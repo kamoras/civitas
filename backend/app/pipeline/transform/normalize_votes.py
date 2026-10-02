@@ -241,8 +241,8 @@ def _determine_party_alignment(
     the losing side stays a break.
 
     For Independents, uses their inferred caucus party (see
-    _infer_caucus_party). This ensures that senators like Sanders (I-VT)
-    and King (I-ME) — who caucus with Democrats — are measured against
+    _infer_caucus_party). This ensures that Independent senators who caucus
+    with Democrats are measured against
     the D party line rather than being excluded entirely.
 
     Args:
@@ -689,8 +689,8 @@ def extract_senator_vote(
     """Extract a senator's vote from roll call vote data.
 
     Matches by last name + state since senate.gov XML doesn't include bioguideId.
-    Handles multi-word last names (e.g. "Cortez Masto", "Van Hollen") and
-    accented characters (e.g. "Luján" vs "Lujan") via Unicode normalization.
+    Handles multi-word last names (e.g. "De la Rosa", "Van Doren") and
+    accented characters (e.g. "Núñez" vs "Nunez") via Unicode normalization.
 
     Args:
         roll_call_data: Parsed roll call vote data from senate.gov.

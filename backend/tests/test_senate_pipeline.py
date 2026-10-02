@@ -252,12 +252,12 @@ def test_upsert_senator_persists_leadership_title_and_committees(db_session):
     from app.pipeline.senate_pipeline import upsert_senator
 
     committees = [{"committeeName": "Senate Committee on Finance", "chamber": "senate", "title": None}]
-    base = {"id": "s-thune", "name": "John Thune", "state": "SD", "party": "R"}
+    base = {"id": "s-holloway", "name": "Ray Holloway", "state": "SD", "party": "R"}
     upsert_senator(db_session, {
         **base, "leadershipTitle": "Senate Majority Leader", "committees": committees,
     })
     db_session.commit()
-    stored = db_session.query(Senator).filter(Senator.id == "s-thune").one()
+    stored = db_session.query(Senator).filter(Senator.id == "s-holloway").one()
     assert stored.leadership_title == "Senate Majority Leader"
     assert json.loads(stored.committees) == committees
 

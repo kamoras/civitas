@@ -50,25 +50,15 @@ in state law was found in this research pass (contrast South Dakota's
 entry, which found a real "(Run-Off required...)" marker but only on its
 Governor race) — so runoff_threshold_pct is null.
 
-A known, accepted gap: state_candidates_common.surname() takes the
-trailing whitespace-separated token of a display name, which is wrong
-for a compound surname with a lowercase connector ("Elena\\nDel Real" ->
-"Real", not "Del Real"). Not fixed here — a pre-existing shared-helper
-limitation, not something introduced by this module — and it happens not
-to change any real 2026 outcome (that candidate lost her primary by a
-wide margin regardless of which surname she's stored under).
+A compound surname with a connector ("Maria\nDel Valle") gives surname()
+only its trailing token, "Valle"; the matcher reaches FEC's "DEL VALLE,
+MARIA" through its multi-word rule, which compares the last word of FEC's
+surname (state_candidates._surname_fallbacks; tested).
 
-Verified live 2026-09-08 against the real, certified 2026 primary
-(workbook internally dated 2026-08-26, 8 days after the August 18
-primary; "Total" row cross-checked against a hand-sum of all 23
-counties' own rows for the Senate race): Harriet Hageman (Senate R,
-real plurality winner of a 5-way field, 83,807 of ~129,000 R votes —
-WY's sitting at-large US Representative moving up to run for Senate),
-James Byrd (Senate D, real plurality winner of a 2-way field, 9,591 over
-2,499), Chuck Gray (House R, real plurality winner of a crowded 9-way
-field opened by Hageman's Senate run, 31,224 over runner-up Steve
-Friess's 25,059), Lisa Kinney (House D, real plurality winner of a
-2-way field, 9,344 over 2,660).
+Verified live 2026-09-08 against the certified 2026 primary (the
+workbook's own Total row cross-checked against a hand-sum of all 23
+counties' rows for the Senate race): every federal contest resolved to
+its certified winner, including a nine-way House field.
 """
 
 import io

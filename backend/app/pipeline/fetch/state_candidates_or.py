@@ -77,26 +77,13 @@ own PDF is that same, single, final publication — not a rolling count.
 settle_days is still read from config as a defensive floor, matching every
 other module in this system, not the primary gate.
 
-Verified live 2026-09-08 against the real, official 2026 primary (page
-title "May 19, 2026, Primary Election Abstract of Votes", 63 pages, federal
-contests on pages 1-9 -- every name/vote-total below read directly off the
-document's own real rows, not recalled): Jeff Merkley (Senate D, real
-plurality winner of a 2-way field, 93.7% over Paul Damian Wells), David
-Brock Smith (Senate R, real plurality winner of a 7-way field, 107,953
-over runner-up Jo Rae Perkins's 99,278 -- this is also the module's own
-regression case for the middle-name-wrap quirk documented above: "Smith"
-is correct only if that continuation row didn't overwrite it), Suzanne
-Bonamici (CD1 D, real plurality winner of a 2-way field, 77,306 over
-Jamil O Ahmad's 11,458), Barbara J Kahl (CD1 R, real plurality winner of
-a 2-way field), Chris Beck (CD2 D, real plurality winner of a 6-way
-field, 15,951 over runner-up Mary Doyle's 9,101), Cliff Bentz (CD2 R,
-real plurality winner of a 3-way field), Maxine E Dexter (CD3 D, real
-plurality winner of a 3-way field, 89.5%), Loran Ayles (CD3 R,
-unopposed), Val Hoyle (CD4 D, real plurality winner of a 3-way field),
-Monique DeSpain (CD4 R, real plurality winner of a 2-way field), Janelle
-S Bynum (CD5 D, real plurality winner of a 2-way field), Patti Adair
-(CD5 R, real plurality winner of a 2-way field), Andrea Salinas (CD6 D,
-unopposed), David Russ (CD6 R, unopposed).
+Verified live 2026-09-08 against the official 2026 primary abstract (63
+pages, federal contests on pages 1-9, every total read off the document's
+own rows): all federal contests resolve to their certified winners,
+including plurality winners of fields of two to seven and unopposed
+nominees. The Republican Senate nominee is the module's regression case
+for the middle-name-wrap quirk above: the surname is right only if the
+continuation row did not overwrite it.
 
 STATEWIDE EXECUTIVE contests (only with `statewide_offices`) come off the
 same document by a different reader -- see "Statewide executive contests"

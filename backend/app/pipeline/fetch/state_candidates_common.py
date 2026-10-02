@@ -97,7 +97,7 @@ _PARTY_PATTERNS = [
     # Minnesota's party is the Democratic-Farmer-Labor (DFL) and North
     # Dakota's the Democratic-NPL. Both are the state Democratic party. FEC
     # files some of their candidates as DEM and some under the state code
-    # (DFL, DNL — Ilhan Omar and Amy Klobuchar as DFL, Angie Craig as DEM),
+    # (DFL, DNL: members of one state's delegation are filed both ways),
     # so FEC's side is read through fec_party (FEC_PARTY_ALIASES).
     (re.compile(r"\b(?:democratic|democrat|dem|dfl|d-npl|dnl|npl)\b", re.IGNORECASE), "D"),
     (re.compile(r"\b(?:republican|rep|gop)\b", re.IGNORECASE), "R"),
@@ -1276,7 +1276,7 @@ def normalize_party(text: str, ballot_list: bool = False) -> str | None:
     ballot rather than primary results, where that reasoning inverts: an
     independent is a perfectly ordinary entry, and dropping them loses
     exactly the candidate a ballot list exists to show. South Dakota's
-    Senate race is the live case — Brian Bengs (IND) is on the November
+    Senate race is the live case: an independent is on the November
     ballot and no primary-results source can ever see him. PARTY_CODE_MAP
     already carries "I" -> "IND", so nothing downstream needed changing;
     only this refused to produce it.
@@ -1409,8 +1409,8 @@ def last_name_matches(last_name: str, full_name: str) -> bool:
     substring match would let "lee" match "leeman" by coincidence,
     which is exactly the kind of wrong-person attribution
     api/elections._incumbent_link's docstring warns against. Token-trailing (not
-    single-last-token) so multi-word surnames like "Van Hollen" still
-    match against a full name of "Chris Van Hollen". Shared by that
+    single-last-token) so multi-word surnames like "Van Doren" still
+    match against a full name of "Mary Van Doren". Shared by that
     scorecard link and the live-results sync's seat-holder lookup."""
     cand_tokens = last_name.split()
     name_tokens = full_name.lower().split()
@@ -1428,7 +1428,7 @@ def federal_record(
     `last_name` is what the matcher compares with FEC's surname.
     `display_name` is the printed name, kept for the two things a surname
     cannot do: tell apart two same-party candidates who share a surname
-    (TX-34's Eric and Mayra Flores), and show a candidate who is on the
+    (two same-party siblings in one district), and show a candidate who is on the
     ballot but never filed with the FEC, who has no FEC row to show
     instead. A strategy that reduces names to surnames before picking a
     winner loses the second one silently, which is why this takes the
@@ -1465,16 +1465,14 @@ def surname(display_name: str, last_first: bool = False) -> str | None:
 
     Ballot annotations are stripped first, since no legal name carries
     one: Georgia's names carry a parenthetical incumbency marker, and
-    "Earl L. Carter (I)" would otherwise yield a surname of "(I)" for
+    "Jane L. Doe (I)" would otherwise yield a surname of "(I)" for
     every sitting member in the state; Rhode Island appends a bare
     asterisk to its party-ENDORSED candidates (verified live against its
-    2026 primary -- "John F. Reed*", and note the endorsee does not
-    always win: endorsed "Stephen T. Skoly*" lost RI-2's Republican
-    primary to unendorsed "Victor Mellor"), which would otherwise yield
-    "Reed*" and match no FEC row at all.
+    2026 primary: "Jane Q. Doe*", and the endorsee does not always win),
+    which would otherwise yield "Doe*" and match no FEC row at all.
     """
-    # Some states print the ballot name the way FEC files it — "CASE, Ed",
-    # "Darden, Dustin Thomas House" — where the surname is everything
+    # Some states print the ballot name the way FEC files it — "DOE, Jane",
+    # "Roe, John Thomas Lee" — where the surname is everything
     # BEFORE the comma and the trailing token is a middle name. Taking the
     # last token there is not a near miss, it is a different person's name.
     if last_first and "," in (display_name or ""):

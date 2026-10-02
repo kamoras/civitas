@@ -56,11 +56,10 @@ numbers, in the OTHER party's file — genuine write-in votes cast by
 voters using that ballot (New Hampshire's semi-open primary lets an
 undeclared voter pick either party's ballot, and NH's write-in rules
 let any qualified name be written in regardless of which ballot chosen).
-Verified live: the real 2026 Democratic Senate nominee, Chris Pappas,
-shows 100,053 votes under his own name in the Democratic file, and only
-480 votes under the SAME name in the Republican file. Summing both
-would inflate his real total by nearly 2x; trusting the Republican
-file's number for him would undercount it by 99.5%. So only a file's
+Verified live: a 2026 Senate nominee had about 100,000 votes in their
+own party's file and about 500 write-ins under the same name in the
+other party's file. Summing both would inflate the total; trusting the
+other file's number would undercount the nominee by 99.5%. So only a file's
 OWN party's columns are ever trusted from that file — identified by
 their own ", d"/", r" suffix, or (a real, live-observed data quirk) NO
 suffix at all, since one real candidate's own suffix was dropped

@@ -151,8 +151,8 @@ function live(overrides: Partial<LiveResults> = {}): LiveResults {
         leaderParty: "REP",
         flip: true,
         candidates: [
-          { name: "Eric Conroy", party: "REP", votes: 560, pct: 56, candidateId: "rep1" },
-          { name: "Greg Landsman", party: "DEM", votes: 440, pct: 44, candidateId: "dem1" },
+          { name: "Eric Conway", party: "REP", votes: 560, pct: 56, candidateId: "rep1" },
+          { name: "Greg Lindqvist", party: "DEM", votes: 440, pct: 44, candidateId: "dem1" },
         ],
       },
     ],
@@ -179,7 +179,7 @@ describe("the state page in results mode", () => {
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ohio results");
     const house = await screen.findByRole("region", { name: "U.S. House" });
-    expect(within(house).getByText("Eric Conroy")).toBeInTheDocument();
+    expect(within(house).getByText("Eric Conway")).toBeInTheDocument();
     expect(within(house).getByText("FLIP · LEADING")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /BALLOT RESEARCH/ })).toBeInTheDocument();
     expect(fetchLiveResults).toHaveBeenCalledWith("OH");
@@ -519,7 +519,7 @@ describe("the state page in results mode", () => {
     );
     expect(region).toHaveTextContent(/^REFRESH FAILED$/);
     expect(line).not.toHaveTextContent(/UPDATED/);
-    expect(screen.getByText("Eric Conroy")).toBeInTheDocument();
+    expect(screen.getByText("Eric Conway")).toBeInTheDocument();
     // The district map no longer draws the old count solid, as if live.
     const counted = districtMapProps.filter((p) => p.results !== undefined);
     expect(counted.at(-1)?.stale).toBe(true);
@@ -768,7 +768,7 @@ describe("the state page in results mode", () => {
             flip: false,
             candidates: [
               { name: "Ind Person", party: "IND", votes: 600, pct: 60, candidateId: null },
-              { name: "Greg Landsman", party: "DEM", votes: 400, pct: 40, candidateId: null },
+              { name: "Greg Lindqvist", party: "DEM", votes: 400, pct: 40, candidateId: null },
             ],
           },
         ],
@@ -885,7 +885,7 @@ describe("the state page in results mode", () => {
     }
     // The Senate race has its count, once.
     expect(document.querySelectorAll("#result-2026-SEN-OH")).toHaveLength(1);
-    expect(screen.getByText("Eric Conroy")).toBeInTheDocument();
+    expect(screen.getByText("Eric Conway")).toBeInTheDocument();
     const map = districtMapProps.find((p) => p.showLean === undefined && p.results);
     expect(map?.feedAnswered).toBe(true);
   });
@@ -908,10 +908,10 @@ describe("the state page in results mode", () => {
     // election seated takes office: a defeated member no longer sits, and
     // a re-elected one sits for the new seat. So the label says who they
     // were going in, never "sitting".
-    const landsman = {
-      id: "c-landsman",
-      name: "LANDSMAN, GREG",
-      ballotName: "Greg Landsman",
+    const lindqvist = {
+      id: "c-lindqvist",
+      name: "LINDQVIST, GREG",
+      ballotName: "Greg Lindqvist",
       party: "DEM",
       confirmed: true,
       incumbentChallenge: "I",
@@ -926,7 +926,7 @@ describe("the state page in results mode", () => {
     it("is the member before this election, with the seat they held, in the district picker and research", async () => {
       fetchLiveResults.mockResolvedValue(live());
       const two = [
-        { ...houseRace(), candidates: [landsman] },
+        { ...houseRace(), candidates: [lindqvist] },
         { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 },
       ];
       render(<StateBallotClient ballot={ballot({ houseRaces: two, newDistrictLines: true })} />);
@@ -935,10 +935,10 @@ describe("the state page in results mode", () => {
       await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
       const drawer = within(screen.getByRole("dialog"));
       expect(
-        drawer.getByText("Greg Landsman (member before this election, OH-2)")
+        drawer.getByText("Greg Lindqvist (member before this election, OH-2)")
       ).toBeInTheDocument();
       expect(drawer.queryByText(/sitting member/i)).not.toBeInTheDocument();
-      await userEvent.click(drawer.getByRole("button", { name: /Greg Landsman/ }));
+      await userEvent.click(drawer.getByRole("button", { name: /Greg Lindqvist/ }));
       const research = within(screen.getByRole("dialog"));
       expect(research.getByText("MEMBER BEFORE THIS ELECTION, OH-2")).toBeInTheDocument();
       expect(research.queryByText(/SITTING MEMBER|INCUMBENT/)).not.toBeInTheDocument();
@@ -949,7 +949,7 @@ describe("the state page in results mode", () => {
       render(
         <StateBallotClient
           ballot={ballot({
-            houseRaces: [{ ...houseRace(), candidates: [landsman] }],
+            houseRaces: [{ ...houseRace(), candidates: [lindqvist] }],
             newDistrictLines: true,
           })}
         />

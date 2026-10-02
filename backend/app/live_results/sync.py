@@ -239,7 +239,7 @@ def _tallies(race: Race, contest: ContestCount) -> list[dict]:
             "sourceParty": party,
             # The matched candidate's name as the state's ballot prints it
             # where there is one: a results feed can carry an honorific
-            # (Arkansas: "Congressman Steve Womack") the ballot doesn't.
+            # (Arkansas's prefixes "Congressman") the ballot doesn't.
             "name": (match.ballot_name if match and match.ballot_name else name),
             "party": stated or (_party_group(match.party) if match else _party_group(party)),
             "votes": votes,

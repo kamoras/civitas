@@ -98,7 +98,7 @@ class TestValidateFacts:
             ),
             # "surpass" with two clearly different capitalized entities
             pytest.param(
-                "Biden's approval rating surpassed Trump's for the first time this quarter.",
+                "Dunmore's approval rating surpassed Varga's for the first time this quarter.",
                 id="comparison_verb_with_distinct_entities_kept",
             ),
             # Comparison verb but no proper nouns to detect self-reference
@@ -334,8 +334,8 @@ class TestComposeNewPost:
         import json as _json
         defaults = dict(
             date="2026-07-24", rank=1, is_current=True,
-            title="Trump calls for EU investigation into tech fines",
-            summary="Trump said EU fines against major tech companies should be reversed.",
+            title="Varga calls for EU investigation into tech fines",
+            summary="Varga said EU fines against major tech companies should be reversed.",
             facts=_json.dumps(["The EU fined three companies this year."]),
             source_names=_json.dumps(["AP News"]),
             bsky_posted_at=None,
@@ -351,15 +351,15 @@ class TestComposeNewPost:
         # A first post (bsky_posted_facts NULL) ignores the facts; published
         # the same day as its article, it carries no staleness prefix.
         text = bluesky_poster._compose_new_post(self._issue(), "2026-07-24")
-        assert text == "Trump said EU fines against major tech companies should be reversed."
+        assert text == "Varga said EU fines against major tech companies should be reversed."
 
     def test_a_lede_too_long_falls_back_to_the_headline_rather_than_being_cut(self):
         from app.pipeline.analyze import bluesky_poster
 
-        long_lede = "Trump said " + "EU fines against major tech companies should be reversed, " * 6 + "officials said."
+        long_lede = "Varga said " + "EU fines against major tech companies should be reversed, " * 6 + "officials said."
         assert len(long_lede) > bluesky_poster.MAX_POST_CHARS
         text = bluesky_poster._compose_new_post(self._issue(summary=long_lede), "2026-07-24")
-        assert text == "Trump calls for EU investigation into tech fines"
+        assert text == "Varga calls for EU investigation into tech fines"
 
     def test_nothing_that_fits_posts_nothing_and_is_counted(self):
         from app.pipeline.analyze import action_metrics, bluesky_poster
@@ -387,7 +387,7 @@ class TestComposeNewPost:
         issue = self._issue(
             facts=_json.dumps(["The EU fined three companies this year.", "The Commission said it would appeal."]),
             bsky_posted_facts=_json.dumps(["The EU fined three companies this year."]),
-            bsky_last_post_text="Trump said EU fines against major tech companies should be reversed.",
+            bsky_last_post_text="Varga said EU fines against major tech companies should be reversed.",
         )
         assert bluesky_poster._compose_new_post(issue, "2026-07-24") == "The Commission said it would appeal."
 
@@ -398,7 +398,7 @@ class TestComposeNewPost:
 
         facts = _json.dumps(["The EU fined three companies this year."])
         issue = self._issue(facts=facts, bsky_posted_facts=facts)
-        assert bluesky_poster._compose_new_post(issue, "2026-07-24").startswith("Trump said EU fines")
+        assert bluesky_poster._compose_new_post(issue, "2026-07-24").startswith("Varga said EU fines")
 
 
 class TestStalenessPhrasing:
@@ -411,8 +411,8 @@ class TestStalenessPhrasing:
         from app.models import ActionIssue
         return ActionIssue(
             date="2026-07-25", rank=1, is_current=True,
-            title="Trump calls for EU investigation into tech fines",
-            summary="Trump said EU fines against major tech companies should be reversed.",
+            title="Varga calls for EU investigation into tech fines",
+            summary="Varga said EU fines against major tech companies should be reversed.",
             facts="[]", source_names="[]", bsky_posted_at=None,
             primary_article_date=article_date,
         )
@@ -421,13 +421,13 @@ class TestStalenessPhrasing:
         from app.pipeline.analyze import bluesky_poster
 
         text = bluesky_poster._compose_new_post(self._issue("2026-07-24"), "2026-07-25")
-        assert text == "Yesterday: Trump said EU fines against major tech companies should be reversed."
+        assert text == "Yesterday: Varga said EU fines against major tech companies should be reversed."
 
     def test_multiple_days_stale_opens_with_the_date(self):
         from app.pipeline.analyze import bluesky_poster
 
         text = bluesky_poster._compose_new_post(self._issue("2026-07-20"), "2026-07-25")
-        assert text == "On July 20: Trump said EU fines against major tech companies should be reversed."
+        assert text == "On July 20: Varga said EU fines against major tech companies should be reversed."
 
     def test_unreadable_or_missing_date_has_no_prefix(self):
         from app.pipeline.analyze import bluesky_poster

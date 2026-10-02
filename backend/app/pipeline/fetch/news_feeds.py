@@ -64,9 +64,9 @@ _CONTENT_ENCODED_TAG = "{http://purl.org/rss/1.0/modules/content/}encoded"
 _MEDIA_CONTENT_TAG = "{http://search.yahoo.com/mrss/}content"
 _SYNDICATION_RIGHTS_TAG = "{http://schemas.ingestion.microsoft.com/common/}hasSyndicationRights"
 # <media:text> is the actual photo caption (e.g. "Supreme Court Chief
-# Justice John G. Roberts Jr. attends...") — real accessible alt text
+# Justice <name> attends...") — real accessible alt text
 # straight from the source, not a generic/empty fallback. <mi:licensorName>
-# is the photographer/wire-service credit (e.g. "Tom Williams/CQ Roll
+# is the photographer/wire-service credit (e.g. "<Photographer>/CQ Roll
 # Call"), sometimes empty even on a rights-cleared item.
 _MEDIA_TEXT_TAG = "{http://search.yahoo.com/mrss/}text"
 _LICENSOR_NAME_TAG = "{http://schemas.ingestion.microsoft.com/common/}licensorName"
@@ -255,7 +255,7 @@ _DANGLING_TAG_RE = re.compile(r"</?[a-zA-Z][^<>]*$")
 _BLOCK_SEP = "\x00"
 _SEPARATOR_RUN_RE = re.compile(r"(?:\s*\x00\s*)+")
 # A block that already ended in sentence punctuation does not need the
-# separator on top of it — "voted Thursday.; Grassley objected" is the
+# separator on top of it — "voted Thursday.; Doe objected" is the
 # boundary stated twice. Both forms split identically downstream (the
 # action center's item splitter takes ". " and "; " alike), so this is
 # purely about the text that reaches the embedding and the LLM prompt.
@@ -291,8 +291,8 @@ def _extract_body_text(el: Element | None) -> str:
 
     Block boundaries become "; " for the same reason _strip_html does it,
     and this is the whole reason a plain "".join(itertext()) is not enough:
-    joining the pieces of "<p>He voted Thursday.</p><p>Grassley objected.</p>"
-    yields "Thursday.Grassley", which welds two sentences into a token no
+    joining the pieces of "<p>He voted Thursday.</p><p>Doe objected.</p>"
+    yields "Thursday.Doe", which welds two sentences into a token no
     downstream stage can split — the action center's item splitter needs
     whitespace after the period to see a boundary at all.
     """
@@ -570,7 +570,7 @@ def fetch_news_articles(
 # Hill, Politico, Roll Call), which cannot cover 50 states' House and
 # Senate races. That gap is what the open Bluesky candidate-name search
 # was filling, and it filled it with 7,740 items of which Minnesota's
-# contribution included "Dave Hughes still a whiny cunt" and a post about
+# contribution included a profane insult of a candidate and a post about
 # the Australian comedian of the same name. A name mention is not
 # coverage; the answer is to widen the SOURCES rather than to filter a
 # firehose harder, which four successive filters failed to do.

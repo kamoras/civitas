@@ -296,7 +296,7 @@ _FULL_NAME_RE = re.compile(r"^(?:Sen\.|Rep\.|Del\.|Resident Commissioner)\s+([^,
 
 
 def display_name(p: dict) -> str:
-    """"Ted Cruz" for Congress.gov's "Sen. Cruz, Ted [R-TX]": the page
+    """"Jane Doe" for Congress.gov's "Sen. Doe, Jane [R-TX]": the page
     shows party and state beside the name already."""
     if p.get("firstName") and p.get("lastName"):
         return " ".join(x for x in (p["firstName"], p.get("middleName"), p["lastName"]) if x)

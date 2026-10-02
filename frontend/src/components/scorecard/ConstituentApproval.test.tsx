@@ -5,7 +5,7 @@ import ConstituentApproval from "./ConstituentApproval";
 const approval = {
   survey: "CES 2024 Common Content (pre-election wave, Oct-Nov 2024)",
   fielded: "2024-10/2024-11",
-  surveyedAs: "Susan Collins",
+  surveyedAs: "Ruth Pryor",
   byParty: [
     { party: "D" as const, approve: 0.2283, ownWeight: 0.72, respondents: 88 },
     { party: "R" as const, approve: 0.5675, ownWeight: 0.31, respondents: 72 },
@@ -35,7 +35,7 @@ describe("ConstituentApproval", () => {
 
   it("names the survey and the member it asked about, and says it isn't scored", () => {
     render(<ConstituentApproval approval={approval} />);
-    expect(screen.getByText(/rating .Susan Collins.\. Informational, not scored\./)).toBeTruthy();
+    expect(screen.getByText(/rating .Ruth Pryor.\. Informational, not scored\./)).toBeTruthy();
   });
 
   it("renders nothing without a reading", () => {

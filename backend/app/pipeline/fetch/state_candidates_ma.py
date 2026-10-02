@@ -106,7 +106,7 @@ empty state.
 THE STATE'S OWN WINNER MARK is a second gate after the vote count. PD43+
 tags the nominee's Totals cell `winner`, and a named write-in who
 topped the named field is not always one: the real 2026 5th
-Congressional District Republican primary lists Walter Grochowski and
+Congressional District Republican primary lists one named candidate and
 the 1st Governor's Council District Republican primary lists Mary
 Catherine Dormer (write-in, 455 votes against 1,212 "All Others"), and
 the archive marks neither as having won. Picked on votes alone, both
@@ -137,17 +137,10 @@ fetched or read fails the whole run rather than dropping that office,
 because a missing office under the opt-in renders as "not on this
 ballot".
 
-Verified live 2026-09-08 against the real 2026 primary: Edward J.
-Markey (Senate D, real incumbent, real plurality winner of a 2-way
-field), John Deaton (Senate R, unopposed), Richard E. Neal (CD1 D, real
-incumbent), Gary J. Grossi (CD3 R, unopposed), Jake Auchincloss (CD4 D,
-real incumbent), Dan Koh (CD6 D, real plurality winner of a real 6-way
-field, 47,835 over runner-up Tram T. Nguyen's 34,324), Ayanna S. Pressley
-(CD7 D, real incumbent, unopposed), Stephen F. Lynch (CD8 D, real
-incumbent), Bill Keating (CD9 D, real incumbent) — the state's own real
-2026 map has no contested Republican primary in most districts (real
-plurality winners there are unopposed general-election long shots, not
-incumbents).
+Verified live 2026-09-08 against the 2026 primary: every federal contest
+resolves to its certified winner, including incumbents, unopposed
+nominees and the plurality winner of a six-way field. Most districts on
+the state's map had no contested Republican primary.
 """
 
 import html as html_lib

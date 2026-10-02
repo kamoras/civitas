@@ -2,12 +2,12 @@
 spreadsheet (xlsx or csv) — one row per candidate on the November ballot.
 
 Maine is the live case, and the reason this exists. Maine's adapter read
-the June primary's official results and confirmed Graham Platner as the
-Democratic Senate nominee. He was: he won with 77.7%. He then withdrew on
-2026-07-10 and the party nominated Troy Jackson at a convention on July
+the June primary's official results and confirmed the Democratic Senate
+nominee, correctly: the candidate won with 77.7%, then withdrew on
+2026-07-10, and the party nominated a replacement at a convention on July
 25. Primary results cannot see that, and they never will — the same way
-South Carolina's results named Lindsey Graham after a special primary had
-replaced him. The Secretary of State's "2026 General Candidate List" is
+South Carolina's results named a June Senate winner after a special
+primary had replaced them. The Secretary of State's "2026 General Candidate List" is
 the ballot as certified, replacement included, so it is read instead.
 
 Every state-specific detail is configuration: where the list is linked
@@ -154,7 +154,7 @@ Optional, each because a live state needed it:
                                      marked state_offices_incomplete
   format.name_regex                  the name is inside a longer cell; the
                                      regex's first group is the name
-                                     (Oklahoma prints "KEVIN HERN,
+                                     (Oklahoma prints "JOHN DOE,
                                      REPUBLICAN" in one cell)
   statewide_offices                  also read the state's own executive
                                      contests and legislative seats, through
@@ -392,7 +392,7 @@ def report_grid_rows(page: bytes, headings: list[str]) -> list[dict]:
 
 def _reading_order(printed: str) -> tuple[str, str]:
     """("Given Surname Suffix", "Surname") for a "Surname, Given Suffix"
-    name -- "Sullivan, Daniel J. Jr." reads "Daniel J. Sullivan Jr."."""
+    name -- "Doe, John J. Jr." reads "John J. Doe Jr."."""
     surname_part, _, given = printed.partition(",")
     given, suffix = _SUFFIX_RE.subn("", clean_display_name(given))
     tail = _SUFFIX_RE.search(clean_display_name(printed.partition(",")[2]))

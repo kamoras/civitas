@@ -1669,7 +1669,7 @@ async def run_senate_pipeline(
                     funding = senator.get("funding", {})
 
                 # Use the pre-extracted last name that handles multi-word
-                # surnames (e.g. "Cortez Masto", "Van Hollen") and accents.
+                # surnames (e.g. "De la Rosa", "Van Doren") and accents.
                 last_name = senator.get("lastNameForVoteMatch", "")
                 if not last_name:
                     name_parts = senator["name"].split()

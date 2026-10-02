@@ -310,10 +310,10 @@ def _extract_last_name(name: str) -> str:
     """Extract the multi-word last name from Congress.gov name format.
 
     Congress.gov returns "LastName, FirstName MiddleName" — the part
-    before the comma preserves multi-word last names like "Cortez Masto",
-    "Van Hollen", "Blunt Rochester".  Accented characters are normalized
+    before the comma preserves multi-word last names like "De la Rosa",
+    "Van Doren", "Hale Morrow".  Accented characters are normalized
     to ASCII for matching against Senate.gov roll call XML (which drops
-    accents, e.g. "Luján" → "Lujan").
+    accents, e.g. "Núñez" → "Nunez").
     """
     if "," in name:
         last = name.split(",", 1)[0].strip()

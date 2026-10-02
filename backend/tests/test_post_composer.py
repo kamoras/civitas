@@ -11,27 +11,27 @@ import pytest
 from app.pipeline.analyze.post_composer import compose, headline_source
 
 IRAN = (
-    "Recent statements emphasize the need for an immediate conclusion to the Iran "
+    "Recent statements emphasize the need for an immediate conclusion to the border "
     "conflict to alleviate rising energy costs. Officials from Michigan and Iowa "
     "have called for measures such as temporary export restrictions."
 )
 ENDORSEMENT = (
-    "VOTE VERONICA FERNANDEZ!  I didn't know a thing about her until I saw her on "
-    "the ballot. she is better for Jersey then booker!"
+    "VOTE JANE DOE!  I didn't know a thing about her until I saw her on "
+    "the ballot. she is better for the state then the incumbent!"
 )
 REAL_NEWS = (
-    "Democrat John Larson loses to younger primary challenger in Connecticut. "
-    "Larson conceded the race on Tuesday night after trailing all evening."
+    "Democrat Pat Morgan loses to younger primary challenger in Connecticut. "
+    "Morgan conceded the race on Tuesday night after trailing all evening."
 )
 
 
 class TestParaphraseIsImpossible:
-    """"Iran War Ends Quickly to Lower Prices" over a source that said
+    """"Border War Ends Quickly to Lower Prices" over a source that said
     officials had CALLED FOR an end. Asserting the event required
     inventing the word "Ends", and an invented word is not a span."""
 
     def test_an_invented_verb_cannot_be_published(self):
-        assert compose("Iran War", "Ends Quickly to Lower Prices", IRAN) is None
+        assert compose("Border War", "Ends Quickly to Lower Prices", IRAN) is None
 
     def test_the_advocacy_the_source_actually_reported_survives(self):
         got = compose(
@@ -45,21 +45,21 @@ class TestParaphraseIsImpossible:
         )
 
     def test_a_plausible_but_absent_claim_is_refused(self):
-        assert compose("John Larson", "won the election decisively", REAL_NEWS) is None
+        assert compose("Pat Morgan", "won the election decisively", REAL_NEWS) is None
 
 
 class TestEndorsementIsImpossible:
-    """"VOTE VERONICA FERNANDEZ!" — an imperative has no grammatical
+    """"VOTE JANE DOE!" — an imperative has no grammatical
     subject, so there is no actor to extract and nothing to compose."""
 
     def test_an_imperative_yields_no_actor(self):
-        assert compose("", "VOTE VERONICA FERNANDEZ", ENDORSEMENT) is None
+        assert compose("", "VOTE JANE DOE", ENDORSEMENT) is None
 
     def test_an_imperative_smuggled_in_as_a_predicate_is_refused(self):
         """Both spans here are genuinely verbatim, so the verbatim rule
         alone does not catch it — a predicate that restates its own actor
         is malformed, and that is what disqualifies it."""
-        assert compose("Veronica Fernandez", "VOTE VERONICA FERNANDEZ", ENDORSEMENT) is None
+        assert compose("Jane Doe", "VOTE JANE DOE", ENDORSEMENT) is None
 
 
 class TestEmptinessIsImpossible:
@@ -79,22 +79,22 @@ class TestEmptinessIsImpossible:
 class TestWellFormedness:
     def test_a_real_fact_composes(self):
         assert compose(
-            "John Larson", "loses to younger primary challenger in Connecticut", REAL_NEWS
-        ) == "John Larson loses to younger primary challenger in Connecticut."
+            "Pat Morgan", "loses to younger primary challenger in Connecticut", REAL_NEWS
+        ) == "Pat Morgan loses to younger primary challenger in Connecticut."
 
     def test_a_predicate_cut_before_its_object_is_refused(self):
         """Measured live: the model located the right span but stopped
-        early, yielding "Cory Booker takes a selfie with." — verbatim,
+        early, yielding "Alex Rivera takes a selfie with." — verbatim,
         grounded, and not a sentence."""
-        src = ("From left, New Jersey Sen. Cory Booker takes a selfie with Maryland "
-               "Sens. Chris Van Hollen and Angela Alsobrooks.")
-        assert compose("New Jersey Sen. Cory Booker", "takes a selfie with", src) is None
+        src = ("From left, New Jersey Sen. Alex Rivera takes a selfie with Maryland "
+               "Sens. Sam Lee and Dana Cruz.")
+        assert compose("New Jersey Sen. Alex Rivera", "takes a selfie with", src) is None
         # The whole predicate composes. "Sens." must not read as the end of
         # the sentence — an earlier version truncated there and rejected
         # this valid composition.
         assert compose(
-            "New Jersey Sen. Cory Booker",
-            "takes a selfie with Maryland Sens. Chris Van Hollen and Angela Alsobrooks",
+            "New Jersey Sen. Alex Rivera",
+            "takes a selfie with Maryland Sens. Sam Lee and Dana Cruz",
             src,
         ) is not None
 
@@ -107,41 +107,41 @@ class TestBothSpansMustBeAssertedTogether:
     """Two true fragments can make one false sentence.
 
     Verbatim-ness alone does NOT preserve who-did-what, which the first
-    version of this module got wrong: both "E. Jean Carroll" and "liable
-    for sexual abuse and defamation" are genuine spans of the source
+    version of this module got wrong: both "Jordan Ellis" and "liable
+    for fraud and negligence" are genuine spans of the source
     below, so checking them separately composed the plaintiff as the
     party found liable — reproducing issue #376 exactly, in the module
     written to make that class impossible.
     """
 
-    CARROLL = (
-        "A jury found Donald Trump liable for sexual abuse and defamation in the "
-        "case brought by E. Jean Carroll. Carroll sued Trump in 2022."
+    LAWSUIT = (
+        "A jury found Acme Corp liable for fraud and negligence in the "
+        "case brought by Jordan Ellis. Ellis sued Acme Corp in 2022."
     )
-    BIDEN = (
-        "Hunter Biden confirmed he would sit next to Donald Trump Jr. for testimony "
-        "before Congress. Trump Jr. is the son of the president."
+    TESTIMONY = (
+        "Sam Carter confirmed he would sit next to Chris Dale Jr. for testimony "
+        "before Congress. Dale Jr. is the son of the governor."
     )
 
     def test_the_party_the_source_actually_names_composes(self):
         assert compose(
-            "Donald Trump", "liable for sexual abuse and defamation", self.CARROLL
-        ) == "Donald Trump liable for sexual abuse and defamation."
+            "Acme Corp", "liable for fraud and negligence", self.LAWSUIT
+        ) == "Acme Corp liable for fraud and negligence."
 
     def test_the_reversed_party_is_refused(self):
         assert compose(
-            "E. Jean Carroll", "liable for sexual abuse and defamation", self.CARROLL
+            "Jordan Ellis", "liable for fraud and negligence", self.LAWSUIT
         ) is None
 
     def test_a_relationship_spliced_from_two_sentences_is_refused(self):
-        """The real issue-748 failure: a published story called Donald
-        Trump Jr. Hunter Biden's son. Both halves are verbatim and in the
+        """The real issue-748 failure: a published story called one
+        public figure another's son. Both halves are verbatim and in the
         same article; they are not asserted of each other."""
-        assert compose("Hunter Biden", "is the son of the president", self.BIDEN) is None
+        assert compose("Sam Carter", "is the son of the governor", self.TESTIMONY) is None
 
     def test_the_assertion_the_source_does_make_still_composes(self):
         assert compose(
-            "Hunter Biden", "confirmed he would sit next to Donald Trump Jr.", self.BIDEN
+            "Sam Carter", "confirmed he would sit next to Chris Dale Jr.", self.TESTIMONY
         ) is not None
 
 
@@ -165,15 +165,15 @@ class TestASpanMustRunToTheEndOfItsClause:
         ) is not None
 
     @pytest.mark.parametrize("actor,predicate,source", [
-        ("Chinese President Xi Jinping", "arrived in Washington",
-         "Chinese President Xi Jinping arrived in Washington."),
+        ("Prime Minister Ana Silva", "arrived in Washington",
+         "Prime Minister Ana Silva arrived in Washington."),
         ("Judge", "orders White House to restore access to CNN, MS NOW and Politico",
          "Judge orders White House to restore access to CNN, MS NOW and Politico."),
         ("The Pentagon", "announced the plan",
          "The Pentagon announced the plan, which drew criticism from lawmakers."),
-        ("Donald Trump", "liable for sexual abuse and defamation",
-         "A jury found Donald Trump liable for sexual abuse and defamation in the case "
-         "brought by E. Jean Carroll."),
+        ("Acme Corp", "liable for fraud and negligence",
+         "A jury found Acme Corp liable for fraud and negligence in the case "
+         "brought by Jordan Ellis."),
     ])
     def test_real_spans_still_compose(self, actor, predicate, source):
         """Including one ending at a comma — a clause boundary is a
@@ -216,13 +216,13 @@ class TestTheGapIsRenderedNotDropped:
         )
 
     def test_a_possessive_keeps_its_owner(self):
-        src = "Trump's lawyer argued the case was moot."
-        assert compose("Trump", "argued the case was moot", src) == "Trump's lawyer argued the case was moot."
+        src = "Morgan's lawyer argued the case was moot."
+        assert compose("Morgan", "argued the case was moot", src) == "Morgan's lawyer argued the case was moot."
 
     def test_a_time_phrase_is_kept_verbatim(self):
-        src = "Sen. Susan Collins on Tuesday rejected the nominee."
-        assert compose("Sen. Susan Collins", "rejected the nominee", src) == (
-            "Sen. Susan Collins on Tuesday rejected the nominee."
+        src = "Sen. Jamie Ortiz on Tuesday rejected the nominee."
+        assert compose("Sen. Jamie Ortiz", "rejected the nominee", src) == (
+            "Sen. Jamie Ortiz on Tuesday rejected the nominee."
         )
 
 
@@ -235,13 +235,13 @@ class TestATruncatedPredicateIsCompletedFromItsSource:
     """
 
     def test_a_bare_verb_runs_to_the_end_of_its_headline(self):
-        src = headline_source("Blackburn sues Jack Smith for obtaining her phone records", None)
-        assert compose("Blackburn", "sues", src) == (
-            "Blackburn sues Jack Smith for obtaining her phone records."
+        src = headline_source("Rivera sues the county clerk for withholding her voting records", None)
+        assert compose("Rivera", "sues", src) == (
+            "Rivera sues the county clerk for withholding her voting records."
         )
 
     def test_a_dangling_preposition_is_completed(self):
-        title = ("Supreme Court grants review of Trump administration's mandatory "
+        title = ("Supreme Court grants review of the administration's mandatory "
                  "detention policy for immigrants")
         assert compose("Supreme Court", "grants review of", headline_source(title, None)) == f"{title}."
 
@@ -252,13 +252,13 @@ class TestATruncatedPredicateIsCompletedFromItsSource:
     def test_a_possible_abbreviation_refuses_rather_than_guesses(self):
         # "Sens." could end the sentence or not; the completion is refused
         # rather than truncated there.
-        src = ("Cory Booker takes a selfie with Maryland Sens. Chris Van Hollen "
-               "and Angela Alsobrooks.")
-        assert compose("Cory Booker", "takes a selfie with", src) is None
+        src = ("Alex Rivera takes a selfie with Maryland Sens. Sam Lee "
+               "and Dana Cruz.")
+        assert compose("Alex Rivera", "takes a selfie with", src) is None
 
     def test_a_predicate_in_a_later_sentence_is_still_refused(self):
-        src = "Carroll spoke on Tuesday. The court sues nobody for anything at all."
-        assert compose("Carroll", "sues", src) is None
+        src = "Ellis spoke on Tuesday. The court sues nobody for anything at all."
+        assert compose("Ellis", "sues", src) is None
 
     def test_a_clause_that_never_ends_within_reach_is_refused(self):
         src = "Governor signs " + " ".join(["word"] * 30) + "."

@@ -241,8 +241,8 @@ def _race_id_for(db: Session, cycle: int, state: str, office: str, district: int
 def _fold(text: str) -> str:
     """Lowercased with diacritics removed. FEC files names in plain ASCII
     capitals and a state prints them as the candidate spells them, so
-    without this "Sánchez" never equals "SANCHEZ" — which left Linda
-    Sánchez (CA-41) unmatched and her race showing all eleven filers."""
+    without this "Sánchez" never equals "SANCHEZ" — which left a sitting
+    member unmatched and the race showing all eleven filers."""
     decomposed = unicodedata.normalize("NFKD", text or "")
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).lower()
 
@@ -267,7 +267,7 @@ _NOT_A_NAME = frozenset({
 
 
 def _without_trailing_suffix(name: str) -> str:
-    """"John A. Olszewski, Jr." without its ", Jr.": a comma before a
+    """"John A. Doe, Jr." without its ", Jr.": a comma before a
     generational suffix is not the "Last, First" comma, and read as one it
     left the name with no given name at all. Only after more than one word:
     "LEE, JR." is a surname and its suffix, and stripped it would read its
@@ -282,9 +282,9 @@ def _without_trailing_suffix(name: str) -> str:
 def _given_names(name: str) -> list[str]:
     """The given-name tokens, folded, with honorifics and initials dropped.
 
-    Both sides are normalised the same way: FEC files "SULLIVAN, DANIEL
-    J" (surname, then given names) and a state prints "Sullivan, Daniel
-    J. Jr." or "Daniel J. Sullivan Jr.". Taking the tokens AFTER any comma
+    Both sides are normalised the same way: FEC files "DOE, JOHN
+    J" (surname, then given names) and a state prints "Doe, John
+    J. Jr." or "John J. Doe Jr.". Taking the tokens AFTER any comma
     handles the first two; for the third the leading token already is the
     given name."""
     name = _without_trailing_suffix(name)
@@ -332,29 +332,29 @@ def _surname_fallbacks(
     means for a rule's result (the caller's plausibility test) — and each
     still has to come out UNIQUE in the race (the caller refuses anything
     ambiguous)."""
-    # A MULTI-WORD surname survives on the FEC side ("WASSERMAN SCHULTZ,
-    # DEBBIE") but not on the state's, because a state publishes a display
-    # name and the trailing token is all that can be taken from "Debbie
-    # Wasserman Schultz" without guessing where the surname begins.
+    # A MULTI-WORD surname survives on the FEC side ("VAN DOREN, MARY")
+    # but not on the state's, because a state publishes a display name and
+    # the trailing token is all that can be taken from "Mary Van Doren"
+    # without guessing where the surname begins.
     found = keep([c for c in candidates if _candidate_surname(c.name).split()[-1:] == [target]])
     if found:
         return found
     # The mirror: the state prints the whole surname and FEC files only its
-    # last word — Maryland's "McClain Delaney" is FEC's "DELANEY, APRIL
-    # MCCLAIN" (MD-6, 2026).
+    # last word — a ballot's "Hale Morrow" is FEC's "MORROW, JANE HALE"
+    # (a sitting member, 2026).
     if len(target.split()) > 1:
         found = keep([c for c in candidates if _candidate_surname(c.name) == target.split()[-1]])
         if found:
             return found
     # A married or former surname filed as a given name: the ballot says
-    # "Ashley Hinson" and FEC has "ARENHOLZ, ASHLEY HINSON" (IA Senate,
-    # 2026 — the Republican nominee, unmatched without this).
+    # "Jane Hale" and FEC has "MORROW, JANE HALE" (a 2026 Senate nominee
+    # was unmatched without this).
     found = keep([c for c in candidates if _given_names(c.name)[-1:] == [target]])
     if found:
         return found
     # A one-letter slip on either side, only with the given name agreeing
-    # too: the ballot's "Brandon Coulter Daugherty" is FEC's "DAUGHTERY,
-    # BRANDON" (MO-2, 2026). Short surnames are excluded — one edit away
+    # too: the ballot's "Brandon Coulter Doherty" is FEC's "DOHERTY,
+    # BRANDON" (a 2026 case). Short surnames are excluded — one edit away
     # from "Lee" is too many real names.
     wanted = _first_name_key(display_name or "")
     if wanted and len(target) >= 5:
@@ -425,8 +425,8 @@ def given_name_contradicts(cand: Candidate, display_name: str | None, last_name:
         if tokens:
             # The record's first given name against any of theirs (a short
             # form either way), or FEC's first given name EXACTLY among the
-            # record's later ones: "Maria Elvira Salazar" is FEC's
-            # "SALAZAR, ELVIRA" and "Mary Anne Smith" is "SMITH, ANNE". Not
+            # record's later ones: "Maria Elena Doe" is FEC's
+            # "DOE, ELENA" and "Mary Anne Smith" is "SMITH, ANNE". Not
             # any name against any: a shared middle name ("John Lee" and
             # "MARY LEE") or a later prefix ("Mary Jo" and "JOHN") is not
             # the same person.
@@ -461,8 +461,8 @@ def _match_by_surname(
 
     def plausible(tier: list[Candidate]) -> list[Candidate]:
         # A tier whose every candidate is plainly someone else (_contradicts)
-        # says nothing, and the next rule is tried: John Hinson, Libertarian,
-        # on the exact surname must not hide Ashley Hinson filed under her
+        # says nothing, and the next rule is tried: another party's nominee
+        # sharing the exact surname must not hide a candidate filed under a
         # married name. A tier with anyone plausible is judged whole, as
         # before — dropping only the implausible could turn an ambiguous
         # pair into a false unique match.
@@ -473,7 +473,7 @@ def _match_by_surname(
     if not matches:
         # Each fallback rule is judged the same way, over everyone but the
         # exact-surname people just refused (the rule that reads a
-        # surname's last word would otherwise find John Hinson again).
+        # surname's last word would otherwise find the same person again).
         refused = {id(c) for c in exact}
         matches = _surname_fallbacks(
             [c for c in candidates if id(c) not in refused], target, display_name, keep=plausible,
@@ -488,9 +488,8 @@ def _match_by_surname(
     if len(pool) == 1:
         return pool[0]
     # Two candidates sharing a surname AND a party. A given name separates
-    # them where party cannot: Alaska's 2026 top-four advances two
-    # Sullivans, TX-34 has Eric and Mayra Flores, AZ-7 Raúl and Adelita
-    # Grijalva. It can only narrow; a given name nobody matches (a
+    # them where party cannot (2026 had three such races, a top-four
+    # primary advancing two namesakes among them). It can only narrow; a given name nobody matches (a
     # nickname, say) leaves the pool as it was.
     wanted = _first_name_key(display_name or "")
     if wanted:
@@ -704,9 +703,9 @@ def _unconfirm_off_ballot(db: Session, listed: dict[str, set[str]]) -> int:
     `confirmed_general` is otherwise never cleared, which is right for
     primary results (a nominee does not stop being one because a later
     fetch hiccupped) and wrong once the state has certified its ballot.
-    Maine confirmed Graham Platner from the June primary he won; he
-    withdrew in July and the party nominated Troy Jackson. Adding Jackson
-    alone would have shown both. Scoped to the races the list actually
+    Maine confirmed its Democratic Senate nominee from the June primary;
+    the winner withdrew in July and the party nominated a replacement.
+    Adding the replacement alone would have shown both. Scoped to the races the list actually
     covers, so a race the list is missing (a parse slip) keeps what it
     had rather than losing everyone."""
     changed = 0
@@ -765,8 +764,8 @@ def _same_given_name(a: str, b: str) -> bool:
 def _surnames_agree(a: str, b: str) -> bool:
     """Whether two folded surnames can be one person's: equal, or one the
     last word of the other — the multi-word equivalence the matcher's first
-    two fallbacks accept ("LEGER FERNANDEZ, TERESA" printed by one source,
-    "Teresa Leger Fernandez", surname "Fernandez", by another)."""
+    two fallbacks accept ("VAN DOREN, MARY" printed by one source,
+    "Mary Van Doren", surname "Doren", by another)."""
     return bool(a) and (a == b or a.split()[-1:] == [b] or b.split()[-1:] == [a])
 
 
@@ -1295,7 +1294,7 @@ async def _forget_if_broken(
     return "forgotten"
 
 
-# A comma after these is part of the name ("Olszewski, Jr."), not a
+# A comma after these is part of the name ("Doe, Jr."), not a
 # "Last, First" printing.
 _SUFFIX_AFTER_COMMA_RE = re.compile(r",\s*(?:Jr|Sr|II|III|IV|V)\.?$", re.IGNORECASE)
 

@@ -66,7 +66,7 @@ _ANNUAL_TITLE_MARKERS = ("annual report", "new filer report")
 def is_senator_filing(filing: dict) -> bool:
     """True when the search row was filed in the senator's own capacity.
 
-    The office cell reads "Baldwin, Tammy (Senator)" (electronic) or
+    The office cell reads "Doe, Jane (Senator)" (electronic) or
     "Senator" (paper); candidates read "Candidate (Candidate)", and a
     departed member "(Former Senator)". A candidate sharing a sitting
     senator's surname would otherwise be matched to the senator by name.

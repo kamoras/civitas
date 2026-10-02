@@ -255,9 +255,9 @@ class TestValidateSenator:
         assert result["bioguideId"] == "B001230"
 
     def test_initials_generated_if_missing(self):
-        senator = _make_senator(initials="", name="Ted Cruz")
+        senator = _make_senator(initials="", name="Rob Delgado")
         result = validate_senator(senator)
-        assert result["initials"] == "TC"
+        assert result["initials"] == "RD"
 
     def test_none_funding_handled(self):
         senator = _make_senator(funding=None)

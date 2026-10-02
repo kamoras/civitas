@@ -6,9 +6,9 @@ Illinois is the live case. Its State Board of Elections prints the filed
 candidates for an election as a "Website Candidate List":
 
     1ST CONGRESS                                   <- office heading
-    DEMOCRATIC    Jonathan L. Jackson   10/31/2025 10:00 AM
+    DEMOCRATIC    John L. Doe           10/31/2025 10:00 AM
     ...
-    INDEPENDENT   Mayra Macias          5/26/2026 5:00 PM
+    INDEPENDENT   Jane Roe              5/26/2026 5:00 PM
                   8445 S Kostner Ave    REMOVED 7/21/2026   <- off the ballot
 
 so the party is the text left of `name_x`, the name the text between

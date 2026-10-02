@@ -485,9 +485,9 @@ class TestFullStoryShouldInvalidate:
         # regenerate on every hourly refresh of an unchanged story.
         pytest.param("Senator X hospitalized", '["fact a"]', "Senator X hospitalized", '["fact a"]', False,
                      id="unchanged_title_and_facts_does_not_invalidate"),
-        # The real 2026-07 bug: a McConnell hospitalization story's row got
+        # The real 2026-07 bug: a McAllister hospitalization story's row got
         # re-matched onto a later, different senator's death.
-        pytest.param("Mitch McConnell hospitalized", '["fact a"]', "Lindsey Graham dies at 71", '["fact a"]', True,
+        pytest.param("Hal McAllister hospitalized", '["fact a"]', "Lowell Whitfield dies at 71", '["fact a"]', True,
                      id="changed_title_invalidates"),
         # Same headline, but the underlying facts were updated (story
         # evolved) — the old full_story may cite facts no longer true.
@@ -810,7 +810,7 @@ class TestAdministrativeNoticeTitleFilter:
 
 
 class TestFindRelatedSenatorsCommonWordSurnames:
-    """Rep. Shomari Figures (surname "Figures", seated Jan 2025) was
+    """Rep. Darnell Figures (surname "Figures", seated Jan 2025) was
     getting tagged on any article using the common word "figures" ("the
     data figures show...") — a bare last-name substring/word-boundary
     match with no context requirement strong enough to filter it out
@@ -821,7 +821,7 @@ class TestFindRelatedSenatorsCommonWordSurnames:
 
     def test_common_word_surname_not_matched_by_bare_word(self, db_session):
         db_session.add(Representative(
-            id="s-figures", name="Shomari Figures", state="AL", party="D",
+            id="s-figures", name="Darnell Figures", state="AL", party="D",
         ))
         db_session.commit()
 
@@ -834,12 +834,12 @@ class TestFindRelatedSenatorsCommonWordSurnames:
         """The stoplist only blocks bare last-name matching — a full-name
         hit is always high-confidence and must still work."""
         db_session.add(Representative(
-            id="s-figures", name="Shomari Figures", state="AL", party="D",
+            id="s-figures", name="Darnell Figures", state="AL", party="D",
         ))
         db_session.commit()
 
         result = _find_related_senators(
-            "Alabama delegation", "Rep. Shomari Figures announced a new bill today.", [], db_session,
+            "Alabama delegation", "Rep. Darnell Figures announced a new bill today.", [], db_session,
         )
         assert [r["id"] for r in result] == ["s-figures"]
 
@@ -869,15 +869,15 @@ class TestFindRelatedSenatorsCommonWordSurnames:
 
 class TestFindRelatedSenatorsSameSurnameCollision:
     """2026-07: live production bug — the Action Center's #2-ranked issue
-    ("Endorsements for South Carolina race", about SC candidate Darline
-    Graham) also tagged Sen. Lindsey Graham as "referenced in coverage",
+    ("Endorsements for South Carolina race", about SC candidate Delia
+    Whitfield) also tagged Sen. Lowell Whitfield as "referenced in coverage",
     even though he is never mentioned anywhere in the title, summary,
     facts, or full story. 30+ surnames are shared by 2+ current members
-    (Smith x5, Johnson x5, Moore x5, Graham x2, etc.), so this wasn't a
+    (Smith x5, Carver x5, Moore x5, Whitfield x2, etc.), so this wasn't a
     one-off: any story that fully-names one member also puts every OTHER
     member with the same surname through last-name-only disambiguation,
-    and a same-state, same-general-topic collision (candidate Graham,
-    Senator Graham, both South Carolina, both "politician" context) can
+    and a same-state, same-general-topic collision (candidate Whitfield,
+    Senator Whitfield, both South Carolina, both "politician" context) can
     read as similar enough to a generic "Senator {name} from {state}"
     prototype phrase to cross the similarity threshold — despite the
     surname's every appearance in the text being fully explained by the
@@ -885,62 +885,62 @@ class TestFindRelatedSenatorsSameSurnameCollision:
     """
 
     def test_unrelated_same_surname_member_is_not_matched(self, db_session):
-        db_session.add(Senator(id="darline-graham", name="Darline Graham", state="SC", party="R"))
-        db_session.add(Senator(id="lindsey-graham", name="Lindsey Graham", state="SC", party="R"))
+        db_session.add(Senator(id="delia-whitfield", name="Delia Whitfield", state="SC", party="R"))
+        db_session.add(Senator(id="lowell-whitfield", name="Lowell Whitfield", state="SC", party="R"))
         db_session.commit()
 
         result = _find_related_senators(
             "Endorsements for South Carolina race",
-            "Several officials have publicly backed Darline Graham as a candidate "
+            "Several officials have publicly backed Delia Whitfield as a candidate "
             "for the South Carolina congressional seat.",
             [
-                "Graham collected endorsements from political figures following her announcement.",
+                "Whitfield collected endorsements from political figures following her announcement.",
                 "The race is scheduled for a full six-year term as outlined in her campaign plans.",
             ],
             db_session,
         )
 
-        assert [r["id"] for r in result] == ["darline-graham"]
+        assert [r["id"] for r in result] == ["delia-whitfield"]
 
     def test_same_surname_member_still_matched_when_also_named_in_full(self, db_session):
         """The fix must only suppress the OTHER person sharing a surname —
         if both are genuinely named in full, both should still match."""
-        db_session.add(Senator(id="darline-graham", name="Darline Graham", state="SC", party="R"))
-        db_session.add(Senator(id="lindsey-graham", name="Lindsey Graham", state="SC", party="R"))
+        db_session.add(Senator(id="delia-whitfield", name="Delia Whitfield", state="SC", party="R"))
+        db_session.add(Senator(id="lowell-whitfield", name="Lowell Whitfield", state="SC", party="R"))
         db_session.commit()
 
         result = _find_related_senators(
             "South Carolina endorsement",
-            "Darline Graham received an endorsement from Lindsey Graham today.",
+            "Delia Whitfield received an endorsement from Lowell Whitfield today.",
             [],
             db_session,
         )
 
-        assert {r["id"] for r in result} == {"darline-graham", "lindsey-graham"}
+        assert {r["id"] for r in result} == {"delia-whitfield", "lowell-whitfield"}
 
     @patch("app.pipeline.analyze.action_center._embed_texts")
     def test_last_name_only_reference_still_works_without_a_collision(self, mock_embed, db_session):
         """The fix must not break ordinary last-name-only disambiguation
         for a member with no same-surname collision in play at all."""
-        db_session.add(Senator(id="lindsey-graham", name="Lindsey Graham", state="SC", party="R"))
+        db_session.add(Senator(id="lowell-whitfield", name="Lowell Whitfield", state="SC", party="R"))
         db_session.commit()
         mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
 
         result = _find_related_senators(
-            "South Carolina news", "Graham criticized the bill in a floor speech.", [], db_session,
+            "South Carolina news", "Whitfield criticized the bill in a floor speech.", [], db_session,
         )
 
-        assert [r["id"] for r in result] == ["lindsey-graham"]
+        assert [r["id"] for r in result] == ["lowell-whitfield"]
 
 
 class TestFindRelatedOfficialsJusticeCommonWordSurnames:
     """Same failure mode as senators/reps, applied to justice matching:
-    Justice Ketanji Brown Jackson's surname is both a common place name
+    Justice Mara Lynn Jackson's surname is both a common place name
     ("Jackson, Mississippi") and an everyday word."""
 
     def test_justice_common_word_surname_not_matched_by_bare_word(self, db_session):
         db_session.add(Senator(id="dummy", name="Dummy Senator", state="CA", party="D"))
-        db_session.add(Justice(id="jackson", name="Ketanji Brown Jackson", last_name="Jackson"))
+        db_session.add(Justice(id="jackson", name="Mara Lynn Jackson", last_name="Jackson"))
         db_session.commit()
 
         result = _find_related_officials(
@@ -962,7 +962,7 @@ class TestSurnameOwnedByOtherName:
     @pytest.mark.parametrize("text, expected", [
         pytest.param("Spain defeated Argentina 1-0 in a match featuring Ferran Torres' late goal.", True,
                      id="live_ferran_torres_case"),
-        pytest.param("The bill from Ritchie Torres advanced on Tuesday.", False,
+        pytest.param("The bill from Marco Torres advanced on Tuesday.", False,
                      id="own_first_name_is_not_another_owner"),
         pytest.param("On the floor, Rep. Torres criticized the amendment.", False,
                      id="title_prefix_is_not_another_owner"),
@@ -978,13 +978,13 @@ class TestSurnameOwnedByOtherName:
         import re
 
         m = re.search(r"\bTorres\b", text)
-        assert _surname_owned_by_other_name(text, m, "Ritchie Torres") is expected
+        assert _surname_owned_by_other_name(text, m, "Marco Torres") is expected
 
 
 class TestFindRelatedSenatorsSurnameOwnedByOtherPerson:
     def test_world_cup_ferran_torres_does_not_tag_reps_torres(self, db_session):
-        db_session.add(Representative(id="r-torres", name="Ritchie Torres", state="NY", party="D"))
-        db_session.add(Representative(id="n-torres", name="Norma J. Torres", state="CA", party="D"))
+        db_session.add(Representative(id="r-torres", name="Marco Torres", state="NY", party="D"))
+        db_session.add(Representative(id="n-torres", name="Inez J. Torres", state="CA", party="D"))
         db_session.commit()
 
         result = _find_related_senators(
@@ -999,7 +999,7 @@ class TestFindRelatedSenatorsSurnameOwnedByOtherPerson:
         # One occurrence owned by another name, one genuinely bare — the
         # member stays a live candidate (the guard requires EVERY
         # occurrence to be someone else's).
-        db_session.add(Representative(id="r-torres", name="Ritchie Torres", state="NY", party="D"))
+        db_session.add(Representative(id="r-torres", name="Marco Torres", state="NY", party="D"))
         db_session.commit()
         with patch("app.pipeline.analyze.action_center._embed_texts") as mock_embed:
             mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
@@ -1083,7 +1083,7 @@ class TestIssueSignatureMatching:
 
     def test_sparse_single_token_signature_cannot_match_even_itself(self):
         # Live 2026-07-23 bug: a story whose only extractable entity is one
-        # name ("Trump") produces a 1-token signature. _SIGNATURE_MATCH_MIN_SHARED
+        # name ("Varga") produces a 1-token signature. _SIGNATURE_MATCH_MIN_SHARED
         # (2) means it can never clear the floor, even compared to an
         # exact copy of itself — this is exactly why _run_refresh's loop
         # needs the exact-content check ahead of signature matching (see
@@ -1092,17 +1092,17 @@ class TestIssueSignatureMatching:
         # different stories that happen to mention the same one person).
         facts = [
             "A new bill text was released by Republican representatives.",
-            "The legislation includes a provision endorsed by former President Trump.",
+            "The legislation includes a provision endorsed by former President Varga.",
         ]
         sig = _issue_signature("Republicans introduce crypto legislation with ethical clause", facts)
-        assert sig == {"trump"}
+        assert sig == {"varga"}
         assert _signatures_match(sig, sig) is False
 
     def test_byte_identical_issues_are_duplicates(self):
         title = "Republicans introduce crypto legislation with ethical clause"
         facts = [
             "A new bill text was released by Republican representatives.",
-            "The legislation includes a provision endorsed by former President Trump.",
+            "The legislation includes a provision endorsed by former President Varga.",
         ]
         assert _is_exact_content_duplicate(title, facts, title, list(facts)) is True
 
@@ -1122,7 +1122,7 @@ class TestIssueSignatureMatching:
         title = "Republicans introduce crypto legislation with ethical clause"
         facts = [
             "A new bill text was released by Republican representatives.",
-            "The legislation includes a provision endorsed by former President Trump.",
+            "The legislation includes a provision endorsed by former President Varga.",
         ]
         existing = ActionIssue(
             id=420, date="2026-07-23", rank=2, title=title, facts=json.dumps(facts),
@@ -1135,20 +1135,20 @@ class TestIssueSignatureMatching:
         assert match is existing
 
     def test_find_matching_issue_catches_identical_title_with_reworded_facts(self):
-        # Live 2026-08-22 bug: "Trump defends beef import plan amid GOP
+        # Live 2026-08-22 bug: "Varga defends beef import plan amid GOP
         # criticism" was regenerated an hour apart with the same title but
         # "cattle producers"/"ranchers" swapped between generations — enough
         # to sink _issue_signature's sparse entity overlap below
         # _signatures_match's floor, and _is_exact_content_duplicate
         # requires facts to match too so it didn't catch this either. Two
         # rows created, two Bluesky posts for the same story.
-        title = "Trump defends beef import plan amid GOP criticism"
+        title = "Varga defends beef import plan amid GOP criticism"
         old_facts = [
-            "Trump said the decision was driven by public pressure to lower beef prices.",
+            "Varga said the decision was driven by public pressure to lower beef prices.",
             "GOP lawmakers voiced alarm over the policy's effect on U.S. beef producers.",
         ]
         new_facts = [
-            "Trump said the decision was driven by public pressure to lower beef prices.",
+            "Varga said the decision was driven by public pressure to lower beef prices.",
             "GOP lawmakers voiced alarm over the policy's effect on U.S. cattle producers.",
         ]
         existing = ActionIssue(
@@ -1194,8 +1194,8 @@ class TestIssueSignatureMatching:
         # ongoing saga into one row would hide real distinct developments.
         title = "Senate passes funding bill to avert October shutdown"
         cand_title = "Senate approves funding bill to avoid shutdown"
-        facts = ["Senator Grassley led the floor vote ahead of the October deadline."]
-        cand_facts = ["Senator Collins negotiated the final procedural agreement with House leaders."]
+        facts = ["Senator Grantham led the floor vote ahead of the October deadline."]
+        cand_facts = ["Senator Pryor negotiated the final procedural agreement with House leaders."]
         existing = ActionIssue(
             id=535, date="2026-08-18", rank=5, title=cand_title, facts=json.dumps(cand_facts),
         )
@@ -1294,9 +1294,9 @@ class TestDedupeNearIdenticalIssues:
         # Identical vectors -> cosine 1.0 (over threshold); orthogonal ->
         # cosine 0.0 (nowhere close). The threshold's own calibration is
         # tested in TestIssueSignatureMatching — this exercises clustering.
-        a = self._issue(603, "Trump defends beef import plan amid GOP criticism", datetime(2026, 8, 21, 23))
-        b = self._issue(604, "Trump defends beef import plan amid GOP criticism", datetime(2026, 8, 22, 0))
-        c = self._issue(605, "Trump defends beef import plan after GOP criticism", datetime(2026, 8, 22, 2))
+        a = self._issue(603, "Varga defends beef import plan amid GOP criticism", datetime(2026, 8, 21, 23))
+        b = self._issue(604, "Varga defends beef import plan amid GOP criticism", datetime(2026, 8, 22, 0))
+        c = self._issue(605, "Varga defends beef import plan after GOP criticism", datetime(2026, 8, 22, 2))
         d = self._issue(999, "Senate confirms new EPA administrator", datetime(2026, 8, 21, 10))
         mock_embed.return_value = np.array([
             [1.0, 0.0], [1.0, 0.0], [1.0, 0.0], [0.0, 1.0],
@@ -1326,9 +1326,9 @@ class TestDedupeNearIdenticalIssues:
         from app.pipeline.analyze.action_center import mark_recent_duplicates
 
         rows = [
-            ActionIssue(date="2026-08-22", rank=1, title="Trump defends beef import plan", facts="[]",
+            ActionIssue(date="2026-08-22", rank=1, title="Varga defends beef import plan", facts="[]",
                         created_at=datetime(2026, 8, 22, 2)),
-            ActionIssue(date="2026-08-22", rank=2, title="Trump defends beef import plan", facts="[]",
+            ActionIssue(date="2026-08-22", rank=2, title="Varga defends beef import plan", facts="[]",
                         created_at=datetime(2026, 8, 21, 23)),
             ActionIssue(date="2026-08-21", rank=1, title="Senate confirms new EPA administrator", facts="[]",
                         created_at=datetime(2026, 8, 21, 10)),
@@ -1352,9 +1352,9 @@ class TestDedupeNearIdenticalIssues:
     def test_kept_issues_preserve_their_original_relative_order(self, mock_embed):
         # Freshest-of-cluster is issue b (middle position) — it must stay
         # in b's original slot relative to c, not jump to wherever a was.
-        a = self._issue(1, "Trump defends beef import plan amid GOP criticism", datetime(2026, 8, 21))
+        a = self._issue(1, "Varga defends beef import plan amid GOP criticism", datetime(2026, 8, 21))
         b = self._issue(2, "Senate confirms new EPA administrator", datetime(2026, 8, 20))
-        c = self._issue(3, "Trump defends beef import plan amid GOP criticism", datetime(2026, 8, 20))
+        c = self._issue(3, "Varga defends beef import plan amid GOP criticism", datetime(2026, 8, 20))
         mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 0.0]])
 
         result = dedupe_near_identical_issues([a, b, c])
@@ -1383,8 +1383,8 @@ class TestDedupeNearIdenticalIssues:
         # TOPIC_CHANGE_THRESHOLD (0.65) and _NEAR_IDENTICAL_TITLE_THRESHOLD
         # (0.92) — only signature overlap should decide this one, same as
         # _find_matching_issue.
-        a = self._issue(1, "Trump attorney general nominee advances 54-45", datetime(2026, 8, 21))
-        b = self._issue(2, "Senate advances Trump attorney general pick 54-45", datetime(2026, 8, 22))
+        a = self._issue(1, "Varga attorney general nominee advances 54-45", datetime(2026, 8, 21))
+        b = self._issue(2, "Senate advances Varga attorney general pick 54-45", datetime(2026, 8, 22))
         mock_embed.return_value = np.array([[1.0, 0.0], [0.7, (1 - 0.7 ** 2) ** 0.5]])
 
         result = dedupe_near_identical_issues([a, b])
@@ -1396,8 +1396,8 @@ class TestDedupeNearIdenticalIssues:
         # Sanity check for the new branches: a shared-vocabulary pair with
         # NO shared entities/numbers and no shared source URL must not
         # collapse just because title cosine clears TOPIC_CHANGE_THRESHOLD.
-        a = self._issue(1, "Trump attorney general nominee advances 54-45", datetime(2026, 8, 21))
-        b = self._issue(2, "Biden EPA administrator confirmed 60-38", datetime(2026, 8, 22))
+        a = self._issue(1, "Varga attorney general nominee advances 54-45", datetime(2026, 8, 21))
+        b = self._issue(2, "Dunmore EPA administrator confirmed 60-38", datetime(2026, 8, 22))
         mock_embed.return_value = np.array([[1.0, 0.0], [0.7, (1 - 0.7 ** 2) ** 0.5]])
 
         result = dedupe_near_identical_issues([a, b])
@@ -1415,8 +1415,8 @@ class TestDedupeNearIdenticalIssues:
         # since A-C shares neither a URL, a signature, nor meaningful
         # title similarity, regardless of C's link to B.
         a = self._issue(1, "DHS data claims and think tank connections", datetime(2026, 8, 21, 21))
-        b = self._issue(2, "Trump attorney general nominee advances 54-45", datetime(2026, 8, 21, 22))
-        c = self._issue(3, "Senate advances Trump attorney general pick 54-45", datetime(2026, 8, 22, 2))
+        b = self._issue(2, "Varga attorney general nominee advances 54-45", datetime(2026, 8, 21, 22))
+        c = self._issue(3, "Senate advances Varga attorney general pick 54-45", datetime(2026, 8, 22, 2))
         a.source_urls = json.dumps(["https://npr.org/dhs-story"])
         b.source_urls = json.dumps(["https://npr.org/dhs-story"])
         # A-B: orthogonal (merge is via shared URL alone, not cosine).
@@ -1605,7 +1605,7 @@ class TestApplyMatchedIssueUpdate:
             id=1, date="2026-07-20", rank=3, title="Old title",
             facts=json.dumps(["An old fact."]), primary_article_date="2026-07-19",
         )
-        new_values = _new_values_for("New title", ["An old fact.", "A new fact with Senator Susan Collins."], "2026-07-20")
+        new_values = _new_values_for("New title", ["An old fact.", "A new fact with Senator Ruth Pryor."], "2026-07-20")
 
         _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", json.loads(new_values["facts"]), "New title")
 
@@ -1699,7 +1699,7 @@ class TestApplyMatchedIssueUpdate:
             facts=json.dumps(["An old fact."]), primary_article_date="2026-07-19",
             bsky_posted_at=utcnow(), bsky_posted_rank=1,
         )
-        facts = ["An old fact.", "A new fact naming Senator Susan Collins."]
+        facts = ["An old fact.", "A new fact naming Senator Ruth Pryor."]
         new_values = _new_values_for("Story", facts, "2026-07-20")
 
         result = _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", facts, "Story")
@@ -1728,11 +1728,11 @@ class TestApplyMatchedIssueUpdate:
     def test_no_new_date_does_not_allow_repost(self):
         match = ActionIssue(
             id=1, date="2026-07-19", rank=1, title="Story",
-            facts=json.dumps(["An old fact naming Senator Susan Collins."]),
+            facts=json.dumps(["An old fact naming Senator Ruth Pryor."]),
             primary_article_date="2026-07-19",
             bsky_posted_at=utcnow(), bsky_posted_rank=1,
         )
-        facts = ["An old fact naming Senator Susan Collins.", "Brand new fact naming Senator Marco Rubio."]
+        facts = ["An old fact naming Senator Ruth Pryor.", "Brand new fact naming Senator Dev Kapoor."]
         # primary_article_date NOT advanced past match's own — new facts
         # don't matter if the date itself never moved forward.
         new_values = _new_values_for("Story", facts, "2026-07-19")
@@ -1766,7 +1766,7 @@ class TestApplyMatchedIssueUpdate:
 
         # Run A — same article date, so no repost is possible here, but the
         # LLM's re-extraction surfaces a genuinely new named entity.
-        developed = posted_facts + ["Senator Susan Collins announced opposition."]
+        developed = posted_facts + ["Senator Ruth Pryor announced opposition."]
         action_metrics.reset()
         assert _apply_matched_issue_update(
             match, _new_values_for("Story", developed, "2026-07-19"),
@@ -1776,7 +1776,7 @@ class TestApplyMatchedIssueUpdate:
         assert match.bsky_posted_facts == json.dumps(posted_facts)  # repost baseline did not
 
         # Run B — the article date finally advances, facts unchanged since
-        # run A. Collins is still new relative to what was actually posted.
+        # run A. Pryor is still new relative to what was actually posted.
         assert _apply_matched_issue_update(
             match, _new_values_for("Story", developed, "2026-07-20"),
             1, "2026-07-20", "2026-07-20", developed, "Story",
@@ -1820,14 +1820,14 @@ class TestApplyMatchedIssueUpdate:
         # an empty baseline as "everything is new" and reposting all of them.
         # The facts here carry a named entity precisely so that an empty
         # baseline WOULD return True — this fails if the fallback is dropped.
-        facts = ["Senator Susan Collins opposed the temporary funding measure."]
+        facts = ["Senator Ruth Pryor opposed the temporary funding measure."]
         match = ActionIssue(
             id=1, date="2026-07-19", rank=1, title="Story",
             facts=json.dumps(facts), bsky_posted_facts=None,
             primary_article_date="2026-07-19",
             bsky_posted_at=utcnow(), bsky_posted_rank=1,
         )
-        reworded = ["Senator Susan Collins opposed the funding measure."]
+        reworded = ["Senator Ruth Pryor opposed the funding measure."]
         assert _bsky_repost_has_new_information("", reworded) is True  # empty baseline
 
         assert _apply_matched_issue_update(
@@ -2043,7 +2043,7 @@ class TestBskyRepostHasNewInformation:
         pytest.param(
             ["The House passed a temporary funding measure to avoid a shutdown."],
             ["The House passed a temporary funding measure to avoid a shutdown.",
-             "Senator Susan Collins said she would support the measure in the Senate."],
+             "Senator Ruth Pryor said she would support the measure in the Senate."],
             True, id="a_new_named_entity_counts_as_new_information",
         ),
         pytest.param(
@@ -2152,9 +2152,9 @@ class TestValidateFactsAuditAdditions:
     the live text."""
 
     def test_placeholder_fact_dropped(self):
-        facts = ["Thune announced the tribute details on [date].",
+        facts = ["Holloway announced the tribute details on [date].",
                  "The Senate held a vote on Thursday."]
-        clean = _validate_facts(facts, source_text="Thune announced details. The Senate held a vote on Thursday.")
+        clean = _validate_facts(facts, source_text="Holloway announced details. The Senate held a vote on Thursday.")
         assert clean == ["The Senate held a vote on Thursday."]
 
     @pytest.mark.parametrize("fact, source, kept", [
@@ -2162,19 +2162,19 @@ class TestValidateFactsAuditAdditions:
                      None, False, id="articles_as_subject_meta_fact_dropped"),
         pytest.param("The articles referenced specific names and dates related to the discussion.",
                      None, False, id="articles_referenced_meta_fact_dropped"),
-        pytest.param("Senator Graham announced her candidacy for the seat left by her brother.",
-                     "Darline Graham announced her candidacy for the vacant seat.",
+        pytest.param("Senator Whitfield announced her candidacy for the seat left by her brother.",
+                     "Delia Whitfield announced her candidacy for the vacant seat.",
                      False, id="ungrounded_family_relationship_fact_dropped"),
-        pytest.param("Senator Graham announced her candidacy for the seat left by her brother.",
-                     "Darline Graham, whose brother held the seat, announced her candidacy.",
+        pytest.param("Senator Whitfield announced her candidacy for the seat left by her brother.",
+                     "Delia Whitfield, whose brother held the seat, announced her candidacy.",
                      True, id="grounded_family_relationship_fact_kept"),
-        # 2026-07 live case: "former President Donald Trump" published while
-        # the source material said "President Trump".
-        pytest.param("Former President Donald Trump announced new tariffs on steel imports.",
-                     "President Trump announced tariffs on steel imports.",
+        # 2026-07 live case: "former President Victor Varga" published while
+        # the source material said "President Varga".
+        pytest.param("Former President Victor Varga announced new tariffs on steel imports.",
+                     "President Varga announced tariffs on steel imports.",
                      False, id="ungrounded_former_status_fact_dropped"),
-        pytest.param("Former President Obama criticized the ruling on Tuesday.",
-                     "Former President Barack Obama criticized the court's ruling Tuesday.",
+        pytest.param("Former President Ferrante criticized the ruling on Tuesday.",
+                     "Former President Luca Ferrante criticized the court's ruling Tuesday.",
                      True, id="grounded_former_status_fact_kept"),
     ])
     def test_single_fact(self, fact, source, kept):
@@ -2223,7 +2223,7 @@ class TestDigestFiltering:
     """An outlet's recurring briefing ("Up First", "Morning news brief") is
     ONE feed item covering several unrelated stories. Left in, it becomes an
     issue whose summary presents separate events as one narrative — live
-    2026-07 case (issue 483): a Hamas-Israel agreement, a Trump quote, and a
+    2026-07 case (issue 483): a Hamas-Israel agreement, a Varga quote, and a
     slowing US economy joined by a causal "following the announcement" no
     source stated. These have to be dropped at ingest: once the items are in
     one article the topic boundary between them is not recoverable
@@ -2252,7 +2252,7 @@ class TestDigestFiltering:
         # this product leads with "The", which is too long to be absorbed by
         # the source-tag group (no colon of its own within 20 chars) and was
         # not otherwise skipped, so the whole prefix pattern silently failed.
-        "The Up First newsletter: Trump weighs birthright citizenship order",
+        "The Up First newsletter: Varga weighs birthright citizenship order",
         "An evening briefing on troop levels",
     ])
     def test_recurring_digest_titles_are_dropped(self, title):
@@ -2267,7 +2267,7 @@ class TestDigestFiltering:
         # only count title-initial. All three published as ordinary
         # single-story headlines and were dropped before this was split out.
         "White House news briefing on the Gaza strikes",
-        "Trump skipped the President's Daily Brief for a week, officials say",
+        "Varga skipped the President's Daily Brief for a week, officials say",
         "Pentagon holds evening briefing on troop levels",
         "The building blew up first, then the roof collapsed",
         # A hyphenated word is not a source tag, so what follows it is not
@@ -2276,7 +2276,7 @@ class TestDigestFiltering:
         # "in brief" / "and more" are digest markers only as a trailing tag;
         # mid-sentence they are ordinary prose, and an unspaced dash is a
         # compound adjective rather than the tag boundary.
-        "Senator Collins spoke in brief remarks after the vote",
+        "Senator Pryor spoke in brief remarks after the vote",
         "Flooding kills 20 and more than 100 are missing in Texas",
         "Senate passes trade bill and more-restrictive tariff rules",
         # Single-topic forms deliberately left out of the pattern: an
@@ -2300,10 +2300,10 @@ class TestDigestFiltering:
         # real name rather than grammar, and must not be stripped. Both
         # cases read as a single two-item blurb if it is.
         ("Wednesday",
-         "Netanyahu addressed the Knesset; Powell defended the rate "
-         "decision; Newsom declared a state of emergency."),
+         "Okonkwo addressed the Knesset; Brandt defended the rate "
+         "decision; Quillen declared a state of emergency."),
         ("The day ahead",
-         "Ukraine aid clears the Senate • Powell signals a pause • Texas "
+         "Ukraine aid clears the Senate • Brandt signals a pause • Texas "
          "sues over the new map"),
     ])
     def test_bodies_listing_unrelated_stories_are_dropped(self, title, body):
@@ -2320,7 +2320,7 @@ class TestDigestFiltering:
          "for a phased withdrawal. Hamas said it would release hostages."),
         ("Senate confirms Jane Doe to lead FDA",
          "The Senate voted 51-49 to confirm Jane Doe. Doe will lead the "
-         "FDA. Trump praised the outcome."),
+         "FDA. Varga praised the outcome."),
         # Sentence-initial capitals are grammar, not names — without the
         # forced-capital strip each of these sentences would look like it
         # introduced a different entity and the blurb would read as a list.
@@ -2330,8 +2330,8 @@ class TestDigestFiltering:
         # Three sentences, three disjoint entity sets, ONE story — caught
         # only by the title-coverage condition, since the headline accounts
         # for all three items.
-        ("Grassley releases FBI transcript in Judiciary probe",
-         "Sen. Chuck Grassley released the transcript Thursday. The FBI "
+        ("Grantham releases FBI transcript in Judiciary probe",
+         "Sen. Chuck Grantham released the transcript Thursday. The FBI "
          "declined to comment. House Judiciary Democrats called for "
          "hearings."),
         # Bare numbers are not topics.
@@ -2351,19 +2351,19 @@ class TestDigestFiltering:
 
     @pytest.mark.parametrize("title", [
         # A possessive-led headline is the most common shape there is, and
-        # _issue_signature keeps "'s" inside the token — so "Trump's" shared
-        # nothing with a body saying "Trump" and the headline read as
+        # _issue_signature keeps "'s" inside the token — so "Varga's" shared
+        # nothing with a body saying "Varga" and the headline read as
         # failing to describe its own story. Both apostrophe characters,
         # since the typographic one tokenizes differently again.
-        "Trump's tariff order and the Bessent schedule fight",
-        "Trump\u2019s tariff order and the Bessent schedule fight",
+        "Varga's tariff order and the Lindqvist schedule fight",
+        "Varga\u2019s tariff order and the Lindqvist schedule fight",
     ])
     def test_possessive_headline_still_covers_its_own_body(self, title):
         from app.pipeline.analyze.action_center import _multi_topic_body
 
         body = (
-            "The order signed by Trump takes effect Monday; Roberts set "
-            "argument for October; Bessent defended the schedule."
+            "The order signed by Varga takes effect Monday; Marchetti set "
+            "argument for October; Lindqvist defended the schedule."
         )
         # Covers two of the three items once possessives are normalized.
         assert _multi_topic_body(body, title) is False
@@ -2378,13 +2378,13 @@ class TestDigestFiltering:
         from app.pipeline.analyze.action_center import _multi_topic_body
 
         body = (
-            "Reporters pressed Netanyahu on the deal; Powell defended the "
-            "rate decision; Netanyahu answered again hours later."
+            "Reporters pressed Okonkwo on the deal; Brandt defended the "
+            "rate decision; Okonkwo answered again hours later."
         )
         assert _multi_topic_body(body, "A quiet Tuesday") is False
         # Same shape with the repeated name swapped out IS a list — the
         # only difference between the two is the shared entity.
-        disjoint = body.replace("Netanyahu answered again", "Newsom spoke again")
+        disjoint = body.replace("Okonkwo answered again", "Quillen spoke again")
         assert _multi_topic_body(disjoint, "A quiet Tuesday") is True
 
     def test_body_cut_at_the_summary_cap_does_not_invent_an_item(self):
@@ -2443,7 +2443,7 @@ class TestDigestFiltering:
         which is most bulleted lists."""
         from app.pipeline.analyze.action_center import _split_body_items
 
-        body = "Ukraine aid clears the Senate • Powell signals a pause • Texas sues"
+        body = "Ukraine aid clears the Senate • Brandt signals a pause • Texas sues"
         assert len(_split_body_items(body)) == 3
 
     def test_html_bulleted_digest_survives_parsing_into_the_detector(self):
@@ -2802,7 +2802,7 @@ class TestFullNameMatchingIsWordAnchored:
 
     def test_reported_cases_does_not_name_rep_ed_case(self, db_session):
         db_session.add(Representative(
-            id="r-case", name="Ed Case", state="HI", party="D",
+            id="r-case", name="Ned Case", state="HI", party="D",
         ))
         db_session.commit()
 
@@ -2816,7 +2816,7 @@ class TestFullNameMatchingIsWordAnchored:
 
     def test_several_green_does_not_name_rep_al_green(self, db_session):
         db_session.add(Representative(
-            id="r-green", name="Al Green", state="TX", party="D",
+            id="r-green", name="Cal Green", state="TX", party="D",
         ))
         db_session.commit()
 
@@ -2832,16 +2832,16 @@ class TestFullNameMatchingIsWordAnchored:
         """The anchoring must not cost real matches — these are the same two
         members, actually named."""
         db_session.add(Representative(
-            id="r-case", name="Ed Case", state="HI", party="D",
+            id="r-case", name="Ned Case", state="HI", party="D",
         ))
         db_session.add(Representative(
-            id="r-green", name="Al Green", state="TX", party="D",
+            id="r-green", name="Cal Green", state="TX", party="D",
         ))
         db_session.commit()
 
         result = _find_related_senators(
             "Hawaii and Texas delegations split on the bill",
-            "Rep. Ed Case backed the measure, while Rep. Al Green opposed it.",
+            "Rep. Ned Case backed the measure, while Rep. Cal Green opposed it.",
             [], db_session,
         )
 
@@ -2867,7 +2867,7 @@ class TestFullNameMatchingIsWordAnchored:
     def test_justice_full_name_is_word_anchored_too(self, db_session):
         """Same helper, same guarantee, for the SCOTUS path."""
         db_session.add(Justice(
-            id="j-1", name="Amy Coney Barrett", last_name="Barrett",
+            id="j-1", name="Mary Lane Barrett", last_name="Barrett",
             appointing_party="R",
         ))
         db_session.commit()
@@ -2885,13 +2885,13 @@ class TestMentionsFullName:
     """Unit-level coverage of the boundary rule itself."""
 
     @pytest.mark.parametrize("text,name,expected", [
-        ("Health officials cited reported cases.", "Ed Case", False),
-        ("It funds several green projects.", "Al Green", False),
-        ("Rep. Ed Case said so.", "Ed Case", True),
-        ("ED CASE voted no.", "Ed Case", True),
-        ("Signed by Al Green, the letter...", "Al Green", True),
-        ("A profile of Al Greene, the singer.", "Al Green", False),
-        ("", "Ed Case", False),
+        ("Health officials cited reported cases.", "Ned Case", False),
+        ("It funds several green projects.", "Cal Green", False),
+        ("Rep. Ned Case said so.", "Ned Case", True),
+        ("NED CASE voted no.", "Ned Case", True),
+        ("Signed by Cal Green, the letter...", "Cal Green", True),
+        ("A profile of Cal Greene, the singer.", "Cal Green", False),
+        ("", "Ned Case", False),
         ("Some text", "", False),
         # A name ending in a non-word character: \b would assert a transition
         # *after* the period and refuse every one of these. Sen. Angus King's
@@ -2899,10 +2899,10 @@ class TestMentionsFullName:
         # hypothetical.
         ("Sen. Angus King Jr. voted no.", "Angus King Jr.", True),
         ("Rep. Donald Payne Jr. introduced it.", "Donald Payne Jr.", True),
-        ("A statement from Harold Rogers Jr.", "Harold Rogers Jr.", True),
+        ("A statement from Harold Rhodes Jr.", "Harold Rhodes Jr.", True),
         ("Rep. Robert F. Kennedy spoke.", "Robert F. Kennedy", True),
-        ("Rep. Alexandria Ocasio-Cortez spoke.", "Alexandria Ocasio-Cortez", True),
-        ("Sen. Beto O'Rourke spoke.", "Beto O'Rourke", True),
+        ("Rep. Lena Ortiz-Hale spoke.", "Lena Ortiz-Hale", True),
+        ("Sen. Kip O'Dwyer spoke.", "Kip O'Dwyer", True),
     ])
     def test_boundary_rule(self, text, name, expected):
         assert _mentions_full_name(text, name) is expected
@@ -2999,7 +2999,7 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
 
     @pytest.mark.parametrize("text,names_special", [
         # "special" before "Senate" / "U.S.", and "special election for …".
-        ("Ossoff leads in the special Senate election in Georgia", True),
+        ("Brennan leads in the special Senate election in Georgia", True),
         ("Special U.S. Senate race in Georgia too close to call", True),
         ("Count tightens in the special U.S. Senate election in Georgia", True),
         ("Georgia's special election for U.S. Senate tightens", True),
@@ -3017,13 +3017,13 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         assert (self._match(regular, text, db=db) is regular) is not names_special
 
     @pytest.mark.parametrize("race_id,text", [
-        ("2026-SEN-OH-SPECIAL", "Brown leads Husted in Ohio Senate race"),
+        ("2026-SEN-OH-SPECIAL", "Brown leads Halvorsen in Ohio Senate race"),
         ("2026-SEN-OH-SPECIAL", "Democrat leads the U.S. Senate race in Ohio"),
         ("2026-SEN-OH-SPECIAL", "Count tightens in the special U.S. Senate election in Ohio"),
         ("2026-SEN-FL-SPECIAL", "Republican leads Florida's U.S. Senate count"),
         ("2026-SEN-FL-SPECIAL", "Florida's special election for U.S. Senate tightens"),
         # A state's only race is its only race either way round.
-        ("2026-SEN-GA", "Ossoff leads in the special Senate election in Georgia"),
+        ("2026-SEN-GA", "Brennan leads in the special Senate election in Georgia"),
     ])
     def test_a_states_only_senate_race_is_named_by_any_senate_phrase(self, db_session, race_id, text):
         """Florida and Ohio elect a senator in 2026 only to fill a vacancy:
@@ -3038,7 +3038,7 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         issue = self._flip_issue("2026-SEN-OH-SPECIAL", "the U.S. Senate race")
         db_session.add(issue)
         db_session.commit()
-        assert self._match(issue, "Brown leads Husted in Ohio Senate race") is issue
+        assert self._match(issue, "Brown leads Halvorsen in Ohio Senate race") is issue
 
     def test_a_state_senate_story_never_names_a_states_only_senate_race(self, db_session):
         db = self._senate_races(db_session, "2026-SEN-OH-SPECIAL")
@@ -3073,13 +3073,13 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
     @pytest.mark.parametrize("race_id,text", [
         # Still named: a bare "race", a possessive, "special" or "U.S.", and
         # a year or month after the phrase.
-        ("2026-SEN-OH-SPECIAL", "Brown leads Husted in Ohio Senate race"),
+        ("2026-SEN-OH-SPECIAL", "Brown leads Halvorsen in Ohio Senate race"),
         ("2026-SEN-OH-SPECIAL", "Brown leads in the race for Ohio's Senate seat"),
         ("2026-SEN-OH-SPECIAL", "Brown leads in Ohio's Senate seat race in November"),
         ("2026-SEN-OH-SPECIAL", "Brown leads in Ohio's special Senate election"),
         ("2026-SEN-OH-SPECIAL", "Brown leads in the Ohio U.S. Senate seat count"),
         ("2026-SEN-FL-SPECIAL", "Moody leads in Florida's U.S. Senate special election"),
-        ("2026-SEN-GA", "Ossoff leads in Georgia Senate race in 2026 rematch"),
+        ("2026-SEN-GA", "Brennan leads in Georgia Senate race in 2026 rematch"),
     ])
     def test_the_us_senate_race_is_still_named_beside_those_rules(self, db_session, race_id, text):
         db = self._senate_races(db_session, race_id)
@@ -3090,10 +3090,10 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         db = self._senate_races(db_session, "2020-SEN-GA", "2020-SEN-GA-SPECIAL")
         regular = self._flip_issue("2020-SEN-GA", "Georgia's U.S. Senate")
         special = self._flip_issue("2020-SEN-GA-SPECIAL", "Georgia's U.S. Senate special election")
-        text = "Ossoff leads Perdue in Georgia's regular Senate race"
+        text = "Brennan leads Purcell in Georgia's regular Senate race"
         assert self._match(regular, text, db=db) is regular
         assert self._match(special, text, db=db) is None
-        assert self._match(regular, "Ossoff leads in the regular Senate race in Georgia", db=db) is regular
+        assert self._match(regular, "Brennan leads in the regular Senate race in Georgia", db=db) is regular
 
     def test_an_issue_whose_race_cannot_be_read_is_not_promoted(self):
         issue = self._flip_issue()
@@ -3256,8 +3256,8 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         assert self._match(issue, text, db=db) is None, text
 
     @pytest.mark.parametrize("race_id,text", [
-        ("2026-SEN-OH-SPECIAL", "Brown leads Husted in Ohio Senate race, 2026 rematch"),
-        ("2026-SEN-OH-SPECIAL", "Brown leads Husted in the Senate race in Ohio"),
+        ("2026-SEN-OH-SPECIAL", "Brown leads Halvorsen in Ohio Senate race, 2026 rematch"),
+        ("2026-SEN-OH-SPECIAL", "Brown leads Halvorsen in the Senate race in Ohio"),
         ("2026-HOUSE-MI-2", "Democrat wins Michigan's 2nd District House race"),
         ("2026-HOUSE-AK-0", "Peltola leads for the only House seat in Alaska"),
     ])
@@ -3280,20 +3280,20 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         return db
 
     def test_a_story_naming_the_race_but_none_of_its_candidates_does_not_promote(self, db_session):
-        db = self._count(db_session, "2026-HOUSE-GA-2", "Sanford D. Bishop Jr.", "Wayne Johnson")
+        db = self._count(db_session, "2026-HOUSE-GA-2", "Leland D. Bishop Jr.", "Dale Carver")
         issue = self._flip_issue()
         assert self._match(issue, "Democrat leads in Georgia's 2nd Congressional District", db=db) is None
         assert self._match(issue, "GA-2 tightens", db=db) is None
-        assert self._match(issue, "Sanford Bishop leads in Georgia's 2nd Congressional District", db=db) is issue
-        assert self._match(issue, "Wayne Johnson pulls ahead in GA-02", db=db) is issue
+        assert self._match(issue, "Leland Bishop leads in Georgia's 2nd Congressional District", db=db) is issue
+        assert self._match(issue, "Dale Carver pulls ahead in GA-02", db=db) is issue
 
     def test_the_issues_own_session_supplies_the_candidates(self, db_session):
-        self._count(db_session, "2026-HOUSE-GA-2", "Sanford Bishop", "Wayne Johnson")
+        self._count(db_session, "2026-HOUSE-GA-2", "Leland Bishop", "Dale Carver")
         issue = self._flip_issue()
         db_session.add(issue)
         db_session.commit()
         assert self._match(issue, "Democrat leads in Georgia's 2nd Congressional District") is None
-        assert self._match(issue, "Sanford Bishop leads in Georgia's 2nd Congressional District") is issue
+        assert self._match(issue, "Leland Bishop leads in Georgia's 2nd Congressional District") is issue
 
     @pytest.mark.parametrize("race_id,text", [
         # Round 6's low-realism phrases: each names other people, or none.
@@ -3307,50 +3307,50 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
     ])
     def test_prose_without_a_candidate_is_not_the_race_once_candidates_are_known(self, db_session, race_id, text):
         db = self._senate_races(db_session, race_id) if "-SEN-" in race_id else db_session
-        self._count(db, race_id, "Jon Ossoff" if "-SEN-" in race_id else "Pat Quimby", "Lee Zwanziger")
+        self._count(db, race_id, "Jon Brennan" if "-SEN-" in race_id else "Pat Quimby", "Lee Zwanziger")
         issue = self._flip_issue(race_id, "the race")
         assert self._match(issue, text, db=db) is None, text
 
     @staticmethod
-    def _two_georgia_senate_races(db, special_runner_up="Kelly Loeffler"):
+    def _two_georgia_senate_races(db, special_runner_up="Kelsey Lofton"):
         from app.models import Race
 
         db.add(Race(id="2020-SEN-GA", cycle_year=2020, office="S", state="GA"))
         db.add(Race(id="2020-SEN-GA-SPECIAL", cycle_year=2020, office="S", state="GA", is_special=True))
         db.commit()
-        TestElectionResultsIssuesMatchOnlyTheirRace._count(db, "2020-SEN-GA", "David Perdue", "Jon Ossoff")
-        TestElectionResultsIssuesMatchOnlyTheirRace._count(db, "2020-SEN-GA-SPECIAL", "Raphael Warnock",
+        TestElectionResultsIssuesMatchOnlyTheirRace._count(db, "2020-SEN-GA", "David Purcell", "Jon Brennan")
+        TestElectionResultsIssuesMatchOnlyTheirRace._count(db, "2020-SEN-GA-SPECIAL", "Rafael Wexford",
                                                            special_runner_up)
         return db
 
     def test_two_races_in_one_state_are_told_apart_by_their_candidates(self, db_session):
-        """Georgia 2020: "Raphael Warnock defeats Kelly Loeffler in Georgia
+        """Georgia 2020: "Rafael Wexford defeats Kelsey Lofton in Georgia
         Senate runoff" says no "special", and named the REGULAR race by the
-        phrase alone. Warnock and Loeffler are the special's candidates."""
+        phrase alone. Wexford and Lofton are the special's candidates."""
         db = self._two_georgia_senate_races(db_session)
         regular = self._flip_issue("2020-SEN-GA", "Georgia's U.S. Senate")
         special = self._flip_issue("2020-SEN-GA-SPECIAL", "Georgia's U.S. Senate special election")
-        for text in ("Raphael Warnock defeats Kelly Loeffler in Georgia Senate runoff",
-                     "Raphael Warnock leads in the Georgia Senate runoff"):
+        for text in ("Rafael Wexford defeats Kelsey Lofton in Georgia Senate runoff",
+                     "Rafael Wexford leads in the Georgia Senate runoff"):
             assert self._match(regular, text, db=db) is None, text
             assert self._match(special, text, db=db) is special, text
-        text = "Jon Ossoff leads David Perdue in Georgia Senate race"
+        text = "Jon Brennan leads David Purcell in Georgia Senate race"
         assert self._match(regular, text, db=db) is regular
         assert self._match(special, text, db=db) is None
         # Both races' candidates in an unqualified phrase: about the two, so neither.
-        text = "Raphael Warnock and Jon Ossoff lead in Georgia Senate runoffs"
+        text = "Rafael Wexford and Jon Brennan lead in Georgia Senate runoffs"
         assert self._match(regular, text, db=db) is None
         assert self._match(special, text, db=db) is None
         # An explicit word still decides, and never against it.
-        assert self._match(special, "Raphael Warnock leads in Georgia's special Senate election", db=db) is special
-        assert self._match(special, "Raphael Warnock leads in Georgia's regular Senate race", db=db) is None
-        assert self._match(regular, "Jon Ossoff leads in Georgia's special Senate election", db=db) is None
+        assert self._match(special, "Rafael Wexford leads in Georgia's special Senate election", db=db) is special
+        assert self._match(special, "Rafael Wexford leads in Georgia's regular Senate race", db=db) is None
+        assert self._match(regular, "Jon Brennan leads in Georgia's special Senate election", db=db) is None
 
     @pytest.mark.parametrize("text", [
         # Surnames only, however many: never a name (by design).
-        "Warnock defeats Loeffler in Georgia Senate runoff",
-        "Sen. Warnock leads in Georgia Senate runoff",
-        "Warnock leads in Georgia's special Senate election",
+        "Wexford defeats Lofton in Georgia Senate runoff",
+        "Sen. Wexford leads in Georgia Senate runoff",
+        "Wexford leads in Georgia's special Senate election",
         # A candidate named King (round 8): a title, a place, a holiday.
         "Georgia Senate runoff turnout surges on Martin Luther King Jr. Day",
         "King Center: Georgia Senate race drew record early vote",
@@ -3365,86 +3365,86 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
 
     def test_a_states_only_special_race_is_named_with_its_candidates(self, db_session):
         db = self._senate_races(db_session, "2026-SEN-OH-SPECIAL")
-        self._count(db, "2026-SEN-OH-SPECIAL", "Sherrod Brown", "Jon Husted")
+        self._count(db, "2026-SEN-OH-SPECIAL", "Sheldon Brown", "Jon Halvorsen")
         issue = self._flip_issue("2026-SEN-OH-SPECIAL", "the U.S. Senate race")
-        assert self._match(issue, "Sherrod Brown leads Jon Husted in Ohio Senate race", db=db) is issue
-        assert self._match(issue, "Jon Husted leads in Ohio's special U.S. Senate election", db=db) is issue
-        assert self._match(issue, "Brown leads Husted in Ohio Senate race", db=db) is None
+        assert self._match(issue, "Sheldon Brown leads Jon Halvorsen in Ohio Senate race", db=db) is issue
+        assert self._match(issue, "Jon Halvorsen leads in Ohio's special U.S. Senate election", db=db) is issue
+        assert self._match(issue, "Brown leads Halvorsen in Ohio Senate race", db=db) is None
         assert self._match(issue, "Ohio's special U.S. Senate election tightens", db=db) is None
-        assert self._match(issue, "Sherrod Brown leads in Ohio Senate race, District 5", db=db) is None
+        assert self._match(issue, "Sheldon Brown leads in Ohio Senate race, District 5", db=db) is None
 
     @pytest.mark.parametrize("text", [
-        "Wayne Johnson flips Georgia's 2nd District",
-        "Wayne Johnson Flips Georgia's 2nd District",
-        "WAYNE JOHNSON LEADS IN GEORGIA'S 2ND DISTRICT",
-        "W. Johnson leads in Georgia's 2nd District",
-        "Wayne Johnson's lead grows in GA-02",
-        "Sanford D. Bishop Jr. leads in Georgia's 2nd District",
-        "Sanford D. Bishop Leads In Georgia's 2nd District",
-        "Rep. Sanford Bishop trails in Georgia's 2nd District",
-        "Georgia's 2nd District Republican Wayne Johnson leads",
-        "Georgia's 2nd District House race: Wayne Johnson leads",
-        "Wayne Johnson Flips Georgia's 2nd District Seat From Bishop",
-        "Georgia's 2nd District flips the seat to Wayne Johnson",
-        "Georgia's 2nd District heads to a recount; Wayne Johnson leads",
-        "Georgia's 2nd District House of Representatives seat goes to Wayne Johnson",
-        "Republican leads in Georgia's 2nd District\nWayne Johnson ahead with most precincts in",
+        "Dale Carver flips Georgia's 2nd District",
+        "Dale Carver Flips Georgia's 2nd District",
+        "DALE CARVER LEADS IN GEORGIA'S 2ND DISTRICT",
+        "D. Carver leads in Georgia's 2nd District",
+        "Dale Carver's lead grows in GA-02",
+        "Leland D. Bishop Jr. leads in Georgia's 2nd District",
+        "Leland D. Bishop Leads In Georgia's 2nd District",
+        "Rep. Leland Bishop trails in Georgia's 2nd District",
+        "Georgia's 2nd District Republican Dale Carver leads",
+        "Georgia's 2nd District House race: Dale Carver leads",
+        "Dale Carver Flips Georgia's 2nd District Seat From Bishop",
+        "Georgia's 2nd District flips the seat to Dale Carver",
+        "Georgia's 2nd District heads to a recount; Dale Carver leads",
+        "Georgia's 2nd District House of Representatives seat goes to Dale Carver",
+        "Republican leads in Georgia's 2nd District\nDale Carver ahead with most precincts in",
     ])
     def test_the_race_is_named_by_a_candidates_full_name(self, db_session, text):
-        # The count prints "Sanford D. Bishop, Jr.": the comma sets off a
+        # The count prints "Leland D. Bishop, Jr.": the comma sets off a
         # suffix, not a given name.
-        db = self._count(db_session, "2026-HOUSE-GA-2", "Wayne Johnson", "Sanford D. Bishop, Jr.")
+        db = self._count(db_session, "2026-HOUSE-GA-2", "Dale Carver", "Leland D. Bishop, Jr.")
         issue = self._flip_issue()
         assert self._match(issue, text, db=db) is issue, text
 
     @pytest.mark.parametrize("race_id,names,text", [
         # A surname alone: the candidate, a namesake, or a word.
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"), "Bishop concedes in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"), "Rep. Johnson leads in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"), "JOHNSON LEADS IN GEORGIA'S 2ND DISTRICT"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"), "the bishop of Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
-         "Captain Johnson Honored In Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "Bishop concedes in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "Rep. Carver leads in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "CARVER LEADS IN GEORGIA'S 2ND DISTRICT"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "the bishop of Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Captain Carver Honored In Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "The Bishop Of Savannah Speaks In Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Bishop Lamor Whitehead preaches in Georgia's 2nd District"),
-        ("2026-HOUSE-TX-9", ("Al Green", "Pat Quimby"), "Green energy booms in Texas's 9th District"),
-        ("2026-HOUSE-HI-1", ("Ed Case", "Pat Quimby"), "Case counts climb in Hawaii's 1st District"),
+        ("2026-HOUSE-TX-9", ("Cal Green", "Pat Quimby"), "Green energy booms in Texas's 9th District"),
+        ("2026-HOUSE-HI-1", ("Ned Case", "Pat Quimby"), "Case counts climb in Hawaii's 1st District"),
         # Someone else of the same surname, whatever the initial or middle.
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"), "Alicia Johnson wins in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
-         "Alicia M. Johnson wins in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"), "A. Johnson leads in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
-         "Alicia Johnson, a school board member, spoke about Georgia's 2nd District.\nJohnson said turnout was high."),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
-         "Speaker Mike Johnson hails Georgia's 2nd District result"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
-         "Waylon Johnson wins in Georgia's 2nd District"),
-        ("2026-HOUSE-NC-1", ("Don Davis", "Laurie Buckhout"), "Donna Davis wins in North Carolina's 1st District"),
-        ("2026-HOUSE-NC-1", ("Don Davis", "Laurie Buckhout"), "Donald Davis wins in North Carolina's 1st District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "Alicia Carver wins in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Alicia M. Carver wins in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "A. Carver leads in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Alicia Carver, a school board member, spoke about Georgia's 2nd District.\nJohnson said turnout was high."),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Speaker Mike Carver hails Georgia's 2nd District result"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Dalton Carver wins in Georgia's 2nd District"),
+        ("2026-HOUSE-NC-1", ("Ron Davis", "Laurie Buckland"), "Ronna Davis wins in North Carolina's 1st District"),
+        ("2026-HOUSE-NC-1", ("Ron Davis", "Laurie Buckland"), "Ronald Davis wins in North Carolina's 1st District"),
         # A given name and surname split across lines, or a longer surname.
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"), "Wayne\nJohnson in Georgia's 2nd District"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
-         "Wayne Johnson-Smith wins Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"), "Dale\nJohnson in Georgia's 2nd District"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Dale Carver-Smith wins Georgia's 2nd District"),
         # Round 7: a namesake, and another body's district.
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
-         "Alicia Johnson wins Georgia's District 2 Public Service Commission seat"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Alicia Carver wins Georgia's District 2 Public Service Commission seat"),
         ("2026-HOUSE-OH-2", ("Dave Taylor", "Lee Quimby"), "Judge Taylor of Ohio's 2nd District Court of Appeals rules"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
-         "Wayne Johnson flips Georgia's 2nd District Public Service Commission seat"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
-         "Wayne Johnson wins Georgia's 2nd District county commission seat"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Dale Carver flips Georgia's 2nd District Public Service Commission seat"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Dale Carver wins Georgia's 2nd District county commission seat"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
          "Georgia's 2nd seat on the Public Service Commission"),
         ("2026-HOUSE-OH-2", ("Dave Taylor", "Lee Quimby"),
          "Ohio's 2nd District Court of Appeals: Taylor writes majority"),
-        ("2026-HOUSE-GA-2", ("Wayne Johnson", "Sanford Bishop"),
-         "Johnson Wins Georgia's 2nd District School Board Race"),
-        ("2026-HOUSE-CA-2", ("Jared Huffman", "Chris Price"),
+        ("2026-HOUSE-GA-2", ("Dale Carver", "Leland Bishop"),
+         "Carver Wins Georgia's 2nd District School Board Race"),
+        ("2026-HOUSE-CA-2", ("Jared Hoffstra", "Chris Price"),
          "Price Gouging Case: California's 2nd District Court of Appeal Rules"),
-        ("2026-HOUSE-CA-2", ("Jared Huffman", "Chris Price"),
+        ("2026-HOUSE-CA-2", ("Jared Hoffstra", "Chris Price"),
          "California's 2nd District Court of Appeal rules on price gouging law. Price controls upheld."),
     ])
     def test_a_surname_a_namesake_or_another_bodys_district_is_not_the_race(self, db_session, race_id, names,
@@ -3467,25 +3467,25 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
     def test_full_names_are_read_as_names(self, db_session):
         # Accents and curly apostrophes folded either way, multi-word and
         # hyphenated surnames whole.
-        db = self._count(db_session, "2026-HOUSE-CA-38", "Linda T. Sánchez", "Eric Ching")
-        self._count(db, "2026-HOUSE-IA-1", "Mariannette Miller-Meeks", "Christina Bohannan")
-        self._count(db, "2026-HOUSE-TX-16", "Beto O'Rourke", "Pat Quimby")
-        self._count(db, "2026-HOUSE-TX-15", "Beto O’Rourke", "Pat Quimby")
+        db = self._count(db_session, "2026-HOUSE-CA-38", "Lucia T. Peña", "Eric Tolan")
+        self._count(db, "2026-HOUSE-IA-1", "Marisol Hart-Keller", "Christina Wexley")
+        self._count(db, "2026-HOUSE-TX-16", "Kip O'Dwyer", "Pat Quimby")
+        self._count(db, "2026-HOUSE-TX-15", "Kip O’Dwyer", "Pat Quimby")
         ca = self._flip_issue("2026-HOUSE-CA-38", "California's 38th")
-        assert self._match(ca, "Linda Sanchez leads in California's 38th District", db=db) is ca
-        assert self._match(ca, "Linda Sánchez leads in California's 38th District", db=db) is ca
-        assert self._match(ca, "Sánchez leads in California's 38th District", db=db) is None
+        assert self._match(ca, "Lucia Pena leads in California's 38th District", db=db) is ca
+        assert self._match(ca, "Lucia Peña leads in California's 38th District", db=db) is ca
+        assert self._match(ca, "Peña leads in California's 38th District", db=db) is None
         ia = self._flip_issue("2026-HOUSE-IA-1", "Iowa's 1st")
-        assert self._match(ia, "Mariannette Miller-Meeks trails in Iowa's 1st District", db=db) is ia
-        assert self._match(ia, "Mariannette Miller Meeks trails in Iowa's 1st District", db=db) is ia
-        assert self._match(ia, "Mariannette Meeks trails in Iowa's 1st District", db=db) is None
-        assert self._match(ia, "Miller-Meeks trails in Iowa's 1st District", db=db) is None
+        assert self._match(ia, "Marisol Hart-Keller trails in Iowa's 1st District", db=db) is ia
+        assert self._match(ia, "Marisol Hart Keller trails in Iowa's 1st District", db=db) is ia
+        assert self._match(ia, "Marisol Keller trails in Iowa's 1st District", db=db) is None
+        assert self._match(ia, "Hart-Keller trails in Iowa's 1st District", db=db) is None
         for race_id in ("2026-HOUSE-TX-16", "2026-HOUSE-TX-15"):
             tx = self._flip_issue(race_id, "Texas")
             district = race_id.rsplit("-", 1)[1] + "th"
-            assert self._match(tx, f"Beto O’Rourke leads in Texas’ {district} District", db=db) is tx
-            assert self._match(tx, f"Beto O'Rourke leads in Texas's {district} District", db=db) is tx
-            assert self._match(tx, f"O’Rourke leads in Texas’ {district} District", db=db) is None
+            assert self._match(tx, f"Kip O’Dwyer leads in Texas’ {district} District", db=db) is tx
+            assert self._match(tx, f"Kip O'Dwyer leads in Texas's {district} District", db=db) is tx
+            assert self._match(tx, f"O’Dwyer leads in Texas’ {district} District", db=db) is None
 
     def test_candidate_rows_stand_in_before_a_count(self, db_session):
         """No count stored: the certified nominees, by FEC's "LAST, FIRST"
@@ -3494,39 +3494,39 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
 
         db = db_session
         db.add(Race(id="2026-SEN-NV", cycle_year=2026, office="S", state="NV"))
-        db.add(Candidate(id="S2NV00001", race_id="2026-SEN-NV", name="CORTEZ MASTO, CATHERINE", party="DEM",
+        db.add(Candidate(id="S2NV00001", race_id="2026-SEN-NV", name="RUIZ ORTEGA, ELENA", party="DEM",
                          confirmed_general=True))
         db.add(Candidate(id="S2NV00002", race_id="2026-SEN-NV", name="SMITH, PAPER", party="REP"))
         db.add(Race(id="2026-SEN-TX", cycle_year=2026, office="S", state="TX"))
-        db.add(Candidate(id="S2TX00001", race_id="2026-SEN-TX", name='CRUZ, RAFAEL EDWARD "TED"', party="REP"))
+        db.add(Candidate(id="S2TX00001", race_id="2026-SEN-TX", name='DELGADO, MARTIN ALLEN "ROB"', party="REP"))
         db.commit()
         nv = self._flip_issue("2026-SEN-NV", "Nevada's U.S. Senate")
-        assert self._match(nv, "Catherine Cortez Masto leads in Nevada Senate race", db=db) is nv
-        assert self._match(nv, "Cortez Masto leads in Nevada Senate race", db=db) is None
+        assert self._match(nv, "Elena Ruiz Ortega leads in Nevada Senate race", db=db) is nv
+        assert self._match(nv, "Ruiz Ortega leads in Nevada Senate race", db=db) is None
         assert self._match(nv, "Paper Smith leads in Nevada Senate race", db=db) is None
         tx = self._flip_issue("2026-SEN-TX", "Texas's U.S. Senate")
-        assert self._match(tx, "Ted Cruz leads in Texas Senate race", db=db) is tx
-        assert self._match(tx, "Rafael Cruz leads in Texas Senate race", db=db) is tx
-        assert self._match(tx, "Rafael Edward Cruz leads in Texas Senate race", db=db) is tx
-        assert self._match(tx, "Theodore Cruz leads in Texas Senate race", db=db) is None
+        assert self._match(tx, "Rob Delgado leads in Texas Senate race", db=db) is tx
+        assert self._match(tx, "Martin Delgado leads in Texas Senate race", db=db) is tx
+        assert self._match(tx, "Martin Allen Delgado leads in Texas Senate race", db=db) is tx
+        assert self._match(tx, "Robert Delgado leads in Texas Senate race", db=db) is None
 
     def test_a_count_that_prints_only_a_surname_takes_the_given_name_from_the_race(self, db_session):
         from app.models import Candidate
 
         db = db_session
-        db.add(Candidate(id="H2HI01001", race_id="2026-HOUSE-HI-1", name="CASE, ED", party="DEM"))
+        db.add(Candidate(id="H2HI01001", race_id="2026-HOUSE-HI-1", name="CASE, NED", party="DEM"))
         db.commit()
         self._count(db, "2026-HOUSE-HI-1", "CASE", "QUIMBY")
         issue = self._flip_issue("2026-HOUSE-HI-1", "Hawaii's 1st")
-        assert self._match(issue, "Ed Case leads in Hawaii's 1st District", db=db) is issue
+        assert self._match(issue, "Ned Case leads in Hawaii's 1st District", db=db) is issue
         assert self._match(issue, "Case counts climb in Hawaii's 1st District", db=db) is None
 
     def test_a_suffix_after_a_comma_is_not_a_last_first_name(self, db_session):
         from app.pipeline.analyze.action_center import _race_people
 
-        db = self._count(db_session, "2026-HOUSE-GA-2", "Sanford D. Bishop, Jr.", "Wayne Johnson")
+        db = self._count(db_session, "2026-HOUSE-GA-2", "Leland D. Bishop, Jr.", "Dale Carver")
         people = sorted(_race_people(db, "2026-HOUSE-GA-2"))
-        assert [(p.surname, sorted(p.leads)) for p in people] == [("bishop", ["sanford"]), ("johnson", ["wayne"])]
+        assert [(p.surname, sorted(p.leads)) for p in people] == [("bishop", ["leland"]), ("carver", ["dale"])]
 
     def test_with_no_candidate_on_record_the_phrase_decides_alone(self, db_session):
         db = self._senate_races(db_session, "2026-SEN-OH-SPECIAL")
@@ -3535,10 +3535,10 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
 
     @pytest.mark.parametrize("race_id,text", [
         # One race's candidate by full name, the other's by surname: about both.
-        ("2020-SEN-GA-SPECIAL", "Georgia Senate runoff: Raphael Warnock leads as Perdue concedes to Ossoff"),
+        ("2020-SEN-GA-SPECIAL", "Georgia Senate runoff: Rafael Wexford leads as Purcell concedes to Brennan"),
         ("2020-SEN-GA-SPECIAL",
-         "Ossoff, Perdue trade leads in Georgia Senate runoff\nRaphael Warnock declared he would wait for every vote."),
-        ("2020-SEN-GA", "Georgia Senate runoff: Jon Ossoff leads; Warnock and Loeffler too close to call"),
+         "Brennan, Purcell trade leads in Georgia Senate runoff\nRaphael Wexford declared he would wait for every vote."),
+        ("2020-SEN-GA", "Georgia Senate runoff: Jon Brennan leads; Wexford and Lofton too close to call"),
     ])
     def test_any_mention_of_the_other_races_candidate_holds_a_story_back(self, db_session, race_id, text):
         db = self._two_georgia_senate_races(db_session)
@@ -3546,35 +3546,35 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         assert self._match(issue, text, db=db) is None, text
 
     def test_a_count_printing_an_honorific_is_read_against_the_filing(self, db_session):
-        """Arkansas's feed prints "Congressman Steve Womack"; FEC files
-        WOMACK, STEPHEN ALLEN. The title is not his given name."""
+        """Arkansas's feed prints "Congressman Steve Rowe"; FEC files
+        ROWE, STEPHEN ALLEN. The title is not his given name."""
         from app.models import Candidate, RaceResult
         from app.pipeline.analyze.action_center import _race_people
 
         db = db_session
-        db.add(Candidate(id="H0AR03001", race_id="2026-HOUSE-AR-3", name="WOMACK, STEPHEN ALLEN", party="REP"))
-        db.add(Candidate(id="H0AR04001", race_id="2026-HOUSE-AR-4", name="WESTERMAN, BRUCE", party="REP"))
+        db.add(Candidate(id="H0AR03001", race_id="2026-HOUSE-AR-3", name="ROWE, STEPHEN ALLEN", party="REP"))
+        db.add(Candidate(id="H0AR04001", race_id="2026-HOUSE-AR-4", name="WESTBROOK, BRUCE", party="REP"))
         db.commit()
         db.add(RaceResult(race_id="2026-HOUSE-AR-3", election_date="2026-11-03", source_name="State results",
                           tallies=json.dumps([
                               {"name": "Pat Quimby", "votes": 12},
-                              {"name": "Congressman Steve Womack", "votes": 10, "candidateId": "H0AR03001"},
+                              {"name": "Congressman Steve Rowe", "votes": 10, "candidateId": "H0AR03001"},
                           ])))
         # Not linked to a Candidate row: the race's filing of that surname is the check.
         db.add(RaceResult(race_id="2026-HOUSE-AR-4", election_date="2026-11-03", source_name="State results",
                           tallies=json.dumps([
-                              {"name": "Pat Quimby", "votes": 12}, {"name": "Congressman Bruce Westerman", "votes": 10},
+                              {"name": "Pat Quimby", "votes": 12}, {"name": "Congressman Bruce Westbrook", "votes": 10},
                           ])))
         db.commit()
-        womack = [p for p in _race_people(db, "2026-HOUSE-AR-3") if p.surname == "womack"][0]
-        assert womack.leads == {"steve", "stephen"} and womack.initials == {"s"}
+        rowe = [p for p in _race_people(db, "2026-HOUSE-AR-3") if p.surname == "rowe"][0]
+        assert rowe.leads == {"steve", "stephen"} and rowe.initials == {"s"}
         ar3 = self._flip_issue("2026-HOUSE-AR-3", "Arkansas's 3rd")
-        assert self._match(ar3, "Congressman Womack concedes in Arkansas's 3rd District", db=db) is None
-        assert self._match(ar3, "Steve Womack concedes in Arkansas's 3rd District", db=db) is ar3
-        assert self._match(ar3, "Stephen Womack concedes in Arkansas's 3rd District", db=db) is ar3
+        assert self._match(ar3, "Congressman Rowe concedes in Arkansas's 3rd District", db=db) is None
+        assert self._match(ar3, "Steve Rowe concedes in Arkansas's 3rd District", db=db) is ar3
+        assert self._match(ar3, "Stephen Rowe concedes in Arkansas's 3rd District", db=db) is ar3
         ar4 = self._flip_issue("2026-HOUSE-AR-4", "Arkansas's 4th")
-        assert self._match(ar4, "Congressman Westerman wins Arkansas's 4th District", db=db) is None
-        assert self._match(ar4, "Bruce Westerman wins Arkansas's 4th District", db=db) is ar4
+        assert self._match(ar4, "Congressman Westbrook wins Arkansas's 4th District", db=db) is None
+        assert self._match(ar4, "Bruce Westbrook wins Arkansas's 4th District", db=db) is ar4
 
     def test_a_printed_name_with_no_filing_stands_as_printed(self):
         from app.pipeline.analyze.action_center import _person
@@ -3582,12 +3582,12 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         assert _person(["Pat Quimby"], "Pat Quimby").leads == {"pat"}
         # A filing of the person decides which word of a feed's printing is
         # the given name ...
-        assert _person(["Senator Steve Womack", "WOMACK, STEPHEN"], "Senator Steve Womack").leads == {
+        assert _person(["Senator Steve Rowe", "ROWE, STEPHEN"], "Senator Steve Rowe").leads == {
             "steve", "stephen"}
-        assert _person(["Congressman Womack", "WOMACK, STEPHEN"], "Congressman Womack").leads == {"stephen"}
+        assert _person(["Congressman Rowe", "ROWE, STEPHEN"], "Congressman Rowe").leads == {"stephen"}
         # ... but the ballot's printing is the state's own, and stands: a
         # nickname FEC doesn't quote ("Bob" for ROBERT) still names him.
-        assert _person(["Bob Casey", "CASEY, ROBERT P JR", "Bob Casey"], None).leads == {"bob", "robert"}
+        assert _person(["Bob Caskey", "CASKEY, ROBERT P JR", "Bob Caskey"], None).leads == {"bob", "robert"}
 
     @pytest.mark.parametrize("printed,filed,leads", [
         # A title sharing only the filed name's initial is not a given name.
@@ -3596,20 +3596,20 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         ("Congressman Smith", "SMITH, CHARLES", {"charles"}),
         # A short-form fit followed by a word that fits nothing filed: no
         # printed given name ("Bob" is his, but nothing on file says so).
-        ("Representative Bob Latta", "LATTA, ROBERT E", {"robert"}),
-        ("Congressman Bill Womack", "WOMACK, CHARLES", {"charles"}),
+        ("Representative Bob Lanza", "LANZA, ROBERT E", {"robert"}),
+        ("Congressman Bill Rowe", "ROWE, CHARLES", {"charles"}),
         ("Chair Bob Smith", "SMITH, CHARLES", {"charles"}),
         # Short forms still read, title or not before them.
-        ("Congressman Chuck Womack", "WOMACK, CHARLES", {"chuck", "charles"}),
-        ("Steve Allen Womack", "WOMACK, STEPHEN ALLEN", {"steve", "stephen"}),
+        ("Congressman Chuck Rowe", "ROWE, CHARLES", {"chuck", "charles"}),
+        ("Steve Allen Rowe", "ROWE, STEPHEN ALLEN", {"steve", "stephen"}),
         ("Christopher Smith", "SMITH, CHRIS", {"christopher", "chris"}),
         # A short form keeping only the initial is a miss, not a guess.
         ("Jim Smith", "SMITH, JAMES", {"james"}),
         # A parenthesised annotation is no nickname; a fitting one is.
-        ("Jon Ossoff (Incumbent)", "OSSOFF, JON", {"jon"}),
-        ("Jon Ossoff (Dem)", "OSSOFF, JON", {"jon"}),
-        ("Robert (Bob) Latta", "LATTA, ROBERT E", {"robert"}),
-        ("Robert (Rob) Latta", "LATTA, ROBERT E", {"robert", "rob"}),
+        ("Jon Brennan (Incumbent)", "BRENNAN, JON", {"jon"}),
+        ("Jon Brennan (Dem)", "BRENNAN, JON", {"jon"}),
+        ("Robert (Bob) Lanza", "LANZA, ROBERT E", {"robert"}),
+        ("Robert (Rob) Lanza", "LANZA, ROBERT E", {"robert", "rob"}),
     ])
     def test_a_title_in_a_printing_is_not_a_given_name(self, printed, filed, leads):
         from app.pipeline.analyze.action_center import _person
@@ -3617,19 +3617,19 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         assert _person([printed, filed], printed).leads == leads
 
     def test_a_title_in_an_unlinked_printing_is_not_a_given_name(self, db_session):
-        """Round 10: "Representative Bob Latta" linked to LATTA, ROBERT E,
+        """Round 10: "Representative Bob Lanza" linked to LANZA, ROBERT E,
         and "Congressman Smith" linked to nothing beside SMITH, CHARLES,
-        once read the title as the given name, so "Representative Latta"
+        once read the title as the given name, so "Representative Lanza"
         and "Congressman Smith" — surnames alone — promoted the flip."""
         from app.models import Candidate, RaceResult
 
         db = db_session
-        db.add(Candidate(id="c1", race_id="2026-HOUSE-AR-3", name="LATTA, ROBERT E", party="REP"))
+        db.add(Candidate(id="c1", race_id="2026-HOUSE-AR-3", name="LANZA, ROBERT E", party="REP"))
         db.add(Candidate(id="d1", race_id="2026-HOUSE-AR-4", name="SMITH, CHARLES", party="REP"))
         db.commit()
         db.add(RaceResult(race_id="2026-HOUSE-AR-3", election_date="2026-11-03", source_name="State results",
                           tallies=json.dumps([
-                              {"name": "Representative Bob Latta", "votes": 10, "candidateId": "c1"},
+                              {"name": "Representative Bob Lanza", "votes": 10, "candidateId": "c1"},
                               {"name": "Jane Doe", "votes": 9},
                           ])))
         db.add(RaceResult(race_id="2026-HOUSE-AR-4", election_date="2026-11-03", source_name="State results",
@@ -3637,37 +3637,37 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
                                               {"name": "Jane Roe", "votes": 9}])))
         db.commit()
         ar3 = self._flip_issue("2026-HOUSE-AR-3", "Arkansas's 3rd")
-        assert self._match(ar3, "Arkansas's 3rd District flips as Representative Latta trails", db=db) is None
-        assert self._match(ar3, "Arkansas's 3rd District flips as Robert Latta trails", db=db) is ar3
+        assert self._match(ar3, "Arkansas's 3rd District flips as Representative Lanza trails", db=db) is None
+        assert self._match(ar3, "Arkansas's 3rd District flips as Robert Lanza trails", db=db) is ar3
         ar4 = self._flip_issue("2026-HOUSE-AR-4", "Arkansas's 4th")
         assert self._match(ar4, "Arkansas's 4th District flips; Congressman Smith concedes", db=db) is None
 
     @pytest.mark.parametrize("district,names,text,named", [
-        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
-         "Georgia's 2nd District: a Johnson aide said turnout was high", False),
-        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
-         "Georgia's 2nd District: a Bishop aide says a Johnson win is unlikely", False),
-        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
-         "A.J. Johnson leads in Georgia's 2nd District", True),
-        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
-         "A. J. Johnson leads in Georgia's 2nd District", True),
-        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
-         "AJ Johnson leads in Georgia's 2nd District", True),
-        ("GA-2", ('JOHNSON, ANTHONY JAMES "A.J."', "BISHOP, SANFORD D JR"),
-         "A J Johnson leads in Georgia's 2nd District", False),
-        ("TX-9", ('SMITH, TERRENCE "T.J."', 'GREEN, ALEXANDER "AL"'),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
+         "Georgia's 2nd District: a Carver aide said turnout was high", False),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
+         "Georgia's 2nd District: a Bishop aide says a Carver win is unlikely", False),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
+         "A.J. Carver leads in Georgia's 2nd District", True),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
+         "A. J. Carver leads in Georgia's 2nd District", True),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
+         "AJ Carver leads in Georgia's 2nd District", True),
+        ("GA-2", ('CARVER, ANTHONY JAMES "A.J."', "BISHOP, LELAND D JR"),
+         "A J Carver leads in Georgia's 2nd District", False),
+        ("TX-9", ('SMITH, TERRENCE "T.J."', 'GREEN, CALVIN "CAL"'),
          "Texas's 9th District sees J Smith Elementary reopen", False),
-        ("TX-9", ('SMITH, TERRENCE "T.J."', 'GREEN, ALEXANDER "AL"'),
+        ("TX-9", ('SMITH, TERRENCE "T.J."', 'GREEN, CALVIN "CAL"'),
          "T.J. Smith leads in Texas's 9th District", True),
         # A record that is all initials is named by them, together.
-        ("OH-2", ("VANCE, J. D.", "QUIMBY, PAT"),
-         "J.D. Vance leads in Ohio's 2nd District", True),
-        ("OH-2", ("VANCE, J. D.", "QUIMBY, PAT"),
-         "J. D. Vance leads in Ohio's 2nd District", True),
-        ("OH-2", ("VANCE, J. D.", "QUIMBY, PAT"),
-         "JD Vance leads in Ohio's 2nd District", True),
-        ("OH-2", ("VANCE, J. D.", "QUIMBY, PAT"),
-         "D. Vance leads in Ohio's 2nd District", False),
+        ("OH-2", ("CALLOWAY, J. D.", "QUIMBY, PAT"),
+         "J.D. Calloway leads in Ohio's 2nd District", True),
+        ("OH-2", ("CALLOWAY, J. D.", "QUIMBY, PAT"),
+         "J. D. Calloway leads in Ohio's 2nd District", True),
+        ("OH-2", ("CALLOWAY, J. D.", "QUIMBY, PAT"),
+         "JD Calloway leads in Ohio's 2nd District", True),
+        ("OH-2", ("CALLOWAY, J. D.", "QUIMBY, PAT"),
+         "D. Calloway leads in Ohio's 2nd District", False),
     ])
     def test_initials_are_a_name_only_together(self, db_session, district, names, text, named):
         from app.models import Candidate
@@ -3682,18 +3682,18 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
     def test_a_single_quoted_letter_is_an_annotation_not_a_name(self):
         from app.pipeline.analyze.action_center import _person
 
-        person = _person(["Wayne Johnson (I)"])
-        assert person.leads == {"wayne"} and person.middles == frozenset()
+        person = _person(["Dale Carver (I)"])
+        assert person.leads == {"dale"} and person.middles == frozenset()
 
     @pytest.mark.parametrize("names,text,named", [
-        (("Mark Green", "Pat Quimby"),
-         "Voters in Tennessee's 7th District will mark green ribbons on their ballots", False),
-        (("Mark Green", "Pat Quimby"), "Mark green ribbons in Tennessee's 7th District", False),
-        (("Mark Green", "Pat Quimby"), "Mark Green wins Tennessee's 7th District", True),
-        (("Mark Green", "Pat Quimby"), "MARK GREEN WINS TENNESSEE'S 7TH DISTRICT", True),
-        (("VAN HOLLEN, CHRIS", "Pat Quimby"), "Chris van Hollen leads in Tennessee's 7th District", True),
-        (("Beto O'Rourke", "Pat Quimby"), "Beto O'Rourke leads in Tennessee's 7th District", True),
-        (("Beto O'Rourke", "Pat Quimby"), "beto o'rourke leads in Tennessee's 7th District", False),
+        (("Mark Brown", "Pat Quimby"),
+         "Voters in Tennessee's 7th District will mark brown ribbons on their ballots", False),
+        (("Mark Brown", "Pat Quimby"), "Mark brown ribbons in Tennessee's 7th District", False),
+        (("Mark Brown", "Pat Quimby"), "Mark Brown wins Tennessee's 7th District", True),
+        (("Mark Brown", "Pat Quimby"), "MARK BROWN WINS TENNESSEE'S 7TH DISTRICT", True),
+        (("VAN DORN, CHRIS", "Pat Quimby"), "Chris van Dorn leads in Tennessee's 7th District", True),
+        (("Kip O'Dwyer", "Pat Quimby"), "Kip O'Dwyer leads in Tennessee's 7th District", True),
+        (("Kip O'Dwyer", "Pat Quimby"), "kip o'dwyer leads in Tennessee's 7th District", False),
     ])
     def test_a_name_is_written_as_a_name(self, db_session, names, text, named):
         db = self._count(db_session, "2026-HOUSE-TN-7", *names)

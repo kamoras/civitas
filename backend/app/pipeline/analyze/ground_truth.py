@@ -10,8 +10,8 @@ investigated before trusting the run. Failures are logged as warnings
 Every expectation here is DERIVED from the current population's own raw
 data at check time — no politician is named and no score range is
 hand-typed (AGENTS.md principle 1 / 3a). A prior version of this module
-kept a hand-maintained GROUND_TRUTH table of reference senators
-(Collins/Sanders/McConnell/...) with per-senator score ranges, plus a
+kept a hand-maintained GROUND_TRUTH table of named reference senators
+with per-senator score ranges, plus a
 second drifting copy in scripts/rescore.py; that table went stale with
 membership churn, encoded developer priors about specific people, and
 violated the no-hardcoded-values principle. See git history for the
@@ -32,15 +32,14 @@ Three families of checks, all population-level:
    from the stored party-labeled votes (constituent_metrics — since v6.15
    that component is not monotonic in break rate, and since v6.16 it peaks
    at the seat's expectation, so raw break rate alone doesn't rank it). "The most PAC-free members must score high on FI" is exactly
-   what the old Sanders/Warren rows asserted, computed fresh each run
-   for whoever currently holds that profile.
+   what the old named rows asserted, computed fresh each run for
+   whoever currently holds that profile.
 
 3. Extremes — Mann-Whitney U on the top/bottom decile by each raw
    metric: the decile the metric says should score highest must score
    stochastically higher than the rest, and the lowest-expected decile
-   lower. The lower-tail test is the derived form of the old "McConnell
-   must NOT exceed 60" audit trap, without naming a leader who will
-   eventually retire.
+   lower. The lower-tail test is the derived form of an old audit trap
+   capping one named leader's score, without naming anyone.
 
 check_score_distribution guards the failure mode per-member checks
 can't see — the whole population collapsing toward one value (Promise

@@ -274,11 +274,10 @@ export default function ScoresChapter() {
             The one and a half and the three are design choices, not measurements. Tested against
             election results, wider or narrower settings didn&apos;t fit consistently better, so
             they were set to reserve 0 for the heaviest breakers (five senators as of September
-            2026: Durbin, Fetterman, King, Murkowski and Paul) and to keep loyalty the gentler side.
-            No senator was then more than about three-quarters of a gap more loyal than their
-            seat&apos;s norm, so extra loyalty cost at most about 24 points. The 70/30 split is also
-            a design choice: the break-rate part showed the larger association in the one election
-            where both could be tested.
+            2026) and to keep loyalty the gentler side. No senator was then more than about
+            three-quarters of a gap more loyal than their seat&apos;s norm, so extra loyalty cost at
+            most about 24 points. The 70/30 split is also a design choice: the break-rate part
+            showed the larger association in the one election where both could be tested.
           </P>
         </More>
         <More label="Why loyalty counts, and why safe seats get no special treatment">

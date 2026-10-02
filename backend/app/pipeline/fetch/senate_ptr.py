@@ -141,7 +141,7 @@ def _parse_search_row(row: list) -> dict | None:
     means searching for an href inside a plain name string and silently
     matching nothing on every row.
 
-    The office cell ("Baldwin, Tammy (Senator)", "Candidate (Candidate)")
+    The office cell ("Doe, Jane (Senator)", "Candidate (Candidate)")
     is kept because an annual-report search returns candidates' reports
     too, and a candidate who shares a sitting senator's surname must not be
     matched to that senator (see senate_fd.is_senator_filing).

@@ -344,9 +344,7 @@ def _unopposed_nominees(
     candidate who drew no opponent. `_confirmed_or_all` would then treat
     that candidate as a loser and drop them — which deleted 36 real
     candidates from live races, 19 of them SITTING members of Congress
-    running for re-election: Warner and Ernst in their own Senate races,
-    Crockett, Himes, Castor, Griffith, Bilirakis and a dozen more in
-    theirs. A voter reading those pages saw a one-party ballot.
+    running for re-election, two senators among them. A voter reading those pages saw a one-party ballot.
 
     Scoped tightly, because the filter it relaxes exists for a real
     reason (TX's 19 stale FEC filers). A candidate comes back only when
@@ -741,7 +739,7 @@ STATE_COVERAGE_QUERY_LIMIT = 100
 #   has_advocacy — does it tell a reader how to vote?
 #
 # Measured over 1,500 real Bluesky items: 31.5% clear relevance, and 7%
-# of those are campaign advocacy — "Elect Jonathan Nez to Congress!"
+# of those are campaign advocacy — "Elect <candidate> to Congress!"
 # scores 0.632, because campaign material is maximally on-topic for a
 # campaign. Gating on relevance alone would have concentrated the feed
 # toward exactly the content that caused the 2026-09-23 incident;
@@ -760,8 +758,8 @@ def _coverage_is_displayable(db: Session):
     This relaxed once, to let real local newsrooms that publish on
     Bluesky back in (@nebraskaexaminer, @journalstar), gated on
     relevance, no-advocacy and a DNS-verified domain handle. That was
-    wrong, and Minnesota's page is why: it carried "Dave Hughes still a
-    whiny cunt" from @crowbar.wtf — which passes the domain rule,
+    wrong, and Minnesota's page is why: it carried a profane insult of a
+    candidate from one account — which passes the domain rule,
     because it IS a domain — and directly beneath it a post about the
     AUSTRALIAN comedian of the same name defending Pauline Hanson's One
     Nation, filed as MN-7 coverage.

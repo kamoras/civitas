@@ -70,11 +70,11 @@ class TestStripHtml:
 
     @pytest.mark.parametrize("raw, expected", [
         pytest.param("<p>The House passed the bill.</p>", "The House passed the bill.", id="tags_are_removed"),
-        # An <img> lead is the common WordPress shape, and "Trump-Rally.jpg"
+        # An <img> lead is the common WordPress shape, and "Varga-Rally.jpg"
         # reads as a named entity that appears in no other sentence — which is
         # exactly what the digest detector's disjointness test keys on.
         pytest.param(
-            '<img src="https://thehill.com/wp-content/Trump-Rally.jpg"/><p>The Senate voted on Tuesday.</p>',
+            '<img src="https://thehill.com/wp-content/Varga-Rally.jpg"/><p>The Senate voted on Tuesday.</p>',
             "The Senate voted on Tuesday.",
             id="image_filename_is_not_left_behind_as_an_entity",
         ),
@@ -82,8 +82,8 @@ class TestStripHtml:
         # welds two sentences into one run-on with no item boundary left for
         # the digest detector to split on.
         pytest.param(
-            "<ul><li>Ukraine aid clears</li><li>Powell signals a pause</li></ul>",
-            "Ukraine aid clears; Powell signals a pause",
+            "<ul><li>Ukraine aid clears</li><li>Brandt signals a pause</li></ul>",
+            "Ukraine aid clears; Brandt signals a pause",
             id="block_boundaries_survive_as_punctuation",
         ),
         pytest.param(
@@ -217,8 +217,8 @@ class TestStripHtml:
         reaches the embedding and the LLM prompt."""
         assert _strip_html("<p>A vote was held.</p><p>B objected.</p>") == "A vote was held. B objected."
         # A block that did NOT end a sentence still needs the separator.
-        assert _strip_html("<li>Ukraine aid clears</li><li>Powell pauses</li>") == (
-            "Ukraine aid clears; Powell pauses"
+        assert _strip_html("<li>Ukraine aid clears</li><li>Brandt pauses</li>") == (
+            "Ukraine aid clears; Brandt pauses"
         )
 
     def test_semicolon_written_by_the_newsroom_is_left_alone(self):
@@ -254,7 +254,7 @@ class TestStripHtml:
               <title>News Wrap: Wildfire forces evacuations near Reno</title>
               <link>https://www.pbs.org/newshour/show/news-wrap-wildfire-forces-evacuations-near-reno</link>
               <description>Tens of thousands evacuate near Reno, the Supreme Court
-                cleared Trump's mail-in voting order, and the Pentagon struck a boat
+                cleared Varga's mail-in voting order, and the Pentagon struck a boat
                 in the eastern Pacific.</description>
             </item></channel></rss>""".encode(),
             "PBS NewsHour",
@@ -267,7 +267,7 @@ class TestStripHtml:
         # stories must keep flowing normally.
         articles = _parse_rss_feed(
             """<?xml version="1.0"?><rss><channel><item>
-              <title>Supreme Court clears the way for Trump mail voting order</title>
+              <title>Supreme Court clears the way for Varga mail voting order</title>
               <link>https://www.pbs.org/newshour/politics/supreme-court-clears-the-way</link>
               <description>The Supreme Court ruled 6-3 on Monday.</description>
             </item></channel></rss>""".encode(),
@@ -279,7 +279,7 @@ class TestStripHtml:
         assert _is_multi_topic_digest("News Wrap: Wildfire forces evacuations near Reno")
         assert _is_multi_topic_digest("news wrap: lowercase variant")
         assert _is_multi_topic_digest("News Wrap - dash variant")
-        assert not _is_multi_topic_digest("Supreme Court clears the way for Trump mail voting order")
+        assert not _is_multi_topic_digest("Supreme Court clears the way for Varga mail voting order")
         assert not _is_multi_topic_digest("Wrapping up the day's news wrap-up")
 
 

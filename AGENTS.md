@@ -545,11 +545,11 @@ the per-member pass. No named senator anchors either.
 
 ### 4a. Vote matching for multi-word names
 
-Senate.gov roll call XML uses multi-word last names (e.g. "Cortez Masto",
-"Van Hollen", "Blunt Rochester").  The pipeline extracts the original last
+Senate.gov roll call XML uses multi-word last names (e.g. "De la Rosa",
+"Van Doren", "Hale Morrow").  The pipeline extracts the original last
 name from the Congress.gov "LastName, FirstName" format during member
 normalization and stores it as `lastNameForVoteMatch`.  Unicode accents are
-stripped (NFD decomposition) so "Luján" matches "Lujan" in the XML.
+stripped (NFD decomposition) so "Núñez" matches "Nunez" in the XML.
 
 ### 5. Config as single source of truth
 

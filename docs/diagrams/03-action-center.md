@@ -109,7 +109,7 @@ at the headline's end look cut off, and on 2026-09-27 left 5 claims from 40
 articles instead of 14.
 
 **A cut-short predicate is read on in its source.**
-The model often stops its predicate span early ("Blackburn sues"). Where the
+The model often stops its predicate span early ("Senator sues"). Where the
 source runs on, `post_composer._complete_predicate` reads it to the next clause
 punctuation (at most 25 words) and renders that, still the source's own words;
 a period after a possible abbreviation ("Sens.") refuses instead of guessing.

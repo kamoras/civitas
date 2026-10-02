@@ -187,7 +187,7 @@ class TestNewMexico:
 TN_ROWS = [
     {"Office": "United States House of Representatives District 6", "Candidate": "Johnny Garrett",
      "Party Name": "Republican", "City": ""},
-    {"Office": "Governor", "Candidate": "Marsha Blackburn", "Party Name": "Republican", "City": ""},
+    {"Office": "Governor", "Candidate": "Marla Blackwood", "Party Name": "Republican", "City": ""},
     {"Office": "Governor", "Candidate": "Jerri Green", "Party Name": "Democratic", "City": ""},
     {"Office": "Governor", "Candidate": "Misam Abidi", "Party Name": "Independent", "City": ""},
     # The legislative files head the column "Party", not "Party Name".
@@ -205,7 +205,7 @@ class TestTennessee:
         federal, statewide, leg = _split(parse_certified_rows(TN_ROWS, fmt, True))
         assert federal == {("H", 6, "Johnny Garrett", "R")}   # 43.6% plurality: no runoff
         assert statewide == {
-            ("governor", "R", "Marsha Blackburn"),
+            ("governor", "R", "Marla Blackwood"),
             ("governor", "D", "Jerri Green"),
             ("governor", "I", "Misam Abidi"),
         }
@@ -248,7 +248,7 @@ def tennessee(db_session, monkeypatch):
 async def test_a_certified_list_that_opts_in_supplies_the_state_offices(tennessee, monkeypatch):
     listed = [
         _rec("H", 6, "R", "Garrett", "Johnny Garrett"),
-        _rec("governor", None, "R", "Marsha Blackburn"),
+        _rec("governor", None, "R", "Marla Blackwood"),
         _rec("governor", None, "I", "Misam Abidi"),
         _rec("upper", "5", "R", "Jimmy Matlock"),
     ]
@@ -259,7 +259,7 @@ async def test_a_certified_list_that_opts_in_supplies_the_state_offices(tennesse
     await sc.sync_confirmed_candidates(tennessee, None, 2026)
 
     assert {(r.office, r.party, r.display_name) for r in tennessee.query(StatewideNominee)} == {
-        ("governor", "R", "Marsha Blackburn"), ("governor", "I", "Misam Abidi"),
+        ("governor", "R", "Marla Blackwood"), ("governor", "I", "Misam Abidi"),
     }
     assert {(r.chamber, r.district) for r in tennessee.query(StateLegNominee)} == {("upper", "5")}
     _, coverage = _statewide_section(tennessee, "TN", 2026)

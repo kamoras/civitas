@@ -301,7 +301,7 @@ def _purge_member_traces(db: Session, member, chamber: str) -> None:
 
     Every one is scoped to this chamber. Both chambers' ids are the
     member's "last-first" name, so a representative who went on to the
-    Senate (Schiff, Slotkin, Gallego, Kim and Banks in 2025) leaves a
+    Senate (five did in 2025) leaves a
     departed House row with the same id as a serving senator — and a purge
     by id alone unlinked the senator's floor speeches and struck them from
     every action issue.

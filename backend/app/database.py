@@ -239,7 +239,7 @@ def _migrate_columns() -> None:
         #
         # Observed 2026-09-23: house run #67 reported "431 success, 2
         # failed" and status partial, the 2 being newly-seated members
-        # (Aisha Wahab, Everton Blair) that no run could ever insert.
+        # that no run could ever insert.
         # An UPDATE of an existing row is unaffected, which is exactly
         # why this stayed invisible -- 431 of 433 kept working. The real
         # exposure is November: a whole freshman class is new rows, and
