@@ -128,7 +128,7 @@ caps how dominant any single row can get long before HHI or top-share
 ever see the data — the two statistics converge because the input they
 share has already had its long tail removed. The real disagreements that
 remain (e.g. a member with several moderately-large industries vs. one
-genuinely dominant one — Gwen Moore, Ayanna Pressley in the live 2026-07
+genuinely dominant one, as for two House members in the live 2026-07
 data) are the exact case the theory predicts, but they affect roughly a
 dozen members, not the population — not enough to justify moving every
 member's score for a measure that would rank them almost identically.
