@@ -2350,8 +2350,17 @@ def _industry_concentration(
     Ranked within the chamber (_rank_score over the deciles
     compute_funding_reference measures each run), as top-donor
     concentration is: the median member's mix scores 50. Before a chamber
-    has that reference, HHI 0.10 scores 100 and 1.0 scores 0, as before
-    v6.26.
+    has that reference, `missing_score`.
+
+    The shares are of the classified money, not of everything raised.
+    Taken over everything raised (as top-donor concentration's are), the
+    HHI tracked how much of a member's money the classifier could place
+    (r = -0.91 with the classified share, Senate, 2026-10-01), and that is
+    mostly how many itemized donors' stated occupations resolve to an
+    industry: a median 24% of a senator's itemized individual money, 11%
+    to 39% p10 to p90. The mix of the money that is placed estimates the
+    composition whatever the coverage; how much money is industry money is
+    the PAC and small-donor components' question.
 
     Unmeasurable below _INDUSTRY_MIN_CLASSIFIED of classified money (score
     `missing_score`). Until v6.26 the score was also pulled toward
@@ -2369,15 +2378,52 @@ def _industry_concentration(
         )
     share = known / total_raised if total_raised else 0.0
     ref = reference or {}
-    if ref.get("industry_hhi_deciles"):
-        score = _rank_score(hhi, ref["industry_hhi_deciles"])
-        versus = f"chamber median {ref['industry_hhi_median']:.3f}"
-    else:
-        score = (1 - max(0, min((hhi - 0.10) / 0.90, 1.0))) * 100
-        versus = "no chamber reference yet"
+    if not ref.get("industry_hhi_deciles"):
+        return missing_score, f"HHI {hhi:.3f}, no chamber reference to compare with yet, {missing_label} {missing_score:.0f}"
+    score = _rank_score(hhi, ref["industry_hhi_deciles"])
+    versus = f"chamber median {ref['industry_hhi_median']:.3f}"
     return score, (
         f"HHI {hhi:.3f} across {n} industries ({versus}); ${known:,.0f} classified, "
         f"{share:.0%} of contributions"
+    )
+
+
+def _industry_mix_diversity(
+    funding: dict, total_raised: float, missing_score: float, missing_label: str = "neutral",
+) -> tuple[float, str]:
+    """(score, detail) for industry concentration: inverse HHI across
+    classified industries — a member whose PAC and itemized money all comes
+    from one industry is more captured than one whose money spans eight
+    (Parmigiani 2025 computes the same HHI per legislator). Small donors
+    and unclassified large individuals are excluded; they are not
+    industry-specific money.
+
+    When less than 5% of the money is industry-classified, HHI on that
+    slice is noise, so the score is `missing_score`; between 5% and 40% it
+    is shrunk toward `missing_score` in proportion to the classified
+    share. Funding Independence passes a neutral 50; Funding Diversity
+    passes its grassroots-scaled neutral (see _funding_diversity_core)."""
+    industries = [
+        ind for ind in funding.get("industryBreakdown") or []
+        if ind.get("industry") not in NON_INDUSTRY_CODES
+    ]
+    if not industries or not total_raised:
+        return missing_score, f"no industry breakdown available — {missing_label} {missing_score:.0f}"
+    total_known = sum(ind.get("total", 0) for ind in industries)
+    total_known_pct = total_known / total_raised * 100
+    if total_known_pct < 5 or total_known <= 0:
+        return missing_score, (
+            f"only {total_known_pct:.1f}% of funding is industry-classified — "
+            f"too little to measure HHI, {missing_label} {missing_score:.0f}"
+        )
+    hhi = sum((ind.get("total", 0) / total_known) ** 2 for ind in industries)
+    raw = (1 - max(0, min((hhi - 0.10) / 0.90, 1.0))) * 100
+    relevance = min(total_known_pct / 40, 1.0)
+    score = raw * relevance + missing_score * (1 - relevance)
+    return score, (
+        f"HHI={hhi:.3f} across {len(industries)} industries → raw {raw:.1f}, "
+        f"blended {relevance:.0%} with {missing_label} {missing_score:.0f} "
+        f"({total_known_pct:.0f}% of funding industry-classified)"
     )
 
 
@@ -2441,7 +2487,7 @@ def _funding_diversity_core(funding: dict) -> dict:
     # at that point, not a discontinuous jump) lets that reward grow all
     # the way to 100 for a hypothetical fully-small-dollar campaign.
     grassroots_neutral = 50 + small_frac * 50
-    concentration_score, concentration_detail = _industry_concentration(
+    concentration_score, concentration_detail = _industry_mix_diversity(
         funding, total_raised, missing_score=grassroots_neutral,
         missing_label=f"grassroots-scaled neutral ({small_frac:.0%} small-donor share)",
     )
