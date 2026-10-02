@@ -43,7 +43,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
       "Top-donor concentration is the top ten donors' share of all outside money, and both concentration components are ranked within the chamber: no concentration scores 100, the typical member 50. Before, no member could score above about 65 on them.",
       "Industry concentration is ranked within the member's party. Ranked across the chamber it scored each party's donor base, not the member: Democratic donors' occupations fall in fewer, broader categories, which left Senate Democrats averaging 27.6 against 69.7 for Republicans. Ranked within party, both average about 50. An independent is ranked against the chamber.",
       "A part that can't be measured (no donor list, or too little industry money to tell its mix) is left out and the score is weighed over the parts that were. It used to count as a neutral 50, which cost a campaign scoring 100 on everything else 12 points for the industry part alone.",
-      "Effect, simulated on October 2026 data: the Senate mean moves from 49.8 to 50.0 and the House mean from 55.0 to 51.7; the average member moves 12.6 points (Senate) and 10.2 (House). docs/methodology/member-score/v6.26.md has the measurements.",
+      "Effect, simulated on October 2026 data: the Senate mean moves from 49.9 to 49.7 and the House mean from 55.0 to 51.8; the average member moves 12.6 points (Senate) and 10.3 (House). docs/methodology/member-score/v6.26.md has the measurements.",
     ],
   },
   {
