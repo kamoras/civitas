@@ -507,7 +507,7 @@ async def _ingest_members(db: Session, chamber: _Chamber, per_member: dict[str, 
         out_of_time = False
         # One row per filing, the first sighting kept (as the Senate search
         # keeps it while paging): the House index can list a document twice
-        # (2025: Ansari's 10078188), and a failing filing shouldn't be
+        # (seen in 2025), and a failing filing shouldn't be
         # fetched twice.
         unique: dict[str, dict] = {}
         for f in per_member[member_id]:

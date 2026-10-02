@@ -107,7 +107,7 @@ function SenatorSelector({
   return (
     <div className="panel p-4 space-y-3">
       <div className="font-mono text-xs text-ink-lo tracking-widest">
-        {label} — SELECT LEGISLATOR
+        {label} · SELECT LEGISLATOR
       </div>
 
       {/* Chamber toggle */}
@@ -147,10 +147,10 @@ function SenatorSelector({
           }}
           className="w-full bg-white/[0.03] border border-white/15 text-ink-hi px-3 py-2 font-mono text-xs focus:outline-none focus:border-signal-cyan/40"
         >
-          <option value="">— SELECT STATE —</option>
+          <option value="">Select a state</option>
           {stateOptions.map((s) => (
             <option key={s.code} value={s.code}>
-              {s.code} — {s.name}
+              {s.code} · {s.name}
             </option>
           ))}
         </select>
@@ -271,7 +271,7 @@ function ComparisonTable({
       {leftChamber !== rightChamber && (
         <div className="px-3 py-2 border-b border-signal-amber/40 bg-signal-amber/10 text-center">
           <span className="text-signal-amber font-mono text-xs uppercase tracking-wide">
-            Cross-chamber comparison — scores are calibrated within each chamber, so side-by-side
+            Cross-chamber comparison: scores are calibrated within each chamber, so side-by-side
             numbers are indicative, not like-for-like
           </span>
         </div>

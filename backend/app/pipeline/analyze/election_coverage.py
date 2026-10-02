@@ -116,24 +116,24 @@ def _word_pattern(word: str) -> "re.Pattern[str]":
 
 
 def _full_name_pattern(first: str, surname: str) -> "re.Pattern[str]":
-    """The two names TOGETHER — "Bill Hill" or "Hill, Bill" — not merely
+    """The two names TOGETHER — "Jane Doe" or "Doe, Jane" — not merely
     both present somewhere in the text.
 
     The old rule asked only that the surname appear capitalised and the
     first name appear anywhere at all, in any position, any case. That is
     how Alaska's at-large race — which has a real, $1.3M-raised candidate
-    named BILL HILL — collected "The Hill" plus "I'm just a bill, sittin
+    whose name is also two common words — collected "The Hill" plus "I'm just a bill, sittin
     here on Capitol Hill" as full-name coverage, and then posted about it
     nine times. Measured across all 7,471 stored full_name matches, 25.1%
-    were incidental in exactly this way: "Cameron Hamilton to lead FEMA"
-    for Daniel Cameron, "Adam Driver will play Mister Sinister" for Adam
-    Delgado, "Warner Bros. bid" for William Todd Warner.
+    were incidental in exactly this way: "<first> <other surname> to lead FEMA"
+    for a candidate whose given name is that surname, "<first> Driver will
+    play Mister Sinister" for a candidate sharing the given name, "Warner Bros. bid" for William Todd Warner.
 
     Up to two intervening tokens carry real middle names and initials
     ("Robert F. Kennedy"). Compiled case-INSENSITIVELY, with
     capitalisation verified on the matched text by the caller, for the
-    same reason _matches_as_a_name documents: building "Mcconnell" to
-    compare case-sensitively rejects every real "McConnell".
+    same reason _matches_as_a_name documents: building "Mcallister" to
+    compare case-sensitively rejects every real "McAllister".
     """
     f, ln = re.escape(first), re.escape(surname)
     return re.compile(
@@ -168,7 +168,7 @@ def _matches_as_a_name(pattern: "re.Pattern[str]", text: str) -> bool:
     coverage. It needs no curated stop-word list, and it keeps intercaps
     names, which is why the match is found case-insensitively and only
     the matched TEXT is checked: lower-casing the tail to build
-    "Mcconnell" would reject every real "McConnell" (that error is what
+    "Mcallister" would reject every real "McAllister" (that error is what
     a first, wrong measurement of this rule reported as an 18.8% cost).
 
     ALL-CAPS headlines still qualify — the first character is a capital.
@@ -580,7 +580,7 @@ def score_unscored_items(db: Session, batch: int = 500) -> int:
     (structural, and absolute regardless of relevance). Measured over
     1,500 real Bluesky items: 31.5% clear relevance and 7% of those are
     campaign advocacy — a feed gated on relevance alone would carry
-    "Elect Jonathan Nez to Congress!" as race coverage.
+    "Elect <candidate> to Congress!" as race coverage.
     """
     from app.pipeline.analyze.grounding import electioneering_language
     from app.pipeline.analyze.race_relevance import (

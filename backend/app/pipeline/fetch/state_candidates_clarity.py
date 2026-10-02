@@ -33,11 +33,10 @@ auth, no scraping of the rendered Angular SPA:
    (free-text contest name), `CH` (choice/candidate names), `V` (votes)
    and `PCT` (percentages), positionally aligned.
 
-Ground truth check (the discipline state_candidates_tx.py used with
-Paxton/Cornyn): Colorado's CO-01 Democratic primary in this feed shows
-Melat Kiros 83,855 (53.2%) over 15-term incumbent Diana DeGette 62,715,
-with Wanda James a distant third — which is exactly what actually happened
-on 2026-06-30 and was reported statewide. The feed is the state's own
+Ground truth check (the same discipline as state_candidates_tx.py):
+Colorado's 2026 primary results in this feed, including a long-serving
+incumbent's defeat, matched what the state certified and what was
+reported statewide. The feed is the state's own
 canonical result, not a projection.
 
 WINNER DERIVATION. `W` (the per-choice winner flag) was all zeros in
@@ -485,7 +484,7 @@ def general_contests(summary: dict) -> list[ContestCount]:
             # was merged into its regular one.
             choice = str(raw).strip()
             # South Carolina prints the party code before the name
-            # ("REP Nancy Mace"); it is the choice's own `P`, not a name.
+            # ("REP Jane Doe"); it is the choice's own `P`, not a name.
             if code and choice.upper().startswith(code.upper() + " "):
                 choice = choice[len(code) + 1:]
             if is_not_a_person(choice):

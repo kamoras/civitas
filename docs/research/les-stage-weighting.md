@@ -101,8 +101,7 @@ comparison.
    Speaker low. That matches the standard being cited: V&W's own benchmarks
    expect as much of Speakers as of the average member or more (0.99–1.48
    in the 109th–118th Houses, against an average of 1.0), and rate recent Speakers well below expectations
-   (LES/benchmark 0.02–0.53, except Pelosi in the 110th and Ryan in the
-   114th). No exemption was added. A record of zero bills is rare: 0.1% of
+   (LES/benchmark 0.02–0.53, with two exceptions). No exemption was added. A record of zero bills is rare: 0.1% of
    House member-congresses in the data.
 4. **A failed download is not zero bills.** `fetch_member_sponsored` returned
    an empty list when Congress.gov failed, and that run scored the member as

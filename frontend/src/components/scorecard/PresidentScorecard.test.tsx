@@ -105,6 +105,9 @@ const breakdown: PresidentScoreBreakdown = {
       approvalMean: 50.93,
       approvalTrend: -5.6,
       trendMean: -13.6,
+      approvalStart: 41.0,
+      trendExpected: 4.8,
+      comparedOverDays: 598,
       electionMargin: null,
       marginMean: 8.39,
       recentApproval: 35.42,
@@ -149,7 +152,7 @@ describe("PresidentScorecard", () => {
     expect(screen.getByText("Ranked once the term ends")).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Averaged 37\.3% approval over the term; presidents average 50\.9%\. Approval fell 5\.6 points/
+        /Averaged 37\.3% approval so far; presidents averaged 50\.9% over their first 20 months\. Approval fell 5\.6 points from a start of 41\.0%; presidents who started there rose about 4\.8\./
       )
     ).toBeInTheDocument();
     expect(

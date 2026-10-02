@@ -64,7 +64,7 @@ export default function DataChapter() {
             </Fact>
             <Fact label="FEC (fec.gov)">
               Campaign finance: individual and PAC contributions, committee filings and types,
-              spending — and declared candidates for every federal race.
+              spending, and declared candidates for every federal race.
             </Fact>
             <Fact label="Senate.gov & House Clerk">
               Roll-call votes with every member&apos;s position, and each chamber&apos;s live floor
@@ -78,7 +78,7 @@ export default function DataChapter() {
             </Fact>
             <Fact label="Cooperative Election Study">
               Approval of each member among their own constituents, by party (2024 survey, Harvard
-              Dataverse) — shown on profiles, not scored.
+              Dataverse): shown on profiles, not scored.
             </Fact>
             <Fact label="Financial disclosures">
               STOCK Act trade reports and annual disclosures from the House Clerk and the
@@ -88,7 +88,10 @@ export default function DataChapter() {
               holdings; the periodic reports since are scans, read by OCR, and their dates support
               no timeliness figure. Where a scanned report&apos;s date can&apos;t be read (one 2026
               presidential report is printed at half size), the trade is listed with the date marked
-              not legible, for members&apos; paper filings as for the president&apos;s.
+              not legible, for members&apos; paper filings as for the president&apos;s. A
+              trade&apos;s industry is the SEC&apos;s own industry code for the company behind it,
+              found by ticker or exact company name; bonds, funds and anything else the SEC
+              doesn&apos;t cover carry none rather than a guess.
             </Fact>
             <Fact label="Lobbying Disclosure Act registry (lda.gov)">
               Registered lobbying spending by organizations that appear among donors, and the bills
@@ -128,13 +131,13 @@ export default function DataChapter() {
             <Fact label="State election offices">
               Certified candidate lists and primary results, from each state&apos;s own site. And
               statewide ballot measures, read directly from each state&apos;s own certified list,
-              voter guide or ballot notice and quoted verbatim with the drafter named — the only
+              voter guide or ballot notice and quoted verbatim with the drafter named: the only
               source for measures. A state we don&apos;t read yet, or which publishes no list, shows
               as not yet covered with its official lookup link.
             </Fact>
             <Fact label="Census Bureau · Google Civic">
-              District boundaries; and lookups run only on addresses we chose — a town hall for the
-              town selector, a fixed public building per district to fill in candidate lists — never
+              District boundaries; and lookups run only on addresses we chose (a town hall for the
+              town selector, a fixed public building per district to fill in candidate lists), never
               a visitor&apos;s.
             </Fact>
             <Fact label="USAGov">
@@ -148,12 +151,12 @@ export default function DataChapter() {
         </Sub>
         <P>
           Every source&apos;s rate limits are respected, and responses are cached for 72 hours to
-          avoid asking twice — except a state&apos;s answer that it has no measures, kept for only
+          avoid asking twice, except a state&apos;s answer that it has no measures, kept for only
           six hours, so a measure certified afterwards appears the next night.
         </P>
       </Section>
 
-      <Section id="ai" title="How AI is used — and where it isn’t">
+      <Section id="ai" title="How AI is used, and where it isn’t">
         <P>
           Two kinds of model run here, each for what it&apos;s suited to. Neither ever produces a
           score: every score is a published formula.
@@ -162,9 +165,9 @@ export default function DataChapter() {
           <P>
             Small sentence-embedding models turn text into numbers whose closeness tracks closeness
             in meaning
-            <Cite id="reimers2019" />. That lets the pipeline classify by comparison — this bill
+            <Cite id="reimers2019" />. That lets the pipeline classify by comparison (this bill
             against a description of each policy area, this donor&apos;s employer against a
-            description of each industry — with no hand-written keyword rules, and it generalizes to
+            description of each industry), with no hand-written keyword rules, and it generalizes to
             names the pipeline has never seen
             <Cite id="bengio2003" />. Unlike a generative model, it is deterministic and can&apos;t
             invent a category
@@ -179,8 +182,8 @@ export default function DataChapter() {
               noise. On this site&apos;s own failure cases, all-MiniLM-L6-v2 separated them roughly
               four times as well for matching news to documents and three times as well for policy
               relevance. Classification stays on Arctic because its thresholds were calibrated
-              against that model — moving a threshold to a different model without re-measuring it
-              is how thresholds quietly stop meaning anything.
+              against that model: moving a threshold to a different model without re-measuring it is
+              how thresholds quietly stop meaning anything.
             </P>
           </More>
         </Sub>
@@ -192,7 +195,7 @@ export default function DataChapter() {
           <List>
             <Item label="Action Center">
               Finding an attributable claim in an article. The sentence shown is then copied from
-              the article and checked word for word — see <A href="/about/news#quoted">how</A>.
+              the article and checked word for word: see <A href="/about/news#quoted">how</A>.
             </Item>
             <Item label="Monitors and the timeline">
               Deciding whether a story is significant enough to track and whether two monitors are
@@ -246,8 +249,8 @@ export default function DataChapter() {
             Cosine similarity against a plain-English description of each category, such as each of
             the 18 policy areas (based on the Congressional Research Service&apos;s scheme) or each
             industry
-            <Cite id="yin2019" />. Bill direction — does it expand, restrict or reform? — is read
-            the same way
+            <Cite id="yin2019" />. Bill direction (does it expand, restrict or reform?) is read the
+            same way
             <Cite id="baumgartner1993" />, in the text-as-data tradition
             <Cite id="grimmer2013" />.
           </Step>
@@ -270,15 +273,15 @@ export default function DataChapter() {
             At the start of every run, the pipeline fingerprints its own analysis code (ignoring
             comments). If the code has changed since the last run, every stored label and the
             reference set are cleared so the new code starts fresh; if not, they are kept. Raw data
-            from government sources is never cleared — it reflects the sources, not our processing.
+            from government sources is never cleared: it reflects the sources, not our processing.
           </P>
           <P>
             Classification avoids hand-written keyword lists, with three narrow, documented
             exceptions: a check for a bill&apos;s leading verb, a hotel-brand tier for industries,
             and a PAC-suffix and payment-processor tier for donors. Each exists because of a
             specific, measured failure of the embedding model, and runs only as a first filter in
-            front of the embedding classifier — never in place of it. The project&apos;s README
-            lists each with its measurement.
+            front of the embedding classifier, never in place of it. The project&apos;s README lists
+            each with its measurement.
           </P>
         </More>
       </Section>
@@ -297,8 +300,7 @@ export default function DataChapter() {
           </Item>
           <Item label="Keywords">
             A keyword index
-            <Cite id="robertson2009" /> — the only way to find an executive order number or a
-            docket.
+            <Cite id="robertson2009" />, the only way to find an executive order number or a docket.
           </Item>
           <Item label="Recency">A newer document is usually the more useful answer.</Item>
           <Item label="Authority">
@@ -306,7 +308,7 @@ export default function DataChapter() {
           </Item>
         </List>
         <P>
-          Near-duplicates are collapsed, and no single member or agency can crowd the top results —
+          Near-duplicates are collapsed, and no single member or agency can crowd the top results:
           the rest are moved down, never dropped. Ranking weights are changed only when a
           measurement of search quality says to, never because one set of results looks better.
         </P>
@@ -315,27 +317,27 @@ export default function DataChapter() {
       <Section id="privacy" title="What we record about you">
         <P>
           No accounts, no cookies of our own, no ad networks and no third-party analytics. We count
-          visits on our own server in a way designed so that, once a day is over, nobody — including
-          us — can recover who visited:
+          visits on our own server in a way designed so that, once a day is over, nobody, including
+          us, can recover who visited:
         </P>
         <List>
           <Item label="Daily unique visits">
             Each visitor&apos;s IP address is scrambled with a random key that exists only for the
             current day and is then deleted. Without the key, the scrambled value can&apos;t be
             turned back into an address. Raw IP addresses and browser identification strings are
-            never stored — only a coarse browser, operating system and device type (for example
+            never stored, only a coarse browser, operating system and device type (for example
             &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser opening a page counts: search
             and AI crawlers, scripts and automated browsers aren&apos;t visitors and aren&apos;t
             counted.
           </Item>
           <Item label="Page views">A count per page type, per day.</Item>
           <Item label="Load times">
-            A tally of how long pages take to load, in broad ranges — with nothing about who loaded
+            A tally of how long pages take to load, in broad ranges, with nothing about who loaded
             them.
           </Item>
           <Item label="API use">
             A count per day of requests to the <A href="/developers">public API and MCP server</A>,
-            by endpoint and outcome — with nothing about who made them. Programs calling the API are
+            by endpoint and outcome, with nothing about who made them. Programs calling the API are
             not counted as visitors.
           </Item>
           <Item label="Rate limits">
@@ -378,8 +380,8 @@ export default function DataChapter() {
 
       <Section id="infrastructure" title="The computer it runs on">
         <P>
-          The whole of Civitas — database, models, pipeline and website — runs on one Raspberry Pi
-          5, a credit-card-sized computer with 16 GB of memory and an NVMe drive, at home. Its board
+          The whole of Civitas (database, models, pipeline and website) runs on one Raspberry Pi 5,
+          a credit-card-sized computer with 16 GB of memory and an NVMe drive, at home. Its board
           measured 2–7 watts during the nightly pipeline, and we budget 7 for the whole machine; a
           cloud AI accelerator draws 250–400
           <Cite id="patterson2021" />. The trade is speed: the nightly pipeline takes hours rather

@@ -59,6 +59,13 @@ APPOINTER = {
     "RBGinsburg": "Clinton", "SGBreyer": "Clinton", "SSotomayor": "Obama", "EKagan": "Obama",
     "NMGorsuch": "Trump", "BMKavanaugh": "Trump", "ACBarrett": "Trump", "KBJackson": "Biden",
 }
+# Each president's party, for the same-party check on the post-2014 votes
+# (Epstein & Posner code it themselves before then).
+PARTY = {
+    "FDR": "D", "Truman": "D", "Eisenhower": "R", "Kennedy": "D", "Johnson": "D", "Nixon": "R", "Ford": "R",
+    "Carter": "D", "Reagan": "R", "Bush41": "R", "Clinton": "D", "Bush43": "R", "Obama": "D", "Trump": "R",
+    "Biden": "D",
+}
 CURRENT = ["JGRoberts", "CThomas", "SAAlito", "SSotomayor", "EKagan", "NMGorsuch", "BMKavanaugh", "ACBarrett", "KBJackson"]
 
 
@@ -140,10 +147,16 @@ def panel(ep: pd.DataFrame, sc: pd.DataFrame) -> pd.DataFrame:
     new = sc[(sc.term >= 2015) & sc.justiceName.isin(APPOINTER)].copy()
     new["pres"] = pd.to_datetime(new.dateDecision).dt.strftime("%Y-%m-%d").map(president_on)
     new["in_office"] = (new.pres == new.justiceName.map(APPOINTER)).astype(int)
+    new["same_party"] = (
+        (new.pres.map(PARTY) == new.justiceName.map(APPOINTER).map(PARTY)) & (new.in_office == 0)
+    ).astype(int)
     new = new.assign(pet=new.pet_gov.astype(int)).rename(columns={"vote_for_pres": "y"})
     old = ep.dropna(subset=["JVoteForPres"]).assign(term=lambda d: d.caseId.str[:4].astype(int))
-    old = old.rename(columns={"JVoteForPres": "y", "pres_inOfficeApptJ": "in_office", "PresPet": "pet"})
-    cols = ["justiceName", "term", "y", "in_office", "pet"]
+    old = old.rename(columns={
+        "JVoteForPres": "y", "pres_inOfficeApptJ": "in_office", "PresPet": "pet",
+        "same_partyExcludeInOffice": "same_party",
+    })
+    cols = ["justiceName", "term", "y", "in_office", "same_party", "pet"]
     return pd.concat([old[cols], new[cols]], ignore_index=True)
 
 
@@ -175,6 +188,57 @@ def loyalty(P: pd.DataFrame) -> pd.DataFrame:
         print(f"    {r.justice:12} {r.shrunk * 100:+5.1f} ± {r.shrunk_se * 100:.1f}  (raw {r.b * 100:+5.1f}, "
               f"{r.n_in} votes under the appointing president, {r.n_out} under others)")
     return R
+
+
+def same_party(P: pd.DataFrame) -> None:
+    """Does "under other presidents" hide a party effect? Splits the
+    comparison into other presidents of the appointer's party and
+    presidents of the other party (Epstein & Posner's own
+    same_partyExcludeInOffice coding through 2014)."""
+    print("\n== 5. Other presidents of the appointer's party ==")
+    P = P.dropna(subset=["same_party"])
+    fit = smf.ols("y ~ in_office + same_party + pet + C(justiceName)", P).fit(
+        cov_type="cluster", cov_kwds={"groups": pd.factorize(P.justiceName)[0]})
+    cov = fit.cov_params()
+    diff = fit.params["in_office"] - fit.params["same_party"]
+    se = np.sqrt(cov.loc["in_office", "in_office"] + cov.loc["same_party", "same_party"]
+                 - 2 * cov.loc["in_office", "same_party"])
+    print(f"  pooled, against presidents of the other party: appointing president {fit.params['in_office']:+.3f} "
+          f"(t={fit.tvalues['in_office']:.1f}), same-party others {fit.params['same_party']:+.3f} "
+          f"(t={fit.tvalues['same_party']:.1f}); appointing president against same-party others {diff:+.3f} "
+          f"(t={diff / se:.1f}); N={len(P)}")
+    print("  the current Court (same-party others against the other party; votes: appointer / same party / other):")
+    for j in CURRENT:
+        g = P[P.justiceName == j]
+        n = (int(g.in_office.sum()), int(g.same_party.sum()), int(((g.in_office == 0) & (g.same_party == 0)).sum()))
+        if min(n) < 10:
+            print(f"    {j:12} not measurable: {n}")
+            continue
+        f = smf.ols("y ~ in_office + same_party + pet", g).fit(cov_type="HC1")
+        print(f"    {j:12} {f.params['same_party'] * 100:+5.1f} ± {f.bse['same_party'] * 100:.1f}  {n}")
+
+
+def against_ideology(sc: pd.DataFrame, mq: pd.DataFrame) -> None:
+    """Would "votes against their own ideological side" measure fairness?
+    In the justice-centered Database, `direction` is the justice's own
+    vote (1 conservative, 2 liberal). Divided decisions only: unanimous
+    ones split about evenly either way and swamp everything."""
+    print("\n== 6. Votes against a justice's own side (Martin-Quinn) ==")
+    v = sc[sc.decisionType.isin([1, 7]) & sc.direction.isin([1, 2]) & (sc.minVotes > 0)]
+    med = mq.groupby("term").post_mn.median()
+    side = mq.assign(rel=mq.post_mn - mq.term.map(med))[["justiceName", "term", "rel"]]
+    m = v.merge(side, on=["justiceName", "term"])
+    m = m[m.rel.abs() > 0.05]
+    m = m.assign(against=np.where(m.rel < 0, m.direction == 1, m.direction == 2).astype(int))
+    g = m.groupby("justiceName").agg(against=("against", "mean"), dist=("rel", lambda s: s.abs().mean()),
+                                     n=("against", "size"))
+    g = g[g.n >= 300]
+    rho = spearmanr(g.against, g.dist)
+    print(f"  against-side rate vs mean distance from the median: Spearman {rho.statistic:.2f} "
+          f"(p {rho.pvalue:.1g}, {len(g)} justices with 300+ divided votes)")
+    for j in CURRENT:
+        if j in g.index:
+            print(f"    {j:12} {g.loc[j, 'against']:.1%} against their side, distance {g.loc[j, 'dist']:.2f}")
 
 
 def validity(P: pd.DataFrame, R: pd.DataFrame, mq: pd.DataFrame) -> None:
@@ -214,6 +278,8 @@ def main():
     P = panel(ep, scdb_votes(sc, gov))
     R = loyalty(P)
     validity(P, R, mq)
+    same_party(P)
+    against_ideology(sc, mq)
     if args.write_bundle:
         write_bundle(ep)
 

@@ -54,6 +54,11 @@ export interface ActionIssue {
    * check one against the outlet that made it. Empty for issues that
    * predate the claim layer. */
   factSources: string[];
+  /** The article each fact was quoted from, aligned with `facts`. */
+  factSourceUrls?: string[];
+  /** The summary's outlet and article: it is a quoted line too. */
+  summarySource?: string | null;
+  summarySourceUrl?: string | null;
   /** Subset of `facts` not present as of this issue's last genuine content
    *  change — empty for an issue that's never been updated. */
   newFacts: string[];

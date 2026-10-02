@@ -12,8 +12,8 @@ state_candidates_tx.py).
 Verified live against North Carolina's real 2026 primary on 2026-08-12:
 `results_pct_20260303.zip` (1.4 MB) holds all 103,517 precinct rows for the
 whole state, of which 49,884 are federal, resolving to 21 federal contests.
-Ground-truthed on recognisable outcomes — Virginia Foxx taking the NC-05
-Republican primary with 74.5%, Valerie Foushee NC-04 Democratic with 49.2%.
+Ground-truthed against the state's certified results for its 2026
+primary: every federal contest resolved to the certified winner.
 
 FOUR DISCOVERY MODES, because the file's URL must never be hardcoded to
 one cycle's date:
@@ -43,7 +43,7 @@ kept whole rather than reduced to a surname because there is no FEC row
 to match them against.
 
 Verified live against Minnesota's real 2026 primary export: 18 federal,
-8 statewide (Keith Ellison AG, Steve Simon Secretary of State, a joint
+8 statewide (Attorney General, Secretary of State, a joint
 "Governor & Lt Governor" ticket resolving to the top of the ticket, and
 State Auditor) and 61 legislative records across all 32 legislative
 contests the file actually contains. Its house districts are "10A"/"10B",

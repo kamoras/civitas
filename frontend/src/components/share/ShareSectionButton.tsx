@@ -92,11 +92,11 @@ export default function ShareSectionButton({
 
   if (!subject || !hasSection) return null;
 
-  /** "Tim Burchett — Funding Independence"; just the title when the label
+  /** "Jane Doe: Funding Independence"; just the title when the label
    *  is the title (an Action Center card is labelled by its issue). */
   function describe(): string {
     if (!subject) return label;
-    return label === subject.title ? label : `${subject.title} — ${label}`;
+    return label === subject.title ? label : `${subject.title}: ${label}`;
   }
 
   function linkFor(id: string): string {

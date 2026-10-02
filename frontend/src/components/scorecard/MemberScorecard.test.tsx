@@ -23,10 +23,10 @@ vi.mock("@/lib/api", () => ({
   fetchPresidentHistory: vi.fn(),
 }));
 
-// Tim Burchett (R-TN-2) as the API served him on 2026-09-28, trimmed.
+// A House member as the API served one on 2026-09-28, trimmed and renamed.
 const member = {
-  id: "tim-burchett",
-  name: "Tim Burchett",
+  id: "jordan-hale",
+  name: "Jordan Hale",
   state: "TN",
   party: "R",
   yearsInOffice: 7,
@@ -56,7 +56,7 @@ const member = {
         pacAnalysis: null,
       },
       {
-        name: "Burchett for Congress",
+        name: "Hale for Congress",
         total: 50000,
         type: "CandidateAffiliated",
         industry: "OTHER",
@@ -234,7 +234,7 @@ beforeEach(() => {
 describe("MemberScorecard", () => {
   it("states each score's evidence without anything to expand", async () => {
     renderCard();
-    expect(screen.getByRole("heading", { level: 1, name: "Tim Burchett" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Jordan Hale" })).toBeInTheDocument();
     expect(screen.getByText("#412 of 433 representatives")).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -252,13 +252,13 @@ describe("MemberScorecard", () => {
       )
     ).toBeInTheDocument();
     // A member's own committee isn't one of their donors.
-    expect(screen.queryByText("Burchett for Congress")).not.toBeInTheDocument();
+    expect(screen.queryByText("Hale for Congress")).not.toBeInTheDocument();
   });
 
   it("lists every vote against party with the chamber's own tallies", async () => {
     renderCard();
     expect(fetchRepVotes).toHaveBeenCalledWith(
-      "tim-burchett",
+      "jordan-hale",
       expect.objectContaining({ category: "all", filter: "against-party" })
     );
     // The Clerk's bare "H R 8800" shows as the site's own label.
@@ -316,13 +316,13 @@ describe("MemberScorecard", () => {
   });
 
   it("shows constituents' approval by party in the alignment column, marked not scored", async () => {
-    // Illustrative figures, not Burchett's.
+    // Illustrative figures, not the fixture member's.
     const surveyed = {
       ...member,
       constituentApproval: {
         survey: "CES 2024 Common Content (pre-election wave, Oct-Nov 2024)",
         fielded: "2024-10/2024-11",
-        surveyedAs: "Tim Burchett",
+        surveyedAs: "Jordan Hale",
         byParty: [
           { party: "D" as const, approve: 0.21, ownWeight: 0.3, respondents: 40 },
           { party: "R" as const, approve: 0.74, ownWeight: 0.6, respondents: 90 },

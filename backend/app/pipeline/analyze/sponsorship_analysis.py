@@ -354,8 +354,7 @@ def party_ideology_bounds(
     fall in that empty valley, so the "moderate/centrist" band captures ~0%
     of members and every D reads "progressive", every R "conservative" —
     the label collapses to party identity even though the WITHIN-party
-    spread is real and large (DW-NOMINATE: Warren far left of Fetterman,
-    both Democrats). Scoring each member against their own party's terciles
+    spread is real and large (DW-NOMINATE). Scoring each member against their own party's terciles
     makes "moderate Democrat" mean moderate AMONG Democrats — the same
     cohort-relative, recomputed-every-run pattern this module already uses
     for bipartisanship and score_calculator uses for seat-relative alignment.
@@ -482,6 +481,13 @@ def describe_senator_position(
     return " ".join(parts)
 
 
+# The fewest measured members a party needs for its own median to anchor
+# the receive rate: the same floor the whole cohort needs (len(raw_rates)
+# < 10 returns nothing), so a party is never held to a noisier anchor than
+# the chamber would be.
+_MIN_PARTY_COHORT = 10
+
+
 def compute_bipartisanship_scores(
     bills_data: list[dict],
     cosponsors_map: dict[str, list[dict]],
@@ -519,15 +525,22 @@ def compute_bipartisanship_scores(
         (score_calculator), which must not cite HVW's finding while
         quietly measuring a blend they explicitly distinguish it from.
 
-    Scores are normalized to the pooled cohort median (median -> 0.5, 2x
-    the median or better -> 1.0), recomputed from the observed cohort every
-    run — per direction, since "both" and "receive" rates have genuinely
-    different cohort distributions. Whether one pooled median is fair to
-    both parties (and to majority vs minority members, who have different
-    reasons to seek cross-party cosponsors) has not been measured: no
-    cosponsorship data was reachable when this was reviewed (2026-09). Each
-    run logs the per-party medians so the question can be answered from the
-    pipeline's own data before the normalization is changed.
+    Scores are normalized to a cohort median (median -> 0.5, 2x the median
+    or better -> 1.0), recomputed from the observed cohort every run. For
+    "both" that is the pooled chamber median, the Lugar Index's own
+    convention, and half the blend (giving) is the member's own choice.
+    For "receive" it is the median of the member's own party (v6.25):
+    a sponsor can only attract cosponsors the other party is willing to
+    give, and the two parties are not equally willing. Measured on
+    Congress.gov cosponsor lists (random samples of bills with at least
+    one cosponsor, 2026-10-01), Republican-sponsored bills drew the larger
+    cross-party share in both a Democratic and a Republican majority:
+    117th House 19.0% vs 15.8% (n=152 R / 256 D bills), Senate 35.3% vs
+    29.4%; 119th House 26.7% vs 25.6%, Senate 38.7% vs 33.4%. So it is
+    party, not majority status. Pooled, it put the Democratic median
+    member at 29-33 on the 0-100 component and the Republican at 62-67,
+    a gap set by the other party's cosponsoring rather than by the member.
+    Compared within the party, every sponsor faces the same pool.
     Members of neither major party are assigned the side they cosponsor
     with most (caucus inference, consistent with normalize_votes);
     members with fewer than ``min_interactions`` observed interactions
@@ -632,5 +645,19 @@ def compute_bipartisanship_scores(
         # Degenerate cohort (no observed crossing anywhere): fall back to
         # an absolute scale where 30% cross-party interactions = 1.0.
         return {bio: min(r / 0.30, 1.0) for bio, r in raw_rates.items()}
+
+    if direction == "receive":
+        # Each party against its own median (docstring). A party with too
+        # few measured members to have a stable median, or none crossing
+        # at all, falls back to the pooled one.
+        anchors = {
+            side: statistics.median(v)
+            for side, v in by_side.items()
+            if len(v) >= _MIN_PARTY_COHORT and statistics.median(v) > 0
+        }
+        return {
+            bio: min(r / (2.0 * anchors.get(_side(bio) or "?", median)), 1.0)
+            for bio, r in raw_rates.items()
+        }
 
     return {bio: min(r / (2.0 * median), 1.0) for bio, r in raw_rates.items()}

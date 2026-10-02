@@ -27,7 +27,7 @@ costs one post, which is the right cost profile for a ranking decision.
 
 Safety decisions are deliberately NOT made here. A classifier has a
 false-negative rate, and one miss on an endorsement is another "VOTE
-VERONICA FERNANDEZ" on a non-partisan account. Endorsements and invented
+<NAME>" on a non-partisan account. Endorsements and invented
 facts are made impossible structurally in post_composer.py; this module
 only decides what is worth saying at all.
 
@@ -37,10 +37,10 @@ Otsu's method (Otsu 1979, "A Threshold Selection Method from Gray-Level
 Histograms", IEEE Trans. SMC 9:1) picks the cut that maximises
 between-class variance in a bimodal distribution. It takes no parameter
 and no labels: the corpus decides. Measured over 800 live matched items
-it lands at 0.276, splitting "Democrat John Larson loses to younger
-primary challenger" (0.663) and "Senate ballot in Alaska will feature
-two Dan Sullivans" (0.614) from "Why does this dog look like Mitch
-McConnell?" and a Saskatchewan travel post (both ~0.24).
+it lands at 0.276, splitting a headline about an incumbent losing a
+primary (0.663) and one about two same-named candidates on a ballot
+(0.614) from a pet-photo post that names a senator and a travel post
+(both ~0.24).
 
 Same generated-tunable discipline as explore_ranking.py, including its
 failure mode: if recalibration fails the previous value stays in force,

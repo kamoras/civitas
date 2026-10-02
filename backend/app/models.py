@@ -327,6 +327,11 @@ class StockTrade(Base):
     amount_low: Mapped[float] = mapped_column(Float, default=0.0)
     amount_high: Mapped[float] = mapped_column(Float, default=0.0)
     industry: Mapped[str] = mapped_column(String, default="UNCLASSIFIED")
+    # The eFD table's Asset Type cell as printed ("Stock", "Cryptocurrency"):
+    # the filer's own statement of what the asset is, which the nightly
+    # industry pass reads (stock_pipeline._reclassify_stored_trades). The
+    # House prints its code inside asset_name; the 278-T states none.
+    asset_type: Mapped[str | None] = mapped_column(String, nullable=True)
     source_url: Mapped[str] = mapped_column(String, default="")
     filing_id: Mapped[str] = mapped_column(String, nullable=False, index=True)  # dedupe key
     # "text" = parsed from a PDF/HTML text layer, "ocr" = OCR fallback on a
@@ -744,6 +749,11 @@ class President(Base):
     # (see calc_public_mandate) — persisted for the same on-demand
     # score-breakdown-recompute reason as rulemaking_finalized_pct above.
     approval_trend: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # First-quartile average approval: where the term started. The trend
+    # is judged against what presidents starting at that level went on to
+    # do (president_scorer.fit_trend_on_start), since a president who
+    # starts high has far further to fall.
+    approval_start: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Raw C-SPAN 2021 Presidential Historians Survey point total (e.g.
     # Lincoln=897) — persisted alongside the normalized score_
     # historical_legacy for the same on-demand-recompute reason as
@@ -926,7 +936,7 @@ class Candidate(Base):
     # ballot says nothing about surviving it, so once a state confirms
     # nominees, those win (see _confirmed_or_all).
     on_primary_ballot: Mapped[bool] = mapped_column(Boolean, default=False)
-    # The name as the state prints it on its ballot ("Roy Cooper"), from
+    # The name as the state prints it on its ballot ("Jane Doe"), from
     # whichever state source last matched this candidate. `name` stays the
     # FEC's own ("COOPER, ROY") — it is what the roster sync keys on and
     # what every non-ballot page shows. Null until a state source names
@@ -1307,6 +1317,12 @@ class ActionIssue(Base):
     # attribution where it exists without a migration backfilling
     # guesses.
     fact_sources: Mapped[str] = mapped_column(Text, default="[]")
+    # The article each fact was quoted from, aligned with `facts` (so a
+    # reader can open it), and the outlet and article of the summary, which
+    # is a quoted claim too. NULL / "[]" where an issue predates them.
+    fact_source_urls: Mapped[str | None] = mapped_column(Text, nullable=True, default="[]")
+    summary_source: Mapped[str | None] = mapped_column(String, nullable=True)
+    summary_source_url: Mapped[str | None] = mapped_column(String, nullable=True)
     related_monitor_slugs: Mapped[str] = mapped_column(Text, default="[]")
     # Unused: the "This concerns me / Not a priority" vote that counted into
     # these was removed in 2026-09. Still mapped, with their default, because

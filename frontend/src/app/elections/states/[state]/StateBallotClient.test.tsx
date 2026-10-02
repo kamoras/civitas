@@ -56,12 +56,12 @@ function houseRace(overrides: Partial<RaceWithCandidates> = {}): RaceWithCandida
     candidates: [
       candidate({
         id: "dem1",
-        name: "Greg Landsman",
+        name: "Greg Lindqvist",
         party: "DEM",
         incumbentChallenge: "I",
         cashOnHand: 3_610_213,
       }),
-      candidate({ id: "rep1", name: "Eric Conroy", party: "REP", cashOnHand: 474_156 }),
+      candidate({ id: "rep1", name: "Eric Conway", party: "REP", cashOnHand: 474_156 }),
     ],
     ...overrides,
   };
@@ -195,7 +195,7 @@ describe("the ballot page", () => {
                 candidate({ id: "d", name: "A Dem", party: "DEM" }),
                 candidate({
                   id: "l",
-                  name: "Shannon Bray",
+                  name: "Shannon Bly",
                   party: "LIB",
                   confirmed: true,
                   candidateStatus: "N",
@@ -208,7 +208,7 @@ describe("the ballot page", () => {
       />
     );
     const box = screen.getByTestId("ballot-columns");
-    expect(within(box).getByText("Shannon Bray")).toBeInTheDocument();
+    expect(within(box).getByText("Shannon Bly")).toBeInTheDocument();
   });
 
   it("keeps the list of what this page does not cover in view", () => {
@@ -343,7 +343,7 @@ describe("U.S. Representative", () => {
   it("lists each district's leading matchup in the picker", async () => {
     render(<StateBallotClient ballot={twoDistricts()} />);
     const drawer = await openContest(/U\.S\. Representative/);
-    expect(drawer.getByText("Greg Landsman (I)")).toBeInTheDocument();
+    expect(drawer.getByText("Greg Lindqvist (I)")).toBeInTheDocument();
     expect(drawer.getByText("Second District Dem")).toBeInTheDocument();
   });
 
@@ -359,9 +359,9 @@ describe("U.S. Representative", () => {
   it("marks a sitting member on new lines as a sitting member, never the new district's incumbent", async () => {
     render(<StateBallotClient ballot={twoDistricts({ newDistrictLines: true })} />);
     const drawer = await openContest(/U\.S\. Representative/);
-    expect(drawer.getByText("Greg Landsman (sitting member)")).toBeInTheDocument();
+    expect(drawer.getByText("Greg Lindqvist (sitting member)")).toBeInTheDocument();
     expect(drawer.queryByText(/\(I\)/)).not.toBeInTheDocument();
-    await userEvent.click(drawer.getByRole("button", { name: /Greg Landsman/ }));
+    await userEvent.click(drawer.getByRole("button", { name: /Greg Lindqvist/ }));
     const research = within(screen.getByRole("dialog"));
     expect(research.getByText("SITTING MEMBER")).toBeInTheDocument();
     expect(research.queryByText("INCUMBENT")).not.toBeInTheDocument();
@@ -393,7 +393,7 @@ describe("U.S. Representative", () => {
     ).toBeInTheDocument();
     expect(window.location.hash).toBe("#race-d2");
     await userEvent.click(drawer.getByRole("button", { name: "← PICK ANOTHER DISTRICT" }));
-    expect(within(screen.getByRole("dialog")).getByText("Greg Landsman (I)")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText("Greg Lindqvist (I)")).toBeInTheDocument();
     window.location.hash = "";
   });
 
@@ -631,7 +631,7 @@ describe("statewide executive offices", () => {
       />
     );
     const drawer = await openContest(/Statewide offices/);
-    expect(drawer.getByText(/EXECUTIVE COUNCIL — 4 SEATS/)).toBeInTheDocument();
+    expect(drawer.getByText(/EXECUTIVE COUNCIL · 4 SEATS/)).toBeInTheDocument();
     expect(drawer.getByText(/Each voter votes in one district's seat only/)).toBeInTheDocument();
     fireEvent.change(drawer.getByLabelText(/Filter Executive Council seats/), {
       target: { value: "concord" },
@@ -886,8 +886,8 @@ describe("state legislature", () => {
   it("renders both chambers with their contested seat counts", async () => {
     render(<StateBallotClient ballot={ballot(legislature)} />);
     const drawer = await open();
-    expect(drawer.getByText("STATE SENATE — 1 SEAT CONTESTED")).toBeInTheDocument();
-    expect(drawer.getByText("STATE HOUSE — 4 SEATS CONTESTED")).toBeInTheDocument();
+    expect(drawer.getByText("STATE SENATE · 1 SEAT CONTESTED")).toBeInTheDocument();
+    expect(drawer.getByText("STATE HOUSE · 4 SEATS CONTESTED")).toBeInTheDocument();
   });
 
   it("shows each seat's towns so a reader can find it without an address", async () => {
@@ -1247,7 +1247,7 @@ describe("ballot measures", () => {
       />
     );
     const box = within(screen.getByTestId("ballot-columns"));
-    expect(box.getByText(/From our last successful read — may be out of date/)).toBeInTheDocument();
+    expect(box.getByText(/From our last successful read: may be out of date/)).toBeInTheDocument();
     expect(box.getByText("removed")).toBeInTheDocument();
     expect(box.getByText("1 measure")).toBeInTheDocument();
   });
@@ -1536,7 +1536,7 @@ describe("state office terms", () => {
       />
     );
     const drawer = await openContest(/State Senate/);
-    expect(drawer.getByText(/STATE SENATE — 1 SEAT CONTESTED/).textContent).toContain(
+    expect(drawer.getByText(/STATE SENATE · 1 SEAT CONTESTED/).textContent).toContain(
       "4-YEAR TERMS"
     );
   });

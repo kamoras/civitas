@@ -15,6 +15,7 @@ import pytest
 
 from app.models import ActionIssue, ApiCache
 from app.pipeline.analyze import action_center
+from app.pipeline.analyze.claims import Claim
 from app.pipeline.fetch.news_feeds import NewsArticle
 
 
@@ -30,6 +31,10 @@ def _article(cluster: int, i: int) -> NewsArticle:
 CLUSTERS = [[_article(c, i) for i in range(3)] for c in range(1, 7)]
 # Clusters 1, 2 and 4 yield no attributable claim; 3, 5 and 6 do.
 WITH_CLAIMS = {3, 5, 6}
+
+
+def _c(text: str) -> Claim:
+    return Claim(text=text, source_name="Outlet 0", source_url=f"https://example.com/{text.replace(' ', '-')}")
 
 
 def _cluster_number(cluster) -> int:
@@ -76,14 +81,14 @@ def refresh(monkeypatch):
     monkeypatch.setattr(ac, "_resolve_url", lambda u: u)
 
     def extract(cluster, locate):
-        return ["claim a", "claim b"] if _cluster_number(cluster) in WITH_CLAIMS else []
+        return [_c("claim a"), _c("claim b")] if _cluster_number(cluster) in WITH_CLAIMS else []
 
     monkeypatch.setattr(ac.claim_layer, "extract_claims", extract)
     monkeypatch.setattr(ac.claim_layer, "extract_body_claims", lambda cluster, locate: [])
     monkeypatch.setattr(ac.claim_layer, "dedupe_claims", lambda claims: list(dict.fromkeys(claims)))
     monkeypatch.setattr(ac.claim_layer, "on_topic", lambda claims, cluster: claims)
     monkeypatch.setattr(ac.claim_layer, "build_lede", lambda claims: "A lede.")
-    monkeypatch.setattr(ac.claim_layer, "build_facts", lambda claims: (["A fact."], ["Outlet 0"]))
+    monkeypatch.setattr(ac.claim_layer, "build_facts", lambda claims: (["A fact."], ["Outlet 0"], ["https://example.com/a-fact"]))
     monkeypatch.setattr(ac, "grounding_violations", lambda text, source: [])
     monkeypatch.setattr(ac, "hedge_and_editorializing_violations", lambda text: [])
     monkeypatch.setattr(ac, "_classify_issue_policy_areas", lambda t, s: [])
@@ -138,14 +143,14 @@ def test_a_summary_claim_counts_toward_the_two_claim_gate(db_session, refresh, m
     ledes = []
 
     def headline(cluster, locate):
-        return ["headline claim"] if _cluster_number(cluster) in WITH_CLAIMS else []
+        return [_c("headline claim")] if _cluster_number(cluster) in WITH_CLAIMS else []
 
     def body(cluster, locate):
         # extract_body_claims re-yields the headline's claim too.
-        return headline(cluster, locate) + ["summary claim"]
+        return headline(cluster, locate) + [_c("summary claim")]
 
     def lede(claims):
-        ledes.append(claims)
+        ledes.append([c.text for c in claims])
         return "A lede."
 
     monkeypatch.setattr(action_center.claim_layer, "extract_claims", headline)
@@ -161,10 +166,22 @@ def test_a_summary_claim_counts_toward_the_two_claim_gate(db_session, refresh, m
 def test_a_summary_claim_that_restates_a_headline_claim_is_one_fact(db_session, refresh, monkeypatch):
     """dedupe_claims keeps the longer of two nested claims. The headline's
     shorter one must go with it, or one fact counts twice at the gate."""
-    monkeypatch.setattr(action_center.claim_layer, "extract_claims", lambda cluster, locate: ["X sues Y"])
-    monkeypatch.setattr(action_center.claim_layer, "extract_body_claims", lambda cluster, locate: ["X sues Y for Z"])
+    monkeypatch.setattr(action_center.claim_layer, "extract_claims", lambda cluster, locate: [_c("X sues Y")])
+    monkeypatch.setattr(action_center.claim_layer, "extract_body_claims", lambda cluster, locate: [_c("X sues Y for Z")])
     monkeypatch.setattr(
         action_center.claim_layer, "dedupe_claims",
-        lambda claims: [c for c in claims if not any(c != o and c in o for o in claims)],
+        lambda claims: [c for c in claims if not any(c != o and c.text in o.text for o in claims)],
     )
     assert action_center._run_refresh(db_session) == 0
+
+
+def test_an_issue_names_and_links_the_outlet_of_every_line_it_quotes(db_session, refresh):
+    """The summary is a quoted claim like the facts: it carries its outlet
+    and article, and each fact links the article it was quoted from
+    (2026-10-01: the outlet behind the summary was named only in the
+    source list, so "In the coverage" seemed to be missing an outlet)."""
+    action_center._run_refresh(db_session)
+    issue = db_session.query(ActionIssue).order_by(ActionIssue.rank).first()
+    assert issue.summary_source == "Outlet 0"
+    assert issue.summary_source_url == "https://example.com/claim-a"
+    assert json.loads(issue.fact_source_urls) == ["https://example.com/a-fact"]

@@ -106,7 +106,7 @@ def _sc_row(office, name, party, status="Active"):
 
 
 SC_TABLES = {
-    "376": _HEAD + _sc_row("U.S. Senate", "Darline Graham", "Republican")
+    "376": _HEAD + _sc_row("U.S. Senate", "Delia Whitfield", "Republican")
     + _sc_row("U.S. Senate", "Mark Hackett", "Constitution") + "</tbody></table>",
     "378": _HEAD + _sc_row("U.S. House of Representatives, District 2", "Joe Wilson", "Republican")
     + _sc_row("U.S. House of Representatives, District 2", "Pat Petition", "Petition")
@@ -137,7 +137,7 @@ async def test_vrems_reads_every_federal_office_on_the_general_ballot():
     assert asked == ["376", "378"]
     got = {(r["office"], r["district"], r["display_name"], r["party"]) for r in records}
     assert got == {
-        ("S", None, "Darline Graham", "R"),
+        ("S", None, "Delia Whitfield", "R"),
         ("S", None, "Mark Hackett", "C"),
         ("H", 2, "Joe Wilson", "R"),
         ("H", 2, "Pat Petition", "I"),
@@ -251,15 +251,15 @@ def _rec(office, district, party, last, display):
 
 @pytest.mark.asyncio
 async def test_a_certified_ballot_unconfirms_a_nominee_who_withdrew(db_session, only):
-    # Maine 2026: Platner won the primary, withdrew, Jackson replaced him.
-    # The sticky flag used to keep Platner on the page beside Jackson.
+    # Maine 2026: Colfax won the primary, withdrew, Penrose replaced him.
+    # The sticky flag used to keep Colfax on the page beside Penrose.
     _race(db_session, "2026-SEN-LA", "LA")
-    _db_cand(db_session, "S6ME00001", "2026-SEN-LA", "PLATNER, GRAHAM", "DEM", confirmed_general=True)
-    _db_cand(db_session, "S6ME00002", "2026-SEN-LA", "JACKSON, TROY", "DEM")
-    _db_cand(db_session, "S6ME00003", "2026-SEN-LA", "COLLINS, SUSAN M.", "REP", confirmed_general=True)
+    _db_cand(db_session, "S6ME00001", "2026-SEN-LA", "COLFAX, WHITFIELD", "DEM", confirmed_general=True)
+    _db_cand(db_session, "S6ME00002", "2026-SEN-LA", "PENROSE, TROY", "DEM")
+    _db_cand(db_session, "S6ME00003", "2026-SEN-LA", "PRYOR, SUSAN M.", "REP", confirmed_general=True)
     db_session.commit()
-    only("LA", [_rec("S", None, "D", "Jackson", "Troy D. Jackson"),
-                _rec("S", None, "R", "Collins", "Susan M. Collins")])
+    only("LA", [_rec("S", None, "D", "Penrose", "Reid D. Penrose"),
+                _rec("S", None, "R", "Pryor", "Susan M. Pryor")])
 
     results = await sc.sync_confirmed_candidates(db_session, None, 2026)
 
@@ -530,15 +530,15 @@ async def test_every_listed_file_is_required():
 
 @pytest.mark.asyncio
 async def test_a_certified_general_list_decides_federal_races_over_primary_results(db_session, monkeypatch):
-    # Maine 2026 in miniature: the primary results still name Platner, the
-    # certified list names Jackson. The list runs first and alone decides;
-    # Platner is never confirmed, not even for a moment within the run.
+    # Maine 2026 in miniature: the primary results still name Colfax, the
+    # certified list names Penrose. The list runs first and alone decides;
+    # Colfax is never confirmed, not even for a moment within the run.
     _one_state(monkeypatch, "ME")
-    monkeypatch.setitem(sc.STRATEGIES, "me_results", AsyncMock(return_value=[_rec("S", None, "D", "Platner", "Graham Platner")]))
-    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=[_rec("S", None, "D", "Jackson", "Troy D. Jackson")]))
+    monkeypatch.setitem(sc.STRATEGIES, "me_results", AsyncMock(return_value=[_rec("S", None, "D", "Colfax", "Gordon Colfax")]))
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=[_rec("S", None, "D", "Penrose", "Reid D. Penrose")]))
     _race(db_session, "2026-SEN-ME", "ME")
-    _db_cand(db_session, "S6ME1", "2026-SEN-ME", "PLATNER, GRAHAM", "DEM")
-    _db_cand(db_session, "S6ME2", "2026-SEN-ME", "JACKSON, TROY", "DEM")
+    _db_cand(db_session, "S6ME1", "2026-SEN-ME", "COLFAX, WHITFIELD", "DEM")
+    _db_cand(db_session, "S6ME2", "2026-SEN-ME", "PENROSE, TROY", "DEM")
     db_session.commit()
 
     await sc.sync_confirmed_candidates(db_session, None, 2026)
@@ -546,7 +546,7 @@ async def test_a_certified_general_list_decides_federal_races_over_primary_resul
     flags = {c.id: c.confirmed_general for c in db_session.query(Candidate)}
     assert flags == {"S6ME1": False, "S6ME2": True}
     # The page shows the name as the state printed it.
-    assert db_session.get(Candidate, "S6ME2").ballot_name == "Troy D. Jackson"
+    assert db_session.get(Candidate, "S6ME2").ballot_name == "Reid D. Penrose"
     assert elections_api._race_complete(elections_api._ballot_marker(db_session, "ME", 2026), "ME", "2026-SEN-ME") is True
 
 
@@ -688,7 +688,7 @@ def test_a_row_with_a_withdrawal_date_is_off_the_ballot():
     # are its own: LBR is Libertarian, CT Constitution.
     rows = [
         {"Office Sought": "UNITED STATES REPRESENTATIVE", "Party Affiliation": "LBR",
-         "Candidate Last Name": "JOHNSON", "Ballot Name": "Shawn Johnson", "Date Withdrawn": ""},
+         "Candidate Last Name": "CARVER", "Ballot Name": "Shawn Carver", "Date Withdrawn": ""},
         {"Office Sought": "UNITED STATES REPRESENTATIVE", "Party Affiliation": "CT",
          "Candidate Last Name": "HAGGIT", "Ballot Name": "Jeffrey Haggit", "Date Withdrawn": ""},
         {"Office Sought": "UNITED STATES REPRESENTATIVE", "Party Affiliation": "REP",
@@ -698,7 +698,7 @@ def test_a_row_with_a_withdrawal_date_is_off_the_ballot():
            "surname_column": "Candidate Last Name", "name_columns": ["Ballot Name"],
            "status_column": "Date Withdrawn", "status_values": [""]}
     got = {(r["district"], r["display_name"], r["party"]) for r in parse_certified_rows(rows, fmt)}
-    assert got == {(None, "Shawn Johnson", "L"), (None, "Jeffrey Haggit", "C")}
+    assert got == {(None, "Shawn Carver", "L"), (None, "Jeffrey Haggit", "C")}
 
 
 @pytest.mark.asyncio
@@ -710,8 +710,8 @@ async def test_a_list_behind_the_pages_own_export_button():
             '<input type="submit" name="export" value=""></form></html>')
     listing = ('"Contests","Party","BallotName","Status"\r\n'
                '"U.S. REPRESENTATIVE, DIST I","NONPARTISAN","BERNING, Nathan M.","In General"\r\n'
-               '"U.S. REPRESENTATIVE, DIST II","DEMOCRATIC","LEGER FERNANDEZ, Teresa","In General"\r\n'
-               '"U.S. REPRESENTATIVE, DIST I","DEMOCRATIC","BOOKER, Jennifer","In Primary"\r\n')
+               '"U.S. REPRESENTATIVE, DIST II","DEMOCRATIC","LEGER DOE, Teresa","In General"\r\n'
+               '"U.S. REPRESENTATIVE, DIST I","DEMOCRATIC","RIVERA, Jennifer","In Primary"\r\n')
     posted = []
 
     def handler(request):
@@ -735,7 +735,7 @@ async def test_a_list_behind_the_pages_own_export_button():
         assert await fetch_certified_table(client, 2028, "HI", source) == []  # not published for that year yet: "not yet", not a failure
     assert "__VIEWSTATE=vs" in posted[0] and "export=" in posted[0]
     assert {(r["district"], r["display_name"], r["last_name"], r["party"]) for r in got} == {
-        (1, "Nathan M. BERNING", "BERNING", "I"), (2, "Teresa LEGER FERNANDEZ", "LEGER FERNANDEZ", "D"),
+        (1, "Nathan M. BERNING", "BERNING", "I"), (2, "Teresa LEGER DOE", "LEGER DOE", "D"),
     }
 
 
@@ -844,17 +844,17 @@ async def test_a_partial_certified_list_decides_only_the_races_it_covers(db_sess
     # the page may call only the covered races "confirmed".
     _one_state(monkeypatch, "ME")
     monkeypatch.setitem(sc.STRATEGIES, "me_results", AsyncMock(return_value=[
-        _rec("S", None, "D", "Platner", "Graham Platner"),
+        _rec("S", None, "D", "Colfax", "Gordon Colfax"),
         _rec("H", 2, "R", "LePage", "Paul LePage"),
     ]))
     monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=[
-        _rec("S", None, "D", "Jackson", "Troy D. Jackson"),
+        _rec("S", None, "D", "Penrose", "Reid D. Penrose"),
         _rec("S", None, "I", "Indie", "Jordan Indie"),  # on the list, never filed with the FEC
     ]))
     _race(db_session, "2026-SEN-ME", "ME")
     _race(db_session, "2026-HOUSE-ME-2", "ME", office="H", district=2)
-    _db_cand(db_session, "S6ME1", "2026-SEN-ME", "PLATNER, GRAHAM", "DEM")
-    _db_cand(db_session, "S6ME2", "2026-SEN-ME", "JACKSON, TROY", "DEM")
+    _db_cand(db_session, "S6ME1", "2026-SEN-ME", "COLFAX, WHITFIELD", "DEM")
+    _db_cand(db_session, "S6ME2", "2026-SEN-ME", "PENROSE, TROY", "DEM")
     _db_cand(db_session, "H6ME2", "2026-HOUSE-ME-2", "LEPAGE, PAUL", "REP")
     db_session.commit()
 

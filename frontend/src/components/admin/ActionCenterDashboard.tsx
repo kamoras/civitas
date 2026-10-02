@@ -49,7 +49,7 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
   if (!ac || (!ac.isRunning && !ac.lastCompletedAt)) {
     return (
       <div className="p-4 text-xs font-mono text-ink-min">
-        No data yet — status available after first refresh.
+        No data yet: status available after first refresh.
       </div>
     );
   }
@@ -279,7 +279,7 @@ export function ActionCenterDashboard({
         <Segmented label="WINDOW" options={WINDOW_OPTIONS} value={limit} onChange={setLimit} />
         {refetchFailed && (
           <span role="status" className="text-xs font-mono text-signal-amber">
-            Couldn&apos;t refresh — showing data from {fetchedAt ? hourLabel(fetchedAt) : "—"}
+            Couldn&apos;t refresh: showing data from {fetchedAt ? hourLabel(fetchedAt) : "—"}
           </span>
         )}
       </div>
@@ -310,7 +310,7 @@ export function ActionCenterDashboard({
         <StatTile
           label="Suppressed by a gate"
           value={loaded ? suppressed.toLocaleString() : "—"}
-          note="dropped by a validator — see below"
+          note="dropped by a validator: see below"
         />
       </div>
 
@@ -380,7 +380,7 @@ export function ActionCenterDashboard({
           <div>
             {suppressedEntries.length > 0 ? (
               <RankBars
-                title="SUPPRESSED, BY GATE — THIS WINDOW"
+                title="SUPPRESSED BY GATE · THIS WINDOW"
                 entries={suppressedEntries}
                 unit="suppressed"
                 labelWidth="w-48"

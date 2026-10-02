@@ -335,8 +335,8 @@ describe("ElectionsPage", () => {
       leaderParty: null,
       flip: false,
       candidates: [
-        { name: "Dan Osborn", party: null, votes: 1000, pct: 52.6, candidateId: null },
-        { name: "Pete Ricketts", party: "REP", votes: 900, pct: 47.4, candidateId: null },
+        { name: "Dan Osgood", party: null, votes: 1000, pct: 52.6, candidateId: null },
+        { name: "Pete Rickard", party: "REP", votes: 900, pct: 47.4, candidateId: null },
       ],
     };
     const house = (district: number, leaderParty: string) => ({
@@ -357,7 +357,7 @@ describe("ElectionsPage", () => {
     const ga = within(await screen.findByRole("region", { name: /By state/ })).getByRole("link", {
       name: /^GA/,
     });
-    expect(ga).toHaveTextContent("Senate: Dan Osborn (party not given) leads");
+    expect(ga).toHaveTextContent("Senate: Dan Osgood (party not given) leads");
     expect(ga).not.toHaveTextContent("()");
     expect(ga).toHaveTextContent("HOUSE D 0 · R 1 · I 1 LEADING");
     // The Senate map's key has the purple an independent's lead is drawn in.

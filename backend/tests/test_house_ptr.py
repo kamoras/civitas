@@ -100,28 +100,31 @@ async def test_fetch_and_parse_ptr_tags_rows(db_session):
 
 
 @pytest.mark.asyncio
-async def test_fetch_and_parse_ptr_pdf_fetch_failure_returns_empty(db_session):
+async def test_fetch_and_parse_ptr_pdf_fetch_failure_returns_none(db_session):
+    """None, not []: "could not fetch" must stay distinguishable from "read
+    it, and it holds nothing" — a stored filing's re-read keeps its rows on
+    the first and drops an older reading of a scan on the second."""
     filing = {"doc_id": "20026590", "pdf_url": "https://example.com/20026590.pdf"}
     with patch(
         "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock
     ) as mock_fetch:
         mock_fetch.return_value = None
         rows = await fetch_and_parse_ptr(None, db_session, filing)
-    assert rows == []
+    assert rows is None
 
 
 @pytest.mark.asyncio
-async def test_fetch_and_parse_ptr_parse_exception_returns_empty_not_raises(db_session):
+async def test_fetch_and_parse_ptr_parse_exception_returns_none_not_raises(db_session):
     filing = {"doc_id": "20026590", "pdf_url": "https://example.com/20026590.pdf"}
     with patch(
         "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock
     ) as mock_fetch, patch(
         "app.pipeline.fetch.house_ptr.parse_pdf_bytes"
     ) as mock_parse:
-        mock_fetch.return_value = b"garbage"
+        mock_fetch.return_value = b"%PDF-1.4 corrupt"
         mock_parse.side_effect = Exception("corrupt PDF")
         rows = await fetch_and_parse_ptr(None, db_session, filing)
-    assert rows == []
+    assert rows is None
 
 
 @pytest.mark.asyncio
@@ -151,3 +154,18 @@ async def test_a_scan_row_without_a_legible_date_carries_the_filing_date(db_sess
         rows = await fetch_and_parse_ptr(None, db_session, filing)
     assert mock_parse.call_args.kwargs == {"not_after": "2026-05-14", "keep_undated": True}
     assert (rows[0].transaction_date, rows[0].disclosure_date) == (None, "2026-05-14")
+
+
+@pytest.mark.asyncio
+async def test_a_rows_disclosure_date_is_the_reports_filing_date(db_session):
+    """Filing 20030387: trades of 05/08-05/12/2025, notified 05/15, filed
+    06/22. The STOCK Act's 45 days run from the trade to the report."""
+    filing = {"doc_id": "20030387", "pdf_url": "https://example.com/20030387.pdf", "filing_date": "2025-06-22"}
+    row = TradeRow(ticker="ABT", asset_name="Abbott Laboratories Common Stock (ABT) [ST]", owner="self",
+                   transaction_type="sale_full", transaction_date="2025-05-12", disclosure_date="2025-05-15",
+                   amount_low=50001.0, amount_high=100000.0)
+    with patch(
+        "app.pipeline.fetch.house_ptr.fetch_bytes_with_retry", new_callable=AsyncMock, return_value=b"%PDF-1.4",
+    ), patch("app.pipeline.fetch.house_ptr.parse_pdf_bytes", return_value=([row], "text")):
+        rows = await fetch_and_parse_ptr(None, db_session, filing)
+    assert rows[0].disclosure_date == "2025-06-22"

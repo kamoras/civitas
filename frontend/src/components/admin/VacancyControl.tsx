@@ -47,7 +47,7 @@ export function VacancyControl({ token }: { token: string }) {
       <div className="p-4 space-y-3">
         <p className="text-ink-min text-xs font-mono">
           Marks a senator/representative&apos;s seat vacant (or restores it) without deleting their
-          historical data. No automated detection — this is manual only.
+          historical data. No automated detection: this is manual only.
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">

@@ -27,7 +27,7 @@ def _days_ago(n: int) -> str:
 @pytest.fixture
 def client(db_session):
     db_session.add(Senator(
-        id="jon-ossoff", name="Jon Ossoff", state="GA", party="D",
+        id="jon-brennan", name="Jon Brennan", state="GA", party="D",
         score_funding_independence=60, score_promise_persistence=50, score_constituent_alignment=55,
         score_funding_diversity=40, score_legislative_effectiveness=70,
     ))

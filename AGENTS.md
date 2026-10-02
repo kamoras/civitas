@@ -233,7 +233,7 @@ Each file is hashed as its docstring-stripped AST (`_normalized_source`), so
 editing a comment or docstring does not count as a code change — only code,
 string constants (prototypes, prompts) and thresholds do. A short, tested
 exemption list covers what cannot affect classification or scoring:
-`_NOT_ANALYSIS_PATHS` (the holdings ingest, filer matching, the run-coordination
+`_NOT_ANALYSIS_PATHS` (the holdings and trade ingests, filer matching, the run-coordination
 modules, the election run's orchestration, the LDA bill-name matcher
 `analyze/lobbying_records.py`, the Explore summary prompt `analyze/prompts.py`,
 the modules that word and publish posts, the Action Center's hourly run
@@ -546,11 +546,11 @@ the per-member pass. No named senator anchors either.
 
 ### 4a. Vote matching for multi-word names
 
-Senate.gov roll call XML uses multi-word last names (e.g. "Cortez Masto",
-"Van Hollen", "Blunt Rochester").  The pipeline extracts the original last
+Senate.gov roll call XML uses multi-word last names (e.g. "De la Rosa",
+"Van Doren", "Hale Morrow").  The pipeline extracts the original last
 name from the Congress.gov "LastName, FirstName" format during member
 normalization and stores it as `lastNameForVoteMatch`.  Unicode accents are
-stripped (NFD decomposition) so "Luján" matches "Lujan" in the XML.
+stripped (NFD decomposition) so "Núñez" matches "Nunez" in the XML.
 
 ### 5. Config as single source of truth
 
@@ -963,8 +963,12 @@ phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction
 reports plus the sitting president's OGE Form 278-T filings (PDF, from OGE's
 public presidential disclosure index), matches filer to a known member (the
 president's filings are indexed under the office and need no matching),
-classifies trade industry (reusing the donor-industry embedding classifier),
-and computes disclosure timeliness. Best-effort per phase: one source being
+labels each trade with the industry of the SIC code the SEC assigned its
+issuer (`fetch/sec_tickers.py` — tier-1 structured metadata; the donor
+embedding classifier measured 30% agreement with it on trade names and is
+not used), and computes disclosure timeliness. Every stored trade's industry
+is recomputed each night (`_reclassify_stored_trades`); the SEC being
+unreachable raises rather than reading as "no industry". Best-effort per phase: one source being
 down does not discard the others' rows.
 
 No profit or gain figure is derived for any filer, and none can be: every one
@@ -1297,6 +1301,10 @@ the pending list).
 - Tailwind CSS for styling
 - API calls go through `src/lib/api.ts`
 - Dynamic configuration fetched from `GET /api/config` — never hardcode industry codes, score weights, or category labels
+- **Site prose uses no em dashes** (2026-10). Use a comma, colon, parentheses or a
+  full stop; for a separator inside a label, the middle dot " · ". A string that is
+  only "—" is the table placeholder for no data and stays.
+  `src/lib/noEmDash.test.ts` fails on any other em dash in a user-visible string.
 - Every metric shown on scorecards has a `MetricTooltip` component providing
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they
@@ -1343,7 +1351,7 @@ the pending list).
   taken from the record, not the request's spelling.
 - Titles lead with what people type into a search box (member name +
   party-state, bill number, full state name); the root template appends
-  " — Civitas". Search-facing wording lives in `src/lib/seo.ts`, not in
+  " | Civitas" (no em dashes in site prose, 2026-10). Search-facing wording lives in `src/lib/seo.ts`, not in
   `page.tsx` (Next rejects extra exports there).
 - A missing record is a real 404 via `notFound()` plus `noindex`, never a
   200 page that says "not found". The converse holds too: an unreachable

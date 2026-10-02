@@ -22,7 +22,7 @@ async def mcp_client(db_session):
     a fixture: the session manager's task group must be exited by the task
     that entered it, and pytest-asyncio tears fixtures down in another."""
     db_session.add(Senator(
-        id="jon-ossoff", name="Jon Ossoff", state="GA", party="D",
+        id="jon-brennan", name="Jon Brennan", state="GA", party="D",
         score_funding_independence=60, score_promise_persistence=50, score_constituent_alignment=55,
         score_funding_diversity=40, score_legislative_effectiveness=70,
     ))
@@ -72,13 +72,13 @@ async def test_every_public_endpoint_is_a_read_only_tool(db_session):
 
 async def test_a_tool_call_answers_what_the_http_route_does(db_session):
     async with mcp_client(db_session) as mcp:
-        result = await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "jon-ossoff"}})
+        result = await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "jon-brennan"}})
         assert not result.get("isError")
-        assert result["structuredContent"]["name"] == "Jon Ossoff"
-        assert result["structuredContent"]["siteUrl"].endswith("/politicians/jon-ossoff")
+        assert result["structuredContent"]["name"] == "Jon Brennan"
+        assert result["structuredContent"]["siteUrl"].endswith("/politicians/jon-brennan")
 
         page = await mcp("tools/call", {"name": "list_senators", "arguments": {"state": "GA"}})
-        assert [e["id"] for e in page["structuredContent"]["entries"]] == ["jon-ossoff"]
+        assert [e["id"] for e in page["structuredContent"]["entries"]] == ["jon-brennan"]
 
 
 async def test_errors_come_back_as_readable_tool_results(db_session):
@@ -94,7 +94,7 @@ async def test_errors_come_back_as_readable_tool_results(db_session):
 async def test_tool_calls_and_connections_are_counted_on_the_mcp_channel(db_session):
     async with mcp_client(db_session) as mcp:
         await mcp("tools/list")
-        await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "jon-ossoff"}})
+        await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "jon-brennan"}})
         await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "nobody"}})
     _drain_queue_and_write(db_session)
     counts = {(r.endpoint, r.channel, r.status): r.count for r in db_session.query(ApiRequestCount).all()}

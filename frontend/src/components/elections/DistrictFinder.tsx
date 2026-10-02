@@ -83,8 +83,7 @@ export default function DistrictFinder({
         )}
       </div>
       <p className="mt-1 font-mono text-[11px] leading-relaxed text-ink-min">
-        Pick the county you live in. Nothing is typed, sent or stored — it only changes what you
-        see.
+        Pick the county you live in. Nothing is typed, sent or stored: it only changes what you see.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-1" role="group" aria-label="County initial">

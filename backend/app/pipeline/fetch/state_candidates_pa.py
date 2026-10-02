@@ -24,8 +24,8 @@ Three hops, nothing cycle-specific written down:
 3. GetOfficeData returns the results nested district -> party ->
    candidates, with votes.
 
-Verified live on the real 2026-05-19 primary (election 117): Bob Harvie
-taking the PA-01 Democratic primary with 65.14%.
+Verified live on the real 2026-05-19 primary (election 117): the PA-01
+Democratic primary's winner read with 65.14%.
 
 STATE OFFICES, with `statewide_offices`. The same office list names
 Pennsylvania's own contests beside the federal ones — for 2026 "GOV"

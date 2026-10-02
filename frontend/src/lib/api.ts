@@ -95,7 +95,7 @@ function reportShape(endpoint: string, field: string, expected: string, received
   const got = received === null ? "null" : Array.isArray(received) ? "array" : typeof received;
   console.warn(
     `[civitas] ${endpoint}: expected ${field} to be ${expected === "list" ? "an array" : "an object"}, got ${got}. ` +
-      `Coerced to an empty ${expected} — the view will render its no-data state.`
+      `Coerced to an empty ${expected}: the view will render its no-data state.`
   );
 }
 

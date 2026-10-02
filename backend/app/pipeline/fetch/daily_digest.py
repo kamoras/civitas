@@ -207,8 +207,8 @@ _HOUSE_FAILED_RE = re.compile(r"\b(?:failed of passage|The House (?:failed|rejec
 
 def _events_from_items(kind: str, items: list[dict], merge_details: bool) -> list[dict]:
     """One event per sub-item. With merge_details, an item naming no
-    measure of its own ("Husted (for Hoeven/Duckworth) Amendment No. 6834,
-    in the nature of a substitute.") is the previous item's detail and is
+    measure of its own ("Doe (for Roe/Poe) Amendment No. 6834, in the
+    nature of a substitute.") is the previous item's detail and is
     appended to it rather than standing as an event. An item that ended
     without a page reference continues into the next one ("3 Coast Guard
     nominations in the rank of admiral." / "A routine list in the Coast

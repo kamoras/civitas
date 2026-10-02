@@ -10,7 +10,7 @@ read_senate` adds the U.S. SENATE nominees, and `read_house` the House
 districts the special primary does NOT decide.)
 
 WHY JUST THE SPECIAL PRIMARY: following Louisiana v. Callais (2026-04-29)
-and a Alabama Legislature special session, Governor Ivey ordered four of
+and an Alabama Legislature special session, the Governor ordered four of
 Alabama's seven US House districts (1, 2, 6, 7) redrawn and re-run under a
 new map, decided in a single-round SPECIAL primary on 2026-08-11 with NO
 runoff (confirmed reporting: "There will be no runoff election"). The other
@@ -54,16 +54,13 @@ hardcoded here, so that update is a config edit, not a code change.
 Because that id has no cycle of its own baked into the URL, this module
 refuses to serve it for any cycle but the one it was verified against —
 `YEAR` below — rather than silently re-confirming 2026's winners against a
-LATER cycle's real FEC candidates on nothing but a surname match (Jerry
-Carl and Gary Palmer, among real 2026 winners here, are exactly the kind
-of repeat incumbent who could otherwise coincidentally "confirm" a false
-positive in 2028).
+LATER cycle's real FEC candidates on nothing but a surname match (a repeat
+incumbent is exactly who could coincidentally "confirm" a false positive
+in a later cycle).
 
-Verified live 2026-09-03 against the real, certified-by-count special
-primary: Jerry Carl (CD1 R, 74.70%), Rhett Marques (CD2 R, 50.03%), Maurice
-Mercer (CD6 D, 64.17%), Gary Palmer (CD6 R, 86.98%), Ammie Akin (CD7 R,
-73.37%) — no CD1/CD2/CD7 Democratic primary is shown on this page at all,
-meaning Democrats fielded no candidate in those three redrawn districts.
+Verified live 2026-09-03 against the certified special primary: every
+contest on the page resolves to its certified winner, and a district
+with no Democratic primary on the page is read as having none.
 """
 
 import asyncio
@@ -106,7 +103,7 @@ class _ContestResultsParser(HTMLParser):
     """Alabama's own results page nests one table per contest, headed by a
     td.enrContestHeader ("UNITED STATES REPRESENTATIVE, 1ST CONGRESSIONAL
     DISTRICT (REP)"), then one row per candidate whose name/party sit in a
-    td.enrCandNameCol ("Jerry Carl                             (REP)") and
+    td.enrCandNameCol ("Jane Doe                               (REP)") and
     whose vote count sits in a td.enrCandVoteNumCol. Alternating rows carry
     an extra "enrAlt" class prefix (plain zebra striping), so matching is on
     the class SUFFIX, not the exact class string — but a plain "CandNameCol"
@@ -190,9 +187,8 @@ class _ContestResultsParser(HTMLParser):
 # Candidate -- and then one column per precinct (plus ABSENTEE and
 # PROVISIONAL), so a candidate's statewide total is the sum of every
 # numeric cell in their row across all 67 counties. Summed that way the
-# 2026 Republican primary gives Thomas (Tommy) Tuberville 422,255 votes for
-# Governor and Jim Zeigler 194,062 for PSC Place 2, both exactly the
-# Alabama Republican Party's own certified workbook's figures.
+# 2026 Republican primary's Governor and PSC Place 2 winners come out at
+# exactly the Alabama Republican Party's own certified workbook's figures.
 #
 # Alabama nominates by MAJORITY (runoff_threshold_pct 50 in the config):
 # a primary leader below it is withheld and the runoff decides. A runoff
@@ -201,9 +197,8 @@ class _ContestResultsParser(HTMLParser):
 #
 # Only STATEWIDE offices, and (with read_senate) the U.S. Senate seat, are
 # read from these files. The Senate seat was never redistricted, so its
-# regular primary and runoff are the real contest: the 2026 Republican
-# runoff gives Barry Moore 173,673 to Jared Hudson's 137,552, the
-# Democratic runoff Everett Wess 50,428 to Dakarai Larriett's 41,985.
+# regular primary and runoff are the real contest (in 2026, a runoff in
+# each party).
 # Their House contests for the districts the special primary decides are
 # NEVER read: those are the pre-redistricting primaries its new map
 # voided. That set is the union of the districts with a contest on the
@@ -211,10 +206,8 @@ class _ContestResultsParser(HTMLParser):
 # (from the proclamation), so neither a missing page contest nor a stale
 # config can let one through (special_primary_districts()). The other
 # House districts -- CD3, CD4, CD5 in 2026 -- are read with read_house,
-# only in the cycle whose special primary was actually read: Mike Rogers
-# (R-3, 83.2%), Robert Aderholt (R-4, 77.6%), Amanda Pusczek (D-4,
-# 62.8%), Andrew Sneed (D-5, runoff 16,688 to 4,607). Dale Strong (R-5)
-# was unopposed and is in no primary file -- and the same holds for a
+# only in the cycle whose special primary was actually read. An unopposed
+# nominee is in no primary file -- and the same holds for a
 # STATEWIDE nominee who ran unopposed: Alabama prints no uncontested
 # contest, so an office read here can hold one party's nominee while the
 # other party's is absent. The Secretary of State's certifications of

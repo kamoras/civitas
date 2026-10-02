@@ -54,9 +54,8 @@ only correct where a plurality wins the primary outright. A state whose
 sub-majority leader goes to a RUNOFF carries `runoff_threshold_pct` in
 its source entry and yields nothing rather than a guess. Note the
 vendor's own ballot annotation is NOT a winner signal either: Rhode
-Island appends "*" to the party-ENDORSED candidate, and its real 2026
-RI-2 Republican primary was won by unendorsed Victor Mellor (8,837)
-over endorsed "Stephen T. Skoly*" (6,380) — the asterisk is stripped
+Island appends "*" to the party-ENDORSED candidate, and in 2026 an
+unendorsed candidate won one of its primaries over the endorsed one — the asterisk is stripped
 as an annotation by the shared surname(), never read as a result.
 
 FRESHNESS follows the rule state_candidates_tabular._withheld already
@@ -87,20 +86,12 @@ Candidate. A state only PUBLISHES them once its entry opts in with
 statewide_offices (see state_candidate_sources.json's _contract for why
 that flag is a truth condition, not a toggle).
 
-Verified live 2026-09-17 against Rhode Island's real, certified 2026
-statewide primary (40/40 localities reporting, isOfficialResults true),
-all six federal contests: John F. Reed (Senate D, real incumbent, 98,473
-of 128,194 over Connor F. Burbridge and Luis Daniel Muñoz), Raymond T.
-McKay (Senate R, unopposed), Gabriel Amo (CD1 D, real incumbent,
-unopposed), Kellie Keenan (CD1 R, unopposed), Seth Magaziner (CD2 D,
-real incumbent, unopposed), Victor Mellor (CD2 R, real winner over the
-party-endorsed candidate). Re-verified 2026-09-21 for the statewide
-half, same certified data: all 9 executive contests resolve (Helena
-Buonanno Foulkes and Aaron C. Guckian for Governor, Sabina Matos and
-John J. Loughlin II for Lieutenant Governor, Kimberly Ahern and Alan
-Leonard Gordon for Attorney General, Gregg M. Amore for Secretary of
-State, James A. Diossa and Micholas A. Credle for General Treasurer),
-with all 177 non-federal, non-statewide contests still refused.
+Verified live 2026-09-17 against Rhode Island's certified 2026 statewide
+primary (40/40 localities reporting, isOfficialResults true): all six
+federal contests resolve, including one won by a candidate over the
+party-endorsed one. Re-verified 2026-09-21 for the statewide half: all 9
+executive contests resolve, with all 177 non-federal, non-statewide
+contests still refused.
 """
 
 import logging

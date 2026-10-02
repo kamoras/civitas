@@ -17,7 +17,7 @@ The PDF itself (real embedded text, not scanned; pdfplumber's plain
 needed, unlike KY/MS/AL's PDFs) is the SIMPLEST shape of any PDF this
 system reads: one race name per section header ("United States Senate",
 "United States House of Representatives 4"), one row per candidate
-directly under it ("D-Adam Hamilton    77,607   34.63%"), already
+directly under it ("D-John Doe    77,607   34.63%"), already
 reduced to a single statewide total — no per-county columns to sum, no
 rotated text, no running-total tracking across pages needed. Party is a
 literal PREFIX on the candidate's own name, the same shape Arkansas's

@@ -157,10 +157,9 @@ it read.
 saturates at 100. A member who breaks with their party far more than the seat
 calls for may be as far from what their voters sent them to do as a member
 who never breaks. If so, the score should peak and then fall. The question
-came from John Fetterman, who scores 100. On Voteview's party-unity votes he
-broke with the Democratic majority on 1.2% of them in the 118th Senate and on
-20.4% in the 119th. 89 of his 159 breaks in the 119th were cloture or
-confirmation votes on nominations.
+came from a senator who scored 100: on Voteview's party-unity votes, a break
+rate of 1.2% in the 118th Senate and 20.4% in the 119th, 89 of the 159 breaks
+in the 119th on cloture or confirmation votes for nominations.
 
 "What voters sent them to do" depends on which voters. Fenno's (1978)
 concentric constituencies separate the member's whole seat from their own
@@ -285,8 +284,8 @@ below the expectation, the same distance at which the crossing side reaches
 100. In today's polarized Senate that deviation is under 4 points. Using
 2025 Voteview party-unity votes:
 
-- Ossoff breaks on 4% of votes against an expected 8%, and scored 0.
-- Tina Smith breaks on 0% against an expected 6%, and scored 0.
+- A senator breaking on 4% of votes against an expected 8% scored 0.
+- A senator breaking on 0% against an expected 6% scored 0.
 - 28 of 101 senators fell below 25 on the vote component, mostly for being
   a few points more loyal than their seat's norm.
 
@@ -323,8 +322,8 @@ House, so loyalty stays scored.
 **Changed (v6.15):** `LOYAL_SIDE_SCALE = 4`. At equal distance from the norm,
 extra loyalty now costs less than extra disloyalty past the peak. Two gaps
 more loyal scores 25; two gaps more disloyal scores 50 and three gaps scores
-0. On 2025 votes, 4 senators fall below 25 instead of 28 (Ossoff 36, Smith
-29).
+0. On 2025 votes, 4 senators fall below 25 instead of 28 (the two loyal
+senators above now score 36 and 29).
 
 **Party balance.** The gentler loyal side and the over-break decline make
 the shape lopsided, so each party's average no longer sits at exactly 50.
@@ -334,8 +333,7 @@ v6.13. The sign changed from one Congress to the next, so the shape shows no
 systematic lean toward either party. Averages now sit around 52–55.
 
 The 119th Senate has the widest gap in the series: 5.3 points, D higher.
-Its heaviest breakers past the peak (Murkowski, Collins, Paul) are mostly
-Republicans. In a given Congress, the gap follows who breaks far past the
+Its three heaviest breakers past the peak are Republicans. In a given Congress, the gap follows who breaks far past the
 norm.
 
 This is a design weight, chosen on where the Senate and primary evidence
@@ -347,12 +345,13 @@ the score still carries a clear signal there (t=4.4).
 **The problem.** Two senators in the live 119th Senate showed the v6.15
 shape measuring the wrong thing.
 
-- **Gary Peters** broke on 3.5% of 172 votes against an expected 7.1%, and
-  scored 41. Most swing-seat Democrats break 2–5%; a few heavy breakers
-  (Fetterman 22%, Shaheen 18%, Kaine 16%) pulled the least-squares
+- **A swing-seat Democrat** broke on 3.5% of 172 votes against an expected
+  7.1%, and scored 41. Most swing-seat Democrats break 2–5%; a few heavy
+  breakers (16% to 22%) pulled the least-squares
   expectation up to 7.1%, so the typical member sat below it. Under v6.15,
   33 of 47 Democrats and 46 of 53 Republicans scored under 50.
-- **Bill Cassidy** broke on 5.5% against an expected 1.5%, and scored 90.
+- **A safe-seat Republican** broke on 5.5% against an expected 1.5%, and
+  scored 90.
   The v6.15 scale was percentage points, 4.9 of them for the whole chamber.
   Four extra points on a 1.5% expectation is breaking more than three times
   as often as the seat's norm, yet it counted the same as four points on 7%.
@@ -427,8 +426,7 @@ site's About page.
 
 Wider zero points strengthen both associations together, so the data does
 not pick one. 1.5 / 3 keeps loyalty at half the cost of excess breaking, and
-puts the heaviest breakers of today's Senate (Fetterman, Murkowski, Paul) at
-or near 0.
+puts the heaviest breakers of today's Senate at or near 0.
 
 **Where a breakdown's "0 at" number comes from.** The zero point a scorecard
 prints is the zero multiple times the member's party's scale:
@@ -446,8 +444,7 @@ chosen for what they do on real records:
 
 - **1.5 above.** Reserves 0 for the heaviest breakers, members well past where
   even their party's most out-of-pattern tenth sits. On the live Senate that is
-  5 of 100: Durbin (1.61 gaps), Fetterman (1.60), King (1.59), Murkowski (3.14)
-  and Paul (5.45). Six more sit between 1 and 1.5 gaps, and score between 33
+  5 of 100, at 1.59 to 5.45 gaps. Six more sit between 1 and 1.5 gaps, and score between 33
   and 0.
 - **3 below.** Loyalty costs half as much per gap. The residual is bounded on
   this side (nobody breaks fewer than zero times), so in practice nobody
@@ -468,20 +465,20 @@ seat's norm.
 
 ### 11. Only breaks toward the other party (v6.20)
 
-**The problem.** Tim Burchett (R-TN-2), known as a reliable party-line
-vote, scored 8 on Constituent Alignment in September 2026. His vote part
-was 0. Two things produced that:
+**The problem.** A House Republican known as a reliable party-line vote
+scored 8 on Constituent Alignment in September 2026, with a vote part of 0.
+Two things produced that:
 
-- **The window.** The rate was read off his stored votes, a sample of the
+- **The window.** The rate was read off the member's stored votes, a sample of the
   chamber's latest 120 roll calls plus key bills: 6 breaks in 76 party-line
   votes, 7.9%. Over every roll call of the 119th Congress it was 15 of 304,
   4.9%.
 - **The direction.** 14 of those 15 came from the Republican right flank:
-  he voted with Democrats against a bill most Republicans backed, alongside
-  the members furthest from Democrats. That is not independence toward his
+  votes with Democrats against bills most Republicans backed, alongside
+  the members furthest from Democrats. That is not independence toward the
   seat, and how far toward the flank a member sits is already scored, by
-  position congruence. Counting it as a break charged it twice. Chip Roy
-  showed the same pattern (14 of 15 from the flank).
+  position congruence. Counting it as a break charged it twice. Another
+  House Republican showed the same pattern (14 of 15 from the flank).
 
 **Changed (v6.20).** A break counts only when, on that roll call, the
 party's members who broke sit on average nearer the other party (mean
@@ -541,11 +538,35 @@ evidence shows it costs nothing.
 
 **On the live 119th Congress** (roll calls through September 2026): the
 House Republican median is 0.7% of measures and the 90th percentile 3.6%;
-Senate Republicans 0.0% and 3.6%, Democrats 1.3% and 6.8%. Burchett breaks
-toward Democrats on 2 of 298 measures (0.7%, the party median), with 14
-more from the flank. Collins (103 of 414), Murkowski (77 of 407),
-Fitzpatrick (91 of 298) and Fetterman (60 of 406) remain the heaviest
-breakers, as before; Thune's reconsider switches still don't count.
+Senate Republicans 0.0% and 3.6%, Democrats 1.3% and 6.8%. The House
+Republican above breaks toward Democrats on 2 of 298 measures (0.7%, the
+party median), with 14 more from the flank. The heaviest breakers (60 to 103
+breaks each) remain the heaviest, as before; the majority leader's
+reconsider switches still don't count.
+
+### 13. The seat's expected position: partisan lean, not voters' self-placement (tested 2026-10)
+
+Position congruence compares a member's roll-call position with what a
+same-party member of a seat with that partisan lean typically holds. Partisan
+lean measures how a seat votes for president, not how liberal or conservative
+its voters say they are, and a state can sit further left or right than its
+presidential vote suggests. So the obvious alternative was tested: the state's
+mean self-placed ideology (Cooperative Election Study 2024, weighted,
+`ideo5`), as the expectation for senators.
+
+Leave-one-out error of per-party fits of the 119th Senate's Nokken-Poole
+positions:
+
+| Party | Partisan lean | Voters' ideology | Both |
+|---|---|---|---|
+| D (n=47) | 0.119 | 0.134 | 0.117 |
+| R (n=57) | 0.196 | 0.197 | 0.200 |
+
+Voters' self-placement predicts senators' positions no better than partisan
+lean, and adding it does not help. The limit is not the measure: two senators
+of one party from one state share an electorate, yet the 43 such pairs sit a
+median 0.093 apart and as much as 0.485, so much of where a senator sits is
+the senator, not the seat. Partisan lean stays the expectation.
 
 ## What the evidence does not settle
 

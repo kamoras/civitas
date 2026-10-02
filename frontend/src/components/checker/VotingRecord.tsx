@@ -308,7 +308,7 @@ export default function VotingRecord({
         {keyVoteCount > 0 && (
           <div>
             <div className="text-xs text-ink-lo mb-2 font-mono tracking-widest">
-              KEY VOTES — LONG-TERM SUMMARY
+              KEY VOTES: LONG-TERM SUMMARY
             </div>
             <PaginatedVoteList
               senatorId={senatorId}

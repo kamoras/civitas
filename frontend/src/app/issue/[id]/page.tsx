@@ -17,6 +17,7 @@ import {
   IssueTags,
   SECTION_HEADING,
   SourceList,
+  SummarySource,
   TEXT_LINK,
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
@@ -119,7 +120,7 @@ export async function generateMetadata({
   const ogImage = absoluteUrl(`/api/og?issue=${issue.publicId}`);
   return pageMetadata({
     title: issue.title,
-    description: issue.summary || "Track what Congress is doing — and what you can do about it.",
+    description: issue.summary || "Track what Congress is doing, and what you can do about it.",
     path,
     type: "article",
     images: [{ url: ogImage, width: 1200, height: 630, alt: issue.title }],
@@ -187,6 +188,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             </h1>
             <p className="mt-4 font-display text-base leading-relaxed text-ink sm:text-[17px]">
               {issue.summary}
+              <SummarySource issue={issue} />
             </p>
             {issue.status === "developing" && (
               <div className="mt-3">

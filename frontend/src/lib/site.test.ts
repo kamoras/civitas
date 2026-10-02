@@ -20,7 +20,7 @@ describe("pageMetadata", () => {
     expect(m.openGraph).toMatchObject({
       url: "/bills",
       siteName: "Civitas",
-      title: "Bills — Civitas",
+      title: "Bills | Civitas",
     });
     expect(m.title).toBe("Bills");
     expect(m.robots).toBeUndefined();

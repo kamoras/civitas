@@ -132,8 +132,8 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     def find(p) -> int | None:
         found_at = index.get(key(p.member_id, p.last_name, p.state)) or []
         if len(found_at) > 1:
-            # Two senators of one state share a last name (Lindsey and
-            # Darline Graham, SC): the roll call's first name tells them apart.
+            # Two senators of one state can share a last name: the roll
+            # call's first name tells them apart.
             first = _normalize_for_match(p.first_name or "")
             found_at = [i for i in found_at if _normalize_for_match((members[i].get("name") or "").split(" ")[0]) == first]
         return found_at[0] if len(found_at) == 1 else None

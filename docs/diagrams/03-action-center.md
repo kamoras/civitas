@@ -109,7 +109,7 @@ at the headline's end look cut off, and on 2026-09-27 left 5 claims from 40
 articles instead of 14.
 
 **A cut-short predicate is read on in its source.**
-The model often stops its predicate span early ("Blackburn sues"). Where the
+The model often stops its predicate span early ("Senator sues"). Where the
 source runs on, `post_composer._complete_predicate` reads it to the next clause
 punctuation (at most 25 words) and renders that, still the source's own words;
 a period after a possible abbreviation ("Sens.") refuses instead of guessing.
@@ -117,6 +117,15 @@ The issue also counts each article's summary claim after the headline claims.
 On 2026-10-01 78 of 300 clusters in three days were skipped as too few facts,
 and 7 of 10 sampled rejected claims were cut-short predicates; replaying the
 day's top six clusters, three passed the two-claim gate instead of none.
+
+**Every quoted line names and links its article.** The summary is the first
+verified claim and the coverage list the rest, so the outlet whose line became
+the summary used to appear only among the sources, and an issue built from two
+articles showed one outlet under "In the coverage". Each issue now stores the
+summary's outlet and article (`summary_source`, `summary_source_url`) and each
+fact's article (`fact_source_urls`), and the page links them. Issues from before
+2026-10 have their facts linked where the outlet a fact names published exactly
+one of the issue's sources (migration 0030).
 
 **Complete linkage, not single.** Every pair of articles in a cluster must be
 at least 0.40 alike. Single linkage (each article like one other) plus a

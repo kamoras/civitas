@@ -59,13 +59,13 @@ export function describeProfile(profile: PoliticianProfile): {
   if (branch === "president") {
     return {
       title: `${name}: Presidential Record & Scorecard`,
-      description: `${name}, ${role}: executive orders, public record, and scorecard — built from Federal Register and other public federal records.`,
+      description: `${name}, ${role}: executive orders, public record, and scorecard, built from Federal Register and other public federal records.`,
     };
   }
   // Justices: role is "Chief Justice" / "Associate Justice".
   return {
     title: `${role} ${name}: Supreme Court Voting Record`,
-    description: `${role} ${name}: Supreme Court voting record, opinions, and impartiality scorecard — from public case records.`,
+    description: `${role} ${name}: Supreme Court voting record, opinions, and impartiality scorecard, from public case records.`,
   };
 }
 
@@ -174,7 +174,7 @@ export function describeElections(
   }
   return {
     title: `${year}Elections by State: Senate, House & Ballot Measures`,
-    description: `Every ${year}U.S. Senate and House race by state — candidates, FEC fundraising, partisan lean, and statewide ballot measures quoted from official sources.`,
+    description: `Every ${year}U.S. Senate and House race by state: candidates, FEC fundraising, partisan lean, and statewide ballot measures quoted from official sources.`,
   };
 }
 
@@ -208,7 +208,7 @@ export function describeStateBallot(
           : `${name} Election Results ${year}: Where to Find Them, and Ballot`,
       description:
         live === true
-          ? `${name}'s ${year} Senate & House count as its election office publishes it — "leads" even once official; Civitas calls no race — and who was on the ballot.`
+          ? `${name}'s ${year} Senate & House count as its election office publishes it ("leads" even once official; Civitas calls no race), and who was on the ballot.`
           : live === false
             ? `Where ${name}'s election office publishes its ${year} count (Civitas doesn't read it live), and who was on the ballot, with their FEC fundraising.`
             : `${name}'s ${year} election: where the state publishes its count, and who was on the ballot, with their FEC fundraising.`,

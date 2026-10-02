@@ -6,7 +6,7 @@ class TestStateNewsFeeds:
     The national eight (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call)
     cannot cover 50 states' House and Senate races. That gap is what the
     open Bluesky candidate-name search was filling, with 7,740 items of
-    which Minnesota's included "Dave Hughes still a whiny cunt" and a
+    which Minnesota's included "Dave Hewitt still a whiny cunt" and a
     post about the Australian comedian of the same name. Four successive
     filters failed to clean it, because a name mention is not coverage —
     the fix is more SOURCES, not a harder filter.

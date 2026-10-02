@@ -30,6 +30,6 @@ export const SCORE_TERMS: Record<ScoreKey, ScoreTerm> = {
     label: "Legislative Effectiveness",
     shortLabel: "EFFECTIVE",
     description:
-      "How effective is this senator at advancing legislation? Based on bill passage rates, cosponsorship influence, and the bipartisan coalitions they attract to their own bills — members who draw cross-party cosponsors are substantially more successful at moving legislation (Harbridge-Yong, Volden & Wiseman 2023).",
+      "How effective is this senator at advancing legislation? Based on bill passage rates, cosponsorship influence, and the bipartisan coalitions they attract to their own bills: members who draw cross-party cosponsors are substantially more successful at moving legislation (Harbridge-Yong, Volden & Wiseman 2023).",
   },
 };

@@ -44,16 +44,16 @@ def test_summaries_count_each_partys_positions(db_session):
 
 
 def test_every_break_is_listed_with_its_roll_call_in_both_chambers(db_session):
-    db_session.add(Representative(id="tim-burchett", bioguide_id="B001309", name="Tim Burchett",
+    db_session.add(Representative(id="tim-hale", bioguide_id="B001309", name="Jordan Hale",
                                   state="TN", district=2, party="R"))
-    db_session.add(Senator(id="rand-paul", bioguide_id="P000603", name="Rand Paul", state="KY", party="R"))
+    db_session.add(Senator(id="rand-paul", bioguide_id="P000603", name="Reed Paul", state="KY", party="R"))
     _roll_call(db_session, "house", 277, [("R", "No")] * 3 + [("D", "Aye")] * 3)
     _roll_call(db_session, "senate", 240, [("R", "Yea")] * 3 + [("D", "Nay")] * 3, question="On Cloture")
     # One break in each category: a list of breaks must not hide either.
-    db_session.add(RepKeyVote(representative_id="tim-burchett", bill_name="H R 8800", bill_id="HouseRC-2026-277",
+    db_session.add(RepKeyVote(representative_id="tim-hale", bill_name="H R 8800", bill_id="HouseRC-2026-277",
                               date="2026-07-22", vote="Yea", voted_with_party=False, vote_category="recent",
                               roll_call="house-119-2-277"))
-    db_session.add(RepKeyVote(representative_id="tim-burchett", bill_name="S.32", bill_id="S.32", date="2026-03-01",
+    db_session.add(RepKeyVote(representative_id="tim-hale", bill_name="S.32", bill_id="S.32", date="2026-03-01",
                               vote="Nay", voted_with_party=False, vote_category="key"))
     db_session.add(KeyVote(senator_id="rand-paul", bill_name="Cloture", bill_id="S.1", date="2026-07-22",
                            vote="Nay", voted_with_party=False, vote_category="recent", roll_call="senate-119-2-240"))
@@ -61,7 +61,7 @@ def test_every_break_is_listed_with_its_roll_call_in_both_chambers(db_session):
     app.dependency_overrides[get_db] = lambda: db_session
     try:
         client = TestClient(app)
-        house = client.get("/api/representatives/tim-burchett/votes?category=all&filter=against-party").json()
+        house = client.get("/api/representatives/tim-hale/votes?category=all&filter=against-party").json()
         assert house["total"] == 2
         by_id = {v["billId"]: v for v in house["votes"]}
         rc = by_id["HouseRC-2026-277"]["rollCall"]

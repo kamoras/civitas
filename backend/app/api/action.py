@@ -355,6 +355,9 @@ def _build_issue_response(
         summary=issue.summary,
         facts=current_facts,
         fact_sources=_parse_json_field(getattr(issue, "fact_sources", "[]")),
+        fact_source_urls=_parse_json_field(getattr(issue, "fact_source_urls", None) or "[]"),
+        summary_source=getattr(issue, "summary_source", None),
+        summary_source_url=getattr(issue, "summary_source_url", None),
         new_facts=new_facts,
         actions=action_items,
         source_urls=_parse_json_field(issue.source_urls),
@@ -773,7 +776,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
         events.append({
             "date": election_day.isoformat(),
             "title": f"{label} Election Day",
-            "description": f"Federal election day — {_series(seats)} are on the ballot.",
+            "description": f"Federal election day: {_series(seats)} are on the ballot.",
             "category": "election",
             "link": "/elections",
             "linkLabel": "View races & state info",

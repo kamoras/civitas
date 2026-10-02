@@ -151,8 +151,8 @@ async def find_candidate(
         fec_ids = crosswalk.get(bioguide_id)
         # A member can hold several valid ids for the same chamber — one per
         # campaign registration — and the crosswalk's order is not recency.
-        # John McGuire (VA-5) has H2VA07196 for a 2022 VA-7 run he lost and
-        # H0VA07133 for the 2024 win and his 2026 race (FEC bulk cn22/cn26,
+        # One member has an id for a 2022 run in another district they lost
+        # and H0VA07133 for the 2024 win and his 2026 race (FEC bulk cn22/cn26,
         # checked 2026-09); taking the first id that resolves scored him on
         # the 2022 committee. Among ids that resolve, the one with the latest
         # election is the current campaign; ties keep crosswalk order.
@@ -222,16 +222,16 @@ async def find_candidate(
         # 2026-07 fix: the strict all-parts check above requires every
         # token of our stored name — including middle initials with their
         # punctuation — to literally appear in FEC's name string, but FEC
-        # files under the legal format: "James E. Risch" never matches
-        # FEC's unpunctuated "RISCH, JAMES E". Audited live against the
+        # files under the legal format: "Jane E. Doe" never matches
+        # FEC's unpunctuated "DOE, JANE E". Audited live against the
         # FEC API: 28 of 100 sitting senators had zero donor/committee
         # data from this class of false negative, flooring their funding
         # scores at score_calculator's neutral-50 default — not
         # "genuinely unmeasurable," just never fetched.
         #
         # Fall back to last-name + EXACT first-name — still rejects a
-        # same-surname different person (e.g. "Darline Graham" vs. FEC's
-        # "GRAHAM, LINDSEY O"), which is the actual misattribution risk
+        # same-surname different person (e.g. "Jane Doe" vs. FEC's
+        # "DOE, JOHN Q"), which is the actual misattribution risk
         # this function guards against; the middle name is what stops
         # mattering. Deliberately NO nickname aliasing here ("Bill" ->
         # WILLIAM): nickname resolution is the bioguide crosswalk's job
@@ -459,8 +459,8 @@ def select_recent_elections(
     `office` ("S"/"H") bounds how far back a completed election may be and
     still be the one that seated them. Without it, "most recent completed"
     silently reaches back to an OLD LOSING RUN: measured against live FEC
-    data for 25 current House members, Clay Fuller (GA-14, seated by a
-    2026 special, years_in_office=0) has rows for 2026 ($1.8M, in
+    data for 25 current House members, one member (seated by a 2026
+    special, years_in_office=0) has rows for 2026 ($1.8M, in
     progress) and 2020 ($0.4M) — and would have been scored on the 2020
     campaign, which did not win him anything. Omitting `office` keeps the
     unbounded behaviour, so a caller that cannot say which chamber never

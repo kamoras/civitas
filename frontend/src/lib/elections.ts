@@ -208,7 +208,8 @@ export function isRedrawnSeat(
  *
  * On a redrawn seat (isRedrawnSeat) a district number names a different
  * place than the one the member going into the election was elected in:
- * Greg Casar held TX-35 and runs in the new TX-37. "Incumbent" there
+ * a member who held one numbered seat can run in a differently numbered one
+ * on the new map. "Incumbent" there
  * claims a seat nobody holds — the page itself says no seat on the new
  * lines has a previous holder — so "I" names the person, not the
  * district, and CHALLENGER / OPEN SEAT, which describe the old seat, are

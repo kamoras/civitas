@@ -354,12 +354,12 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
     — and the defeated-filer filter then dropped them as if they had
     lost. Measured against real 2026 production data on 2026-09-23: 36
     real candidates deleted from live races, 19 of them SITTING members
-    of Congress running for re-election (Warner and Ernst in their own
+    of Congress running for re-election (Wardell and Ernst in their own
     Senate races; Crockett, Himes, Castor, Griffith, Bilirakis and a
     dozen more in theirs). Those pages showed a one-party ballot."""
 
     def test_sole_filer_of_an_unconfirmed_party_comes_back(self, db_session):
-        """Brian Mast's shape: the other party confirmed a nominee, his
+        """Bryce Mast's shape: the other party confirmed a nominee, his
         own primary was uncontested so the file never listed him, and he
         is the only Republican in the race."""
         _race(db_session, "2026-HOUSE-FL-21", "FL", office="H", district=21)
@@ -372,21 +372,21 @@ class TestUnopposedNomineesAreNotTreatedAsLosers:
         assert sorted(c.id for c in elections._confirmed_or_all(race.candidates, "FL", False)) == ["DNOM", "MAST"]
 
     def test_the_single_fec_incumbent_comes_back_from_a_crowded_party(self, db_session):
-        """Mark Warner's shape: several Democrats hold FEC filings, so
+        """Mark Wardell's shape: several Democrats hold FEC filings, so
         "sole filer" cannot save him — but exactly one carries FEC's
         incumbent coding, the same single-I condition _stale_incumbent_ids
         already requires before trusting that field."""
         _race(db_session, "2026-SEN-VA", "VA")
         _candidate(db_session, "RNOM", "2026-SEN-VA", "MIZUSAWA, BERT",
                    party="REP", confirmed_general=True)
-        _candidate(db_session, "WARNER", "2026-SEN-VA", "WARNER, MARK",
+        _candidate(db_session, "WARDELL", "2026-SEN-VA", "WARDELL, MARK",
                    party="DEM", incumbent_challenge="I")
         _candidate(db_session, "PAPER", "2026-SEN-VA", "NOBODY, A", party="DEM")
         db_session.commit()
 
         race = db_session.query(Race).filter(Race.id == "2026-SEN-VA").first()
         got = sorted(c.id for c in elections._confirmed_or_all(race.candidates, "VA", False))
-        assert got == ["RNOM", "WARNER"]
+        assert got == ["RNOM", "WARDELL"]
 
     def test_a_crowded_party_with_no_incumbent_is_not_guessed_at(self, db_session):
         """A genuine coverage gap in the state's own feed. Inventing a
@@ -482,7 +482,7 @@ class TestCoverageFeedShowsOnlyVettedSources:
         self._item(db_session, "2026-HOUSE-CT-3", "news",
                    "Larson loses to younger primary challenger", "u1")
         self._item(db_session, "2026-HOUSE-CT-3", "bluesky",
-                   "The body of experienced diver Andrew Rice, 43, was found", "u2")
+                   "The body of experienced diver Anders Rice, 43, was found", "u2")
         db_session.commit()
 
         data = _body(elections.race_detail("2026-HOUSE-CT-3", db_session))
@@ -499,10 +499,10 @@ class TestCoverageFeedShowsOnlyVettedSources:
         assert [c["title"] for c in data["coverage"]] == ["Real reporting"]
 
     @pytest.mark.parametrize("race_id, state, office, district, title, item_kw", [
-        # "Elect Jonathan Nez to Congress!" scores 0.632 — campaign material
+        # "Elect Jonathan Neff to Congress!" scores 0.632 — campaign material
         # is maximally on-topic for a campaign, so relevance alone would
         # admit exactly what a non-partisan platform must not carry.
-        pytest.param("2026-HOUSE-AZ-2", "AZ", "H", 2, "Elect Jonathan Nez to Congress!",
+        pytest.param("2026-HOUSE-AZ-2", "AZ", "H", 2, "Elect Jonathan Neff to Congress!",
                      dict(relevance=0.632, has_advocacy=True), id="relevant_advocacy"),
         pytest.param("2026-HOUSE-NJ-7", "NJ", "H", 7, "Reservoir Dogs 4K (iTunes) C$4.99",
                      dict(relevance=0.111, has_advocacy=False), id="irrelevant"),
@@ -510,17 +510,17 @@ class TestCoverageFeedShowsOnlyVettedSources:
         # ingest fills it in.
         pytest.param("2026-SEN-CT", "CT", "S", None, "Unscored post", {}, id="unscored"),
         # A DNS-verified domain handle is not enough: @crowbar.wtf is a
-        # domain, and it published "Dave Hughes still a whiny cunt" onto
+        # domain, and it published "Dave Hewitt still a whiny cunt" onto
         # Minnesota's page. Relevance and no-advocacy both passed it — it IS
         # about the race and it never says "vote for".
-        pytest.param("2026-HOUSE-MN-7", "MN", "H", 7, "Dave Hughes still a whiny cunt.",
+        pytest.param("2026-HOUSE-MN-7", "MN", "H", 7, "Dave Hewitt still a whiny cunt.",
                      dict(relevance=0.62, has_advocacy=False, source_name="@crowbar.wtf"),
                      id="clean_looking_domain_handle"),
         # Measured over 1,200 real items: of 377 that cleared relevance and
-        # the no-advocacy bar, the 316 on *.bsky.social were "Jon Husted Is
+        # the no-advocacy bar, the 316 on *.bsky.social were "Jon Halvorsen Is
         # For Sale", "Awww poor Cindy :-(", a Celtic football post — and the
         # opponent's own campaign account attacking him.
-        pytest.param("2026-SEN-OH", "OH", "S", None, "Jon Husted doesn't give a damn about working people",
+        pytest.param("2026-SEN-OH", "OH", "S", None, "Jon Halvorsen doesn't give a damn about working people",
                      dict(relevance=0.55, has_advocacy=False, source_name="@sherrodbrownoh.bsky.social"),
                      id="default_bsky_handle"),
     ])

@@ -30,10 +30,9 @@ residence city (Wikipedia's own current, cited "Member (Residence)"
 table) and geocoding each candidate address via the SAME free Census
 Bureau geocoder this codebase's own `/geocode` endpoint already uses,
 **3 of the first 13 addresses tried resolved to the WRONG district**
-(Rep. Moolenaar's own Midland office → district 8, not 2; Rep. Dingell's
-own Dearborn office → district 12, not 6; Rep. McClain's own Shelby
-Township office → district 10, not 9 — all three real, current district-
-office addresses that simply sit just outside their own member's
+(three members' own district offices resolved one district over — all
+three real, current district-office addresses that simply sit just
+outside their own member's
 redrawn 2022 district lines). This is exactly why an address here is
 never trusted on the strength of "it's a real, current official
 address" alone — every single one must independently geocode to the

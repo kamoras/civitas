@@ -51,4 +51,4 @@ def test_election_day_counts_its_seats_from_the_data(monkeypatch):
     monkeypatch.setattr(action, "get_district_pvi_map", lambda: {f"S{i}-1": 0 for i in range(7)})
     monkeypatch.setattr(action, "seats_up_for_year", lambda year: frozenset({"AA", "BB"}))
     [event] = [e for e in action._upcoming_civic_events(2026, date(2026, 9, 1)) if e["category"] == "election"]
-    assert event["description"] == "Federal election day — all 7 House seats and 2 Senate seats are on the ballot."
+    assert event["description"] == "Federal election day: all 7 House seats and 2 Senate seats are on the ballot."

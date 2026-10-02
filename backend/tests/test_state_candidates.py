@@ -11,7 +11,8 @@ import pytest
 from app.models import Candidate, Race
 from app.pipeline.fetch import state_candidate_sources as sources
 from app.pipeline.fetch import state_candidates as sc
-from app.pipeline.fetch.state_candidates_common import InclusiveThreshold, runoff_threshold
+from app.pipeline.fetch import state_candidates_common as sc_common
+from app.pipeline.fetch.state_candidates_common import InclusiveThreshold, fec_party, runoff_threshold
 from app.pipeline.fetch.state_candidate_sources import configured_states
 
 
@@ -621,16 +622,16 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
             "strategy": "tabular", "source_name": "a results file",
             "description": "Found automatically on 2026-10-01: x"}})
         _race(db_session, "2026-SEN-TX", "TX", office="S")
-        _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
+        _candidate(db_session, "A", "2026-SEN-TX", "PAXSON, KENT", party="REP", confirmed_general=True)
         db_session.commit()
-        paxton = {"office": "S", "district": None, "party": "R", "last_name": "PAXTON", "display_name": "Ken Paxton"}
+        paxson = {"office": "S", "district": None, "party": "R", "last_name": "PAXSON", "display_name": "Kent Paxson"}
         green = {"office": "S", "district": None, "party": "G", "last_name": "GREENE", "display_name": "Gina Greene"}
-        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[paxton, green]))
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[paxson, green]))
         await sc.sync_confirmed_candidates(db_session, None, 2026)
         night1 = self._ids(db_session)
         assert any(i.startswith("ballot:") for i in night1)
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
-        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[paxton]))
+        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[paxson]))
         await sc.sync_confirmed_candidates(db_session, None, 2026)
         assert self._ids(db_session) == night1
 
@@ -673,17 +674,17 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
             "description": "Found automatically on 2026-10-01: x"}})
         _race(db_session, "2026-SEN-TX", "TX", office="S")
         db_session.commit()
-        allred = {"office": "S", "district": None, "party": "D", "last_name": "ALLRED", "display_name": "Colin Allred"}
-        green = {"office": "S", "district": None, "party": "G", "last_name": "ALLRED", "display_name": "Gail Allred"}
-        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[allred, green]))
+        albright = {"office": "S", "district": None, "party": "D", "last_name": "ALBRIGHT", "display_name": "Calvin Albright"}
+        green = {"office": "S", "district": None, "party": "G", "last_name": "ALBRIGHT", "display_name": "Gail Albright"}
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[albright, green]))
         await sc.sync_confirmed_candidates(db_session, None, 2026)
         assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 2
-        _candidate(db_session, "S0TX", "2026-SEN-TX", "ALLRED, COLIN", party="DEM")
+        _candidate(db_session, "S0TX", "2026-SEN-TX", "ALBRIGHT, CALVIN", party="DEM")
         db_session.commit()
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
-        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[allred]))
+        monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[albright]))
         await sc.sync_confirmed_candidates(db_session, None, 2026)
-        assert self._ids(db_session) == ["S0TX", "ballot:2026-SEN-TX:gail-allred"]
+        assert self._ids(db_session) == ["S0TX", "ballot:2026-SEN-TX:gail-albright"]
 
     @pytest.mark.parametrize("order", ["mary_first", "john_first"])
     def test_a_same_surname_same_party_candidate_is_not_taken_for_another(self, db_session, order):
@@ -774,19 +775,31 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         assert db_session.get(Candidate, "H1").confirmed_general is not True
 
     def test_a_refused_exact_surname_does_not_hide_a_fallback_match(self, db_session):
-        """Iowa: FEC files Ashley Hinson under her married name ("ARENHOLZ,
-        ASHLEY HINSON"), found by a fallback rule; a Libertarian John Hinson
+        """Iowa: FEC files Ashley Hollis under her married name ("ARENDT,
+        ASHLEY HOLLIS"), found by a fallback rule; a Libertarian John Hollis
         on the exact surname is plainly not her, and must not end the
         search."""
         _race(db_session, "2026-SEN-IA", "IA", office="S")
-        _candidate(db_session, "S1", "2026-SEN-IA", "HINSON, JOHN", party="LIB")
-        _candidate(db_session, "S2", "2026-SEN-IA", "ARENHOLZ, ASHLEY HINSON", party="REP", has_raised_funds=True)
+        _candidate(db_session, "S1", "2026-SEN-IA", "HOLLIS, JOHN", party="LIB")
+        _candidate(db_session, "S2", "2026-SEN-IA", "ARENDT, ASHLEY HOLLIS", party="REP", has_raised_funds=True)
         db_session.commit()
-        ashley = {"office": "S", "district": None, "party": "R", "last_name": "HINSON",
-                  "display_name": "Ashley Hinson"}
+        ashley = {"office": "S", "district": None, "party": "R", "last_name": "HOLLIS",
+                  "display_name": "Ashley Hollis"}
         sc._apply_ballot(db_session, 2026, "IA", [ashley], keep_unlisted=True, authoritative=True)
         assert db_session.get(Candidate, "S2").confirmed_general is True
         assert not any(i.startswith("ballot:") for i in self._ids(db_session))
+
+    def test_a_surname_with_a_connector_is_matched_through_its_last_word(self, db_session):
+        """The ballot's display name gives only its trailing token ("Del
+        Valle" -> "Valle"), and FEC files the whole compound surname: the
+        multi-word rule reaches it."""
+        _race(db_session, "2026-HOUSE-WY-0", "WY", office="H", district=0)
+        _candidate(db_session, "H1", "2026-HOUSE-WY-0", "DEL VALLE, MARIA", party="DEM")
+        db_session.commit()
+        rows = db_session.get(Race, "2026-HOUSE-WY-0").candidates
+        last = sc_common.surname("Maria\nDel Valle")
+        assert last == "Valle"
+        assert sc._match_candidate(rows, last, "D", "Maria Del Valle").id == "H1"
 
     def test_a_surname_alone_has_no_given_name_to_contradict(self, db_session):
         _race(db_session, "2026-HOUSE-OR-1", "OR", office="H", district=1)
@@ -886,7 +899,7 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
     @pytest.mark.parametrize("fec_party, record_party", [("DFL", "D"), ("DNL", "D"), ("NPA", "I"), ("UN", "I")])
     def test_fecs_state_party_codes_are_the_same_party(self, db_session, fec_party, record_party):
         """FEC files some Minnesota and North Dakota Democrats under the
-        state party's code (Ilhan Omar as DFL) and independents as NPA/UN:
+        state party's code (Iman Odeh as DFL) and independents as NPA/UN:
         a nominee listed by nickname must still be matched."""
         _race(db_session, "2026-HOUSE-MN-2", "MN", office="H", district=2)
         _candidate(db_session, "H1", "2026-HOUSE-MN-2", "SMITH, WILLIAM", party=fec_party)
@@ -963,20 +976,20 @@ class TestAWeakerSourceNeverPrunesTheCertifiedBallot:
         assert self._ids(db_session) == ["H1"]
 
     def test_a_multi_word_surname_placeholder_is_one_person(self, db_session):
-        """One source prints "Leger Fernandez, Teresa", another "Teresa
-        Leger Fernandez" and reads the surname as "Fernandez"."""
+        """One source prints "Lerma Fernandez, Tamara", another "Tamara
+        Lerma Fernandez" and reads the surname as "Fernandez"."""
         _race(db_session, "2026-HOUSE-NM-3", "NM", office="H", district=3)
         db_session.commit()
         sc._apply_ballot(db_session, 2026, "NM", [
-            {"office": "H", "district": 3, "party": "G", "last_name": "LEGER FERNANDEZ",
-             "display_name": "Leger Fernandez, Teresa"},
+            {"office": "H", "district": 3, "party": "G", "last_name": "LERMA FERNANDEZ",
+             "display_name": "Lerma Fernandez, Tamara"},
         ], keep_unlisted=True, authoritative=True)
         sc._apply_ballot(db_session, 2026, "NM", [
             {"office": "H", "district": 3, "party": "G", "last_name": "FERNANDEZ",
-             "display_name": "Teresa Leger Fernandez"},
+             "display_name": "Tamara Lerma Fernandez"},
         ], keep_unlisted=True, authoritative=False, prune=False)
         assert len([i for i in self._ids(db_session) if i.startswith("ballot:")]) == 1
-        assert sc._surnames_agree("fernandez", "leger fernandez")
+        assert sc._surnames_agree("fernandez", "lerma fernandez")
         assert not sc._surnames_agree("fernandez", "hernandez")
 
 
@@ -1101,11 +1114,11 @@ class TestFilingsForHandVerifiedStates:
         monkeypatch.setattr(sc, "configured_states", lambda: {"TX"})
         _use_discovered(monkeypatch, tmp_path, {"TX": {"filings": {"url": "x"}}})
         _race(db_session, "2026-SEN-TX", "TX", office="S")
-        _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
+        _candidate(db_session, "A", "2026-SEN-TX", "PAXSON, KENT", party="REP", confirmed_general=True)
         _candidate(db_session, "B", "2026-SEN-TX", "WITHDRAWN, BOB", party="REP", confirmed_general=True)
         db_session.commit()
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[
-            {"office": "S", "district": None, "party": "R", "last_name": "PAXTON"}]))
+            {"office": "S", "district": None, "party": "R", "last_name": "PAXSON"}]))
         recorded = []
         monkeypatch.setattr(sc, "_record_ballot_basis", lambda db, c, st, src, **k: recorded.append(st))
         await sc.sync_confirmed_candidates(db_session, None, 2026)
@@ -1130,12 +1143,12 @@ class TestFilingsForHandVerifiedStates:
         _use_discovered(monkeypatch, tmp_path, {"TX": {"strategy": "tabular", "source_name": "a results file",
                                                        "description": "Found automatically on 2026-10-01: x"}})
         _race(db_session, "2026-SEN-TX", "TX", office="S")
-        _candidate(db_session, "A", "2026-SEN-TX", "PAXTON, KEN", party="REP", confirmed_general=True)
+        _candidate(db_session, "A", "2026-SEN-TX", "PAXSON, KENT", party="REP", confirmed_general=True)
         _candidate(db_session, "L", "2026-SEN-TX", "LIBBY, LARRY", party="LIB", confirmed_general=True)
         db_session.commit()
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=None))
         monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[
-            {"office": "S", "district": None, "party": "R", "last_name": "PAXTON"}]))
+            {"office": "S", "district": None, "party": "R", "last_name": "PAXSON"}]))
         recorded = []
         monkeypatch.setattr(sc, "_record_ballot_basis",
                             lambda db, c, st, src, **k: recorded.append(src.get("source_name")))
@@ -1217,45 +1230,45 @@ class TestIsConfigured:
 
 class TestMultiWordSurname:
     """A state publishes a display name, so all that can be taken from
-    "Debbie Wasserman Schultz" without guessing is the trailing token —
+    "Dottie Waterman Schulte" without guessing is the trailing token —
     while FEC keeps the whole surname before the comma. Every state is
     affected; Florida's real 2024 file is just where it surfaced."""
 
     def test_matches_a_two_word_fec_surname(self):
         candidates = [
-            Candidate(id="1", race_id="r", name="WASSERMAN SCHULTZ, DEBBIE", party="DEM"),
+            Candidate(id="1", race_id="r", name="WATERMAN SCHULTE, DOTTIE", party="DEM"),
         ]
-        assert sc._match_candidate(candidates, "Schultz", "D").id == "1"
+        assert sc._match_candidate(candidates, "Schulte", "D").id == "1"
 
     def test_still_prefers_an_exact_surname_over_the_fallback(self):
         """An exact match must win outright — the fallback exists for the
         candidate the exact pass cannot see, and must never pull a
         different person in ahead of a real match."""
         candidates = [
-            Candidate(id="1", race_id="r", name="SCHULTZ, BOB", party="REP"),
-            Candidate(id="2", race_id="r", name="WASSERMAN SCHULTZ, DEBBIE", party="DEM"),
+            Candidate(id="1", race_id="r", name="SCHULTE, BOB", party="REP"),
+            Candidate(id="2", race_id="r", name="WATERMAN SCHULTE, DOTTIE", party="DEM"),
         ]
-        assert sc._match_candidate(candidates, "Schultz", "R").id == "1"
+        assert sc._match_candidate(candidates, "Schulte", "R").id == "1"
 
     def test_two_candidates_ending_in_the_same_token_stay_ambiguous(self):
         """The never-guess rule still governs: two same-party candidates
         the fallback can't tell apart yield nobody."""
         candidates = [
-            Candidate(id="1", race_id="r", name="WASSERMAN SCHULTZ, DEBBIE", party="DEM"),
-            Candidate(id="2", race_id="r", name="VAN SCHULTZ, ANA", party="DEM"),
+            Candidate(id="1", race_id="r", name="WATERMAN SCHULTE, DOTTIE", party="DEM"),
+            Candidate(id="2", race_id="r", name="VAN SCHULTE, ANA", party="DEM"),
         ]
-        assert sc._match_candidate(candidates, "Schultz", "D") is None
+        assert sc._match_candidate(candidates, "Schulte", "D") is None
 
 
 class TestMatchCandidate:
     def test_matches_a_unique_surname(self):
-        candidates = [Candidate(id="1", race_id="r", name="PAXTON, KEN", party="REP")]
-        match = sc._match_candidate(candidates, "PAXTON", "R")
+        candidates = [Candidate(id="1", race_id="r", name="PAXSON, KENT", party="REP")]
+        match = sc._match_candidate(candidates, "PAXSON", "R")
         assert match.id == "1"
 
     def test_returns_none_when_no_candidate_shares_the_surname(self):
         candidates = [Candidate(id="1", race_id="r", name="TALARICO, JAMES", party="DEM")]
-        assert sc._match_candidate(candidates, "PAXTON", "R") is None
+        assert sc._match_candidate(candidates, "PAXSON", "R") is None
 
     def test_disambiguates_same_surname_by_party(self):
         candidates = [
@@ -1339,11 +1352,11 @@ class TestSyncConfirmedCandidates:
     @pytest.mark.asyncio
     async def test_flags_a_matched_candidate(self, db_session, monkeypatch):
         _race(db_session, "2026-SEN-TX", "TX", office="S")
-        _candidate(db_session, "C1", "2026-SEN-TX", "PAXTON, KEN", party="REP")
+        _candidate(db_session, "C1", "2026-SEN-TX", "PAXSON, KENT", party="REP")
         db_session.commit()
 
         mock_fetch = AsyncMock(return_value=[
-            {"office": "S", "district": None, "party": "R", "last_name": "PAXTON"},
+            {"office": "S", "district": None, "party": "R", "last_name": "PAXSON"},
         ])
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", mock_fetch)
         results = await sc.sync_confirmed_candidates(db_session, None, 2026)
@@ -1364,7 +1377,7 @@ class TestSyncConfirmedCandidates:
         db_session.commit()
 
         mock_fetch = AsyncMock(return_value=[
-            {"office": "S", "district": None, "party": "R", "last_name": "PAXTON"},
+            {"office": "S", "district": None, "party": "R", "last_name": "PAXSON"},
         ])
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", mock_fetch)
         results = await sc.sync_confirmed_candidates(db_session, None, 2026)
@@ -1443,7 +1456,6 @@ class TestFecPartyCodes:
     same party — never a different one."""
 
     def test_translations(self):
-        from app.pipeline.fetch.state_candidates_common import fec_party
 
         assert fec_party("DFL") == fec_party("DNL") == "DEM"
         assert {fec_party(c) for c in ("NPA", "UN", "NNE", "NOP", "NON")} == {"IND"}
@@ -1461,11 +1473,11 @@ class TestFecPartyCodes:
 
     def test_one_person_refiled_under_the_state_code_is_still_one_person(self, db_session):
         _race(db_session, "2026-SEN-MN", "MN", office="S")
-        _candidate(db_session, "S1", "2026-SEN-MN", "KLOBUCHAR, AMY", party="DFL", has_raised_funds=True)
-        _candidate(db_session, "S2", "2026-SEN-MN", "KLOBUCHAR, AMY J", party="DEM")
+        _candidate(db_session, "S1", "2026-SEN-MN", "KOWALCZYK, AMY", party="DFL", has_raised_funds=True)
+        _candidate(db_session, "S2", "2026-SEN-MN", "KOWALCZYK, AMY J", party="DEM")
         db_session.commit()
         rows = db_session.get(Race, "2026-SEN-MN").candidates
-        assert sc._match_candidate(rows, "KLOBUCHAR", "D", "Amy Klobuchar").id == "S1"
+        assert sc._match_candidate(rows, "KOWALCZYK", "D", "Amy Kowalczyk").id == "S1"
 
     def test_the_page_does_not_bring_back_a_dfl_nominees_primary_loser(self, db_session):
         from app.api.elections import _unopposed_nominees
@@ -1481,9 +1493,9 @@ class TestFecPartyCodes:
         from app.api.elections import _candidate_summary
 
         _race(db_session, "2026-HOUSE-MN-5", "MN", office="H", district=5)
-        omar = _candidate(db_session, "H1", "2026-HOUSE-MN-5", "OMAR, ILHAN", party="DFL")
+        odeh = _candidate(db_session, "H1", "2026-HOUSE-MN-5", "ODEH, ILHAN", party="DFL")
         db_session.commit()
-        summary = _candidate_summary(omar)
+        summary = _candidate_summary(odeh)
         assert summary["party"] == "DFL" and summary["partyGroup"] == "DEM"
 
 
@@ -1494,9 +1506,9 @@ class TestSpecialSenateRace:
 
     def test_a_senate_record_confirms_into_the_states_only_senate_race(self, db_session):
         _race(db_session, "2026-SEN-FL-SPECIAL", "FL", office="S")
-        _candidate(db_session, "S6FL", "2026-SEN-FL-SPECIAL", "MOODY, ASHLEY", party="REP")
+        _candidate(db_session, "S6FL", "2026-SEN-FL-SPECIAL", "MOTT, ASHLEY", party="REP")
         db_session.commit()
-        rec = {"office": "S", "district": None, "party": "R", "last_name": "MOODY", "display_name": "Ashley Moody"}
+        rec = {"office": "S", "district": None, "party": "R", "last_name": "MOTT", "display_name": "Ashley Mott"}
         sc._apply_ballot(db_session, 2026, "FL", [rec], keep_unlisted=True, authoritative=True)
         assert db_session.get(Candidate, "S6FL").confirmed_general is True
 

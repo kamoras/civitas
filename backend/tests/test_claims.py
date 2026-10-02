@@ -45,25 +45,25 @@ class TestDedupeClaims:
 
 
 class TestExtractClaims:
-    SRC = ("A jury found Donald Trump liable for sexual abuse and defamation in the "
-           "case brought by E. Jean Carroll.")
+    SRC = ("A jury found Acme Corp liable for fraud and negligence in the "
+           "case brought by Jordan Ellis.")
 
     def _article(self):
-        return _Article(title="Jury finds Trump liable", summary=self.SRC)
+        return _Article(title="Jury finds Acme Corp liable", summary=self.SRC)
 
     def test_a_located_assertion_becomes_a_claim_with_provenance(self):
         claims = extract_claims([self._article()], lambda _s: {
-            "actor": "Donald Trump", "predicate": "liable for sexual abuse and defamation",
+            "actor": "Acme Corp", "predicate": "liable for fraud and negligence",
         })
         assert len(claims) == 1
-        assert claims[0].text == "Donald Trump liable for sexual abuse and defamation."
+        assert claims[0].text == "Acme Corp liable for fraud and negligence."
         assert claims[0].source_name == "Roll Call"
 
     def test_the_reversed_party_yields_no_claim(self):
         """Issue #376: both spans are verbatim, so only the
         asserted-together rule in post_composer refuses this."""
         claims = extract_claims([self._article()], lambda _s: {
-            "actor": "E. Jean Carroll", "predicate": "liable for sexual abuse and defamation",
+            "actor": "Jordan Ellis", "predicate": "liable for fraud and negligence",
         })
         assert claims == []
 
@@ -84,9 +84,10 @@ class TestFactsAndLede:
         # bsky_posted_facts / newFacts all compare them, so changing the
         # shape would ripple through all of them.
         claims = [_claim("A did X.", "AP"), _claim("B did Y.", "Roll Call")]
-        facts, sources = build_facts(claims)
+        facts, sources, urls = build_facts(claims)
         assert facts == ["A did X.", "B did Y."]
         assert sources == ["AP", "Roll Call"]
+        assert urls == [c.source_url for c in claims]  # each line links its article
 
     # The lede being a verbatim claim, not a synthesis, is asserted by
     # TestTheLedeIsNotRepeatedAsAFact below.
@@ -196,20 +197,20 @@ class TestOnTopic:
 
 class TestTheLedeIsNotRepeatedAsAFact:
     """Caught by the first end-to-end run against live articles, not by
-    any unit test: the Trump/Xi issue's summary and its first key fact
+    any unit test: an issue's summary and its first key fact
     were the same sentence, because build_lede takes claims[0] and
     build_facts was given the whole list."""
 
     def test_facts_exclude_the_claim_used_as_the_lede(self):
         claims = [
-            _claim("Trump and Xi will hold high-stakes meetings.", "The Hill"),
-            _claim("Xi arrived in Washington.", "PBS NewsHour"),
+            _claim("Two leaders will hold high-stakes meetings.", "The Hill"),
+            _claim("The delegation arrived in Washington.", "PBS NewsHour"),
         ]
         lede = build_lede(claims)
-        facts, sources = build_facts(claims[1:])
-        assert lede == "Trump and Xi will hold high-stakes meetings."
+        facts, sources, urls = build_facts(claims[1:])
+        assert lede == "Two leaders will hold high-stakes meetings."
         assert lede not in facts
-        assert facts == ["Xi arrived in Washington."]
+        assert facts == ["The delegation arrived in Washington."]
         assert sources == ["PBS NewsHour"]
 
     def test_a_single_claim_leaves_no_supporting_facts(self):
@@ -217,7 +218,7 @@ class TestTheLedeIsNotRepeatedAsAFact:
         one claim is a lede with nothing corroborating it."""
         claims = [_claim("Only one thing happened.")]
         assert build_lede(claims)
-        assert build_facts(claims[1:]) == ([], [])
+        assert build_facts(claims[1:]) == ([], [], [])
 
 
 class TestExtractionUsesTheWholeCluster:

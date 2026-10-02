@@ -79,8 +79,8 @@ RACE_COOLDOWN_HOURS = 48
 
 # Which coverage sources Civitas will restate IN ITS OWN VOICE.
 #
-# 2026-09-23 incident: this platform posted "VOTE VERONICA FERNANDEZ!
-# ... She's better for Jersey than Booker!" about the NJ Senate race. The
+# 2026-09-23 incident: this platform posted a member of the public's
+# "VOTE <candidate>!" endorsement about the NJ Senate race. The
 # source was one member of the public's campaign post, ingested as
 # "coverage" because it named a candidate on that race's FEC roster. Every
 # guard here worked as written — full_name match basis, grounding,
@@ -97,9 +97,9 @@ RACE_COOLDOWN_HOURS = 48
 # Measured over the 257 race-coverage posts that existed when this
 # shipped: 233 came from news outlets, 24 from arbitrary Bluesky
 # accounts, and essentially every bad post in the account's history was
-# in that 24 — the endorsement above, "nominates Gary Palmer as a
-# candidate" (from "I nominate ... Gary Palmer! 😎"), "Morgan Wallen's
-# presence in local campaigns", plus race "coverage" derived from a 1969
+# in that 24 — the endorsement above, a joke post read as a candidate
+# "nominating" someone, a musician's "presence in local campaigns", plus
+# race "coverage" derived from a 1969
 # Laugh-In listing, a jazz anniversary and a Reservoir Dogs iTunes sale.
 # The restriction removes the whole class rather than pattern-matching
 # its symptoms one at a time.
@@ -190,7 +190,7 @@ Rules:
 - "actor" is who did or said it: a named person, body or organisation.
 - "predicate" starts with the verb and runs to the END of the phrase — \
 include the object. "takes a selfie with" is wrong; "takes a selfie with \
-Maryland Sens. Chris Van Hollen and Angela Alsobrooks" is right.
+Maryland Sens. Ana Ruiz and Paul Grant" is right.
 - If the Source names no one doing anything — an opinion, an advert, a \
 listing — answer with two empty strings. That is a correct answer.
 
@@ -198,7 +198,7 @@ Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
 
     for attempt in range(2):
         result = call_llm(
-            prompt_version="election_coverage_extract_v1",
+            prompt_version="election_coverage_extract_v2",
             system_prompt=_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             model=settings.OLLAMA_STORY_MODEL or None,

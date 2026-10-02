@@ -32,7 +32,7 @@ flowchart LR
     subgraph LE["Legislative Effectiveness — 34%"]
         LE1["Bill significance &amp; advancement — 60%<br/>cumulative stage credit, 5× substantive<br/>vs chamber + majority-status baseline"]
         LE2["Legislative leadership — 25%<br/>cosponsorship PageRank<br/>tenure-confidence-scaled"]
-        LE3["Bipartisan coalition attraction — 15%<br/>v6.11, moved from Constituent Alignment<br/>receive-only cross-party share"]
+        LE3["Bipartisan coalition attraction — 15%<br/>v6.11, moved from Constituent Alignment<br/>receive-only cross-party share<br/>vs own-party median (v6.25)"]
     end
 
     FI --> OVERALL["<b>Representation Score</b><br/>0.33 FI + 0.33 CA + 0.34 LE"]

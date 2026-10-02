@@ -1035,7 +1035,7 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
 #   - anywhere: phrases that are digest-specific wherever they land
 #   - title-initial: product names that collide with real reporting when
 #     they appear mid-headline ("Pentagon holds evening briefing on troop
-#     levels", "Trump skipped the President's Daily Brief", "the building
+#     levels", "Varga skipped the President's Daily Brief", "the building
 #     blew up first") — a product name leads its own headline, optionally
 #     after a source tag like "NPR:"
 #   - trailing tag: "in brief" / "and more", which are digest markers only
@@ -1105,7 +1105,7 @@ def _split_body_items(summary: str, truncated: bool = False) -> list[tuple[str, 
     Grammar capitalizes the word that opens a sentence whether or not it
     names anything, so "Negotiators met in Cairo." looks like it introduces
     a person. After a semicolon or a bullet nothing is forced, so a
-    capitalized word there really is a name ("Powell defended the cut").
+    capitalized word there really is a name ("Brandt defended the cut").
     Which delimiter preceded an item is the only thing that distinguishes
     the two, hence the captured-group split.
 
@@ -1135,7 +1135,7 @@ def _split_body_items(summary: str, truncated: bool = False) -> list[tuple[str, 
     return items
 
 
-# Singular and plural possessives both: "Trump's", "Democrats'".
+# Singular and plural possessives both: "Varga's", "Democrats'".
 _POSSESSIVE_SUFFIX_RE = re.compile(r"'s?$")
 
 
@@ -1144,12 +1144,12 @@ def _topic_tokens(text: str) -> set[str]:
     body — apostrophes unified, trailing possessives dropped.
 
     _issue_signature keeps "'s" inside a token, which is right for telling
-    two stories apart and wrong here: a possessive-led headline ("Trump's
+    two stories apart and wrong here: a possessive-led headline ("Varga's
     tariff order faces court test", the most common headline shape there
-    is) yields {trump's} and shares nothing with a body that says "Trump",
+    is) yields {varga's} and shares nothing with a body that says "Varga",
     so the headline would read as failing to describe its own story. The
-    typographic apostrophe compounds it — "Trump’s" tokenizes as {trump}
-    while "Trump's" tokenizes as {trump's}, so the same headline matched or
+    typographic apostrophe compounds it — "Varga’s" tokenizes as {varga}
+    while "Varga's" tokenizes as {varga's}, so the same headline matched or
     missed depending on which character the feed emitted.
     """
     return {
@@ -1411,7 +1411,7 @@ def _cluster_articles(
     0.20, to join different-angle coverage of one event. Both chained
     stories that merely share a theme. Issue 759 (2026-09-27) was titled
     for Bangkok's floods, led with a Hawaii hurricane and listed facts about
-    a Northeast nor'easter and an HIV epidemic in Fiji; issue 753's Xi–Trump
+    a Northeast nor'easter and an HIV epidemic in Fiji; issue 753's two-leader summit
     summit took its title from an article about Chinese students and a
     professor. Replayed on that day's 50 policy-relevant articles, the old
     passes built a 9-article weather cluster and an 8-article China/AI/
@@ -1595,7 +1595,7 @@ def _count_official_mentions(cluster_text: str, officials: dict) -> int:
     """Count distinct tracked officials named in a cluster's coverage.
 
     A member counts on a full-name match, or on a titled surname match
-    ("Sen. Collins", "Rep. Crockett") — the title disambiguates surnames
+    ("Sen. Pryor", "Rep. Okafor") — the title disambiguates surnames
     that are also common words, so no stoplist is needed. The current
     president counts on a bare surname (word-boundary) match.
     """
@@ -2006,7 +2006,7 @@ def _find_related_senators(
 
     # Full-name matches first, over every member, before any last-name-only
     # candidacy is considered. The roster has real surname collisions (Smith,
-    # Johnson, Moore, Graham all appear multiple times) — checking each
+    # Carver, Moore, Whitfield all appear multiple times) — checking each
     # member independently for a last-name match risks fuzzy-matching one
     # member's story onto a different person who happens to share the same
     # surname. Collecting every confirmed full-name match FIRST means a
@@ -2037,7 +2037,7 @@ def _find_related_senators(
         # by full-name match above — every occurrence of the surname in
         # this text is already accounted for by that more specific match,
         # so this member isn't a live candidate at all (see the note above
-        # Pass 1 for the Graham/Graham case this fixes).
+        # Pass 1 for the Whitfield/Whitfield case this fixes).
         if last_name in full_name_matched_last_names:
             continue
 
@@ -2185,8 +2185,8 @@ def _find_related_officials(
                 }
                 continue
             # Same common-word-surname gap as senators/reps — Justice
-            # Ketanji Brown Jackson's surname is a common place name
-            # ("Jackson, Mississippi") and everyday word.
+            # Ketanji Brown Penrose's surname is a common place name
+            # ("Penrose, Mississippi") and everyday word.
             if last.lower() in _COMMON_WORD_SURNAMES:
                 continue
             pattern = re.compile(r"\b" + re.escape(last) + r"\b", re.IGNORECASE)
@@ -4013,25 +4013,25 @@ def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
 # or initial, then the surname, as one contiguous name (_candidate_name_pattern):
 #
 # - The given name is one the records state, matched exactly: the first
-#   given name FEC files, a nickname it quotes ('CRUZ, RAFAEL EDWARD
-#   "TED"'), the first name the count or the state's ballot prints ("Beto
-#   O'Rourke"), or its initial with a period ("W. Johnson"). No prefix or
+#   given name FEC files, a nickname it quotes ('DELGADO, MARTIN ALLEN
+#   "ROB"'), the first name the count or the state's ballot prints ("Beto
+#   O'Dwyer"), or its initial with a period ("W. Carver"). No prefix or
 #   short-form fit: "Donna Davis" is not Don Davis, and "Mike" is not a
 #   MICHAEL on record only as MICHAEL (a miss, never a wrong promotion).
 # - A middle name must be one on record; a middle initial must be one on
 #   record, or anything when the record states no middle name at all
-#   ("Sanford D. Bishop" for a count that prints "Sanford Bishop").
+#   ("Leland D. Mason" for a count that prints "Leland Mason").
 # - The surname is whole: a multi-word or hyphenated one as a unit
-#   ("Catherine Cortez Masto", "Mariannette Miller-Meeks"); accents and
-#   curly apostrophes folded ("Linda Sánchez", "Beto O’Rourke"); a suffix
+#   ("Elena Ruiz Ortega", "Marisol Hart-Keller"); accents and
+#   curly apostrophes folded ("Lucia Peña", "Kip O’Dwyer"); a suffix
 #   ("Jr.") may follow.
 # - It is written as a name (_name_cased): every word before the surname,
-#   and the surname's last word, capitalised. "WAYNE JOHNSON LEADS …"
+#   and the surname's last word, capitalised. "DALE CARVER LEADS …"
 #   names him; "voters will mark green ribbons" is not Mark Green.
 # - A feed's printing is read against the person's FEC filing (_printed_given_start):
-#   Arkansas's feed prints "Congressman Steve Womack", and "Congressman"
+#   Arkansas's feed prints "Congressman Steve Rowe", and "Congressman"
 #   is not a word he filed or a short form of one, so the given name is
-#   Steve and "Congressman Womack" states none. A printed given name counts
+#   Steve and "Congressman Rowe" states none. A printed given name counts
 #   only if it is a name filed, or (_short_form) a short form no longer
 #   than the filed name sharing its first two letters ("Steve" for
 #   STEPHEN), or a word beginning with / extending the filed name
@@ -4041,8 +4041,8 @@ def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
 #   feed's printing: a miss, never a wrong promotion (the filed given name
 #   and the ballot's own printing still name the candidate). A printing
 #   whose short-form fit is followed by a full word that fits nothing
-#   filed states no given name: "Representative Bob Latta" for ROBERT E,
-#   and likewise a printed middle name not on file ("Steve Allen Womack"
+#   filed states no given name: "Representative Bob Jones" for ROBERT E,
+#   and likewise a printed middle name not on file ("Steve Allen Rowe"
 #   beside a filing of STEPHEN alone) drops the printing's given name.
 #   Documented limits: a title no longer than the filed name and sharing
 #   its first two letters ("Sheriff" for SHERIDAN, "Judge" for JUDITH)
@@ -4050,7 +4050,7 @@ def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
 #   any word with that initial pass; and with no filing of the surname in
 #   the race a printing stands.
 # - Initials count only together: a quoted "A.J." is one name ("A.J.",
-#   "A. J.", "AJ"), as is a record of initials alone ("VANCE, J. D.");
+#   "A. J.", "AJ"), as is a record of initials alone ("CALLOWAY, J. D.");
 #   one bare letter is never a given name, and a quoted single letter
 #   ("(I)", incumbent) is a ballot annotation.
 #
@@ -4059,9 +4059,9 @@ def _senate_needs_telling_apart(db, cycle: int, state: str) -> bool:
 # them, and the phrase must name this very seat too.
 #
 # A surname alone never names a candidate. Every round that graded surname
-# mentions ("Johnson", "Rep. Bishop") found another: a title or article in
-# the given-name slot ("The King Center", "Captain Johnson"), a namesake
-# followed by a bare "Johnson said …", a surname that is also a word at the
+# mentions ("Carver", "Rep. Mason") found another: a title or article in
+# the given-name slot ("The King Center", "Captain Carver"), a namesake
+# followed by a bare "Carver said …", a surname that is also a word at the
 # start of a sentence ("Green energy", "Case counts"). A full name has none
 # of those readings. A story that names the race only by surname leaves the
 # issue DEVELOPING — a miss, which the next hour's story can still fix; a
@@ -4085,7 +4085,7 @@ class _Person(NamedTuple):
 
     surname: str  # "cortez masto", "o'rourke"
     leads: frozenset[str]  # given names a full name may start with
-    initials: frozenset[str]  # a first initial that may stand for them ("w" for "W. Johnson")
+    initials: frozenset[str]  # a first initial that may stand for them ("w" for "W. Carver")
     middles: frozenset[str]  # every other given name or initial on record
 
 
@@ -4095,8 +4095,8 @@ def _strip_accents(text: str) -> str:
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).translate(_APOSTROPHES)
 
 
-# A nickname a record quotes: FEC's 'CRUZ, RAFAEL EDWARD "TED"', a
-# parenthesised "(BETO)", or a single-quoted 'TED' (not an apostrophe: it
+# A nickname a record quotes: FEC's 'DELGADO, MARTIN ALLEN "ROB"', a
+# parenthesised "(BETO)", or a single-quoted 'ROB' (not an apostrophe: it
 # stands after a space).
 _QUOTED_NICKNAME = re.compile(r"[\"“”(]\s*([^\"“”()]+?)\s*[\"“”)]|(?<!\S)'([^'\s]+)'(?!\S)")
 
@@ -4166,7 +4166,7 @@ def _short_form(token: str, name: str) -> bool:
     feed's printing, a miss, never a wrong promotion (the filed given name
     and the ballot's own printing still name the candidate). See also
     _printed_given_start: a printed middle name not on file after a
-    short-form fit ("Steve Allen Womack" beside a filing of STEPHEN alone)
+    short-form fit ("Steve Allen Rowe" beside a filing of STEPHEN alone)
     drops the printing's given name too.
 
     Documented limits: a title no longer than the filed name and sharing
@@ -4189,7 +4189,7 @@ def _given_fits(token: str, filings: list[_RecordName]) -> bool:
     given name or nickname they filed, or a short form of their first
     filed given name or of a nickname (_short_form: "Steve" for STEPHEN,
     "S." for it too). "Congressman" in Arkansas's "Congressman Steve
-    Womack" is neither, so it is not read as his given name — the filing
+    Rowe" is neither, so it is not read as his given name — the filing
     decides what a name is, not a list of titles."""
     for filing in filings:
         if token in filing.given or token in filing.nicknames:
@@ -4206,11 +4206,11 @@ def _printed_given_start(given: list[str], filings: list[_RecordName]) -> int | 
 
     - one that fits only as a short form, followed by another fitting
       full word the filing doesn't state as a middle name, is passed over
-      ("Senator Steve Womack" for STEPHEN, were "Senator" to fit: "Steve"
+      ("Senator Steve Rowe" for STEPHEN, were "Senator" to fit: "Steve"
       fits as well, and is the name);
     - one that fits only as a short form, followed by a full word that
       neither fits nor is a filed middle name, means the printing states
-      no given name ("Representative Bob Latta" for ROBERT E, were
+      no given name ("Representative Bob Jones" for ROBERT E, were
       "Representative" to fit: "Bob" is his name, but nothing on file
       says so, and the word before it is no name of his either).
 
@@ -4237,13 +4237,13 @@ def _person(names: list[str | None], count_printing: str | None = None,
     """One candidate from every name on record for them (FEC's, the
     count's printing, the ballot's), or None when none states a surname.
     A printing that reads only the last word of a multi-word surname as
-    the surname ("Catherine Cortez Masto" read as "Masto", beside FEC's
-    "CORTEZ MASTO, CATHERINE") is the same person, with the whole
+    the surname ("Elena Ruiz Ortega" read as "Ortega", beside FEC's
+    "RUIZ ORTEGA, ELENA") is the same person, with the whole
     surname.
 
     `count_printing`, the name as a results feed prints it (one of
     `names`), is read against the person's FEC filing: a feed can print an
-    honorific the ballot doesn't (Arkansas: "Congressman Steve Womack").
+    honorific the ballot doesn't (Arkansas: "Congressman Steve Rowe").
     The first printed token that fits the filing (_printed_given_start) is
     where its given names start, and words before it are not names; none
     fitting, it states no given name, and a parenthesised word it prints
@@ -4274,7 +4274,7 @@ def _person(names: list[str | None], count_printing: str | None = None,
         surname, given, nicknames, filed = record
         extra = last.split()[:-len(surname.split())] if surname != last else []
         if extra and given[-len(extra):] == extra:
-            given = given[:-len(extra)]  # "catherine cortez" + "masto"
+            given = given[:-len(extra)]  # "elena ruiz" + "ortega"
         if record == checked and not filed and filings:
             at = _printed_given_start(given, filings)
             given = given[at:] if at is not None else []
@@ -4287,7 +4287,7 @@ def _person(names: list[str | None], count_printing: str | None = None,
         if not given:
             continue
         if len(given) > 1 and all(len(g) == 1 for g in given):
-            # All initials ("VANCE, J. D."): together they are the name.
+            # All initials ("CALLOWAY, J. D."): together they are the name.
             leads.add(".".join(given))
             initials.add(given[0])
             middles.update(given[1:])
@@ -4337,7 +4337,7 @@ def _race_people(db, race_id: str) -> list[_Person] | None:
             names += [cand.name, cand.ballot_name]
         person = _person(names, printed)
         if person is not None and not person.leads and not person.initials:
-            # A count that prints only a surname ("JOHNSON"): the race's own
+            # A count that prints only a surname ("CARVER"): the race's own
             # Candidate rows of that surname state the given name.
             names += [n for c in race_rows() if _record_name(c.name).surname == person.surname
                       for n in (c.name, c.ballot_name)]
@@ -4402,14 +4402,14 @@ def _surname_alone_pattern(person: _Person) -> re.Pattern:
 
 
 def _starts_upper(word: str) -> bool:
-    """Whether a word's first letter is a capital ("O'Rourke", "A.J.")."""
+    """Whether a word's first letter is a capital ("O'Dwyer", "A.J.")."""
     return next((ch.isupper() for ch in word if ch.isalpha()), False)
 
 
 def _name_cased(match: re.Match) -> bool:
     """Whether a matched name is written as a name: every word before the
     surname, and the surname's last word, capitalised ("Mark Green", "Beto
-    O'Rourke", "Chris van Hollen", "WAYNE JOHNSON"). The patterns ignore
+    O'Dwyer", "Chris van Dorn", "DALE CARVER"). The patterns ignore
     case so that an all-capitals headline still names; this is what keeps
     prose from doing so — "will mark green ribbons" is not Mark Green. A
     surname's inner words may be lower case ("van", "de la"): no list of
@@ -4451,7 +4451,7 @@ def _names_a_candidate(text: str, people: list[_Person], surname_alone: bool = F
 # - a run of capitalised words straight after the phrase is another body's
 #   name ("Public Service Commission", "Court of Appeal", "School Board")
 #   unless it names one of the race's candidates ("Georgia's 2nd District
-#   Republican Wayne Johnson"); with no candidate on record, it never
+#   Republican Dale Carver"); with no candidate on record, it never
 #   stands;
 # - lower-case words running straight into a race word with no determiner
 #   or preposition between ("county commission seat", "board of education
@@ -4662,7 +4662,7 @@ def _other_senate_race_named(db, cycle: int, state: str, race_id: str, story_tex
     if not others or len(known) != len(others):
         return None
     # Leniently: a capitalised surname of theirs is enough to hold back
-    # ("Raphael Warnock leads as Perdue concedes to Ossoff" is about both
+    # ("Raphael Warnock leads as Perdue concedes to Brennan" is about both
     # races). Holding back can only cost a miss.
     return any(_names_a_candidate(story_text, theirs, surname_alone=True) for theirs in known)
 
@@ -4761,7 +4761,7 @@ def _find_matching_issue(
         # near-identical title is conclusive on its own — facts are FREE to
         # differ, that's a real update, not a mismatch — while a same-
         # headline story whose facts got reworded slightly between
-        # generations, live 2026-08 bug: "Trump defends beef import plan
+        # generations, live 2026-08 bug: "Varga defends beef import plan
         # amid GOP criticism" regenerated an hour apart with "cattle
         # producers" vs "producers"/"ranchers", needs the near-identical-
         # title check to still catch it since that sinks signature overlap
@@ -5057,7 +5057,7 @@ def _run_refresh(db: Session) -> int:
         # Keep only articles that score above 0.25 similarity to the centroid
         # in centered space. 0.0 (above-average) is too loose when the cluster
         # contains articles about different sub-topics that share one broad
-        # dimension (e.g. "Trump administration") — they all score positive.
+        # dimension (e.g. "Varga administration") — they all score positive.
         # 0.25 requires a meaningful alignment with the cluster's specific topic.
         #
         # MEASURED (7,045 observations over 1,039 persisted runs) — but in
@@ -5173,12 +5173,17 @@ def _run_refresh(db: Session) -> int:
         # now the only path.
         title = filtered_cluster[0].title
         summary = claim_layer.build_lede(cluster_claims)
+        # The lede is a quoted claim like the facts, so it carries its
+        # outlet too: without it, the outlet whose line became the summary
+        # appeared only in the source list, and a reader saw fewer outlets
+        # under "In the coverage" than under sources (2026-10-01).
+        summary_source, summary_source_url = cluster_claims[0].source_name, cluster_claims[0].source_url
         # Facts are the SUPPORTING claims — the lede already states the
         # headline one. Passing the whole list made the summary a
         # verbatim duplicate of fact 1, which the first end-to-end run
-        # against live articles showed immediately (Trump/Xi: the
+        # against live articles showed immediately (a summit story: the
         # summary and the first key fact were the same sentence).
-        facts, fact_sources = claim_layer.build_facts(cluster_claims[1:])
+        facts, fact_sources, fact_source_urls = claim_layer.build_facts(cluster_claims[1:])
 
         # Backstop, not the primary defence. Every word here is either a
         # verbatim span or a real outlet's headline, so this should
@@ -5359,6 +5364,9 @@ def _run_refresh(db: Session) -> int:
             # evidence — and a reader can check any fact against the
             # outlet that made it.
             "fact_sources": json.dumps(fact_sources),
+            "fact_source_urls": json.dumps(fact_source_urls),
+            "summary_source": summary_source,
+            "summary_source_url": summary_source_url,
             "source_urls": json.dumps(source_urls),
             "source_names": json.dumps(source_names),
             "policy_areas": json.dumps(policy_areas),
