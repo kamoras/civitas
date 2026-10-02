@@ -48,7 +48,7 @@ senator's state population, the House median), in share points on the
 chamber's measured spread. Top-donor concentration (the top 10 donors'
 share of all outside contributions) and industry concentration (the HHI of
 the industry money's mix) are ranked within the chamber (v6.26,
-_rank_score). Parmigiani (2025, "Campaign contributions and legislative
+_rank_score), industry concentration within the member's party. Parmigiani (2025, "Campaign contributions and legislative
 behavior," Journal of Public Economics 243) computes industry HHI per
 legislator as the industry component does; its top-donor share is taken
 over itemized donors, a narrower base than the all-contributions share
@@ -2367,10 +2367,15 @@ def _industry_concentration(
     unattributed individuals and party money are not industry money and
     are left out of the mix.
 
-    Ranked within the chamber (_rank_score over the deciles
-    compute_funding_reference measures each run), as top-donor
-    concentration is: the median member's mix scores 50. Before a chamber
-    has that reference, `missing_score`.
+    Ranked within the member's party in the chamber (_rank_score over the
+    party's deciles compute_funding_reference measures each run,
+    industry_hhi_by_party): the party's median member scores 50. One
+    party's donors' occupations fall in fewer, broader industries than the
+    other's, so a chamber-wide rank scored the party's donor base (Senate
+    means 27.6 D, 69.7 R, 2026-10-01); within party both average 50, as
+    Legislative Effectiveness's coalition component compares (v6.25). A
+    party with fewer than _MIN_PARTY_COHORT measured members is ranked
+    against the chamber; with no reference at all, `missing_score`.
 
     The shares are of the classified money, not of everything raised.
     Taken over everything raised (as top-donor concentration's are), the

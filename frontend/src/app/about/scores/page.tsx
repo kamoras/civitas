@@ -111,12 +111,12 @@ export default function ScoresChapter() {
           <Step n={1} title="PAC dependency">
             The share of the member&apos;s contributions that came from PACs, against what the seat
             predicts: for a senator, the share senators from states that size take (small states
-            have small donor pools, so their senators lean on PACs more); for a representative,
-            the House median, since every district holds the same population. Both are
-            re-measured every update. The expected share scores 50, and the gap is counted in
-            percentage points against how widely the chamber varies, so a senator taking 5% where
-            3% is typical is a couple of points above typical, not almost twice it. Per chamber,
-            because House candidates rely on PAC money far more than Senate candidates.
+            have small donor pools, so their senators lean on PACs more); for a representative, the
+            House median, since every district holds the same population. Both are re-measured every
+            update. The expected share scores 50, and the gap is counted in percentage points
+            against how widely the chamber varies, so a senator taking 5% where 3% is typical is a
+            couple of points above typical, not almost twice it. Per chamber, because House
+            candidates rely on PAC money far more than Senate candidates.
           </Step>
           <Step n={2} title="Small-donor share">
             Money in gifts under $200: the broadest possible funding base. A senator is compared
@@ -124,23 +124,26 @@ export default function ScoresChapter() {
             the House median.
           </Step>
           <Step n={3} title="Top-donor concentration">
-            How much of all the outside money came from the top ten donors, ranked against the
-            rest of the chamber: the fewer big donors a campaign needs, the higher it scores. The
+            How much of all the outside money came from the top ten donors, ranked against the rest
+            of the chamber: the fewer big donors a campaign needs, the higher it scores. The
             member&apos;s own money and transfers from their own committees are left out.
           </Step>
           <Step n={4} title="Industry concentration">
             How spread out the money is across industries, measured with the Herfindahl-Hirschman
             index
-            <Cite id="rhoades1993" />, ranked against the rest of the chamber. Funding concentrated
-            in one industry suggests a risk of regulatory capture. Every PAC contribution is
-            assigned the industry of the organization behind the PAC, and each itemized
-            individual gift the industry of the donor&apos;s stated occupation, where most people
-            in that occupation work in one industry by Census Bureau survey data (lawyers in law,
-            nurses in health care); a chief executive, a retiree or a job title the data
-            can&apos;t place counts toward no industry. When too little money can be assigned to
-            tell, this counts as neutral. Money from a party, candidate, joint-fundraising or leadership
-            committee is political money, not an industry&apos;s: the FEC&apos;s own registration of
-            each committee decides that, not its name. A state&apos;s home industry counts as
+            <Cite id="rhoades1993" />, ranked against the members of the member&apos;s own party in
+            the chamber (an independent against the whole chamber). One party&apos;s donors work in
+            fewer, broader industries than the other&apos;s, so a ranking across the chamber scored
+            each party&apos;s donor base rather than the member. Funding concentrated in one
+            industry suggests a risk of regulatory capture. Every PAC contribution is assigned the
+            industry of the organization behind the PAC, and each itemized individual gift the
+            industry of the donor&apos;s stated occupation, where most people in that occupation
+            work in one industry by Census Bureau survey data (lawyers in law, nurses in health
+            care); a chief executive, a retiree or a job title the data can&apos;t place counts
+            toward no industry. When too little money can be assigned to tell, this counts as
+            neutral. Money from a party, candidate, joint-fundraising or leadership committee is
+            political money, not an industry&apos;s: the FEC&apos;s own registration of each
+            committee decides that, not its name. A state&apos;s home industry counts as
             concentration like any other, because local economic weight plausibly gives an industry
             more leverage over a member, not less.
           </Step>

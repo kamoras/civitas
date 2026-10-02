@@ -20,7 +20,7 @@ flowchart LR
         FI1["PAC dependency — 20/53<br/>share vs what the seat predicts<br/>(state size / House median, each run)"]
         FI2["Small-donor share — 10/53<br/>&lt;$200 unitemized, state-relative"]
         FI3["Top-donor concentration — 10/53<br/>top 10 share of all outside money<br/>ranked in chamber"]
-        FI5["Industry concentration — 13/53<br/>HHI of industry mix, ranked in chamber<br/>(PAC sponsors + donor occupations)"]
+        FI5["Industry concentration — 13/53<br/>HHI of industry mix, ranked within party<br/>(PAC sponsors + donor occupations)"]
     end
 
     subgraph CA["Constituent Alignment — 33%"]
