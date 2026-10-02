@@ -15,7 +15,7 @@ import logging
 
 from app.pipeline.fetch.fec import committee_id_of, is_political_committee, select_recent_elections
 from app.pipeline.transform.candidate_names import is_candidate_self_donor
-from app.pipeline.transform.industry_classifier import classify_with_learning
+from app.pipeline.transform.industry_classifier import classify_with_learning, primed_industry_lookups
 from app.pipeline.transform.occupation_industry import industry_of_occupation
 from app.pipeline.analyze.donor_classifier_ai import (
     classify_donor_type_semantic,
@@ -151,31 +151,39 @@ def normalize_finance(
     # Build top donors: PACs first, then employer-grouped individuals
     candidate_name = (candidate or {}).get("name", "")
     detail = detail or {}
-    top_donors = build_top_donors(
-        pac_receipts,
-        individual_receipts,
-        aggregated_contributors,
-        candidate_name,
-        ai_classifications=ai_classifications,
-        db_session=db_session,
-        committee_meta_map=committee_meta_map,
-        detail=detail,
-    )
+    committees = detail.get("committees") or {}
+    # One batch encode for the names the industry classifier would otherwise
+    # encode one at a time, in both passes below.
+    with primed_industry_lookups(
+        [committee_donor_name(committees.get(cid), cid) for cid in detail.get("pacs") or {}]
+        + [(r.get("employer") or "").upper().strip() for r in detail.get("employers") or []],
+        db_session,
+    ):
+        top_donors = build_top_donors(
+            pac_receipts,
+            individual_receipts,
+            aggregated_contributors,
+            candidate_name,
+            ai_classifications=ai_classifications,
+            db_session=db_session,
+            committee_meta_map=committee_meta_map,
+            detail=detail,
+        )
 
-    # Build industry breakdown: individuals get explicit buckets, PACs get industry-classified
-    industry_breakdown = _build_industry_breakdown(
-        pac_receipts=pac_receipts,
-        individual_receipts=individual_receipts,
-        aggregated_contributors=aggregated_contributors,
-        small_individual_total=small_individual,
-        large_individual_total=large_individual,
-        contribution_base=contribution_base,
-        ai_classifications=ai_classifications,
-        db_session=db_session,
-        candidate_name=candidate_name,
-        committee_meta_map=committee_meta_map,
-        detail=detail,
-    )
+        # Build industry breakdown: individuals get explicit buckets, PACs get industry-classified
+        industry_breakdown = _build_industry_breakdown(
+            pac_receipts=pac_receipts,
+            individual_receipts=individual_receipts,
+            aggregated_contributors=aggregated_contributors,
+            small_individual_total=small_individual,
+            large_individual_total=large_individual,
+            contribution_base=contribution_base,
+            ai_classifications=ai_classifications,
+            db_session=db_session,
+            candidate_name=candidate_name,
+            committee_meta_map=committee_meta_map,
+            detail=detail,
+        )
 
     computed_pac_total = sum(
         d["total"] for d in top_donors

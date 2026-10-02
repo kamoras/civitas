@@ -11,6 +11,7 @@ import pytest
 
 from app.models import LearnedClassification
 from app.pipeline.transform.industry_classifier import (
+    primed_industry_lookups,
     INDUSTRY_DESCRIPTIONS,
     classify_industries_batch_scored,
     classify_industry,
@@ -162,3 +163,11 @@ class TestBatchScoredAgreesWithSingleEntity:
         assert meta["top_match"] == "POLITICAL"
         assert result != "POLITICAL"
         assert result != "OTHER"
+
+
+@pytest.mark.slow
+def test_a_primed_batch_classifies_as_one_at_a_time():
+    names = ["PFIZER INC", "GOLDMAN SACHS", "NATIONAL ASSOCIATION OF REALTORS", "Lockheed Martin Employees PAC"]
+    alone = {n: classify_industry_with_provenance(n)[0] for n in names}
+    with primed_industry_lookups(names):
+        assert {n: classify_industry_with_provenance(n)[0] for n in names} == alone

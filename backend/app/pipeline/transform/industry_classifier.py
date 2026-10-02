@@ -40,6 +40,9 @@ References
 """
 
 import logging
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+
 import numpy as np
 from sqlalchemy.orm import Session
 
@@ -333,10 +336,12 @@ def classify_industry_with_provenance(org_name: str | None) -> tuple[str, dict]:
 
     # Entity name is a query; industry descriptions are documents.
     # snowflake-arctic-embed-xs must use prompt_name="query" for queries.
-    query_emb = model.encode([org_name], prompt_name="query", show_progress_bar=False)[0]
-    norm = np.linalg.norm(query_emb)
-    if norm > 0:
-        query_emb = query_emb / norm
+    query_emb = _primed_query_embs.get(org_name)
+    if query_emb is None:
+        query_emb = model.encode([org_name], prompt_name="query", show_progress_bar=False)[0]
+        norm = np.linalg.norm(query_emb)
+        if norm > 0:
+            query_emb = query_emb / norm
 
     scored: list[tuple[str, float]] = []
     for industry, ind_emb in raw_embs_cache.items():
@@ -432,6 +437,37 @@ def classify_industries_batch_scored(org_names: list[str]) -> dict[str, tuple[st
         sum(1 for _ in results),
     )
     return results
+
+
+# Query embeddings encoded ahead in one batch (primed_industry_lookups),
+# read by classify_industry_with_provenance and cleared when the block ends.
+_primed_query_embs: dict[str, np.ndarray] = {}
+
+
+@contextmanager
+def primed_industry_lookups(org_names: Iterable[str], db_session: Session | None = None) -> Iterator[None]:
+    """Encode, in one batch, every name in `org_names` that
+    classify_with_learning would send to the embedding model: not already
+    in the learning store, not the hospitality tier. One member's
+    contribution detail names a few hundred employers and committees, and
+    one encode call each cost ~0.13 s on the Pi (2026-10)."""
+    from app.pipeline.vector_store import encode_normalized, get_embedding_model
+
+    names = [n for n in dict.fromkeys(org_names) if n and len(n.strip()) >= 2]
+    if db_session is not None and names:
+        learned = {
+            row[0] for row in db_session.query(LearnedClassification.entity_name).filter(
+                LearnedClassification.entity_type == "industry",
+                LearnedClassification.entity_name.in_({n.upper().strip() for n in names}),
+            )
+        }
+        names = [n for n in names if n.upper().strip() not in learned]
+    if names:
+        _primed_query_embs.update(zip(names, encode_normalized(get_embedding_model(), names, prompt_name="query")))
+    try:
+        yield
+    finally:
+        _primed_query_embs.clear()
 
 
 def classify_with_learning(
