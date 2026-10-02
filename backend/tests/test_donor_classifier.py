@@ -11,7 +11,9 @@ import pytest
 from unittest.mock import patch
 
 from app.models import LearnedClassification
+from app.pipeline.analyze import donor_classifier_ai
 from app.pipeline.analyze.donor_classifier_ai import (
+    skip_entities_batch,
     FEC_ENTITY_TYPE_MAP,
     classify_donor_type_from_fec,
     classify_donor_type_semantic,
@@ -76,6 +78,16 @@ class TestSkipDetection:
         assert is_skip_entity("PFIZER INC") is False
         assert is_skip_entity("GOLDMAN SACHS") is False
 
+    def test_batch_keyword_hits_need_no_model(self):
+        assert skip_entities_batch(["WINRED TECHNICAL SERVICES", "ACTBLUE", ""]) == {"WINRED TECHNICAL SERVICES", "ACTBLUE"}
+
+    @pytest.mark.slow
+    def test_batch_agrees_with_one_at_a_time(self):
+        names = ["WINRED TECHNICAL SERVICES", "PFIZER INC", "GOLDMAN SACHS", "STRIPE PAYMENTS", "RETIRED"]
+        batch = skip_entities_batch(names)
+        donor_classifier_ai._skip_memo.clear()
+        assert batch == {n for n in names if is_skip_entity(n)}
+
 
 class TestSemanticClassification:
     """Tier 2: Embedding-based semantic donor type classification."""
@@ -84,8 +96,8 @@ class TestSemanticClassification:
     def test_candidate_self_funded_personal_contribution(self):
         """When donor name matches the candidate's name, it's a self-funded contribution."""
         result = classify_donor_type_semantic(
-            "CRUZ, RAPHAEL EDWARD TED",
-            candidate_name="CRUZ, RAFAEL EDWARD (TED)",
+            "DELGADO, MARTEN ALLEN ROB",
+            candidate_name="DELGADO, MARTIN ALLEN (ROB)",
         )
         assert result == "Self-Funded"
 

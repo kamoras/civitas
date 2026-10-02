@@ -1,7 +1,6 @@
 """Tests for the five representation sub-score calculations."""
 
 
-import math
 
 import pytest
 

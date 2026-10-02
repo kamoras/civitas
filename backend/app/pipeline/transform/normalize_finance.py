@@ -22,6 +22,7 @@ from app.pipeline.analyze.donor_classifier_ai import (
     classify_employer_skips_batch,
     classify_transfer_memos_batch,
     is_skip_entity,
+    skip_entities_batch,
 )
 
 logger = logging.getLogger(__name__)
@@ -297,12 +298,13 @@ def build_top_donors(
     # 1a. Every committee that gave, from the bulk file.
     if pacs is not None:
         committees = detail.get("committees") or {}
+        pac_skips = skip_entities_batch([committee_donor_name(committees.get(cid), cid).upper().strip() for cid in pacs])
         for cid, amount in pacs.items():
             meta = committees.get(cid)
             name = committee_donor_name(meta, cid)
             key = name.upper().strip()
             ai_class = ai_classifications.get(key) or {}
-            if ai_class.get("skip") or is_skip_entity(key):
+            if ai_class.get("skip") or key in pac_skips:
                 continue
             political = is_political_committee(meta)
             industry = "POLITICAL" if political else (
@@ -378,10 +380,10 @@ def build_top_donors(
     # 2a. Employees, from the FEC's employer totals.
     if employers is not None:
         names = [r["employer"] for r in employers if r.get("employer")]
-        skips = classify_employer_skips_batch(names)
+        skips = classify_employer_skips_batch(names) | skip_entities_batch([n.upper().strip() for n in names])
         for r in employers:
             employer = (r.get("employer") or "").upper().strip()
-            if not employer or employer in skips or is_skip_entity(employer):
+            if not employer or employer in skips:
                 continue
             ai_class = ai_classifications.get(employer) or {}
             if ai_class.get("skip"):
