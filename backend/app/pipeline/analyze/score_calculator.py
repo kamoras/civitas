@@ -1125,7 +1125,7 @@ def _top_donor_concentration(funding: dict) -> tuple[float | None, int, float]:
     candidate's own money and transfers from its own committees. Until
     v6.26 the denominator was the itemized donors listed, a pool the
     sampled receipts capped near 100 donors, so a campaign of small gifts
-    (a $33M Senate campaign with 48 listed donors, 2026-10) read as too few donors
+    (a Senate campaign raising tens of millions in small gifts, 2026-10) read as too few donors
     to measure and was scored a neutral 50 for needing almost no big
     donors at all."""
     donors = funding.get("topDonors") or []
