@@ -232,63 +232,63 @@ class TestFundingReference:
             assert pac["score"] == 50.0
             assert "chamber median" in pac["detail"]
 
-    def _sized(self, dollars_at):
-        """Forty members from $1M to $40M whose PAC dollars follow
-        dollars_at(size), with a +/-10% spread around it."""
-        out = []
-        for i in range(40):
-            base = 1_000_000 * (i + 1)
-            out.append({"totalContributions": base, "totalFromPACs": dollars_at(base) * (1.1 if i % 2 else 0.9)})
-        return out
+    STATES = ["WY", "VT", "AK", "ND", "SD", "DE", "RI", "MT", "ME", "NH", "HI", "WV", "ID", "NE", "NM",
+              "NV", "KS", "MS", "AR", "IA", "UT", "CT", "OK", "OR", "KY", "LA", "AL", "SC", "MN", "CO",
+              "WI", "MD", "MO", "IN", "TN", "MA", "AZ", "WA", "VA", "NJ"]
 
-    def test_the_size_fit_recovers_how_pac_share_falls_with_size(self):
-        # Flat PAC dollars: the share falls as 1/size, slope -1.
-        flat = compute_funding_reference(self._sized(lambda base: 500_000))
-        assert abs(flat["pac_size_slope"] + 1.0) < 0.05
-        # PAC dollars proportional to size: the share doesn't move.
-        proportional = compute_funding_reference(self._sized(lambda base: 0.2 * base))
-        assert abs(proportional["pac_size_slope"]) < 0.05
+    def _senate(self, share_at):
+        """Two senators a state, each PAC share share_at(population) give
+        or take two points."""
+        from app.pipeline.analyze.score_calculator import _state_population
 
-    def test_a_member_at_the_size_fit_scores_fifty_whatever_their_size(self):
-        ref = {"senate": compute_funding_reference(self._sized(lambda base: 500_000))}
-        scores = []
-        for base in (3_000_000, 30_000_000):
-            funding = {"totalContributions": base, "totalFromPACs": 500_000,
+        pop = _state_population()
+        fundings, states = [], []
+        for i, st in enumerate(self.STATES):
+            for k in (0.02, -0.02):
+                fundings.append({"totalContributions": 10_000_000,
+                                 "totalFromPACs": 10_000_000 * (share_at(pop[st]) + k * (1 if i % 2 else -1))})
+                states.append(st)
+        return fundings, states
+
+    def test_the_population_fit_recovers_how_pac_share_falls_with_state_size(self):
+        """v6.26: small states' senators take more from PACs, a difference
+        in the seat (r = -0.49 on 2026-10-01). The fit is on population,
+        fixed by the seat, not on campaign size, the share's own
+        denominator."""
+        fundings, states = self._senate(lambda pop: 0.30 - 0.08 * math.log(pop))
+        fit = compute_funding_reference(fundings, states)["pac_population_fit"]
+        assert abs(fit["slope"] + 0.08) < 0.01 and abs(fit["intercept"] - 0.30) < 0.02
+        assert fit["resid_p10"] < 0 < fit["resid_p90"]
+
+    def test_the_same_share_scores_the_same_whatever_the_campaign_size(self):
+        fundings, states = self._senate(lambda pop: 0.30 - 0.08 * math.log(pop))
+        ref = {"senate": compute_funding_reference(fundings, states)}
+        scores = set()
+        for base in (5_000_000, 60_000_000):
+            funding = {"totalContributions": base, "totalFromPACs": 0.054 * base,
                        "topDonors": [], "industryBreakdown": []}
-            pac = _funding_independence_core(funding, "OH", None, ref)["components"][0]
-            scores.append(pac["score"])
-            assert "campaigns this size" in pac["detail"]
-        # The same PAC dollars read the same in a small and a large
-        # campaign: share alone would have put the large one far ahead.
-        assert all(abs(x - 50.0) < 6 for x in scores)
+            pac = _funding_independence_core(funding, "NV", None, ref)["components"][0]
+            scores.add(pac["score"])
+            assert "states this size" in pac["detail"]
+        assert len(scores) == 1
 
-    def test_sizes_beyond_the_fitted_range_are_read_at_its_edge(self):
-        ref = compute_funding_reference(self._sized(lambda base: 500_000))
-        from app.pipeline.analyze.score_calculator import _expected_pac_ratio
-        edge = _expected_pac_ratio(math.exp(ref["pac_size_log_lo"]), ref)
-        # A tiny, partly reported campaign is not extrapolated to an
-        # expected share near 100%.
-        assert _expected_pac_ratio(20_000, ref) == edge
-        # And the breakdown says which size it was compared with.
-        funding = {"totalContributions": 20_000, "totalFromPACs": 20_000, "topDonors": [], "industryBreakdown": []}
-        detail = _funding_independence_core(funding, "OH", None, {"senate": ref})["components"][0]["detail"]
-        assert "smallest typical campaigns" in detail and "campaigns this size" not in detail
+    def test_a_small_share_above_a_small_expectation_is_a_small_gap(self):
+        """5.4% from PACs against an expected 3.2%
+        scored 17 when the gap was taken in proportion (twice the
+        expectation scored 0). In share points, measured against the
+        chamber's own spread, it is a couple of points above typical."""
+        ref = {"senate": {"pac_population_fit": {"intercept": 0.032, "slope": 0.0,
+                                                  "resid_p10": -0.15, "resid_p90": 0.18}}}
+        funding = {"totalContributions": 64_500_000, "totalFromPACs": 3_440_000,
+                   "topDonors": [], "industryBreakdown": []}
+        score = _funding_independence_core(funding, "NV", None, ref)["components"][0]["score"]
+        assert 45 < score < 50
 
-    def test_the_expected_share_is_never_above_one(self):
-        # A fit steep enough to put the smallest campaigns above 100% would
-        # score a member funded wholly by PACs above the typical 50.
-        from app.pipeline.analyze.score_calculator import _expected_pac_ratio
-
-        ref = {"pac_size_slope": -1.5, "pac_size_intercept": 22.0,
-               "pac_size_log_lo": math.log(1_000_000), "pac_size_log_hi": math.log(50_000_000)}
-        assert _expected_pac_ratio(1_000_000, ref) == 1.0
-        funding = {"totalContributions": 1_000_000, "totalFromPACs": 1_000_000, "topDonors": [], "industryBreakdown": []}
-        pac = _funding_independence_core(funding, "OH", None, {"senate": ref})["components"][0]
-        assert pac["score"] == 50.0
-
-    def test_members_without_pac_money_are_left_out_of_the_fit(self):
-        fundings = self._sized(lambda base: 500_000) + [{"totalContributions": 5_000_000, "totalFromPACs": 0}] * 10
-        assert compute_funding_reference(fundings)["pac_size_n"] <= 40
+    def test_the_house_is_compared_with_its_median(self):
+        ref = {"house": {"pac_ratio_median": 0.4, "pac_ratio_p10": 0.1, "pac_ratio_p90": 0.65}}
+        funding = {"totalContributions": 1_000_000, "totalFromPACs": 400_000, "topDonors": [], "industryBreakdown": []}
+        pac = _funding_independence_core(funding, "OH", 5, ref)["components"][0]
+        assert pac["score"] == 50.0 and "median member" in pac["detail"]
 
     def test_pinned_reference_reproduces_the_old_multipliers(self, pinned_funding_reference):
         # 0.5 / 0.157 ≈ 3.2 and 0.5 / 0.371 ≈ 1.35 — the values previously

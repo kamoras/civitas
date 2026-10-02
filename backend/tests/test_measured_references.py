@@ -16,6 +16,7 @@ from app.pipeline.analyze.president_scorer import (
 )
 from app.pipeline.analyze.score_calculator import (
     _advancement_baseline,
+    _industry_concentration,
     _measure_advancement_rates,
     _small_donor_capacity_score,
     compute_funding_reference,
@@ -42,12 +43,14 @@ class TestFundingReferenceStats:
         ]
         ref = compute_funding_reference(fundings)
         assert ref["small_donor_p10"] < ref["small_donor_median"] < ref["small_donor_p90"]
-        assert ref["concentration_n"] == 40
-        assert ref["concentration_p10"] < ref["concentration_median"] < ref["concentration_p90"]
+        assert ref["top10_share_n"] == 40
+        deciles = ref["top10_share_deciles"]
+        assert len(deciles) == 9 and deciles == sorted(deciles)
+        assert deciles[0] < ref["top10_share_median"] < deciles[-1]
 
     def test_concentration_omitted_when_too_few_pools_are_measurable(self):
         ref = compute_funding_reference([_funding(pac=1) for _ in range(40)])
-        assert "concentration_median" not in ref and "pac_ratio_median" in ref
+        assert "top10_share_median" not in ref and "pac_ratio_median" in ref
 
     def test_house_small_donor_share_is_relative_to_the_house_median(self):
         ref = {"small_donor_p10": 10.0, "small_donor_median": 20.0, "small_donor_p90": 30.0}
@@ -58,6 +61,37 @@ class TestFundingReferenceStats:
     def test_unreadable_small_donor_fit_is_neutral_not_a_second_copy(self, monkeypatch):
         monkeypatch.setattr(score_calculator, "_small_donor_baseline_fit_cache", {})
         assert _small_donor_capacity_score(40.0, "CA", None)[0] == 50.0
+
+
+class TestIndustryConcentrationWithinParty:
+    """v6.26: a party's donors' occupations cluster in fewer, broader
+    industries than the other's, so a chamber-wide rank scored a party's
+    coalition, not the member. Each member is ranked within their party."""
+
+    def _with_mix(self, *shares):
+        return {"industryBreakdown": [{"industry": f"IND{i}", "total": 1_000_000 * x} for i, x in enumerate(shares)]}
+
+    def test_each_party_with_enough_members_gets_its_own_deciles(self):
+        fundings = [_funding(pac=100_000)] * 40
+        for i, f in enumerate(fundings):
+            f = dict(f, **self._with_mix(0.5 + 0.01 * (i % 20), 0.5 - 0.01 * (i % 20)))
+            fundings[i] = f
+        parties = ["D"] * 20 + ["R"] * 15 + ["I"] * 5
+        ref = compute_funding_reference(fundings, None, parties)
+        assert set(ref["industry_hhi_by_party"]) == {"D", "R"}  # 5 independents: too few
+        assert ref["industry_hhi_by_party"]["D"]["n"] == 20
+
+    def test_a_member_is_ranked_within_their_party_and_an_independent_against_the_chamber(self):
+        ref = {
+            "industry_hhi_deciles": [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6], "industry_hhi_median": 0.4,
+            "industry_hhi_by_party": {"D": {"deciles": [0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],
+                                            "median": 0.6, "n": 20}},
+        }
+        funding = self._with_mix(0.723607, 0.276393)  # HHI 0.6
+        d_score, d_detail = _industry_concentration(funding, 1_000_000, 50.0, reference=ref, party="D")
+        i_score, _ = _industry_concentration(funding, 1_000_000, 50.0, reference=ref, party="I")
+        assert d_score == 50.0 and "D median" in d_detail  # the D median
+        assert i_score == 10.0  # the chamber's top decile
 
 
 class TestAdvancementRates:
@@ -124,11 +158,11 @@ class TestPipelineKeepsUnmeasurableStats:
         from app.pipeline.analyze.population_reference import FUNDING_REFERENCE
         from app.pipeline.live_references import live_funding_reference
 
-        FUNDING_REFERENCE.write("senate", {"pac_ratio_median": 0.1, "concentration_median": 0.33,
-                                           "concentration_p10": 0.2, "concentration_p90": 0.4})
+        FUNDING_REFERENCE.write("senate", {"pac_ratio_median": 0.1, "top10_share_median": 0.33,
+                                           "top10_share_deciles": [0.2] * 9})
         merged = live_funding_reference("senate", [_funding(pac=200_000) for _ in range(40)])
         assert merged["senate"]["pac_ratio_median"] == 0.2  # measured this run
-        assert merged["senate"]["concentration_median"] == 0.33  # kept
+        assert merged["senate"]["top10_share_median"] == 0.33  # kept
 
 
 def test_nothing_hand_typed_remains_for_these_constants():

@@ -1,11 +1,11 @@
 """Regenerate app/data/funding_reference.json — Funding Independence's
 bundled pre-first-run PAC-share reference.
 
-The PAC-dependency component scores a member's PAC share against the share
-campaigns of the same size typically take in their chamber (v6.22,
-score_calculator._pac_size_fit), and against the chamber median before a
-chamber has a fit.
-The pipeline measures that median from the members it is about to score on
+The PAC-dependency component scores a member's PAC share against what the
+seat predicts (v6.26, score_calculator._pac_expectation: the Senate's share
+by state population, the House median), and the concentration components
+rank members within the chamber.
+The pipeline measures these from the members it is about to score on
 every run (score_calculator.compute_funding_reference) and writes
 /data/funding_reference.json, which takes precedence; this bundled file
 only matters before a deployment's first run. It uses the SAME
@@ -39,14 +39,18 @@ def _fetch_json(url: str):
         return json.load(resp)
 
 
-def fetch_fundings(branch: str) -> tuple[list[dict], list[str]]:
-    """(each current member's funding, their states), aligned."""
+def fetch_fundings(branch: str) -> tuple[list[dict], list[str], list[str]]:
+    """(each current member's funding, their states, their parties), aligned."""
     listing = _fetch_json(f"{API_BASE}/politicians?branch={branch}")
     # Current members only, the population the pipeline measures; the
     # listing also has departed members inside the removal grace window.
     ids = [d["id"] for d in listing if d.get("hasScorecard") and d.get("isCurrent") is not False]
     cards = [_fetch_json(f"{API_BASE}/politicians/{pid}").get("scorecard") or {} for pid in ids]
-    return [c.get("funding") or {} for c in cards], [c.get("state") or "" for c in cards]
+    return (
+        [c.get("funding") or {} for c in cards],
+        [c.get("state") or "" for c in cards],
+        [c.get("party") or "" for c in cards],
+    )
 
 
 def main() -> None:
@@ -60,10 +64,10 @@ def main() -> None:
         ),
     }
     for branch in ("senate", "house"):
-        fundings, states = fetch_fundings(branch)
+        fundings, states, parties = fetch_fundings(branch)
         # The Senate's small-donor baseline is fitted by state population
         # (v6.24); the House is compared with its own median.
-        ref = compute_funding_reference(fundings, states if branch == "senate" else None)
+        ref = compute_funding_reference(fundings, states if branch == "senate" else None, parties)
         if ref is None:
             print(f"{branch}: too few funded members; left unchanged")
             out[branch] = existing.get(branch)

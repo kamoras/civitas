@@ -1,38 +1,156 @@
 {
- "_as_of": "2026-09-28",
- "_source": "Pre-first-run fallback only: the pipeline recomputes this per chamber every run (score_calculator.compute_funding_reference) and writes /data/funding_reference.json, which takes precedence. Measured from https://civitas-research.org/api by backend/scripts/audit_pac_ratio.py.",
+ "_as_of": "2026-10-02",
+ "_source": "Pre-first-run fallback only: the pipeline recomputes this per chamber every run (score_calculator.compute_funding_reference) and writes /data/funding_reference.json, which takes precedence. Measured by that same function over every current member's v6.26 funding (the FEC's bulk committee contributions and occupation/employer totals for each member's most recent completed election), 2026-10-02, before the first v6.26 pipeline run. Refresh with backend/scripts/audit_pac_ratio.py, which recomputes it from the public API's funding once v6.26 is live.",
  "house": {
-  "concentration_median": 0.237813,
-  "concentration_n": 377,
-  "concentration_p10": 0.188784,
-  "concentration_p90": 0.31496,
+  "industry_hhi_by_party": {
+   "D": {
+    "deciles": [
+     0.098857,
+     0.111856,
+     0.121388,
+     0.127455,
+     0.141503,
+     0.1536,
+     0.167378,
+     0.190207,
+     0.241541
+    ],
+    "median": 0.141503,
+    "n": 196
+   },
+   "R": {
+    "deciles": [
+     0.084837,
+     0.088704,
+     0.092334,
+     0.096138,
+     0.100553,
+     0.106013,
+     0.114144,
+     0.130312,
+     0.151478
+    ],
+    "median": 0.100553,
+    "n": 171
+   }
+  },
+  "industry_hhi_deciles": [
+   0.088344,
+   0.093843,
+   0.100781,
+   0.108898,
+   0.118826,
+   0.130179,
+   0.143993,
+   0.165154,
+   0.199474
+  ],
+  "industry_hhi_median": 0.118826,
+  "industry_hhi_n": 368,
   "n": 432,
-  "pac_ratio_mean": 0.389878,
-  "pac_ratio_median": 0.403185,
-  "pac_size_intercept": 6.060061,
-  "pac_size_log_hi": 15.816246,
-  "pac_size_log_lo": 13.401149,
-  "pac_size_n": 390,
-  "pac_size_slope": -0.484347,
+  "pac_ratio_mean": 0.387935,
+  "pac_ratio_median": 0.398121,
+  "pac_ratio_p10": 0.107171,
+  "pac_ratio_p90": 0.665952,
   "small_donor_median": 6.0,
   "small_donor_p10": 1.0,
-  "small_donor_p90": 28.7
+  "small_donor_p90": 27.7,
+  "top10_share_deciles": [
+   0.037712,
+   0.048444,
+   0.059688,
+   0.067934,
+   0.078605,
+   0.088446,
+   0.098835,
+   0.122243,
+   0.152018
+  ],
+  "top10_share_median": 0.078605,
+  "top10_share_n": 432
  },
  "senate": {
-  "concentration_median": 0.274948,
-  "concentration_n": 74,
-  "concentration_p10": 0.178069,
-  "concentration_p90": 0.440957,
+  "industry_hhi_by_party": {
+   "D": {
+    "deciles": [
+     0.116308,
+     0.131258,
+     0.142129,
+     0.162452,
+     0.182797,
+     0.197544,
+     0.209182,
+     0.229002,
+     0.268089
+    ],
+    "median": 0.182797,
+    "n": 45
+   },
+   "R": {
+    "deciles": [
+     0.086453,
+     0.089228,
+     0.092004,
+     0.095191,
+     0.09908,
+     0.100487,
+     0.107605,
+     0.114255,
+     0.130942
+    ],
+    "median": 0.09908,
+    "n": 51
+   }
+  },
+  "industry_hhi_deciles": [
+   0.089038,
+   0.094194,
+   0.099961,
+   0.107341,
+   0.119879,
+   0.135689,
+   0.163561,
+   0.18952,
+   0.222961
+  ],
+  "industry_hhi_median": 0.119879,
+  "industry_hhi_n": 98,
   "n": 99,
-  "pac_ratio_mean": 0.204895,
-  "pac_ratio_median": 0.170797,
-  "pac_size_intercept": 14.918991,
-  "pac_size_log_hi": 18.052037,
-  "pac_size_log_lo": 14.97983,
-  "pac_size_n": 91,
-  "pac_size_slope": -1.025363,
-  "small_donor_median": 22.0,
+  "pac_population_fit": {
+   "intercept": 0.30719,
+   "n": 99,
+   "resid_p10": -0.15291,
+   "resid_p90": 0.183405,
+   "slope": -0.07677
+  },
+  "pac_ratio_mean": 0.199458,
+  "pac_ratio_median": 0.15461,
+  "pac_ratio_p10": 0.01933,
+  "pac_ratio_p90": 0.438595,
+  "small_donor_fit": {
+   "A": 16.4793,
+   "B": 4.7618,
+   "max_expected_pct": 35.9851,
+   "min_expected_pct": 12.0468,
+   "n": 99,
+   "national_mean_pct": 23.1616,
+   "saturation_pt": 22.2705
+  },
+  "small_donor_median": 22,
   "small_donor_p10": 4.0,
-  "small_donor_p90": 45.0
+  "small_donor_p90": 45.0,
+  "top10_share_deciles": [
+   0.01477,
+   0.020719,
+   0.027152,
+   0.036319,
+   0.040643,
+   0.047207,
+   0.054428,
+   0.069702,
+   0.10706
+  ],
+  "top10_share_median": 0.040643,
+  "top10_share_n": 99
  }
 }

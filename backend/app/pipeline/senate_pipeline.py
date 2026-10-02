@@ -63,7 +63,9 @@ from app.pipeline.fetch.fec import (
     committee_id_of,
     committee_master_cycles,
     fetch_committee_master,
+    fetch_committee_contributions,
     fetch_committee_receipts,
+    fetch_contribution_detail,
     fetch_pac_receipts,
     find_candidate,
     resolve_committee_meta,
@@ -79,7 +81,7 @@ from app.pipeline.member_lifecycle import (
 from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
 from app.pipeline.progress_tracker import ProgressTracker
 # Transform modules
-from app.pipeline.transform.normalize_finance import normalize_finance
+from app.pipeline.transform.normalize_finance import committee_donor_name, normalize_finance
 from app.pipeline.transform.normalize_members import normalize_members
 from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
@@ -732,6 +734,21 @@ def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
                     "amount": c.get("total", 0) or 0,
                     "candidate_name": cand_name,
                 })
+        # The complete detail's donors, under the names normalize_finance
+        # looks them up by. A giving committee's type is already known from
+        # its registration (committee_donor_type); only its industry is
+        # asked of the classifier.
+        detail = fec.get("detail") or {}
+        committees = detail.get("committees") or {}
+        for cid, amount in (detail.get("pacs") or {}).items():
+            entries.append({
+                "name": committee_donor_name(committees.get(cid), cid),
+                "amount": amount,
+                "candidate_name": cand_name,
+            })
+        for r in detail.get("employers") or []:
+            if r.get("employer"):
+                entries.append({"name": r["employer"], "amount": r.get("total") or 0, "candidate_name": cand_name})
     return entries
 
 
@@ -1407,6 +1424,16 @@ async def run_senate_pipeline(
             logger.info("Fetching FEC financial data...")
             progress.begin("fetch_fec", total=len(senators))
             fec_data: dict[str, dict] = {}
+            # The FEC's bulk files, once for every senator: every committee's
+            # registration (type, designation, connected organization) and
+            # every committee-to-candidate contribution, each one download
+            # per cycle where the API would take thousands of requests.
+            committee_master = await fetch_committee_master(
+                client, db, committee_master_cycles(),
+            )
+            committee_contributions = await fetch_committee_contributions(
+                client, db, committee_master_cycles(),
+            )
             for fec_idx, senator in enumerate(senators):
                 candidate = await find_candidate(
                     client, db, senator["name"], senator["state"],
@@ -1451,6 +1478,10 @@ async def run_senate_pipeline(
                     aggregated = await fetch_aggregated_contributors(
                         client, db, committee_id, cycles=recent_cycles
                     )
+                detail = await fetch_contribution_detail(
+                    client, db, candidate_id, [committee_id] if committee_id else [],
+                    recent_cycles, committee_contributions, committee_master,
+                )
 
                 fec_data[senator["id"]] = {
                     "candidate": candidate,
@@ -1458,6 +1489,7 @@ async def run_senate_pipeline(
                     "receipts": receipts,
                     "pacReceipts": pac_receipts_data,
                     "aggregated": aggregated,
+                    "detail": detail,
                 }
                 progress.update("fetch_fec", done=fec_idx + 1)
             logger.info(
@@ -1480,12 +1512,9 @@ async def run_senate_pipeline(
                     if committee_id_of(r):
                         pac_committee_ids.add(r["contributor_id"])
             logger.info("Resolving committee type for %d unique contributing PACs...", len(pac_committee_ids))
-            # The FEC's bulk committee master answers type, designation and
-            # connected organization for nearly every PAC in one download per
-            # cycle; the per-committee API covers only what it lacks.
-            committee_master = await fetch_committee_master(
-                client, db, committee_master_cycles(),
-            )
+            # The bulk committee master (loaded above) answers type,
+            # designation and connected organization for nearly every PAC;
+            # the per-committee API covers only what it lacks.
             committee_meta_map = await resolve_committee_meta(
                 client, db, pac_committee_ids, committee_master,
             )
@@ -1664,6 +1693,7 @@ async def run_senate_pipeline(
                         ai_classifications=ai_classifications,
                         db_session=db,
                         committee_meta_map=committee_meta_map,
+                        detail=fec.get("detail"),
                     )
                 else:
                     funding = senator.get("funding", {})
@@ -1963,6 +1993,7 @@ async def run_senate_pipeline(
         funding_reference = live_funding_reference(
             "senate", [p.get("funding") or {} for p in senator_prepared],
             [p["senator"].get("state", "") for p in senator_prepared],
+            [p["senator"].get("party", "") for p in senator_prepared],
         )
         constituent_reference, constituent_reference_measured = live_constituent_reference_measured(
             "senate",

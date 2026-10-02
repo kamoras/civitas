@@ -32,6 +32,20 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.26",
+    date: "2026-10-02",
+    title: "Funding Independence: every committee and occupation counted, and fairer comparisons",
+    tldr: "Funding Independence now reads the FEC's complete totals instead of a sample of about a hundred donors, places a donor's money in an industry by what they say they do, compares a senator's PAC share with what senators from states that size take instead of with campaigns of the same size, and ranks donor and industry concentration within the chamber. A campaign that needs few big donors now scores high on top-donor concentration instead of neutral.",
+    changes: [
+      "Complete detail: committee money comes from the FEC's bulk contributions-by-committee file, every committee that gave, and individual money from the FEC's own totals by occupation and employer. The old sample left a large small-dollar Senate campaign with under fifty listed donors, scored neutral as too few to measure.",
+      "Industries from occupations: a donor's stated occupation counts toward an industry when most people in that occupation work in it, by Census Bureau survey data, matched against federal job titles exactly. A chief executive, a retiree or a title the data can't place counts toward no industry. The name-based classifier this replaces filed computer systems design under health care.",
+      "PAC dependency: the PAC share is compared with what the seat predicts, the share senators from a state that size take (small states have small donor pools) and the House median for representatives, in percentage points. The campaign-size comparison it replaces divided by the share's own denominator, so a 5% PAC share in a large campaign scored 17.",
+      "Top-donor concentration is the top ten donors' share of all outside money, and both concentration components are ranked within the chamber: no concentration scores 100, the typical member 50. Before, no member could score above about 65 on them.",
+      "Industry concentration is ranked within the member's party. Ranked across the chamber it scored each party's donor base, not the member: Democratic donors' occupations fall in fewer, broader categories, which left Senate Democrats averaging 27.6 against 69.7 for Republicans. Ranked within party, both average about 50. An independent is ranked against the chamber.",
+      "Effect, simulated on October 2026 data: the Senate mean moves from 49.8 to 50.0 and the House mean from 55.0 to 51.7; the average member moves 12.6 points (Senate) and 10.2 (House). docs/methodology/member-score/v6.26.md has the measurements.",
+    ],
+  },
+  {
     version: "v6.25",
     date: "2026-10-01",
     title:

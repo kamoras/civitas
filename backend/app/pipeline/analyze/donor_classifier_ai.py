@@ -394,6 +394,12 @@ def classify_donor_type_from_fec(receipt: dict) -> str | None:
 
 
 _skip_emb_cache: dict[str, np.ndarray] = {}
+# is_skip_entity's verdicts, by (name, threshold). A pure function of the
+# name while the model is fixed, and a run asks about the same employers
+# and committees for the top donors and again for the industry breakdown;
+# skip_entities_batch fills it in one encode. ponytail: unbounded, holds
+# a few strings per distinct donor name seen in the process.
+_skip_memo: dict[tuple[str, float], bool] = {}
 
 
 def _get_skip_prototype_embedding(prototype_key: str, prototype_text: str) -> np.ndarray:
@@ -422,15 +428,33 @@ def is_skip_entity(name_upper: str, threshold: float = 0.67) -> bool:
         if keyword in name_upper:
             return True
 
-    from app.pipeline.vector_store import get_embedding_model
-    model = get_embedding_model()
-    proto_emb = _get_skip_prototype_embedding("payment", _PAYMENT_PROCESSOR_PROTOTYPE)
-    query_emb = model.encode([name_upper], show_progress_bar=False)[0]
-    norm = np.linalg.norm(query_emb)
-    if norm > 0:
-        query_emb = query_emb / norm
-    score = float(np.dot(query_emb, proto_emb))
-    return score >= threshold
+    key = (name_upper, threshold)
+    if key not in _skip_memo:
+        from app.pipeline.vector_store import get_embedding_model
+        model = get_embedding_model()
+        proto_emb = _get_skip_prototype_embedding("payment", _PAYMENT_PROCESSOR_PROTOTYPE)
+        query_emb = model.encode([name_upper], show_progress_bar=False)[0]
+        norm = np.linalg.norm(query_emb)
+        if norm > 0:
+            query_emb = query_emb / norm
+        _skip_memo[key] = float(np.dot(query_emb, proto_emb)) >= threshold
+    return _skip_memo[key]
+
+
+def skip_entities_batch(names_upper: list[str], threshold: float = 0.67) -> set[str]:
+    """is_skip_entity for many names in one encode: the same keyword check
+    and payment-processor prototype at the same threshold. A member's
+    contribution detail lists a few hundred employers and committees, and
+    one encode call per name cost ~0.1 s each (2026-10, ~40 s a member)."""
+    candidates = [n for n in dict.fromkeys(names_upper) if n and len(n.strip()) >= 2]
+    keyword_hits = {n for n in candidates if any(k in n for k in _KNOWN_PAYMENT_PROCESSOR_KEYWORDS)}
+    rest = [n for n in candidates if n not in keyword_hits and (n, threshold) not in _skip_memo]
+    if rest:
+        from app.pipeline.vector_store import encode_normalized, get_embedding_model
+        proto_emb = _get_skip_prototype_embedding("payment", _PAYMENT_PROCESSOR_PROTOTYPE)
+        scores = encode_normalized(get_embedding_model(), rest) @ proto_emb
+        _skip_memo.update(((n, threshold), float(score) >= threshold) for n, score in zip(rest, scores))
+    return keyword_hits | {n for n in candidates if _skip_memo.get((n, threshold))}
 
 
 def classify_skip_names_batch(

@@ -124,7 +124,10 @@ def test_a_sponsor_loop_names_no_sponsor():
 
 def test_parse_reads_type_designation_and_connected_org():
     master = _master(CM_ROWS)
-    assert master["C00104299"] == {"type": "Q", "designation": "B", "connectedOrg": "JPMORGAN CHASE & CO."}
+    assert master["C00104299"] == {
+        "name": "JPMORGAN CHASE & CO. FEDERAL POLITICAL ACTION COMMITTEE",
+        "type": "Q", "designation": "B", "connectedOrg": "JPMORGAN CHASE & CO.",
+    }
     assert master["C00027466"]["type"] == "Y"
     assert "short" not in master
 

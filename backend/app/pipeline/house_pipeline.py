@@ -22,7 +22,15 @@ from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
 from app.pipeline.analyze.bill_stage import is_enacted
+from app.pipeline.analyze.cross_reference import detect_lobbying_matches
 from app.pipeline.analyze.party_line_record import party_line_records
+from app.pipeline.analyze.policy_alignment import clear_alignment_cache
+from app.pipeline.analyze.score_calculator import (
+    ALGORITHM_VERSION,
+    calculate_confidence,
+    calculate_scores,
+    compute_overall_score,
+)
 from app.pipeline.member_lifecycle import (
     CHAMBER_HOUSE,
     purge_departed_members,
@@ -48,23 +56,26 @@ from app.pipeline.fetch.congress import (
     fetch_significant_bills,
 )
 from app.pipeline.fetch.fec import (
+    committee_id_of,
+    committee_master_cycles,
     compute_recent_election_cycles,
     fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
-    committee_id_of,
-    committee_master_cycles,
+    fetch_committee_contributions,
     fetch_committee_master,
     fetch_committee_receipts,
+    fetch_contribution_detail,
     fetch_pac_receipts,
     find_candidate,
-    resolve_committee_meta,
     reset_run_state as reset_fec_run_state,
+    resolve_committee_meta,
 )
 from app.pipeline.fetch.floor_logs import bill_id_from_number
 from app.pipeline.analyze.bill_learning import stamp_motion_type
 from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
 from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
+from app.pipeline.transform.normalize_finance import normalize_finance
 from app.pipeline.transform.normalize_members import normalize_house_members
 from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
@@ -81,6 +92,25 @@ from app.pipeline.transform.normalize_votes import (
     house_roll_call_id,
 )
 from app.time_utils import utcnow
+from app.pipeline.senate_pipeline import invalidate_stale_analysis
+from app.pipeline.fetch.house_clerk import fetch_house_sworn_dates
+from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_policy_areas_multi
+from app.pipeline.analyze.party_platform import analyze_partisan_depth, classify_party_alignment_multi, refine_with_vote_data
+from app.pipeline.analyze.sponsorship_analysis import (
+    compute_bipartisanship_scores,
+    compute_ideology_scores,
+    compute_leadership_scores,
+    describe_senator_position,
+    party_ideology_bounds,
+)
+from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
+from app.pipeline.fetch.voteview import refresh_member_ideal_points
+from app.pipeline.analyze.commemorative import mark_commemorative
+from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores
+from app.pipeline.live_references import live_constituent_reference_measured, live_funding_reference, live_les_reference
+from app.pipeline.analyze.ground_truth import check_ground_truth, check_score_distribution
+from app.pipeline.analyze.signal_overlap import record_signal_overlap
+from app.pipeline.partisan_depth_store import finalize_stored_partisan_depth
 
 logger = logging.getLogger(__name__)
 
@@ -170,13 +200,13 @@ async def run_house_pipeline() -> dict:
 
     try:
         logger.info("=== HOUSE PIPELINE START ===")
-        from app.pipeline.senate_pipeline import invalidate_stale_analysis
 
         invalidate_stale_analysis(db)
 
         async with make_async_client() as client:
             # FEC committee master, loaded on first use (see the FEC step).
             committee_master: dict[str, dict] | None = None
+            committee_contributions: dict | None = None
 
             # ── PHASE 1: FETCH MEMBERS ──
             logger.info("--- House Phase 1: FETCH MEMBERS ---")
@@ -228,7 +258,6 @@ async def run_house_pipeline() -> dict:
             # mid-Congress proration (v6.23). The Clerk's list when it can be
             # read; otherwise the dates stored last, so one failed request
             # doesn't score a special-election arrival against a full term.
-            from app.pipeline.fetch.house_clerk import fetch_house_sworn_dates
             sworn_dates = await fetch_house_sworn_dates(client, db)
             if sworn_dates:
                 for r in reps:
@@ -328,7 +357,6 @@ async def run_house_pipeline() -> dict:
             logger.info("--- House Phase 4: CLASSIFY BILLS ---")
             progress.begin("classify_bills")
 
-            from app.pipeline.analyze.bill_analyzer import classify_all_bills
 
             bills_for_classification = []
             for b in bills_data:
@@ -376,11 +404,6 @@ async def run_house_pipeline() -> dict:
             # only used when the LLM produced no label, so bipartisan-passed
             # bills kept partisan content labels and half the chamber was
             # marked as voting "against party" on near-unanimous bills.
-            from app.pipeline.analyze.party_platform import (
-                classify_party_alignment_multi,
-                refine_with_vote_data,
-            )
-            from app.pipeline.analyze.bill_analyzer import classify_policy_areas_multi
 
             for bill in classified_bills:
                 bill_id = bill.get("billId", "")
@@ -419,13 +442,6 @@ async def run_house_pipeline() -> dict:
             # fixed global cutoffs).
             ideology_bounds_by_party: dict[str, tuple[float, float]] = {}
 
-            from app.pipeline.analyze.sponsorship_analysis import (
-                compute_leadership_scores,
-                compute_ideology_scores,
-                compute_bipartisanship_scores,
-                describe_senator_position,
-                party_ideology_bounds,
-            )
 
             cosponsors_map: dict[str, list[dict]] = {}
             all_bills_for_analysis: list[dict] = []
@@ -434,7 +450,6 @@ async def run_house_pipeline() -> dict:
             bipartisanship_scores: dict[str, float] = {}
             attracted_bipartisanship_scores: dict[str, float] = {}
 
-            from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
 
             try:
                 # Fetch cosponsors for significant bills to build the
@@ -611,7 +626,6 @@ async def run_house_pipeline() -> dict:
                 # Voteview (position-congruence component, score_calculator
                 # v6.11). Best-effort: never raises; a fetch/gate failure
                 # keeps the last good /data/member_ideal_points.json section.
-                from app.pipeline.fetch.voteview import refresh_member_ideal_points
                 await refresh_member_ideal_points("house", settings.CURRENT_CONGRESS)
                 logger.info(
                     "Sponsorship analysis: %d leadership scores, %d ideology scores",
@@ -630,13 +644,10 @@ async def run_house_pipeline() -> dict:
 
             # Commemorative bills (V&W's 1x tier) — before the LES reference
             # is measured, since its stage totals are significance-weighted.
-            from app.pipeline.analyze.commemorative import mark_commemorative
             mark_commemorative([sp for r in reps for sp in r.get("sponsoredBills") or []])
 
             # A withheld or failed analysis leaves members out of these
             # dicts; score them with last run's values, as the Senate does.
-            from app.models import Representative
-            from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores
 
             backfill_withheld_sponsorship_scores(
                 db, Representative, {r["bioguideId"] for r in reps if r.get("bioguideId")},
@@ -647,11 +658,6 @@ async def run_house_pipeline() -> dict:
             # ── PHASE 5: FEC DATA + SCORING ──
             logger.info("--- House Phase 5: FEC DATA + SCORING ---")
             progress.begin("fec_scoring", total=len(reps))
-
-            from app.pipeline.transform.normalize_finance import normalize_finance
-            from app.pipeline.analyze.cross_reference import detect_lobbying_matches
-            from app.pipeline.analyze.policy_alignment import clear_alignment_cache
-            from app.pipeline.analyze.score_calculator import calculate_confidence, calculate_scores
 
             # Clear embeddings cached by a prior run (senate or house) so
             # memory stays bounded; within this run the cache is shared
@@ -666,7 +672,6 @@ async def run_house_pipeline() -> dict:
             # This run's Legislative Effectiveness population reference, from
             # every rep's stage-classified sponsored bills (phase 4b) — before
             # anyone is scored. See live_references.live_les_reference.
-            from app.pipeline.live_references import live_les_reference
             les_reference = live_les_reference(
                 "house",
                 [(r.get("sponsoredBills") or [], r.get("party")) for r in reps],
@@ -817,17 +822,28 @@ async def run_house_pipeline() -> dict:
                             committee_master = await fetch_committee_master(
                                 client, db, committee_master_cycles(),
                             )
+                            # Every committee-to-candidate contribution, from
+                            # the same bulk downloads, once per run.
+                            committee_contributions = await fetch_committee_contributions(
+                                client, db, committee_master_cycles(),
+                            )
                         pac_committee_ids = {
                             cid for r in raw_pac_receipts if (cid := committee_id_of(r))
                         }
                         committee_meta_map = await resolve_committee_meta(
                             client, db, pac_committee_ids, committee_master,
                         )
+                        detail = await fetch_contribution_detail(
+                            client, db, cand_id,
+                            [c["committee_id"] for c in committees if c.get("committee_id")],
+                            recent_cycles, committee_contributions, committee_master,
+                        )
 
                         finance_data = normalize_finance(
                             fec_candidate, financials, raw_receipts, raw_pac_receipts,
                             aggregated, db_session=db,
                             committee_meta_map=committee_meta_map,
+                            detail=detail,
                         )
                         rep["funding"] = finance_data
                     else:
@@ -888,12 +904,9 @@ async def run_house_pipeline() -> dict:
             # measured from the whole population BEFORE anyone is scored
             # (the Senate pipeline already works this way). The PAC-share
             # median needs every rep's funding, which the pass above fetches.
-            from app.pipeline.live_references import (
-                live_constituent_reference_measured,
-                live_funding_reference,
-            )
             funding_reference = live_funding_reference(
                 "house", [r.get("funding") or {} for r, _ in prepared_reps],
+                parties=[r.get("party", "") for r, _ in prepared_reps],
             )
             constituent_reference, constituent_reference_measured = live_constituent_reference_measured(
                 "house", [r for r, _ in prepared_reps],
@@ -931,7 +944,6 @@ async def run_house_pipeline() -> dict:
                     # cosponsorship ideology prior, as for senators
                     # (campaign promises no longer exist); relabelled
                     # against the whole chamber once the run finishes.
-                    from app.pipeline.analyze.party_platform import analyze_partisan_depth
                     rep["partisanDepth"] = analyze_partisan_depth(
                         [], rep.get("party", ""),
                         voting_record=rep.get("votingRecord") or {},
@@ -972,10 +984,6 @@ async def run_house_pipeline() -> dict:
                 # senate_pipeline.py. The House ran distribution-only while
                 # the gate was a hand-named Senate reference table; the
                 # derived checks are chamber-agnostic, so both run here now.
-                from app.pipeline.analyze.ground_truth import (
-                    check_ground_truth,
-                    check_score_distribution,
-                )
                 gt_failures = check_ground_truth(
                     db, model=Representative, constituent_reference=constituent_reference,
                     reference_measured=constituent_reference_measured,
@@ -1000,14 +1008,11 @@ async def run_house_pipeline() -> dict:
                 logger.exception("House ground truth check failed (non-fatal)")
 
             # Same component-overlap check as senate_pipeline.py.
-            from app.pipeline.analyze.signal_overlap import record_signal_overlap
 
             record_signal_overlap(db, "house")
 
             progress.complete("snapshots")
 
-            from app.models import Representative
-            from app.pipeline.partisan_depth_store import finalize_stored_partisan_depth
 
             finalize_stored_partisan_depth(db, Representative)
 
@@ -1064,7 +1069,6 @@ async def run_house_pipeline() -> dict:
 
 def _record_rep_snapshots(db: Session) -> None:
     """Snapshot today's scores for all representatives."""
-    from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, compute_overall_score
 
     today = utcnow().date().isoformat()
     reps = db.query(Representative).all()

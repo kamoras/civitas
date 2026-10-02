@@ -43,24 +43,17 @@ ratio or top-N-donor-concentration table). The specific calibration
 targets below are this platform's own live empirical audits, not
 numbers reproduced from either paper — see _calc_funding_independence's
 own "Academic rationale" note for the fuller account. The PAC share is
-scored per chamber against the share campaigns of the same size typically
-take there (v6.22, _pac_size_fit, measured every run —
-compute_funding_reference), with the chamber median as the fallback
-before a chamber has a fit. Top-donor
-concentration is scored against the chamber's measured median, saturating
-at one p10-p90 spread (v6.13; the fixed 15%/40% anchors it replaced were
-pooled across chambers). The 2026-07-23 audit measured that median at
-28% (Senate 30.5%, House 27.5%). Parmigiani
-(2025, "Campaign contributions and legislative behavior," Journal of
-Public Economics 243) reports the same top-decile-donor-share metric at
-a 47% mean in a different population/period — closer to this platform's
-own re-measured 28-31% median than the old 60% assumption was, real
-independent corroboration that the CURRENT calibration, not the old
-one, sits in the normal range that other work on this exact metric
-finds (not a number copied from that paper — our own audit is the
-calibration source). Prior v1 multipliers (1.3×, 1.5×) compressed
-variation into the 61–94 range; recalibration creates a symmetric
-distribution around the empirical sample median.
+scored against what the seat predicts (v6.26, _pac_expectation: a
+senator's state population, the House median), in share points on the
+chamber's measured spread. Top-donor concentration (the top 10 donors'
+share of all outside contributions) and industry concentration (the HHI of
+the industry money's mix) are ranked within the chamber (v6.26,
+_rank_score), industry concentration within the member's party. Parmigiani (2025, "Campaign contributions and legislative
+behavior," Journal of Public Economics 243) computes industry HHI per
+legislator as the industry component does; its top-donor share is taken
+over itemized donors, a narrower base than the all-contributions share
+used here since v6.26 (the itemized base read a campaign of small gifts as
+unmeasurable).
 
 Promise Persistence: follows Naurin (2011, "Election Promises, Party
 Behaviour and Voter Perceptions," Palgrave) who showed that promise
@@ -135,7 +128,7 @@ caps how dominant any single row can get long before HHI or top-share
 ever see the data — the two statistics converge because the input they
 share has already had its long tail removed. The real disagreements that
 remain (e.g. a member with several moderately-large industries vs. one
-genuinely dominant one — Gwen Moore, Ayanna Pressley in the live 2026-07
+genuinely dominant one, as for two House members in the live 2026-07
 data) are the exact case the theory predicts, but they affect roughly a
 dozen members, not the population — not enough to justify moving every
 member's score for a measure that would rank them almost identically.
@@ -197,7 +190,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.25"
+ALGORITHM_VERSION = "v6.26"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -660,7 +653,7 @@ def calculate_scores(senator: dict) -> dict:
     return {
         "fundingIndependence": _calc_funding_independence(
             funding, senator.get("state", ""), senator.get("district"),
-            senator.get("fundingReference"),
+            senator.get("fundingReference"), senator.get("party"),
         ),
         "promisePersistence": _calc_promise_persistence(
             voting_record,
@@ -726,7 +719,7 @@ def explain_scores(senator: dict) -> dict:
     return {
         "fundingIndependence": _funding_independence_core(
             funding, senator.get("state", ""), senator.get("district"),
-            senator.get("fundingReference"),
+            senator.get("fundingReference"), senator.get("party"),
         ),
         "constituentAlignment": constituent,
         "fundingDiversity": _funding_diversity_core(funding),
@@ -982,6 +975,7 @@ def _small_donor_capacity_score(
 
 def _calc_funding_independence(
     funding: dict, state: str = "", district: int | None = None, reference: dict | None = None,
+    party: str | None = None,
 ) -> int:
     """
     Funding Independence Score (0-100, higher = better).
@@ -992,30 +986,40 @@ def _calc_funding_independence(
     chamber references each is scored against are measured every run
     (compute_funding_reference — AGENTS.md §3a):
 
-      1. PAC dependency (20/53): PAC share of contributions against the
-         share campaigns of the same size typically take in the chamber
-         (v6.22, _pac_size_fit): at that share it scores 50, with none 100,
-         at twice it 0. Per chamber because House members rely on PAC money
-         far more than senators, a structural difference, not a choice. Per
-         size because PAC checks are capped by law and individual money is
-         not, so a larger campaign dilutes the same PAC dollars to a smaller
-         share: scored against one chamber median, FI tracked campaign size
-         (r=+0.58 Senate, +0.15 House, 2026-09-28), and the PAC-cap
-         utilization factor meant to correct that (before v6.22) measured how
-         close each contributing PAC came to a one-election cap, over
-         totals spanning a primary and a general, rather than how much the
-         campaign depended on PACs. With the size fit, r=+0.05 / -0.06.
+      1. PAC dependency (20/53): the PAC share of contributions against
+         what the seat predicts (_pac_expectation): for a senator, the
+         share senators from states that size take (pac_population_fit,
+         small states have small donor pools); for a representative, the
+         House median, every district holding the same population. The
+         expectation scores 50, and one chamber p10-p90 spread above or
+         below it 0 or 100, in share points. Per chamber because House
+         members rely on PAC money far more than senators, a structural
+         difference. v6.22 compared the share with campaigns of the same
+         size, in proportion: campaign size is the share's denominator and
+         PAC dollars barely vary with it (r=0.17, Senate 2026-10-01), so the
+         fit measured PAC dollars, and a 3% expectation scored 6% as zero.
+         The share still falls with campaign size (r=-0.49 House), because
+         a larger campaign raised more of its money elsewhere: that is
+         lower dependence, not a distortion. It rises a little with seat
+         safety (r=+0.14 House; medians 27% within 3 points of even, 44%
+         beyond 15), money the campaign itself takes, unlike the outside
+         spending v6.13 removed for tracking competitiveness.
       2. Small-donor share (10/53): unitemized (<$200) contributions,
          against what the state's size predicts for senators (fitted each
          run, small_donor_baseline_fit) and against the House median for
          representatives (_small_donor_capacity_score).
-      3. Top-donor concentration (10/53): top-10 external donors as a share
-         of the itemized external donor pool (self-funding and affiliated
-         transfers excluded), scored against the chamber median with one
-         p10-p90 spread saturating.
-      4. Industry concentration (13/53): inverse HHI across classified
-         industries (_industry_concentration), shrunk toward a neutral 50
-         as less of the money is industry-classified.
+      3. Top-donor concentration (10/53): the top 10 outside donors' share
+         of all outside contributions (self-funding and affiliated transfers
+         excluded), ranked within the chamber (_rank_score, v6.26).
+      4. Industry concentration (13/53): the HHI of the industry-classified
+         money's mix (_industry_concentration), ranked within the chamber;
+         neutral 50 when too little is classified to measure it.
+
+    The donor list and industry breakdown come from the FEC's complete
+    detail since v6.26 (normalize_finance: every committee contribution
+    from the bulk file, itemized individual money by occupation through
+    transform/occupation_industry). Before, from 100 sampled receipts each,
+    under 1% of a large campaign's money was ever industry-classified.
 
     Removed in v6.13, each on measured evidence (FEC bulk data, 2020-2024
     incumbents with >$100K raised: 415 House / 86 Senate with seat lean;
@@ -1061,7 +1065,7 @@ def _calc_funding_independence(
     Parmigiani (2025, J. Public Econ. 243), which computes the same HHI per
     legislator.
     """
-    return _funding_independence_core(funding, state, district, reference)["score"]
+    return _funding_independence_core(funding, state, district, reference, party)["score"]
 
 
 def funding_share_base(funding: dict) -> float:
@@ -1076,103 +1080,148 @@ def funding_share_base(funding: dict) -> float:
 # distribution; below it the last persisted reference is kept.
 _MIN_FUNDING_REFERENCE_MEMBERS = 30
 
+# A party needs this many measured members for its own industry-mix
+# deciles; fewer (an independent) is ranked against the chamber. The same
+# floor as Legislative Effectiveness's within-party comparison (v6.25).
+_MIN_PARTY_COHORT = 10
 
-# A donor pool is large enough to measure top-10 concentration from.
-_CONCENTRATION_MIN_DONORS = 20
-_CONCENTRATION_MIN_POOL = 250_000
+
+# Industry money below this is too little to measure a mix from: the
+# least a member with any real itemized or PAC money has classified (the
+# same floor the top-donor pool used to need, v6.26).
+_INDUSTRY_MIN_CLASSIFIED = 250_000
+
+
+def _rank_score(value: float, deciles: list[float]) -> float:
+    """100 minus the chamber percentile of a share in [0, 1], interpolated
+    linearly through the chamber's nine measured deciles with 0 and 1 as
+    the ends: no concentration scores 100, the median member 50, total
+    concentration 0.
+
+    For the concentration components (v6.26). Both are shares bounded at
+    zero and skewed right, and on the median-and-spread scale they used
+    before, the best a member could reach was 50 + 50 x median / spread:
+    about 65 for a campaign with no big donors at all. A rank needs no
+    shape assumed."""
+    knots = [(0.0, 0.0)] + [(d, 10.0 * (i + 1)) for i, d in enumerate(deciles)] + [(1.0, 100.0)]
+    value = min(max(value, 0.0), 1.0)
+    for (x0, p0), (x1, p1) in zip(knots, knots[1:]):
+        if value <= x1:
+            percentile = p0 if x1 == x0 else p0 + (p1 - p0) * (value - x0) / (x1 - x0)
+            return round(100.0 - percentile, 1)
+    return 0.0
+
+
+def _deciles(values: list[float]) -> list[float]:
+    """Nine cut points, increasing (ties nudged apart so the interpolation
+    in _rank_score never divides by zero)."""
+    cuts = statistics.quantiles(values, n=10)
+    for i in range(1, len(cuts)):
+        cuts[i] = max(cuts[i], cuts[i - 1] + 1e-9)
+    return [round(c, 6) for c in cuts]
 
 
 def _top_donor_concentration(funding: dict) -> tuple[float | None, int, float]:
-    """(top-10 share of the itemized external donor pool, #external donors,
-    pool $) — the concentration is None when the pool is too small to
-    measure. Shared by the score and its population reference."""
+    """(the top 10 external donors' share of all external contributions,
+    #external donors listed, those contributions $). Shared by the score
+    and its population reference. None without a donor list or money.
+
+    A concentration ratio is taken over the whole market, fringe included:
+    the top ten's share of everything the campaign received, less the
+    candidate's own money and transfers from its own committees. Until
+    v6.26 the denominator was the itemized donors listed, a pool the
+    sampled receipts capped near 100 donors, so a campaign of small gifts
+    (a Senate campaign raising tens of millions in small gifts, 2026-10) read as too few donors
+    to measure and was scored a neutral 50 for needing almost no big
+    donors at all."""
+    donors = funding.get("topDonors") or []
     external = sorted(
-        (
-            d for d in funding.get("topDonors", [])
-            if d.get("type") not in ("CandidateAffiliated", "Self-Funded")
-        ),
+        (d for d in donors if d.get("type") not in ("CandidateAffiliated", "Self-Funded")),
         key=lambda d: d.get("total", 0),
         reverse=True,
     )
-    pool = sum(d.get("total", 0) for d in external)
-    if len(external) >= _CONCENTRATION_MIN_DONORS and pool >= _CONCENTRATION_MIN_POOL:
-        return sum(d.get("total", 0) for d in external[:10]) / pool, len(external), pool
-    return None, len(external), pool
+    own = sum(d.get("total", 0) for d in donors if d.get("type") == "Self-Funded")
+    pool = max(0.0, funding_share_base(funding) - own)
+    if not external or pool <= 0:
+        return None, len(external), pool
+    return min(1.0, sum(d.get("total", 0) for d in external[:10]) / pool), len(external), pool
 
 
-def _pac_size_fit(sized: list[tuple[float, float]]) -> dict | None:
-    """The PAC share a campaign of a given size typically takes, from one
-    chamber's (contributions, PAC dollars) pairs: log(PAC share) fitted
-    linearly on log(contributions) by least squares, the intercept then
-    moved by the median residual so a member at the fit is the typical
-    member of that size (scored 50), as the chamber median was before.
+def pac_population_fit(pairs: list[tuple[float, float]]) -> dict | None:
+    """The PAC share senators from a state of a given size typically take,
+    fitted from this run's senators: `pairs` are (state population in
+    millions, PAC share of contributions). share = intercept + slope *
+    ln(population) by least squares, with the residuals' p10 and p90 as the
+    scale. None below _MIN_FUNDING_REFERENCE_MEMBERS senators.
 
-    Fitted over members inside the chamber's 5th-95th percentile of
-    campaign size, and read back only inside that range (_expected_pac_
-    ratio clamps to it), so a campaign far smaller or larger than any the
-    fit saw — a first-term member with a partial record, a nine-figure
-    Senate race — is compared with the edge of the observed range, not an
-    extrapolation. Members with no PAC money have no log share and are left
-    out of the fit (they score 100 on the component either way).
-
-    Measured 2026-09-28 from the live breakdowns: slope -1.03 Senate
-    (n=91; PAC dollars barely grow with campaign size, so the share mostly
-    measures size), -0.48 House (n=390). See docs/methodology/member-score/
-    v6.22.md. None below _MIN_FUNDING_REFERENCE_MEMBERS usable members."""
-    logs = sorted(math.log(base) for base, _ in sized if base > 0)
-    if len(logs) < _MIN_FUNDING_REFERENCE_MEMBERS:
-        return None
-    ventiles = statistics.quantiles(logs, n=20)
-    lo, hi = ventiles[0], ventiles[-1]
-    points = [
-        (math.log(base), math.log(pac / base))
-        for base, pac in sized
-        if base > 0 and pac > 0 and lo <= math.log(base) <= hi
-    ]
+    Why population (v6.26). Small states have small donor pools, so their
+    senators take more of their money from PACs, a difference in the seat
+    rather than in the senator: on 2026-10-01, r = -0.49 between PAC share
+    and ln(state population). Population is fixed by the seat; campaign
+    size, which v6.22 fitted against, is not. It is the share's own
+    denominator, and PAC dollars barely vary with it (r = 0.17), so the
+    size fit (slope -0.98 in log-log) turned "share of the campaign from
+    PACs" back into "PAC dollars against the typical senator's", and with
+    the gap taken in proportion, 5% of a large campaign scored 17 for being
+    1.7 times a fitted 3% (Pearson 1897 and Kronmal 1993 on regressing a
+    ratio on its own denominator)."""
+    points = [(math.log(pop), share) for pop, share in pairs if pop and pop > 0]
     if len(points) < _MIN_FUNDING_REFERENCE_MEMBERS:
         return None
     xs = [x for x, _ in points]
-    mx = statistics.mean(xs)
-    my = statistics.mean(y for _, y in points)
+    mx, my = statistics.mean(xs), statistics.mean(y for _, y in points)
     sxx = sum((x - mx) ** 2 for x in xs)
     if sxx == 0:
         return None
     slope = sum((x - mx) * (y - my) for x, y in points) / sxx
     intercept = my - slope * mx
-    intercept += statistics.median(y - (intercept + slope * x) for x, y in points)
+    deciles = statistics.quantiles([y - (intercept + slope * x) for x, y in points], n=10)
     return {
-        "pac_size_n": len(points),
-        "pac_size_slope": round(slope, 6),
-        "pac_size_intercept": round(intercept, 6),
-        "pac_size_log_lo": round(lo, 6),
-        "pac_size_log_hi": round(hi, 6),
+        "n": len(points),
+        "intercept": round(intercept, 6),
+        "slope": round(slope, 6),
+        "resid_p10": round(deciles[0], 6),
+        "resid_p90": round(deciles[8], 6),
     }
 
 
-def _expected_pac_ratio(base: float, ref: dict) -> float | None:
-    """The PAC share typical of a campaign this size in the chamber
-    (_pac_size_fit), or None without a fit."""
-    keys = ("pac_size_slope", "pac_size_intercept", "pac_size_log_lo", "pac_size_log_hi")
-    if base <= 0 or any(ref.get(k) is None for k in keys):
-        return None
-    x = min(max(math.log(base), ref["pac_size_log_lo"]), ref["pac_size_log_hi"])
-    # A share is at most 1. The fit is a line in log space, re-measured every
-    # run, and a steep enough one would put the smallest campaigns above 100%,
-    # where a member funded wholly by PACs would score above the typical 50.
-    return min(1.0, math.exp(ref["pac_size_intercept"] + ref["pac_size_slope"] * x))
+def _pac_expectation(state: str, chamber: str, ref: dict) -> tuple[float, float, str] | None:
+    """(expected PAC share, scale, how it was set) for one member, or None
+    without a chamber reference. Senators: what their state's size predicts
+    (pac_population_fit). Representatives: the House median, since every
+    district is apportioned the same population. The scale is the
+    chamber's p10-p90 spread around that expectation, in share points."""
+    fit = ref.get("pac_population_fit")
+    pop = _state_population().get(state) if chamber == "senate" and fit else None
+    if pop:
+        expected = max(0.0, fit["intercept"] + fit["slope"] * math.log(pop))
+        return expected, fit["resid_p90"] - fit["resid_p10"], f"senators from states this size typically take {expected:.0%}"
+    median, p10, p90 = ref.get("pac_ratio_median"), ref.get("pac_ratio_p10"), ref.get("pac_ratio_p90")
+    if median is not None and p10 is not None and p90 is not None:
+        return median, p90 - p10, f"the chamber's median member takes {median:.0%}"
+    return None
 
 
-def compute_funding_reference(fundings: list[dict], states: list[str] | None = None) -> dict | None:
+def compute_funding_reference(
+    fundings: list[dict], states: list[str] | None = None, parties: list[str] | None = None,
+) -> dict | None:
     """One chamber's Funding Independence reference from this run's
     members' funding dicts:
 
     - pac_ratio_median: median PAC share of contributions (the raw ratio,
       before the outside-spending adjustment — what scripts/audit_pac_ratio.py
       measured when the multipliers were hand-typed);
-    - pac_size_*: the PAC share campaigns of each size typically take
-      (_pac_size_fit), which the PAC-dependency component is scored against;
-    - concentration_p10 / _median / _p90: top-10 donor concentration among
-      members with a measurable pool;
+    - pac_ratio_p10 / _p90: the spread of PAC shares, the House's scale;
+    - pac_population_fit: the PAC share a state's size predicts for its
+      senators (pac_population_fit), when `states` is given;
+    - top10_share_deciles / _median (v6.26; concentration_* before, on a
+      different scale, so an older reference is never read as one): the
+      top 10 donors' share of outside contributions
+      (_top_donor_concentration), ranked by _rank_score;
+    - industry_hhi_deciles / _median: the HHI of the industry money's mix
+      among members with enough of it classified (industry_hhi);
+    - industry_hhi_by_party: the same per party, when `parties` is given,
+      for each party with at least _MIN_PARTY_COHORT measured members;
     - small_donor_fit: the Senate's small-donor share by state population
       (small_donor_baseline_fit), when `states` — each member's, aligned
       with `fundings` — is given. The House is compared with its own
@@ -1181,7 +1230,8 @@ def compute_funding_reference(fundings: list[dict], states: list[str] | None = N
     None when too few members have funding to measure the PAC share; the
     concentration stats are omitted (keep the last persisted ones) when too
     few members have a measurable pool."""
-    ratios, sized, concentrations, small, by_population = [], [], [], [], []
+    ratios, concentrations, small, by_population, pac_by_population, hhis = [], [], [], [], [], []
+    hhis_by_party: dict[str, list[float]] = {}
     population = _state_population() if states is not None else {}
     for i, f in enumerate(fundings):
         f = f or {}
@@ -1189,40 +1239,54 @@ def compute_funding_reference(fundings: list[dict], states: list[str] | None = N
         if base > 0:
             pac = f.get("totalFromPACs") or 0
             ratios.append(min(pac / base, 1.0))
-            sized.append((base, pac))
             small.append(f.get("smallDonorPercentage") or 0)
             pop = population.get(states[i]) if states is not None and i < len(states) else None
             if pop:
                 by_population.append((pop, f.get("smallDonorPercentage") or 0))
+                pac_by_population.append((pop, min(pac / base, 1.0)))
         c, _, _ = _top_donor_concentration(f)
         if c is not None:
             concentrations.append(c)
+        h, _, _ = industry_hhi(f)
+        if h is not None:
+            hhis.append(h)
+            if parties is not None and i < len(parties) and parties[i]:
+                hhis_by_party.setdefault(parties[i], []).append(h)
     if len(ratios) < _MIN_FUNDING_REFERENCE_MEMBERS:
         return None
     ref = {
         "n": len(ratios),
         "pac_ratio_median": round(statistics.median(ratios), 6),
         "pac_ratio_mean": round(statistics.mean(ratios), 6),
-        **(_pac_size_fit(sized) or {}),
+        "pac_ratio_p10": round(statistics.quantiles(ratios, n=10)[0], 6),
+        "pac_ratio_p90": round(statistics.quantiles(ratios, n=10)[8], 6),
         "small_donor_p10": round(statistics.quantiles(small, n=10)[0], 4),
         "small_donor_median": round(statistics.median(small), 4),
         "small_donor_p90": round(statistics.quantiles(small, n=10)[8], 4),
     }
     if states is not None and (fit := small_donor_baseline_fit(by_population)):
         ref["small_donor_fit"] = fit
-    if len(concentrations) >= _MIN_FUNDING_REFERENCE_MEMBERS:
-        deciles = statistics.quantiles(concentrations, n=10)
-        ref.update({
-            "concentration_n": len(concentrations),
-            "concentration_p10": round(deciles[0], 6),
-            "concentration_median": round(statistics.median(concentrations), 6),
-            "concentration_p90": round(deciles[8], 6),
-        })
+    if states is not None and (fit := pac_population_fit(pac_by_population)):
+        ref["pac_population_fit"] = fit
+    by_party = {
+        party: {"deciles": _deciles(values), "median": round(statistics.median(values), 6), "n": len(values)}
+        for party, values in sorted(hhis_by_party.items()) if len(values) >= _MIN_PARTY_COHORT
+    }
+    if by_party:
+        ref["industry_hhi_by_party"] = by_party
+    for key, values in (("top10_share", concentrations), ("industry_hhi", hhis)):
+        if len(values) >= _MIN_FUNDING_REFERENCE_MEMBERS:
+            ref.update({
+                f"{key}_n": len(values),
+                f"{key}_deciles": _deciles(values),
+                f"{key}_median": round(statistics.median(values), 6),
+            })
     return ref
 
 
 def _funding_independence_core(
     funding: dict, state: str = "", district: int | None = None, reference: dict | None = None,
+    party: str | None = None,
 ) -> dict:
     """Same math as _calc_funding_independence, returning every intermediate
     value alongside the final score. Single implementation — _calc_funding_
@@ -1237,36 +1301,20 @@ def _funding_independence_core(
     pac_total = funding.get("totalFromPACs", 0)
     pac_ratio = pac_total / total_raised
 
-    # Scored against the share campaigns of the member's size typically take
-    # in their chamber (v6.22, _pac_size_fit, measured every run): the member
-    # at that share scores 50, none scores 100, twice it scores 0. PAC
-    # checks are capped by law and individual money is not, so a larger
-    # campaign dilutes the same PAC dollars to a smaller share. Scored
-    # against one chamber median, share tracked size (FI vs log campaign
-    # size r=+0.58 Senate on 2026-09-28 data), and the PAC-cap utilization
-    # factor meant to correct it measured how hard each contributing PAC
-    # gave, not how much the campaign depended on PACs, against a
-    # one-election cap applied to totals that span a primary and a general.
-    # Before a chamber has a fit, its median share is the reference, as
-    # before v6.22.
+    # Scored against what the seat predicts (v6.26, _pac_expectation): the
+    # expected share scores 50 and one chamber p10-p90 spread above or below
+    # it saturates at 0 or 100, in plain share points. v6.22 compared the
+    # share with campaigns of the same size, in proportion (twice the
+    # expectation scored 0), which a 3% expectation turned into 0 at 6%.
     chamber = _chamber_of(district)
     ref = {
         **(FUNDING_REFERENCE.load().get(chamber) or {}),
         **((reference or {}).get(chamber) or {}),
     }
-    expected = _expected_pac_ratio(total_raised, ref)
-    if expected:
-        ratio_score = max(0.0, (1.0 - pac_ratio * (0.5 / expected))) * 100
-        lo, hi = (math.exp(ref["pac_size_log_lo"]), math.exp(ref["pac_size_log_hi"]))
-        if lo <= total_raised <= hi:
-            reference_detail = f"campaigns this size in the chamber typically take {expected:.0%}"
-        else:
-            # Outside the fitted range the edge stands in; say which size.
-            edge = lo if total_raised < lo else hi
-            reference_detail = (
-                f"the chamber's {'smallest' if edge == lo else 'largest'} typical campaigns"
-                f" (${edge:,.0f}) take {expected:.0%}"
-            )
+    expectation = _pac_expectation(state, chamber, ref)
+    if expectation and expectation[1] > 0:
+        expected, spread, reference_detail = expectation
+        ratio_score = max(0.0, min(100.0, 50.0 - 50.0 * (pac_ratio - expected) / spread))
     elif ref.get("pac_ratio_median"):
         ratio_score = max(0.0, (1.0 - pac_ratio * (0.5 / ref["pac_ratio_median"]))) * 100
         reference_detail = f"chamber median {ref['pac_ratio_median']:.0%}"
@@ -1282,29 +1330,19 @@ def _funding_independence_core(
 
     # Component 3: relative top-donor concentration (25% weight)
     concentration, n_external, pool = _top_donor_concentration(funding)
-    c_median = ref.get("concentration_median")
-    c_spread = (ref.get("concentration_p90") or 0) - (ref.get("concentration_p10") or 0)
-    if concentration is not None and c_median is not None and c_spread > 0:
-        # Chamber-relative: the median member's concentration scores 50,
-        # and one p10-p90 spread above/below saturates at 0/100 — measured
-        # each run (compute_funding_reference). The previous fixed anchors
-        # (0.15 -> 100, 0.40 -> 0) were fitted by hand around a 2026-07
-        # snapshot of both chambers pooled (median 27.8%); a still-earlier
-        # set had drifted until the typical member scored ~90 regardless of
-        # real concentration.
-        concentration_score = max(0.0, min(100.0, 50.0 - 50.0 * (concentration - c_median) / c_spread))
+    c_deciles, c_median = ref.get("top10_share_deciles"), ref.get("top10_share_median")
+    if concentration is not None and c_deciles:
+        # Ranked within the chamber (_rank_score): no big donors scores
+        # 100, the median member 50.
+        concentration_score = _rank_score(concentration, c_deciles)
         concentration_detail = (
-            f"top 10 of {n_external} external donors = {concentration:.0%} "
-            f"of the ${pool:,.0f} itemized external donor pool "
-            f"(chamber median {c_median:.0%})"
+            f"the top 10 donors gave {concentration:.1%} of ${pool:,.0f} in outside contributions "
+            f"(chamber median {c_median:.1%})"
         )
     else:
-        # Too few itemized external donors to measure concentration.
+        # No donor list, or no chamber reference yet.
         concentration_score = 50.0
-        concentration_detail = (
-            f"only {n_external} itemized external donors (${pool:,.0f} pool) "
-            "— too few to measure concentration, neutral 50"
-        )
+        concentration_detail = "no donor list or chamber reference to compare with, neutral 50"
 
     # Component 4: industry concentration (folded in from the former
     # Funding Diversity dimension, v6.5). Money too little of which is
@@ -1312,7 +1350,7 @@ def _funding_independence_core(
     # grassroots-scaled fallback, which would count the small-donor share
     # (component 2) a second time.
     industry_concentration_score, industry_concentration_detail = _industry_concentration(
-        funding, total_raised, missing_score=50.0,
+        funding, total_raised, missing_score=50.0, reference=ref, party=party,
     )
 
     score = clamp(
@@ -1549,8 +1587,8 @@ def _signed_state_alignment(
     House members are measured against their DISTRICT's lean when the
     per-district table has it; state lean is the senator measure and the
     House fallback. For Independents, uses effective_party (inferred
-    caucus) to determine alignment. Sanders (I-VT, caucuses D) gets the
-    D lean for Vermont.
+    caucus) to determine alignment: an Independent who caucuses with
+    the Democrats is measured against the D lean.
     """
     pvi = _seat_pvi(state, district)
     eval_party = effective_party or party
@@ -2305,7 +2343,82 @@ def _calc_funding_diversity(funding: dict) -> int:
     return _funding_diversity_core(funding)["score"]
 
 
+def industry_hhi(funding: dict) -> tuple[float | None, int, float]:
+    """(HHI of the industry-classified money's mix, #industries, classified $)
+    — None below _INDUSTRY_MIN_CLASSIFIED. Shared by the score and its
+    population reference."""
+    industries = [
+        ind for ind in funding.get("industryBreakdown") or []
+        if ind.get("industry") not in NON_INDUSTRY_CODES and (ind.get("total") or 0) > 0
+    ]
+    known = sum(ind["total"] for ind in industries)
+    if known < _INDUSTRY_MIN_CLASSIFIED:
+        return None, len(industries), known
+    return sum((ind["total"] / known) ** 2 for ind in industries), len(industries), known
+
+
 def _industry_concentration(
+    funding: dict, total_raised: float, missing_score: float, missing_label: str = "neutral",
+    reference: dict | None = None, party: str | None = None,
+) -> tuple[float, str]:
+    """(score, detail) for industry concentration: how evenly the member's
+    industry money spreads across industries, by the HHI of its mix
+    (Parmigiani 2025 computes the same HHI per legislator). Small donors,
+    unattributed individuals and party money are not industry money and
+    are left out of the mix.
+
+    Ranked within the member's party in the chamber (_rank_score over the
+    party's deciles compute_funding_reference measures each run,
+    industry_hhi_by_party): the party's median member scores 50. One
+    party's donors' occupations fall in fewer, broader industries than the
+    other's, so a chamber-wide rank scored the party's donor base (Senate
+    means 27.6 D, 69.7 R, 2026-10-01); within party both average 50, as
+    Legislative Effectiveness's coalition component compares (v6.25). A
+    party with fewer than _MIN_PARTY_COHORT measured members is ranked
+    against the chamber; with no reference at all, `missing_score`.
+
+    The shares are of the classified money, not of everything raised.
+    Taken over everything raised (as top-donor concentration's are), the
+    HHI tracked how much of a member's money the classifier could place
+    (r = -0.91 with the classified share, Senate, 2026-10-01), and that is
+    mostly how many itemized donors' stated occupations resolve to an
+    industry: a median 24% of a senator's itemized individual money, 11%
+    to 39% p10 to p90. The mix of the money that is placed estimates the
+    composition whatever the coverage; how much money is industry money is
+    the PAC and small-donor components' question.
+
+    Unmeasurable below _INDUSTRY_MIN_CLASSIFIED of classified money (score
+    `missing_score`). Until v6.26 the score was also pulled toward
+    `missing_score` in proportion to the share of ALL funding classified:
+    that read a campaign of small gifts, whose industry money is a small
+    share of the total however much of it there is, as an unreliable
+    estimate, and the small-donor share it reflects is scored by its own
+    component. How far to trust an HHI depends on the evidence behind it,
+    which is the classified money itself."""
+    hhi, n, known = industry_hhi(funding)
+    if hhi is None:
+        return missing_score, (
+            f"${known:,.0f} of industry-classified money, too little to measure its mix, "
+            f"{missing_label} {missing_score:.0f}"
+        )
+    share = known / total_raised if total_raised else 0.0
+    ref = reference or {}
+    cohort = (ref.get("industry_hhi_by_party") or {}).get(party or "")
+    if cohort:
+        score = _rank_score(hhi, cohort["deciles"])
+        versus = f"{party} median {cohort['median']:.3f}"
+    elif ref.get("industry_hhi_deciles"):
+        score = _rank_score(hhi, ref["industry_hhi_deciles"])
+        versus = f"chamber median {ref['industry_hhi_median']:.3f}"
+    else:
+        return missing_score, f"HHI {hhi:.3f}, no chamber reference to compare with yet, {missing_label} {missing_score:.0f}"
+    return score, (
+        f"HHI {hhi:.3f} across {n} industries ({versus}); ${known:,.0f} classified, "
+        f"{share:.0%} of contributions"
+    )
+
+
+def _industry_mix_diversity(
     funding: dict, total_raised: float, missing_score: float, missing_label: str = "neutral",
 ) -> tuple[float, str]:
     """(score, detail) for industry concentration: inverse HHI across
@@ -2391,7 +2504,7 @@ def _funding_diversity_core(funding: dict) -> dict:
     # thin a slice to measure HHI on. Previously a flat step (65 if
     # small_frac > 0.3 else 50) regardless of how far past 0.3 small_frac
     # actually was — so a senator overwhelmingly funded by small donors
-    # (Bernie Sanders: 63% small-donor, 0.28% classified-industry money)
+    # (one 2026-07 senator: 63% small-donor, 0.28% classified-industry money)
     # got exactly the same 65 as one just barely over the threshold.
     # That silently capped Funding Diversity's population-wide maximum at
     # 69 (2026-07 audit: 0/100 senators break 69, the ceiling this flat
@@ -2404,7 +2517,7 @@ def _funding_diversity_core(funding: dict) -> dict:
     # at that point, not a discontinuous jump) lets that reward grow all
     # the way to 100 for a hypothetical fully-small-dollar campaign.
     grassroots_neutral = 50 + small_frac * 50
-    concentration_score, concentration_detail = _industry_concentration(
+    concentration_score, concentration_detail = _industry_mix_diversity(
         funding, total_raised, missing_score=grassroots_neutral,
         missing_label=f"grassroots-scaled neutral ({small_frac:.0%} small-donor share)",
     )

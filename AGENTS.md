@@ -447,7 +447,8 @@ The correct pattern, established by `_district_pvi()` /
    `/data/les_reference.json` for the API's breakdowns, with
    `app/data/les_reference.json` (`scripts/calibrate_les_credit_scale.py`)
    as the pre-first-run fallback. Funding Independence's references
-   (the chamber's PAC-share size fit, v6.22, and the Senate's small-donor
+   (the Senate's PAC share by state population and the chamber spreads,
+   v6.26, the top-donor and industry-concentration deciles, and the Senate's small-donor
    baseline by state population, v6.24) work the same way (`compute_funding_reference`,
    `funding_reference.json`, `scripts/audit_pac_ratio.py`), and so does
    Constituent Alignment's per-party expected break rate by seat lean

@@ -15,12 +15,14 @@ import logging
 
 from app.pipeline.fetch.fec import committee_id_of, is_political_committee, select_recent_elections
 from app.pipeline.transform.candidate_names import is_candidate_self_donor
-from app.pipeline.transform.industry_classifier import classify_with_learning
+from app.pipeline.transform.industry_classifier import classify_with_learning, primed_industry_lookups
+from app.pipeline.transform.occupation_industry import industry_of_occupation
 from app.pipeline.analyze.donor_classifier_ai import (
     classify_donor_type_semantic,
     classify_employer_skips_batch,
     classify_transfer_memos_batch,
     is_skip_entity,
+    skip_entities_batch,
 )
 
 logger = logging.getLogger(__name__)
@@ -101,6 +103,7 @@ def normalize_finance(
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
     committee_meta_map: dict[str, dict] | None = None,
+    detail: dict | None = None,
 ) -> dict:
     """Normalize FEC financial data into the Senator funding shape.
 
@@ -118,6 +121,12 @@ def normalize_finance(
             party, candidate, joint-fundraising or leadership committee is
             political money (industry POLITICAL) whatever its name reads
             like, and a PAC's connected organization names who sponsors it.
+        detail: the complete contribution detail (fetch_contribution_detail):
+            {"pacs": {committee_id: dollars} from the FEC's bulk file,
+            "committees": the committee master for those ids, "occupations"
+            and "employers": the FEC's itemized totals}. Each part that is
+            None (its source couldn't be read) falls back to the sampled
+            receipts above, which cover a sliver of a large campaign.
 
     Returns:
         Normalized funding object matching Senator.funding type.
@@ -141,29 +150,40 @@ def normalize_finance(
 
     # Build top donors: PACs first, then employer-grouped individuals
     candidate_name = (candidate or {}).get("name", "")
-    top_donors = build_top_donors(
-        pac_receipts,
-        individual_receipts,
-        aggregated_contributors,
-        candidate_name,
-        ai_classifications=ai_classifications,
-        db_session=db_session,
-        committee_meta_map=committee_meta_map,
-    )
+    detail = detail or {}
+    committees = detail.get("committees") or {}
+    # One batch encode for the names the industry classifier would otherwise
+    # encode one at a time, in both passes below.
+    with primed_industry_lookups(
+        [committee_donor_name(committees.get(cid), cid) for cid in detail.get("pacs") or {}]
+        + [(r.get("employer") or "").upper().strip() for r in detail.get("employers") or []],
+        db_session,
+    ):
+        top_donors = build_top_donors(
+            pac_receipts,
+            individual_receipts,
+            aggregated_contributors,
+            candidate_name,
+            ai_classifications=ai_classifications,
+            db_session=db_session,
+            committee_meta_map=committee_meta_map,
+            detail=detail,
+        )
 
-    # Build industry breakdown: individuals get explicit buckets, PACs get industry-classified
-    industry_breakdown = _build_industry_breakdown(
-        pac_receipts=pac_receipts,
-        individual_receipts=individual_receipts,
-        aggregated_contributors=aggregated_contributors,
-        small_individual_total=small_individual,
-        large_individual_total=large_individual,
-        contribution_base=contribution_base,
-        ai_classifications=ai_classifications,
-        db_session=db_session,
-        candidate_name=candidate_name,
-        committee_meta_map=committee_meta_map,
-    )
+        # Build industry breakdown: individuals get explicit buckets, PACs get industry-classified
+        industry_breakdown = _build_industry_breakdown(
+            pac_receipts=pac_receipts,
+            individual_receipts=individual_receipts,
+            aggregated_contributors=aggregated_contributors,
+            small_individual_total=small_individual,
+            large_individual_total=large_individual,
+            contribution_base=contribution_base,
+            ai_classifications=ai_classifications,
+            db_session=db_session,
+            candidate_name=candidate_name,
+            committee_meta_map=committee_meta_map,
+            detail=detail,
+        )
 
     computed_pac_total = sum(
         d["total"] for d in top_donors
@@ -191,6 +211,22 @@ def normalize_finance(
     }
 
 
+def committee_donor_name(meta: dict | None, committee_id: str) -> str:
+    """How a giving committee is listed and classified: its sponsor when it
+    is an organization's fund (the industry is the sponsor's, and the
+    lobbying registry lists the sponsor), otherwise its own name."""
+    meta = meta or {}
+    return meta.get("connectedOrg") or meta.get("name") or committee_id
+
+
+def committee_donor_type(meta: dict | None) -> str:
+    """A giving committee's donor type from its FEC registration (tier 1): a
+    party, candidate, joint-fundraising or leadership committee is
+    political, any other committee a PAC. Every giver in the bulk file is a
+    committee, so no name is read to decide it."""
+    return "Party/Ideological" if is_political_committee(meta) else "PAC"
+
+
 def build_top_donors(
     pac_receipts: list[dict],
     individual_receipts: list[dict],
@@ -199,6 +235,7 @@ def build_top_donors(
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
     committee_meta_map: dict[str, dict] | None = None,
+    detail: dict | None = None,
 ) -> list[dict]:
     """Build top donors list prioritizing PAC/corporate money.
 
@@ -211,10 +248,19 @@ def build_top_donors(
     for each PAC that appears in pac_receipts. The type ("Q"=Qualified/
     multicandidate, "N"=Nonqualified, ...) is reported on the donor, and
     type and designation decide the political-committee rule.
+
+    detail (normalize_finance): when its "pacs" are known, every committee
+    that gave is listed from the FEC's bulk file and the sampled PAC
+    receipts supply only the candidate's own contributions; when its
+    "employers" are known, the employee side comes from the FEC's employer
+    totals instead of the 100 largest receipts.
     """
     donor_map: dict[str, dict] = {}
     ai_classifications = ai_classifications or {}
     committee_meta_map = committee_meta_map or {}
+    detail = detail or {}
+    pacs = detail.get("pacs")
+    employers = detail.get("employers")
 
     # Pre-compute embedding-based skip sets for employers and memo texts.
     # This replaces hardcoded SKIP_EMPLOYERS and keyword-based memo filtering
@@ -257,9 +303,37 @@ def build_top_donors(
         dtype, industry = _classify_fallback(name, name_upper)
         return dtype, industry, False
 
-    # 1. PAC/committee contributions
+    # 1a. Every committee that gave, from the bulk file.
+    if pacs is not None:
+        committees = detail.get("committees") or {}
+        pac_skips = skip_entities_batch([committee_donor_name(committees.get(cid), cid).upper().strip() for cid in pacs])
+        for cid, amount in pacs.items():
+            meta = committees.get(cid)
+            name = committee_donor_name(meta, cid)
+            key = name.upper().strip()
+            ai_class = ai_classifications.get(key) or {}
+            if ai_class.get("skip") or key in pac_skips:
+                continue
+            political = is_political_committee(meta)
+            industry = "POLITICAL" if political else (
+                ai_class.get("industry") or classify_with_learning(name, db_session)[0]
+            )
+            existing = donor_map.setdefault(key, {
+                "name": name, "total": 0, "type": committee_donor_type(meta), "industry": industry,
+            })
+            existing["total"] += amount
+            existing["isCommittee"] = True
+            if meta and meta.get("type") is not None:
+                existing["committeeType"] = meta["type"]
+            if meta and meta.get("connectedOrg"):
+                existing["connectedOrg"] = meta["connectedOrg"]
+
+    # 1b. PAC/committee receipts: the sampled rows, or with the bulk file in
+    # hand only the candidate's own contributions it doesn't carry.
     for r in pac_receipts:
         if not _is_contribution_row(r):
+            continue
+        if pacs is not None and not _is_candidate_line(r):
             continue
 
         name = r.get("contributor_name") or ""
@@ -311,8 +385,26 @@ def build_top_donors(
                 existing["industry"] = "POLITICAL"
         donor_map[name_upper] = existing
 
-    # 2. Individual contributions grouped by employer
-    for r in individual_receipts:
+    # 2a. Employees, from the FEC's employer totals.
+    if employers is not None:
+        names = [r["employer"] for r in employers if r.get("employer")]
+        skips = classify_employer_skips_batch(names) | skip_entities_batch([n.upper().strip() for n in names])
+        for r in employers:
+            employer = (r.get("employer") or "").upper().strip()
+            if not employer or employer in skips:
+                continue
+            ai_class = ai_classifications.get(employer) or {}
+            if ai_class.get("skip"):
+                continue
+            industry = ai_class.get("industry") or classify_with_learning(employer, db_session)[0]
+            existing = donor_map.setdefault(employer, {
+                "name": employer, "total": 0, "type": ai_class.get("type", "Org/Employees"), "industry": industry,
+            })
+            existing["total"] += r.get("total") or 0
+
+    # 2b. Individual contributions grouped by employer (the sampled rows,
+    # when the employer totals couldn't be read)
+    for r in individual_receipts if employers is None else []:
         if not _is_contribution_row(r):
             continue
         employer = (r.get("contributor_employer") or "").upper().strip()
@@ -409,15 +501,29 @@ def _build_industry_breakdown(
     db_session=None,
     candidate_name: str = "",
     committee_meta_map: dict[str, dict] | None = None,
+    detail: dict | None = None,
 ) -> list[dict]:
     """Build a funding breakdown showing all sources by industry.
 
-    Uses AI classifications (embedding-based) for industry. Falls back
-    to the embedding classifier for entities without AI results.
+    PAC money: every committee that gave (detail["pacs"], the FEC's bulk
+    file), political by the FEC's registration or else the sponsor's
+    industry. Itemized individual money: by the donor's stated occupation
+    (detail["occupations"], transform/occupation_industry); an occupation
+    the data gives no industry (a generic role, retired, not employed) stays
+    in LARGE_INDIVIDUAL. Each part falls back to the sampled receipts when
+    its source couldn't be read. Until 2026-10 only the samples existed, and
+    under 1% of a large campaign's money was ever industry-classified.
     """
     industry_totals: dict[str, dict] = {}
     ai_classifications = ai_classifications or {}
     counted_donors: set[str] = set()
+    detail = detail or {}
+    pacs = detail.get("pacs")
+    occupations = detail.get("occupations")
+
+    def _add(industry: str, amount: float) -> None:
+        existing = industry_totals.setdefault(industry, {"industry": industry, "name": industry, "total": 0})
+        existing["total"] += amount
 
     if small_individual_total > 0:
         industry_totals["SMALL_DONORS"] = {
@@ -455,7 +561,18 @@ def _build_industry_breakdown(
             return True
         return False
 
-    for r in pac_receipts:
+    if pacs is not None:
+        committees = detail.get("committees") or {}
+        for cid, amount in pacs.items():
+            meta = committees.get(cid)
+            name = committee_donor_name(meta, cid)
+            key = name.upper().strip()
+            if _should_skip_for_breakdown(key):
+                continue
+            _add("POLITICAL" if is_political_committee(meta) else _get_industry(name, key), amount)
+            counted_donors.add(key)
+
+    for r in pac_receipts if pacs is None else []:
         if not _is_contribution_row(r) or _is_candidate_line(r):
             continue
         org = r.get("contributor_name") or r.get("contributor_organization_name") or ""
@@ -481,8 +598,22 @@ def _build_industry_breakdown(
         industry_totals[industry] = existing
         counted_donors.add(org_upper)
 
+    classified_individual_total = 0.0
+    if occupations is not None:
+        stated = sum(r.get("total") or 0 for r in occupations)
+        # The occupation totals are the FEC's own sum of the same itemized
+        # contributions large_individual_total counts; scaled down only if
+        # they ever run over it, so no dollar is counted twice.
+        scale = min(1.0, large_individual_total / stated) if stated > 0 else 0.0
+        for r in occupations:
+            industry = industry_of_occupation(r.get("occupation"))
+            if industry:
+                amount = (r.get("total") or 0) * scale
+                _add(industry, amount)
+                classified_individual_total += amount
+
     employer_totals: dict[str, float] = {}
-    for r in individual_receipts:
+    for r in individual_receipts if occupations is None else []:
         if not _is_contribution_row(r):
             continue
         employer = (r.get("contributor_employer") or "").upper().strip()
@@ -494,7 +625,6 @@ def _build_industry_breakdown(
             r.get("contribution_receipt_amount", 0) or 0
         )
 
-    classified_individual_total = 0.0
     for employer, amount in employer_totals.items():
         industry = _get_industry(employer, employer)
 
@@ -511,7 +641,9 @@ def _build_industry_breakdown(
             "total": unclassified_large,
         }
 
-    for c in aggregated_contributors:
+    # The top contributors by name fill in only for the sampled path: with
+    # the complete detail every dollar is already counted above.
+    for c in aggregated_contributors if pacs is None and occupations is None else []:
         name = c.get("contributor_name") or "Unknown"
         if not name or name == "Unknown":
             continue
