@@ -906,6 +906,7 @@ async def run_house_pipeline() -> dict:
             # median needs every rep's funding, which the pass above fetches.
             funding_reference = live_funding_reference(
                 "house", [r.get("funding") or {} for r, _ in prepared_reps],
+                parties=[r.get("party", "") for r, _ in prepared_reps],
             )
             constituent_reference, constituent_reference_measured = live_constituent_reference_measured(
                 "house", [r for r, _ in prepared_reps],

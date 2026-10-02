@@ -244,7 +244,9 @@ def attach_live_references(cur, senators, payloads) -> bool:
         (persisted_les.get("senate") or {}).get("advancement_rates"),
     )
     persisted_funding = FUNDING_REFERENCE.load()
-    funding = compute_funding_reference([p["funding"] for p in current], [p["state"] for p in current])
+    funding = compute_funding_reference(
+        [p["funding"] for p in current], [p["state"] for p in current], [p.get("party") for p in current],
+    )
     persisted_ca = CONSTITUENT_REFERENCE.load()
     ca = compute_constituent_reference(constituent_reference_inputs(current))
 

@@ -653,7 +653,7 @@ def calculate_scores(senator: dict) -> dict:
     return {
         "fundingIndependence": _calc_funding_independence(
             funding, senator.get("state", ""), senator.get("district"),
-            senator.get("fundingReference"),
+            senator.get("fundingReference"), senator.get("party"),
         ),
         "promisePersistence": _calc_promise_persistence(
             voting_record,
@@ -719,7 +719,7 @@ def explain_scores(senator: dict) -> dict:
     return {
         "fundingIndependence": _funding_independence_core(
             funding, senator.get("state", ""), senator.get("district"),
-            senator.get("fundingReference"),
+            senator.get("fundingReference"), senator.get("party"),
         ),
         "constituentAlignment": constituent,
         "fundingDiversity": _funding_diversity_core(funding),
@@ -975,6 +975,7 @@ def _small_donor_capacity_score(
 
 def _calc_funding_independence(
     funding: dict, state: str = "", district: int | None = None, reference: dict | None = None,
+    party: str | None = None,
 ) -> int:
     """
     Funding Independence Score (0-100, higher = better).
@@ -1064,7 +1065,7 @@ def _calc_funding_independence(
     Parmigiani (2025, J. Public Econ. 243), which computes the same HHI per
     legislator.
     """
-    return _funding_independence_core(funding, state, district, reference)["score"]
+    return _funding_independence_core(funding, state, district, reference, party)["score"]
 
 
 def funding_share_base(funding: dict) -> float:
@@ -1078,6 +1079,11 @@ def funding_share_base(funding: dict) -> float:
 # Fewest funded members that still describe a chamber's PAC-share
 # distribution; below it the last persisted reference is kept.
 _MIN_FUNDING_REFERENCE_MEMBERS = 30
+
+# A party needs this many measured members for its own industry-mix
+# deciles; fewer (an independent) is ranked against the chamber. The same
+# floor as Legislative Effectiveness's within-party comparison (v6.25).
+_MIN_PARTY_COHORT = 10
 
 
 # Industry money below this is too little to measure a mix from: the
@@ -1196,7 +1202,9 @@ def _pac_expectation(state: str, chamber: str, ref: dict) -> tuple[float, float,
     return None
 
 
-def compute_funding_reference(fundings: list[dict], states: list[str] | None = None) -> dict | None:
+def compute_funding_reference(
+    fundings: list[dict], states: list[str] | None = None, parties: list[str] | None = None,
+) -> dict | None:
     """One chamber's Funding Independence reference from this run's
     members' funding dicts:
 
@@ -1212,6 +1220,8 @@ def compute_funding_reference(fundings: list[dict], states: list[str] | None = N
       (_top_donor_concentration), ranked by _rank_score;
     - industry_hhi_deciles / _median: the HHI of the industry money's mix
       among members with enough of it classified (industry_hhi);
+    - industry_hhi_by_party: the same per party, when `parties` is given,
+      for each party with at least _MIN_PARTY_COHORT measured members;
     - small_donor_fit: the Senate's small-donor share by state population
       (small_donor_baseline_fit), when `states` — each member's, aligned
       with `fundings` — is given. The House is compared with its own
@@ -1221,6 +1231,7 @@ def compute_funding_reference(fundings: list[dict], states: list[str] | None = N
     concentration stats are omitted (keep the last persisted ones) when too
     few members have a measurable pool."""
     ratios, concentrations, small, by_population, pac_by_population, hhis = [], [], [], [], [], []
+    hhis_by_party: dict[str, list[float]] = {}
     population = _state_population() if states is not None else {}
     for i, f in enumerate(fundings):
         f = f or {}
@@ -1239,6 +1250,8 @@ def compute_funding_reference(fundings: list[dict], states: list[str] | None = N
         h, _, _ = industry_hhi(f)
         if h is not None:
             hhis.append(h)
+            if parties is not None and i < len(parties) and parties[i]:
+                hhis_by_party.setdefault(parties[i], []).append(h)
     if len(ratios) < _MIN_FUNDING_REFERENCE_MEMBERS:
         return None
     ref = {
@@ -1255,6 +1268,12 @@ def compute_funding_reference(fundings: list[dict], states: list[str] | None = N
         ref["small_donor_fit"] = fit
     if states is not None and (fit := pac_population_fit(pac_by_population)):
         ref["pac_population_fit"] = fit
+    by_party = {
+        party: {"deciles": _deciles(values), "median": round(statistics.median(values), 6), "n": len(values)}
+        for party, values in sorted(hhis_by_party.items()) if len(values) >= _MIN_PARTY_COHORT
+    }
+    if by_party:
+        ref["industry_hhi_by_party"] = by_party
     for key, values in (("top10_share", concentrations), ("industry_hhi", hhis)):
         if len(values) >= _MIN_FUNDING_REFERENCE_MEMBERS:
             ref.update({
@@ -1267,6 +1286,7 @@ def compute_funding_reference(fundings: list[dict], states: list[str] | None = N
 
 def _funding_independence_core(
     funding: dict, state: str = "", district: int | None = None, reference: dict | None = None,
+    party: str | None = None,
 ) -> dict:
     """Same math as _calc_funding_independence, returning every intermediate
     value alongside the final score. Single implementation — _calc_funding_
@@ -1330,7 +1350,7 @@ def _funding_independence_core(
     # grassroots-scaled fallback, which would count the small-donor share
     # (component 2) a second time.
     industry_concentration_score, industry_concentration_detail = _industry_concentration(
-        funding, total_raised, missing_score=50.0, reference=ref,
+        funding, total_raised, missing_score=50.0, reference=ref, party=party,
     )
 
     score = clamp(
@@ -2339,7 +2359,7 @@ def industry_hhi(funding: dict) -> tuple[float | None, int, float]:
 
 def _industry_concentration(
     funding: dict, total_raised: float, missing_score: float, missing_label: str = "neutral",
-    reference: dict | None = None,
+    reference: dict | None = None, party: str | None = None,
 ) -> tuple[float, str]:
     """(score, detail) for industry concentration: how evenly the member's
     industry money spreads across industries, by the HHI of its mix
@@ -2378,10 +2398,15 @@ def _industry_concentration(
         )
     share = known / total_raised if total_raised else 0.0
     ref = reference or {}
-    if not ref.get("industry_hhi_deciles"):
+    cohort = (ref.get("industry_hhi_by_party") or {}).get(party or "")
+    if cohort:
+        score = _rank_score(hhi, cohort["deciles"])
+        versus = f"{party} median {cohort['median']:.3f}"
+    elif ref.get("industry_hhi_deciles"):
+        score = _rank_score(hhi, ref["industry_hhi_deciles"])
+        versus = f"chamber median {ref['industry_hhi_median']:.3f}"
+    else:
         return missing_score, f"HHI {hhi:.3f}, no chamber reference to compare with yet, {missing_label} {missing_score:.0f}"
-    score = _rank_score(hhi, ref["industry_hhi_deciles"])
-    versus = f"chamber median {ref['industry_hhi_median']:.3f}"
     return score, (
         f"HHI {hhi:.3f} across {n} industries ({versus}); ${known:,.0f} classified, "
         f"{share:.0%} of contributions"

@@ -16,6 +16,7 @@ from app.pipeline.analyze.president_scorer import (
 )
 from app.pipeline.analyze.score_calculator import (
     _advancement_baseline,
+    _industry_concentration,
     _measure_advancement_rates,
     _small_donor_capacity_score,
     compute_funding_reference,
@@ -60,6 +61,37 @@ class TestFundingReferenceStats:
     def test_unreadable_small_donor_fit_is_neutral_not_a_second_copy(self, monkeypatch):
         monkeypatch.setattr(score_calculator, "_small_donor_baseline_fit_cache", {})
         assert _small_donor_capacity_score(40.0, "CA", None)[0] == 50.0
+
+
+class TestIndustryConcentrationWithinParty:
+    """v6.26: a party's donors' occupations cluster in fewer, broader
+    industries than the other's, so a chamber-wide rank scored a party's
+    coalition, not the member. Each member is ranked within their party."""
+
+    def _with_mix(self, *shares):
+        return {"industryBreakdown": [{"industry": f"IND{i}", "total": 1_000_000 * x} for i, x in enumerate(shares)]}
+
+    def test_each_party_with_enough_members_gets_its_own_deciles(self):
+        fundings = [_funding(pac=100_000)] * 40
+        for i, f in enumerate(fundings):
+            f = dict(f, **self._with_mix(0.5 + 0.01 * (i % 20), 0.5 - 0.01 * (i % 20)))
+            fundings[i] = f
+        parties = ["D"] * 20 + ["R"] * 15 + ["I"] * 5
+        ref = compute_funding_reference(fundings, None, parties)
+        assert set(ref["industry_hhi_by_party"]) == {"D", "R"}  # 5 independents: too few
+        assert ref["industry_hhi_by_party"]["D"]["n"] == 20
+
+    def test_a_member_is_ranked_within_their_party_and_an_independent_against_the_chamber(self):
+        ref = {
+            "industry_hhi_deciles": [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6], "industry_hhi_median": 0.4,
+            "industry_hhi_by_party": {"D": {"deciles": [0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],
+                                            "median": 0.6, "n": 20}},
+        }
+        funding = self._with_mix(0.723607, 0.276393)  # HHI 0.6
+        d_score, d_detail = _industry_concentration(funding, 1_000_000, 50.0, reference=ref, party="D")
+        i_score, _ = _industry_concentration(funding, 1_000_000, 50.0, reference=ref, party="I")
+        assert d_score == 50.0 and "D median" in d_detail  # the D median
+        assert i_score == 10.0  # the chamber's top decile
 
 
 class TestAdvancementRates:
