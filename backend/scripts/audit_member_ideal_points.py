@@ -25,6 +25,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from app.config import settings  # noqa: E402
 from app.pipeline.analyze.score_calculator import (  # noqa: E402
     _district_pvi,
+    _member_ideal_points,
     _position_reliability,
     _state_pvi,
     position_confidence,
@@ -33,6 +34,7 @@ from app.pipeline.fetch.voteview import (  # noqa: E402
     build_chamber_ideal_points,
     fetch_member_rows,
     ingestion_gates,
+    with_carried_scale,
 )
 
 
@@ -49,6 +51,9 @@ async def main() -> int:
             rows, chamber, _state_pvi(), _district_pvi(),
             reliability=_position_reliability(), congress=congress,
         )
+        if failures == []:
+            # As the refresh does: early in a Congress, the last scale on disk.
+            data = with_carried_scale(data, _member_ideal_points(chamber) or {})
         failures += ingestion_gates(chamber, data)
         fits = ", ".join(
             f"{p}: a={f['a']:+.3f} b={f['b']:+.5f} r2={f['r2']:.2f} n={f['n']}"
@@ -58,7 +63,8 @@ async def main() -> int:
         uncounted = sum(1 for b in data["members"] if b not in data["votes"])
         weak = sum(1 for n in data["votes"].values() if position_confidence(n, rel) < 0.9)
         print(f"{chamber} (congress {congress}): {len(data['members'])} members, {data['seated']} seated "
-              f"in {data['seats']} seats, p90 |extremity| {data['extremity_p90']}, fits [{fits}]")
+              f"in {data['seats']} seats, p90 |extremity| {data['extremity_p90']} "
+              f"(measured on Congress {data['scale_congress']}), fits [{fits}]")
         print(f"  {data['measure']}, reliability {rel}: {weak} counted members under 90% weight, "
               f"{uncounted} with no reported count")
         for f in failures:

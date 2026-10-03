@@ -158,3 +158,25 @@ def test_another_congresss_positions_still_set_a_breaks_direction(db_session, mo
     db_session.commit()
     record = party_line_records(db_session, "house", _members())[4]
     assert record["breaks"] == [] and record["flankBreaks"] != []
+
+
+def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_session, monkeypatch):
+    """A lone defector's side is its own position's, whatever its weight, so
+    early in a Congress the last Congress's full record ("prior") decides it:
+    R4's 2-vote position reads center-side (0.3), its full record flank-side
+    (0.9). Without the prior the break counts; with it, it is a flank break.
+    A full current position is kept over the prior."""
+    current = {**DIM1, "R4": 0.3}
+    section = {"members": current, "votes": {**{m: 500 for m in DIM1}, "R4": 2}, "reliability": {"n0": 24},
+               "congress": 120}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    _roll_call(db_session, "house", 32, "On Passage", "HR.7", {"R4": "Nay"})
+    db_session.commit()
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+
+    section["prior"] = {"congress": 119, "members": DIM1, "votes": {m: 500 for m in DIM1}, "reliability": {"n0": 24}}
+    record = party_line_records(db_session, "house", _members())[4]
+    assert record["breaks"] == [] and record["flankBreaks"] != []
+
+    section["votes"]["R4"] = 500
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []

@@ -20,9 +20,27 @@ def _script():
     return module
 
 
-def _row(icpsr, party, x, n, dim2="0.1", state="OH"):
+def _row(icpsr, party, x, n, dim2="0.1", state="OH", career=""):
     return {"icpsr": icpsr, "party_code": party, "nokken_poole_dim1": x, "nokken_poole_dim2": dim2,
-            "nominate_number_of_votes": n, "state_abbrev": state}
+            "nominate_number_of_votes": n, "state_abbrev": state, "nominate_dim1": career}
+
+
+def test_only_a_no_count_position_with_a_career_is_calibrated_as_uncounted(tmp_path, monkeypatch):
+    """The score weights a no-count position with a career DW-NOMINATE
+    position by uncounted_weight and reads one with neither as no votes, so
+    only the first kind enters the calibration's no-count sample."""
+    script = _script()
+    full = [_row(str(i), "100" if i % 2 else "200", f"{0.1 * (i % 5) - (0.4 if i % 2 else -0.4):.2f}", "500",
+                 career="0.3") for i in range(40)]
+    early = full + [_row("90", "100", "-0.5", "", career="-0.4"), _row("91", "100", "-0.6", "")]
+    late = full + [_row("90", "100", "-0.5", "500", career="-0.4"), _row("91", "100", "-0.6", "500")]
+    rows = {101: early, 102: late}
+    monkeypatch.setattr(script, "member_rows", lambda chamber, congress, cache=None: rows[congress])
+    monkeypatch.setattr(script, "_usable", lambda chamber, congress, cache: True)
+    monkeypatch.setattr(script, "party_line_share", lambda chamber, congress, cache=None: 0.5)
+    data, _ = script.pairs(None, range(101, 103))
+    kinds = {r[1]: r[5] for r in data if r[0] == "S"}
+    assert kinds["90"] == "uncounted" and "91" not in kinds
 
 
 def test_fit_recovers_n0_with_a_drift_per_transition():
@@ -33,14 +51,27 @@ def test_fit_recovers_n0_with_a_drift_per_transition():
     script = _script()
     data = []
     for c, drift in ((105, 0.66), (115, 1.0)):
-        data += [("H", f"F{c}{i}", 600.0, x, drift * x, "full", c, 0.5)
+        data += [("H", f"F{c}{i}", 600.0, x, drift * x, "full", c, 0.5, False)
                  for i, x in enumerate((-0.2, -0.1, 0.1, 0.3))]
-        data += [("H", f"T{c}{n}{i}", float(n), x, drift * float(script.relative_weight(n, 60)) * x, "thin", c, 0.5)
-                 for n in (5, 20, 60, 150) for i, x in enumerate((-0.3, 0.2, 0.4))]
+        data += [("H", f"T{c}{n}{i}", float(n), x, drift * float(script.relative_weight(n, 60)) * x, "thin", c, 0.5,
+                  False) for n in (5, 20, 60, 150) for i, x in enumerate((-0.3, 0.2, 0.4))]
     assert script.fit_n0(data) == 60.0
     assert abs(float(script.relative_weight(script.half_point(60), 60)) - 0.5) < 1e-9
     # A thin pair in a transition with no full pairs has no drift and is left out.
-    assert script.fit_n0(data + [("H", "X", 5.0, 0.4, 0.0, "thin", 130, 0.5)]) == 60.0
+    assert script.fit_n0(data + [("H", "X", 5.0, 0.4, 0.0, "thin", 130, 0.5, False)]) == 60.0
+
+
+def test_a_departing_members_pair_uses_the_reverse_drift():
+    """Full pairs where the later position is 0.8 of the earlier: forward
+    drift 0.8, reverse 1.25. A departing member's (thin later) full earlier
+    record is predicted from the thin one with the reverse."""
+    script = _script()
+    full = [("H", f"F{i}", 600.0, x, 0.8 * x, "full", 110, 0.5, False) for i, x in enumerate((-0.3, 0.1, 0.4))]
+    forward, reverse = script.drifts(full)[("H", 110)]
+    assert abs(forward - 0.8) < 1e-12 and abs(reverse - 1.25) < 1e-12
+    thin = [("H", f"T{i}", 60.0, x, 1.25 * float(script.relative_weight(60, 60)) * x, "thin", 110, 0.5, True)
+            for i, x in enumerate((-0.3, 0.2, 0.4))]
+    assert script.fit_n0(full + thin) == 60.0
 
 
 def test_voteview_party_line_share_counts_opposed_majorities(tmp_path):
@@ -62,9 +93,10 @@ def test_deviations_are_flank_signed_from_the_party_center():
             _row("6", "100", "-0.4", ""), _row("7", "100", "-0.9", "40", state="VI")]  # a delegate
     dev = _script().deviations(rows)
     assert "7" not in dev
+    assert dev["1"][2] is False  # no career DW-NOMINATE position in these rows
     assert "5" not in dev  # no position
     assert dev["3"][0] == 10.0 and abs(dev["3"][1] - 0.2) < 1e-12  # 0.2 left of the Democrats' center (-0.4)
-    assert dev["4"] == (300.0, 0.0)  # float-coded party parses
+    assert dev["4"] == (300.0, 0.0, False)  # float-coded party parses
     assert dev["6"][0] == 0.0  # no count reported
 
 

@@ -11,9 +11,9 @@ generation step: the component is inert only until the first successful
 ingest, and a fetch/gate failure on a later run keeps the last good data
 rather than degrading scores (missing/stale data is never punitive). Since
 v6.27 that holds within a Congress: each section records its Congress, and
-the score does not read one from another Congress (principle 6), so
-across Jan 3, until the new Congress's export passes the gates, the
-component is left out for everyone, as when no data exists.
+the score reads it only for roll calls of that Congress (principle 6), so
+once a new Congress's roll calls are being scored the component is left
+out until its Voteview export passes the gates, as when no data exists.
 
 Source: Voteview / Lewis et al., "Voteview: Congressional Roll-Call
 Votes Database" (voteview.com), per-congress member-ideology exports —
@@ -63,7 +63,10 @@ Office," APSR 96:1 — district-relative ideological extremity):
     of scaled roll calls is stored under "votes", and the section stores the
     measured reliability (score_calculator._position_reliability, from
     scripts/calibrate_position_confidence.py; position_confidence turns it
-    into a weight in [0, 1], 1 for a full record). A row whose Nokken-Poole
+    into a weight in [0, 1], 1 for a full record). A row with no count (or
+    0) but a career DW-NOMINATE position has no "votes" entry and gets the
+    weight measured for such positions; one with neither (just sworn in)
+    is recorded as 0 votes and sits at 50. A row whose Nokken-Poole
     coordinates are both exactly 0 is Voteview's placeholder for a member
     it could not scale, not an estimate: it is left out, and the score
     reads that member as having no position (50). The fits are taken over
@@ -75,7 +78,9 @@ Office," APSR 96:1 — district-relative ideological extremity):
     scale shrunk with them. The weight applies to the DW-NOMINATE fallback
     too, as an uncalibrated extension: n0 was measured on Nokken-Poole
     positions, but this Congress's count is the current term's evidence
-    either way.
+    either way. A new Congress's section keeps the last Congress's
+    positions under "prior" (previous_positions), read only by the flank
+    rule in party_line_record, never scored.
 
 Independents (party_code 328) are included in the per-member positions
 (score_calculator scores them against the fit of the party they caucus
@@ -142,10 +147,11 @@ METHOD_DESC = (
     "(seat_pvi positive = R lean; state PVI for senators, district PVI "
     "for House). extremity = residual signed toward the party flank "
     "(-residual for D, +residual for R); extremity_p90 = 90th percentile "
-    "of |extremity| across the chamber's D+R members. votes = each member's "
+    "of |extremity| across the chamber's D+R members with full records "
+    "(Voteview's 0,0 placeholders excluded). votes = each member's "
     "count of scaled roll calls; the score weights a position's extremity by "
-    "position_confidence(votes, reliability); p90 is over full records only "
-    "(the chamber's last scale carried when too few). Construct: "
+    "position_confidence(votes, reliability); with too few full records the "
+    "chamber's last scale is carried. Construct: "
     "Canes-Wrone, Brady & Cogan 2002 district-relative extremity; "
     "per-party fits avoid Bafumi & Herron 2010 leapfrog bimodality."
 )
@@ -248,7 +254,7 @@ def _position_column(rows: list[dict]) -> tuple[str, str]:
 
 # Full records the saturation scale needs: below it (early in a Congress)
 # the chamber's last scale is carried. The same floor as the old pooled
-# quantile's, 20 members a party.
+# quantile's (40).
 SCALE_MIN_FULL = 40
 
 
@@ -312,7 +318,13 @@ def build_chamber_ideal_points(
         except ValueError:
             continue
         members[bio] = round(dim1, 4)
-        n_votes = _vote_count(row)
+        n_votes = _vote_count(row) or None
+        if n_votes is None and _number(row.get("nominate_dim1")) is None:
+            # No count and no career position: newly sworn in, nothing yet
+            # behind the position; it rests on no votes. (A member with a
+            # career position and no count is the uncounted case the
+            # calibration measures, left out of `votes`.)
+            n_votes = 0
         if n_votes is not None:
             votes[bio] = n_votes
         code = _number(row.get("party_code"))
@@ -396,8 +408,39 @@ def ingestion_gates(chamber: str, data: dict) -> list[str]:
     if d_fit and r_fit and not (d_fit["a"] < r_fit["a"]):
         failures.append(f"{chamber}: D intercept {d_fit['a']} not left of R intercept {r_fit['a']} — party columns swapped?")
     if not data.get("extremity_p90"):
-        failures.append(f"{chamber}: no saturation scale (too few full records, and no earlier scale to carry)")
+        failures.append(f"{chamber}: no saturation scale (too few full records; none carried)")
     return failures
+
+
+def with_carried_scale(data: dict, previous: dict) -> dict:
+    """`data` with the chamber's last saturation scale when it has too few
+    full records for its own. The scale describes the spread of the
+    chamber's seats, not any member's record, so it holds across a
+    Congress's first weeks."""
+    if data.get("extremity_p90") or not (previous or {}).get("extremity_p90"):
+        return data
+    return {**data, "extremity_p90": previous["extremity_p90"],
+            "scale_congress": previous.get("scale_congress") or previous.get("congress")}
+
+
+def previous_positions(previous: dict, congress: int | None) -> dict | None:
+    """The last Congress's positions, kept beside a new Congress's section
+    for party_line_record's flank rule only (never scored: principle 6).
+    Early in a Congress every new position rests on a few roll calls, and
+    a lone defector's side of their party is then unreliable; the last
+    Congress's full record is the better evidence of it until the new one
+    catches up. Taken from a previous section of an earlier Congress, or
+    carried from one of the same Congress; only from a v6.27 section, whose
+    counts and reliability give each position its weight."""
+    have = (previous or {}).get("congress")
+    if have is None or congress is None:
+        return None
+    if int(have) == int(congress):
+        return previous.get("prior")
+    if int(have) > int(congress) or not isinstance(previous.get("reliability"), dict):
+        return None
+    return {"congress": previous["congress"], "members": previous.get("members") or {},
+            "votes": previous.get("votes") or {}, "reliability": previous["reliability"]}
 
 
 async def refresh_member_ideal_points(
@@ -426,14 +469,12 @@ async def refresh_member_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),
             reliability=_position_reliability(), congress=congress,
         )
-        if failures == [] and not data["extremity_p90"]:
-            # Too few full records for a scale: carry the chamber's last one.
-            # It describes the spread of the chamber's seats, not any
-            # member's record, so it holds across a Congress's first weeks.
-            previous = _member_ideal_points(chamber)
-            if previous.get("extremity_p90"):
-                data = {**data, "extremity_p90": previous["extremity_p90"],
-                        "scale_congress": previous.get("scale_congress", previous.get("congress"))}
+        previous = _member_ideal_points(chamber) or {}
+        if failures == []:
+            data = with_carried_scale(data, previous)
+        prior = previous_positions(previous, congress)
+        if prior:
+            data = {**data, "prior": prior}
         failures += ingestion_gates(chamber, data)
         if failures:
             for f in failures:

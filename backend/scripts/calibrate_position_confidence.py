@@ -27,7 +27,9 @@ count (full records count 1). n0 is then the least-squares fit of the thin
 pairs. The curve's shape is weakly identified; the count at which a
 position counts half (half_weight_votes) is the stable summary, reported
 with its interval. Positions Voteview publishes with no count get their own
-measured weight, on the same drift.
+measured weight, on the same drift: those with a career DW-NOMINATE
+position, as the score applies it (a member with neither a count nor a
+career, such as one just sworn in, reads as no votes).
 
 Left out: Voteview's 0, 0 placeholders (no position); members from outside
 the 50 states (the House's delegates, whose records are thin because they
@@ -142,12 +144,13 @@ def _states() -> set[str]:
     return {key.split("-")[0] for key in _district_pvi()}
 
 
-def deviations(rows: list[dict]) -> dict[str, tuple[float, float]]:
-    """icpsr -> (scaled votes, 0 when none reported; position from the
-    party's center signed toward its flank) for each major-party member
-    with a position, one row each (a member listed twice, after a party
-    switch, is left out). The center is the median of the party's full
-    records."""
+def deviations(rows: list[dict]) -> dict[str, tuple[float, float, bool]]:
+    """icpsr -> (scaled votes, 0 when none or 0 reported; position from the
+    party's center signed toward its flank; whether Voteview has a career
+    DW-NOMINATE position for the member) for each major-party member of a
+    state with a position, one row each (a member listed twice, after a
+    party switch, is left out). The center is the median of the party's
+    full records."""
     states = _states()
     seen: dict[str, list[dict]] = {}
     for r in rows:
@@ -161,12 +164,13 @@ def deviations(rows: list[dict]) -> dict[str, tuple[float, float]]:
             continue
         if (r.get("state_abbrev") or "").strip().upper() not in states:
             continue
-        members.append((icpsr, party, x, _float(r.get("nominate_number_of_votes")) or 0.0))
+        career = _float(r.get("nominate_dim1")) is not None
+        members.append((icpsr, party, x, _float(r.get("nominate_number_of_votes")) or 0.0, career))
     center = {
-        p: statistics.median([x for _, q, x, n in members if q == p and n >= RELIABLE_VOTES] or [0.0])
+        p: statistics.median([x for _, q, x, n, _ in members if q == p and n >= RELIABLE_VOTES] or [0.0])
         for p in (100.0, 200.0)
     }
-    return {i: (n, (x - center[p]) * (-1.0 if p == 100.0 else 1.0)) for i, p, x, n in members}
+    return {i: (n, (x - center[p]) * (-1.0 if p == 100.0 else 1.0), career) for i, p, x, n, career in members}
 
 
 def congresses() -> range:
@@ -189,12 +193,13 @@ def _usable(chamber: str, congress: int, cache: pathlib.Path | None) -> bool:
 
 def pairs(cache: pathlib.Path | None = None, span: range | None = None) -> tuple[list[tuple], dict]:
     """(chamber, icpsr, n, thin-or-earlier deviation, full deviation, kind,
-    transition, party-line share) with kind "full" (both sides full
-    records: n is the earlier side's), "thin" (one side counted under
-    RELIABLE_VOTES: n is that side's) or "uncounted" (one side with no
-    count), every pair keyed by the transition it spans (its earlier
-    Congress) and that Congress's party-line share; and each chamber's
-    party-line share by usable Congress."""
+    transition, party-line share, thin side is the later) with kind "full"
+    (both sides full records: n is the earlier side's), "thin" (one side
+    counted under RELIABLE_VOTES: n is that side's) or "uncounted" (one
+    side with no count but a career position, the case the score weights
+    by uncounted_weight), every pair keyed by the transition it spans (its
+    earlier Congress) and that Congress's party-line share; and each
+    chamber's party-line share by usable Congress."""
     span = span or congresses()
     out, shares = [], {}
     for chamber in ("S", "H"):
@@ -206,13 +211,19 @@ def pairs(cache: pathlib.Path | None = None, span: range | None = None) -> tuple
             prev = deviations(member_rows(chamber, earlier, cache))
             cur = deviations(member_rows(chamber, later, cache))
             for icpsr in prev.keys() & cur.keys():
-                (na, xa), (nb, xb) = prev[icpsr], cur[icpsr]
+                (na, xa, ca), (nb, xb, cb) = prev[icpsr], cur[icpsr]
                 if na >= RELIABLE_VOTES and nb >= RELIABLE_VOTES:
-                    out.append((chamber, icpsr, na, xa, xb, "full", earlier, share[earlier]))
+                    out.append((chamber, icpsr, na, xa, xb, "full", earlier, share[earlier], False))
                 elif nb >= RELIABLE_VOTES or na >= RELIABLE_VOTES:
-                    n, thin, full = (na, xa, xb) if nb >= RELIABLE_VOTES else (nb, xb, xa)
-                    out.append((chamber, icpsr, n, thin, full, "thin" if n > 0 else "uncounted",
-                                earlier, share[earlier]))
+                    later_thin = na >= RELIABLE_VOTES
+                    n, thin, full, career = (nb, xb, xa, cb) if later_thin else (na, xa, xb, ca)
+                    if n > 0:
+                        kind = "thin"
+                    elif career:
+                        kind = "uncounted"  # the score's no-count case: a career position, no count
+                    else:
+                        continue  # no count and no career position: the score reads it as no votes
+                    out.append((chamber, icpsr, n, thin, full, kind, earlier, share[earlier], later_thin))
     return out, shares
 
 
@@ -229,24 +240,30 @@ def half_point(n0: float) -> float:
     return 0.5 * r * n0 / (1 - 0.5 * r)
 
 
-def drifts(data: list[tuple]) -> dict[tuple, float]:
-    """Each (chamber, transition)'s drift: the slope of its full pairs."""
+def drifts(data: list[tuple]) -> dict[tuple, tuple[float, float]]:
+    """Each (chamber, transition)'s drift from its full pairs, both ways:
+    the slope of the later position on the earlier (for a member whose
+    thin record is the earlier) and of the earlier on the later (a member
+    whose thin record is the later: a departing member)."""
     acc: dict[tuple, list[float]] = {}
     for r in data:
         if r[5] == "full":
-            a = acc.setdefault((r[0], r[6]), [0.0, 0.0])
+            a = acc.setdefault((r[0], r[6]), [0.0, 0.0, 0.0])
             a[0] += r[3] * r[4]
             a[1] += r[3] * r[3]
-    return {k: num / den for k, (num, den) in acc.items() if den}
+            a[2] += r[4] * r[4]
+    return {k: (xy / xx, xy / yy) for k, (xy, xx, yy) in acc.items() if xx and yy}
 
 
 def _thin(data: list[tuple], kind: str = "thin") -> tuple[np.ndarray, ...]:
-    """(n, drift * thin, full) for pairs of `kind` in transitions with a drift."""
+    """(n, drift * thin, full) for pairs of `kind` in transitions with a
+    drift, each with the drift in its own direction."""
     d = drifts(data)
     rows = [r for r in data if r[5] == kind and (r[0], r[6]) in d]
     if not rows:
         return np.zeros(0), np.zeros(0), np.zeros(0)
-    return (np.array([r[2] for r in rows]), np.array([d[(r[0], r[6])] * r[3] for r in rows]),
+    return (np.array([r[2] for r in rows]),
+            np.array([d[(r[0], r[6])][1 if r[8] else 0] * r[3] for r in rows]),
             np.array([r[4] for r in rows]))
 
 
@@ -347,9 +364,12 @@ def main() -> None:
             "party's center toward its flank, keyed by the transition they span: full = "
             "drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / "
             f"w({RELIABLE_VOTES})), w(n) = n / (n + n0); drift from each transition's pairs of full "
-            f"records (both sides {RELIABLE_VOTES} or more scaled votes), n0 the least-squares fit of "
-            "the thin pairs, one for both chambers and every Congress; half_weight_votes is where "
-            "weight(n) = 0.5; uncounted_weight is the slope for positions published with no count; "
+            f"records (both sides {RELIABLE_VOTES} or more scaled votes) in the pair's direction, n0 "
+            "the least-squares fit of the thin pairs on a grid to 5000, one for both chambers and "
+            "every Congress; half_weight_votes is where weight(n) = 0.5, never above reference_votes / 2 (as n0 grows "
+            "the curve tends to n / reference_votes), so an interval reaching that limit is open above; "
+            "uncounted_weight is the "
+            "slope for positions published with no count (or 0) but a career DW-NOMINATE position; "
             "party_line_test is the rejected alternative with log n0 linear in the Congress's "
             "party-line share; transitions with no full pairs and Congresses still thin by the "
             "calendar are left out; interval_90 is the 5th-95th percentile over members resampled"

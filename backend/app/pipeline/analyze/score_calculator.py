@@ -369,8 +369,8 @@ def _member_ideal_points(chamber: str) -> dict:
     """Roll-call ideal-point data for one chamber ("senate" or "house"):
     {"members": {bioguideId: dim1}, "votes": {bioguideId: scaled roll calls},
     "fit": {party: {"a", "b"}}, "extremity_p90": float, "measure",
-    "congress", "seats", "seated", "reliability", "scale_congress"} (all but
-    the first four since v6.27). Used by _constituent_alignment_core's position-congruence
+    "congress", "seats", "seated", "reliability", "scale_congress"} (votes,
+    congress, seats, seated, reliability and scale_congress since v6.27). Used by _constituent_alignment_core's position-congruence
     component (v6.11): the member's congress-specific Nokken-Poole
     first-dimension position (DW-NOMINATE only as a whole-chamber fallback)
     scored against a seat-conditional expectation.
@@ -2088,8 +2088,10 @@ def position_confidence(votes: int | None, reliability: dict | None) -> float:
     w(reference_votes)), w(n) = n / (n + n0), for a position resting on
     `votes` scaled roll calls. A full record (reference_votes or more)
     counts in full; the calibration measures how much less a thin one says.
-    A position Voteview published with no count (None) gets the weight
-    measured for such positions, uncounted_weight. Always in [0, 1]; 1
+    A position Voteview published with no count (None: a member it has
+    barely scaled who has a career DW-NOMINATE position; one with neither
+    is stored as 0 votes at ingest) gets the weight measured for such
+    positions, uncounted_weight. Always in [0, 1]; 1
     without a usable reliability (a section written before v6.27, or no
     calibration available)."""
     rel = reliability or {}
@@ -2207,8 +2209,9 @@ def _calc_constituent_alignment(
              anyway.
            - Weighted by reliability (v6.27): the extremity is scaled by
              how well a position from n scaled roll calls this Congress
-             predicts a full record's (position_confidence, measured by
-             _position_reliability; a full record counts in full). A
+             predicts a full record's (position_confidence, from the curve
+             scripts/calibrate_position_confidence.py measures and
+             _position_reliability reads; a full record counts in full). A
              member with no position in a current v6.27 section sits at
              50; a section from another Congress is not read (principle
              6); a section written before v6.27 (no counts) is read as
@@ -2260,7 +2263,8 @@ def _constituent_alignment_core(
         residual = float(dim1) - expected_dim1
         extremity = -residual if eval_party == "D" else residual
         # None: Voteview reported no count of the roll calls behind the
-        # position (a member it has barely scaled), weighted on its own.
+        # position (a member it has barely scaled, with a career position),
+        # weighted on its own; 0 when it had neither (voteview.py).
         position_votes = (ideal.get("votes") or {}).get(bioguide_id)
         weight = position_confidence(position_votes, reliability)
         congruence_score = position_congruence_score(extremity, float(congruence_sat), weight)
@@ -2273,6 +2277,11 @@ def _constituent_alignment_core(
             congruence_detail += (
                 f"; Voteview reports no count of the roll calls behind this position, so it counts "
                 f"at {weight:.0%} strength, the measured weight of such positions, pulled toward 50"
+            )
+        elif position_votes == 0:
+            congruence_detail += (
+                "; Voteview has counted no roll calls behind this position yet, so it doesn't count "
+                "and this part sits at 50"
             )
         elif weight < 1.0:
             half = (reliability or {}).get("half_weight_votes")

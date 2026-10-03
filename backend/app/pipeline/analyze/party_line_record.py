@@ -92,8 +92,11 @@ def _toward_other_party(party: str, cast: list[tuple]) -> bool:
     the other party than their party does (mean dim1: Democrats negative,
     Republicans positive). Each cast entry's position is (dim1, weight):
     means are weighted by the position's reliability (v6.27,
-    score_calculator.position_confidence), so a position resting on a few
-    roll calls barely moves them."""
+    score_calculator.position_confidence), so among several defectors one
+    resting on a few roll calls barely moves their mean. A lone defector's
+    side is its own position's sign against the party's, whatever its
+    weight, which is why party_line_records reads each member's more
+    reliable of this Congress's and the last Congress's positions."""
     everyone = [d for _, p, _, _, d in cast if p == party and d is not None and d[1] > 0]
     broke = [d for _, p, _, with_party, d in cast if p == party and not with_party and d is not None and d[1] > 0]
     if not everyone or not broke:
@@ -151,14 +154,24 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # the defectors sit, and positions carry from one Congress to the next,
     # so early in a new Congress the last positions classify its breaks
     # rather than every flank break counting (stale beats punitive).
+    # Once the new Congress's section is in, its positions rest on a few roll
+    # calls at first, so each member's more reliable of that position and
+    # the last Congress's ("prior", voteview.previous_positions) decides
+    # their side.
     ideal = _member_ideal_points(chamber) or {}
-    reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else None
-    counts = ideal.get("votes") or {}
-    # bioguide -> (position, reliability weight)
-    dim1 = {
-        b: (x, position_confidence(counts.get(b), reliability))
-        for b, x in (ideal.get("members") or {}).items()
-    }
+
+    def weighted(section) -> dict:
+        # bioguide -> (position, reliability weight)
+        if not isinstance(section, dict):
+            return {}
+        reliability = section.get("reliability") if isinstance(section.get("reliability"), dict) else None
+        counts = section.get("votes") or {}
+        return {b: (x, position_confidence(counts.get(b), reliability))
+                for b, x in (section.get("members") or {}).items()}
+    dim1 = weighted(ideal)
+    for b, (x, w) in weighted(ideal.get("prior")).items():
+        if w > dim1.get(b, (None, -1.0))[1]:
+            dim1[b] = (x, w)
 
     positions: dict[int, list] = defaultdict(list)
     for p in db.query(

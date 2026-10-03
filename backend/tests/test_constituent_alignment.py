@@ -551,6 +551,13 @@ class TestPositionCongruence:
         assert "reports no count" in self._congruence()["detail"]
         assert "0 roll calls" not in self._congruence()["detail"]
 
+    def test_a_position_from_no_counted_votes_sits_at_neutral(self):
+        """No count and no career position: stored as 0 votes at ingest, so
+        the position counts nothing, and the breakdown says that plainly."""
+        self.patch({"X1": -0.55}, votes={"X1": 0}, reliability={"n0": 24, "uncounted_weight": 0.2})
+        assert self._congruence()["score"] == 50.0
+        assert "counted no roll calls" in self._congruence()["detail"]
+
     def test_a_full_record_counts_in_full(self):
         """A full record (here the reference, 576 votes, or more) counts in full."""
         self.patch({"X1": -0.55}, votes={"X1": 800},

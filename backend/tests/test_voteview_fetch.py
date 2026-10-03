@@ -96,7 +96,8 @@ class TestBuildAndGates:
         for r in rows:
             r["nokken_poole_dim1"], r["nokken_poole_dim2"] = r["nominate_dim1"], "0.1"
         rows[0].update(nokken_poole_dim1="0.0", nokken_poole_dim2="0.0", nominate_number_of_votes="2")
-        rows[1].update(nominate_number_of_votes="")
+        rows[1].update(nominate_number_of_votes="")  # a career position, no count: uncounted
+        rows[3].update(nominate_number_of_votes="", nominate_dim1="")  # neither: just sworn in
         rows[2].update(nominate_number_of_votes="12")
         data, failures = voteview.build_chamber_ideal_points(
             rows, "senate", state_pvi, {}, reliability=REL, congress=119)
@@ -104,6 +105,7 @@ class TestBuildAndGates:
         assert rows[0]["bioguide_id"] not in data["members"]
         assert rows[1]["bioguide_id"] in data["members"] and rows[1]["bioguide_id"] not in data["votes"]
         assert data["votes"][rows[2]["bioguide_id"]] == 12
+        assert data["votes"][rows[3]["bioguide_id"]] == 0
         assert data["reliability"] == REL and data["congress"] == 119
         assert data["measure"] == "Nokken-Poole"
 
@@ -243,7 +245,10 @@ class TestRefresh:
         component sits near 50 for everyone (the weights don't cancel)."""
         path = _patch_path(monkeypatch, tmp_path)
         state_pvi = score_calculator._state_pvi()
-        path.write_text(json.dumps({"senate": {"members": {}, "extremity_p90": 0.2, "congress": 118}}))
+        # A section carried before scale_congress was written names no scale
+        # Congress; its own Congress stands in.
+        path.write_text(json.dumps({"senate": {"members": {}, "extremity_p90": 0.2, "congress": 118,
+                                               "scale_congress": None}}))
         rows = _synthetic_rows(state_pvi)
         for r in rows:
             r["nominate_number_of_votes"] = "5"
@@ -260,6 +265,31 @@ class TestRefresh:
         assert weight < 0.1
         # A position at the old scale's saturation scores 50 - 50 * weight, not 0.
         assert abs(score_calculator.position_congruence_score(0.2, 0.2, weight) - 50) < 5
+
+    async def test_a_new_congress_keeps_the_last_ones_positions_for_the_flank_rule(self, monkeypatch, tmp_path):
+        """A v6.27 section of the 118th becomes the 119th's "prior", kept
+        through the 119th's later refreshes; a pre-v6.27 one (no
+        reliability, so no weights) is not kept."""
+        path = _patch_path(monkeypatch, tmp_path)
+        rows = _synthetic_rows(score_calculator._state_pvi())
+
+        async def fake_rows(chamber, congress, client=None):
+            return rows
+
+        monkeypatch.setattr(voteview, "fetch_member_rows", fake_rows)
+        monkeypatch.setattr(score_calculator, "_position_reliability", lambda: dict(REL))
+        last = {"members": {"OLD": 0.4}, "votes": {"OLD": 600}, "congress": 118, "reliability": dict(REL),
+                "extremity_p90": 0.2}
+        path.write_text(json.dumps({"senate": last}))
+        assert await voteview.refresh_member_ideal_points("senate", 119) is True
+        prior = score_calculator._member_ideal_points("senate")["prior"]
+        assert prior == {"congress": 118, "members": {"OLD": 0.4}, "votes": {"OLD": 600}, "reliability": dict(REL)}
+        assert await voteview.refresh_member_ideal_points("senate", 119) is True
+        assert score_calculator._member_ideal_points("senate")["prior"] == prior
+
+        path.write_text(json.dumps({"senate": {k: v for k, v in last.items() if k != "reliability"}}))
+        assert await voteview.refresh_member_ideal_points("senate", 119) is True
+        assert "prior" not in score_calculator._member_ideal_points("senate")
 
     async def test_fetch_failure_keeps_previous_data(self, monkeypatch, tmp_path):
         path = _patch_path(monkeypatch, tmp_path)

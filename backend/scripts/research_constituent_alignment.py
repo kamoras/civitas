@@ -890,9 +890,9 @@ def _drop_placeholders(M):
 
 def _congruence_scales(M):
     """Saturation per member under each design, over full records as the
-    pipeline measures it (fetch/voteview.py: reference_votes or more; all
-    members where no count is given): pooled across both parties (shipped)
-    and one per party."""
+    pipeline measures it (fetch/voteview.py: reference_votes or more), or
+    every member in a panel without counts (section 1's): pooled across
+    both parties (shipped) and one per party."""
     ref = score_calculator._position_reliability().get("reference_votes", 0)
     n = pd.to_numeric(M.get("nominate_number_of_votes"), errors="coerce")
     F = M[n >= ref] if n is not None and n.notna().any() else M
@@ -1019,12 +1019,17 @@ def _sitting_effect(p):
             if (n or 0) < RELIABLE_VOTES or bio not in e_new:
                 row = [r for r in rows if r["bioguide_id"] == bio][-1]
                 seat = row["state_abbrev"] + ("" if chamber == "senate" else f"-{int(float(row['district_code'] or 0))}")
-                label = "placeholder" if bio not in e_new else (n if n is not None else "no count")
+                label = ("placeholder" if bio not in e_new else n if row["nominate_number_of_votes"]
+                         else "no count, career" if row.get("nominate_dim1") else "no count, new")
                 thin.append(f"{seat} {label}: {before:.1f} -> {after:.1f}")
         fits = "; ".join(f"{q} b {old['fit'][q]['b']:+.4f} -> {new['fit'][q]['b']:+.4f}" for q in ("D", "R"))
         full = [n for n in new["votes"].values() if n >= RELIABLE_VOTES]
         print(f"  {chamber}: half weight at {rel['half_weight_votes']} votes; median full record "
               f"{np.median(full):.0f} votes, weight {score_calculator.position_confidence(int(np.median(full)), rel):.3f}")
+        after_all = [score_calculator.position_congruence_score(
+            e, new["extremity_p90"], score_calculator.position_confidence(new["votes"].get(b), rel))
+            for b, e in e_new.items()]
+        print(f"  {chamber}: v6.27 component mean {np.mean(after_all):.1f} over {len(after_all)} positioned members")
         print(f"  {chamber}: saturation {old['extremity_p90']} -> {new['extremity_p90']} ({fits}); mean |change| "
               f"{np.mean(changes):.2f} on the component, {0.3 * np.mean(changes):.2f} on Constituent Alignment, "
               f"over {len(changes)} members; r2 R {new['fit']['R']['r2']}")
@@ -1046,14 +1051,14 @@ def _full_record_gradient(p):
             prev = cal.deviations(cal.member_rows(chamber, earlier, cache))
             cur = cal.deviations(cal.member_rows(chamber, earlier + 1, cache))
             for i in prev.keys() & cur.keys():
-                (na, xa), (nb, xb) = prev[i], cur[i]
+                (na, xa, _), (nb, xb, _) = prev[i], cur[i]
                 if na >= cal.RELIABLE_VOTES and nb >= cal.RELIABLE_VOTES:
-                    full.append((chamber, i, na, xa, xb, "full", earlier, 0.0))
-    drift = cal.drifts(full)
+                    full.append((chamber, i, na, xa, xb, "full", earlier, 0.0, False))
+    drift = {k: v[0] for k, v in cal.drifts(full).items()}
     print(f"  per-transition drift: {min(drift.values()):.2f} to {max(drift.values()):.2f} "
           f"over {len(drift)} chamber-transitions")
     F = pd.DataFrame([(r[2], r[3] * drift[(r[0], r[6])], r[4]) for r in full], columns=["n", "dx", "y"])
-    F["band"] = pd.cut(F.n, [200, 400, 600, 851, 1100, 10_000])
+    F["band"] = pd.cut(F.n, [200, 400, 600, 800, 1100, 10_000], include_lowest=True)
     slopes = F.groupby("band", observed=True).apply(lambda g: (g.dx * g.y).sum() / (g.dx ** 2).sum())
     print("  full records' slope relative to drift, by votes: "
           + ", ".join(f"{b}: {v:.3f}" for b, v in slopes.items()))
@@ -1109,9 +1114,9 @@ def position_scale_test(p, m):
     print("\n== 14. Position congruence's score scale ==")
     # House generals 1994-2010: section 1's panel with each member's
     # congress-specific Nokken-Poole position and count from Voteview, per
-    # party fits on seat lean and the scales over every member of the
-    # congress, as the pipeline measures them; the regression on the
-    # contested incumbents with section 1's controls.
+    # party fits on seat lean over every member of the congress and the
+    # scales over its full records, as the pipeline measures them; the
+    # regression on the contested incumbents with section 1's controls.
     parts = []
     for c, g in m.groupby("cong"):
         vv = pd.read_csv(p[f"H{c}_members.csv"])[["icpsr", "nokken_poole_dim1", "nokken_poole_dim2",

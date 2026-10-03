@@ -627,12 +627,14 @@ score point, t, and the R² the score adds:
   both parties. Neither is distinguishable. Republicans minus Democrats,
   per NOMINATE unit: House +1.44 (t=0.5, p=0.65), Senate −3.31 (t=−0.5,
   p=0.61). Per own-party unit: House −0.15 (p=0.80), Senate −1.32 (p=0.34).
-  Unlike the vote part's case, the pooled scale doesn't shift either party's
-  average (over every Senate, unweighted: 50.5 D and 51.6 R pooled, 50.8
-  and 50.9 per party). It widens the spread for the party that spreads more
-  (share at 0, unweighted: 2.8% D and 9.9% R pooled, 5.7% and 6.8% per
-  party; with v6.27's weights nobody sits exactly at 0 or 100). With no
-  evidence for either, the shipped scale stays.
+  Unlike the vote part's case, the pooled scale leaves the parties'
+  averages about a point apart (over every Senate, unweighted: 50.5 D and
+  51.6 R pooled, 50.8 and 50.9 per party). It widens the spread for the
+  party that spreads more (unweighted, share at 0: 2.9% D and 10.1% R
+  pooled, 5.8% and 6.8% per party; at 100: 1.6% and 6.1% pooled, 3.8% and
+  2.6% per party). v6.27's weights don't change this, since nearly every
+  senator's record is full. With no evidence for either, the shipped
+  scale stays.
 
 **Thin records: what a position from n votes is worth.** The score should
 read a member's position at the strength it predicts where the member
@@ -665,31 +667,50 @@ party's flank, every pair keyed by the transition it spans:
   - A Congress still thin by the calendar.
 
 `scripts/calibrate_position_confidence.py` runs this over Congresses
-101–119: 8,098 full pairs, 99 thin and 25 with no count on the thin side.
+101–119: 8,098 full pairs, 99 thin and 25 with no count on the thin side
+(and a career DW-NOMINATE position, as the score requires of such a
+position; see below).
 
 | | Estimate | 90% interval (members resampled) |
 |---|---|---|
-| Votes at which a position counts half | **52** | 26–98 |
-| n0 | 109 | 35 to over 5,000 (the curve's shape is weakly identified; its half point is not) |
-| Weight of a position with no count | **0.22** | 0.05–0.42 |
+| Votes at which a position counts half | **50** | 22–98 |
+| n0 | 100 | 29 to the search grid's limit of 5,000 |
+| Weight of a position with no count | **0.21** | 0.02–0.40 |
+
+- **The half point is the measured quantity, not n0.** The fit's error is
+  nearly flat in n0 across the grid, so n0 is weakly determined, while
+  the half point it implies is not. The curve also can't put the half
+  point above 100 votes (as n0 grows, w(n) / w(200) falls to n / 200,
+  which is 0.5 at 100), so the interval's upper end, 98, sits at that
+  limit: the data allow anything up to the linear curve.
 
 - **One curve, not one per chamber or era.**
-  - By chamber, the half point is 26 votes in the Senate (26 thin pairs)
-    and 87 in the House (73). By era it is 61 (101–109) and 50 (110–119).
+  - By chamber, the half point is 25 votes in the Senate (26 thin pairs)
+    and 85 in the House (73). By era it is 62 (101–109) and 46 (110–119).
     Each interval is wide, and the fit pools them.
   - A party-line term was tested and is not used. That would make n0 a
     line in the share of roll calls on which the parties' majorities split,
     since in a more party-line Congress each vote might say less about a
     member's place within their party. With drift per transition its slope
-    is −3.75, the wrong direction, and it barely changes the fit (squared
-    error 1.402 against 1.411 for one n0).
+    is −4.25, the wrong direction, and it barely changes the fit (squared
+    error 1.384 against 1.396 for one n0).
   - An earlier draft of this change did find a positive slope. It came
     from forcing one drift on every Congress, which loaded the era
     differences in drift onto n0.
 - **Positions with no count carry some information.** They are members
   Voteview has barely scaled (newly sworn in, or with very few scalable
-  votes). They count 0.22 from 25 pairs. Three of those pairs carry most
-  of the estimate.
+  votes). Measured only where the member also has a career DW-NOMINATE
+  position, they count 0.21 from 25 pairs; in review, three of those
+  pairs carried most of the estimate. A no-count position with no career
+  position at all (a member just sworn in, with nothing yet to anchor it)
+  is not measured by these pairs, and the score reads it as a position
+  from no votes (50).
+- **Each pair is predicted in its own direction.** A member whose thin
+  record is the earlier one (an entrant) is predicted with the
+  transition's forward drift, the slope of the later full position on the
+  earlier. A member whose thin record is the later one (a leaver) is
+  predicted with the reverse slope, of the earlier on the later. In
+  review the two kinds of pairs gave similar half points.
 - **Limits.** Centering on the party median rather than the seat's
   expectation understates the noise slightly, by the share of
   within-party position that seat lean explains (10% for House
@@ -728,10 +749,12 @@ artifacts go away once drift is measured per transition.
 
 **Shipped (v6.27).**
 - The member's extremity is scaled by weight(n) before it is read against
-  the saturation point. A position from 52 votes counts half, and one
+  the saturation point. A position from 50 votes counts half, and one
   from 200 or more counts in full; n is the member's scaled roll calls
   this Congress (Voteview's `nominate_number_of_votes`).
-  - A position with no reported count is weighted 0.22.
+  - A position with no reported count is weighted 0.21 when the member
+    has a career DW-NOMINATE position, and read as no votes (50) when
+    not.
   - One curve serves both chambers and every Congress, so nothing in it
     follows the sitting Congress. A new Congress needs no rerun and no
     setting. Rerunning the calibration (its Congress range follows the
@@ -771,6 +794,11 @@ artifacts go away once drift is measured per transition.
   positions carry across Congresses. Early in a new Congress the last
   positions therefore classify its breaks, rather than every flank break
   counting.
+  - Weighting means cannot help a lone defector, whose side is its own
+    position's sign against the party's. So once the new Congress's
+    section is in, the rule reads each member's more reliable of the new
+    position and the last Congress's (kept beside the new section for
+    this rule only, never scored).
   - On the 119th Congress's party-unity roll calls (majorities opposed,
     Voteview's votes) the weighting reclassifies none of 2,351 Senate
     breaks and 2 of 6,055 House breaks.
@@ -782,19 +810,20 @@ which read placeholders as positions and weighted nothing, with v6.27:
 | | Senate | House |
 |---|---|---|
 | Saturation | 0.258 → 0.268 | 0.224 → 0.221 |
-| Mean change in the component | 1.70 | 0.57 |
-| Mean change in Constituent Alignment | 0.51 | 0.17 |
+| Mean change in the component | 1.69 | 0.58 |
+| Mean change in Constituent Alignment | 0.51 | 0.18 |
 
-- Full records don't move except through the scale. The Senate's mean
-  change comes from dropping its placeholder, which moves the Republican
-  slope from +0.0033 to +0.0018, and from its scale now being measured on
-  full records.
+- Full records move only through the scale and the refit seat lines. The
+  Senate's mean change comes from dropping its placeholder, which moves
+  the Republican slope from +0.0033 to +0.0018, and from its scale now
+  being measured on full records.
 - Records under 200 votes, with no count or with no position move most:
   four in the Senate and twelve in the House.
-  - Two recently sworn-in representatives with no count move from 23.3
-    and 31.1 to 44.1 and 45.9 on the component.
-  - A representative with 77 votes moves from 93.2 to 78.0.
-  - Members with 116–171 votes move 1 to 5 points.
+  - Two recently sworn-in representatives with no count and no career
+    position move from 23.3 and 31.1 to 50.
+  - Representatives with 77 and 72 votes move from 93.2 to 78.6 and from
+    75.3 to 66.1.
+  - Members with 116–171 votes move up to 5 points.
   - Senators with 53 and 187 votes move about 1.
   - Members scored from 1 to 39 votes or a placeholder, all since departed,
     move by up to 50 points.
@@ -830,10 +859,10 @@ which read placeholders as positions and weighted nothing, with v6.27:
   and near 100.
 - **The thin-record weight rests on 99 members.** Few members have a thin
   record next to a full one, so the half point has a wide interval
-  (26–98 votes), and the chambers can't be measured apart. A member's thin
-  Congress is also often their first or last, though entrants and leavers
-  gave similar values in review. Rerunning the calibration adds each
-  Congress's new pairs.
+  (22–98 votes, the upper end at the curve's limit), and the chambers
+  can't be measured apart. A member's thin Congress is also often their
+  first or last, though entrants and leavers gave similar values in
+  review. Rerunning the calibration adds each Congress's new pairs.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight
