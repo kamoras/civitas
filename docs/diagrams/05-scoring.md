@@ -25,7 +25,7 @@ flowchart LR
 
     subgraph CA["Constituent Alignment — 33%"]
         CA1["Seat-relative vote alignment — 70%<br/>break rate minus the same-party<br/>expectation at that seat lean, both ways<br/>(measured each run, v6.13)"]
-        CA2["Position congruence — 30%<br/>Nokken-Poole vs seat-conditional<br/>per-party expectation"]
+        CA2["Position congruence — 30%<br/>Nokken-Poole vs seat-conditional<br/>per-party expectation,<br/>weighted by its votes (v6.27)"]
         CA3["Fallback when no ideal points:<br/>100% vote alignment"]
     end
 

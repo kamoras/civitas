@@ -123,3 +123,35 @@ def test_the_breakdown_serves_each_counted_break_with_its_roll_call(db_session):
     assert facts["breakVotes"][0]["vote"] == "Nay"
     assert facts["breakVotes"][0]["rollCall"]["parties"][0] == {"party": "R", "yea": 4, "nay": 1, "present": 0, "notVoting": 0}
     assert facts["flankBreakVotes"][0]["rollCall"]["billId"] == "HR.2"
+
+
+def test_a_thin_records_position_barely_moves_the_direction_of_a_break(db_session, monkeypatch):
+    """v6.27: R0 (center) and R4 (flank) break together. Read at full weight
+    the defectors average 0.55, flank-side of the party's 0.51; but R4's
+    position rests on 2 roll calls, so it counts at 2 / (2 + 24) and the
+    break is toward the Democrats. Ten Republicans, so two defectors still
+    leave a party-line vote."""
+    roster = {**DIM1, **{f"R{i}": 0.5 for i in range(5, 10)}}
+    monkeypatch.setitem(globals(), "DIM1", roster)
+    full = {m: 500 for m in roster}
+    section = {"members": roster, "votes": full, "half_weight_votes": 24}
+    _roll_call(db_session, "house", 30, "On Passage", "HR.5", {"R0": "Nay", "R4": "Nay"})
+    db_session.commit()
+
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    assert party_line_records(db_session, "house", _members())[0]["flankBreaks"] != []
+
+    section["votes"] = {**full, "R4": 2}
+    records = party_line_records(db_session, "house", _members())
+    assert records[0]["breaks"] == [{"rollCall": "house-119-2-30", "vote": "Nay"}]
+    assert records[4]["breaks"] == [{"rollCall": "house-119-2-30", "vote": "Nay"}]
+
+
+def test_an_earlier_congresss_positions_are_not_read(db_session, monkeypatch):
+    """A section left from the 118th says nothing about the 119th's roll
+    calls: with no position, R4's flank-side break counts, as before v6.20."""
+    monkeypatch.setattr(party_line_record, "_member_ideal_points",
+                        lambda chamber: {"members": DIM1, "congress": 118})
+    _roll_call(db_session, "house", 31, "On Passage", "HR.6", {"R4": "Nay"})
+    db_session.commit()
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []

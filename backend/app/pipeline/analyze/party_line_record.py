@@ -35,7 +35,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import RollCall, RollCallPosition
-from app.pipeline.analyze.score_calculator import _member_ideal_points
+from app.pipeline.analyze.score_calculator import (
+    _ideal_points_current,
+    _member_ideal_points,
+    position_confidence,
+)
 from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
     _determine_party_alignment,
@@ -89,16 +93,21 @@ def load_record(text: str | None) -> dict | None:
 def _toward_other_party(party: str, cast: list[tuple]) -> bool:
     """Whether the members of `party` who broke on this roll call sit nearer
     the other party than their party does (mean dim1: Democrats negative,
-    Republicans positive)."""
-    everyone = [d for _, p, _, _, d in cast if p == party and d is not None]
-    broke = [d for _, p, _, with_party, d in cast if p == party and not with_party and d is not None]
+    Republicans positive). Each cast entry's position is (dim1, weight):
+    means are weighted by the position's reliability (v6.27,
+    score_calculator.position_confidence), so a position resting on a few
+    roll calls barely moves them."""
+    everyone = [d for _, p, _, _, d in cast if p == party and d is not None and d[1] > 0]
+    broke = [d for _, p, _, with_party, d in cast if p == party and not with_party and d is not None and d[1] > 0]
     if not everyone or not broke:
-        # ponytail: no NOMINATE position for any defector (a member Voteview
-        # hasn't estimated yet) counts the break, as every break did before
-        # v6.20; only reachable in a Congress's first weeks.
+        # ponytail: no usable position for any defector (a member Voteview
+        # hasn't estimated, or reports no count for) counts the break, as
+        # every break did before v6.20; mostly a Congress's first weeks.
         return True
-    mean, broke_mean = sum(everyone) / len(everyone), sum(broke) / len(broke)
-    return broke_mean > mean if party == "D" else broke_mean < mean
+
+    def mean(points):
+        return sum(x * w for x, w in points) / sum(w for _, w in points)
+    return mean(broke) > mean(everyone) if party == "D" else mean(broke) < mean(everyone)
 
 
 def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[dict | None]:
@@ -141,7 +150,16 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     parties = [(m.get("votingRecord") or {}).get("effectiveParty") or m.get("party") for m in members]
     tenures = load_leadership_tenures()
     spans = [majority_leader_spans(m.get("leadershipTitle"), tenures.get(m.get("bioguideId"))) for m in members]
-    dim1 = (_member_ideal_points(chamber) or {}).get("members") or {}
+    ideal = _member_ideal_points(chamber) or {}
+    if not _ideal_points_current(ideal):
+        ideal = {}  # an earlier Congress's positions say nothing about this one's roll calls
+    half = float(ideal.get("half_weight_votes") or 0)
+    counts = ideal.get("votes") if isinstance(ideal.get("votes"), dict) else None
+    # bioguide -> (position, reliability weight)
+    dim1 = {
+        b: (x, position_confidence(counts.get(b, 0) if counts is not None else None, half))
+        for b, x in (ideal.get("members") or {}).items()
+    }
 
     positions: dict[int, list] = defaultdict(list)
     for p in db.query(

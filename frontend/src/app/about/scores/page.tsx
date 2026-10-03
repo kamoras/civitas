@@ -255,9 +255,10 @@ export default function ScoresChapter() {
             member who sits about where their seat predicts scores about 50 on this part, by design:
             tested against House and Senate elections, this shape predicted how incumbents did, and
             one that put the typical position at 100 did not. A position estimated from only a few
-            roll calls is mostly noise, so it is pulled toward 50 until it rests on as many votes as
-            a reliable estimate needs (a count measured from every Congress since 1989). When that
-            data isn&apos;t available, the score is all break-rate.
+            roll calls is mostly noise, so it counts only as much as its votes support: how much is
+            measured by re-estimating members&apos; positions from small samples of their own votes
+            across every Congress since 1989, and a position from a full Congress counts almost in
+            full. When that data isn&apos;t available, the score is all break-rate.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

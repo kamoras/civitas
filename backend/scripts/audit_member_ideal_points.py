@@ -23,7 +23,12 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from app.config import settings  # noqa: E402
-from app.pipeline.analyze.score_calculator import _district_pvi, _state_pvi  # noqa: E402
+from app.pipeline.analyze.score_calculator import (  # noqa: E402
+    _district_pvi,
+    _position_half_weight_votes,
+    _state_pvi,
+    position_confidence,
+)
 from app.pipeline.fetch.voteview import (  # noqa: E402
     build_chamber_ideal_points,
     fetch_member_rows,
@@ -40,14 +45,22 @@ async def main() -> int:
             print(f"{chamber}: FETCH FAILED (congress {congress})")
             any_failures = True
             continue
-        data, failures = build_chamber_ideal_points(rows, chamber, _state_pvi(), _district_pvi())
+        data, failures = build_chamber_ideal_points(
+            rows, chamber, _state_pvi(), _district_pvi(),
+            half_weight_votes=_position_half_weight_votes(chamber), congress=congress,
+        )
         failures += ingestion_gates(chamber, data)
         fits = ", ".join(
             f"{p}: a={f['a']:+.3f} b={f['b']:+.5f} r2={f['r2']:.2f} n={f['n']}"
             for p, f in data["fit"].items()
         )
-        print(f"{chamber} (congress {congress}): {len(data['members'])} members, "
+        half = data["half_weight_votes"]
+        uncounted = sum(1 for b in data["members"] if b not in data["votes"])
+        weak = sum(1 for n in data["votes"].values() if position_confidence(n, half) < 0.9)
+        print(f"{chamber} (congress {congress}): {len(data['members'])} members in {data['seats']} seats, "
               f"p90 |extremity| {data['extremity_p90']}, fits [{fits}]")
+        print(f"  {data['measure']}, half weight at {half} votes: {weak} members under 90% weight, "
+              f"{uncounted} with no reported count")
         for f in failures:
             print(f"  GATE FAILED: {f}")
         any_failures |= bool(failures)

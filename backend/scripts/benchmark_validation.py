@@ -175,18 +175,22 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
     and score_calculator.position_congruence_score at that fit's saturation."""
     from app.pipeline.analyze.score_calculator import (
         _district_pvi,
-        _position_full_confidence_votes,
+        _position_half_weight_votes,
         _seat_pvi,
         _state_pvi,
         position_congruence_score,
     )
     from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points
 
-    data, _ = build_chamber_ideal_points(
-        member_rows, chamber, _state_pvi(), _district_pvi(), _position_full_confidence_votes(),
+    data, failures = build_chamber_ideal_points(
+        member_rows, chamber, _state_pvi(), _district_pvi(), half_weight_votes=_position_half_weight_votes(chamber),
     )
     saturation = data.get("extremity_p90")
-    if not saturation:
+    if failures or not saturation:
+        # Not silently: the comparison below would otherwise run on the vote
+        # part alone while claiming to recompute the whole score.
+        print(f"  {chamber}: position part not built ({'; '.join(failures) or 'no saturation'}); "
+              "Constituent Alignment recomputed from the vote part alone")
         return {}
     out = {}
     for row in member_rows:
@@ -204,7 +208,8 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
         expected = fit["a"] + fit["b"] * _seat_pvi(row.get("state_abbrev", ""), district)
         residual = data["members"][bio] - expected
         out[bio] = position_congruence_score(
-            -residual if party == "D" else residual, float(saturation), data["votes"].get(bio, 0),
+            -residual if party == "D" else residual, float(saturation),
+            data["votes"].get(bio, 0), data["half_weight_votes"],
         )
     return out
 

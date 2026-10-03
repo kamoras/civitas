@@ -53,7 +53,7 @@ class TestBuildAndGates:
     def test_clean_synthetic_population_passes_all_gates(self):
         state_pvi = score_calculator._state_pvi()
         rows = _synthetic_rows(state_pvi)
-        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {})
+        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, half_weight_votes=24)
         assert failures == []
         assert voteview.ingestion_gates("senate", data) == []
         assert 90 <= len(data["members"]) <= 105
@@ -65,7 +65,7 @@ class TestBuildAndGates:
         state_pvi = score_calculator._state_pvi()
         rows = _synthetic_rows(state_pvi)
         rows[0]["nominate_dim1"] = ""  # freshman pre-first-scaling
-        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {})
+        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, half_weight_votes=24)
         assert rows[0]["bioguide_id"] not in data["members"]
 
     def test_sign_flip_fails_gates(self):
@@ -75,51 +75,60 @@ class TestBuildAndGates:
         rows = _synthetic_rows(state_pvi)
         for r in rows:
             r["nominate_dim1"] = f"{-float(r['nominate_dim1']):.4f}"
-        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {})
+        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, half_weight_votes=24)
         assert voteview.ingestion_gates("senate", data)
 
     def test_tiny_population_fails_gates(self):
         state_pvi = score_calculator._state_pvi()
         rows = _synthetic_rows(state_pvi)[:30]
-        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {})
+        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, half_weight_votes=24)
         assert failures or voteview.ingestion_gates("senate", data)
 
-    def test_thin_records_are_kept_but_left_out_of_the_norm(self):
-        """A position from a handful of roll calls is mostly noise (v6.27):
-        the member is still stored, with their count, but neither the fits
-        nor the saturation scale move for them."""
-        state_pvi = score_calculator._state_pvi()
-        rows = _synthetic_rows(state_pvi)
-        without, _ = voteview.build_chamber_ideal_points(rows[1:], "senate", state_pvi, {}, 80)
-        rows[0].update(nominate_dim1="-1.2", nominate_number_of_votes="12")
-        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, 80)
-        assert failures == []
-        assert data["members"][rows[0]["bioguide_id"]] == -1.2
-        assert data["votes"][rows[0]["bioguide_id"]] == 12
-        assert data["fit"] == without["fit"] and data["extremity_p90"] == without["extremity_p90"]
-        assert data["full_confidence_votes"] == 80
-
-    def test_a_member_with_no_count_is_left_out_of_the_norm(self):
-        """Voteview publishes a Nokken-Poole position before it scales a
-        newly sworn-in member; that member has no count, so no entry."""
-        state_pvi = score_calculator._state_pvi()
-        rows = _synthetic_rows(state_pvi)
-        without, _ = voteview.build_chamber_ideal_points(rows[1:], "senate", state_pvi, {}, 80)
-        rows[0].update(nominate_dim1="-1.2", nominate_number_of_votes="")
-        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, 80)
-        assert rows[0]["bioguide_id"] in data["members"]
-        assert rows[0]["bioguide_id"] not in data["votes"]
-        assert data["fit"] == without["fit"]
-
-    def test_too_early_in_a_congress_fails_the_build(self):
-        """Before enough members have a full record there is no norm to
-        fit; the build fails and refresh keeps the previous section."""
+    def test_counts_are_recorded_and_placeholders_dropped(self):
+        """v6.27: each member's scaled-vote count is stored for the score's
+        reliability weight. Voteview's 0, 0 placeholder is no estimate and
+        is left out; a position with no count is kept, uncounted."""
         state_pvi = score_calculator._state_pvi()
         rows = _synthetic_rows(state_pvi)
         for r in rows:
-            r["nominate_number_of_votes"] = "15"
-        _, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, 80)
-        assert any("too early" in f for f in failures)
+            r["nokken_poole_dim1"], r["nokken_poole_dim2"] = r["nominate_dim1"], "0.1"
+        rows[0].update(nokken_poole_dim1="0.0", nokken_poole_dim2="0.0", nominate_number_of_votes="2")
+        rows[1].update(nominate_number_of_votes="")
+        rows[2].update(nominate_number_of_votes="12")
+        data, failures = voteview.build_chamber_ideal_points(
+            rows, "senate", state_pvi, {}, half_weight_votes=24, congress=119)
+        assert failures == []
+        assert rows[0]["bioguide_id"] not in data["members"]
+        assert rows[1]["bioguide_id"] in data["members"] and rows[1]["bioguide_id"] not in data["votes"]
+        assert data["votes"][rows[2]["bioguide_id"]] == 12
+        assert data["half_weight_votes"] == 24 and data["congress"] == 119
+        assert data["measure"] == "Nokken-Poole"
+
+    def test_a_dw_nominate_section_carries_no_half_weight(self):
+        """The career fallback: this Congress's count doesn't describe it."""
+        state_pvi = score_calculator._state_pvi()
+        data, _ = voteview.build_chamber_ideal_points(
+            _synthetic_rows(state_pvi), "senate", state_pvi, {}, half_weight_votes=24)
+        assert data["measure"] == "DW-NOMINATE" and data["half_weight_votes"] == 0
+
+    def test_replacements_and_delegates_do_not_fail_the_house_gate(self):
+        """The 119th House export had 451 rows by October 2026 (delegates
+        and mid-Congress replacements); a row bound of 450 failed it every
+        run. The gate counts seats."""
+        district_pvi = {f"S{i // 10}-{i % 10 + 1}": (i % 41) - 20 for i in range(435)}
+        rows = []
+        for i, key in enumerate(district_pvi):
+            st, d = key.split("-")
+            party = "100" if district_pvi[key] < 0 else "200"
+            pos = (-0.4 if party == "100" else 0.4) + 0.005 * district_pvi[key] + 0.01 * ((i * 7) % 11 - 5)
+            rows.append({"chamber": "House", "bioguide_id": f"H{i}", "party_code": party, "state_abbrev": st,
+                         "district_code": d, "nominate_dim1": f"{pos:.4f}", "nominate_number_of_votes": "500"})
+        rows += [dict(rows[j], bioguide_id=f"REPL{j}", nominate_number_of_votes="40") for j in range(10)]
+        rows += [{"chamber": "House", "bioguide_id": f"DEL{j}", "party_code": "100", "state_abbrev": "VI",
+                  "district_code": "0", "nominate_dim1": "-0.4", "nominate_number_of_votes": "300"} for j in range(6)]
+        data, failures = voteview.build_chamber_ideal_points(rows, "house", {}, district_pvi, half_weight_votes=24)
+        assert len(data["members"]) == 451 and data["seats"] == 435
+        assert failures == [] and voteview.ingestion_gates("house", data) == []
 
     def test_house_at_large_fallback_key(self):
         """Voteview district_code 1 for an at-large state resolves via the

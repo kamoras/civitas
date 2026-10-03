@@ -1,8 +1,57 @@
 {
- "_source": "Voteview member exports (voteview.com, Lewis et al.), Senate and House, Congresses 101-118, retrieved 2026-10-03; regenerate with backend/scripts/calibrate_position_confidence.py",
- "_method": "Least squares of (nokken_poole_dim1 - nominate_dim1)^2 = drift + k / nominate_number_of_votes over every member; full_confidence_votes = k / drift, the vote count at which a congress-specific position's estimation noise equals real congress-to-congress movement",
- "members": 9821,
- "k": 0.2793,
- "drift": 0.003462,
- "full_confidence_votes": 81
+ "_source": "Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses 101-118 (sampling error) and 119 (the scored population), retrieved 2026-10-03; regenerate with backend/scripts/calibrate_position_confidence.py",
+ "_method": "Weight = slope of the full-record score on the score from n votes, with sampling errors measured by re-estimating members' positions from random subsets of their votes and true extremities from the sitting Congress; each chamber's half_weight_votes is the least-squares n0 of n / (n + n0) over its weights (the scorer reads these); the top-level value pools both chambers, for reference",
+ "chambers": {
+  "senate": {
+   "weights": {
+    "10": 0.279,
+    "20": 0.448,
+    "40": 0.637,
+    "80": 0.785,
+    "160": 0.9
+   },
+   "median_abs_error": {
+    "10": 0.1429,
+    "20": 0.0798,
+    "40": 0.0508,
+    "80": 0.0338,
+    "160": 0.0209
+   },
+   "errors_measured": {
+    "10": 6812,
+    "20": 6812,
+    "40": 6812,
+    "80": 6812,
+    "160": 6812
+   },
+   "members_in_population": 98,
+   "half_weight_votes": 23.5
+  },
+  "house": {
+   "weights": {
+    "10": 0.245,
+    "20": 0.392,
+    "40": 0.55,
+    "80": 0.712,
+    "160": 0.84
+   },
+   "median_abs_error": {
+    "10": 0.1566,
+    "20": 0.0905,
+    "40": 0.0585,
+    "80": 0.0385,
+    "160": 0.0256
+   },
+   "errors_measured": {
+    "10": 29812,
+    "20": 29812,
+    "40": 29812,
+    "80": 29812,
+    "160": 29812
+   },
+   "members_in_population": 433,
+   "half_weight_votes": 31.7
+  }
+ },
+ "half_weight_votes": 27.2
 }

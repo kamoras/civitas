@@ -1,4 +1,4 @@
-"""Reproduce the evidence behind Constituent Alignment's design (v6.13-v6.16).
+"""Reproduce the evidence behind Constituent Alignment's design (v6.13-v6.27).
 
 Every number in docs/research/constituent-alignment.md comes from this
 script. It tests each candidate design choice the way the studies behind
@@ -22,7 +22,9 @@ Data (public, fetched at pinned commits into --cache):
   - 109th Senate roll calls (R package pscl, github.com/cran/pscl)
   - Every Senate (101st-119th) and House (101st-111th) roll call from
     Voteview (voteview.com, Lewis et al.) -- not versioned upstream, so
-    the newest congress can shift slightly between downloads
+    the newest congress can shift slightly between downloads; and the
+    House member exports for the 112th-119th (section 14: thin records and
+    the sitting House)
   - MIT Election Data + Science Lab, U.S. Senate 1976-2024 and President
     1976-2024 (Harvard Dataverse doi:10.7910/DVN/PEJ5QU, 10.7910/DVN/42MVDX)
   - U.S. House primary elections 1956-2010 (Pettigrew, Owen & Wanless;
@@ -31,7 +33,10 @@ Data (public, fetched at pinned commits into --cache):
 The shipped expectation and vote shape are the scorer's own functions
 (score_calculator.compute_constituent_reference, _expected_break_rate,
 seat_residual, _vote_shape), so the evidence always describes the formula
-that ships (section 10 of the note). Sections 8-9 were measured on v6.15's
+that ships (section 10 of the note), and section 14 scores positions with
+position_congruence_score and the weight in app/data/position_confidence.json
+(written by scripts/calibrate_position_confidence.py, which section 14 reads
+rather than reruns: it takes about an hour). Sections 8-9 were measured on v6.15's
 method — a least-squares expectation and a percentage-point scale, peaking
 one scale above the expectation — which this script keeps as a labelled
 local copy (v615_expectation, v615_score) so those numbers still reproduce
@@ -43,6 +48,7 @@ Run:
 """
 
 import argparse
+import json
 import pathlib
 import statistics
 import sys
@@ -89,7 +95,7 @@ for _c in SENATES:
 for _c in HOUSES:
     for _k in ("votes", "members", "rollcalls"):
         SOURCES[f"H{_c}_{_k}.csv"] = f"{VOTEVIEW}/{_k}/H{_c}_{_k}.csv"
-for _c in range(HOUSES.stop, 119):  # section 14's thin-record calibration: members only
+for _c in range(HOUSES.stop, 120):  # section 14: thin records and the sitting House, members only
     SOURCES[f"H{_c}_members.csv"] = f"{VOTEVIEW}/members/H{_c}_members.csv"
 # Congress -> presidential year whose district results describe the same
 # district lines. The outcome is the election at the END of the congress.
@@ -865,26 +871,43 @@ def _per_party_extremity(M, pos="nokken_poole_dim1", lean="pvi"):
     return M
 
 
-def _congruence_scales(M, fit_mask=None):
-    """Saturation per member under each design, from the members fit_mask
-    selects (all by default): pooled across both parties (shipped) and one
-    per party."""
-    F = M if fit_mask is None else M[fit_mask]
+def _weights(M, chamber):
+    """The shipped reliability weight (v6.27): n / (n + n0), n the member's
+    scaled roll calls that Congress (none reported: 0), n0 the chamber's
+    from app/data/position_confidence.json."""
+    half = score_calculator._position_half_weight_votes(chamber)
+    n = pd.to_numeric(M.get("nominate_number_of_votes"), errors="coerce").fillna(0)
+    return np.array([score_calculator.position_confidence(int(v), half) for v in n])
+
+
+def _drop_placeholders(M):
+    """Voteview's 0, 0 for a member it could not scale is no estimate."""
+    return M[~((M.nokken_poole_dim1 == 0) & (M.nokken_poole_dim2 == 0))]
+
+
+def _congruence_scales(M):
+    """Saturation per member under each design, over every member as the
+    pipeline measures it: pooled across both parties (shipped) and one per
+    party."""
     M = M.copy()
-    M["sat_pooled"] = _p90(F.ext.abs())
-    M["sat_party"] = M.party.map({p: _p90(g.ext.abs()) for p, g in F.groupby("party")})
+    M["sat_pooled"] = _p90(M.ext.abs())
+    M["sat_party"] = M.party.map({p: _p90(g.ext.abs()) for p, g in M.groupby("party")})
     return M
 
 
-def _linear(ext, sat):
-    """The shipped shape: score_calculator.position_congruence_score."""
-    return np.array([score_calculator.position_congruence_score(e, s) for e, s in zip(ext, sat)])
+def _linear(ext, sat, w):
+    """The shipped score: score_calculator.position_congruence_score, its
+    distance from 50 scaled by the reliability weight."""
+    return np.array([50 + (score_calculator.position_congruence_score(e, s) - 50) * k
+                     for e, s, k in zip(ext, sat, w)])
 
 
-def _peaked(ext, sat):
+def _peaked(ext, sat, w):
     """The alternative: 100 at the expectation, falling to 0 at saturation
-    either way, the vote part's shape since v6.16."""
-    return 100.0 - 100.0 * np.minimum(np.abs(np.asarray(ext, float) / np.asarray(sat, float)), 1.0)
+    either way, the vote part's shape since v6.16, read on the weighted
+    extremity."""
+    x = np.asarray(w, float) * np.asarray(ext, float) / np.asarray(sat, float)
+    return 100.0 - 100.0 * np.minimum(np.abs(x), 1.0)
 
 
 CONGRUENCE_DESIGNS = (
@@ -898,9 +921,21 @@ CONGRUENCE_DESIGNS = (
 def _compare_designs(S, y, base, groups):
     b0 = smf.ols(f"{y} ~ {base}", S).fit()
     for label, shape, sat in CONGRUENCE_DESIGNS:
-        S["sc"] = shape(S.ext, S[sat])
+        S["sc"] = shape(S.ext, S[sat], S.w)
         r = smf.ols(f"{y} ~ {base} + sc", S).fit(cov_type="cluster", cov_kwds={"groups": groups})
         print(f"  {label:32s} {r.params['sc']:7.3f}/pt (t={r.tvalues['sc']:5.1f}) dR2={r.rsquared - b0.rsquared:.4f}")
+
+
+def _which_unit(S, y, base, groups):
+    """Do voters respond to a NOMINATE unit of extremity (one pooled scale)
+    or to a unit of the member's own party's spread (one scale per party)?
+    Each form with a Republican interaction: the right unit is the one whose
+    slope is the same for both parties."""
+    S = S.assign(isR=(S.party == "R") * 1.0, raw=S.ext, rel=S.ext / S.sat_party)
+    for k, unit in (("raw", "NOMINATE unit"), ("rel", "own party's saturation")):
+        r = smf.ols(f"{y} ~ {base} + {k} + {k}:isR", S).fit(cov_type="cluster", cov_kwds={"groups": groups})
+        print(f"   per {unit}: D {r.params[k]:.2f} (t={r.tvalues[k]:.1f}); R minus D "
+              f"{r.params[k + ':isR']:+.2f} (t={r.tvalues[k + ':isR']:.1f}, p={r.pvalues[k + ':isR']:.2f})")
 
 
 def _senate_returns(p):
@@ -931,31 +966,90 @@ def _attach_senate_share(M, yr, tot, cands):
 
 def _senate_positions(p, c, st, nat):
     M = voteview_breaks(p, "S", c)
-    M = M[M.nokken_poole_dim1.notna()].copy()
+    M = _drop_placeholders(M[M.nokken_poole_dim1.notna()]).copy()
     py = max(y for y in nat.index if y <= 1786 + 2 * c)
     M["presR"] = [st.get((py, s), np.nan) for s in M.state_abbrev]
     M = M[M.presR.notna()].copy()
     M["pvi"] = (M.presR - nat[py]) * 100
     M["x"] = np.where(M.party == "R", M.presR, 1 - M.presR) * 100
+    M["w"] = _weights(M, "senate")
     return M
+
+
+def _sitting_effect(p):
+    """v6.26 against v6.27 on the sitting Congress's Voteview exports,
+    through the pipeline's own build and score: every positioned member,
+    then each member whose position counts at under 90% (seat, count,
+    before, after). Both sides leave out Voteview's placeholders, which
+    v6.26 read as positions."""
+    from app.pipeline.fetch.voteview import build_chamber_ideal_points
+    for chamber, letter in (("senate", "S"), ("house", "H")):
+        half = score_calculator._position_half_weight_votes(chamber)
+        rows = pd.read_csv(p[f"{letter}119_members.csv"], dtype=str).fillna("").to_dict("records")
+        rows = [r for r in rows if r["chamber"] != "President"]
+        spvi, dpvi = score_calculator._state_pvi(), score_calculator._district_pvi()
+        data, _ = build_chamber_ideal_points(rows, chamber, spvi, dpvi, half_weight_votes=half)
+        changes, thin = [], []
+        for bio, e in _extremities(data, rows, chamber, spvi, dpvi).items():
+            n = data["votes"].get(bio, 0)
+            before = score_calculator.position_congruence_score(e, data["extremity_p90"])
+            after = score_calculator.position_congruence_score(e, data["extremity_p90"], n, half)
+            changes.append(abs(after - before))
+            if score_calculator.position_confidence(n, half) < 0.9:
+                row = next(r for r in rows if r["bioguide_id"] == bio)
+                seat = row["state_abbrev"] + ("" if chamber == "senate" else f"-{row['district_code']}")
+                thin.append(f"{seat} {row['nominate_number_of_votes'] or 'no count'}: {before:.1f} -> {after:.1f}")
+        print(f"  {chamber}: saturation {data['extremity_p90']}; mean |change| {np.mean(changes):.2f} on the "
+              f"component, {0.3 * np.mean(changes):.2f} on Constituent Alignment, over {len(changes)} members")
+        print("   weighted under 90%: " + "; ".join(thin))
+
+
+def _extremities(data, rows, chamber, spvi, dpvi):
+    from app.pipeline.fetch.voteview import PARTY_CODES, _seat_pvi_for
+    out = {}
+    for r in rows:
+        bio, party = r["bioguide_id"], PARTY_CODES.get(int(float(r["party_code"] or 0)))
+        pvi = _seat_pvi_for(r, chamber, spvi, dpvi)
+        if bio in data["members"] and party in data["fit"] and pvi is not None:
+            res = data["members"][bio] - (data["fit"][party]["a"] + data["fit"][party]["b"] * pvi)
+            out[bio] = -res if party == "D" else res
+    return out
 
 
 def position_scale_test(p, m):
     print("\n== 14. Position congruence's score scale ==")
-    # House generals 1994-2010: section 1's panel, scored per congress.
-    # Scales from every member of the congress, as the pipeline measures
-    # them; the regression on the contested incumbents.
-    S = contested(pd.concat(_congruence_scales(g.assign(ext=g.extA)) for _, g in m.groupby("cong"))).reset_index(drop=True)
-    print(f" House generals 1994-2010 (DW-NOMINATE, N={len(S)}), own-party share:")
+    # House generals 1994-2010: section 1's panel with each member's
+    # congress-specific Nokken-Poole position and count from Voteview, per
+    # party fits on seat lean and the scales over every member of the
+    # congress, as the pipeline measures them; the regression on the
+    # contested incumbents with section 1's controls.
+    parts = []
+    for c, g in m.groupby("cong"):
+        vv = pd.read_csv(p[f"H{c}_members.csv"])[["icpsr", "nokken_poole_dim1", "nokken_poole_dim2",
+                                                  "nominate_number_of_votes"]]
+        g = _drop_placeholders(g.merge(vv, left_on="id", right_on="icpsr").dropna(subset=["nokken_poole_dim1"]))
+        g = _per_party_extremity(g)
+        g["w"] = _weights(g, "house")
+        parts.append(_congruence_scales(g))
+    S = contested(pd.concat(parts)).reset_index(drop=True)
+    print(f" House generals 1994-2010 (Nokken-Poole, N={len(S)}), own-party share:")
     _compare_designs(S, "y", "x + lterms + C(fe)", S.id)
+    print("  which unit of extremity voters respond to:")
+    _which_unit(S, "y", "x + lterms + C(fe)", S.id)
 
     # Senate generals 1990-2024 on congress-specific Nokken-Poole positions.
     st, nat, tot, cands = _senate_returns(p)
     rows, balance = [], []
     for c in SENATES:
         M = _congruence_scales(_per_party_extremity(_senate_positions(p, c, st, nat)))
+        if c == max(SENATES):
+            print(f" the {c}th Senate's saturation: pooled {M.sat_pooled.iloc[0]:.3f}, "
+                  + ", ".join(f"{q} {M[M.party == q].sat_party.iloc[0]:.3f}" for q in ("D", "R"))
+                  + f"; Republicans at 0: {(_linear(M.ext, M.sat_pooled, np.ones(len(M)))[(M.party == 'R').values] <= 0).mean():.1%}")
+        # The scale's effect on party balance, so unweighted: every member
+        # read at full strength.
         for label, shape, sat in CONGRUENCE_DESIGNS:
-            sc = shape(M.ext, M[sat])
+            sc = shape(M.ext, M[sat], np.ones(len(M)))
             for party in ("D", "R"):
                 x = sc[(M.party == party).values]
                 balance.append({"chamber": "Senate", "congress": c, "design": label, "party": party,
@@ -972,6 +1066,8 @@ def position_scale_test(p, m):
     r = smf.ols("own ~ x + I(x**2) + C(fe) + pos + neg", S).fit(cov_type="cluster", cov_kwds={"groups": pd.factorize(S.icpsr)[0]})
     print(f"  symmetry: flank-ward {r.params['pos']:.2f} (t={r.tvalues['pos']:.1f}), center-ward "
           f"{r.params['neg']:.2f} (t={r.tvalues['neg']:.1f}), equal slopes p={float(r.t_test('pos = neg').pvalue):.2f}")
+    print("  which unit of extremity voters respond to:")
+    _which_unit(S, "own", "x + I(x**2) + C(fe)", pd.factorize(S.icpsr)[0])
 
     # Own-party voters: House primaries 1990-2010, Nokken-Poole positions.
     P = pd.read_stata(p["house_primaries.dta"])
@@ -988,10 +1084,12 @@ def position_scale_test(p, m):
         M = M.merge(P[P.year == yr][["state_po", "party", "last", "candnumber", "candpct", "winner", "prez"]],
                     left_on=["state_abbrev", "party", "last"], right_on=["state_po", "party", "last"])
         M = M.drop_duplicates("icpsr", keep=False)
-        M = M[M.prez.notna() & M.nokken_poole_dim1.notna()].reset_index(drop=True)
+        M = _drop_placeholders(M[M.prez.notna() & M.nokken_poole_dim1.notna()]).reset_index(drop=True)
         # prez is the own party's presidential share; per-party fits make
         # it equivalent to the R-signed lean.
-        M = _congruence_scales(_per_party_extremity(M, lean="prez"))
+        M = _per_party_extremity(M, lean="prez")
+        M["w"] = _weights(M, "house")
+        M = _congruence_scales(M)
         M["fe"] = f"{yr}" + M.party
         rows.append(M)
     A = pd.concat(rows, ignore_index=True)
@@ -1004,7 +1102,7 @@ def position_scale_test(p, m):
 
     # Party balance: every Senate, each design.
     B = pd.DataFrame(balance)
-    print(" party balance, every Senate 101st-119th (mean over Senates):")
+    print(" party balance, every Senate 101st-119th, unweighted (mean over Senates):")
     for label, _, _ in CONGRUENCE_DESIGNS:
         d = B[B.design == label]
         w = d.pivot(index="congress", columns="party", values=["mean", "at0", "at100", "sd"])
@@ -1017,32 +1115,49 @@ def position_scale_test(p, m):
     print("  shipped, share at 0 by Senate (R minus D): "
           + ", ".join(f"{c}:{(w.R[c] - w.D[c]) * 100:+.0f}" for c in w.index))
 
-    # Thin records: a congress-specific position from few votes.
-    # Thin records: every member of every completed Congress, the files
-    # scripts/calibrate_position_confidence.py fits (a sitting Congress's
-    # counts are still growing).
-    from calibrate_position_confidence import CONGRESSES, fit_noise, observations
-    print(f" thin records: |Nokken-Poole - career DW-NOMINATE| by the member's vote count, "
-          f"Senate and House {CONGRESSES.start}-{CONGRESSES.stop - 1}:")
+    # Thin records. First the proxy v6.27's first draft used (a member's
+    # Nokken-Poole position against their career DW-NOMINATE one), and why
+    # it can't calibrate anything: its least-squares fit of
+    # gap^2 = drift + k / votes swings with which few thin members are in
+    # it. Then the shipped measurement, from the calibration's own file.
+    from calibrate_position_confidence import CONGRESSES
     T = []
     for prefix in ("S", "H"):
         for c in CONGRESSES:
             mm = pd.read_csv(p[f"{prefix}{c}_members.csv"])
-            mm = mm[(mm.chamber != "President") & mm.nokken_poole_dim1.notna() & mm.nominate_dim1.notna()]
-            T.append(mm[["nominate_number_of_votes", "nokken_poole_dim1", "nominate_dim1"]])
-    T = pd.concat(T)
-    T["gap"] = (T.nokken_poole_dim1 - T.nominate_dim1).abs()
-    T["bin"] = pd.cut(T.nominate_number_of_votes, [0, 25, 50, 75, 100, 150, 200, 300, 500, 10_000])
-    print(T.groupby("bin", observed=True).gap.agg(["size", "median", lambda s: s.quantile(.9)])
-          .rename(columns={"<lambda_0>": "p90"}).round(3).to_string())
-    obs = []
-    for prefix in ("S", "H"):
-        for c in CONGRESSES:
-            obs += observations(pd.read_csv(p[f"{prefix}{c}_members.csv"]).fillna("").astype(str).to_dict("records"))
-    fit = fit_noise(obs)
-    print(f"  gap^2 = drift + k/votes over {fit['members']} members: drift {fit['drift']:.5f} "
-          f"(SD {np.sqrt(fit['drift']):.3f}), k {fit['k']:.3f}; noise equals drift at "
-          f"{fit['full_confidence_votes']:.0f} votes; at 20 votes noise SD {np.sqrt(fit['k'] / 20):.3f}")
+            mm = mm[(mm.chamber != "President") & mm.nokken_poole_dim1.notna() & mm.nominate_dim1.notna()
+                    & (mm.nominate_number_of_votes > 0)]
+            T.append(mm.assign(ch=prefix, c=c, placeholder=(mm.nokken_poole_dim1 == 0) & (mm.nokken_poole_dim2 == 0)))
+    T = pd.concat(T, ignore_index=True)
+    T["gap2"] = (T.nokken_poole_dim1 - T.nominate_dim1) ** 2
+
+    def k_over_drift(d):
+        b, a = np.polyfit(1 / d.nominate_number_of_votes, d.gap2, 1)
+        return b / a
+    real = T[~T.placeholder]
+    print(f" thin records, the career-gap proxy ({len(T)} member-congresses, {int(T.placeholder.sum())} placeholders):")
+    print(f"  k/drift: all {k_over_drift(T):.0f}; placeholders out {k_over_drift(real):.0f}; Senate "
+          f"{k_over_drift(real[real.ch == 'S']):.0f}; House {k_over_drift(real[real.ch == 'H']):.0f}; "
+          f"5+ votes {k_over_drift(real[real.nominate_number_of_votes >= 5]):.0f}")
+    rng = np.random.default_rng(0)
+    ids = real.icpsr.unique()
+    boot = []
+    for _ in range(300):
+        pick = pd.Series(rng.choice(ids, len(ids)))
+        boot.append(k_over_drift(real.merge(pick.rename("icpsr").to_frame(), on="icpsr")))
+    print("  member-clustered bootstrap, placeholders out: 5th/50th/95th percentile "
+          + "/".join(f"{q:.0f}" for q in np.percentile(boot, [5, 50, 95])))
+    real = real.assign(gap=np.sqrt(real.gap2),
+                       bin=pd.cut(real.nominate_number_of_votes, [0, 25, 50, 75, 100, 150, 200, 300, 500, 10_000]))
+    print(real.groupby("bin", observed=True).gap.agg(["size", "median"]).round(3).to_string())
+    shipped = json.loads((pathlib.Path(__file__).resolve().parents[1] / "app" / "data"
+                          / "position_confidence.json").read_text())
+    print(" thin records, shipped (scripts/calibrate_position_confidence.py):")
+    for chamber, c in shipped["chambers"].items():
+        print(f"  {chamber}: weight by votes {c['weights']}, median |error| {c['median_abs_error']}, "
+              f"own fit {c['half_weight_votes']}")
+    print(" v6.26 -> v6.27 on the sitting Congress:")
+    _sitting_effect(p)
 
 
 def main():

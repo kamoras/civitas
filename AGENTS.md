@@ -283,7 +283,12 @@ Key mathematical properties:
   a sample) — its leadership component is still pulled toward 50 for short
   tenure.
   The rate is the count confidence below — fixed, not estimated from the
-  population's variance, so do not call it Bayesian or empirical Bayes
+  population's variance, so do not call it Bayesian or empirical Bayes.
+  One measured exception: Constituent Alignment's position part (v6.27)
+  weights a roll-call position from n votes by n / (n + n0), where n0 is
+  the measured slope-of-prediction of a full record's score on n votes'
+  (`scripts/calibrate_position_confidence.py`, sampling error against the
+  sitting Congress's spread) — a reliability weight, not a count threshold
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Constituent Alignment scores account for Cook
