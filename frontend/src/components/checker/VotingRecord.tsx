@@ -259,7 +259,7 @@ export default function VotingRecord({
         <div className="text-xl font-display font-semibold text-ink-hi">
           {totalVotes.toLocaleString()}
         </div>
-        <div className="text-ink-min text-xs">
+        <div className="[&>span]:justify-center text-ink-min text-xs">
           <MetricTooltip text="Total roll-call votes tracked from Congress.gov and Senate.gov for this member across recent and key votes.">
             TOTAL TRACKED
           </MetricTooltip>
@@ -269,7 +269,7 @@ export default function VotingRecord({
         <div className="text-xl font-display font-semibold text-signal-cyan">
           {Math.round(partyLoyaltyPct)}%
         </div>
-        <div className="text-ink-min text-xs">
+        <div className="[&>span]:justify-center text-ink-min text-xs">
           <MetricTooltip text="How often this member votes with the majority of the member's party. 100% = perfect party-line voter. Calculated from all scoreable roll-call votes.">
             PARTY LOYALTY
           </MetricTooltip>
@@ -280,7 +280,7 @@ export default function VotingRecord({
         <div className="text-xl font-display font-semibold text-signal-amber">
           {partyIndependencePct}%
         </div>
-        <div className="text-ink-min text-xs">
+        <div className="[&>span]:justify-center text-ink-min text-xs">
           <MetricTooltip text="How often this member votes against the member's own party. Higher = more willingness to break from party leadership on roll-call votes.">
             INDEPENDENT
           </MetricTooltip>

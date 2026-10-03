@@ -96,7 +96,11 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
   }, [open]);
 
   return (
-    <span ref={ref} className="relative inline-flex items-center">
+    // flex-wrap + max-w-full: in a box narrower than the label and the
+    // button together (a third-width stat tile on a phone), the button
+    // drops under the label instead of running past the box's edge, where
+    // a `.panel`'s overflow:hidden cut it off and left it untappable.
+    <span ref={ref} className="relative inline-flex max-w-full flex-wrap items-center">
       {children}
       <button
         type="button"

@@ -84,7 +84,7 @@ function PartisanDepthPanel({
           >
             {depth.overallParty === "centrist" ? "CTR" : depth.overallParty}
           </div>
-          <div className="text-xs text-ink-min">
+          <div className="[&>span]:justify-center text-xs text-ink-min">
             <MetricTooltip text="Overall ideological direction derived from roll-call votes. R = votes lean Republican, D = votes lean Democrat, CTR = centrist.">
               LEAN
             </MetricTooltip>
@@ -92,7 +92,7 @@ function PartisanDepthPanel({
         </div>
         <div className="panel p-2 min-w-0">
           <div className="text-sm font-mono text-ink-hi">{depth.totalPositions}</div>
-          <div className="text-xs text-ink-min">
+          <div className="[&>span]:justify-center text-xs text-ink-min">
             <MetricTooltip text="Number of policy areas where this member has cast votes. Each area's lean is derived from the votes cast on D-leaning vs R-leaning bills in that area.">
               AREAS
             </MetricTooltip>
@@ -104,7 +104,7 @@ function PartisanDepthPanel({
           >
             {depth.crossPartyCount}
           </div>
-          <div className="text-xs text-ink-min">
+          <div className="[&>span]:justify-center text-xs text-ink-min">
             <MetricTooltip text="Number of policy areas where this member's votes align with the opposite party's platform. Higher = more ideologically independent.">
               CROSS
             </MetricTooltip>
