@@ -1305,6 +1305,10 @@ the pending list).
   full stop; for a separator inside a label, the middle dot " · ". A string that is
   only "—" is the table placeholder for no data and stays.
   `src/lib/noEmDash.test.ts` fails on any other em dash in a user-visible string.
+  The rule covers backend text the site shows too: the scorecard's "show the
+  math" details and notes come from `score_calculator.py` and
+  `president_scorer.py`, and `backend/tests/test_shown_text_style.py` fails on
+  an em dash in any string there that isn't a docstring or a log message.
 - Every metric shown on scorecards has a `MetricTooltip` component providing
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they

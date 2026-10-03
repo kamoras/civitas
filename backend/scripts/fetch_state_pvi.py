@@ -96,9 +96,12 @@ SOURCE_DESC = (
     "returns v20210113 (doi:10.7910/DVN/42MVDX). 2024: tonmcg county-level "
     "presidential results (official county canvasses) summed to state level, "
     "cross-validated against MEDSL for 2020 (<=0.3pp per state, gated). "
-    "Two-party vote shares, Cook PVI formula. Regenerate with "
-    "backend/scripts/fetch_state_pvi.py."
+    "Two-party vote shares, Cook PVI formula."
 )
+# For maintainers, kept out of _source: the site shows _source as the
+# figure's provenance (PviMethodologyNote), where a regenerate command
+# is noise.
+REGENERATE = "backend/scripts/fetch_state_pvi.py"
 
 WINDOW = "2020+2024"
 AS_OF = "2026-07-24"  # retrieval date of the pinned sources above
@@ -305,6 +308,7 @@ def main() -> int:
     json.dump(
         {
             "_source": SOURCE_DESC,
+            "_regenerate": REGENERATE,
             "_method": (
                 "STATE_PVI(st) = -round(100 * mean over {2020,2024} of "
                 "[state two-party D share - national two-party D share]); "

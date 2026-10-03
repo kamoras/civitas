@@ -634,7 +634,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                         db.add(ExploreDocument(
                             doc_type="Senate Floor Speech",
                             source="Congressional Record (GovInfo)",
-                            title=remark.get("title", f"Sen. {_speaker_surname(speaker)} — Floor Remarks"),
+                            title=remark.get("title", f"Sen. {_speaker_surname(speaker)} · Floor Remarks"),
                             summary=remark["text"][:300],
                             body=remark["text"],
                             date=remark["date"],
@@ -673,7 +673,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
                     db.add(ExploreDocument(
                         doc_type="House Floor Speech",
                         source="Congressional Record (GovInfo)",
-                        title=remark.get("title", f"Rep. {_speaker_surname(speaker)} — Floor Remarks"),
+                        title=remark.get("title", f"Rep. {_speaker_surname(speaker)} · Floor Remarks"),
                         summary=remark["text"][:300],
                         body=remark["text"],
                         date=remark["date"],
