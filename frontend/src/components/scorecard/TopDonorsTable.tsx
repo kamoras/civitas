@@ -20,13 +20,13 @@ export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
         </caption>
         <thead>
           <tr className="border-b border-white/[0.07] text-xs text-ink-min">
-            <th scope="col" className="py-2 pr-4 text-left">
+            <th scope="col" className="py-2 pr-2 sm:pr-4 text-left">
               RANK
             </th>
-            <th scope="col" className="py-2 pr-4 text-left">
+            <th scope="col" className="py-2 pr-2 sm:pr-4 text-left">
               DONOR
             </th>
-            <th scope="col" className="py-2 pr-4 text-right">
+            <th scope="col" className="py-2 pr-2 sm:pr-4 text-right">
               AMOUNT
             </th>
             <th scope="col" className="py-2 text-right">
@@ -40,8 +40,8 @@ export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
               key={donor.name}
               className={`border-b border-white/[0.07] ${i % 2 === 0 ? "bg-white/[0.03]" : ""}`}
             >
-              <td className="py-2 pr-4 text-ink-min">#{i + 1}</td>
-              <td className="py-2 pr-4">
+              <td className="py-2 pr-2 sm:pr-4 text-ink-min">#{i + 1}</td>
+              <td className="py-2 pr-2 sm:pr-4">
                 {/* An FEC employer name can be one unspaced token: wrap it
                     rather than push AMOUNT and TYPE off a phone's screen. */}
                 <div className="text-ink [overflow-wrap:anywhere]">
@@ -62,15 +62,17 @@ export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
                   donor.pacSponsor.toLowerCase() !== donor.name.toLowerCase() &&
                   !NO_SPONSOR.has(donor.pacSponsor.toLowerCase().trim()) &&
                   donor.pacSponsor.length > 2 && (
-                    <div className="mt-0.5 text-xs text-ink-lo">
+                    <div className="mt-0.5 text-xs text-ink-lo [overflow-wrap:anywhere]">
                       BEHIND THE PAC: {donor.pacSponsor}
                     </div>
                   )}
                 {donor.pacAnalysis && !EMPTY_ANALYSIS.test(donor.pacAnalysis) && (
-                  <div className="mt-0.5 text-xs text-ink-min">{donor.pacAnalysis}</div>
+                  <div className="mt-0.5 text-xs text-ink-min [overflow-wrap:anywhere]">
+                    {donor.pacAnalysis}
+                  </div>
                 )}
               </td>
-              <td className="py-2 pr-4 text-right text-signal-cyan">
+              <td className="py-2 pr-2 sm:pr-4 text-right text-signal-cyan">
                 {formatCurrency(donor.total)}
               </td>
               <td className="py-2 text-right">

@@ -68,11 +68,12 @@ function PartisanDepthPanel({
           />
           {/* Clamped to the track like the fill: a lean past the scale
               (measured leans reach +0.43) put the marker beyond the bar,
-              where the panel's overflow:hidden cut it off. */}
+              where the panel's overflow:hidden cut it off. The 2px inset
+              keeps the 4px marker inside the track at either end. */}
           <div
             className="absolute top-0 bottom-0 w-1 bg-phos"
             style={{
-              left: `${Math.min(Math.max(50 + (depth.overallLean / 0.15) * 50, 0), 100)}%`,
+              left: `clamp(2px, ${50 + (depth.overallLean / 0.15) * 50}%, calc(100% - 2px))`,
               transform: "translateX(-50%)",
             }}
           />
@@ -158,7 +159,9 @@ function PartisanDepthPanel({
             const isD = p.alignment === "D";
             return (
               <div key={i} className="flex items-center gap-2 text-xs">
-                <span className="w-24 text-ink-lo truncate">
+                {/* w-28: the longest policy area, FOREIGN POLICY, is 101px and
+                    was cut to "FOREIGN POL…" in w-24 at every width. */}
+                <span className="w-28 shrink-0 text-ink-lo truncate">
                   <PolicyLabel area={p.area} />
                 </span>
                 <div className="flex-1 h-2 bg-white/[0.03] border border-white/[0.07] relative">
