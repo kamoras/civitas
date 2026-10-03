@@ -50,7 +50,22 @@ Office," APSR 96:1 — district-relative ideological extremity):
 
     extremity_p90 (per chamber, across both parties) is the saturation
     scale: the most out-of-step ~decile spans the scoring component's
-    full range. Data-derived, recomputed on every ingest.
+    full range. Data-derived, recomputed on every ingest. Pooled, not one
+    per party: the two predicted election results equally well and the
+    test of which unit voters respond to was inconclusive (research note
+    section 14), so the shipped design stands.
+
+    Thin records (v6.27): a Nokken-Poole position estimated from few roll
+    calls is mostly noise (research note section 14). The fits and
+    extremity_p90 are taken only over members with at least
+    score_calculator._position_full_confidence_votes() votes, and each
+    member's count is stored under "votes" so the score can shrink a thin
+    record's component toward 50. A member with a Nokken-Poole position but
+    no count (Voteview publishes the position before scaling a newly
+    sworn-in member) has no entry, which the score reads as 0 votes.
+    Early in a Congress, before enough members have that many, the build
+    fails the member-count gate and the previous good section is kept, as
+    for any other gate failure.
 
 Independents (party_code 328) are included in the per-member positions
 (score_calculator scores them against the fit of the party they caucus
@@ -121,7 +136,9 @@ METHOD_DESC = (
     "(seat_pvi positive = R lean; state PVI for senators, district PVI "
     "for House). extremity = residual signed toward the party flank "
     "(-residual for D, +residual for R); extremity_p90 = 90th percentile "
-    "of |extremity| across the chamber's D+R members. Construct: "
+    "of |extremity| across the chamber's D+R members. Fits and p90 use only "
+    "members with at least full_confidence_votes roll calls (votes = each "
+    "member's count). Construct: "
     "Canes-Wrone, Brady & Cogan 2002 district-relative extremity; "
     "per-party fits avoid Bafumi & Herron 2010 leapfrog bimodality."
 )
@@ -214,14 +231,25 @@ def _position_column(rows: list[dict]) -> tuple[str, str]:
     return POSITION_COLUMNS[-1]
 
 
+def _vote_count(row: dict) -> int | None:
+    try:
+        return int(float(row.get("nominate_number_of_votes") or ""))
+    except ValueError:
+        return None
+
+
 def build_chamber_ideal_points(
     rows: list[dict], chamber: str,
     state_pvi: dict[str, int], district_pvi: dict[str, int],
+    full_confidence_votes: float = 0,
 ) -> tuple[dict, list[str]]:
-    """One chamber's {members, fit, extremity_p90} section from parsed
-    Voteview rows, plus build-stage failure strings (empty = clean)."""
+    """One chamber's {members, votes, fit, extremity_p90} section from parsed
+    Voteview rows, plus build-stage failure strings (empty = clean). Only
+    members with at least full_confidence_votes roll calls enter the fits
+    and the saturation scale; every member's position is kept."""
     column, measure = _position_column(rows)
     members: dict[str, float] = {}
+    votes: dict[str, int] = {}
     by_party: dict[str, list[tuple[float, float]]] = {"D": [], "R": []}
     unresolved_seats = 0
 
@@ -235,6 +263,11 @@ def build_chamber_ideal_points(
         except ValueError:
             continue
         members[bio] = round(dim1, 4)
+        n_votes = _vote_count(row)
+        if n_votes is not None:
+            votes[bio] = n_votes
+        if full_confidence_votes and (n_votes or 0) < full_confidence_votes:
+            continue  # a thin record: scored, shrunk, but not part of the norm
         try:
             party = PARTY_CODES.get(int(row.get("party_code") or 0))
         except ValueError:
@@ -251,7 +284,10 @@ def build_chamber_ideal_points(
     failures: list[str] = []
     for party, pairs in by_party.items():
         if len(pairs) < 20:
-            failures.append(f"{chamber}/{party}: only {len(pairs)} members with seat+dim1 — parse drift?")
+            failures.append(
+                f"{chamber}/{party}: only {len(pairs)} members with seat+dim1 and a full record "
+                "— parse drift, or too early in the Congress?"
+            )
             continue
         xs = [p for p, _ in pairs]
         ys = [d for _, d in pairs]
@@ -267,7 +303,8 @@ def build_chamber_ideal_points(
         logger.info("voteview %s: %d members with no resolvable seat PVI (excluded from fit only)",
                     chamber, unresolved_seats)
     return {
-        "members": members, "fit": fit, "extremity_p90": extremity_p90, "measure": measure,
+        "members": members, "votes": votes, "fit": fit, "extremity_p90": extremity_p90,
+        "measure": measure, "full_confidence_votes": full_confidence_votes,
     }, failures
 
 
@@ -313,7 +350,7 @@ async def refresh_member_ideal_points(
     never aborting the pipeline run.
     """
     from app.pipeline.analyze.score_calculator import (
-        _district_pvi, _state_pvi, write_member_ideal_points,
+        _district_pvi, _position_full_confidence_votes, _state_pvi, write_member_ideal_points,
     )
     try:
         rows = await fetch_member_rows(chamber, congress, client=client)
@@ -322,7 +359,9 @@ async def refresh_member_ideal_points(
                 "Voteview %s unreachable — keeping previous member_ideal_points data", chamber,
             )
             return False
-        data, failures = build_chamber_ideal_points(rows, chamber, _state_pvi(), _district_pvi())
+        data, failures = build_chamber_ideal_points(
+            rows, chamber, _state_pvi(), _district_pvi(), _position_full_confidence_votes(),
+        )
         failures += ingestion_gates(chamber, data)
         if failures:
             for f in failures:

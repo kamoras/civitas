@@ -477,14 +477,24 @@ class TestPositionCongruence:
 
     @pytest.fixture(autouse=True)
     def ideal_points(self, monkeypatch):
-        def patch(members):
-            monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", {"senate": {
+        # A position needs 80 roll calls to be trusted in full.
+        monkeypatch.setattr(score_calculator, "_position_full_confidence_cache", 80.0)
+
+        def patch(members, votes=None):
+            section = {
                 "members": members,
                 "fit": {"D": {"a": -0.35, "b": 0.006}, "R": {"a": 0.35, "b": 0.006}},
                 "extremity_p90": 0.2,
                 "measure": "Nokken-Poole",
-            }})
+            }
+            if votes is not None:
+                section["votes"] = votes
+            monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", {"senate": section})
         self.patch = patch
+
+    def _congruence(self, bioguide_id="X1"):
+        core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id=bioguide_id)
+        return {c["label"]: c for c in core["components"]}["Position congruence"]
 
     def test_flank_ward_scores_below_neutral(self):
         self.patch({"X1": -0.55})
@@ -511,6 +521,35 @@ class TestPositionCongruence:
         core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id="X1")
         assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
         assert core["components"][0]["weight"] == 1.0
+
+    def test_a_thin_record_is_pulled_toward_neutral(self):
+        """v6.27: 40 of the 80 roll calls a reliable position needs, so a
+        position at saturation toward the flank scores halfway to 50."""
+        self.patch({"X1": -0.55}, votes={"X1": 40})
+        assert self._congruence()["score"] == 25.0
+        assert "40 roll calls" in self._congruence()["detail"]
+
+    def test_a_full_record_is_not_shrunk(self):
+        self.patch({"X1": -0.55}, votes={"X1": 500})
+        assert self._congruence()["score"] == 0.0
+        assert "roll calls" not in self._congruence()["detail"]
+        assert score(record(10), bioguide_id="X1") == 70
+
+    def test_no_count_in_a_counted_section_reads_as_no_votes(self):
+        """Voteview hasn't scaled the member yet (sworn in days ago): the
+        component sits at neutral rather than trusting the estimate."""
+        self.patch({"X1": -0.55}, votes={})
+        assert self._congruence()["score"] == 50.0
+
+    def test_a_section_without_counts_is_not_shrunk(self):
+        """A file written before v6.27 has no counts to shrink by."""
+        self.patch({"X1": -0.55})
+        assert self._congruence()["score"] == 0.0
+
+    def test_no_calibration_no_shrinkage(self, monkeypatch):
+        monkeypatch.setattr(score_calculator, "_position_full_confidence_cache", 0.0)
+        self.patch({"X1": -0.55}, votes={"X1": 5})
+        assert self._congruence()["score"] == 0.0
 
     def test_breakdown_weights_and_measure(self):
         self.patch({"X1": -0.15})

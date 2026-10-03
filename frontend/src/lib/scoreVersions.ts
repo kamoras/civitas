@@ -32,6 +32,20 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.27",
+    date: "2026-10-03",
+    title:
+      "Constituent Alignment: a voting position measured from only a few votes counts for less",
+    tldr: "Part of Constituent Alignment compares where a member sits on the left-right scale with where members of their party from similar seats sit. That position is estimated from the member's roll-call votes in the current Congress, and from only a few votes it is mostly noise. It is now pulled toward neutral until it rests on enough votes to be reliable, measured at 81. Almost every member is unaffected.",
+    changes: [
+      "Why: across every member of Congresses 101 to 118, a position estimated from 25 to 50 votes was typically four times further from the member's long-run position than one from a full Congress. At 20 votes, sampling noise alone was worth about 25 points on this part of the score.",
+      "The count is measured: 81 votes is where the noise in the estimate equals how much members really move from one Congress to the next. Below it, the position part of the score moves toward 50 in proportion. A member Voteview hasn't measured yet sits at 50.",
+      "The typical position for a seat, and the range the score spans, are now set only from members with at least 81 votes.",
+      "Tested and kept: this part scores 50 for sitting where members of your party from similar seats sit, and above 50 for sitting nearer the seat's center. Scoring it like the vote part (100 at the typical position) was tested against House and Senate election results and predicted nothing, while the current shape did. One scale for both parties was also kept: a scale per party predicted elections no better.",
+      "Effect on October 2026 data: the average member moves 0.5 points (Senate) and 0.3 (House) on Constituent Alignment. Two recently sworn-in representatives move up 8.0 and 5.7. docs/methodology/member-score/v6.27.md has the measurements.",
+    ],
+  },
+  {
     version: "v6.26",
     date: "2026-10-02",
     title: "Funding Independence: every committee and occupation counted, and fairer comparisons",

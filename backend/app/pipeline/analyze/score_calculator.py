@@ -190,7 +190,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.26"
+ALGORITHM_VERSION = "v6.27"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -496,6 +496,36 @@ def _state_population() -> dict[str, float]:
             logger.warning("state_population.json unavailable — small-donor baseline will use the national mean for every state")
             _state_population_cache = {}
     return _state_population_cache
+
+
+_position_full_confidence_cache: float | None = None
+
+
+def _position_full_confidence_votes() -> float:
+    """Roll calls at which a congress-specific (Nokken-Poole) position is
+    trusted in full: the count at which its estimation noise equals real
+    congress-to-congress movement, fitted over every member of Congresses
+    101-118 (v6.27, research note section 14).
+
+    Read from app/data/position_confidence.json; regenerate with
+    scripts/calibrate_position_confidence.py. 0 (no shrinkage, every
+    member in the fits — the pre-v6.27 behaviour) if the file is
+    unavailable: missing data is never punitive.
+    """
+    global _position_full_confidence_cache
+    if _position_full_confidence_cache is None:
+        import json
+        import pathlib
+        path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "position_confidence.json"
+        try:
+            _position_full_confidence_cache = float(json.loads(path.read_text())["full_confidence_votes"])
+        except Exception:
+            logger.warning(
+                "position_confidence.json unavailable — position congruence will not "
+                "shrink thin records; regenerate with scripts/calibrate_position_confidence.py"
+            )
+            _position_full_confidence_cache = 0.0
+    return _position_full_confidence_cache
 
 
 # A fetch/district_pvi.SeatLines (a dict of the sitting table that also
@@ -2015,15 +2045,33 @@ def seat_break_residual(
 POSITION_CONGRUENCE_WEIGHT = 0.30
 
 
-def position_congruence_score(extremity: float, saturation: float) -> float:
+def position_confidence(votes: int | None) -> float:
+    """Count confidence of a congress-specific position (v6.27): min(votes /
+    _position_full_confidence_votes(), 1). 1 when the count is unknown (a
+    section written before v6.27) or no calibration is available."""
+    full = _position_full_confidence_votes()
+    if votes is None or not full:
+        return 1.0
+    return min(max(votes, 0) / full, 1.0)
+
+
+def position_congruence_score(extremity: float, saturation: float, votes: int | None = None) -> float:
     """Constituent Alignment's position-congruence component: 50 at the
     position a same-party member of this seat is expected to hold, falling to
     0 at `saturation` (the chamber's 90th-percentile extremity) toward the
     party flank and rising to 100 as far toward the seat's center —
     symmetric, as the 2004 House test found (docstring below). `extremity` is
-    signed toward the flank. The one implementation the score and
-    scripts/benchmark_validation.py both call."""
-    return 50.0 - 50.0 * max(-1.0, min(extremity / saturation, 1.0))
+    signed toward the flank. A position estimated from fewer roll calls than
+    a reliable one needs is pulled toward 50 by position_confidence(votes)
+    (v6.27). The one implementation the score and
+    scripts/benchmark_validation.py both call.
+
+    Linear and 50 at the expectation, not 100 there like the vote part:
+    across House generals 1994-2010 and Senate generals 1990-2024 this
+    shape predicted the incumbent's vote share (t=5.2, t=2.5) and the
+    peaked one did not (t=0.5, t=-0.7) — research note section 14."""
+    raw = 50.0 - 50.0 * max(-1.0, min(extremity / saturation, 1.0))
+    return 50.0 + (raw - 50.0) * position_confidence(votes)
 
 
 def _calc_constituent_alignment(
@@ -2106,6 +2154,14 @@ def _calc_constituent_alignment(
              dominated it when both were entered — and "current term, not
              career" (AGENTS.md principle 6) wants the congress-specific one
              anyway.
+           - Thin records shrink toward 50 (v6.27): a position from fewer
+             roll calls than _position_full_confidence_votes() is weighted by
+             its count confidence, and only full records set the fit and the
+             saturation. Below that count estimation noise outweighs the
+             member's real movement (research note section 14).
+           - The shape, 50 at the expectation, and the scale, pooled across
+             both parties, were tested against the alternatives in section 14
+             and kept.
     """
     return _constituent_alignment_core(
         voting_record, lobbying_matches, funding, state, party,
@@ -2143,12 +2199,23 @@ def _constituent_alignment_core(
         expected_dim1 = float(position_fit["a"]) + float(position_fit["b"]) * _seat_pvi(state, district)
         residual = float(dim1) - expected_dim1
         extremity = -residual if eval_party == "D" else residual
-        congruence_score = position_congruence_score(extremity, float(congruence_sat))
+        # A section that records counts (v6.27) and has none for this member
+        # means Voteview hasn't scaled them yet: a member sworn in days ago,
+        # the thinnest record there is. None only for an older section.
+        position_votes = (ideal["votes"].get(bioguide_id, 0)
+                          if isinstance(ideal.get("votes"), dict) else None)
+        congruence_score = position_congruence_score(extremity, float(congruence_sat), position_votes)
         congruence_detail = (
             f"{ideal.get('measure', 'NOMINATE')} dim1 {float(dim1):+.2f} vs "
             f"{expected_dim1:+.2f} expected for a {eval_party} member of this seat — "
             + ("toward the party flank" if extremity > 0 else "toward the seat's center")
         )
+        if position_confidence(position_votes) < 1.0:
+            congruence_detail += (
+                f"; estimated from {position_votes} roll calls, under the "
+                f"{_position_full_confidence_votes():.0f} a position needs to be reliable, "
+                "so the score is pulled toward 50 in proportion"
+            )
 
     break_rate, n_party = party_break_rate(voting_record)
     if break_rate is None:

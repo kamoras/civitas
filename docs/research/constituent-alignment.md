@@ -568,6 +568,116 @@ of one party from one state share an electorate, yet the 43 such pairs sit a
 median 0.093 apart and as much as 0.485, so much of where a senator sits is
 the senator, not the seat. Partisan lean stays the expectation.
 
+### 14. Position congruence's score: shape, scale and thin records (v6.27, tested 2026-10)
+
+**The question.** Position congruence reads low beside everything around it:
+across the 119th Congress its mean is about 50 in both chambers, and one
+Senate Republican in ten scores 0 on it. Section 1 tested the position as a
+continuous measure. The score is a transform of it (clipped at a saturation
+point, 50 at the seat's expectation), and three things about that transform
+had never been put in front of election results:
+
+- **Shape.** The vote part is 100 at the seat's expectation and falls both
+  ways (v6.16). Position congruence is 50 at the expectation and rises
+  toward the seat's center. Should it peak at the expectation too?
+- **Scale.** The score reaches 0 at the 90th percentile of |extremity|,
+  pooled across both parties. The vote part moved to one scale per party in
+  v6.16 (section 10). Republican positions spread more widely around their
+  expectation (in the 119th Congress the Senate's per-party 90th percentiles
+  are 0.346 R and 0.177 D), so on the pooled scale Republicans reach 0 more
+  often.
+- **Thin records.** A Nokken-Poole position is estimated from one
+  congress's roll calls. Members with few of them (sworn in late, gone
+  early, or anyone early in a Congress) got the same weight in the fit, the
+  scale and the score as everyone else.
+
+**Shape and scale against elections.** The four combinations, each scored
+per congress exactly as the pipeline does (`position_congruence_score`, per
+party fits on seat lean). Coefficient per score point, t, and the R² the
+score adds to the controls of the earlier sections:
+
+| Outcome | Linear, pooled (shipped) | Linear, per party | Peaked, pooled | Peaked, per party |
+|---|---|---|---|---|
+| House generals 1994–2010 (DW-NOMINATE, N=2,545) | **0.036 (5.2), 0.0100** | 0.038 (5.4), 0.0110 | 0.003 (0.5), 0.0001 | 0.003 (0.4), 0.0001 |
+| Senate generals 1990–2024 (Nokken-Poole, N=461) | **0.042 (2.5), 0.0118** | 0.040 (2.5), 0.0111 | −0.009 (−0.7), 0.0008 | −0.007 (−0.5), 0.0005 |
+| House primaries 1990–2010, contested, primary share (N=1,044) | −0.009 (−0.5), 0.0003 | −0.008 (−0.4), 0.0002 | 0.021 (1.4), 0.0019 | 0.022 (1.5), 0.0022 |
+| drew a primary challenger (N=3,869) | 0.000 (1.2) | 0.000 (1.4) | −0.000 (−1.1) | −0.000 (−1.4) |
+
+- **Shape: kept.** The linear shape predicts the general election in both
+  chambers. The peaked shape predicts nothing there. The Senate replicates
+  section 3's symmetry (flank-ward −0.86, t=−1.4; center-ward −1.23,
+  t=−1.8; equal slopes p=0.73), so sitting nearer the seat's center earns
+  credit rather than costing it. Primary voters show nothing significant
+  for either shape, so unlike the vote part (section 10) there is no
+  own-party signal pulling the other way. A median member scoring about 50
+  here is the scale working as tested: 50 means "where a same-party member
+  of this seat sits".
+- **Scale: kept, as not settled.** Pooled and per-party scales predict
+  equally well (House slightly better per party, Senate slightly better
+  pooled). The direct test, whether voters penalize a NOMINATE unit or a
+  party's own spread, came out in opposite directions in the two chambers
+  and significant in neither: per raw unit, House Republicans pay 2.63 less
+  than Democrats (t=0.8, p=0.42) and Senate Republicans 3.31 more (t=−0.5,
+  p=0.61). Unlike the vote part's case, the pooled scale doesn't shift
+  either party's average (over every Senate, 50.5 D and 51.6 R pooled, 50.8
+  and 50.9 per party). It widens the spread for the party that spreads more
+  (share at 0: 2.8% D and 9.9% R pooled, 5.7% and 6.8% per party). With no
+  evidence for either, the shipped scale stays.
+
+**Thin records.** Over every member of Congresses 101–118 (9,821
+member-congresses), the gap between a member's Nokken-Poole position and
+their career DW-NOMINATE position, by the member's vote count that congress:
+
+| Votes | Members | Median gap | 90th percentile |
+|---|---|---|---|
+| 1–25 | 25 | 0.099 | 0.496 |
+| 26–50 | 28 | 0.166 | 0.282 |
+| 51–75 | 19 | 0.080 | 0.245 |
+| 76–100 | 14 | 0.038 | 0.133 |
+| 101–150 | 26 | 0.038 | 0.143 |
+| 151–200 | 19 | 0.043 | 0.091 |
+| 201–300 | 64 | 0.040 | 0.119 |
+| 301–500 | 768 | 0.036 | 0.096 |
+| over 500 | 8,858 | 0.031 | 0.091 |
+
+Fitting gap² = drift + k / votes over the same members gives drift 0.00346
+(a real congress-to-congress movement of SD 0.059) and k = 0.279. The noise
+variance equals the drift at **81 votes**. Below that, the estimate says
+more about the sample than about the member. At 20 votes its noise SD is
+0.118, about half the saturation scale, which is ±25 points on this
+component from sampling alone. This can't be tested against elections:
+incumbents who run again have full records. It is the reliability question
+every count-confidence threshold in the score answers (AGENTS.md principle
+3), and this one is measured.
+
+**Shipped (v6.27).** `scripts/calibrate_position_confidence.py` fits that
+count from Voteview's member files and writes
+`app/data/position_confidence.json`.
+- A member's component is shrunk toward 50 by `min(votes / 81, 1)`.
+- The per-party fits and the saturation scale use only members with full
+  records.
+- Voteview publishes a position for a newly sworn-in member before it
+  publishes their count, and the score reads that missing count as 0
+  votes.
+- Early in a Congress, until 20 members of each party have full records,
+  the ingest fails its member-count gate and keeps the previous good
+  section, as it does for any other gate failure.
+
+On the 119th Congress (October 2026 data) the saturation scale moves from
+0.258 to 0.269 in the Senate and from 0.224 to 0.223 in the House. The
+average member's position-congruence score moves 1.7 points (Senate) and 1.1
+(House), so 0.5 and 0.3 points of Constituent Alignment. Among voting
+members still serving, four have thin records:
+- Two recently sworn-in representatives have no count yet. They move
+  from 23.3 and 31.1 to 50 on the component, which is +8.0 and +5.7 on
+  Constituent Alignment.
+- A representative with 77 votes moves from 93.2 to 91.3.
+- A senator with 53 votes moves from 55.0 to 54.9.
+
+Most of the other movement comes from the rescaled fit. The largest single
+changes, up to 49 points on the component, are members who have left, each
+scored from 1 to 39 roll calls.
+
 ## What the evidence does not settle
 
 - **The association fades over time.** Per election, the position coefficient
@@ -589,6 +699,12 @@ the senator, not the seat. Partisan lean stays the expectation.
   saturation, t=1.9) but the loyal side does not (−0.59, t=−0.5), and the
   whole association is weak after 2008. That is one reason v6.15 flattened
   the loyal side (section 9).
+- **Position congruence's scale is not settled.** One scale for both parties
+  and one per party predict elections equally well, and the test of which
+  one voters respond to is inconclusive (section 14). The pooled scale
+  stays because nothing favors changing it. It leaves the party whose
+  members spread more widely around the seat's norm (Republicans, in most
+  Congresses since 1989) with more members at 0 and at 100.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight

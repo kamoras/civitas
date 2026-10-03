@@ -251,8 +251,13 @@ export default function ScoresChapter() {
             congress-specific Nokken-Poole estimate
             <Cite id="nokken2004" />, not a career average, with what a same-party member of a
             similarly-leaning seat typically holds. Toward the party&apos;s flank scores below
-            neutral; toward the seat&apos;s center scores above, by the same amount either way. When
-            that data isn&apos;t available, the score is all break-rate.
+            neutral; toward the seat&apos;s center scores above, by the same amount either way. So a
+            member who sits about where their seat predicts scores about 50 on this part, by design:
+            tested against House and Senate elections, this shape predicted how incumbents did, and
+            one that put the typical position at 100 did not. A position estimated from only a few
+            roll calls is mostly noise, so it is pulled toward 50 until it rests on as many votes as
+            a reliable estimate needs (a count measured from every Congress since 1989). When that
+            data isn&apos;t available, the score is all break-rate.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

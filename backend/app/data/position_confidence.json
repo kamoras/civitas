@@ -1,0 +1,8 @@
+{
+ "_source": "Voteview member exports (voteview.com, Lewis et al.), Senate and House, Congresses 101-118, retrieved 2026-10-03; regenerate with backend/scripts/calibrate_position_confidence.py",
+ "_method": "Least squares of (nokken_poole_dim1 - nominate_dim1)^2 = drift + k / nominate_number_of_votes over every member; full_confidence_votes = k / drift, the vote count at which a congress-specific position's estimation noise equals real congress-to-congress movement",
+ "members": 9821,
+ "k": 0.2793,
+ "drift": 0.003462,
+ "full_confidence_votes": 81
+}
