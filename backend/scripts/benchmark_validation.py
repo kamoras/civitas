@@ -184,7 +184,7 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
     from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points
 
     data, failures = build_chamber_ideal_points(
-        member_rows, chamber, _state_pvi(), _district_pvi(), reliability=_position_reliability(),
+        member_rows, chamber, _state_pvi(), _district_pvi(), reliability=_position_reliability(chamber),
     )
     saturation = data.get("extremity_p90")
     if failures or not saturation:

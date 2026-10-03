@@ -96,8 +96,8 @@ def _toward_other_party(party: str, cast: list[tuple]) -> bool:
     score_calculator.position_confidence), so among several defectors one
     resting on a few roll calls barely moves their mean. A lone defector's
     side is its own position's sign against the party's, whatever its
-    weight, which is why party_line_records reads each member's more
-    reliable of this Congress's and the last Congress's positions."""
+    weight, which is why party_line_records reads a member's last-Congress
+    position until their new record reaches a measured count."""
     everyone = [d for _, p, _, _, d in cast if p == party and d is not None and d[1] > 0]
     broke = [d for _, p, _, with_party, d in cast if p == party and not with_party and d is not None and d[1] > 0]
     if not everyone or not broke:
@@ -175,22 +175,50 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # so early in a new Congress the last positions classify its breaks
     # rather than every flank break counting (stale beats punitive).
     # Once the new Congress's section is in, its positions rest on a few roll
-    # calls at first, so each member's more reliable of that position and
-    # the last Congress's ("prior", voteview.previous_positions) decides
-    # their side.
+    # calls at first, so a member's last-Congress position ("prior",
+    # voteview.previous_positions) decides their side until their new record
+    # reaches the measured prior_until_votes (or, in a section calibrated
+    # before it was measured, while it is the more reliable). Each section's
+    # positions are read from their own party's mean in that section, so a
+    # party-wide shift between the two Congresses can't move a member who is
+    # read from one against a party read from the other.
     ideal = _member_ideal_points(chamber) or {}
 
+    party_of: dict[str, str] = {}
+    if chamber == "house":
+        # The House's roll calls name every member's bioguide and party.
+        party_of.update({p.member_id: p.party for ps in positions.values() for p in ps if p.member_id})
+    party_of.update({m.get("bioguideId"): parties[i] for i, m in enumerate(members) if m.get("bioguideId")})
+
     def weighted(section) -> dict:
-        # bioguide -> (position, reliability weight)
+        # bioguide -> (position from its party's mean, reliability weight)
         if not isinstance(section, dict):
             return {}
         reliability = section.get("reliability") if isinstance(section.get("reliability"), dict) else None
         counts = section.get("votes") or {}
-        return {b: (x, position_confidence(counts.get(b), reliability))
-                for b, x in (section.get("members") or {}).items()}
+        points = {b: (float(x), position_confidence(counts.get(b), reliability))
+                  for b, x in (section.get("members") or {}).items()}
+        center = {}
+        for party in ("R", "D"):
+            mine = [(x, w) for b, (x, w) in points.items() if party_of.get(b) == party and w > 0]
+            if mine:
+                center[party] = sum(x * w for x, w in mine) / sum(w for _, w in mine)
+        return {b: (x - center.get(party_of.get(b), 0.0), w) for b, (x, w) in points.items()}
     dim1 = weighted(ideal)
+    reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else {}
+    until = reliability.get("prior_until_votes")
+    counts = ideal.get("votes") or {}
     for b, (x, w) in weighted(ideal.get("prior")).items():
-        if w > dim1.get(b, (None, -1.0))[1]:
+        if b not in dim1:
+            dim1[b] = (x, w)
+        elif until is not None:
+            # Measured: below `until` roll calls a new record puts a member on
+            # their side of the party less often than their last full record
+            # (calibrate_position_confidence.prior_test, drift included).
+            n = counts.get(b)
+            if n is None or n < float(until):
+                dim1[b] = (x, w)
+        elif w > dim1[b][1]:
             dim1[b] = (x, w)
 
     found: set[int] = set()

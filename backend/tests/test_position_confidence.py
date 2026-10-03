@@ -1,7 +1,8 @@
 """The reliability weight on a congress-specific roll-call position (v6.27):
 scripts/calibrate_position_confidence.py measures it from Voteview's own
 positions and writes app/data/position_confidence.json, which the scorer
-reads. One n0, so nothing in it follows the sitting Congress."""
+reads. One n0 per chamber (or one for both, whichever predicts held-out
+members better), so nothing in it follows the sitting Congress."""
 
 import importlib.util
 import json
@@ -108,14 +109,23 @@ def test_a_placeholder_is_not_a_position():
 
 def test_shipped_file_documents_its_source_and_intervals():
     data = json.loads(_DATA.read_text())
+    script = _script()
     assert "calibrate_position_confidence.py" in data["_source"]
-    lo, hi = data["interval_90"]["half_weight_votes"]
-    assert lo <= data["half_weight_votes"] <= hi
-    assert abs(_script().half_point(data["n0"]) - data["half_weight_votes"]) < 0.06
+    # The structure is the usable one with the smaller held-out error.
+    held = data["heldout_error"]
+    assert data["structure"] == min(script.USABLE, key=lambda name: held[name])
+    for chamber in ("senate", "house"):
+        c = data["chambers"][chamber]
+        lo, hi = data["interval_90"][chamber]["half_weight_votes"]
+        assert lo <= c["half_weight_votes"] <= hi <= 100
+        assert abs(script.half_point(c["n0"]) - c["half_weight_votes"]) < 0.06
     assert data["pairs"]["thin"] > 50 and data["pairs"]["full"] > 1000
-    # The rejected party-line term: no better fit than one n0.
-    test = data["party_line_test"]
-    assert test["loss_with"] <= test["loss_without"] < 1.01 * test["loss_with"]
+    lo, hi = data["uncounted_weight_leave_one_out"]
+    assert lo <= data["uncounted_weight"] <= hi
+    # The rejected party-line term predicts held-out members worse.
+    assert data["party_line_test"]["heldout_error"] > held[data["structure"]]
+    # The flank rule reads a last full record until the new one catches up.
+    assert data["prior_until_votes"] == _script().prior_until_votes(data["prior_test"])
 
 
 def test_the_congress_range_follows_the_sitting_congress(monkeypatch):
@@ -128,8 +138,67 @@ def test_the_congress_range_follows_the_sitting_congress(monkeypatch):
 def test_scorer_reads_the_shipped_file(monkeypatch):
     monkeypatch.setattr(score_calculator, "_position_reliability_cache", None)
     data = json.loads(_DATA.read_text())
-    assert score_calculator._position_reliability() == {
-        k: data[k] for k in ("n0", "reference_votes", "half_weight_votes", "uncounted_weight")}
+    for chamber in ("senate", "house"):
+        assert score_calculator._position_reliability(chamber) == {
+            "n0": data["chambers"][chamber]["n0"], "half_weight_votes": data["chambers"][chamber]["half_weight_votes"],
+            "reference_votes": data["reference_votes"], "uncounted_weight": data["uncounted_weight"],
+            "prior_until_votes": data["prior_until_votes"]}
+    assert score_calculator._position_reliability("presidency") == {}
+
+
+def _pairs(n0s, drift=0.9):
+    """Pairs generated exactly from each chamber's n0, full pairs at `drift`."""
+    script = _script()
+    data = []
+    for ch, n0 in n0s.items():
+        data += [(ch, f"{ch}F{i}", 600.0, x, drift * x, "full", 110, 0.5, False)
+                 for i, x in enumerate((-0.2, -0.1, 0.1, 0.3))]
+        data += [(ch, f"{ch}T{n}{i}", float(n), x, drift * float(script.relative_weight(n, n0)) * x, "thin", 110, 0.5,
+                  False) for n in (5, 20, 60, 150) for i, x in enumerate((-0.3, 0.2, 0.4))]
+    return data
+
+
+def test_held_out_error_decides_whether_the_chambers_differ():
+    """Chambers generated with different n0: one per chamber predicts held-out
+    members better, and each chamber's is recovered. With the same n0, the
+    pooled curve is as good, and the tie goes to it."""
+    script = _script()
+    data = _pairs({"S": 30, "H": 600})
+    held = {name: script.heldout_error(data, name) for name in script.USABLE}
+    assert held["chamber"] < held["pooled"]
+    assert script.fit_chambers(data, "chamber") == {"senate": 30.0, "house": 600.0}
+    same = _pairs({"S": 80, "H": 80})
+    held = {name: script.heldout_error(same, name) for name in script.USABLE}
+    assert min(script.USABLE, key=lambda name: held[name]) == "pooled"
+    assert script.fit_chambers(same, "pooled") == {"senate": 80.0, "house": 80.0}
+
+
+def test_the_intervals_do_not_depend_on_the_order_of_the_pairs(monkeypatch):
+    script = _script()
+    monkeypatch.setattr(script, "BOOTSTRAP", 20)
+    data = _pairs({"S": 30, "H": 600})
+    assert script.bootstrap(data, "chamber") == script.bootstrap(list(reversed(data)), "chamber")
+
+
+def test_the_crossover_is_where_thin_records_agree_as_often_as_full_ones():
+    """Full pairs agree in sign 80% of the time across a Congress. Thin ones,
+    observed across a Congress too, from 10% at 10 votes rising with log n:
+    they match a last full record where their observed agreement reaches
+    0.8^2 + 0.2^2 = 0.68 (the drift taken out), near 100 votes."""
+    script = _script()
+    full = [("H", f"F{i}", 600.0, 0.1, 0.1 if i % 5 else -0.1, "full", 110, 0.5, False) for i in range(100)]
+    thin = []
+    for n, agree in ((10, 1), (30, 4), (100, 8), (300, 10)):
+        thin += [("H", f"T{n}{i}", float(n), 0.1, 0.1 if i < agree else -0.1, "thin", 110, 0.5, False)
+                 for i in range(10)]
+    crossover = script.prior_crossover(full + thin)
+    assert 50 < crossover < 100
+    assert script.prior_until_votes({"crossover_votes": crossover}) == crossover
+    assert script.prior_until_votes({"crossover_votes": None}) == 200.0
+    assert script.prior_until_votes({"crossover_votes": 450.0}) == 200.0
+    # Agreement that doesn't rise with the count never crosses.
+    flat = [("H", f"T{i}", float(10 + i), 0.1, -0.1, "thin", 110, 0.5, False) for i in range(10)]
+    assert script.prior_crossover(full + flat) is None
 
 
 def test_weight():

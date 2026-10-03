@@ -181,6 +181,15 @@ def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_ses
     section["votes"]["R4"] = 500
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
 
+    # With the measured switch point, the last record decides below it
+    # whatever the weights, and the new one from it.
+    section["reliability"] = {"n0": 24, "prior_until_votes": 50}
+    section["votes"]["R4"] = 49
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    section["votes"]["R4"] = 50
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+    del section["votes"]["R4"]  # no count reported: read as thin
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
 
 def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, monkeypatch):
     """Darline Graham took Lindsey Graham's seat after his death; matched by
@@ -205,3 +214,20 @@ def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, m
         "party": "R", "votingRecord": {"effectiveParty": "R"},
     }])
     assert record["votes"] == 1, record
+
+
+def test_each_congresss_positions_are_read_from_their_own_partys_mean(db_session, monkeypatch):
+    """The whole Republican conference sits 0.3 further right in the last
+    Congress's positions. R4 (2 votes now) is read from those, the rest from
+    this Congress's: R4's last position, 0.6, is right of every current
+    Republican but left of its own Congress's party mean (0.82), so its break
+    is toward the Democrats, not from the flank."""
+    current = {**DIM1, "R0": 0.4, "R1": 0.5, "R2": 0.5, "R3": 0.5, "R4": 0.45}
+    prior = {**DIM1, "R0": 0.9, "R1": 0.8, "R2": 0.8, "R3": 0.8, "R4": 0.6}
+    full = {m: 500 for m in DIM1}
+    section = {"members": current, "votes": {**full, "R4": 2}, "reliability": {"n0": 24}, "congress": 120,
+               "prior": {"congress": 119, "members": prior, "votes": full, "reliability": {"n0": 24}}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    _roll_call(db_session, "house", 33, "On Passage", "HR.8", {"R4": "Nay"})
+    db_session.commit()
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []

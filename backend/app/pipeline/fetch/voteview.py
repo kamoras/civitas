@@ -151,7 +151,8 @@ METHOD_DESC = (
     "(Voteview's 0,0 placeholders excluded). votes = each member's "
     "count of scaled roll calls; the score weights a position's extremity by "
     "position_confidence(votes, reliability); with too few full records the "
-    "chamber's last scale is carried. Construct: "
+    "chamber's last scale is carried; prior = the last Congress's positions, read only by "
+    "the flank-break rule. Construct: "
     "Canes-Wrone, Brady & Cogan 2002 district-relative extremity; "
     "per-party fits avoid Bafumi & Herron 2010 leapfrog bimodality."
 )
@@ -429,15 +430,17 @@ def previous_positions(previous: dict, congress: int | None) -> dict | None:
     Early in a Congress every new position rests on a few roll calls, and
     a lone defector's side of their party is then unreliable; the last
     Congress's full record is the better evidence of it until the new one
-    catches up. Taken from a previous section of an earlier Congress, or
-    carried from one of the same Congress; only from a v6.27 section, whose
-    counts and reliability give each position its weight."""
+    catches up. Taken from the previous section when it is the Congress just
+    before, or carried from one of the same Congress; only from a v6.27
+    section, whose counts and reliability give each position its weight."""
     have = (previous or {}).get("congress")
     if have is None or congress is None:
         return None
     if int(have) == int(congress):
         return previous.get("prior")
-    if int(have) > int(congress) or not isinstance(previous.get("reliability"), dict):
+    if int(have) != int(congress) - 1 or not isinstance(previous.get("reliability"), dict):
+        # Only the Congress just before: the evidence for the rule
+        # (calibrate_position_confidence.prior_test) is adjacent Congresses.
         return None
     return {"congress": previous["congress"], "members": previous.get("members") or {},
             "votes": previous.get("votes") or {}, "reliability": previous["reliability"]}
@@ -467,7 +470,7 @@ async def refresh_member_ideal_points(
             return False
         data, failures = build_chamber_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),
-            reliability=_position_reliability(), congress=congress,
+            reliability=_position_reliability(chamber), congress=congress,
         )
         previous = _member_ideal_points(chamber) or {}
         if failures == []:

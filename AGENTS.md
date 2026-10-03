@@ -291,8 +291,10 @@ Key mathematical properties:
   w(n) = n / (n + n0): the measured slope of a member's full-record
   position on their thin one, a full record counting 1. n0 is fitted on
   Voteview's own adjacent-Congress records with drift per transition
-  (`scripts/calibrate_position_confidence.py`), one curve for both
-  chambers and every Congress, so nothing is reset for a new Congress.
+  (`scripts/calibrate_position_confidence.py`), one curve per chamber
+  (or one for both, whichever predicts held-out members better; the
+  calibration decides) for every Congress, so nothing is reset for a new
+  Congress.
   It is a reliability weight, not a count threshold
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores

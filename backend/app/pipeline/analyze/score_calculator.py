@@ -369,8 +369,10 @@ def _member_ideal_points(chamber: str) -> dict:
     """Roll-call ideal-point data for one chamber ("senate" or "house"):
     {"members": {bioguideId: dim1}, "votes": {bioguideId: scaled roll calls},
     "fit": {party: {"a", "b"}}, "extremity_p90": float, "measure",
-    "congress", "seats", "seated", "reliability", "scale_congress"} (votes,
-    congress, seats, seated, reliability and scale_congress since v6.27). Used by _constituent_alignment_core's position-congruence
+    "congress", "seats", "seated", "reliability", "scale_congress", "prior"}
+    (votes, congress, seats, seated, reliability, scale_congress and prior
+    since v6.27; prior, the last Congress's positions, is read only by
+    party_line_record's flank rule, never scored). Used by _constituent_alignment_core's position-congruence
     component (v6.11): the member's congress-specific Nokken-Poole
     first-dimension position (DW-NOMINATE only as a whole-chamber fallback)
     scored against a seat-conditional expectation.
@@ -529,21 +531,23 @@ def _state_population() -> dict[str, float]:
 _position_reliability_cache: dict | None = None
 
 
-def _position_reliability() -> dict:
-    """{"n0", "reference_votes", "half_weight_votes", "uncounted_weight"}:
-    the reliability weight a congress-specific (Nokken-Poole) position gets
-    (v6.27, position_confidence). Measured by
+def _position_reliability(chamber: str) -> dict:
+    """{"n0", "reference_votes", "half_weight_votes", "uncounted_weight",
+    "prior_until_votes"} (the last for party_line_record's flank rule):
+    the reliability weight a congress-specific (Nokken-Poole) position in
+    `chamber` gets (v6.27, position_confidence). Measured by
     scripts/calibrate_position_confidence.py on Voteview's own positions:
     members with a thin record in one Congress and a full one in the next,
     against full records' drift over the same transition (research note
-    section 14). One curve for both chambers and every Congress (a
-    party-line term was tested and found no support), so nothing in it
-    follows the sitting Congress.
+    section 14). One curve per chamber or one for both, whichever predicts
+    held-out members better, for every Congress (a party-line term was
+    tested and found no support), so nothing in it follows the sitting
+    Congress.
 
     Read from app/data/position_confidence.json, and stored in each
     member_ideal_points section at ingest: the score reads the section's
-    copy. {} (no weighting, the pre-v6.27 behaviour) if the file is
-    unavailable: missing data is never punitive.
+    copy. {} (no weighting, the pre-v6.27 behaviour) if the file or the
+    chamber is unavailable: missing data is never punitive.
     """
     global _position_reliability_cache
     if _position_reliability_cache is None:
@@ -553,7 +557,11 @@ def _position_reliability() -> dict:
         try:
             raw = json.loads(path.read_text())
             _position_reliability_cache = {
-                k: float(raw[k]) for k in ("n0", "reference_votes", "half_weight_votes", "uncounted_weight")
+                name: {"n0": float(c["n0"]), "half_weight_votes": float(c["half_weight_votes"]),
+                       "reference_votes": float(raw["reference_votes"]),
+                       "uncounted_weight": float(raw["uncounted_weight"]),
+                       "prior_until_votes": float(raw["prior_until_votes"])}
+                for name, c in raw["chambers"].items()
             }
         except Exception:
             logger.warning(
@@ -561,7 +569,7 @@ def _position_reliability() -> dict:
                 "thin records; regenerate with scripts/calibrate_position_confidence.py"
             )
             _position_reliability_cache = {}
-    return dict(_position_reliability_cache)
+    return dict(_position_reliability_cache.get(chamber) or {})
 
 
 # A fetch/district_pvi.SeatLines (a dict of the sitting table that also

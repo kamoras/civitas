@@ -99,6 +99,7 @@ class TestBuildAndGates:
         rows[1].update(nominate_number_of_votes="")  # a career position, no count: uncounted
         rows[3].update(nominate_number_of_votes="", nominate_dim1="")  # neither: just sworn in
         rows[2].update(nominate_number_of_votes="12")
+        rows[4].update(nominate_number_of_votes="0")  # a count of 0 with a career position: uncounted
         data, failures = voteview.build_chamber_ideal_points(
             rows, "senate", state_pvi, {}, reliability=REL, congress=119)
         assert failures == []
@@ -106,6 +107,7 @@ class TestBuildAndGates:
         assert rows[1]["bioguide_id"] in data["members"] and rows[1]["bioguide_id"] not in data["votes"]
         assert data["votes"][rows[2]["bioguide_id"]] == 12
         assert data["votes"][rows[3]["bioguide_id"]] == 0
+        assert rows[4]["bioguide_id"] in data["members"] and rows[4]["bioguide_id"] not in data["votes"]
         assert data["reliability"] == REL and data["congress"] == 119
         assert data["measure"] == "Nokken-Poole"
 
@@ -235,7 +237,7 @@ class TestRefresh:
         # reliability, or every section would read as current forever and
         # no position would be weighted.
         assert section["congress"] == 119
-        assert section["reliability"] == score_calculator._position_reliability()
+        assert section["reliability"] == score_calculator._position_reliability("senate")
         assert section["reliability"]["half_weight_votes"] > 0
         assert section["votes"]
 
@@ -257,7 +259,7 @@ class TestRefresh:
             return rows
 
         monkeypatch.setattr(voteview, "fetch_member_rows", fake_rows)
-        monkeypatch.setattr(score_calculator, "_position_reliability", lambda: dict(REL))
+        monkeypatch.setattr(score_calculator, "_position_reliability", lambda chamber: dict(REL))
         assert await voteview.refresh_member_ideal_points("senate", 119) is True
         section = score_calculator._member_ideal_points("senate")
         assert section["extremity_p90"] == 0.2 and section["scale_congress"] == 118
@@ -277,7 +279,7 @@ class TestRefresh:
             return rows
 
         monkeypatch.setattr(voteview, "fetch_member_rows", fake_rows)
-        monkeypatch.setattr(score_calculator, "_position_reliability", lambda: dict(REL))
+        monkeypatch.setattr(score_calculator, "_position_reliability", lambda chamber: dict(REL))
         last = {"members": {"OLD": 0.4}, "votes": {"OLD": 600}, "congress": 118, "reliability": dict(REL),
                 "extremity_p90": 0.2}
         path.write_text(json.dumps({"senate": last}))
@@ -288,6 +290,11 @@ class TestRefresh:
         assert score_calculator._member_ideal_points("senate")["prior"] == prior
 
         path.write_text(json.dumps({"senate": {k: v for k, v in last.items() if k != "reliability"}}))
+        assert await voteview.refresh_member_ideal_points("senate", 119) is True
+        assert "prior" not in score_calculator._member_ideal_points("senate")
+
+        # Only the Congress just before: a 117th section is not kept for the 119th.
+        path.write_text(json.dumps({"senate": {**last, "congress": 117}}))
         assert await voteview.refresh_member_ideal_points("senate", 119) is True
         assert "prior" not in score_calculator._member_ideal_points("senate")
 
