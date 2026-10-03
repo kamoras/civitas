@@ -175,15 +175,16 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
     and score_calculator.position_congruence_score at that fit's saturation."""
     from app.pipeline.analyze.score_calculator import (
         _district_pvi,
-        _position_half_weight_votes,
+        _position_reliability,
         _seat_pvi,
         _state_pvi,
+        position_confidence,
         position_congruence_score,
     )
     from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points
 
     data, failures = build_chamber_ideal_points(
-        member_rows, chamber, _state_pvi(), _district_pvi(), half_weight_votes=_position_half_weight_votes(chamber),
+        member_rows, chamber, _state_pvi(), _district_pvi(), reliability=_position_reliability(chamber),
     )
     saturation = data.get("extremity_p90")
     if failures or not saturation:
@@ -195,7 +196,7 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
     out = {}
     for row in member_rows:
         bio = (row.get("bioguide_id") or "").strip()
-        party = PARTY_CODES.get(int(row.get("party_code") or 0))
+        party = PARTY_CODES.get(int(float(row.get("party_code") or 0)))
         fit = data["fit"].get(party or "")
         if bio not in data["members"] or not fit:
             continue
@@ -209,7 +210,7 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
         residual = data["members"][bio] - expected
         out[bio] = position_congruence_score(
             -residual if party == "D" else residual, float(saturation),
-            data["votes"].get(bio, 0), data["half_weight_votes"],
+            position_confidence(data["votes"].get(bio), data["reliability"]),
         )
     return out
 

@@ -49,11 +49,14 @@ def _patch_path(monkeypatch, tmp_path):
     return path
 
 
+REL = {"half_weight_votes": 64.0}
+
+
 class TestBuildAndGates:
     def test_clean_synthetic_population_passes_all_gates(self):
         state_pvi = score_calculator._state_pvi()
         rows = _synthetic_rows(state_pvi)
-        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, half_weight_votes=24)
+        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
         assert failures == []
         assert voteview.ingestion_gates("senate", data) == []
         assert 90 <= len(data["members"]) <= 105
@@ -65,7 +68,7 @@ class TestBuildAndGates:
         state_pvi = score_calculator._state_pvi()
         rows = _synthetic_rows(state_pvi)
         rows[0]["nominate_dim1"] = ""  # freshman pre-first-scaling
-        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, half_weight_votes=24)
+        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
         assert rows[0]["bioguide_id"] not in data["members"]
 
     def test_sign_flip_fails_gates(self):
@@ -75,13 +78,13 @@ class TestBuildAndGates:
         rows = _synthetic_rows(state_pvi)
         for r in rows:
             r["nominate_dim1"] = f"{-float(r['nominate_dim1']):.4f}"
-        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, half_weight_votes=24)
+        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
         assert voteview.ingestion_gates("senate", data)
 
     def test_tiny_population_fails_gates(self):
         state_pvi = score_calculator._state_pvi()
         rows = _synthetic_rows(state_pvi)[:30]
-        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, half_weight_votes=24)
+        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
         assert failures or voteview.ingestion_gates("senate", data)
 
     def test_counts_are_recorded_and_placeholders_dropped(self):
@@ -96,20 +99,30 @@ class TestBuildAndGates:
         rows[1].update(nominate_number_of_votes="")
         rows[2].update(nominate_number_of_votes="12")
         data, failures = voteview.build_chamber_ideal_points(
-            rows, "senate", state_pvi, {}, half_weight_votes=24, congress=119)
+            rows, "senate", state_pvi, {}, reliability=REL, congress=119)
         assert failures == []
         assert rows[0]["bioguide_id"] not in data["members"]
         assert rows[1]["bioguide_id"] in data["members"] and rows[1]["bioguide_id"] not in data["votes"]
         assert data["votes"][rows[2]["bioguide_id"]] == 12
-        assert data["half_weight_votes"] == 24 and data["congress"] == 119
+        assert data["reliability"] == REL and data["congress"] == 119
         assert data["measure"] == "Nokken-Poole"
 
-    def test_a_dw_nominate_section_carries_no_half_weight(self):
-        """The career fallback: this Congress's count doesn't describe it."""
+    def test_float_coded_exports_parse(self):
+        """The 115th-117th exports write party and district codes as floats
+        ("200.0", "3.0"); they used to fail with no members in either party."""
         state_pvi = score_calculator._state_pvi()
-        data, _ = voteview.build_chamber_ideal_points(
-            _synthetic_rows(state_pvi), "senate", state_pvi, {}, half_weight_votes=24)
-        assert data["measure"] == "DW-NOMINATE" and data["half_weight_votes"] == 0
+        rows = _synthetic_rows(state_pvi)
+        for r in rows:
+            r["party_code"] += ".0"
+        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+        assert failures == [] and voteview.ingestion_gates("senate", data) == []
+
+    def test_one_senator_per_state_fails_the_gate(self):
+        state_pvi = score_calculator._state_pvi()
+        rows = _synthetic_rows(state_pvi)[::2]
+        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+        assert data["seats"] >= 45
+        assert any("seated members" in f for f in voteview.ingestion_gates("senate", data))
 
     def test_replacements_and_delegates_do_not_fail_the_house_gate(self):
         """The 119th House export had 451 rows by October 2026 (delegates
@@ -124,9 +137,10 @@ class TestBuildAndGates:
             rows.append({"chamber": "House", "bioguide_id": f"H{i}", "party_code": party, "state_abbrev": st,
                          "district_code": d, "nominate_dim1": f"{pos:.4f}", "nominate_number_of_votes": "500"})
         rows += [dict(rows[j], bioguide_id=f"REPL{j}", nominate_number_of_votes="40") for j in range(10)]
+        rows[0]["district_code"] += ".0"  # the same seat, float-coded
         rows += [{"chamber": "House", "bioguide_id": f"DEL{j}", "party_code": "100", "state_abbrev": "VI",
                   "district_code": "0", "nominate_dim1": "-0.4", "nominate_number_of_votes": "300"} for j in range(6)]
-        data, failures = voteview.build_chamber_ideal_points(rows, "house", {}, district_pvi, half_weight_votes=24)
+        data, failures = voteview.build_chamber_ideal_points(rows, "house", {}, district_pvi, reliability=REL)
         assert len(data["members"]) == 451 and data["seats"] == 435
         assert failures == [] and voteview.ingestion_gates("house", data) == []
 
@@ -186,7 +200,15 @@ class TestRefresh:
         assert await voteview.refresh_member_ideal_points("senate", 119) is True
         assert "senate" in json.loads(path.read_text())
         # scoring loader sees it immediately (cache invalidated on write)
-        assert score_calculator._member_ideal_points("senate")["fit"]["D"]["b"] > 0
+        section = score_calculator._member_ideal_points("senate")
+        assert section["fit"]["D"]["b"] > 0
+        # v6.27: the section names its Congress and carries the shipped
+        # reliability, or every section would read as current forever and
+        # no position would be weighted.
+        assert section["congress"] == 119
+        assert section["reliability"] == score_calculator._position_reliability("senate")
+        assert section["reliability"]["half_weight_votes"] > 0
+        assert section["votes"]
 
     async def test_fetch_failure_keeps_previous_data(self, monkeypatch, tmp_path):
         path = _patch_path(monkeypatch, tmp_path)

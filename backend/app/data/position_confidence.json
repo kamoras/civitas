@@ -1,57 +1,53 @@
 {
- "_source": "Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses 101-118 (sampling error) and 119 (the scored population), retrieved 2026-10-03; regenerate with backend/scripts/calibrate_position_confidence.py",
- "_method": "Weight = slope of the full-record score on the score from n votes, with sampling errors measured by re-estimating members' positions from random subsets of their votes and true extremities from the sitting Congress; each chamber's half_weight_votes is the least-squares n0 of n / (n + n0) over its weights (the scorer reads these); the top-level value pools both chambers, for reference",
+ "_source": "Voteview (voteview.com, Lewis et al.) member exports, Senate and House, Congresses 101-119, retrieved 2026-10-03; regenerate with backend/scripts/calibrate_position_confidence.py",
+ "_method": "Members with positions in adjacent Congresses, each read from the party's center toward its flank: least squares of full = drift * n / (n + n0) * thin over pairs with a thin side (under 200 scaled votes) and pairs of full records, both chambers, with log n0 linear in the thin Congress's party-line share; each chamber's half_weight_votes is n0 at the sitting Congress's share, clamped to the middle 90% of the thin pairs' shares; uncounted_weight_recent is the weight of positions with no count since the 110th Congress, which the score reads as 0 votes; intervals are 5th-95th percentiles over members resampled",
+ "congress": 119,
  "chambers": {
   "senate": {
-   "weights": {
-    "10": 0.279,
-    "20": 0.448,
-    "40": 0.637,
-    "80": 0.785,
-    "160": 0.9
-   },
-   "median_abs_error": {
-    "10": 0.1429,
-    "20": 0.0798,
-    "40": 0.0508,
-    "80": 0.0338,
-    "160": 0.0209
-   },
-   "errors_measured": {
-    "10": 6812,
-    "20": 6812,
-    "40": 6812,
-    "80": 6812,
-    "160": 6812
-   },
-   "members_in_population": 98,
-   "half_weight_votes": 23.5
+   "party_line_share": 0.92,
+   "read_at": 0.756,
+   "half_weight_votes": 75.7,
+   "interval_90": [
+    45.35,
+    119.453
+   ]
   },
   "house": {
-   "weights": {
-    "10": 0.245,
-    "20": 0.392,
-    "40": 0.55,
-    "80": 0.712,
-    "160": 0.84
-   },
-   "median_abs_error": {
-    "10": 0.1566,
-    "20": 0.0905,
-    "40": 0.0585,
-    "80": 0.0385,
-    "160": 0.0256
-   },
-   "errors_measured": {
-    "10": 29812,
-    "20": 29812,
-    "40": 29812,
-    "80": 29812,
-    "160": 29812
-   },
-   "members_in_population": 433,
-   "half_weight_votes": 31.7
+   "party_line_share": 0.7,
+   "read_at": 0.7,
+   "half_weight_votes": 64.1,
+   "interval_90": [
+    37.736,
+    103.625
+   ]
   }
  },
- "half_weight_votes": 27.2
+ "model": {
+  "log_n0": "3.86 + 3.00 * (party-line share - 0.6)",
+  "a": 3.86,
+  "b": 3.0,
+  "b_interval_90": [
+   0.8,
+   6.705
+  ],
+  "drift": 0.9383,
+  "drift_interval_90": [
+   0.911,
+   0.975
+  ],
+  "shares_covered": [
+   0.457,
+   0.756
+  ]
+ },
+ "uncounted_weight_recent": 0.128,
+ "uncounted_weight_interval_90": [
+  -0.134,
+  0.33
+ ],
+ "pairs": {
+  "full": 8099,
+  "thin": 108,
+  "uncounted": 25
+ }
 }

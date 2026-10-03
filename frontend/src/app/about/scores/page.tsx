@@ -81,11 +81,13 @@ export default function ScoresChapter() {
             little there is. This borrows the idea of shrinkage estimation, which keeps small
             samples from producing extreme results
             <Cite id="efron1975" />, in a simpler form: the pull is set by a fixed count of
-            observations rather than estimated from the data. Two parts differ. Constituent
+            observations rather than estimated from the data. Three parts differ. Constituent
             Alignment&apos;s voting half pulls a thin record toward what a typical member of the
             same party scores, because 50 sits below nearly every member on that scale. Legislative
             Effectiveness&apos;s bill half isn&apos;t pulled at all, because a member&apos;s bills
-            are their whole record, not a sample of it.
+            are their whole record, not a sample of it. And Constituent Alignment&apos;s position
+            half counts a roll-call position by how reliable it measured to be for that many votes,
+            rather than by a fixed count.
           </P>
         </Sub>
         <Sub title="Why the current Congress, not a career">
@@ -255,10 +257,11 @@ export default function ScoresChapter() {
             member who sits about where their seat predicts scores about 50 on this part, by design:
             tested against House and Senate elections, this shape predicted how incumbents did, and
             one that put the typical position at 100 did not. A position estimated from only a few
-            roll calls is mostly noise, so it counts only as much as its votes support: how much is
-            measured by re-estimating members&apos; positions from small samples of their own votes
-            across every Congress since 1989, and a position from a full Congress counts almost in
-            full. When that data isn&apos;t available, the score is all break-rate.
+            roll calls is mostly noise, so it counts only as much as its votes support, measured on
+            members whose short record in one Congress sits next to a full one in the next, and read
+            at how party-line the current Congress votes: half at several dozen votes, about nine
+            tenths over a whole Congress. A member with no position yet sits at 50. Before a new
+            Congress&apos;s positions are published, the score is all break-rate.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

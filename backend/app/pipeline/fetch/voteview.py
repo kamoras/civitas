@@ -8,9 +8,12 @@ each chamber's pipeline refreshes its own section of
 /data/member_ideal_points.json (the persistent writable volume) every
 run, read-merge-write, never aborting the run. There is no offline
 generation step: the component is inert only until the first successful
-ingest, and a
-fetch/gate failure on a later run keeps the last good data rather than
-degrading scores (missing/stale data is never punitive).
+ingest, and a fetch/gate failure on a later run keeps the last good data
+rather than degrading scores (missing/stale data is never punitive). Since
+v6.27 that holds within a Congress: each section records its Congress, and
+the score does not read one from another Congress (principle 6), so
+across Jan 3, until the new Congress's export passes the gates, the
+component is left out for everyone, as when no data exists.
 
 Source: Voteview / Lewis et al., "Voteview: Congressional Roll-Call
 Votes Database" (voteview.com), per-congress member-ideology exports —
@@ -57,20 +60,21 @@ Office," APSR 96:1 — district-relative ideological extremity):
 
     Thin records (v6.27): a Nokken-Poole position estimated from few roll
     calls is mostly noise (research note section 14). Each member's count
-    of scaled roll calls is stored under "votes", and the score weights the
-    member's position by n / (n + half_weight_votes), measured by
-    scripts/calibrate_position_confidence.py. A row with a position but no
-    count (Voteview reports none for a member it has barely scaled: newly
-    sworn in, or one who cast very few scalable votes) has no entry and
-    reads as 0 votes. A row whose Nokken-Poole coordinates are both exactly
-    0 is Voteview's placeholder for a member it could not scale, not an
-    estimate, and is left out. The fits and the scale are taken over every
-    member: a thin record's position is noisy but not biased, so it adds
-    noise to the fit, not slant. Early in a Congress, when every record is
-    thin, the positions are weighted toward 50 accordingly, and each member
-    is read on the current Congress's own votes (AGENTS.md principle 6).
-    The weight applies only to Nokken-Poole: the DW-NOMINATE fallback is a
-    career estimate, which the Congress's count does not describe.
+    of scaled roll calls is stored under "votes", and the section stores the
+    measured reliability (score_calculator._position_reliability, from
+    scripts/calibrate_position_confidence.py): a position from n votes
+    counts n / (n + half_weight_votes), and one Voteview published with no
+    count (a member it has barely scaled) reads as resting on none. A row
+    whose Nokken-Poole coordinates are both exactly 0 is Voteview's
+    placeholder for a member it could not scale, not an estimate: it is
+    left out, and the score reads that member as having no position (50).
+    The fits and the scale are taken over every member: a thin record's
+    position is noisy but not biased, so it adds noise to the fit, not
+    slant. Once a new Congress's export passes the gates, each member is
+    read on that Congress's own votes, weighted toward 50 while they are
+    few. The weight applies to the DW-NOMINATE fallback too: whatever a
+    career estimate rests on, this Congress's count is the evidence from
+    the current term.
 
 Independents (party_code 328) are included in the per-member positions
 (score_calculator scores them against the fit of the party they caucus
@@ -102,10 +106,12 @@ House races (the construct's source paper, Canes-Wrone/Brady/Cogan 2002,
 is itself House-focused), and it is NOT something to patch by
 substituting a different seat-safety variable just to force a fit
 through. The gate re-measures this from scratch on every run: on the
-119th Congress's October 2026 data the Senate Republican slope is
-positive (b=+0.0033, r2=0.01), both parties pass, and the Senate's
-position-congruence component is live, as the House's is. A run whose
-slope turns non-positive again switches it off for both parties.
+119th Congress's October 2026 export the Senate Republican slope is
+positive (b=+0.0018, r2=0.004, Voteview's placeholders left out), both
+parties pass, and the Senate's position-congruence component is live, as
+the House's is. A run whose slope is not positive fails its gates: within a
+Congress the last good section stays, and a new Congress's component waits
+for a run that passes.
 """
 
 import csv
@@ -137,7 +143,7 @@ METHOD_DESC = (
     "(-residual for D, +residual for R); extremity_p90 = 90th percentile "
     "of |extremity| across the chamber's D+R members. votes = each member's "
     "count of scaled roll calls; the score weights a position by n / (n + "
-    "half_weight_votes). Construct: "
+    "half_weight_votes) from reliability; no count reads as 0. Construct: "
     "Canes-Wrone, Brady & Cogan 2002 district-relative extremity; "
     "per-party fits avoid Bafumi & Herron 2010 leapfrog bimodality."
 )
@@ -181,6 +187,14 @@ async def fetch_member_rows(
     finally:
         if own_client:
             await client.aclose()
+
+
+def _seat_district(row: dict, district_pvi: dict[str, int]) -> int:
+    """The district number a House row's PVI resolves under: its own, or
+    0 when the state is at-large (Voteview codes some at-large seats 1)."""
+    st = (row.get("state_abbrev") or "").strip().upper()
+    d = int(_number(row.get("district_code")) or 0)
+    return d if f"{st}-{d}" in district_pvi else 0
 
 
 def _seat_pvi_for(row: dict, chamber: str,
@@ -238,28 +252,35 @@ def _vote_count(row: dict) -> int | None:
     return n if n >= 0 else None
 
 
+def _number(value) -> float | None:
+    """A Voteview CSV number: "200", "200.0" and "3.0" all parse (several
+    Congresses' exports write floats); blank, NaN and junk do not."""
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return None
+    return x if x == x else None
+
+
 def _is_placeholder(row: dict) -> bool:
     """Voteview's 0, 0 for a member it could not scale: no estimate."""
-    try:
-        return float(row.get("nokken_poole_dim1") or "nan") == 0 and float(row.get("nokken_poole_dim2") or "nan") == 0
-    except ValueError:
-        return False
+    return _number(row.get("nokken_poole_dim1")) == 0 and _number(row.get("nokken_poole_dim2")) == 0
 
 
 def build_chamber_ideal_points(
     rows: list[dict], chamber: str,
     state_pvi: dict[str, int], district_pvi: dict[str, int],
-    *, half_weight_votes: float, congress: int | None = None,
+    *, reliability: dict, congress: int | None = None,
 ) -> tuple[dict, list[str]]:
     """One chamber's {members, votes, fit, extremity_p90, ...} section from
     parsed Voteview rows, plus build-stage failure strings (empty = clean).
-    half_weight_votes is stored for the score's reliability weight (0 for a
-    DW-NOMINATE section, whose career positions the count does not
-    describe); it does not filter the fits."""
+    `reliability` (score_calculator._position_reliability) is stored for the
+    score's weight; it does not filter the fits."""
     column, measure = _position_column(rows)
     members: dict[str, float] = {}
     votes: dict[str, int] = {}
     seats: set[str] = set()
+    seated = 0
     by_party: dict[str, list[tuple[float, float]]] = {"D": [], "R": []}
     unresolved_seats = 0
 
@@ -278,16 +299,17 @@ def build_chamber_ideal_points(
         n_votes = _vote_count(row)
         if n_votes is not None:
             votes[bio] = n_votes
-        try:
-            party = PARTY_CODES.get(int(row.get("party_code") or 0))
-        except ValueError:
-            party = None
+        code = _number(row.get("party_code"))
+        party = PARTY_CODES.get(int(code)) if code is not None else None
         pvi = _seat_pvi_for(row, chamber, state_pvi, district_pvi)
         if pvi is None:
             unresolved_seats += 1
             continue
+        seated += 1
         st = (row.get("state_abbrev") or "").strip().upper()
-        seats.add(f"{st}-{row.get('district_code')}" if chamber == "house" else st)
+        # The seat the PVI lookup resolved, so "3" and "3.0", or an
+        # at-large state coded 0 in one row and 1 in another, are one seat.
+        seats.add(f"{st}-{_seat_district(row, district_pvi)}" if chamber == "house" else st)
         if party:
             by_party[party].append((float(pvi), dim1))
 
@@ -313,8 +335,8 @@ def build_chamber_ideal_points(
                     chamber, unresolved_seats)
     return {
         "members": members, "votes": votes, "fit": fit, "extremity_p90": extremity_p90,
-        "measure": measure, "congress": congress, "seats": len(seats),
-        "half_weight_votes": half_weight_votes if column == "nokken_poole_dim1" else 0,
+        "measure": measure, "congress": congress, "seats": len(seats), "seated": seated,
+        "reliability": dict(reliability),
     }, failures
 
 
@@ -330,6 +352,11 @@ def ingestion_gates(chamber: str, data: dict) -> list[str]:
     lo, hi = (45, 50) if chamber == "senate" else (380, 435)
     if not (lo <= data.get("seats", 0) <= hi):
         failures.append(f"{chamber}: {data.get('seats', 0)} seats with a member and dim1, expected {lo}-{hi}")
+    # And most of each seat filled: an export with one senator per state
+    # covers every state.
+    floor = 90 if chamber == "senate" else 380
+    if data.get("seated", 0) < floor:
+        failures.append(f"{chamber}: {data.get('seated', 0)} seated members with dim1, expected at least {floor}")
     # Headroom beyond [-1, 1] so a legitimately extreme estimate never trips
     # it; this guards against reading the wrong column, not against outliers.
     if not all(-1.5 <= v <= 1.5 for v in members.values()):
@@ -365,7 +392,7 @@ async def refresh_member_ideal_points(
     never aborting the pipeline run.
     """
     from app.pipeline.analyze.score_calculator import (
-        _district_pvi, _position_half_weight_votes, _state_pvi, write_member_ideal_points,
+        _district_pvi, _position_reliability, _state_pvi, write_member_ideal_points,
     )
     try:
         rows = await fetch_member_rows(chamber, congress, client=client)
@@ -376,7 +403,7 @@ async def refresh_member_ideal_points(
             return False
         data, failures = build_chamber_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),
-            half_weight_votes=_position_half_weight_votes(chamber), congress=congress,
+            reliability=_position_reliability(chamber), congress=congress,
         )
         failures += ingestion_gates(chamber, data)
         if failures:

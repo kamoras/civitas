@@ -25,7 +25,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from app.config import settings  # noqa: E402
 from app.pipeline.analyze.score_calculator import (  # noqa: E402
     _district_pvi,
-    _position_half_weight_votes,
+    _position_reliability,
     _state_pvi,
     position_confidence,
 )
@@ -47,19 +47,19 @@ async def main() -> int:
             continue
         data, failures = build_chamber_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),
-            half_weight_votes=_position_half_weight_votes(chamber), congress=congress,
+            reliability=_position_reliability(chamber), congress=congress,
         )
         failures += ingestion_gates(chamber, data)
         fits = ", ".join(
             f"{p}: a={f['a']:+.3f} b={f['b']:+.5f} r2={f['r2']:.2f} n={f['n']}"
             for p, f in data["fit"].items()
         )
-        half = data["half_weight_votes"]
+        rel = data["reliability"]
         uncounted = sum(1 for b in data["members"] if b not in data["votes"])
-        weak = sum(1 for n in data["votes"].values() if position_confidence(n, half) < 0.9)
-        print(f"{chamber} (congress {congress}): {len(data['members'])} members in {data['seats']} seats, "
-              f"p90 |extremity| {data['extremity_p90']}, fits [{fits}]")
-        print(f"  {data['measure']}, half weight at {half} votes: {weak} members under 90% weight, "
+        weak = sum(1 for n in data["votes"].values() if position_confidence(n, rel) < 0.9)
+        print(f"{chamber} (congress {congress}): {len(data['members'])} members, {data['seated']} seated "
+              f"in {data['seats']} seats, p90 |extremity| {data['extremity_p90']}, fits [{fits}]")
+        print(f"  {data['measure']}, reliability {rel}: {weak} counted members under 90% weight, "
               f"{uncounted} with no reported count")
         for f in failures:
             print(f"  GATE FAILED: {f}")

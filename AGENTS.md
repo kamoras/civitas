@@ -285,10 +285,12 @@ Key mathematical properties:
   The rate is the count confidence below — fixed, not estimated from the
   population's variance, so do not call it Bayesian or empirical Bayes.
   One measured exception: Constituent Alignment's position part (v6.27)
-  weights a roll-call position from n votes by n / (n + n0), where n0 is
-  the measured slope-of-prediction of a full record's score on n votes'
-  (`scripts/calibrate_position_confidence.py`, sampling error against the
-  sitting Congress's spread) — a reliability weight, not a count threshold
+  weights a roll-call position from n votes by n / (n + n0). That weight is
+  the measured slope of a member's full-record position on their thin one;
+  n0, the vote count where it is one half, is fitted on Voteview's own
+  adjacent-Congress records against each Congress's party-line share and
+  read at the sitting Congress's (`scripts/calibrate_position_confidence.py`).
+  It is a reliability weight, not a count threshold
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Constituent Alignment scores account for Cook

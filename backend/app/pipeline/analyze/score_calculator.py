@@ -369,8 +369,8 @@ def _member_ideal_points(chamber: str) -> dict:
     """Roll-call ideal-point data for one chamber ("senate" or "house"):
     {"members": {bioguideId: dim1}, "votes": {bioguideId: scaled roll calls},
     "fit": {party: {"a", "b"}}, "extremity_p90": float, "measure",
-    "congress", "half_weight_votes"} (votes, congress and half_weight_votes
-    since v6.27). Used by _constituent_alignment_core's position-congruence
+    "congress", "seats", "reliability"} (votes, congress, seats and
+    reliability since v6.27). Used by _constituent_alignment_core's position-congruence
     component (v6.11): the member's congress-specific Nokken-Poole
     first-dimension position (DW-NOMINATE only as a whole-chamber fallback)
     scored against a seat-conditional expectation.
@@ -393,9 +393,12 @@ def _member_ideal_points(chamber: str) -> dict:
     missing-data handling), and constituent alignment runs on the
     seat-relative vote component alone. So the component is inert only
     until the FIRST successful ingest; a later fetch/gate failure keeps
-    the last good data (stale beats punitive, and DW-NOMINATE moves
-    slowly week to week). Missing data is never punitive — same
-    convention as every other loader in this file.
+    the last good data (stale beats punitive, and positions move slowly
+    week to week). Since v6.27 that holds within a Congress: a section
+    records its Congress, and _ideal_points_current keeps one from another
+    Congress from being read, so across Jan 3 the component is left out
+    until the new Congress's export passes the gates. Missing data is never
+    punitive — same convention as every other loader in this file.
     """
     import pathlib
 
@@ -431,17 +434,22 @@ def _member_ideal_points(chamber: str) -> dict:
     return chamber_data if isinstance(chamber_data, dict) else {}
 
 
-def _ideal_points_current(section: dict) -> bool:
-    """Whether a member_ideal_points section describes the sitting Congress.
-    A section records its Congress since v6.27; one that predates that is
-    taken as current, as it always was. One from an earlier Congress is a
-    previous term's record (a refresh that failed its gates after Jan 3
-    keeps it on disk), which the score does not read (AGENTS.md
-    principle 6)."""
+def _ideal_points_current(section: dict, congress: int | None = None) -> bool:
+    """Whether a member_ideal_points section describes `congress`: the
+    Congress of the roll calls being scored (a party-line record's own
+    "congress"), else the sitting one. A section records its Congress since
+    v6.27; one that predates that is taken as current, as it always was.
+    Another Congress's section (a refresh that failed its gates after Jan 3
+    keeps the last one on disk) is not read: its positions are not this
+    term's record (AGENTS.md principle 6). Matching the record's Congress
+    rather than the clock keeps a stored score's "show the math" on the
+    positions it was scored on across Jan 3, until the next run rescores
+    it."""
     from app.config import settings
 
-    congress = section.get("congress")
-    return congress is None or int(congress) >= settings.CURRENT_CONGRESS
+    have = section.get("congress")
+    want = congress if congress is not None else settings.CURRENT_CONGRESS
+    return have is None or int(have) == int(want)
 
 
 def write_member_ideal_points(chamber: str, data: dict) -> None:
@@ -513,44 +521,42 @@ def _state_population() -> dict[str, float]:
     return _state_population_cache
 
 
-_position_half_weight_cache: dict | None = None
+_position_reliability_cache: dict | None = None
 
 
-def _position_half_weight_votes(chamber: str) -> float:
-    """n0 of the reliability weight n / (n + n0) on a congress-specific
-    (Nokken-Poole) position resting on n scaled roll calls (v6.27): the
-    vote count at which the score a position gives predicts the
-    full-record score at half strength. Measured by
-    scripts/calibrate_position_confidence.py (sampling error from
-    re-estimating members' positions on subsets of their votes, against the
-    sitting Congress's spread of positions), research note section 14.
+def _position_reliability(chamber: str) -> dict:
+    """{"half_weight_votes": n0}: the reliability weight a congress-specific
+    (Nokken-Poole) position resting on n scaled roll calls gets in this
+    chamber, n / (n + n0) (v6.27). Measured by
+    scripts/calibrate_position_confidence.py on Voteview's own positions:
+    members with a thin record in one Congress and a full one in the next.
+    n0 rises with how party-line a Congress votes (each vote then says less
+    about a member's place within their party), so each chamber's is read
+    at the sitting Congress's party-line share (research note section 14).
 
-    Each chamber's own measurement: party-line voting is heavier in the
-    House, so a House vote says less about where a member sits within their
-    party (n0 31.7 against the Senate's 23.5 in the 2026-10 calibration).
-
-    Read from app/data/position_confidence.json. 0 (no weighting, the
-    pre-v6.27 behaviour) if the file is unavailable: missing data is never
-    punitive. Stored in each member_ideal_points section at ingest, and the
-    score reads the section's own copy, so a regenerated file takes effect
-    with the next ingest, together with the counts it applies to.
+    Read from app/data/position_confidence.json, and stored in each
+    member_ideal_points section at ingest: the score reads the section's
+    copy, so a regenerated file takes effect with the next ingest, together
+    with the counts it applies to. {} (no weighting, the pre-v6.27
+    behaviour) if the file is unavailable: missing data is never punitive.
     """
-    global _position_half_weight_cache
-    if _position_half_weight_cache is None:
+    global _position_reliability_cache
+    if _position_reliability_cache is None:
         import json
         import pathlib
         path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "position_confidence.json"
         try:
-            _position_half_weight_cache = {
-                c: float(v["half_weight_votes"]) for c, v in json.loads(path.read_text())["chambers"].items()
+            _position_reliability_cache = {
+                c: {"half_weight_votes": float(v["half_weight_votes"])}
+                for c, v in json.loads(path.read_text())["chambers"].items()
             }
         except Exception:
             logger.warning(
                 "position_confidence.json unavailable: position congruence will not weight "
                 "thin records; regenerate with scripts/calibrate_position_confidence.py"
             )
-            _position_half_weight_cache = {}
-    return _position_half_weight_cache.get(chamber, 0.0)
+            _position_reliability_cache = {}
+    return dict(_position_reliability_cache.get(chamber, {}))
 
 
 # A fetch/district_pvi.SeatLines (a dict of the sitting table that also
@@ -2070,30 +2076,32 @@ def seat_break_residual(
 POSITION_CONGRUENCE_WEIGHT = 0.30
 
 
-def position_confidence(votes: int | None, half_weight_votes: float) -> float:
-    """Reliability weight of a congress-specific position resting on `votes`
-    scaled roll calls (v6.27): votes / (votes + half_weight_votes), the
-    measured slope of the full-record score on the score those votes give.
-    1 when either is unknown (a section written before v6.27, or a
-    DW-NOMINATE section, whose career positions the count does not
-    describe)."""
-    if votes is None or not half_weight_votes:
+def position_confidence(votes: int | None, reliability: dict | None) -> float:
+    """Reliability weight of a congress-specific position (v6.27): votes /
+    (votes + half_weight_votes) for a position resting on `votes` scaled
+    roll calls, from the section's `reliability` (written at ingest from
+    app/data/position_confidence.json). No reported count (None) reads as 0
+    votes: Voteview gives none for a member it has barely scaled, and such
+    positions showed no measurable weight in recent Congresses (research
+    note section 14). 1 without a reliability (a section written before
+    v6.27, or no calibration available)."""
+    half = float((reliability or {}).get("half_weight_votes") or 0)
+    if not half:
         return 1.0
-    votes = max(votes, 0)
-    return votes / (votes + half_weight_votes)
+    votes = max(votes or 0, 0)
+    return votes / (votes + half)
 
 
-def position_congruence_score(
-    extremity: float, saturation: float, votes: int | None = None, half_weight_votes: float = 0,
-) -> float:
+def position_congruence_score(extremity: float, saturation: float, weight: float = 1.0) -> float:
     """Constituent Alignment's position-congruence component: 50 at the
-    position a same-party member of this seat is expected to hold, falling to
-    0 at `saturation` (the chamber's 90th-percentile extremity) toward the
-    party flank and rising to 100 as far toward the seat's center —
-    symmetric, as the 2004 House test found (docstring below). `extremity` is
-    signed toward the flank. The score is weighted toward 50 by
-    position_confidence(votes, half_weight_votes) (v6.27): its best linear
-    prediction of the score a full record would give. The one
+    position a same-party member of this seat is expected to hold, falling
+    toward 0 at `saturation` (the chamber's 90th-percentile extremity)
+    toward the party flank and rising toward 100 as far toward the seat's
+    center — symmetric, as the 2004 House test found (docstring below).
+    `extremity` is signed toward the flank. The distance from 50 is scaled
+    by the position's reliability `weight` (position_confidence, v6.27): the
+    measured slope of a member's real position on one resting on that many
+    votes, so the score is its best linear prediction. The one
     implementation the score and scripts/benchmark_validation.py both call.
 
     Linear and 50 at the expectation, not 100 there like the vote part:
@@ -2101,7 +2109,7 @@ def position_congruence_score(
     shape predicted the incumbent's vote share and the peaked one did not
     (research note section 14)."""
     raw = 50.0 - 50.0 * max(-1.0, min(extremity / saturation, 1.0))
-    return 50.0 + (raw - 50.0) * position_confidence(votes, half_weight_votes)
+    return 50.0 + (raw - 50.0) * weight
 
 
 def _calc_constituent_alignment(
@@ -2186,9 +2194,10 @@ def _calc_constituent_alignment(
              anyway.
            - Weighted by reliability (v6.27): the score is pulled toward 50
              by n / (n + n0), n the member's scaled roll calls this Congress
-             and n0 (_position_half_weight_votes, per chamber) the measured count at which
-             a position predicts the full-record score at half strength.
-             A section from an earlier Congress is not read (principle 6).
+             and n0 (_position_reliability) the measured count at which a
+             position predicts the member's real one at half strength. A
+             member with no position in a current section sits at 50; a
+             section from another Congress is not read (principle 6).
            - The shape, 50 at the expectation, and the scale, pooled across
              both parties, were tested against the alternatives in section 14
              and kept.
@@ -2220,41 +2229,47 @@ def _constituent_alignment_core(
     chamber = _chamber_of(district)
 
     ideal = _member_ideal_points(chamber)
-    if not _ideal_points_current(ideal):
-        ideal = {}  # an earlier Congress's positions: not this term's record (principle 6)
+    record_congress = (voting_record.get("partyLineRecord") or {}).get("congress")
+    if not _ideal_points_current(ideal, record_congress):
+        ideal = {}  # another Congress's positions: not this term's record (principle 6)
     dim1 = (ideal.get("members") or {}).get(bioguide_id) if bioguide_id else None
     position_fit = (ideal.get("fit") or {}).get(eval_party)
     congruence_sat = ideal.get("extremity_p90")
+    reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else None
     congruence_score = None
     congruence_detail = ""
     if dim1 is not None and position_fit is not None and congruence_sat:
         expected_dim1 = float(position_fit["a"]) + float(position_fit["b"]) * _seat_pvi(state, district)
         residual = float(dim1) - expected_dim1
         extremity = -residual if eval_party == "D" else residual
-        half = float(ideal.get("half_weight_votes") or 0)
-        # A section that records counts (v6.27) with none for this member:
-        # Voteview reports no scaled-vote count for them (newly sworn in, or
-        # very few scalable votes), so nothing says the position is reliable.
-        counted = isinstance(ideal.get("votes"), dict)
-        position_votes = ideal["votes"].get(bioguide_id) if counted else None
-        scored_votes = 0 if counted and position_votes is None else position_votes
-        weight = position_confidence(scored_votes, half)
-        congruence_score = position_congruence_score(extremity, float(congruence_sat), scored_votes, half)
+        # None: Voteview reported no count of the roll calls behind the
+        # position (a member it has barely scaled), read as none.
+        position_votes = (ideal.get("votes") or {}).get(bioguide_id)
+        weight = position_confidence(position_votes, reliability)
+        congruence_score = position_congruence_score(extremity, float(congruence_sat), weight)
         congruence_detail = (
             f"{ideal.get('measure', 'NOMINATE')} dim1 {float(dim1):+.2f} vs "
             f"{expected_dim1:+.2f} expected for a {eval_party} member of this seat — "
             + ("toward the party flank" if extremity > 0 else "toward the seat's center")
         )
-        if counted and position_votes is None and half:
+        if reliability and position_votes is None:
             congruence_detail += (
-                "; Voteview reports no count of the roll calls this position rests on, "
-                "so it is scored at 50 until it does"
+                "; Voteview reports no count of the roll calls behind this position, so it "
+                "reads as resting on none and sits at 50"
             )
         elif weight < 1.0:
             congruence_detail += (
                 f"; rests on {position_votes} roll calls, so it counts at {weight:.0%} strength "
-                f"(half strength at {half:.0f}), pulled toward 50"
+                f"(half strength at {reliability['half_weight_votes']:.0f}), pulled toward 50"
             )
+    elif reliability and position_fit is not None and congruence_sat and bioguide_id:
+        # A current section with no usable position for this member (Voteview
+        # hasn't placed them, or gave its 0, 0 placeholder): neutral, as a
+        # position resting on no votes would be, not a dropped component.
+        congruence_score = 50.0
+        congruence_detail = (
+            "Voteview has no position for this member this Congress yet, so this part sits at a neutral 50"
+        )
 
     break_rate, n_party = party_break_rate(voting_record)
     if break_rate is None:

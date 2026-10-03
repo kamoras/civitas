@@ -1,49 +1,47 @@
 """Calibrate how much a congress-specific roll-call position can be trusted.
 
 Regenerates app/data/position_confidence.json, read by score_calculator's
-_position_half_weight_votes(chamber): each chamber's n0 in the reliability
-weight n / (n + n0)
-that Constituent Alignment's position-congruence component applies to a
-member whose Nokken-Poole position rests on n roll calls (v6.27).
+_position_reliability(chamber): n0 in the weight n / (n + n0) that
+Constituent Alignment's position-congruence component gives a member whose
+Nokken-Poole position rests on n scaled roll calls (v6.27).
 
-The weight is the slope of the score a member would get from a full
-record on the score their n votes give: the factor that best predicts the
-first from the second, so 50 + weight * (score - 50) is the best linear
-estimate of where the member really sits. It is measured, not assumed:
+Measured on Voteview's own positions, with no model of how Voteview
+estimates them. A member who served part of one Congress and all of the
+next (or all of one and part of the next) has a thin position and a full
+one for adjacent Congresses. Read each against their party's center that
+Congress, signed toward the party's flank:
 
-1. Sampling error per vote count. For every member of Congresses
-   CONGRESSES with at least RELIABLE_VOTES scalable votes, re-estimate
-   their first-dimension position from random subsets of n of those votes
-   (n in VOTE_COUNTS) and record the error against the estimate from all
-   of them. Positions are maximum-likelihood under a logit per roll call,
-   P(yea) = 1 / (1 + exp(-(a + b * x))), fitted on that Congress's
-   Nokken-Poole positions, so the error is in Nokken-Poole units. The
-   errors are heavy-tailed (a handful of party-line votes cannot place a
-   member within their party at all), which is why no variance formula
-   stands in for this step.
-2. The population the score is applied to. Every member of the sitting
-   Congress with at least RELIABLE_VOTES votes, read through the
-   pipeline's own fit (fetch/voteview.build_chamber_ideal_points) and
-   score (position_congruence_score at the chamber's saturation).
-3. For each chamber and n, draw a member's true extremity from (2) and an
-   error from (1), score both, and take the regression slope of the
-   true score on the observed one. Each chamber's n0 is the least-squares
-   fit of n / (n + n0) to its slopes; they differ (the House's heavier
-   party-line voting says less about a member's place within their party),
-   so the scorer reads each chamber's own.
+    full = drift * n / (n + n0) * thin + error
 
-Run from the repo (network required; Voteview's vote files are large, so
-pass a cache directory to keep them):
+Drift is how far anyone's position carries from one Congress to the next.
+Pairs of full records (both sides at least RELIABLE_VOTES) measure drift
+times the weight of a full record, and pairs with a thin side add the
+weight of thin ones, so one least-squares fit identifies both.
+
+n0 is not one number across eras. The more a Congress votes on party lines,
+the less each vote says about where a member sits within their party, so
+log n0 is fitted as a line in the thin Congress's party-line share (the
+share of roll calls on which the two parties' majorities voted opposite
+ways), and each chamber's n0 is read at the sitting Congress's share,
+clamped to the range the thin pairs cover (their middle 90%) rather than
+extrapolated. A position
+published with no count is the thinnest record there is; the pairs give it
+no measurable weight in recent Congresses (UNCOUNTED_FROM onward), so the
+score reads it as 0 votes. Voteview's 0, 0 placeholders are no position and
+are left out. Every estimate comes with a bootstrap interval over members.
+
+Run from the repo (network required; the vote files are large, so pass a
+cache directory to keep them):
     python3 backend/scripts/calibrate_position_confidence.py [--cache DIR] [--out FILE]
 """
 
 import argparse
-import asyncio
 import csv
 import datetime
 import io
 import json
 import pathlib
+import statistics
 import sys
 import urllib.request
 
@@ -53,25 +51,23 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from app.contact import BOT_USER_AGENT  # noqa: E402
 
-VOTEVIEW = "https://voteview.com/static/data/out/{kind}/{chamber}{congress}_{kind}.csv"
-CONGRESSES = range(101, 119)  # completed Congresses: a sitting one's records are still growing
-VOTE_COUNTS = (10, 20, 40, 80, 160)
-DRAWS = 4  # subsamples per member per vote count
-# A member with this many votes is located well enough to serve as the
-# reference in (1) and as a true extremity in (2): the measured weight at
-# 160 votes is already about 0.9, and it keeps rising.
-RELIABLE_VOTES = 200
-MINORITY = 0.025  # Voteview's scaling drops roll calls with a smaller minority
+MEMBERS_URL = "https://voteview.com/static/data/out/members/{chamber}{congress}_members.csv"
+VOTES_URL = "https://voteview.com/static/data/out/votes/{chamber}{congress}_votes.csv"
+CONGRESSES = range(101, 120)  # pairs (c, c + 1); the sitting Congress's records are the newest side
+RELIABLE_VOTES = 200  # a full record; the pairs measure the weight below it
+CENTER = 0.6  # log n0 = a + b * (party-line share - CENTER): centers the fit, changes nothing else
+A_GRID = np.arange(2.0, 6.0, 0.02)
+B_GRID = np.arange(-6.0, 12.0, 0.1)
+UNCOUNTED_FROM = 110  # the recent Congresses the no-count weight is reported on
+BOOTSTRAP = 200
 YEA, NAY = (1, 2, 3), (4, 5, 6)
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "position_confidence.json"
 
 
-def read_csv(chamber: str, congress: int, kind: str, cache: pathlib.Path | None) -> list[dict]:
-    name = f"{chamber}{congress}_{kind}.csv"
+def _csv(url: str, name: str, cache: pathlib.Path | None) -> list[dict]:
     if cache is not None and (cache / name).exists():
         text = (cache / name).read_text()
     else:
-        url = VOTEVIEW.format(kind=kind, chamber=chamber, congress=congress)
         with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})) as resp:
             text = resp.read().decode()
         if cache is not None:
@@ -80,171 +76,203 @@ def read_csv(chamber: str, congress: int, kind: str, cache: pathlib.Path | None)
     return list(csv.DictReader(io.StringIO(text)))
 
 
+def member_rows(chamber: str, congress: int, cache: pathlib.Path | None = None) -> list[dict]:
+    rows = _csv(MEMBERS_URL.format(chamber=chamber, congress=congress), f"{chamber}{congress}_members.csv", cache)
+    return [r for r in rows if r.get("chamber") != "President"]
+
+
+def party_line_share(chamber: str, congress: int, cache: pathlib.Path | None = None) -> float:
+    """Share of a Congress's roll calls on which the two parties' majorities
+    voted opposite ways (Yea against Nay), over major-party members' yea and
+    nay votes."""
+    party = {}
+    for r in member_rows(chamber, congress, cache):
+        code = _float(r.get("party_code"))
+        if code in (100.0, 200.0):
+            party.setdefault(_id(r["icpsr"]), code)
+    tally: dict[str, dict[float, list[int]]] = {}
+    for r in _csv(VOTES_URL.format(chamber=chamber, congress=congress), f"{chamber}{congress}_votes.csv", cache):
+        p, code = party.get(_id(r["icpsr"])), int(_float(r.get("cast_code")) or 0)
+        if p is None or code not in YEA + NAY:
+            continue
+        t = tally.setdefault(r["rollnumber"], {100.0: [0, 0], 200.0: [0, 0]})[p]
+        t[0 if code in YEA else 1] += 1
+    opposed = [(d[0] > d[1]) != (r[0] > r[1]) for d, r in (v.values() for v in tally.values())
+               if sum(d) and sum(r)]
+    return sum(opposed) / len(opposed)
+
+
+def _float(value) -> float | None:
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return None
+    return x if x == x else None  # NaN is no value
+
+
+def _id(value) -> str:
+    """An ICPSR id as one spelling: several exports write "14009.0"."""
+    x = _float(value)
+    return str(int(x)) if x is not None else str(value)
+
+
 def is_placeholder(row: dict) -> bool:
-    """Voteview writes 0, 0 for a member it could not scale (a handful of
-    votes); that is no estimate, not a centrist."""
-    return row.get("nokken_poole_dim1") in ("0", "0.0") and row.get("nokken_poole_dim2") in ("0", "0.0")
+    """Voteview writes 0, 0 for a member it could not scale: no estimate."""
+    return _float(row.get("nokken_poole_dim1")) == 0 and _float(row.get("nokken_poole_dim2")) == 0
 
 
-def fit_rollcalls(x: np.ndarray, y: np.ndarray, mask: np.ndarray, iters: int = 25, ridge: float = 1e-2):
-    """Per roll call (column), a and b of a logit on member position x by
-    Newton's method; the small ridge on b keeps a party-line vote finite."""
-    a, b = np.zeros(y.shape[1]), np.zeros(y.shape[1])
-    for _ in range(iters):
-        p = 1 / (1 + np.exp(-(a[None] + b[None] * x[:, None])))
-        w = p * (1 - p) * mask
-        r = (y - p) * mask
-        g_a, g_b = r.sum(0), (r * x[:, None]).sum(0) - ridge * b
-        h_aa = w.sum(0) + 1e-9
-        h_ab = (w * x[:, None]).sum(0)
-        h_bb = (w * x[:, None] ** 2).sum(0) + ridge
-        det = h_aa * h_bb - h_ab ** 2
-        a += (h_bb * g_a - h_ab * g_b) / det
-        b += (h_aa * g_b - h_ab * g_a) / det
-    return a, b
-
-
-def locate(a: np.ndarray, b: np.ndarray, y: np.ndarray, x0: float, iters: int = 40) -> float:
-    """A member's maximum-likelihood position given fixed roll-call logits,
-    bounded to Nokken-Poole's range."""
-    x = x0
-    for _ in range(iters):
-        p = 1 / (1 + np.exp(-(a + b * x)))
-        x = float(np.clip(x + (b * (y - p)).sum() / ((b * b * p * (1 - p)).sum() + 1e-9), -1.5, 1.5))
-    return x
-
-
-def sampling_errors(chamber: str, congress: int, cache, rng) -> dict[int, list[float]]:
-    """n -> signed errors of positions from n votes against the member's
-    position from all their votes, over one Congress."""
-    members = {
-        r["icpsr"]: float(r["nokken_poole_dim1"]) for r in read_csv(chamber, congress, "members", cache)
-        if r.get("chamber") != "President" and r.get("nokken_poole_dim1") and not is_placeholder(r)
-    }
-    cast = [(r["icpsr"], r["rollnumber"], int(float(r["cast_code"])))
-            for r in read_csv(chamber, congress, "votes", cache) if r["icpsr"] in members]
-    cast = [(i, rc, 1.0 if c in YEA else 0.0) for i, rc, c in cast if c in YEA + NAY]
-    share: dict[str, list[float]] = {}
-    for _, rc, y in cast:
-        share.setdefault(rc, []).append(y)
-    scalable = sorted(rc for rc, ys in share.items() if MINORITY <= sum(ys) / len(ys) <= 1 - MINORITY)
-    ids = sorted({i for i, _, _ in cast})
-    row, col = {i: k for k, i in enumerate(ids)}, {rc: k for k, rc in enumerate(scalable)}
-    y, mask = np.zeros((len(ids), len(scalable))), np.zeros((len(ids), len(scalable)))
-    for i, rc, v in cast:
-        if rc in col:
-            y[row[i], col[rc]], mask[row[i], col[rc]] = v, 1.0
-    x = np.array([members[i] for i in ids])
-    a, b = fit_rollcalls(x, y, mask)
-    errors: dict[int, list[float]] = {n: [] for n in VOTE_COUNTS}
-    for k in range(len(ids)):
-        votes = np.flatnonzero(mask[k])
-        if len(votes) < RELIABLE_VOTES:
-            continue
-        full = locate(a[votes], b[votes], y[k, votes], x[k])
-        for n in VOTE_COUNTS:
-            for _ in range(DRAWS):
-                s = rng.choice(votes, n, replace=False)
-                errors[n].append(locate(a[s], b[s], y[k, s], 0.0) - full)
-    return errors
-
-
-def sitting_extremities(chamber: str) -> tuple[np.ndarray, float]:
-    """Extremities of the sitting Congress's reliable members, through the
-    pipeline's own build, and the chamber's saturation."""
-    from app.config import settings
-    from app.pipeline.analyze.score_calculator import _district_pvi, _state_pvi
-    from app.pipeline.fetch.voteview import PARTY_CODES, _seat_pvi_for, build_chamber_ideal_points, fetch_member_rows
-
-    rows = asyncio.run(fetch_member_rows(chamber, settings.CURRENT_CONGRESS))
-    data, failures = build_chamber_ideal_points(rows, chamber, _state_pvi(), _district_pvi(), half_weight_votes=0)
-    if failures or not data["extremity_p90"]:
-        sys.exit(f"{chamber}: sitting Congress did not build: {failures}")
-    out = []
+def deviations(rows: list[dict]) -> dict[str, tuple[float, float]]:
+    """icpsr -> (scaled votes, 0 when none reported; position from the
+    party's center signed toward its flank) for each major-party member
+    with a position, one row each (a member listed twice, after a party
+    switch, is left out). The center is the median of the party's full
+    records."""
+    seen: dict[str, list[dict]] = {}
     for r in rows:
-        bio = (r.get("bioguide_id") or "").strip()
-        party = PARTY_CODES.get(int(float(r.get("party_code") or 0)))
-        pvi = _seat_pvi_for(r, chamber, _state_pvi(), _district_pvi())
-        if party not in data["fit"] or bio not in data["members"] or pvi is None:
+        seen.setdefault(_id(r["icpsr"]), []).append(r)
+    members = []
+    for icpsr, rs in seen.items():
+        r = rs[0]
+        party = _float(r.get("party_code"))
+        x = _float(r.get("nokken_poole_dim1"))
+        if len(rs) != 1 or party not in (100.0, 200.0) or x is None or is_placeholder(r):
             continue
-        if data["votes"].get(bio, 0) < RELIABLE_VOTES:
-            continue
-        fit = data["fit"][party]
-        residual = data["members"][bio] - (fit["a"] + fit["b"] * pvi)
-        out.append(-residual if party == "D" else residual)
-    return np.array(out), float(data["extremity_p90"])
+        members.append((icpsr, party, x, _float(r.get("nominate_number_of_votes")) or 0.0))
+    center = {
+        p: statistics.median([x for _, q, x, n in members if q == p and n >= RELIABLE_VOTES] or [0.0])
+        for p in (100.0, 200.0)
+    }
+    return {i: (n, (x - center[p]) * (-1.0 if p == 100.0 else 1.0)) for i, p, x, n in members}
 
 
-def reliability(extremities: np.ndarray, saturation: float, errors: list[float], rng, draws: int = 200_000) -> float:
-    """Slope of the true score on the observed score (both centered at 50)."""
-    from app.pipeline.analyze.score_calculator import position_congruence_score
+def pairs(cache: pathlib.Path | None = None) -> list[tuple]:
+    """(chamber, icpsr, n, thin-or-earlier deviation, full deviation, kind,
+    congress, party-line share) with kind "full" (both sides full records:
+    n and the Congress are the earlier side's), "thin" (one side counted
+    under RELIABLE_VOTES: n and the Congress are that side's) or
+    "uncounted" (one side with no count)."""
+    out = []
+    for chamber in ("S", "H"):
+        share = {c: party_line_share(chamber, c, cache) for c in CONGRESSES}
+        prev = deviations(member_rows(chamber, CONGRESSES.start, cache))
+        for congress in CONGRESSES[1:]:
+            cur = deviations(member_rows(chamber, congress, cache))
+            for icpsr in prev.keys() & cur.keys():
+                (na, xa), (nb, xb) = prev[icpsr], cur[icpsr]
+                if na >= RELIABLE_VOTES and nb >= RELIABLE_VOTES:
+                    out.append((chamber, icpsr, na, xa, xb, "full", congress - 1, share[congress - 1]))
+                elif nb >= RELIABLE_VOTES or na >= RELIABLE_VOTES:
+                    if nb >= RELIABLE_VOTES:
+                        n, thin, full, c = na, xa, xb, congress - 1
+                    else:
+                        n, thin, full, c = nb, xb, xa, congress
+                    out.append((chamber, icpsr, n, thin, full, "thin" if n > 0 else "uncounted", c, share[c]))
+            prev = cur
+    return out
 
-    def score(e):
-        return np.array([position_congruence_score(v, saturation) for v in e]) - 50.0
-    true = rng.choice(extremities, draws)
-    observed = true + rng.choice(np.asarray(errors), draws)
-    s_true, s_obs = score(true), score(observed)
-    return float(np.cov(s_true, s_obs)[0, 1] / s_obs.var())
+
+def fit(data: list[tuple]) -> dict:
+    """Least squares of full = drift * n / (n + n0) * thin over counted
+    pairs, with log n0 = a + b * (party-line share - CENTER) (a and b on
+    their grids, drift closed-form for each); then, on that drift, the
+    weight of positions with no count in Congresses UNCOUNTED_FROM on."""
+    counted = [(n, x, y, u) for _, _, n, x, y, kind, _, u in data if kind != "uncounted"]
+    n, x, y, u = (np.array(v) for v in zip(*counted))
+    best = None
+    for b in B_GRID:
+        for a in A_GRID:
+            z = n / (n + np.exp(a + b * (u - CENTER))) * x
+            drift = float((z * y).sum() / (z * z).sum())
+            loss = float(((y - drift * z) ** 2).sum())
+            if best is None or loss < best[0]:
+                best = (loss, float(a), float(b), drift)
+    _, a, b, drift = best
+    unc = [(x, y) for _, _, _, x, y, kind, c, _ in data if kind == "uncounted" and c >= UNCOUNTED_FROM]
+    uncounted = (sum(x * y for x, y in unc) / sum(x * x for x, _ in unc) / drift) if unc else 0.0
+    return {"a": a, "b": b, "drift": drift, "uncounted_weight": uncounted}
 
 
-def fit_half_weight(points: list[tuple[int, float]]) -> float:
-    """Least-squares n0 of weight = n / (n + n0) over (n, weight) points."""
-    grid = np.arange(1.0, 200.0, 0.1)
-    loss = [sum((w - n / (n + g)) ** 2 for n, w in points) for g in grid]
-    return float(grid[int(np.argmin(loss))])
+def half_weight(model: dict, share: float, lo: float, hi: float) -> float:
+    """n0 at a party-line share, clamped to [lo, hi], the shares the pairs cover."""
+    return float(np.exp(model["a"] + model["b"] * (min(max(share, lo), hi) - CENTER)))
 
 
-def calibrate(cache: pathlib.Path | None = None, seed: int = 0) -> dict:
+def bootstrap(data: list[tuple], shares: dict[str, float], lo: float, hi: float, seed: int = 0) -> dict:
+    """5th and 95th percentiles, resampling members: the model's slope, the
+    drift, the recent no-count weight and each chamber's n0."""
     rng = np.random.default_rng(seed)
-    chambers = {}
-    for chamber, letter in (("senate", "S"), ("house", "H")):
-        errors: dict[int, list[float]] = {n: [] for n in VOTE_COUNTS}
-        for congress in CONGRESSES:
-            for n, e in sampling_errors(letter, congress, cache, rng).items():
-                errors[n] += e
-            print(f"{letter}{congress} measured", file=sys.stderr, flush=True)
-        extremities, saturation = sitting_extremities(chamber)
-        weights = {n: reliability(extremities, saturation, errors[n], rng) for n in VOTE_COUNTS}
-        chambers[chamber] = {
-            "weights": {str(n): round(w, 3) for n, w in weights.items()},
-            "median_abs_error": {str(n): round(float(np.median(np.abs(errors[n]))), 4) for n in VOTE_COUNTS},
-            "errors_measured": {str(n): len(errors[n]) for n in VOTE_COUNTS},
-            "members_in_population": int(len(extremities)),
-            "half_weight_votes": round(fit_half_weight(list(weights.items())), 1),
-        }
-    pooled = [(n, w) for c in chambers.values() for n, w in ((int(k), v) for k, v in c["weights"].items())]
-    return {"chambers": chambers, "half_weight_votes": round(fit_half_weight(pooled), 1)}
+    by_member: dict[str, list[tuple]] = {}
+    for row in data:
+        by_member.setdefault(row[1], []).append(row)
+    ids = list(by_member)
+    draws = []
+    for _ in range(BOOTSTRAP):
+        m = fit([row for i in rng.choice(ids, len(ids)) for row in by_member[i]])
+        draws.append({"b": m["b"], "drift": m["drift"], "uncounted_weight": m["uncounted_weight"],
+                      **{c: half_weight(m, u, lo, hi) for c, u in shares.items()}})
+    return {k: [round(float(np.percentile([d[k] for d in draws], q)), 3) for q in (5, 95)] for k in draws[0]}
+
+
+def calibrate(cache: pathlib.Path | None = None) -> dict:
+    data = pairs(cache)
+    model = fit(data)
+    # The shares the thin pairs cover: their middle 90%, so a few pairs
+    # at an extreme Congress don't license reading the line out there.
+    covered = [u for *_, kind, _, u in data if kind == "thin"]
+    lo, hi = (float(np.percentile(covered, q)) for q in (5, 95))
+    sitting = CONGRESSES.stop - 1
+    shares = {name: party_line_share(letter, sitting, cache) for name, letter in (("senate", "S"), ("house", "H"))}
+    interval = bootstrap(data, shares, lo, hi)
+    return {
+        "congress": sitting,
+        "chambers": {
+            name: {
+                "party_line_share": round(u, 3),
+                "read_at": round(min(max(u, lo), hi), 3),
+                "half_weight_votes": round(half_weight(model, u, lo, hi), 1),
+                "interval_90": interval[name],
+            }
+            for name, u in shares.items()
+        },
+        "model": {
+            "log_n0": f"{model['a']:.2f} + {model['b']:.2f} * (party-line share - {CENTER})",
+            "a": round(model["a"], 3), "b": round(model["b"], 3), "b_interval_90": interval["b"],
+            "drift": round(model["drift"], 4), "drift_interval_90": interval["drift"],
+            "shares_covered": [round(lo, 3), round(hi, 3)],
+        },
+        "uncounted_weight_recent": round(model["uncounted_weight"], 3),
+        "uncounted_weight_interval_90": interval["uncounted_weight"],
+        "pairs": {kind: sum(1 for row in data if row[5] == kind) for kind in ("full", "thin", "uncounted")},
+    }
 
 
 def main() -> None:
-    from app.config import settings
-
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--cache", type=pathlib.Path)
     ap.add_argument("--out", type=pathlib.Path, default=OUT)
     args = ap.parse_args()
-    result = calibrate(args.cache)
     data = {
         "_source": (
-            f"Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, "
-            f"Congresses {CONGRESSES.start}-{CONGRESSES.stop - 1} (sampling error) and "
-            f"{settings.CURRENT_CONGRESS} (the scored population), retrieved "
-            f"{datetime.date.today().isoformat()}; regenerate with "
-            "backend/scripts/calibrate_position_confidence.py"
+            f"Voteview (voteview.com, Lewis et al.) member exports, Senate and House, Congresses "
+            f"{CONGRESSES.start}-{CONGRESSES.stop - 1}, retrieved {datetime.date.today().isoformat()}; "
+            "regenerate with backend/scripts/calibrate_position_confidence.py"
         ),
         "_method": (
-            "Weight = slope of the full-record score on the score from n votes, with sampling "
-            "errors measured by re-estimating members' positions from random subsets of their "
-            "votes and true extremities from the sitting Congress; each chamber's half_weight_votes "
-            "is the least-squares n0 of n / (n + n0) over its weights (the scorer reads these); "
-            "the top-level value pools both chambers, for reference"
+            "Members with positions in adjacent Congresses, each read from the party's center toward "
+            "its flank: least squares of full = drift * n / (n + n0) * thin over pairs with a thin "
+            f"side (under {RELIABLE_VOTES} scaled votes) and pairs of full records, both chambers, with "
+            "log n0 linear in the thin Congress's party-line share; each chamber's half_weight_votes is "
+            "n0 at the sitting Congress's share, clamped to the middle 90% of the thin pairs' shares; "
+            "uncounted_weight_recent is the weight of positions with no count since the "
+            f"{UNCOUNTED_FROM}th Congress, which the score reads as 0 votes; intervals are 5th-95th "
+            "percentiles over members resampled"
         ),
-        **result,
+        **calibrate(args.cache),
     }
     args.out.write_text(json.dumps(data, indent=1) + "\n")
-    print(f"wrote {args.out}: half_weight_votes {data['half_weight_votes']} "
-          f"(senate {result['chambers']['senate']['half_weight_votes']}, "
-          f"house {result['chambers']['house']['half_weight_votes']})")
+    print(f"wrote {args.out}: " + "; ".join(
+        f"{c} n0 {v['half_weight_votes']} {v['interval_90']} at share {v['party_line_share']}"
+        for c, v in data["chambers"].items()) + f"; model {data['model']['log_n0']}")
 
 
 if __name__ == "__main__":

@@ -482,8 +482,9 @@ Two things produced that:
 
 **Changed (v6.20).** A break counts only when, on that roll call, the
 party's members who broke sit on average nearer the other party (mean
-DW-NOMINATE first dimension) than the party does
-(`party_line_record._toward_other_party`). Other breaks are listed on the
+first-dimension position, from the same Voteview section position
+congruence reads; since v6.27 each position weighted by its reliability,
+section 14) than the party does (`party_line_record._toward_other_party`). Other breaks are listed on the
 scorecard as from the flank, and not counted. The rate is measured over
 every roll call the chamber recorded this Congress, not a sample.
 
@@ -571,8 +572,8 @@ the senator, not the seat. Partisan lean stays the expectation.
 ### 14. Position congruence's score: shape, scale and thin records (v6.27, tested 2026-10)
 
 **The question.** Position congruence reads low beside everything around it:
-across the 119th Congress its mean is about 50 in both chambers, and 10.7% of
-Senate Republicans score 0 on it. Section 1 tested the position as a
+across the 119th Congress its mean is about 50 in both chambers, and under
+v6.26 10.7% of Senate Republicans scored 0 on it. Section 1 tested the position as a
 continuous measure. The score is a transform of it (clipped at a saturation
 point, 50 at the seat's expectation), and three things about that transform
 had never been put in front of election results:
@@ -584,7 +585,9 @@ had never been put in front of election results:
   pooled across both parties. The vote part moved to one scale per party in
   v6.16 (section 10). Republican positions spread more widely around their
   expectation (the 119th Senate's per-party 90th percentiles are 0.329 R and
-  0.186 D, pooled 0.258), so on the pooled scale more Republicans reach 0.
+  0.186 D, pooled 0.258, with seat lean from the presidential vote; the
+  pipeline's Cook PVI gives a pooled 0.265), so on the pooled scale more
+  Republicans reach 0.
 - **Thin records.** A Nokken-Poole position is estimated from one
   congress's roll calls. Members with few of them (sworn in late, gone
   early, or anyone early in a Congress) were scored at full strength.
@@ -593,15 +596,17 @@ had never been put in front of election results:
 per congress the way the pipeline scores it: congress-specific Nokken-Poole
 positions from Voteview (Voteview's 0, 0 placeholders dropped), per-party
 fits on seat lean, the scale over every member, and v6.27's reliability
-weight. The House rows use section 1's panel and controls. Coefficient per
+weight (nearly inert here: almost every incumbent in these panels has a full
+record). The House rows use section 1's panel and controls; seat lean is
+the presidential vote, as throughout this note, not the pipeline's Cook PVI. Coefficient per
 score point, t, and the R² the score adds:
 
 | Outcome | Linear, pooled (shipped) | Linear, per party | Peaked, pooled | Peaked, per party |
 |---|---|---|---|---|
-| House generals 1994–2010 (N=2,545) | **0.036 (5.2), 0.0091** | 0.037 (5.3), 0.0096 | −0.002 (−0.4), 0.0000 | −0.001 (−0.3), 0.0000 |
-| Senate generals 1990–2024 (N=461) | **0.044 (2.5), 0.0115** | 0.042 (2.5), 0.0110 | −0.010 (−0.7), 0.0009 | −0.009 (−0.6), 0.0007 |
-| House primaries 1990–2010, contested, primary share (N=1,044) | −0.009 (−0.5), 0.0003 | −0.008 (−0.4), 0.0002 | 0.022 (1.4), 0.0020 | 0.023 (1.5), 0.0022 |
-| drew a primary challenger (N=3,869) | 0.000 (1.2) | 0.000 (1.3) | −0.000 (−1.0) | −0.000 (−1.4) |
+| House generals 1994–2010 (N=2,545) | **0.037 (5.2), 0.0091** | 0.038 (5.3), 0.0097 | −0.002 (−0.4), 0.0000 | −0.001 (−0.2), 0.0000 |
+| Senate generals 1990–2024 (N=461) | **0.048 (2.5), 0.0114** | 0.046 (2.5), 0.0108 | −0.008 (−0.5), 0.0005 | −0.007 (−0.5), 0.0004 |
+| House primaries 1990–2010, contested, primary share (N=1,044) | −0.010 (−0.5), 0.0003 | −0.008 (−0.4), 0.0002 | 0.023 (1.4), 0.0021 | 0.023 (1.5), 0.0023 |
+| drew a primary challenger, per 10 points (N=3,869) | 0.004 (1.1), 0.0006 | 0.005 (1.3), 0.0008 | −0.003 (−1.0), 0.0004 | −0.004 (−1.4), 0.0007 |
 
 - **Shape: kept.** The linear shape predicts the general election in both
   chambers. The peaked shape predicts nothing there. The Senate replicates
@@ -624,97 +629,143 @@ score point, t, and the R² the score adds:
   Unlike the vote part's case, the pooled scale doesn't shift either party's
   average (over every Senate, unweighted: 50.5 D and 51.6 R pooled, 50.8
   and 50.9 per party). It widens the spread for the party that spreads more
-  (share at 0: 2.8% D and 9.9% R pooled, 5.7% and 6.8% per party). With no
+  (share at 0, unweighted: 2.8% D and 9.9% R pooled, 5.7% and 6.8% per
+  party; with v6.27's weights nobody sits exactly at 0 or 100). With no
   evidence for either, the shipped scale stays.
 
 **Thin records: what a position from n votes is worth.** The score should
-read a member's position at the strength it predicts the member's real one.
-For a score centered on the seat's expectation, that is the regression
-slope of the full-record score on the score from n votes: 50 + slope ×
-(score − 50) is the best linear estimate. `scripts/calibrate_position_confidence.py`
-measures it:
+read a member's position at the strength it predicts where the member
+really sits. Voteview's own positions measure that directly, with no model
+of how Voteview estimates them. Some members served part of one Congress
+and all of the next, or all of one and part of the next: a special-election
+winner, or a member who left. They have a thin position and a full one for
+adjacent Congresses, and a thin record that arises this way is a run of
+consecutive votes, just as in the score. Read each against their party's
+center that Congress (the median of its full records), signed toward the
+party's flank:
 
-1. **Sampling error.** Every member of Congresses 101–118 with at least 200
-   scaled votes is re-located from random subsets of n of them (4 draws
-   each; 6,812 Senate and 29,812 House errors per n). The location is
-   maximum likelihood under a logit per roll call fitted on that Congress's
-   Nokken-Poole positions, so errors are in Nokken-Poole units. Median
-   |error| at 10, 20, 40, 80 and 160 votes: Senate 0.143, 0.080, 0.051,
-   0.034, 0.021; House 0.157, 0.091, 0.059, 0.039, 0.026. The errors are
-   heavy-tailed: a handful of party-line votes cannot place a member within
-   their party at all.
-2. **The population.** True extremities are the 119th Congress's members
-   with at least 200 votes (98 Senate, 433 House), through the pipeline's
-   own fit and score.
-3. **The weight.** Score a drawn true extremity and the same plus a drawn
-   error; the slope of the first on the second:
+    full = drift × weight(n) × thin,   weight(n) = n / (n + n0)
 
-| Votes | 10 | 20 | 40 | 80 | 160 |
-|---|---|---|---|---|---|
-| Senate | 0.279 | 0.448 | 0.637 | 0.785 | 0.900 |
-| House | 0.245 | 0.392 | 0.550 | 0.712 | 0.840 |
+Drift is how far anyone's position carries from one Congress to the next.
+Pairs of full records (both sides at least 200 scaled votes) measure drift
+times a full record's weight, and pairs with a thin side add the thin
+weights, so one least-squares fit identifies both.
+`scripts/calibrate_position_confidence.py` runs it over Congresses 101–119:
+8,099 full pairs, 108 thin and 25 with no count on the thin side.
 
-Both follow n / (n + n0), with n0 = **23.5** (Senate) and **31.7** (House):
-the House's heavier party-line voting says less about where a member sits
-within their party. The score reads each chamber's own.
+**n0 depends on the era.** One n0 for every Congress is 45, but fitting
+Congresses 101–109 alone gives 26 and 113–119 gives 101. The more a
+Congress votes on party lines, the less each vote says about where a member
+sits within their party. That is measurable: the share of roll calls on
+which the two parties' majorities voted opposite ways.
+- House: 0.42–0.67 through the 111th, 0.58–0.75 since.
+- Senate: 0.46 in the 101st, 0.81 in the 117th, 0.92 in the 119th.
 
-**A proxy that doesn't work.** v6.27's first draft calibrated a cutoff from
-the gap between a member's Nokken-Poole position and their career
-DW-NOMINATE position, fitting gap² = drift + k / votes and taking k / drift
-(81 votes over 9,821 member-congresses). Review found that number to be an
-artifact:
-- Three of the points are Voteview's placeholders (0, 0 for a member it
-  could not scale), and leaving them out moves the cutoff from 81 to 32.
+So log n0 is fitted as a line in the thin Congress's party-line share:
+
+    log n0 = 3.86 + 3.00 × (share − 0.6),   drift 0.938
+
+The slope is positive in the bootstrap's 90% interval (0.8 to 6.7), so the
+dependence is not noise. Each chamber's n0 is read at the sitting
+Congress's share, clamped to the middle 90% of the thin pairs' shares
+(0.457–0.756) rather than extrapolated:
+
+| | Party-line share | Read at | n0 | 90% interval |
+|---|---|---|---|---|
+| House, 119th | 0.70 | 0.70 | **64** | 38–104 |
+| Senate, 119th | 0.92 | 0.756 | **76** | 45–119 |
+
+No Congress in the data was as party-line as the 119th Senate, so its n0 is
+read at the edge of what was measured. Extrapolating would give a larger n0.
+
+- A House member with a full record (about 560 votes by October 2026)
+  counts 0.90, and a full Senate record about the same.
+- A position with no reported count is the thinnest record there is. Since
+  the 110th Congress its measured weight is 0.13, with an interval of
+  −0.13 to 0.33 that includes zero, so the score reads it as resting on
+  no votes.
+
+**Two approaches that don't work.** Both appeared in drafts of this
+change and were replaced after review.
+
+*The career-gap proxy.* The first draft fit gap² = drift + k / votes, where
+the gap is between a member's Nokken-Poole position and their career
+DW-NOMINATE position. It took k / drift as a cutoff, which came to 81
+votes over 9,821 member-congresses of Congresses 101–118.
+- Three of those points are Voteview's placeholders (0, 0 for a member it
+  could not scale). Leaving them out moves the cutoff from 81 to 32.
 - With them out it still swings: Senate 39, House 31, members with 5 or
-  more votes 234.
-- A member-clustered bootstrap gives 11 to 157 (5th to 95th percentile).
-- Only about 200 points have under 300 votes, and the 1/n term gives one-
-  and two-vote members most of the leverage.
-- It answered a different question as well. Drift is a member's movement
-  around their career position, but the score centers on the seat's
-  expectation, so what matters is the spread of members around that.
-- A member whose career is one congress has both positions estimated from
-  the same votes, which shrinks the gap and biases k down.
+  more votes 234. A member-clustered bootstrap gives 11 to 157 (5th to
+  95th percentile).
+- It also answered a different question. Drift around a career position
+  is not the spread around the seat's expectation that the score centers
+  on.
 
-The subsampling measurement has none of these problems. It has thousands
-of errors at every n, measured directly, and scored on the transform that
-ships.
+*Re-estimating positions from subsamples.* The second draft re-located
+members from random subsets of their votes, by maximum likelihood under a
+logit per roll call. It failed for three reasons:
+- With a handful of party-line votes that estimate has no finite value and
+  runs to its bound, which Nokken-Poole positions never do.
+- Random subsets are also the most favourable case. Real thin records are
+  consecutive runs of votes, and a reviewer found that the first or last n
+  votes give errors about 1.5 times larger.
+- The draft pooled every era, which understated the weight for today's
+  Congress.
+
+Measuring Voteview's positions directly avoids all three.
 
 **Shipped (v6.27).**
-- The component is weighted toward 50 by n / (n + n0), n the member's
-  scaled roll calls this Congress (Voteview's `nominate_number_of_votes`).
-  A reviewer recomputed it from the vote files as yea or nay votes on roll
-  calls with at least a 2.5% minority, and matched it exactly for 87–94% of
-  6,798 member-congresses and within 2 votes for over 99%.
+- The component's distance from 50 is scaled by n / (n + n0), where n0 is
+  64 for the House and 76 for the Senate, read at the 119th Congress's
+  party-line share. n is the member's scaled roll calls this Congress
+  (Voteview's `nominate_number_of_votes`).
+- A position with no reported count reads as resting on none.
 - There is no cutoff. The seat fits and the scale are taken over every
   member, since a thin position is noisy but not biased.
-- Early in a Congress, when every record is thin, every member's position
-  reads close to 50, and each member is read on the current Congress's own
-  votes. A section left from an earlier Congress (a refresh that failed its
-  gates after January 3) is not read at all.
-- A position with no reported count reads as 0 votes. Voteview gives no
-  count for a member it has barely scaled: someone newly sworn in, or a
-  member with very few scalable votes.
-- Placeholders are dropped. The weight does not apply to a DW-NOMINATE
-  section, since a career position is not described by this Congress's
-  count.
+- Voteview's placeholders are dropped. A member a current section has no
+  position for (those, or anyone Voteview hasn't placed yet) sits at 50,
+  as a position from no votes would, instead of having the component
+  left out.
+- Each section records its Congress, and a position counts only for roll
+  calls of that same Congress.
+  - Across January 3, until the new Congress's Voteview export passes the
+    ingest gates, the component is left out for everyone, as when no data
+    exists.
+  - From then on, each member is read on the new Congress's own votes,
+    weighted toward 50 while those are few.
+  - A stored score's "show the math" keeps reading the positions it was
+    scored on until the next run rescores it.
+- The weight applies to the DW-NOMINATE fallback too: whatever a career
+  estimate rests on, this Congress's count is the current term's evidence.
+- Rerun the calibration each Congress, since a new Congress brings a new
+  party-line share and new pairs.
 - The flank-break rule of section 11 weights the defectors' and the
-  party's mean positions the same way.
+  party's mean positions the same way. On the 119th Congress's roll calls
+  this reclassifies none of 2,351 Senate breaks and 2 of 6,055 House
+  breaks.
 
-**Effect on the 119th Congress** (Voteview exports of 2026-10-03, v6.26's
-formula against v6.27's on the same fits). The average member's component
-moves 0.59 points in the Senate and 1.55 in the House, which is 0.18 and
-0.47 points of Constituent Alignment. Members whose positions count at under
-90%:
+**Effect on the 119th Congress** (Voteview exports of 2026-10-03, through
+the pipeline's own build with Cook PVI seat lean). This compares v6.26,
+which read placeholders as positions and weighted nothing, with v6.27:
 
-- Senate: three (7, 53 and 187 votes).
-- House: fifteen.
-  - Two recently sworn-in members have no count. They move from 23.3 and
-    31.1 to 50, which is +8.0 and +5.7 on Constituent Alignment.
-  - A member with 77 votes moves from 93.2 to 80.6.
-  - Members who have left, each scored from 1 to 39 votes, move by up to 49
-    points.
-  - Members with 116–386 votes move 1 to 8 points.
+| | Senate | House |
+|---|---|---|
+| Saturation | 0.258 → 0.265 | 0.224 → 0.224 |
+| Mean change in the component | 2.85 | 2.68 |
+| Mean change in Constituent Alignment | 0.86 | 0.80 |
+
+- Most of the change is every full record now counting at about 0.9,
+  which pulls each component about a tenth of the way to 50.
+- Dropping the Senate placeholder moves the Senate Republican slope from
+  +0.0033 to +0.0018.
+- Records under 200 votes, with no count or with no position move most:
+  four in the Senate and twelve in the House.
+  - Two recently sworn-in representatives with no count move from 23.3
+    and 31.1 to 50 on the component.
+  - A representative with 77 votes moves from 93.2 to 73.6.
+  - Members with 116–182 votes move 6 to 16 points.
+  - Members scored from 1 to 39 votes or a placeholder, all of whom have
+    since left, move by up to 50 points.
 
 ## What the evidence does not settle
 
@@ -740,14 +791,16 @@ moves 0.59 points in the Senate and 1.55 in the House, which is 0.18 and
 - **Position congruence's scale is not settled.** One scale for both parties
   and one per party predict elections equally well, and the test of which
   unit voters respond to is inconclusive in both chambers (section 14). The
-  pooled scale stays because nothing favors changing it. It leaves the
-  party whose members spread more widely around the seat's norm
-  (Republicans, in most Congresses since 1989) with more members at 0 and
-  at 100.
-- **The thin-record weight rests on a model of the roll call.** The
-  sampling error is measured under a one-dimensional logit per roll call,
-  not Voteview's two-dimensional NOMINATE model, and the true extremities
-  are one Congress's. Rerun the calibration each Congress.
+  pooled scale stays because nothing favors changing it. Unweighted, it
+  leaves the party whose senators spread more widely around the seat's
+  norm (Republicans, in most Senates since 1989) with more members near 0
+  and near 100.
+- **The thin-record weight rests on 108 members.** Few members have a thin
+  record next to a full one, so n0 has a wide interval (House 38–104,
+  Senate 45–119). The 119th Senate is more party-line than any Congress
+  measured, so its n0 is read at the edge of the data. A member's thin
+  Congress is also often their first or last, which may move differently
+  from others. Rerun the calibration each Congress.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight

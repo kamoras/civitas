@@ -134,7 +134,7 @@ def test_a_thin_records_position_barely_moves_the_direction_of_a_break(db_sessio
     roster = {**DIM1, **{f"R{i}": 0.5 for i in range(5, 10)}}
     monkeypatch.setitem(globals(), "DIM1", roster)
     full = {m: 500 for m in roster}
-    section = {"members": roster, "votes": full, "half_weight_votes": 24}
+    section = {"members": roster, "votes": full, "reliability": {"half_weight_votes": 24}}
     _roll_call(db_session, "house", 30, "On Passage", "HR.5", {"R0": "Nay", "R4": "Nay"})
     db_session.commit()
 
@@ -148,10 +148,11 @@ def test_a_thin_records_position_barely_moves_the_direction_of_a_break(db_sessio
 
 
 def test_an_earlier_congresss_positions_are_not_read(db_session, monkeypatch):
-    """A section left from the 118th says nothing about the 119th's roll
-    calls: with no position, R4's flank-side break counts, as before v6.20."""
+    """A section from another Congress says nothing about these roll calls
+    (the 119th's): with no position, R4's flank-side break counts, as
+    before v6.20. Judged against the roll calls' Congress, not the clock."""
     monkeypatch.setattr(party_line_record, "_member_ideal_points",
-                        lambda chamber: {"members": DIM1, "congress": 118})
+                        lambda chamber: {"members": DIM1, "congress": 120})
     _roll_call(db_session, "house", 31, "On Passage", "HR.6", {"R4": "Nay"})
     db_session.commit()
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []

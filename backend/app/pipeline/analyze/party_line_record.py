@@ -101,8 +101,8 @@ def _toward_other_party(party: str, cast: list[tuple]) -> bool:
     broke = [d for _, p, _, with_party, d in cast if p == party and not with_party and d is not None and d[1] > 0]
     if not everyone or not broke:
         # ponytail: no usable position for any defector (a member Voteview
-        # hasn't estimated, or reports no count for) counts the break, as
-        # every break did before v6.20; mostly a Congress's first weeks.
+        # hasn't estimated) counts the break, as every break did before
+        # v6.20; mostly a Congress's first weeks.
         return True
 
     def mean(points):
@@ -151,13 +151,13 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     tenures = load_leadership_tenures()
     spans = [majority_leader_spans(m.get("leadershipTitle"), tenures.get(m.get("bioguideId"))) for m in members]
     ideal = _member_ideal_points(chamber) or {}
-    if not _ideal_points_current(ideal):
-        ideal = {}  # an earlier Congress's positions say nothing about this one's roll calls
-    half = float(ideal.get("half_weight_votes") or 0)
-    counts = ideal.get("votes") if isinstance(ideal.get("votes"), dict) else None
+    if not _ideal_points_current(ideal, congress):
+        ideal = {}  # another Congress's positions say nothing about this one's roll calls
+    reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else None
+    counts = ideal.get("votes") or {}
     # bioguide -> (position, reliability weight)
     dim1 = {
-        b: (x, position_confidence(counts.get(b, 0) if counts is not None else None, half))
+        b: (x, position_confidence(counts.get(b), reliability))
         for b, x in (ideal.get("members") or {}).items()
     }
 
