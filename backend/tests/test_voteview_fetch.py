@@ -49,7 +49,7 @@ def _patch_path(monkeypatch, tmp_path):
     return path
 
 
-REL = {"half_weight_votes": 43.0}
+REL = {"n0": 109.0, "reference_votes": 200.0, "half_weight_votes": 52.2, "uncounted_weight": 0.2}
 
 
 class TestBuildAndGates:
@@ -107,9 +107,9 @@ class TestBuildAndGates:
         assert data["reliability"] == REL and data["congress"] == 119
         assert data["measure"] == "Nokken-Poole"
 
-    def test_the_scale_is_read_on_weighted_extremities(self):
-        """A thin record's noise can't widen the saturation scale: it enters
-        at its reliability weight, as the score reads it."""
+    def test_the_scale_comes_from_full_records(self):
+        """Thin records' noise can't widen the saturation scale: it is taken
+        over full records only (reference_votes or more)."""
         state_pvi = score_calculator._state_pvi()
         rows = _synthetic_rows(state_pvi)
         for r in rows:
@@ -122,6 +122,17 @@ class TestBuildAndGates:
         unweighted, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability={})
         assert unweighted["extremity_p90"] > 3 * base["extremity_p90"]
         assert thin["extremity_p90"] < 1.5 * base["extremity_p90"]
+
+    def test_an_export_where_every_record_is_thin_has_no_scale_of_its_own(self):
+        """Early in a Congress: the build leaves the scale to be carried, so
+        the weights pull positions toward 50 instead of a scale shrunk with
+        them cancelling them."""
+        state_pvi = score_calculator._state_pvi()
+        rows = _synthetic_rows(state_pvi)
+        for r in rows:
+            r["nominate_number_of_votes"] = "5"
+        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+        assert failures == [] and data["extremity_p90"] is None and data["fit"]
 
     def test_float_coded_exports_parse(self):
         """The 115th-117th exports write party and district codes as floats
@@ -225,6 +236,30 @@ class TestRefresh:
         assert section["reliability"] == score_calculator._position_reliability()
         assert section["reliability"]["half_weight_votes"] > 0
         assert section["votes"]
+
+    async def test_an_early_congress_carries_the_last_scale_and_scores_near_50(self, monkeypatch, tmp_path):
+        """Every record 5 votes thin: the section carries the chamber's last
+        scale, so each position counts a fraction of a full record's and the
+        component sits near 50 for everyone (the weights don't cancel)."""
+        path = _patch_path(monkeypatch, tmp_path)
+        state_pvi = score_calculator._state_pvi()
+        path.write_text(json.dumps({"senate": {"members": {}, "extremity_p90": 0.2, "congress": 118}}))
+        rows = _synthetic_rows(state_pvi)
+        for r in rows:
+            r["nominate_number_of_votes"] = "5"
+
+        async def fake_rows(chamber, congress, client=None):
+            return rows
+
+        monkeypatch.setattr(voteview, "fetch_member_rows", fake_rows)
+        monkeypatch.setattr(score_calculator, "_position_reliability", lambda: dict(REL))
+        assert await voteview.refresh_member_ideal_points("senate", 119) is True
+        section = score_calculator._member_ideal_points("senate")
+        assert section["extremity_p90"] == 0.2 and section["scale_congress"] == 118
+        weight = score_calculator.position_confidence(5, section["reliability"])
+        assert weight < 0.1
+        # A position at the old scale's saturation scores 50 - 50 * weight, not 0.
+        assert abs(score_calculator.position_congruence_score(0.2, 0.2, weight) - 50) < 5
 
     async def test_fetch_failure_keeps_previous_data(self, monkeypatch, tmp_path):
         path = _patch_path(monkeypatch, tmp_path)

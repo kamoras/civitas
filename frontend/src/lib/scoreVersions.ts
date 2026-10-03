@@ -36,15 +36,15 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     date: "2026-10-03",
     title:
       "Constituent Alignment: a voting position counts only as much as the votes behind it support",
-    tldr: "Part of Constituent Alignment compares where a member sits on the left-right scale with where members of their party from similar seats sit. That position is estimated from the member's roll-call votes in the current Congress, and from only a few votes it is mostly noise. It now counts in proportion to how reliable it is: a position from about 40 votes counts half as much as a full record's, and a full record counts in full. Most members barely move.",
+    tldr: "Part of Constituent Alignment compares where a member sits on the left-right scale with where members of their party from similar seats sit. That position is estimated from the member's roll-call votes in the current Congress, and from only a few votes it is mostly noise. It now counts in proportion to how reliable it is: a position from about 50 votes counts half, and a record of 200 votes or more counts in full. Most members barely move.",
     changes: [
       "Why: a position estimated from a handful of votes says little about where a member really sits, yet members sworn in late or gone early, and everyone early in a Congress, were scored on such positions at full strength.",
       "How much a position counts is measured on Voteview's own positions: members with a short record in one Congress and a full one in the next show how well the short one predicts the full one, once ordinary change from one Congress to the next is taken out. One measurement covers both chambers and every Congress, so nothing needs resetting when a new Congress begins.",
       "A position Voteview publishes without a vote count counts at the weight measured for such positions, about a fifth. A member with no position this Congress sits at a neutral 50, instead of this part being dropped and the vote part carrying their whole score. Voteview's placeholder for a member it could not place is no longer read as a centrist position.",
-      "Positions count only for the Congress they come from: early in a new Congress, once its positions are published, members are read on its own few votes, close to 50, never on the last Congress's record.",
+      "Positions count only for the Congress they come from: early in a new Congress, once its positions are published, members are read on its own few votes, close to 50 (the scale is carried from the last Congress, so the weighting isn't undone), never on the last Congress's record.",
       "Also fixed: the House's data check counted members, and delegates and mid-term replacements had pushed it past its limit, so House positions had stopped refreshing. It now counts seats.",
       "Tested and kept: this part scores 50 for sitting where members of your party from similar seats sit, and above 50 for sitting nearer the seat's center. Scoring it like the vote part (100 at the typical position) was tested against House and Senate election results and predicted nothing, while the current shape did. One scale for both parties was also kept: a scale per party predicted elections no better.",
-      "Effect on October 2026 data: the average member moves 0.5 points (Senate) and 0.2 (House) on Constituent Alignment. Two recently sworn-in representatives move up 6.3 and 4.5. docs/methodology/member-score/v6.27.md has the measurements.",
+      "Effect on October 2026 data: the average member moves 0.5 points (Senate) and under 0.2 (House) on Constituent Alignment. Two recently sworn-in representatives move up 6.2 and 4.4. docs/methodology/member-score/v6.27.md has the measurements.",
     ],
   },
   {

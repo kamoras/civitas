@@ -874,10 +874,10 @@ def _per_party_extremity(M, pos="nokken_poole_dim1", lean="pvi"):
 
 def _weights(M):
     """The shipped reliability weight (v6.27, score_calculator.
-    position_confidence): n / (n + n0) for n scaled roll calls that
-    Congress (none reported: 0), n0 from app/data/position_confidence.json;
-    applied to these historical Congresses it is nearly inert, since almost
-    every incumbent has a full record."""
+    position_confidence) for each member: 1 for a full record, less for a
+    thin one, the measured no-count weight when Voteview reported none;
+    from app/data/position_confidence.json. Nearly inert in the historical
+    election panels, where almost every incumbent has a full record."""
     rel = score_calculator._position_reliability()
     n = pd.to_numeric(M.get("nominate_number_of_votes"), errors="coerce")
     return np.array([score_calculator.position_confidence(None if v != v else int(v), rel) for v in n])
@@ -889,12 +889,16 @@ def _drop_placeholders(M):
 
 
 def _congruence_scales(M):
-    """Saturation per member under each design, over every member as the
-    pipeline measures it: pooled across both parties (shipped) and one per
-    party."""
+    """Saturation per member under each design, over full records as the
+    pipeline measures it (fetch/voteview.py: reference_votes or more; all
+    members where no count is given): pooled across both parties (shipped)
+    and one per party."""
+    ref = score_calculator._position_reliability().get("reference_votes", 0)
+    n = pd.to_numeric(M.get("nominate_number_of_votes"), errors="coerce")
+    F = M[n >= ref] if n is not None and n.notna().any() else M
     M = M.copy()
-    M["sat_pooled"] = _p90(M.ext.abs())
-    M["sat_party"] = M.party.map({p: _p90(g.ext.abs()) for p, g in M.groupby("party")})
+    M["sat_pooled"] = _p90(F.ext.abs())
+    M["sat_party"] = M.party.map({p: _p90(g.ext.abs()) for p, g in F.groupby("party")})
     return M
 
 
@@ -1019,12 +1023,40 @@ def _sitting_effect(p):
                 thin.append(f"{seat} {label}: {before:.1f} -> {after:.1f}")
         fits = "; ".join(f"{q} b {old['fit'][q]['b']:+.4f} -> {new['fit'][q]['b']:+.4f}" for q in ("D", "R"))
         full = [n for n in new["votes"].values() if n >= RELIABLE_VOTES]
-        print(f"  {chamber}: n0 {rel['half_weight_votes']}; median full record {np.median(full):.0f} votes, "
-              f"weight {score_calculator.position_confidence(int(np.median(full)), rel):.3f}")
+        print(f"  {chamber}: half weight at {rel['half_weight_votes']} votes; median full record "
+              f"{np.median(full):.0f} votes, weight {score_calculator.position_confidence(int(np.median(full)), rel):.3f}")
         print(f"  {chamber}: saturation {old['extremity_p90']} -> {new['extremity_p90']} ({fits}); mean |change| "
               f"{np.mean(changes):.2f} on the component, {0.3 * np.mean(changes):.2f} on Constituent Alignment, "
               f"over {len(changes)} members; r2 R {new['fit']['R']['r2']}")
         print(f"   under {RELIABLE_VOTES} votes, no count or no position: " + "; ".join(thin))
+
+
+def _full_record_gradient(p):
+    """Full records' attenuation by their vote count: the slope of each
+    adjacent-Congress pair of full records, relative to its chamber and
+    transition's drift (calibrate_position_confidence's own pairs and
+    drift), by band of the earlier side's count, and the range of the
+    drifts themselves."""
+    import calibrate_position_confidence as cal
+
+    cache = pathlib.Path(p["S101_members.csv"]).parent
+    full = []
+    for chamber in ("S", "H"):
+        for earlier in range(101, 119):
+            prev = cal.deviations(cal.member_rows(chamber, earlier, cache))
+            cur = cal.deviations(cal.member_rows(chamber, earlier + 1, cache))
+            for i in prev.keys() & cur.keys():
+                (na, xa), (nb, xb) = prev[i], cur[i]
+                if na >= cal.RELIABLE_VOTES and nb >= cal.RELIABLE_VOTES:
+                    full.append((chamber, i, na, xa, xb, "full", earlier, 0.0))
+    drift = cal.drifts(full)
+    print(f"  per-transition drift: {min(drift.values()):.2f} to {max(drift.values()):.2f} "
+          f"over {len(drift)} chamber-transitions")
+    F = pd.DataFrame([(r[2], r[3] * drift[(r[0], r[6])], r[4]) for r in full], columns=["n", "dx", "y"])
+    F["band"] = pd.cut(F.n, [200, 400, 600, 851, 1100, 10_000])
+    slopes = F.groupby("band", observed=True).apply(lambda g: (g.dx * g.y).sum() / (g.dx ** 2).sum())
+    print("  full records' slope relative to drift, by votes: "
+          + ", ".join(f"{b}: {v:.3f}" for b, v in slopes.items()))
 
 
 def _flank_effect(p):
@@ -1210,13 +1242,15 @@ def position_scale_test(p, m):
     shipped = json.loads((pathlib.Path(__file__).resolve().parents[1] / "app" / "data"
                           / "position_confidence.json").read_text())
     print(f" thin records, shipped (scripts/calibrate_position_confidence.py, adjacent-Congress pairs "
-          f"{shipped['pairs']}, through the {shipped['calibrated_through']}th): half weight at "
-          f"{shipped['half_weight_votes']} votes (90% {shipped['interval_90']['half_weight_votes']}); by chamber "
-          f"{shipped['by_chamber']}; one n0 by era {shipped['one_n0_by_era']}; party-line test "
+          f"{shipped['pairs']}, through the {shipped['calibrated_through']}th): n0 {shipped['n0']} "
+          f"({shipped['interval_90']['n0']}), half weight at {shipped['half_weight_votes']} votes "
+          f"({shipped['interval_90']['half_weight_votes']}), reference {shipped['reference_votes']}; by chamber "
+          f"{shipped['by_chamber']}; half weight by era {shipped['half_weight_votes_by_era']}; party-line test "
           f"{shipped['party_line_test']}; no-count weight {shipped['uncounted_weight']} "
           f"({shipped['interval_90']['uncounted_weight']})")
     for c, by in shipped["party_line_share_by_congress"].items():
         print(f"  {c} party-line share by Congress: " + ", ".join(f"{k}:{v:.2f}" for k, v in by.items()))
+    _full_record_gradient(p)
     print(" v6.26 -> v6.27 on the sitting Congress (the pipeline's own build: Cook PVI seat lean):")
     _sitting_effect(p)
     _flank_effect(p)

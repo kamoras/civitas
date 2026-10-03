@@ -36,11 +36,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import RollCall, RollCallPosition
-from app.pipeline.analyze.score_calculator import (
-    _ideal_points_current,
-    _member_ideal_points,
-    position_confidence,
-)
+from app.pipeline.analyze.score_calculator import _member_ideal_points, position_confidence
 from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
     _determine_party_alignment,
@@ -151,9 +147,11 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     parties = [(m.get("votingRecord") or {}).get("effectiveParty") or m.get("party") for m in members]
     tenures = load_leadership_tenures()
     spans = [majority_leader_spans(m.get("leadershipTitle"), tenures.get(m.get("bioguideId"))) for m in members]
+    # Any Congress's section: this rule needs only which side of their party
+    # the defectors sit, and positions carry from one Congress to the next,
+    # so early in a new Congress the last positions classify its breaks
+    # rather than every flank break counting (stale beats punitive).
     ideal = _member_ideal_points(chamber) or {}
-    if not _ideal_points_current(ideal, congress):
-        ideal = {}  # another Congress's positions say nothing about this one's roll calls
     reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else None
     counts = ideal.get("votes") or {}
     # bioguide -> (position, reliability weight)

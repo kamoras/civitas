@@ -487,7 +487,7 @@ class TestPositionCongruence:
                 **extra,
             }
             if votes is not None:
-                section.update(votes=votes, reliability=reliability or {"half_weight_votes": 24})
+                section.update(votes=votes, reliability=reliability or {"n0": 24})
             monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", {"senate": section})
         self.patch = patch
 
@@ -522,11 +522,13 @@ class TestPositionCongruence:
         assert core["components"][0]["weight"] == 1.0
 
     def test_a_position_is_weighted_by_its_reliability(self):
-        """v6.27: 24 roll calls against a half weight at 24, so a position
+        """v6.27: 24 roll calls against n0 24 (no reference), so a position
         at saturation toward the flank counts half: 25, not 0."""
         self.patch({"X1": -0.55}, votes={"X1": 24})
         assert self._congruence()["score"] == 25.0
         assert "rests on 24 roll calls, so it counts at 50% strength" in self._congruence()["detail"]
+        self.patch({"X1": -0.55}, votes={"X1": 24}, reliability={"n0": 24, "half_weight_votes": 24})
+        assert "half strength at about 24" in self._congruence()["detail"]
 
     def test_the_weight_applies_before_the_scale_saturates(self):
         """The weight is on the position: a position twice past saturation
@@ -544,15 +546,15 @@ class TestPositionCongruence:
         """Voteview reports no count: the position counts at the weight
         measured for such positions (0.2 here), and the breakdown says so
         rather than "0 roll calls"."""
-        self.patch({"X1": -0.55}, votes={}, reliability={"half_weight_votes": 24, "uncounted_weight": 0.2})
+        self.patch({"X1": -0.55}, votes={}, reliability={"n0": 24, "uncounted_weight": 0.2})
         assert self._congruence()["score"] == 40.0
         assert "reports no count" in self._congruence()["detail"]
         assert "0 roll calls" not in self._congruence()["detail"]
 
     def test_a_full_record_counts_in_full(self):
-        """Weighted relative to a typical full record (here 576 votes)."""
+        """A full record (here the reference, 576 votes, or more) counts in full."""
         self.patch({"X1": -0.55}, votes={"X1": 800},
-                   reliability={"half_weight_votes": 24, "full_record_votes": 576})
+                   reliability={"n0": 24, "reference_votes": 576})
         assert self._congruence()["score"] == 0.0
 
     def test_no_position_in_a_current_section_sits_at_neutral(self):
@@ -574,7 +576,7 @@ class TestPositionCongruence:
         assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
 
     def test_no_calibration_no_weighting(self):
-        self.patch({"X1": -0.55}, votes={"X1": 5}, reliability={"half_weight_votes": 0})
+        self.patch({"X1": -0.55}, votes={"X1": 5}, reliability={"n0": 0})
         assert self._congruence()["score"] == 0.0
 
     def test_another_congresss_section_is_not_read(self):
@@ -588,11 +590,14 @@ class TestPositionCongruence:
         core = _constituent_alignment_core(rec, [], {}, state="SW", party="D", bioguide_id="X1")
         assert {c["label"]: c for c in core["components"]}["Position congruence"]["score"] < 5
 
-    def test_a_member_with_no_party_line_record_reads_the_runs_section(self, monkeypatch):
-        """Matched to no roll call, a member has no Congress to judge the
-        section by, so reads it as the rest of the run does, not the clock."""
+    def test_a_member_with_no_party_line_record_is_judged_by_the_sitting_congress(self, monkeypatch):
+        """Matched to no roll call, a member has no record's Congress, so the
+        section is judged against the sitting one."""
         monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
         self.patch({"X1": -0.55}, votes={"X1": 500}, congress=119)
+        core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id="X1")
+        assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
+        self.patch({"X1": -0.55}, votes={"X1": 500}, congress=120)
         assert self._congruence()["score"] < 5
 
     def test_the_breakdown_reads_the_positions_of_the_records_congress(self, monkeypatch):

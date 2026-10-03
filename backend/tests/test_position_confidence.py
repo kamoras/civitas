@@ -25,18 +25,22 @@ def _row(icpsr, party, x, n, dim2="0.1", state="OH"):
             "nominate_number_of_votes": n, "state_abbrev": state}
 
 
-def test_fit_recovers_n0_with_a_drift_per_congress():
-    """Pairs generated from full = drift[c] * n / (n + 40) * thin with very
-    different drift in two Congresses: the fit recovers n0, which one drift
-    for every Congress would confuse with how the eras differ."""
+def test_fit_recovers_n0_with_a_drift_per_transition():
+    """Pairs generated from full = drift[c] * min(1, w(n) / w(200)) * thin,
+    n0 = 60, with very different drift in two transitions: the fit recovers
+    n0 (drift from each transition's full pairs, which count 1), and the half
+    point follows from it."""
     script = _script()
     data = []
     for c, drift in ((105, 0.66), (115, 1.0)):
-        data += [("H", f"F{c}{i}", 600.0, x, drift * 600 / 640 * x, "full", c, 0.5)
+        data += [("H", f"F{c}{i}", 600.0, x, drift * x, "full", c, 0.5)
                  for i, x in enumerate((-0.2, -0.1, 0.1, 0.3))]
-        data += [("H", f"T{c}{n}{i}", float(n), x, drift * n / (n + 40) * x, "thin", c, 0.5)
+        data += [("H", f"T{c}{n}{i}", float(n), x, drift * float(script.relative_weight(n, 60)) * x, "thin", c, 0.5)
                  for n in (5, 20, 60, 150) for i, x in enumerate((-0.3, 0.2, 0.4))]
-    assert script.fit_n0(data) == 40.0
+    assert script.fit_n0(data) == 60.0
+    assert abs(float(script.relative_weight(script.half_point(60), 60)) - 0.5) < 1e-9
+    # A thin pair in a transition with no full pairs has no drift and is left out.
+    assert script.fit_n0(data + [("H", "X", 5.0, 0.4, 0.0, "thin", 130, 0.5)]) == 60.0
 
 
 def test_voteview_party_line_share_counts_opposed_majorities(tmp_path):
@@ -75,6 +79,7 @@ def test_shipped_file_documents_its_source_and_intervals():
     assert "calibrate_position_confidence.py" in data["_source"]
     lo, hi = data["interval_90"]["half_weight_votes"]
     assert lo <= data["half_weight_votes"] <= hi
+    assert abs(_script().half_point(data["n0"]) - data["half_weight_votes"]) < 0.06
     assert data["pairs"]["thin"] > 50 and data["pairs"]["full"] > 1000
     # The rejected party-line term: no better fit than one n0.
     test = data["party_line_test"]
@@ -92,19 +97,19 @@ def test_scorer_reads_the_shipped_file(monkeypatch):
     monkeypatch.setattr(score_calculator, "_position_reliability_cache", None)
     data = json.loads(_DATA.read_text())
     assert score_calculator._position_reliability() == {
-        "half_weight_votes": data["half_weight_votes"], "full_record_votes": data["full_record_votes"],
-        "uncounted_weight": data["uncounted_weight"]}
+        k: data[k] for k in ("n0", "reference_votes", "half_weight_votes", "uncounted_weight")}
 
 
 def test_weight():
-    """Relative to a typical full record (the calibration measures thin
-    records against full ones in the same Congress), capped at 1."""
-    rel = {"half_weight_votes": 40.0, "full_record_votes": 360.0, "uncounted_weight": 0.2}
+    """Relative to a full record (reference_votes or more counts 1), in [0, 1]."""
+    rel = {"n0": 40.0, "reference_votes": 360.0, "uncounted_weight": 0.2}
     assert score_calculator.position_confidence(40, rel) == 0.5 / 0.9
     assert score_calculator.position_confidence(0, rel) == 0.0
     assert score_calculator.position_confidence(360, rel) == 1.0
     assert score_calculator.position_confidence(900, rel) == 1.0  # capped
     assert score_calculator.position_confidence(None, rel) == 0.2  # no count reported: its measured weight
-    assert score_calculator.position_confidence(40, {"half_weight_votes": 40.0}) == 0.5  # no reference
+    assert score_calculator.position_confidence(None, {**rel, "uncounted_weight": -0.1}) == 0.0  # clamped
+    assert score_calculator.position_confidence(40, {"n0": 40.0}) == 0.5  # no reference
+    assert score_calculator.position_confidence(5, {"n0": -3.0}) == 1.0  # unusable calibration
     assert score_calculator.position_confidence(5, None) == 1.0  # a pre-v6.27 section
     assert score_calculator.position_confidence(5, {}) == 1.0  # no calibration
