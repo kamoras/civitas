@@ -87,17 +87,49 @@ def dedupe_merge_map(candidates: list[Candidate]) -> dict[str, str]:
             # as the only safe case and fell back to an arbitrary id-sort
             # otherwise, which could drop the one confirmed_general row when a
             # second dupe separately had on_primary_ballot set.
-            def _rank(c: Candidate) -> tuple[int, str]:
-                if c.confirmed_general:
-                    return (0, c.id)
-                if c.on_primary_ballot:
-                    return (1, c.id)
-                return (2, c.id)
-
-            keep = min(dupes, key=_rank)
+            keep = min(dupes, key=_survivor_rank)
             merge_map.update({c.id: keep.id for c in dupes if c.id != keep.id})
 
+    # A second, narrower path: the same full name filed twice for the same
+    # party with no money on either record. Seen live (2026-10-03): NY-1
+    # listed "WILSON, CELINA MRS." twice and NY-21 "CARUSO, ALLEN" twice,
+    # each pair under consecutive FEC ids registered minutes apart, neither
+    # ever reporting a dollar. The financial fingerprint above can't see
+    # these (no figures to match), and the page showed the same name twice.
+    # Safe because nothing is misattributed: there are no financials to
+    # carry over, and two rows with identical names and parties are
+    # indistinguishable to a reader. A different given name ("SMITH, JOHN"
+    # / "SMITH, JANE") or any money on either record never merges here.
+    by_full_name: dict[tuple[str, str], list[Candidate]] = {}
+    for c in candidates:
+        if c.id in merge_map or not _no_money(c):
+            continue
+        by_full_name.setdefault((_normalized_full_name(c.name), c.party or ""), []).append(c)
+    for (name, _party), dupes in by_full_name.items():
+        if not name or len(dupes) < 2:
+            continue
+        keep = min(dupes, key=_survivor_rank)
+        merge_map.update({c.id: keep.id for c in dupes if c.id != keep.id})
+
     return merge_map
+
+
+def _survivor_rank(c: Candidate) -> tuple[int, str]:
+    """confirmed_general over on_primary_ballot over neither, then id."""
+    if c.confirmed_general:
+        return (0, c.id)
+    if c.on_primary_ballot:
+        return (1, c.id)
+    return (2, c.id)
+
+
+def _no_money(c: Candidate) -> bool:
+    return not c.contributions and not c.cash_on_hand
+
+
+def _normalized_full_name(name: str) -> str:
+    """The whole FEC name, case, punctuation and spacing aside."""
+    return " ".join("".join(ch for ch in (name or "").lower() if ch.isalnum() or ch.isspace()).split())
 
 
 def dedupe_candidates(candidates: list[Candidate]) -> list[Candidate]:

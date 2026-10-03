@@ -56,7 +56,7 @@ class TestExtractClaims:
             "actor": "Acme Corp", "predicate": "liable for fraud and negligence",
         })
         assert len(claims) == 1
-        assert claims[0].text == "Acme Corp liable for fraud and negligence."
+        assert claims[0].text == "Acme Corp liable for fraud and negligence in the case brought by Jordan Ellis."
         assert claims[0].source_name == "Roll Call"
 
     def test_the_reversed_party_yields_no_claim(self):

@@ -90,6 +90,41 @@ def test_top_donors_come_from_the_complete_detail():
     assert donors["GOOGLE"]["total"] == 80_000 and "RETIRED" not in donors
 
 
+def test_null_and_an_occupation_in_the_employer_field_are_not_donors():
+    """Live 2026-10-03: "Null" was a top donor on 354 scorecards, usually
+    rank 1, and "Owner", "President", "Attorney" sat among the
+    organizations."""
+    employers = [
+        {"employer": "GOOGLE", "total": 80_000},
+        {"employer": "NULL", "total": 206_450},
+        {"employer": "ATTORNEY", "total": 40_000},  # as occupation: $1M
+        {"employer": "OWNER", "total": 30_000},  # never an occupation here
+    ]
+    _, f = _breakdown(_detail(employers=employers))
+    donors = {d["name"].upper() for d in f["topDonors"]}
+    assert "GOOGLE" in donors
+    assert "NULL" not in donors and "ATTORNEY" not in donors
+    # Only this committee's own occupation field marks a value: with no
+    # donor listing OWNER as their occupation, it is left as filed.
+    assert "OWNER" in donors
+
+
+def test_an_organization_also_written_as_an_occupation_is_kept():
+    # A few donors writing their employer in both boxes doesn't make it a job.
+    assert nf._employer_values_not_organizations(
+        [{"employer": "GOOGLE", "total": 80_000}],
+        [{"occupation": "GOOGLE", "total": 2_000}],
+    ) == set()
+    assert nf._employer_values_not_organizations(
+        [{"employer": "Null", "total": 5}, {"employer": "PRESIDENT", "total": 10}],
+        [{"occupation": "PRESIDENT", "total": 900}],
+    ) == {"NULL", "PRESIDENT"}
+    # Occupations unreadable: only the missing-value text is known.
+    assert nf._employer_values_not_organizations(
+        [{"employer": "NULL", "total": 5}, {"employer": "PRESIDENT", "total": 10}], None,
+    ) == {"NULL"}
+
+
 def test_a_missing_source_falls_back_to_the_samples_not_to_zero():
     # Occupations unreadable: the breakdown uses the sampled receipts.
     receipt = {"contributor_employer": "GOOGLE", "contribution_receipt_amount": 3_000, "memo_text": ""}

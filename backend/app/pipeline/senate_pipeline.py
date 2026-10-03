@@ -81,7 +81,7 @@ from app.pipeline.member_lifecycle import (
 from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
 from app.pipeline.progress_tracker import ProgressTracker
 # Transform modules
-from app.pipeline.transform.normalize_finance import committee_donor_name, normalize_finance
+from app.pipeline.transform.normalize_finance import MISSING_VALUE_TEXT, committee_donor_name, normalize_finance
 from app.pipeline.transform.normalize_members import normalize_members
 from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
@@ -747,7 +747,9 @@ def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
                 "candidate_name": cand_name,
             })
         for r in detail.get("employers") or []:
-            if r.get("employer"):
+            # "NULL" is no employer; classified, it became a learned
+            # Org/Employees example.
+            if r.get("employer") and r["employer"].upper().strip() not in MISSING_VALUE_TEXT:
                 entries.append({"name": r["employer"], "amount": r.get("total") or 0, "candidate_name": cand_name})
     return entries
 

@@ -174,8 +174,34 @@ def _locate_assertion(actor: str, predicate: str, source: str) -> tuple[str, re.
         # NEXT sentence, whose subject is somebody else.
         if "." in gap:
             continue
+        # A relative pronoun in the gap means the predicate is a relative
+        # clause hung on the actor, not the source's main assertion, and
+        # the span reads as a fragment: the Action Center published the
+        # summary "Christa Pike, who survived despite being subject to two
+        # doses of lethal injection." (live, 2026-10-03).
+        if _RELATIVE_PRONOUNS & {w.strip(",;:'\"’”").lower() for w in gap.split()}:
+            continue
+        # The actor as the object of a preposition is not who acted: "The
+        # botched execution of Christa Pike is renewing scrutiny" composed
+        # as "Christa Pike is renewing scrutiny..." (live, 2026-10-03),
+        # making the woman executed the one renewing it.
+        before = haystack[:match.start()].split()
+        if before and before[-1].strip(",;:'\"‘“(").lower() in _OBJECT_PREPOSITIONS:
+            continue
         return tail, hit
     return None
+
+
+# Grammatical function words, not a classification: what they mark is
+# sentence structure (_locate_assertion).
+# "that" is left out: after a reporting verb it opens a complement
+# ("said that"), which is the main assertion.
+_RELATIVE_PRONOUNS = frozenset({"who", "whom", "whose", "which"})
+_OBJECT_PREPOSITIONS = frozenset({
+    "of", "by", "for", "with", "against", "to", "from", "on", "at", "in",
+    "about", "over", "under", "between", "toward", "towards", "into",
+    "including", "than", "behind", "without", "upon",
+})
 
 
 def _looks_like_an_actor(span: str) -> bool:
@@ -218,11 +244,19 @@ _TRAILING_MODIFIER_OPENERS = frozenset({
 
 # Punctuation that ends a clause. A "." or "," followed by a digit is
 # inside a number — "$1.5 billion", "1,000 jobs" — and ending there would
-# render "cuts $1." as the fact.
-_CLAUSE_END = re.compile(r"[;:!?]|[.,](?!\d)")
+# render "cuts $1." as the fact. A "." is a sentence end only where the
+# next thing is not a lowercase word or more of the same token: "U.S.
+# energy infrastructure" and "a D.C. judge" run on. Treating those dots as
+# ends made the completion below give up on "will invest up to $200
+# billion in U.S. energy infrastructure" (live, 2026-09-30), and the
+# claim went out as "...will invest up to $200 billion." with what it
+# was invested in gone.
+_CLAUSE_END = re.compile(r"[;:!?]|,(?!\d)|\.(?=\s*$|\s+[^a-z\s]|[\"'’”)\]])")
 
 
-def _ends_at_clause_boundary(predicate: str, source: str) -> bool:
+def _ends_at_clause_boundary(
+    predicate: str, source: str, allow_trailing_modifier: bool = True,
+) -> bool:
     """True when the predicate runs to a natural break in the source.
 
     _DANGLING_TAIL catches a span cut before a preposition ("takes a
@@ -237,9 +271,11 @@ def _ends_at_clause_boundary(predicate: str, source: str) -> bool:
     ends. Anything still running when the span stops means the model cut
     it short.
     """
-    haystack = _normalise(source)
-    needle = _normalise(predicate)
-    for match in re.finditer(re.escape(needle), haystack):
+    # Case kept: whether a "." ends the sentence depends on whether the
+    # next word is capitalised (_CLAUSE_END).
+    haystack = _flatten(source)
+    needle = _flatten(predicate)
+    for match in re.finditer(re.escape(needle), haystack, re.IGNORECASE):
         rest = haystack[match.end():].lstrip(" '\"’”)")
         if not rest or _CLAUSE_END.match(rest):
             return True
@@ -251,8 +287,8 @@ def _ends_at_clause_boundary(predicate: str, source: str) -> bool:
         # preposition or conjunction starting a new phrase. It may not
         # be the object the predicate was still reaching for, which is
         # what "repeatedly violated" + "court order" is.
-        nxt = rest.split(" ", 1)[0].strip(".,;:!?")
-        if nxt in _TRAILING_MODIFIER_OPENERS:
+        nxt = rest.split(" ", 1)[0].strip(".,;:!?").lower()
+        if allow_trailing_modifier and nxt in _TRAILING_MODIFIER_OPENERS:
             return True
     return False
 
@@ -336,10 +372,16 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
     # A predicate cut short — a bare verb, a phrase stopped before its
     # object — is completed from the source (_complete_predicate) and
     # then held to every check below, like any other.
+    # Tried whenever the span stops short of the source's own punctuation,
+    # not only when it stops somewhere ungrammatical: a span stopped
+    # before a trailing modifier is a clause, but the modifier may be the
+    # part that says what happened ("will invest up to $200 billion" /
+    # "in U.S. energy infrastructure"). When the clause can't be
+    # completed, the shorter span is still judged by the boundary rule.
     tail_word = re.sub(r"[^\w]", "", predicate.split()[-1]).lower()
     if (
         len(predicate) < MIN_PREDICATE_CHARS or tail_word in _DANGLING_TAIL
-        or not _ends_at_clause_boundary(predicate, source)
+        or not _ends_at_clause_boundary(predicate, source, allow_trailing_modifier=False)
     ):
         predicate = _complete_predicate(actor, predicate, source) or predicate
     if len(predicate) < MIN_PREDICATE_CHARS:

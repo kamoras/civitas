@@ -104,12 +104,12 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
         committees=json.loads(rep.committees or "[]"),
         representation_score={
             "fundingIndependence": rep.score_funding_independence,
-            "promisePersistence": rep.score_promise_persistence,
+            "promisePersistence": None,  # not measured: RepresentationScoreSchema
             "constituentAlignment": rep.score_constituent_alignment,
             "fundingDiversity": rep.score_funding_diversity,
             "legislativeEffectiveness": rep.score_legislative_effectiveness,
             "overall": compute_overall_score(rep),
-            "confidence": json.loads(rep.score_confidence or "{}"),
+            "confidence": json.loads(rep.score_confidence or "{}") or None,
         },
         funding={
             "totalRaised": rep.total_raised,
@@ -403,11 +403,12 @@ def get_rep_leaderboard(
             "initials": _compute_initials(r.name) or r.initials,
             "representationScore": {
                 "fundingIndependence": r.score_funding_independence,
-                "promisePersistence": r.score_promise_persistence,
+                "promisePersistence": None,
                 "constituentAlignment": r.score_constituent_alignment,
                 "fundingDiversity": r.score_funding_diversity,
                 "legislativeEffectiveness": r.score_legislative_effectiveness,
                 "overall": compute_overall_score(r),
+                "confidence": json.loads(r.score_confidence or "{}") or None,
             },
             "totalRaised": r.total_raised,
             "totalContributions": r.total_contributions,

@@ -85,7 +85,9 @@ def retry_soon_json(data) -> JSONResponse:
 # identical copy per entity type.
 SENATOR_DIMENSION_LABELS = {
     "score_1": "fundingIndependence",
-    "score_2": "promisePersistence",
+    # score_2 (Promise Persistence) is retired: campaign-promise tracking
+    # was removed in 2026-07 and every value since is a constant, so it is
+    # not drawn (as the presidents' score_3 below).
     "score_3": "constituentAlignment",
     "score_4": "fundingDiversity",
     "score_5": "legislativeEffectiveness",
