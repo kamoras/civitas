@@ -71,8 +71,12 @@ jobs:
     name: Backend — Fast Tests
     runs-on: ubuntu-latest
     # See frontend job's comment on why every job here has one of these.
-    # Normal run: 4-5 minutes.
-    timeout-minutes: 15
+    # Normal run: 8-11 minutes for the 6,600-test suite with coverage; a
+    # slow runner took 13.5 minutes on 2026-10-03 and the job was cancelled
+    # at a 15-minute ceiling after every test had passed, while uploading
+    # the coverage report. 20 keeps a hung job from running on while
+    # leaving room for a slow runner.
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
