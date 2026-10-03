@@ -58,8 +58,9 @@ export default function ScorecardHeader({
     >
       {/* Three blocks in reading order for a phone — who, the score, then
           how to reach them; on a desktop the score takes the right column
-          beside both. */}
-      <div className="flex min-w-0 gap-5 lg:col-start-1 lg:row-start-1">
+          beside both. Below sm the photo sits above the name: beside it, the
+          name had about 146px at 320px and long surnames split mid-word. */}
+      <div className="flex min-w-0 flex-col gap-5 sm:flex-row lg:col-start-1 lg:row-start-1">
         {thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, varied politician-photo hosts
           <img

@@ -94,6 +94,8 @@ export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
                   </div>
                 )}
                 <div className="mt-1 sm:hidden">
+                  {/* The TYPE header is hidden here: say what this is. */}
+                  <span className="sr-only">Type: </span>
                   <DonorType donor={donor} />
                 </div>
               </td>
