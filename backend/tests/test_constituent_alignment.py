@@ -187,7 +187,7 @@ class TestSeatRelativeVotes:
                   for c in ("senate", "house")}
         detail = _constituent_alignment_core(record(45), [], {}, state="SW", party="D",
                                              reference=preset)["components"][0]["detail"]
-        assert "preset curve" in detail
+        assert "preset expectation" in detail
         assert "members of this chamber" not in detail
 
     def test_measured_references_carry_the_statistic(self):

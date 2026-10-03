@@ -2,7 +2,8 @@
  "_as_of": "2026-07-24",
  "_method": "STATE_PVI(st) = -round(100 * mean over {2020,2024} of [state two-party D share - national two-party D share]); positive = R lean. Same window as Cook Political Report's current (2025) published PVIs.",
  "_sign": "positive = R lean, negative = D lean (matches district_pvi.json)",
- "_source": "2020: MIT Election Data & Science Lab (MEDSL) U.S. President state-level returns v20210113 (doi:10.7910/DVN/42MVDX). 2024: tonmcg county-level presidential results (official county canvasses) summed to state level, cross-validated against MEDSL for 2020 (<=0.3pp per state, gated). Two-party vote shares, Cook PVI formula. Regenerate with backend/scripts/fetch_state_pvi.py.",
+ "_source": "2020: MIT Election Data & Science Lab (MEDSL) U.S. President state-level returns v20210113 (doi:10.7910/DVN/42MVDX). 2024: tonmcg county-level presidential results (official county canvasses) summed to state level, cross-validated against MEDSL for 2020 (<=0.3pp per state, gated). Two-party vote shares, Cook PVI formula.",
+ "_regenerate": "backend/scripts/fetch_state_pvi.py",
  "_window": "2020+2024",
  "states": {
   "AK": 7,

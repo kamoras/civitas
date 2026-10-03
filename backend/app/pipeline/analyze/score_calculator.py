@@ -629,7 +629,7 @@ def _load_pvi_meta() -> dict:
     meta["note"] = (
         "Cook-PVI-style partisan lean relative to the national presidential "
         "vote. Measures how a state or district leans, not who will win a "
-        "specific race — incumbency, candidate quality, and open seats are "
+        "specific race: incumbency, candidate quality, and open seats are "
         "not part of this number."
     )
     if unreadable:
@@ -1297,7 +1297,7 @@ def _funding_independence_core(
     neither reimplements the formula separately."""
     total_raised = funding_share_base(funding)
     if not total_raised or total_raised == 0:
-        return {"score": 50, "components": [], "note": "No funding data — neutral default."}
+        return {"score": 50, "components": [], "note": "No funding data, so a neutral 50."}
 
     # Component 1: PAC dependency. Outside spending is deliberately not in
     # it (removed v6.13 — see the docstring's measured account).
@@ -2146,7 +2146,7 @@ def _constituent_alignment_core(
         congruence_score = position_congruence_score(extremity, float(congruence_sat))
         congruence_detail = (
             f"{ideal.get('measure', 'NOMINATE')} dim1 {float(dim1):+.2f} vs "
-            f"{expected_dim1:+.2f} expected for a {eval_party} member of this seat — "
+            f"{expected_dim1:+.2f} expected for a {eval_party} member of this seat, "
             + ("toward the party flank" if extremity > 0 else "toward the seat's center")
         )
 
@@ -2159,19 +2159,19 @@ def _constituent_alignment_core(
             # seat_relative_vote_score).
             party_score = typical
             party_alignment_detail = (
-                f"fewer than {CONSTITUENT_MIN_VOTES} party-labeled votes available — "
+                f"fewer than {CONSTITUENT_MIN_VOTES} party-labeled votes available, so "
                 f"the typical score for a {eval_party} member of this chamber, {typical:.0f}"
             )
         else:
             party_score = 50.0
             vote_part_status = "neutral:few-votes"
-            party_alignment_detail = f"fewer than {CONSTITUENT_MIN_VOTES} party-labeled votes available — neutral 50"
+            party_alignment_detail = f"fewer than {CONSTITUENT_MIN_VOTES} party-labeled votes available, so a neutral 50"
     elif expected is None:
         party_score = 50.0
         vote_part_status = "neutral:no-expectation"
         party_alignment_detail = (
             f"break rate {break_rate:.1%}; no measured expectation for a "
-            f"{eval_party or 'non-caucusing'} member of this chamber — neutral 50"
+            f"{eval_party or 'non-caucusing'} member of this chamber, so a neutral 50"
         )
     else:
         residual = seat_residual(break_rate, expected, n_party)
@@ -2190,8 +2190,8 @@ def _constituent_alignment_core(
             f"(signal {alignment:+.2f}) break on {expected:.1%}"
             if measured else
             f"a {eval_party} member of a seat with this lean (signal {alignment:+.2f}) is "
-            f"expected to break on {expected:.1%} (a preset curve until this chamber is "
-            "measured on the current method)"
+            f"expected to break on {expected:.1%} (a preset expectation until this chamber "
+            "has been measured)"
         )
         # seat_residual keeps p half a vote of this record from 0 and 1; say
         # so when it moved, or the printed numbers don't reproduce the gap.
@@ -2218,7 +2218,7 @@ def _constituent_alignment_core(
                 f"{reach:g} × {scale:.2f}, {basis})"
             )
         party_alignment_detail = (
-            f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; {norm} — {gap}"
+            f"broke with party on {break_rate:.1%} of {n_party} party-labeled votes; {norm}: {gap}"
         )
         if n_party < CONSTITUENT_FULL_CONFIDENCE_VOTES:
             target = (
@@ -2445,20 +2445,20 @@ def _industry_mix_diversity(
         if ind.get("industry") not in NON_INDUSTRY_CODES
     ]
     if not industries or not total_raised:
-        return missing_score, f"no industry breakdown available — {missing_label} {missing_score:.0f}"
+        return missing_score, f"no industry breakdown available, so {missing_label} {missing_score:.0f}"
     total_known = sum(ind.get("total", 0) for ind in industries)
     total_known_pct = total_known / total_raised * 100
     if total_known_pct < 5 or total_known <= 0:
         return missing_score, (
-            f"only {total_known_pct:.1f}% of funding is industry-classified — "
-            f"too little to measure HHI, {missing_label} {missing_score:.0f}"
+            f"only {total_known_pct:.1f}% of funding is industry-classified, "
+            f"too little to measure HHI, so {missing_label} {missing_score:.0f}"
         )
     hhi = sum((ind.get("total", 0) / total_known) ** 2 for ind in industries)
     raw = (1 - max(0, min((hhi - 0.10) / 0.90, 1.0))) * 100
     relevance = min(total_known_pct / 40, 1.0)
     score = raw * relevance + missing_score * (1 - relevance)
     return score, (
-        f"HHI={hhi:.3f} across {len(industries)} industries → raw {raw:.1f}, "
+        f"HHI {hhi:.3f} across {len(industries)} industries → raw {raw:.1f}, "
         f"blended {relevance:.0%} with {missing_label} {missing_score:.0f} "
         f"({total_known_pct:.0f}% of funding industry-classified)"
     )
@@ -2473,7 +2473,7 @@ def _funding_diversity_core(funding: dict) -> dict:
     total_raised = funding_share_base(funding)
 
     if not industry_breakdown or not total_raised:
-        return {"score": 50, "components": [], "note": "No funding data — neutral default."}
+        return {"score": 50, "components": [], "note": "No funding data, so a neutral 50."}
 
     # Signal 1: source breadth
     # Small donors = broadest possible base (many independent contributors).
@@ -3045,13 +3045,13 @@ def _les_component_score(
     if not bills_known:
         # The member's sponsored legislation could not be fetched this run.
         # An empty list here is a failed request, not a record of zero bills.
-        return 50.0, "sponsored legislation could not be fetched this run — neutral 50"
+        return 50.0, "sponsored legislation could not be fetched this run, so a neutral 50"
     inputs = _les_member_inputs(sponsored_bills, party)
     if inputs is None:
         if (years_in_office or 0) < _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS:
-            return 50.0, "no substantive bills on record yet — neutral 50"
+            return 50.0, "no substantive bills on record yet, so a neutral 50"
         if chamber is None:
-            return 50.0, "no substantive bills and no chamber to compare against — neutral 50"
+            return 50.0, "no substantive bills and no chamber to compare against, so a neutral 50"
         n_sub = 0
     else:
         n_sub = inputs["n_sub"]
@@ -3059,15 +3059,15 @@ def _les_component_score(
 
     ref = (reference or load_les_reference()).get(chamber)
     if not ref:
-        return 50.0, "no population reference available for this chamber — neutral 50"
+        return 50.0, "no population reference available for this chamber, so a neutral 50"
     if (not ref.get("stage_totals") or not ref.get("n_members")
             or len(ref["stage_totals"]) != _LES_MAX_STAGE):
         # A reference measured before v6.14 is on the old weight x stages
         # scale; comparing a stage-normalized credit with it would be
         # meaningless. The next pipeline run replaces it.
         return 50.0, (
-            f"the stored {chamber} reference predates stage-normalized credit "
-            "— neutral 50 until the next pipeline run measures a new one"
+            f"the stored {chamber} reference predates stage-normalized credit, "
+            "so a neutral 50 until the next pipeline run measures a new one"
         )
     if inputs is None:
         # No substantive bills after real tenure: a credit of 0, compared
@@ -3088,8 +3088,8 @@ def _les_component_score(
         # previous congress's full-term median would score everyone as if
         # they'd done almost nothing.
         return 50.0, (
-            f"no {chamber} reference measured for the {member_congress}th Congress yet "
-            "— neutral 50 until enough members have sponsored bills to measure one"
+            f"no {chamber} reference measured for the {member_congress}th Congress yet, "
+            "so a neutral 50 until enough members have sponsored bills to measure one"
         )
     current = (ref["congress"], ref["majority"]) if ref.get("majority") else None
     population_median = ref["median_credit"]
@@ -3167,13 +3167,13 @@ def _les_component_score(
         bar += f"; {full_bar:.2f} prorated to the {exposure:.0%} of this Congress served since {sworn_date}"
     if inputs is None:
         return score, (
-            f"0 substantive bills over {years_in_office:.1f} years in office — "
+            f"0 substantive bills over {years_in_office:.1f} years in office: "
             f"a credit of 0 vs. {expected_per_congress:.2f} expected ({bar})"
         )
     commemorative = sum(1 for b in substantive_bills if b.get("commemorative"))
     detail = (
         f"stage-normalized credit {raw_per_congress:.2f}/congress (chamber average 1.00) vs. "
-        f"{expected_per_congress:.2f} expected ({bar}) — "
+        f"{expected_per_congress:.2f} expected ({bar}); "
         f"{n_sub} bills: {introduced_only} introduced only, "
         f"{advanced_short_of_law} advanced further, {enacted} became law"
     )
@@ -3310,13 +3310,16 @@ def _legislative_effectiveness_core(
         # No data yet — neutral prior, never a punitive below-50 default
         # (this repo's design principle: missing data is never "bad").
         leadership_raw = 50.0
-        leadership_head = "no cosponsorship-network data — neutral 50"
+        leadership_head = "no cosponsorship-network data, so a neutral 50"
 
     leadership_conf = min((years_in_office or 0) / LEADERSHIP_TENURE_FULL_CREDIT_YEARS, 1.0)
     leadership_pct = leadership_raw * leadership_conf + 50 * (1 - leadership_conf)
+    # Tenure weight: a newer member's network position is pulled toward
+    # 50; LEADERSHIP_TENURE_FULL_CREDIT_YEARS in office gives it full weight.
     leadership_detail = (
-        f"{leadership_head}, tenure-confidence-scaled "
-        f"{leadership_conf:.0%} ({years_in_office or 0:.1f} of 6 years)"
+        f"{leadership_head}; weighted {leadership_conf:.0%} for tenure "
+        f"({years_in_office or 0:.1f} years in office; full weight from "
+        f"{LEADERSHIP_TENURE_FULL_CREDIT_YEARS:g})"
     )
 
     if (
@@ -3325,7 +3328,7 @@ def _legislative_effectiveness_core(
         and attracted_bipartisanship is None
         and les_score == 50.0
     ):
-        return {"score": 50, "components": [], "note": "No sponsored-bill or leadership data — neutral default."}
+        return {"score": 50, "components": [], "note": "No sponsored-bill or leadership data, so a neutral 50."}
 
     # Bipartisan coalition attraction (v6.11 — see the docstring above for
     # the HVW 2023 rationale and disclosed limits). The median attractor

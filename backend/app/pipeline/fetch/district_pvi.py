@@ -609,8 +609,11 @@ def _payload(blocks: dict[str, dict], sitting_congress: int) -> dict:
     key = _lines_congress(blocks, sitting_congress)
     sitting = blocks[key]
     return {
-        "_source": sitting["_source"] + (
-            ". Pinned per Congress in app/data/district_pvi_sources.json; ingested by "
+        "_source": sitting["_source"],
+        # For maintainers, kept out of _source: the API serves _source as
+        # the figures' provenance, where file paths are noise.
+        "_regenerate": (
+            "Pinned per Congress in app/data/district_pvi_sources.json; ingested by "
             "app/pipeline/fetch/district_pvi.py (regenerate the bundled copy with "
             "backend/scripts/fetch_district_pvi.py)."
         ),

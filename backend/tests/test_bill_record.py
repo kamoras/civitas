@@ -302,3 +302,18 @@ def test_a_failed_bill_request_stops_there(senate, monkeypatch):
     raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=_charging(charged)))
     assert len(calls) == 1 and charged == [1]
     assert set(raw["unavailable"]) == {"bill", "summaries", "actions", "cosponsors", "text"}
+
+
+def test_a_successor_of_the_same_surname_is_not_linked_to_the_predecessors_votes(db_session):
+    """Darline Graham took Lindsey Graham's seat; the vote pages linked his
+    roll-call positions to her page (live, 2026-10-03)."""
+    db_session.add(Senator(id="darline-graham", bioguide_id="G000600", name="Darline Graham", state="SC", party="R"))
+    for number, first, lis in ((624, "Lindsey", "S293"), (254, "Darline", "S441")):
+        rc = RollCall(chamber="senate", congress=119, session=1, number=number, date="2026-01-01", question="Q")
+        db_session.add(rc)
+        db_session.flush()
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=lis, last_name="Graham", first_name=first,
+                                        party="R", state="SC", position="Yea"))
+    db_session.commit()
+    pages = {rc.number: br.vote_detail(db_session, rc)["members"][0]["page"] for rc in db_session.query(RollCall)}
+    assert pages == {624: None, 254: "/politicians/darline-graham"}

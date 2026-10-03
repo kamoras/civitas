@@ -525,11 +525,31 @@ def compute_recent_election_cycles(financials: list[dict], office: str) -> list[
     return cycles
 
 
+# Every totals row a candidate has, in one page. The API's sort=-cycle does
+# nothing for election-full rows (cycle: null — see
+# _sort_financials_recent_first), so the rows arrive in no useful order and
+# a short page is an arbitrary subset of the candidate's elections. At
+# per_page=4 a long-serving member's most recent completed election was
+# often not among them, and the member was scored on whichever elections
+# were: live on 2026-10-03, one Senate leader showed $5.0M raised against
+# the $68.1M FEC reports for 2019-20 alone, and House members of 13 to 45
+# years showed a twentieth of their 2023-24 receipts (one: $375K against
+# $10.2M). 100 is the API's maximum; no candidate has that many rows.
+FINANCIALS_PER_PAGE = 100
+
+
+def financials_cache_key(candidate_id: str) -> str:
+    """The ApiCache key for a candidate's totals rows (read by
+    scripts/rescore.py too). v2: rows fetched before FINANCIALS_PER_PAGE
+    were a 4-row sample and must not be read as the candidate's history."""
+    return f"candidate-financials-v2-{candidate_id}"
+
+
 async def fetch_candidate_financials(
     client: httpx.AsyncClient, db: Session, candidate_id: str
 ) -> list[dict]:
     """Fetch candidate financial totals, most recent election period first."""
-    cache_key = f"candidate-financials-{candidate_id}"
+    cache_key = financials_cache_key(candidate_id)
     cached = api_cache_get(db, "fec", cache_key)
     if cached is not None:
         # Sort cached entries too — entries cached before 2026-07 were
@@ -538,7 +558,7 @@ async def fetch_candidate_financials(
 
     data = await _fetch_with_retry(
         client,
-        f"{FEC_API_BASE}/candidate/{candidate_id}/totals/?sort=-cycle&per_page=4",
+        f"{FEC_API_BASE}/candidate/{candidate_id}/totals/?sort=-cycle&per_page={FINANCIALS_PER_PAGE}",
     )
     results = _sort_financials_recent_first((data or {}).get("results", []))
     api_cache_set(db, "fec", cache_key, results)
