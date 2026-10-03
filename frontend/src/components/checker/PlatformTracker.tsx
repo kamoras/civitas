@@ -66,10 +66,13 @@ function PartisanDepthPanel({
               width: `${leanPct / 2}%`,
             }}
           />
+          {/* Clamped to the track like the fill: a lean past the scale
+              (measured leans reach +0.43) put the marker beyond the bar,
+              where the panel's overflow:hidden cut it off. */}
           <div
             className="absolute top-0 bottom-0 w-1 bg-phos"
             style={{
-              left: `${50 + (depth.overallLean / 0.15) * 50}%`,
+              left: `${Math.min(Math.max(50 + (depth.overallLean / 0.15) * 50, 0), 100)}%`,
               transform: "translateX(-50%)",
             }}
           />
