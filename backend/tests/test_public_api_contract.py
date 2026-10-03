@@ -32,6 +32,7 @@ from app.services import explore_search
 SCORES = dict(
     score_funding_independence=60, score_promise_persistence=50, score_constituent_alignment=55,
     score_funding_diversity=40, score_legislative_effectiveness=70,
+    score_confidence='{"fundingIndependence": "high"}',
 )
 
 
@@ -138,3 +139,25 @@ def test_spec_documents_exactly_the_public_routes(client, monkeypatch):
     ok = spec["paths"]["/api/public/v1/senators/{senator_id}"]["get"]["responses"]["200"]
     assert ok["content"]["application/json"]["schema"]["$ref"].endswith("PublicSenatorProfileSchema")
     assert "siteUrl" in spec["components"]["schemas"]["PublicSenatorProfileSchema"]["properties"]
+
+
+@pytest.mark.parametrize("chamber,member", [("senators", "S000001"), ("representatives", "R000001")])
+def test_list_rows_and_profiles_carry_the_same_score_block(client, chamber, member):
+    """List rows published "confidence": null for every member (live,
+    2026-10-03), while the profile carried the grades."""
+    row = next(e for e in _body(client, f"/{chamber}")["entries"] if e["id"] == member)
+    profile = _body(client, f"/{chamber}/{member}")
+    assert row["representationScore"]["confidence"] == {"fundingIndependence": "high"}
+    assert profile["representationScore"]["confidence"] == row["representationScore"]["confidence"]
+
+
+@pytest.mark.parametrize("chamber,member", [("senators", "S000001"), ("representatives", "R000001")])
+def test_promise_persistence_is_published_as_not_measured(client, chamber, member):
+    """Campaign-promise tracking was removed in 2026-07; the stored value
+    since is a constant (55 for 97 of 100 senators, live 2026-10-03), so the
+    API says null rather than publish it as a measurement."""
+    row = next(e for e in _body(client, f"/{chamber}")["entries"] if e["id"] == member)
+    assert row["representationScore"]["promisePersistence"] is None
+    assert _body(client, f"/{chamber}/{member}")["representationScore"]["promisePersistence"] is None
+    (snap,) = _body(client, f"/{chamber}/{member}/history")["snapshots"]
+    assert snap["promisePersistence"] is None

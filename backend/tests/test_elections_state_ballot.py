@@ -258,6 +258,23 @@ def _filer(cand_id, name, party, contributions, cash_on_hand):
         _filer("A", "SMITH, JOHN", "DEM", None, None),
         _filer("B", "SMITH, JANE", "DEM", 0.0, 0.0),
     ], 2, id="never_synced_or_zero_dollar_never_merged_on_that_alone"),
+    # Real New York data, 2026-10-03: the same full name filed twice for
+    # the same party under consecutive ids, neither ever reporting money.
+    # No financial fingerprint to match, and the page listed the name twice.
+    pytest.param("2026-HOUSE-NY-1", "NY", "H", 1, [
+        _filer("H6NY01217", "WILSON, CELINA MRS.", "REP", None, None),
+        _filer("H6NY01225", "WILSON, CELINA MRS.", "REP", None, None),
+    ], 1, id="same_full_name_same_party_no_money_collapses"),
+    # ...but never across parties, and never when either record has money
+    # (the financial fingerprint is the evidence there, as above).
+    pytest.param("2026-HOUSE-NY-21", "NY", "H", 21, [
+        _filer("H6NY21256", "CARUSO, ALLEN", "REP", None, None),
+        _filer("H6NY21264", "CARUSO, ALLEN", "DEM", None, None),
+    ], 2, id="same_name_other_party_is_not_merged"),
+    pytest.param("2026-HOUSE-NY-21", "NY", "H", 21, [
+        _filer("H6NY21256", "CARUSO, ALLEN", "REP", 5000.0, 100.0),
+        _filer("H6NY21264", "CARUSO, ALLEN", "REP", None, None),
+    ], 2, id="same_name_with_money_on_one_needs_the_fingerprint"),
 ])
 def test_duplicate_fec_filings_collapse_only_on_real_evidence(
     db_session, race_id, state, office, district, filers, expected,

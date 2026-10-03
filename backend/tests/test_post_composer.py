@@ -126,7 +126,7 @@ class TestBothSpansMustBeAssertedTogether:
     def test_the_party_the_source_actually_names_composes(self):
         assert compose(
             "Acme Corp", "liable for fraud and negligence", self.LAWSUIT
-        ) == "Acme Corp liable for fraud and negligence."
+        ) == "Acme Corp liable for fraud and negligence in the case brought by Jordan Ellis."
 
     def test_the_reversed_party_is_refused(self):
         assert compose(
@@ -281,3 +281,42 @@ class TestATruncatedPredicateIsCompletedFromItsSource:
         assert compose("Pentagon", "cuts funding by $1", "Pentagon cuts funding by $1.5 billion.") == (
             "Pentagon cuts funding by $1.5 billion."
         )
+
+
+class TestLiveCompositionDefects:
+    """Three published Action Center sentences (2026-09-30 to 2026-10-03),
+    each verbatim and each wrong."""
+
+    PIKE = (
+        "The botched execution of Christa Pike is renewing scrutiny over how "
+        "states carry out the death penalty."
+    )
+
+    def test_the_object_of_a_preposition_is_not_the_actor(self):
+        # Published: "Christa Pike is renewing scrutiny over how states..."
+        assert compose("Christa Pike", "is renewing scrutiny over how states carry out the death penalty", self.PIKE) is None
+
+    def test_the_actor_after_a_verb_still_composes(self):
+        src = "A jury found Acme Corp liable for fraud."
+        assert compose("Acme Corp", "liable for fraud", src) == "Acme Corp liable for fraud."
+
+    def test_a_relative_clause_is_not_an_assertion(self):
+        # Published as a summary: "Christa Pike, who survived despite
+        # being subject to two doses of lethal injection."
+        src = "Christa Pike, who survived despite being subject to two doses of lethal injection."
+        assert compose("Christa Pike", "survived despite being subject to two doses of lethal injection", src) is None
+
+    def test_the_qualifier_after_a_dotted_abbreviation_is_kept(self):
+        # Published: "South Korea's government will invest up to $200 billion."
+        src = "South Korea’s government will invest up to $200 billion in U.S. energy infrastructure."
+        assert compose("South Korea’s government", "will invest up to $200 billion", src) == (
+            "South Korea’s government will invest up to $200 billion in U.S. energy infrastructure."
+        )
+
+    def test_a_dotted_abbreviation_mid_clause_is_not_its_end(self):
+        src = "A D.C. judge dismissed the charges. Prosecutors may appeal."
+        assert compose("D.C. judge", "dismissed", src) == "D.C. judge dismissed the charges."
+
+    def test_a_number_still_does_not_end_the_clause(self):
+        src = "The Senate cuts $1.5 billion from the program."
+        assert compose("The Senate", "cuts $1", src) == "The Senate cuts $1.5 billion from the program."

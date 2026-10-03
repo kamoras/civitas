@@ -193,7 +193,8 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
                     "date": s.date,
                     "overall": round(s.overall_score, 1),
                     "fundingIndependence": round(s.score_1, 1),
-                    "promisePersistence": round(s.score_2, 1),
+                    # Not measured: see RepresentationScoreSchema.
+                    "promisePersistence": None,
                     "constituentAlignment": round(s.score_3, 1),
                     "fundingDiversity": round(s.score_4, 1),
                     "legislativeEffectiveness": round(s.score_5, 1),

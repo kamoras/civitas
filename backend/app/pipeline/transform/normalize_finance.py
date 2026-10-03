@@ -50,6 +50,45 @@ def _is_contribution_row(receipt: dict) -> bool:
     return str(line).startswith("11")
 
 
+# The FEC's itemized totals write a missing employer as the text "NULL" —
+# a data-format convention for an absent value, like "SELF-EMPLOYED" is
+# one for a status, not something to classify. Read as a name, it was a
+# top donor on 354 of the members' live scorecards (2026-10-03, usually
+# rank 1, median $25,400), typed Org/Employees: "Null" listed above every
+# real organization that gave. Its four letters also pass the employer
+# skip classifier's three-character floor.
+MISSING_VALUE_TEXT = frozenset({"NULL"})
+
+
+def _employer_values_not_organizations(
+    employers: list[dict], occupations: list[dict] | None,
+) -> set[str]:
+    """Employer-field values (upper-cased) that name no organization: the
+    missing-value text, and any value the same committee's donors wrote
+    as their OCCUPATION at least as often, by dollars, as their employer
+    ("OWNER", "PRESIDENT", "ATTORNEY", "HOUSEWIFE": a job, entered in the
+    wrong box). That is the FEC's own two fields testifying, not a word
+    list: a real organization is an employer far more than an occupation.
+    The embedding classifier can't make this call: measured on the
+    17,812 live donor names (2026-10-03), the best occupation-vs-
+    organization prototype pair reached AUC 0.94, and catching half of 42
+    occupation values would have dropped 279 real organizations."""
+    as_employer: dict[str, float] = {}
+    for r in employers:
+        name = (r.get("employer") or "").upper().strip()
+        if name:
+            as_employer[name] = as_employer.get(name, 0.0) + (r.get("total") or 0)
+    as_occupation: dict[str, float] = {}
+    for r in occupations or []:
+        name = (r.get("occupation") or "").upper().strip()
+        if name:
+            as_occupation[name] = as_occupation.get(name, 0.0) + (r.get("total") or 0)
+    return {
+        name for name, dollars in as_employer.items()
+        if name in MISSING_VALUE_TEXT or as_occupation.get(name, 0.0) >= dollars > 0
+    }
+
+
 def _is_candidate_line(receipt: dict) -> bool:
     """Line 11D — contributions from the candidate themselves."""
     return str(receipt.get("line_number") or "") == "11D"
@@ -388,7 +427,11 @@ def build_top_donors(
     # 2a. Employees, from the FEC's employer totals.
     if employers is not None:
         names = [r["employer"] for r in employers if r.get("employer")]
-        skips = classify_employer_skips_batch(names) | skip_entities_batch([n.upper().strip() for n in names])
+        skips = (
+            classify_employer_skips_batch(names)
+            | skip_entities_batch([n.upper().strip() for n in names])
+            | _employer_values_not_organizations(employers, detail.get("occupations"))
+        )
         for r in employers:
             employer = (r.get("employer") or "").upper().strip()
             if not employer or employer in skips:
@@ -408,7 +451,7 @@ def build_top_donors(
         if not _is_contribution_row(r):
             continue
         employer = (r.get("contributor_employer") or "").upper().strip()
-        if not employer or employer in skip_employer_set:
+        if not employer or employer in skip_employer_set or employer in MISSING_VALUE_TEXT:
             continue
 
         ai_class = ai_classifications.get(employer)
@@ -617,7 +660,7 @@ def _build_industry_breakdown(
         if not _is_contribution_row(r):
             continue
         employer = (r.get("contributor_employer") or "").upper().strip()
-        if not employer or employer in skip_employer_bd:
+        if not employer or employer in skip_employer_bd or employer in MISSING_VALUE_TEXT:
             continue
         if _should_skip_for_breakdown(employer):
             continue

@@ -269,7 +269,8 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 The representation sub-scores — Funding Independence, Constituent Alignment
 and Legislative Effectiveness (weighted, `SCORE_WEIGHTS`), plus the
-informational Promise Persistence and Funding Diversity — use
+informational Funding Diversity (Promise Persistence, which has had no input
+since campaign-promise tracking was removed, is published as null) — use
 transparent statistical formulas with no LLM input. All formulas include
 inline academic citations.
 
