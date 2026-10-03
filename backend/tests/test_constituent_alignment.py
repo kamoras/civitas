@@ -557,6 +557,10 @@ class TestPositionCongruence:
         self.patch({"X1": -0.55}, votes={"X1": 0}, reliability={"n0": 24, "uncounted_weight": 0.2})
         assert self._congruence()["score"] == 50.0
         assert "counted no roll calls" in self._congruence()["detail"]
+        # With no calibration the position counts in full, and the text says nothing of 50.
+        self.patch({"X1": -0.55}, votes={"X1": 0}, reliability={"n0": 0})
+        assert self._congruence()["score"] == 0.0
+        assert "counted no roll calls" not in self._congruence()["detail"]
 
     def test_a_full_record_counts_in_full(self):
         """A full record (here the reference, 576 votes, or more) counts in full."""

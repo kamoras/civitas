@@ -770,7 +770,7 @@ artifacts go away once drift is measured per transition.
     last scale is carried. It describes the chamber's seats, not any
     member's record.
   - So the weights do pull thin positions toward 50: with every record at
-    5 votes, a position at saturation scores about 47 instead of 0.
+    5 votes, a position at saturation scores about 46 instead of 0.
 - Voteview's placeholders are dropped. A member a current section has no
   position for (those, or anyone Voteview hasn't placed yet) sits at 50,
   as a position from no votes would, instead of having the component
@@ -798,10 +798,13 @@ artifacts go away once drift is measured per transition.
     position's sign against the party's. So once the new Congress's
     section is in, the rule reads each member's more reliable of the new
     position and the last Congress's (kept beside the new section for
-    this rule only, never scored).
+    this rule only, never scored). A full record counts 1, so the last
+    Congress's position decides until the new record is full (200
+    votes). This first applies in the 120th Congress: a 119th section
+    written before v6.27 keeps no earlier positions.
   - On the 119th Congress's party-unity roll calls (majorities opposed,
-    Voteview's votes) the weighting reclassifies none of 2,351 Senate
-    breaks and 2 of 6,055 House breaks.
+    Voteview's votes) the weighting alone reclassifies none of 2,351
+    Senate breaks and 2 of 6,055 House breaks.
 
 **Effect on the 119th Congress** (Voteview exports of 2026-10-03, through
 the pipeline's own build with Cook PVI seat lean). This compares v6.26,

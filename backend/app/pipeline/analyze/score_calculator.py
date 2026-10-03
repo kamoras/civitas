@@ -2278,7 +2278,7 @@ def _constituent_alignment_core(
                 f"; Voteview reports no count of the roll calls behind this position, so it counts "
                 f"at {weight:.0%} strength, the measured weight of such positions, pulled toward 50"
             )
-        elif position_votes == 0:
+        elif position_votes == 0 and weight == 0.0:
             congruence_detail += (
                 "; Voteview has counted no roll calls behind this position yet, so it doesn't count "
                 "and this part sits at 50"

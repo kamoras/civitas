@@ -285,7 +285,8 @@ Key mathematical properties:
   The rate is the count confidence below — fixed, not estimated from the
   population's variance, so do not call it Bayesian or empirical Bayes.
   One measured exception: Constituent Alignment's position part (v6.27)
-  weights a roll-call position from n votes by min(1, w(n) / w(200)),
+  scales the distance of a roll-call position from n votes from the
+  seat's expected position by min(1, w(n) / w(200)),
   w(n) = n / (n + n0): the measured slope of a member's full-record
   position on their thin one, a full record counting 1. n0 is fitted on
   Voteview's own adjacent-Congress records with drift per transition

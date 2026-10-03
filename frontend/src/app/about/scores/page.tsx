@@ -86,8 +86,8 @@ export default function ScoresChapter() {
             same party scores, because 50 sits below nearly every member on that scale. Legislative
             Effectiveness&apos;s bill half isn&apos;t pulled at all, because a member&apos;s bills
             are their whole record, not a sample of it. And Constituent Alignment&apos;s position
-            half counts a roll-call position by how reliable it measured to be for that many votes,
-            rather than by a fixed count.
+            half is pulled toward 50 by a measured amount, how well a position from that many votes
+            predicted a full record&apos;s, rather than by a fixed count.
           </P>
         </Sub>
         <Sub title="Why the current Congress, not a career">
@@ -258,10 +258,10 @@ export default function ScoresChapter() {
             tested against House and Senate elections, this shape predicted how incumbents did, and
             one that put the typical position at 100 did not. A position estimated from only a few
             roll calls is mostly noise, so it counts only as much as its votes support, measured on
-            members whose short record in one Congress sits next to a full one in the next: half at
-            a few dozen votes, in full once a record reaches a couple of hundred. A member with no
-            position yet sits at 50. Early in a new Congress, until its positions are published and
-            pass our checks, this part is left out and the score is the voting part alone.
+            members whose short record in one Congress sits next to a full one in the Congress
+            before or after: half at about 50 votes, in full from 200. A member with no position yet
+            sits at 50. Early in a new Congress, until its positions are published and pass our
+            checks, this part is left out and the score is the voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run
