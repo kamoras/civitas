@@ -318,3 +318,15 @@ class TestCommitteeTypePreserved:
         assert donors[0]["committeeType"] == "Q"
         assert donors[1]["committeeType"] == "N"
         assert donors[2]["committeeType"] is None
+
+
+def test_a_pac_total_above_contributions_is_reported(caplog):
+    """PAC money is part of contributions, so this can only be a data fault;
+    the share the leaderboard shows from it would read over 100%."""
+    import logging
+
+    senator = _make_senator()
+    senator["funding"] = {**senator["funding"], "totalFromPACs": 5_000_000, "totalContributions": 4_000_000}
+    with caplog.at_level(logging.WARNING):
+        validate_senator(senator)
+    assert "PAC total $5,000,000 exceeds contributions $4,000,000" in caplog.text

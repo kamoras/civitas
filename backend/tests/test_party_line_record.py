@@ -180,3 +180,28 @@ def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_ses
 
     section["votes"]["R4"] = 500
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+
+
+def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, monkeypatch):
+    """Darline Graham took Lindsey Graham's seat after his death; matched by
+    last name and state, every roll call he cast in the Congress was hers
+    (live, 2026-10-03). The roll calls' LIS ids tell them apart."""
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": {}})
+    for number, (first, lis) in enumerate((("Lindsey", "S293"), ("Lindsey", "S293"), ("Darline", "S441")), start=1):
+        rc = RollCall(chamber="senate", congress=119, session=2, number=number, date=f"2026-03-0{number}",
+                      question="On Passage", bill_id=f"S.{number}")
+        db_session.add(rc)
+        db_session.flush()
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=lis, last_name="Graham", first_name=first,
+                                        party="R", state="SC", position="Yea"))
+        for i in range(5):
+            db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=f"D{i}", last_name=f"Dem{i}",
+                                            first_name="X", party="D", state="NY", position="Nay"))
+            db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=f"R{i}", last_name=f"Rep{i}",
+                                            first_name="X", party="R", state="TX", position="Yea"))
+    db_session.commit()
+    (record,) = party_line_records(db_session, "senate", [{
+        "bioguideId": "G000600", "name": "Darline Graham", "lastNameForVoteMatch": "Graham", "state": "SC",
+        "party": "R", "votingRecord": {"effectiveParty": "R"},
+    }])
+    assert record["votes"] == 1, record

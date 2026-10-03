@@ -41,6 +41,7 @@ from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
     _determine_party_alignment,
     _normalize_for_match,
+    resolve_senate_lis_ids,
     compute_party_split,
     is_housekeeping,
     is_reconsider_switch,
@@ -138,8 +139,27 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     for i, m in enumerate(members):
         index[key(m.get("bioguideId") or "", m.get("lastNameForVoteMatch") or "", m.get("state") or "")].append(i)
 
+    positions: dict[int, list] = defaultdict(list)
+    for p in db.query(
+        RollCallPosition.roll_call_id, RollCallPosition.member_id, RollCallPosition.last_name,
+        RollCallPosition.first_name, RollCallPosition.state, RollCallPosition.party, RollCallPosition.position,
+    ).filter(RollCallPosition.roll_call_id.in_(list(rolls))):
+        positions[p.roll_call_id].append(p)
+
+    # A seat passed to someone of the same surname (resolve_senate_lis_ids):
+    # only the member's own LIS id is theirs.
+    lis_of: dict[int, str] = {}
+    if chamber == "senate":
+        resolved = resolve_senate_lis_ids(
+            [{**m, "id": i} for i, m in enumerate(members)],
+            [{"lisId": p.member_id, "firstName": p.first_name, "lastName": p.last_name, "state": p.state}
+             for ps in positions.values() for p in ps],
+        )
+        lis_of = {int(i): lis for i, lis in resolved.items()}
+
     def find(p) -> int | None:
         found_at = index.get(key(p.member_id, p.last_name, p.state)) or []
+        found_at = [i for i in found_at if i not in lis_of or lis_of[i] == p.member_id]
         if len(found_at) > 1:
             # Two senators of one state can share a last name: the roll
             # call's first name tells them apart.
@@ -172,13 +192,6 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     for b, (x, w) in weighted(ideal.get("prior")).items():
         if w > dim1.get(b, (None, -1.0))[1]:
             dim1[b] = (x, w)
-
-    positions: dict[int, list] = defaultdict(list)
-    for p in db.query(
-        RollCallPosition.roll_call_id, RollCallPosition.member_id, RollCallPosition.last_name,
-        RollCallPosition.first_name, RollCallPosition.state, RollCallPosition.party, RollCallPosition.position,
-    ).filter(RollCallPosition.roll_call_id.in_(list(rolls))):
-        positions[p.roll_call_id].append(p)
 
     found: set[int] = set()
     # member -> measure -> [(date, session, number, ref, vote, kind)], kind "with" /

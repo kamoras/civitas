@@ -244,7 +244,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         committees=json.loads(senator.committees or "[]"),
         representation_score=RepresentationScoreSchema(
             funding_independence=senator.score_funding_independence,
-            promise_persistence=senator.score_promise_persistence,
+            promise_persistence=None,  # not measured: RepresentationScoreSchema
             constituent_alignment=senator.score_constituent_alignment,
             funding_diversity=senator.score_funding_diversity,
             legislative_effectiveness=senator.score_legislative_effectiveness,
@@ -452,11 +452,12 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
             initials=_compute_initials(s.name) or s.initials,
             representation_score=RepresentationScoreSchema(
                 funding_independence=s.score_funding_independence,
-                promise_persistence=s.score_promise_persistence,
+                promise_persistence=None,
                 constituent_alignment=s.score_constituent_alignment,
                 funding_diversity=s.score_funding_diversity,
                 legislative_effectiveness=s.score_legislative_effectiveness,
                 overall=compute_overall_score(s),
+                confidence=json.loads(s.score_confidence or "{}") or None,
             ),
             total_raised=s.total_raised,
             total_contributions=s.total_contributions,

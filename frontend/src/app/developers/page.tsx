@@ -96,7 +96,18 @@ function Params({ params }: { params: Parameter[] }) {
 }
 
 /** A response body's fields, one level at a time: nested objects open on request. */
-function Fields({ schema, spec, depth = 0 }: { schema: Schema; spec: Spec; depth?: number }) {
+function Fields({
+  schema,
+  spec,
+  depth = 0,
+  context,
+}: {
+  schema: Schema;
+  spec: Spec;
+  depth?: number;
+  /** Which endpoint these are fields of, for the nested disclosures' names (More). */
+  context?: string;
+}) {
   const properties = Object.entries(schema.properties ?? {});
   return (
     <dl className="divide-y divide-white/[0.05] border-y border-white/[0.07]">
@@ -115,8 +126,8 @@ function Fields({ schema, spec, depth = 0 }: { schema: Schema; spec: Spec; depth
                 </p>
               )}
               {nested && (
-                <More label={`Fields of ${name}`}>
-                  <Fields schema={nested} spec={spec} depth={depth + 1} />
+                <More label={`Fields of ${name}`} context={context}>
+                  <Fields schema={nested} spec={spec} depth={depth + 1} context={context} />
                 </More>
               )}
             </dd>
@@ -169,8 +180,11 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
         </div>
       )}
       {body && (
-        <More label={listOf ? "Response: a list; each item has these fields" : "Response fields"}>
-          <Fields schema={listOf ?? body} spec={spec} />
+        <More
+          label={listOf ? "Response: a list; each item has these fields" : "Response fields"}
+          context={`of ${method} ${path}`}
+        >
+          <Fields schema={listOf ?? body} spec={spec} context={`of ${method} ${path}`} />
         </More>
       )}
     </article>

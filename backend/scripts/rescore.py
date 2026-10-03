@@ -61,7 +61,7 @@ from app.pipeline.analyze.score_calculator import (  # noqa: E402
     derive_chamber_majority,
     party_break_rate,
 )
-from app.pipeline.fetch.fec import select_recent_elections  # noqa: E402
+from app.pipeline.fetch.fec import financials_cache_key, select_recent_elections  # noqa: E402
 from app.pipeline.transform.normalize_finance import summarize_election_totals  # noqa: E402
 from app.pipeline.transform.normalize_votes import stored_vote  # noqa: E402
 from app.pipeline.transform.candidate_names import is_candidate_self_donor  # noqa: E402
@@ -90,7 +90,7 @@ def load_fec_caches(cur):
         cid = d.get("candidate_id") if isinstance(d, dict) else (d[0].get("candidate_id") if d else None)
         if cid:
             search[r["cache_key"]] = cid
-    cur.execute("SELECT cache_key, data_json FROM api_cache WHERE cache_key LIKE 'candidate-financials-%'")
+    cur.execute("SELECT cache_key, data_json FROM api_cache WHERE cache_key LIKE ?", (financials_cache_key("%"),))
     fin = {r["cache_key"]: json.loads(r["data_json"]) for r in cur.fetchall()}
     return search, fin
 
@@ -102,7 +102,7 @@ def corrected_funding(search, fin, name, state):
     cid = search.get(f"candidate-search-{name}-{state}-S")
     if not cid:
         return None
-    rows = fin.get(f"candidate-financials-{cid}")
+    rows = fin.get(financials_cache_key(cid))
     if not rows:
         return None
     totals = summarize_election_totals(select_recent_elections(rows, office="S"))

@@ -26,7 +26,8 @@ export interface Senator {
   initials: string;
   representationScore: {
     fundingIndependence: number;
-    promisePersistence: number;
+    /** Always null: campaign-promise tracking was removed (2026-07). */
+    promisePersistence: number | null;
     constituentAlignment: number;
     fundingDiversity: number;
     legislativeEffectiveness: number;

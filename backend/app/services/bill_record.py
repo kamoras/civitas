@@ -27,6 +27,7 @@ from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async, api_cache_set_many_async
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, _rate_limiter, congress_gov_bill_url
 from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
 from app.services.congress_service import bill_days, bill_label
 
 # Congress.gov type path segment for each site bill-id prefix.
@@ -202,8 +203,31 @@ class MemberLinks:
         for r in db.query(Representative):
             if r.bioguide_id:
                 self.by_bioguide[r.bioguide_id] = r.id
+        self.senate_lis = self._senate_lis_ids(db)
 
-    def page(self, *, bioguide: str | None = None, last_name: str = "", state: str = "") -> str | None:
+    def _senate_lis_ids(self, db: Session) -> dict[str, str]:
+        """{senator id: LIS id} where the roll calls give one last name and
+        state to two people (resolve_senate_lis_ids): Lindsey Graham's
+        votes linked to Darline Graham's page, who took his seat."""
+        people = db.query(
+            RollCallPosition.member_id, RollCallPosition.first_name,
+            RollCallPosition.last_name, RollCallPosition.state,
+        ).join(RollCall, RollCall.id == RollCallPosition.roll_call_id).filter(
+            RollCall.chamber == "senate",
+        ).distinct().all()
+        seen = [{"lisId": m, "firstName": f, "lastName": last, "state": st} for m, f, last, st in people]
+        members = []
+        for state, senators in self.senators_by_state.items():
+            for name, sid in senators:
+                last = max((p["lastName"] for p in seen if p["state"] == state and name.endswith(_fold(p["lastName"]))),
+                           key=len, default="")
+                if last:
+                    members.append({"id": sid, "name": name, "lastNameForVoteMatch": last, "state": state})
+        return resolve_senate_lis_ids(members, seen)
+
+    def page(
+        self, *, bioguide: str | None = None, last_name: str = "", state: str = "", lis_id: str | None = None,
+    ) -> str | None:
         """The member's Civitas page ("/politicians/ted-cruz"), or None for
         a member the site has no page for (a former member)."""
         found = self.by_bioguide.get(bioguide or "")
@@ -211,6 +235,8 @@ class MemberLinks:
             last = _fold(last_name)
             matches = [sid for name, sid in self.senators_by_state.get(state, []) if name.endswith(last)]
             found = matches[0] if len(matches) == 1 else None
+            if found in self.senate_lis and lis_id is not None and self.senate_lis[found] != lis_id:
+                found = None
         return f"/politicians/{found}" if found else None
 
 
@@ -279,7 +305,7 @@ def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> 
         "lastName": p.last_name, "firstName": p.first_name, "party": p.party, "state": p.state,
         "position": p.position, "bucket": _bucket(p.position),
         "page": (links.page(bioguide=p.member_id) if rc.chamber == "house"
-                 else links.page(last_name=p.last_name, state=p.state)),
+                 else links.page(last_name=p.last_name, state=p.state, lis_id=p.member_id)),
     } for p in positions]
     members.sort(key=lambda m: (m["lastName"], m["state"]))
     return {

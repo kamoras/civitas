@@ -155,6 +155,18 @@ class McpEndpoint:
                 self._manager = None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("method") == "GET":
+            # A GET opens the server-to-client SSE stream, which the SDK
+            # serves even in stateless mode and which this server never
+            # writes to: nothing is pushed to a client between its own
+            # requests. Left to the SDK, every GET (curl's default Accept
+            # */* counts as accepting event-stream) held a connection open
+            # until nginx's 120 s read timeout, on a public, unauthenticated
+            # path. The streamable HTTP spec lets a server answer 405.
+            await send({"type": "http.response.start", "status": 405,
+                        "headers": [(b"content-type", b"text/plain"), (b"allow", b"POST")]})
+            await send({"type": "http.response.body", "body": b"Method Not Allowed: POST JSON-RPC here"})
+            return
         if self._manager is None:
             # Outside the lifespan (or between runs): unavailable, not a crash.
             await send({"type": "http.response.start", "status": 503,

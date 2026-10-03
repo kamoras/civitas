@@ -47,7 +47,9 @@ class IndustryDonationSchema(CamelModel):
 class RepresentationScoreSchema(CamelModel):
     funding_independence: float = Field(
         description="0-100: how free the member is from PAC and large-donor dependence. Weighted into overall")
-    promise_persistence: float = Field(description="0-100, informational: not part of overall since v6.0")
+    promise_persistence: float | None = Field(
+        None,
+        description="Always null. It measured campaign promises kept, and campaign-promise tracking was removed in 2026-07 (its LLM evaluations were unreliable); the stored value since then was a constant, not a measurement. Kept so existing clients still find the field")
     constituent_alignment: float = Field(
         description="0-100: how the member's votes compare with what the seat's partisan lean predicts. Weighted into overall")
     funding_diversity: float = Field(
@@ -643,7 +645,7 @@ class PublicScoreSnapshotSchema(_PublicModel):
     date: str = Field(description="When the scores were computed, YYYY-MM-DD")
     overall: float
     funding_independence: float
-    promise_persistence: float
+    promise_persistence: float | None = Field(None, description="Always null: see representationScore")
     constituent_alignment: float
     funding_diversity: float
     legislative_effectiveness: float
