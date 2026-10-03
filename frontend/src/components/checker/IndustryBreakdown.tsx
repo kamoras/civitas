@@ -77,9 +77,16 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
               {isExpanded && industryDonors.length > 0 && (
                 <div className="ml-4 mb-3 space-y-1 border-l-2 border-white/[0.07] pl-3">
                   {industryDonors.map((donor) => (
-                    <div key={donor.name} className="flex justify-between text-xs">
-                      <span className="text-ink-lo">{donor.name}</span>
-                      <span className="text-signal-cyan">{formatCurrency(donor.total)}</span>
+                    <div key={donor.name} className="flex justify-between gap-3 text-xs">
+                      {/* A donor name is the employer a contributor typed on
+                          the FEC form and can be one long unspaced token:
+                          wrap it rather than widen the drawer. */}
+                      <span className="min-w-0 text-ink-lo [overflow-wrap:anywhere]">
+                        {donor.name}
+                      </span>
+                      <span className="shrink-0 text-signal-cyan">
+                        {formatCurrency(donor.total)}
+                      </span>
                     </div>
                   ))}
                 </div>

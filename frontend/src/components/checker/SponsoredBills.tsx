@@ -183,7 +183,12 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                         ))}
                     </div>
                     {bill.latestAction && (
-                      <div className="text-xs text-ink-min mt-1 truncate">{bill.latestAction}</div>
+                      // Wraps, never truncated: the action is the bill's current status,
+                      // and an ellipsis cut even a routine "Referred to the House
+                      // Committee on..." short on a phone, with no way to read the rest.
+                      <div className="text-xs text-ink-min mt-1 break-words">
+                        {bill.latestAction}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -240,7 +245,7 @@ function FilterTile({
   const empty = count === 0;
   return (
     <div
-      className={`panel p-2 transition-colors ${pressed ? activeClass : empty ? "" : "hover:bg-white/[0.03]"}`}
+      className={`panel px-1 py-2 sm:p-2 transition-colors ${pressed ? activeClass : empty ? "" : "hover:bg-white/[0.03]"}`}
     >
       <button
         type="button"
@@ -254,7 +259,9 @@ function FilterTile({
         >
           {count}
         </span>{" "}
-        <span className="block text-xs text-ink-min">{label}</span>
+        {/* 11px below sm: SPONSORED and ADVANCING are wider than a
+            third-width tile's label box at 320px and split mid-word. */}
+        <span className="block text-[11px] text-ink-min sm:text-xs">{label}</span>
       </button>
       <span className="text-xs text-ink-min">
         <MetricTooltip text={help} />

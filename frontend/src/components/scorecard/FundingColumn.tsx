@@ -127,7 +127,7 @@ export default function FundingColumn({
           <ul className="flex flex-col gap-1.5">
             {donors.map((d) => (
               <li key={d.name} className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="min-w-0 text-ink">
+                <span className="min-w-0 text-ink [overflow-wrap:anywhere]">
                   {d.type === "PAC" || d.type === "SuperPAC" ? (
                     <a
                       href={fecCommitteeSearchUrl(d.name)}
