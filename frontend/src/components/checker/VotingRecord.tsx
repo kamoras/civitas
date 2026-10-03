@@ -61,7 +61,10 @@ function VoteRow({ vote }: { vote: KeyVote }) {
             {title}
           </Link>
         ) : (
-          <span className="line-clamp-2 text-sm text-ink">{title}</span>
+          // Not clamped: with no bill page to open, this is the only place
+          // to read the title. A nomination's names the office, which two
+          // lines cut off on a phone.
+          <span className="text-sm text-ink break-words">{title}</span>
         )}
         <p className="mt-0.5 text-xs text-ink-min">
           {[rc?.question, rc ? shortDate(rc.date) : vote.date].filter(Boolean).join(" · ")}
