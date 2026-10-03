@@ -17,7 +17,7 @@ export default function PviMethodologyNote({ meta }: { meta?: PviMeta | null }) 
     // the smallest text on the page. Mono at 12px, above the contrast floor.
     <p className="font-sans text-xs leading-relaxed text-ink-lo">
       {note}
-      {source ? ` SOURCE: ${source}.` : ""}
+      {source ? ` SOURCE: ${source.replace(/\.$/, "")}.` : ""}
       {window ? ` WINDOW: ${window}.` : ""}
     </p>
   );

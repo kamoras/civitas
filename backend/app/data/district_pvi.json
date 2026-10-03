@@ -2,7 +2,8 @@
  "_as_of": "2026-09-28",
  "_lines": "District lines the 119th Congress's House was elected on (November 2024; seated 2025-01-03)",
  "_sign": "positive = R lean, negative = D lean (matches state_pvi.json)",
- "_source": "2025 Cook PVI, Cook Political Report, April 3, 2025, as transcribed in Wikipedia's \"Cook Partisan Voting Index\" article, revision 1345805653 (2026-03-28T08:49:56Z): https://en.wikipedia.org/w/index.php?title=Cook_Partisan_Voting_Index&oldid=1345805653. Pinned per Congress in app/data/district_pvi_sources.json; ingested by app/pipeline/fetch/district_pvi.py (regenerate the bundled copy with backend/scripts/fetch_district_pvi.py).",
+ "_source": "2025 Cook PVI, Cook Political Report, April 3, 2025, as transcribed in Wikipedia's \"Cook Partisan Voting Index\" article, revision 1345805653 (2026-03-28T08:49:56Z): https://en.wikipedia.org/w/index.php?title=Cook_Partisan_Voting_Index&oldid=1345805653",
+ "_regenerate": "Pinned per Congress in app/data/district_pvi_sources.json; ingested by app/pipeline/fetch/district_pvi.py (regenerate the bundled copy with backend/scripts/fetch_district_pvi.py).",
  "_window": "2020+2024",
  "congress": 119,
  "congresses": {

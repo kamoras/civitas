@@ -87,7 +87,7 @@ def _blend_live_components(components: list[dict]) -> dict:
     if not components:
         return {
             "score": None, "components": [],
-            "note": "Not applicable for this president — no data source exists even in principle, not merely unfetched.",
+            "note": "Not applicable for this president: no data source exists even in principle, not merely unfetched.",
         }
 
     total_weight = sum(c["weight"] for c in components)
@@ -713,8 +713,8 @@ def _public_mandate_core(
             "Election margin (pre-polling-era proxy)", 1.0, election_margin, margin[0], margin[1],
             f"{election_margin:+.1f}pt average margin of victory across this president's "
             f"election win(s) vs. population mean {margin[0]:+.1f}pt "
-            "— no approval-polling era data exists for this president, so this is the "
-            "historical proxy used instead",
+            "(no approval-polling era data exists for this president, so this is the "
+            "historical proxy used instead)",
         ))
 
     return {**_blend_live_components(components), "facts": facts}

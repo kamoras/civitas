@@ -108,6 +108,16 @@ def validate_senator(senator: dict) -> dict:
 
     # Funding
     f = senator.get("funding") or {}
+    # PAC money is part of contributions (FEC's other_political_committee_
+    # contributions is a line of its contributions total), so a PAC total
+    # above the contributions it is a share of is a data fault, and the
+    # share the site shows from it (pac_share_pct) would read over 100%.
+    pac_total, contributions = f.get("totalFromPACs") or 0, f.get("totalContributions")
+    if contributions is not None and pac_total > contributions > 0:
+        warnings.append(
+            f"PAC total ${pac_total:,.0f} exceeds contributions ${contributions:,.0f}: "
+            "the PAC share will read over 100%"
+        )
     valid_donor_types = {
         "PAC",
         "Individual",
