@@ -243,7 +243,18 @@ export function Step({ n, title, children }: { n: number; title: string; childre
  * default; its summary line says what is inside, so a reader can tell
  * whether it is worth opening.
  */
-export function More({ label, children }: { label: string; children: ReactNode }) {
+/** `context` is read, not shown: what the disclosure belongs to, when the
+ * same label repeats down a page (every endpoint's "Response fields" on
+ * /developers), so a reader tabbing through hears which one each is. */
+export function More({
+  label,
+  context,
+  children,
+}: {
+  label: string;
+  context?: string;
+  children: ReactNode;
+}) {
   return (
     <details className="group border border-white/[0.09] bg-white/[0.015]">
       <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm text-ink-lo hover:text-ink-hi [&::-webkit-details-marker]:hidden">
@@ -251,7 +262,10 @@ export function More({ label, children }: { label: string; children: ReactNode }
           <span className="group-open:hidden">+</span>
           <span className="hidden group-open:inline">−</span>
         </span>
-        <span className="font-medium">{label}</span>
+        <span className="font-medium">
+          {label}
+          {context && <span className="sr-only"> {context}</span>}
+        </span>
       </summary>
       <div className="space-y-3 px-4 pb-4 text-[0.95rem] leading-relaxed text-ink-lo [&_p]:text-[0.95rem] [&_p]:text-ink-lo">
         {children}

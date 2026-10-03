@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Item, List } from "./AboutPage";
+import { Item, List, More } from "./AboutPage";
 
 describe("Item", () => {
   it("lets a wide child scroll inside its own box instead of widening the page", () => {
@@ -21,5 +21,21 @@ describe("Item", () => {
     const content = screen.getByTestId("wide").parentElement!;
     expect(content.tagName).toBe("SPAN");
     expect(content.className.split(/\s+/)).toContain("min-w-0");
+  });
+});
+
+describe("More", () => {
+  it("tells a reader which disclosure this is when the label repeats", () => {
+    // /developers shows "Response fields" under every endpoint; tabbing
+    // through, a screen reader heard the same name a dozen times. The
+    // context is in the accessible name and off the screen.
+    render(
+      <More label="Response fields" context="of GET /senators">
+        <p>fields</p>
+      </More>
+    );
+    const summary = screen.getByText("Response fields").closest("summary")!;
+    expect(summary.textContent).toContain("Response fields of GET /senators");
+    expect(screen.getByText("of GET /senators").className).toContain("sr-only");
   });
 });
