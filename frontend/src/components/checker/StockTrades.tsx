@@ -67,7 +67,10 @@ function TradeRow({ trade }: { trade: StockTrade }) {
     <div className="panel p-3">
       <div className="flex items-center gap-2 flex-wrap mb-1">
         <TransactionBadge type={trade.transactionType} />
-        <span className="text-ink text-sm">
+        {/* min-w-0 and anywhere, as in Holdings: an asset name copied from
+            a filing can be one long unspaced token, which would otherwise
+            widen the row past its panel and the drawer past the screen. */}
+        <span className="min-w-0 text-ink text-sm [overflow-wrap:anywhere]">
           {trade.ticker ? `${trade.ticker}: ${trade.assetName}` : trade.assetName}
         </span>
         {trade.parseConfidence === "ocr" && (
