@@ -10,8 +10,9 @@ member's position), under two rules the research note tests against
 election results (docs/research/constituent-alignment.md, sections 11-12):
 
 - A break counts only toward the other party. On that roll call, the party
-  members who broke sit, on average, nearer the other party (DW-NOMINATE
-  first dimension) than their party as a whole. Hardliners voting down their
+  members who broke sit, on average, nearer the other party (first-dimension
+  position from the Voteview section position congruence reads, each
+  weighted by its reliability since v6.27) than their party as a whole. Hardliners voting down their
   own party's bill from the flank vote against it too, but that is not
   independence toward the seat, and the member's flank position is already
   scored, by position congruence. Such votes are kept as flankBreaks: shown,

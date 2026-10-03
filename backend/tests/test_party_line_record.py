@@ -147,7 +147,7 @@ def test_a_thin_records_position_barely_moves_the_direction_of_a_break(db_sessio
     assert records[4]["breaks"] == [{"rollCall": "house-119-2-30", "vote": "Nay"}]
 
 
-def test_an_earlier_congresss_positions_are_not_read(db_session, monkeypatch):
+def test_another_congresss_positions_are_not_read(db_session, monkeypatch):
     """A section from another Congress says nothing about these roll calls
     (the 119th's): with no position, R4's flank-side break counts, as
     before v6.20. Judged against the roll calls' Congress, not the clock."""
@@ -156,3 +156,4 @@ def test_an_earlier_congresss_positions_are_not_read(db_session, monkeypatch):
     _roll_call(db_session, "house", 31, "On Passage", "HR.6", {"R4": "Nay"})
     db_session.commit()
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+

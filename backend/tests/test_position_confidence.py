@@ -1,7 +1,7 @@
 """The reliability weight on a congress-specific roll-call position (v6.27):
 scripts/calibrate_position_confidence.py measures it from Voteview's own
 positions and writes app/data/position_confidence.json, which the scorer
-reads."""
+reads. One n0, so nothing in it follows the sitting Congress."""
 
 import importlib.util
 import json
@@ -20,32 +20,26 @@ def _script():
     return module
 
 
-def _row(icpsr, party, x, n, dim2="0.1"):
+def _row(icpsr, party, x, n, dim2="0.1", state="OH"):
     return {"icpsr": icpsr, "party_code": party, "nokken_poole_dim1": x, "nokken_poole_dim2": dim2,
-            "nominate_number_of_votes": n}
+            "nominate_number_of_votes": n, "state_abbrev": state}
 
 
-def test_fit_recovers_how_n0_rises_with_party_line_voting():
-    """Pairs generated from full = 0.9 * n / (n + n0) * thin with
-    log n0 = 3.5 + 2 * (share - 0.6), exactly, at two party-line shares."""
-    import math
+def test_fit_recovers_n0_with_a_drift_per_congress():
+    """Pairs generated from full = drift[c] * n / (n + 40) * thin with very
+    different drift in two Congresses: the fit recovers n0, which one drift
+    for every Congress would confuse with how the eras differ."""
     script = _script()
-
-    def n0(u):
-        return math.exp(3.5 + 2.0 * (u - script.CENTER))
     data = []
-    for u in (0.5, 0.8):
-        data += [("H", f"F{u}{i}", 600.0, x, 0.9 * 600 / (600 + n0(u)) * x, "full", 110, u)
+    for c, drift in ((105, 0.66), (115, 1.0)):
+        data += [("H", f"F{c}{i}", 600.0, x, drift * 600 / 640 * x, "full", c, 0.5)
                  for i, x in enumerate((-0.2, -0.1, 0.1, 0.3))]
-        data += [("H", f"T{u}{n}{i}", float(n), x, 0.9 * n / (n + n0(u)) * x, "thin", 110, u)
+        data += [("H", f"T{c}{n}{i}", float(n), x, drift * n / (n + 40) * x, "thin", c, 0.5)
                  for n in (5, 20, 60, 150) for i, x in enumerate((-0.3, 0.2, 0.4))]
-    got = script.fit(data)
-    assert abs(got["a"] - 3.5) < 0.011 and abs(got["b"] - 2.0) < 0.051
-    assert abs(got["drift"] - 0.9) < 1e-3
-    assert abs(script.half_weight(got, 0.95, 0.5, 0.8) - n0(0.8)) / n0(0.8) < 0.02  # read at the edge
+    assert script.fit_n0(data) == 40.0
 
 
-def test_party_line_share_counts_opposed_majorities(tmp_path):
+def test_voteview_party_line_share_counts_opposed_majorities(tmp_path):
     """Two roll calls: one where the parties' majorities split, one where
     both vote Yea. IDs written as floats in one file and ints in the other
     still match."""
@@ -61,8 +55,9 @@ def test_party_line_share_counts_opposed_majorities(tmp_path):
 def test_deviations_are_flank_signed_from_the_party_center():
     rows = [_row("1", "100", "-0.5", "300"), _row("2", "100", "-0.3", "300"), _row("3", "100", "-0.6", "10"),
             _row("4", "200.0", "0.4", "300"), _row("5", "200", "0", "2", dim2="0"),  # a placeholder
-            _row("6", "100", "-0.4", "")]
+            _row("6", "100", "-0.4", ""), _row("7", "100", "-0.9", "40", state="VI")]  # a delegate
     dev = _script().deviations(rows)
+    assert "7" not in dev
     assert "5" not in dev  # no position
     assert dev["3"][0] == 10.0 and abs(dev["3"][1] - 0.2) < 1e-12  # 0.2 left of the Democrats' center (-0.4)
     assert dev["4"] == (300.0, 0.0)  # float-coded party parses
@@ -78,29 +73,38 @@ def test_a_placeholder_is_not_a_position():
 def test_shipped_file_documents_its_source_and_intervals():
     data = json.loads(_DATA.read_text())
     assert "calibrate_position_confidence.py" in data["_source"]
-    lo, hi = data["model"]["shares_covered"]
-    for chamber in ("senate", "house"):
-        c = data["chambers"][chamber]
-        assert c["interval_90"][0] <= c["half_weight_votes"] <= c["interval_90"][1]
-        assert lo <= c["read_at"] <= hi
-        assert c["read_at"] == min(max(c["party_line_share"], lo), hi)
-    assert data["model"]["b_interval_90"][0] > 0  # n0 rises with party-line voting
+    lo, hi = data["interval_90"]["half_weight_votes"]
+    assert lo <= data["half_weight_votes"] <= hi
     assert data["pairs"]["thin"] > 50 and data["pairs"]["full"] > 1000
+    # The rejected party-line term: no better fit than one n0.
+    test = data["party_line_test"]
+    assert test["loss_with"] <= test["loss_without"] < 1.01 * test["loss_with"]
 
 
-def test_scorer_reads_each_chambers_value(monkeypatch):
+def test_the_congress_range_follows_the_sitting_congress(monkeypatch):
+    """No setting to keep up: a rerun in any Congress includes it."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 121)
+    assert _script().congresses() == range(101, 122)
+
+
+def test_scorer_reads_the_shipped_file(monkeypatch):
     monkeypatch.setattr(score_calculator, "_position_reliability_cache", None)
     data = json.loads(_DATA.read_text())
-    for chamber in ("senate", "house"):
-        assert score_calculator._position_reliability(chamber) == {
-            "half_weight_votes": data["chambers"][chamber]["half_weight_votes"]}
+    assert score_calculator._position_reliability() == {
+        "half_weight_votes": data["half_weight_votes"], "full_record_votes": data["full_record_votes"],
+        "uncounted_weight": data["uncounted_weight"]}
 
 
 def test_weight():
-    rel = {"half_weight_votes": 64.0}
-    assert score_calculator.position_confidence(64, rel) == 0.5
+    """Relative to a typical full record (the calibration measures thin
+    records against full ones in the same Congress), capped at 1."""
+    rel = {"half_weight_votes": 40.0, "full_record_votes": 360.0, "uncounted_weight": 0.2}
+    assert score_calculator.position_confidence(40, rel) == 0.5 / 0.9
     assert score_calculator.position_confidence(0, rel) == 0.0
-    assert score_calculator.position_confidence(None, rel) == 0.0  # no count reported: none
-    assert abs(score_calculator.position_confidence(576, rel) - 0.9) < 1e-12
+    assert score_calculator.position_confidence(360, rel) == 1.0
+    assert score_calculator.position_confidence(900, rel) == 1.0  # capped
+    assert score_calculator.position_confidence(None, rel) == 0.2  # no count reported: its measured weight
+    assert score_calculator.position_confidence(40, {"half_weight_votes": 40.0}) == 0.5  # no reference
     assert score_calculator.position_confidence(5, None) == 1.0  # a pre-v6.27 section
     assert score_calculator.position_confidence(5, {}) == 1.0  # no calibration

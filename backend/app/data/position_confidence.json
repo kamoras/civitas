@@ -1,53 +1,86 @@
 {
- "_source": "Voteview (voteview.com, Lewis et al.) member exports, Senate and House, Congresses 101-119, retrieved 2026-10-03; regenerate with backend/scripts/calibrate_position_confidence.py",
- "_method": "Members with positions in adjacent Congresses, each read from the party's center toward its flank: least squares of full = drift * n / (n + n0) * thin over pairs with a thin side (under 200 scaled votes) and pairs of full records, both chambers, with log n0 linear in the thin Congress's party-line share; each chamber's half_weight_votes is n0 at the sitting Congress's share, clamped to the middle 90% of the thin pairs' shares; uncounted_weight_recent is the weight of positions with no count since the 110th Congress, which the score reads as 0 votes; intervals are 5th-95th percentiles over members resampled",
- "congress": 119,
- "chambers": {
-  "senate": {
-   "party_line_share": 0.92,
-   "read_at": 0.756,
-   "half_weight_votes": 75.7,
-   "interval_90": [
-    45.35,
-    119.453
-   ]
-  },
-  "house": {
-   "party_line_share": 0.7,
-   "read_at": 0.7,
-   "half_weight_votes": 64.1,
-   "interval_90": [
-    37.736,
-    103.625
-   ]
-  }
- },
- "model": {
-  "log_n0": "3.86 + 3.00 * (party-line share - 0.6)",
-  "a": 3.86,
-  "b": 3.0,
-  "b_interval_90": [
-   0.8,
-   6.705
+ "_source": "Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses 101-119, retrieved 2026-10-03; regenerate with backend/scripts/calibrate_position_confidence.py",
+ "_method": "Members of the 50 states with positions in adjacent Congresses, each read from the party's center toward its flank: least squares of full = drift[chamber, Congress] * n / (n + n0) * thin over pairs with a thin side (under 200 scaled votes) and pairs of full records, one n0 for both chambers and every Congress; the score weighs a position by min(1, w(n) / w(full_record_votes)), w(n) = n / (n + n0), since the drift absorbs a full record's own attenuation; party_line_test is the rejected alternative with log n0 linear in the Congress's party-line share; uncounted_weight is the same slope for positions published with no count, on the full pairs' drift; interval_90 is the 5th-95th percentile over members resampled",
+ "calibrated_through": 119,
+ "half_weight_votes": 43.0,
+ "interval_90": {
+  "half_weight_votes": [
+   20.95,
+   84.15
   ],
-  "drift": 0.9383,
-  "drift_interval_90": [
-   0.911,
-   0.975
-  ],
-  "shares_covered": [
-   0.457,
-   0.756
+  "uncounted_weight": [
+   0.015,
+   0.383
   ]
  },
- "uncounted_weight_recent": 0.128,
- "uncounted_weight_interval_90": [
-  -0.134,
-  0.33
- ],
+ "by_chamber": {
+  "senate": {
+   "half_weight_votes": 27.0,
+   "thin_pairs": 26
+  },
+  "house": {
+   "half_weight_votes": 61.0,
+   "thin_pairs": 76
+  }
+ },
+ "one_n0_by_era": {
+  "101-109": 38.0,
+  "110-119": 45.0
+ },
+ "party_line_test": {
+  "b": -2.5,
+  "loss_with": 37.3208,
+  "loss_without": 37.3305
+ },
+ "party_line_share_by_congress": {
+  "senate": {
+   "101": 0.458,
+   "102": 0.522,
+   "103": 0.609,
+   "104": 0.671,
+   "105": 0.538,
+   "106": 0.565,
+   "107": 0.518,
+   "108": 0.627,
+   "109": 0.606,
+   "110": 0.577,
+   "111": 0.756,
+   "112": 0.562,
+   "113": 0.685,
+   "114": 0.627,
+   "115": 0.611,
+   "116": 0.588,
+   "117": 0.809,
+   "118": 0.78,
+   "119": 0.92
+  },
+  "house": {
+   "101": 0.537,
+   "102": 0.602,
+   "103": 0.639,
+   "104": 0.675,
+   "105": 0.528,
+   "106": 0.452,
+   "107": 0.419,
+   "108": 0.496,
+   "109": 0.516,
+   "110": 0.588,
+   "111": 0.465,
+   "112": 0.747,
+   "113": 0.705,
+   "114": 0.744,
+   "115": 0.689,
+   "116": 0.685,
+   "117": 0.576,
+   "118": 0.705,
+   "119": 0.7
+  }
+ },
+ "full_record_votes": 851,
+ "uncounted_weight": 0.201,
  "pairs": {
   "full": 8099,
-  "thin": 108,
+  "thin": 102,
   "uncounted": 25
  }
 }

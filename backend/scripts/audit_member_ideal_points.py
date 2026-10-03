@@ -47,7 +47,7 @@ async def main() -> int:
             continue
         data, failures = build_chamber_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),
-            reliability=_position_reliability(chamber), congress=congress,
+            reliability=_position_reliability(), congress=congress,
         )
         failures += ingestion_gates(chamber, data)
         fits = ", ".join(

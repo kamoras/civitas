@@ -1,9 +1,9 @@
 """Calibrate how much a congress-specific roll-call position can be trusted.
 
 Regenerates app/data/position_confidence.json, read by score_calculator's
-_position_reliability(chamber): n0 in the weight n / (n + n0) that
-Constituent Alignment's position-congruence component gives a member whose
-Nokken-Poole position rests on n scaled roll calls (v6.27).
+_position_reliability(): n0 in the weight n / (n + n0) that Constituent
+Alignment's position-congruence component gives a member whose Nokken-Poole
+position rests on n scaled roll calls (v6.27).
 
 Measured on Voteview's own positions, with no model of how Voteview
 estimates them. A member who served part of one Congress and all of the
@@ -11,24 +11,31 @@ next (or all of one and part of the next) has a thin position and a full
 one for adjacent Congresses. Read each against their party's center that
 Congress, signed toward the party's flank:
 
-    full = drift * n / (n + n0) * thin + error
+    full = drift[chamber, Congress] * n / (n + n0) * thin + error
 
-Drift is how far anyone's position carries from one Congress to the next.
-Pairs of full records (both sides at least RELIABLE_VOTES) measure drift
-times the weight of a full record, and pairs with a thin side add the
-weight of thin ones, so one least-squares fit identifies both.
+Drift is how far positions carry from one Congress to the next, and it
+varies by era (a full record's slope on the next Congress's runs from about
+0.66 to 1.00), so each chamber and Congress gets its own, measured by that
+Congress's pairs of full records (both sides at least RELIABLE_VOTES). n0
+is then identified by how much more a thin record is attenuated than a
+full one in the same Congress. Because the drift absorbs a full record's own
+attenuation, what the pairs measure is a thin record's weight relative to a
+full one: the score divides n / (n + n0) by its value at a typical full
+record (full_record_votes) and caps at 1, so a full record counts in full.
+Positions Voteview publishes with no count get their own measured weight,
+on the same per-Congress drift.
 
-n0 is not one number across eras. The more a Congress votes on party lines,
-the less each vote says about where a member sits within their party, so
-log n0 is fitted as a line in the thin Congress's party-line share (the
-share of roll calls on which the two parties' majorities voted opposite
-ways), and each chamber's n0 is read at the sitting Congress's share,
-clamped to the range the thin pairs cover (their middle 90%) rather than
-extrapolated. A position
-published with no count is the thinnest record there is; the pairs give it
-no measurable weight in recent Congresses (UNCOUNTED_FROM onward), so the
-score reads it as 0 votes. Voteview's 0, 0 placeholders are no position and
-are left out. Every estimate comes with a bootstrap interval over members.
+Two things are left out: Voteview's 0, 0 placeholders (no position), and
+members from outside the 50 states (the House's delegates, whose records
+are thin because they vote only in the Committee of the Whole, not because
+they served part of a Congress); the 50 states are read from the
+pipeline's own state lean table.
+
+A party-line term was tested and is reported, not used: with one drift for
+every Congress, n0 appeared to rise with the share of roll calls on which
+the parties' majorities split, but with drift measured per Congress the
+dependence vanishes (research note section 14). So n0 is one number, and
+nothing in it follows the sitting Congress: a rerun only adds new pairs.
 
 Run from the repo (network required; the vote files are large, so pass a
 cache directory to keep them):
@@ -53,12 +60,12 @@ from app.contact import BOT_USER_AGENT  # noqa: E402
 
 MEMBERS_URL = "https://voteview.com/static/data/out/members/{chamber}{congress}_members.csv"
 VOTES_URL = "https://voteview.com/static/data/out/votes/{chamber}{congress}_votes.csv"
-CONGRESSES = range(101, 120)  # pairs (c, c + 1); the sitting Congress's records are the newest side
+FIRST_CONGRESS = 101  # the first with Nokken-Poole positions and counts throughout
 RELIABLE_VOTES = 200  # a full record; the pairs measure the weight below it
-CENTER = 0.6  # log n0 = a + b * (party-line share - CENTER): centers the fit, changes nothing else
-A_GRID = np.arange(2.0, 6.0, 0.02)
-B_GRID = np.arange(-6.0, 12.0, 0.1)
-UNCOUNTED_FROM = 110  # the recent Congresses the no-count weight is reported on
+N0_GRID = np.arange(1.0, 300.0, 1.0)
+CENTER = 0.6  # the party-line test's log n0 = a + b * (share - CENTER)
+A_GRID = np.arange(2.0, 6.0, 0.05)
+B_GRID = np.arange(-6.0, 10.0, 0.25)
 BOOTSTRAP = 200
 YEA, NAY = (1, 2, 3), (4, 5, 6)
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "position_confidence.json"
@@ -121,12 +128,20 @@ def is_placeholder(row: dict) -> bool:
     return _float(row.get("nokken_poole_dim1")) == 0 and _float(row.get("nokken_poole_dim2")) == 0
 
 
+def _states() -> set[str]:
+    """The 50 states, from the pipeline's own state lean table."""
+    from app.pipeline.analyze.score_calculator import _state_pvi
+
+    return set(_state_pvi())
+
+
 def deviations(rows: list[dict]) -> dict[str, tuple[float, float]]:
     """icpsr -> (scaled votes, 0 when none reported; position from the
     party's center signed toward its flank) for each major-party member
     with a position, one row each (a member listed twice, after a party
     switch, is left out). The center is the median of the party's full
     records."""
+    states = _states()
     seen: dict[str, list[dict]] = {}
     for r in rows:
         seen.setdefault(_id(r["icpsr"]), []).append(r)
@@ -137,6 +152,8 @@ def deviations(rows: list[dict]) -> dict[str, tuple[float, float]]:
         x = _float(r.get("nokken_poole_dim1"))
         if len(rs) != 1 or party not in (100.0, 200.0) or x is None or is_placeholder(r):
             continue
+        if (r.get("state_abbrev") or "").strip().upper() not in states:
+            continue
         members.append((icpsr, party, x, _float(r.get("nominate_number_of_votes")) or 0.0))
     center = {
         p: statistics.median([x for _, q, x, n in members if q == p and n >= RELIABLE_VOTES] or [0.0])
@@ -145,17 +162,27 @@ def deviations(rows: list[dict]) -> dict[str, tuple[float, float]]:
     return {i: (n, (x - center[p]) * (-1.0 if p == 100.0 else 1.0)) for i, p, x, n in members}
 
 
-def pairs(cache: pathlib.Path | None = None) -> list[tuple]:
+def congresses() -> range:
+    """FIRST_CONGRESS through the sitting one (settings.CURRENT_CONGRESS,
+    which follows the clock), so a rerun in any Congress includes it."""
+    from app.config import settings
+
+    return range(FIRST_CONGRESS, settings.CURRENT_CONGRESS + 1)
+
+
+def pairs(cache: pathlib.Path | None = None, span: range | None = None) -> tuple[list[tuple], dict]:
     """(chamber, icpsr, n, thin-or-earlier deviation, full deviation, kind,
     congress, party-line share) with kind "full" (both sides full records:
     n and the Congress are the earlier side's), "thin" (one side counted
     under RELIABLE_VOTES: n and the Congress are that side's) or
-    "uncounted" (one side with no count)."""
-    out = []
+    "uncounted" (one side with no count); and each chamber's party-line
+    share by Congress."""
+    span = span or congresses()
+    out, shares = [], {}
     for chamber in ("S", "H"):
-        share = {c: party_line_share(chamber, c, cache) for c in CONGRESSES}
-        prev = deviations(member_rows(chamber, CONGRESSES.start, cache))
-        for congress in CONGRESSES[1:]:
+        share = shares[chamber] = {c: party_line_share(chamber, c, cache) for c in span}
+        prev = deviations(member_rows(chamber, span.start, cache))
+        for congress in span[1:]:
             cur = deviations(member_rows(chamber, congress, cache))
             for icpsr in prev.keys() & cur.keys():
                 (na, xa), (nb, xb) = prev[icpsr], cur[icpsr]
@@ -168,38 +195,64 @@ def pairs(cache: pathlib.Path | None = None) -> list[tuple]:
                         n, thin, full, c = nb, xb, xa, congress
                     out.append((chamber, icpsr, n, thin, full, "thin" if n > 0 else "uncounted", c, share[c]))
             prev = cur
-    return out
+    return out, shares
 
 
-def fit(data: list[tuple]) -> dict:
-    """Least squares of full = drift * n / (n + n0) * thin over counted
-    pairs, with log n0 = a + b * (party-line share - CENTER) (a and b on
-    their grids, drift closed-form for each); then, on that drift, the
-    weight of positions with no count in Congresses UNCOUNTED_FROM on."""
-    counted = [(n, x, y, u) for _, _, n, x, y, kind, _, u in data if kind != "uncounted"]
-    n, x, y, u = (np.array(v) for v in zip(*counted))
-    best = None
-    for b in B_GRID:
-        for a in A_GRID:
-            z = n / (n + np.exp(a + b * (u - CENTER))) * x
-            drift = float((z * y).sum() / (z * z).sum())
-            loss = float(((y - drift * z) ** 2).sum())
-            if best is None or loss < best[0]:
-                best = (loss, float(a), float(b), drift)
-    _, a, b, drift = best
-    unc = [(x, y) for _, _, _, x, y, kind, c, _ in data if kind == "uncounted" and c >= UNCOUNTED_FROM]
-    uncounted = (sum(x * y for x, y in unc) / sum(x * x for x, _ in unc) / drift) if unc else 0.0
-    return {"a": a, "b": b, "drift": drift, "uncounted_weight": uncounted}
+def _loss(rows: list[tuple], n0) -> float:
+    """Squared error of full = drift * n / (n + n0) * thin, with the drift of
+    each chamber and Congress closed-form over its pairs. n0 is a number, or
+    one per row."""
+    n = np.array([r[2] for r in rows])
+    z = n / (n + n0) * np.array([r[3] for r in rows])
+    y = np.array([r[4] for r in rows])
+    groups: dict[tuple, list[int]] = {}
+    for i, r in enumerate(rows):
+        groups.setdefault((r[0], r[6]), []).append(i)
+    total = 0.0
+    for idx in groups.values():
+        zz, yy = z[idx], y[idx]
+        drift = (zz * yy).sum() / (zz * zz).sum()
+        total += float(((yy - drift * zz) ** 2).sum())
+    return total
 
 
-def half_weight(model: dict, share: float, lo: float, hi: float) -> float:
-    """n0 at a party-line share, clamped to [lo, hi], the shares the pairs cover."""
-    return float(np.exp(model["a"] + model["b"] * (min(max(share, lo), hi) - CENTER)))
+def _counted(data: list[tuple]) -> list[tuple]:
+    return [r for r in data if r[5] != "uncounted"]
 
 
-def bootstrap(data: list[tuple], shares: dict[str, float], lo: float, hi: float, seed: int = 0) -> dict:
-    """5th and 95th percentiles, resampling members: the model's slope, the
-    drift, the recent no-count weight and each chamber's n0."""
+def fit_n0(data: list[tuple]) -> float:
+    """The least-squares n0 on N0_GRID, drift per chamber and Congress."""
+    rows = _counted(data)
+    return float(min(N0_GRID, key=lambda g: _loss(rows, g)))
+
+
+def party_line_test(data: list[tuple]) -> dict:
+    """The rejected alternative: log n0 = a + b * (party-line share - CENTER),
+    with the same per-Congress drift. Its b, and both fits' squared error."""
+    rows = _counted(data)
+    u = np.array([r[7] for r in rows])
+    best = min(((_loss(rows, np.exp(a + b * (u - CENTER))), a, b) for b in B_GRID for a in A_GRID))
+    return {"b": round(float(best[2]), 2), "loss_with": round(best[0], 4),
+            "loss_without": round(_loss(rows, fit_n0(data)), 4)}
+
+
+def uncounted_weight(data: list[tuple]) -> float:
+    """Slope of full on thin for positions published with no count, over
+    the drift of their chamber and Congress (from the full pairs)."""
+    full = [r for r in data if r[5] == "full"]
+    drift = {}
+    for key in {(r[0], r[6]) for r in full}:
+        xs = np.array([(r[3], r[4]) for r in full if (r[0], r[6]) == key])
+        drift[key] = (xs[:, 0] * xs[:, 1]).sum() / (xs[:, 0] ** 2).sum()
+    unc = [r for r in data if r[5] == "uncounted" and (r[0], r[6]) in drift]
+    num = sum(r[3] * r[4] for r in unc)
+    den = sum(drift[(r[0], r[6])] * r[3] ** 2 for r in unc)
+    return float(num / den) if den else 0.0
+
+
+def bootstrap(data: list[tuple], seed: int = 0) -> dict[str, list[float]]:
+    """5th and 95th percentiles of n0 and the no-count weight, resampling
+    members."""
     rng = np.random.default_rng(seed)
     by_member: dict[str, list[tuple]] = {}
     for row in data:
@@ -207,41 +260,38 @@ def bootstrap(data: list[tuple], shares: dict[str, float], lo: float, hi: float,
     ids = list(by_member)
     draws = []
     for _ in range(BOOTSTRAP):
-        m = fit([row for i in rng.choice(ids, len(ids)) for row in by_member[i]])
-        draws.append({"b": m["b"], "drift": m["drift"], "uncounted_weight": m["uncounted_weight"],
-                      **{c: half_weight(m, u, lo, hi) for c, u in shares.items()}})
+        sample = [row for i in rng.choice(ids, len(ids)) for row in by_member[i]]
+        draws.append({"half_weight_votes": fit_n0(sample), "uncounted_weight": uncounted_weight(sample)})
     return {k: [round(float(np.percentile([d[k] for d in draws], q)), 3) for q in (5, 95)] for k in draws[0]}
 
 
 def calibrate(cache: pathlib.Path | None = None) -> dict:
-    data = pairs(cache)
-    model = fit(data)
-    # The shares the thin pairs cover: their middle 90%, so a few pairs
-    # at an extreme Congress don't license reading the line out there.
-    covered = [u for *_, kind, _, u in data if kind == "thin"]
-    lo, hi = (float(np.percentile(covered, q)) for q in (5, 95))
-    sitting = CONGRESSES.stop - 1
-    shares = {name: party_line_share(letter, sitting, cache) for name, letter in (("senate", "S"), ("house", "H"))}
-    interval = bootstrap(data, shares, lo, hi)
+    span = congresses()
+    data, shares = pairs(cache, span)
+    by_chamber = {name: [r for r in data if r[0] == letter] for name, letter in (("senate", "S"), ("house", "H"))}
     return {
-        "congress": sitting,
-        "chambers": {
-            name: {
-                "party_line_share": round(u, 3),
-                "read_at": round(min(max(u, lo), hi), 3),
-                "half_weight_votes": round(half_weight(model, u, lo, hi), 1),
-                "interval_90": interval[name],
-            }
-            for name, u in shares.items()
+        "calibrated_through": span.stop - 1,
+        "half_weight_votes": fit_n0(data),
+        "interval_90": bootstrap(data),
+        "by_chamber": {
+            name: {"half_weight_votes": fit_n0(rows), "thin_pairs": sum(1 for r in rows if r[5] == "thin")}
+            for name, rows in by_chamber.items()
         },
-        "model": {
-            "log_n0": f"{model['a']:.2f} + {model['b']:.2f} * (party-line share - {CENTER})",
-            "a": round(model["a"], 3), "b": round(model["b"], 3), "b_interval_90": interval["b"],
-            "drift": round(model["drift"], 4), "drift_interval_90": interval["drift"],
-            "shares_covered": [round(lo, 3), round(hi, 3)],
+        "one_n0_by_era": {
+            f"{e.start}-{e.stop - 1}": fit_n0([r for r in data if r[6] in e])
+            for e in (range(FIRST_CONGRESS, 110), range(110, span.stop))
         },
-        "uncounted_weight_recent": round(model["uncounted_weight"], 3),
-        "uncounted_weight_interval_90": interval["uncounted_weight"],
+        "party_line_test": party_line_test(data),
+        "party_line_share_by_congress": {
+            name: {str(c): round(u, 3) for c, u in shares[letter].items()}
+            for name, letter in (("senate", "S"), ("house", "H"))
+        },
+        # The drift absorbs a full record's own attenuation, so the pairs
+        # identify a thin record's weight relative to a full one: the score
+        # divides by the weight of this typical full record (the median count
+        # of the full pairs' earlier side) and caps at 1.
+        "full_record_votes": int(np.median([r[2] for r in data if r[5] == "full"])),
+        "uncounted_weight": round(uncounted_weight(data), 3),
         "pairs": {kind: sum(1 for row in data if row[5] == kind) for kind in ("full", "thin", "uncounted")},
     }
 
@@ -253,26 +303,27 @@ def main() -> None:
     args = ap.parse_args()
     data = {
         "_source": (
-            f"Voteview (voteview.com, Lewis et al.) member exports, Senate and House, Congresses "
-            f"{CONGRESSES.start}-{CONGRESSES.stop - 1}, retrieved {datetime.date.today().isoformat()}; "
+            f"Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses "
+            f"{congresses().start}-{congresses().stop - 1}, retrieved {datetime.date.today().isoformat()}; "
             "regenerate with backend/scripts/calibrate_position_confidence.py"
         ),
         "_method": (
-            "Members with positions in adjacent Congresses, each read from the party's center toward "
-            "its flank: least squares of full = drift * n / (n + n0) * thin over pairs with a thin "
-            f"side (under {RELIABLE_VOTES} scaled votes) and pairs of full records, both chambers, with "
-            "log n0 linear in the thin Congress's party-line share; each chamber's half_weight_votes is "
-            "n0 at the sitting Congress's share, clamped to the middle 90% of the thin pairs' shares; "
-            "uncounted_weight_recent is the weight of positions with no count since the "
-            f"{UNCOUNTED_FROM}th Congress, which the score reads as 0 votes; intervals are 5th-95th "
-            "percentiles over members resampled"
+            "Members of the 50 states with positions in adjacent Congresses, each read from the "
+            "party's center toward its flank: least squares of full = drift[chamber, Congress] * "
+            f"n / (n + n0) * thin over pairs with a thin side (under {RELIABLE_VOTES} scaled votes) "
+            "and pairs of full records, one n0 for both chambers and every Congress; the score weighs "
+            "a position by min(1, w(n) / w(full_record_votes)), w(n) = n / (n + n0), since the drift "
+            "absorbs a full record's own attenuation; party_line_test is the rejected alternative "
+            "with log n0 linear in the Congress's party-line share; uncounted_weight is the same slope "
+            "for positions published with no count, on the full pairs' drift; interval_90 is the "
+            "5th-95th percentile over members resampled"
         ),
         **calibrate(args.cache),
     }
     args.out.write_text(json.dumps(data, indent=1) + "\n")
-    print(f"wrote {args.out}: " + "; ".join(
-        f"{c} n0 {v['half_weight_votes']} {v['interval_90']} at share {v['party_line_share']}"
-        for c, v in data["chambers"].items()) + f"; model {data['model']['log_n0']}")
+    print(f"wrote {args.out}: half_weight_votes {data['half_weight_votes']} "
+          f"{data['interval_90']['half_weight_votes']}, by chamber {data['by_chamber']}, "
+          f"party-line test {data['party_line_test']}")
 
 
 if __name__ == "__main__":

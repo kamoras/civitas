@@ -258,10 +258,10 @@ export default function ScoresChapter() {
             tested against House and Senate elections, this shape predicted how incumbents did, and
             one that put the typical position at 100 did not. A position estimated from only a few
             roll calls is mostly noise, so it counts only as much as its votes support, measured on
-            members whose short record in one Congress sits next to a full one in the next, and read
-            at how party-line the current Congress votes: half at several dozen votes, about nine
-            tenths over a whole Congress. A member with no position yet sits at 50. Before a new
-            Congress&apos;s positions are published, the score is all break-rate.
+            members whose short record in one Congress sits next to a full one in the next: half as
+            much as a full record at about 40 votes, in full over a whole Congress. A member with no
+            position yet sits at 50. Early in a new Congress, until its positions are published and
+            pass our checks, this part is left out and the score is the voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

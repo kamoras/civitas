@@ -184,7 +184,7 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
     from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points
 
     data, failures = build_chamber_ideal_points(
-        member_rows, chamber, _state_pvi(), _district_pvi(), reliability=_position_reliability(chamber),
+        member_rows, chamber, _state_pvi(), _district_pvi(), reliability=_position_reliability(),
     )
     saturation = data.get("extremity_p90")
     if failures or not saturation:
@@ -198,7 +198,12 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
         bio = (row.get("bioguide_id") or "").strip()
         party = PARTY_CODES.get(int(float(row.get("party_code") or 0)))
         fit = data["fit"].get(party or "")
-        if bio not in data["members"] or not fit:
+        if not fit or not bio:
+            continue
+        if bio not in data["members"]:
+            # As the score does (v6.27): a member with no position sits at 50.
+            if data["reliability"]:
+                out[bio] = 50.0
             continue
         district = None
         if chamber == "house":

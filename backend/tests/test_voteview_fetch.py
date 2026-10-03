@@ -49,7 +49,7 @@ def _patch_path(monkeypatch, tmp_path):
     return path
 
 
-REL = {"half_weight_votes": 64.0}
+REL = {"half_weight_votes": 43.0}
 
 
 class TestBuildAndGates:
@@ -106,6 +106,22 @@ class TestBuildAndGates:
         assert data["votes"][rows[2]["bioguide_id"]] == 12
         assert data["reliability"] == REL and data["congress"] == 119
         assert data["measure"] == "Nokken-Poole"
+
+    def test_the_scale_is_read_on_weighted_extremities(self):
+        """A thin record's noise can't widen the saturation scale: it enters
+        at its reliability weight, as the score reads it."""
+        state_pvi = score_calculator._state_pvi()
+        rows = _synthetic_rows(state_pvi)
+        for r in rows:
+            r["nokken_poole_dim1"], r["nokken_poole_dim2"] = r["nominate_dim1"], "0.1"
+        base, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+        for i, r in enumerate(rows[:40]):  # 40 members on 2 votes each: noise of +/-0.4, either way
+            noisy = float(r["nominate_dim1"]) + (0.4 if i % 2 else -0.4)
+            r.update(nokken_poole_dim1=f"{noisy:.4f}", nominate_number_of_votes="2")
+        thin, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+        unweighted, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability={})
+        assert unweighted["extremity_p90"] > 3 * base["extremity_p90"]
+        assert thin["extremity_p90"] < 1.5 * base["extremity_p90"]
 
     def test_float_coded_exports_parse(self):
         """The 115th-117th exports write party and district codes as floats
@@ -206,7 +222,7 @@ class TestRefresh:
         # reliability, or every section would read as current forever and
         # no position would be weighted.
         assert section["congress"] == 119
-        assert section["reliability"] == score_calculator._position_reliability("senate")
+        assert section["reliability"] == score_calculator._position_reliability()
         assert section["reliability"]["half_weight_votes"] > 0
         assert section["votes"]
 

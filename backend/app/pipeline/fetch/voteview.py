@@ -62,19 +62,20 @@ Office," APSR 96:1 — district-relative ideological extremity):
     calls is mostly noise (research note section 14). Each member's count
     of scaled roll calls is stored under "votes", and the section stores the
     measured reliability (score_calculator._position_reliability, from
-    scripts/calibrate_position_confidence.py): a position from n votes
-    counts n / (n + half_weight_votes), and one Voteview published with no
-    count (a member it has barely scaled) reads as resting on none. A row
-    whose Nokken-Poole coordinates are both exactly 0 is Voteview's
-    placeholder for a member it could not scale, not an estimate: it is
-    left out, and the score reads that member as having no position (50).
-    The fits and the scale are taken over every member: a thin record's
-    position is noisy but not biased, so it adds noise to the fit, not
-    slant. Once a new Congress's export passes the gates, each member is
-    read on that Congress's own votes, weighted toward 50 while they are
-    few. The weight applies to the DW-NOMINATE fallback too: whatever a
-    career estimate rests on, this Congress's count is the evidence from
-    the current term.
+    scripts/calibrate_position_confidence.py; position_confidence turns it
+    into a weight: n / (n + n0) relative to a typical full record, capped
+    at 1, or the measured weight of a position Voteview published with no
+    count). A row whose Nokken-Poole coordinates are both exactly 0 is
+    Voteview's placeholder for a member it could not scale, not an
+    estimate: it is left out, and the score reads that member as having no
+    position (50). The fits are taken over every member, since a thin
+    record's position is noisy but not biased; extremity_p90 is the 90th
+    percentile of the weighted extremities the score reads, so thin records'
+    noise doesn't widen the scale. Once a new Congress's export passes the
+    gates, each member is read on that Congress's own votes, weighted toward
+    50 while they are few. The weight applies to the DW-NOMINATE fallback
+    too: whatever a career estimate rests on, this Congress's count is the
+    evidence from the current term.
 
 Independents (party_code 328) are included in the per-member positions
 (score_calculator scores them against the fit of the party they caucus
@@ -142,8 +143,9 @@ METHOD_DESC = (
     "for House). extremity = residual signed toward the party flank "
     "(-residual for D, +residual for R); extremity_p90 = 90th percentile "
     "of |extremity| across the chamber's D+R members. votes = each member's "
-    "count of scaled roll calls; the score weights a position by n / (n + "
-    "half_weight_votes) from reliability; no count reads as 0. Construct: "
+    "count of scaled roll calls; the score weights a position's extremity by "
+    "position_confidence(votes, reliability), and p90 is over the weighted "
+    "extremities. Construct: "
     "Canes-Wrone, Brady & Cogan 2002 district-relative extremity; "
     "per-party fits avoid Bafumi & Herron 2010 leapfrog bimodality."
 )
@@ -275,13 +277,17 @@ def build_chamber_ideal_points(
     """One chamber's {members, votes, fit, extremity_p90, ...} section from
     parsed Voteview rows, plus build-stage failure strings (empty = clean).
     `reliability` (score_calculator._position_reliability) is stored for the
-    score's weight; it does not filter the fits."""
+    score's weight. It doesn't filter the fits (a thin position is noisy, not
+    biased), but the saturation scale is the 90th percentile of the weighted
+    extremities the score reads."""
+    from app.pipeline.analyze.score_calculator import position_confidence
+
     column, measure = _position_column(rows)
     members: dict[str, float] = {}
     votes: dict[str, int] = {}
     seats: set[str] = set()
     seated = 0
-    by_party: dict[str, list[tuple[float, float]]] = {"D": [], "R": []}
+    by_party: dict[str, list[tuple[float, float, float]]] = {"D": [], "R": []}
     unresolved_seats = 0
 
     for row in rows:
@@ -311,7 +317,7 @@ def build_chamber_ideal_points(
         # at-large state coded 0 in one row and 1 in another, are one seat.
         seats.add(f"{st}-{_seat_district(row, district_pvi)}" if chamber == "house" else st)
         if party:
-            by_party[party].append((float(pvi), dim1))
+            by_party[party].append((float(pvi), dim1, position_confidence(n_votes, reliability)))
 
     fit: dict[str, dict[str, float]] = {}
     extremities: list[float] = []
@@ -320,13 +326,16 @@ def build_chamber_ideal_points(
         if len(pairs) < 20:
             failures.append(f"{chamber}/{party}: only {len(pairs)} members with seat+dim1 — parse drift?")
             continue
-        xs = [p for p, _ in pairs]
-        ys = [d for _, d in pairs]
+        xs = [p for p, _, _ in pairs]
+        ys = [d for _, d, _ in pairs]
         a, b, r2 = _ols(xs, ys)
         fit[party] = {"a": round(a, 5), "b": round(b, 6), "n": len(pairs), "r2": round(r2, 3)}
-        for pvi, dim1 in pairs:
+        for pvi, dim1, weight in pairs:
             residual = dim1 - (a + b * pvi)
-            extremities.append(abs(-residual if party == "D" else residual))
+            # The scale is read on the same weighted extremities the score
+            # reads: a thin record's noise would widen a raw one (most of
+            # all early in a Congress, when every record is thin).
+            extremities.append(abs(weight * (-residual if party == "D" else residual)))
 
     extremity_p90 = round(statistics.quantiles(extremities, n=10)[8], 4) if len(extremities) >= 40 else None
 
@@ -403,7 +412,7 @@ async def refresh_member_ideal_points(
             return False
         data, failures = build_chamber_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),
-            reliability=_position_reliability(chamber), congress=congress,
+            reliability=_position_reliability(), congress=congress,
         )
         failures += ingestion_gates(chamber, data)
         if failures:
