@@ -206,12 +206,44 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
     )
 
 
+_PREFLIGHT_HEADERS = {**_CORS_HEADERS, "Access-Control-Max-Age": "3600"}
+
+
 @router.options("/{path:path}", include_in_schema=False)
 def preflight(path: str) -> Response:
-    return Response(
-        status_code=204,
-        headers={**_CORS_HEADERS, "Access-Control-Max-Age": "3600"},
-    )
+    return Response(status_code=204, headers=_PREFLIGHT_HEADERS)
+
+
+class PublicApiPreflight:
+    """Answers CORS preflights for this API before the site's CORSMiddleware
+    sees them (main.py adds this outside it).
+
+    The site's CORSMiddleware allows the site's own origins only, and it
+    answers every preflight itself, before routing: one from any other
+    origin got 400 "Disallowed CORS origin" and the route above never ran.
+    A simple GET from a page still worked (the route adds the open headers
+    to its own answer), so this went unnoticed; a POST of JSON (every MCP
+    call from a browser-based client) or a request with an Mcp-* header is
+    preflighted, and was refused for every origin but the site's — while
+    the spec said CORS is open to every origin. Here, under PREFIX, it is.
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if (
+            scope["type"] == "http" and scope["method"] == "OPTIONS"
+            and scope["path"].startswith(PREFIX + "/")
+            and any(k == b"access-control-request-method" for k, _ in scope["headers"])
+        ):
+            await send({
+                "type": "http.response.start", "status": 204,
+                "headers": [(k.lower().encode(), v.encode()) for k, v in _PREFLIGHT_HEADERS.items()],
+            })
+            await send({"type": "http.response.body", "body": b""})
+            return
+        await self.app(scope, receive, send)
 
 
 # ---------------------------------------------------------------------------

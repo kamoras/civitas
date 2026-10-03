@@ -205,7 +205,11 @@ export function Item({ label, children }: { label?: string; children: ReactNode 
       <span aria-hidden="true" className="text-ink-min">
         –
       </span>
-      <span>
+      {/* min-w-0: a flex item's minimum width is its content's, so a wide
+          child (the MCP config <pre> on /developers, overflow-x-auto) made
+          the item, and the page, wider than a phone instead of scrolling
+          inside its own box. */}
+      <span className="min-w-0">
         {label && <strong className="font-semibold text-ink-hi">{label}. </strong>}
         {children}
       </span>

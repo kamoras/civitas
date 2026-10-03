@@ -16,6 +16,7 @@ from sqlalchemy.engine import make_url
 
 from app import net_stats
 from app.api.cache_headers import ETagCacheMiddleware
+from app.api.public import PublicApiPreflight
 from app.api.public_mcp import PATH as MCP_PATH, McpEndpoint
 from app.api.router import api_router
 from app.api.throttle import RAM_DIR, run_maintenance
@@ -454,6 +455,10 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type"],
 )
+# Outside CORSMiddleware (added after it, so it runs first): the public API
+# is open to every origin, and CORSMiddleware would refuse its preflights
+# from any origin but the site's own (api/public.py PublicApiPreflight).
+app.add_middleware(PublicApiPreflight)
 
 app.include_router(api_router)
 

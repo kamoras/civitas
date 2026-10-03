@@ -103,3 +103,29 @@ async def test_tool_calls_and_connections_are_counted_on_the_mcp_channel(db_sess
         ("get_senator", "mcp", 200): 1,
         ("get_senator", "mcp", 404): 1,
     }
+
+
+async def test_a_get_is_refused_at_once_rather_than_holding_a_stream_open(db_session):
+    """The SDK answers a GET with the server-to-client SSE stream even in
+    stateless mode, and this server never writes to it, so each GET held a
+    connection open until nginx's read timeout. Refused with 405 instead."""
+    import asyncio
+
+    app = FastAPI()
+    app.include_router(api_router)
+    app.dependency_overrides[get_db] = lambda: db_session
+    endpoint = McpEndpoint()
+    app.add_route(PATH, endpoint, methods=["GET", "POST", "DELETE"])
+    async with endpoint.run(), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://civitas",
+    ) as client:
+        for accept in ("text/event-stream", "*/*"):
+            resp = await asyncio.wait_for(client.get(PATH, headers={"Accept": accept}), timeout=5)
+            assert resp.status_code == 405
+            assert resp.headers["allow"] == "POST"
+        # POST still answers.
+        resp = await client.post(PATH, headers=HEADERS, json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}},
+        })
+        assert resp.status_code == 200
