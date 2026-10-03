@@ -92,6 +92,7 @@ from app.pipeline.transform.normalize_votes import (
     find_senate_roll_call,
     majority_leader_spans,
     normalize_recent_votes,
+    resolve_senate_lis_ids,
     normalize_votes,
     stamp_roll_call_outcome,
     vote_identity,
@@ -1681,6 +1682,11 @@ async def run_senate_pipeline(
         success_count = 0
         fail_count = 0
 
+        # A seat passed to someone of the same surname: the roll calls'
+        # member id says which of them cast each vote.
+        lis_ids = resolve_senate_lis_ids(senators, [
+            m for rc in [*roll_call_data_map.values(), *recent_rc_map.values()] for m in rc.get("members") or []
+        ])
         senator_prepared: list[dict] = []
         for prep_idx, senator in enumerate(senators):
             try:
@@ -1723,6 +1729,7 @@ async def run_senate_pipeline(
                             roll_call_data,
                             last_name,
                             senator["state"],
+                            lis_id=lis_ids.get(senator["id"]),
                         )
                         if vote:
                             senator_votes[bill["billId"]] = vote
@@ -1737,6 +1744,7 @@ async def run_senate_pipeline(
                             roll_call_data,
                             last_name,
                             senator["state"],
+                            lis_id=lis_ids.get(senator["id"]),
                         )
                         if vote:
                             senator_votes[rc_id] = vote
@@ -1773,6 +1781,7 @@ async def run_senate_pipeline(
                     senator.get("party", "I"),
                     effective_party=voting_record.get("effectiveParty"),
                     leader_spans=leader_spans,
+                    lis_id=lis_ids.get(senator["id"]),
                 )
                 voting_record["recentVotes"] = recent_senator_votes
                 # normalize_votes saw the recent roll calls too (for the

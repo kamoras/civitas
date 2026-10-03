@@ -74,3 +74,33 @@ class TestRcKeyLookup:
         ]
         votes = normalize_recent_votes(classified, rc_map, "Doe", "NY", "D")
         assert [v["vote"] for v in votes] == ["Yea", "Nay"]
+
+
+class TestSuccessorOfTheSameSurname:
+    """Darline Graham was appointed to Lindsey Graham's seat; every vote he
+    cast in the Congress was credited to her (live, 2026-10-03)."""
+
+    HIS = {"members": [{"firstName": "Lindsey", "lastName": "Graham", "state": "SC", "voteCast": "Yea", "lisId": "S293"}]}
+    HERS = {"members": [{"firstName": "Darline", "lastName": "Graham", "state": "SC", "voteCast": "Nay", "lisId": "S441"}]}
+    MEMBER = {"id": "darline-graham", "name": "Darline Graham", "lastNameForVoteMatch": "Graham", "state": "SC"}
+
+    def test_the_lis_id_decides_whose_vote_it_is(self):
+        from app.pipeline.transform.normalize_votes import extract_senator_vote, resolve_senate_lis_ids
+        lis = resolve_senate_lis_ids([self.MEMBER], self.HIS["members"] + self.HERS["members"])
+        assert lis == {"darline-graham": "S441"}
+        assert extract_senator_vote(self.HIS, "Graham", "SC", lis_id=lis["darline-graham"]) is None
+        assert extract_senator_vote(self.HERS, "Graham", "SC", lis_id=lis["darline-graham"]) == "Nay"
+
+    def test_one_person_per_name_needs_no_first_name_agreement(self):
+        # senate.gov writes "John" Reed and "Bernie" Sanders; the site does not.
+        from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
+        seen = [{"firstName": "John", "lastName": "Reed", "state": "RI", "lisId": "S259"}]
+        assert resolve_senate_lis_ids([{"id": "jack-reed", "name": "Jack Reed",
+                                         "lastNameForVoteMatch": "Reed", "state": "RI"}], seen) == {}
+
+    def test_no_first_name_match_credits_nothing(self):
+        from app.pipeline.transform.normalize_votes import extract_senator_vote, resolve_senate_lis_ids
+        member = {**self.MEMBER, "name": "Pat Graham"}
+        lis = resolve_senate_lis_ids([member], self.HIS["members"] + self.HERS["members"])
+        assert lis == {"darline-graham": ""}
+        assert extract_senator_vote(self.HERS, "Graham", "SC", lis_id="") is None

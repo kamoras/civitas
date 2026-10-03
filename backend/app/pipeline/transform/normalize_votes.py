@@ -7,6 +7,8 @@ Includes party alignment analysis.
 
 import logging
 import re
+from collections import defaultdict
+from difflib import SequenceMatcher
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -546,6 +548,7 @@ def normalize_recent_votes(
     senator_party: str,
     effective_party: str | None = None,
     leader_spans: list[tuple[str | None, str | None]] | None = None,
+    lis_id: str | None = None,
 ) -> list[dict]:
     """Normalize recent roll call votes for a senator.
 
@@ -574,7 +577,7 @@ def normalize_recent_votes(
 
         # Find this senator's vote in the roll call
         senator_vote = extract_senator_vote(
-            roll_call, senator_last_name, senator_state
+            roll_call, senator_last_name, senator_state, lis_id=lis_id,
         )
         if not senator_vote:
             continue
@@ -681,10 +684,56 @@ def compute_party_split(roll_call_data: dict) -> str | None:
     return result["label"] if result else None
 
 
+def resolve_senate_lis_ids(members: list[dict], seen: list[dict]) -> dict[str, str]:
+    """{member id: LIS id} for each member whose last name and state the
+    roll calls give to more than one person, told apart by first name.
+
+    Senate roll calls name a senator by last name and state, which is one
+    person until a seat passes to someone of the same surname. Darline
+    Graham was appointed to Lindsey Graham's seat after his death, and
+    every vote he cast in the Congress was credited to her (live,
+    2026-10-03: her first roll call on the site was 2025-12-01, cast by
+    LIS id S293, his). The roll call's own member id separates them.
+
+    `members`: dicts with "id", "name", "lastNameForVoteMatch", "state".
+    `seen`: roll-call members, dicts with "lisId", "firstName", "lastName",
+    "state". A member whose key matches one LIS id is left out (matching
+    by name is exact there and needs no first-name agreement, which a
+    nickname would break). A member with several and no single first-name
+    match maps to "": no vote is credited rather than someone else's.
+    """
+    people: dict[tuple[str, str], dict[str, str]] = defaultdict(dict)
+    for m in seen:
+        lis = (m.get("lisId") or "").strip()
+        if lis:
+            key = (_normalize_for_match(m.get("lastName") or ""), (m.get("state") or "").upper())
+            people[key][lis] = m.get("firstName") or ""
+    out: dict[str, str] = {}
+    for member in members:
+        key = (_normalize_for_match(member.get("lastNameForVoteMatch") or ""), (member.get("state") or "").upper())
+        candidates = people.get(key) or {}
+        if len(candidates) < 2:
+            continue
+        first = (member.get("name") or "").split(" ")[0]
+        matched = [lis for lis, name in candidates.items() if _same_first_name(first, name)]
+        out[member["id"]] = matched[0] if len(matched) == 1 else ""
+    return out
+
+
+def _same_first_name(a: str, b: str) -> bool:
+    """One first name written two ways ("Tim" / "Timothy", an accent
+    dropped), by prefix or Ratcliff-Obershelp similarity."""
+    a, b = _normalize_for_match(a).strip("."), _normalize_for_match(b).strip(".")
+    if not a or not b:
+        return False
+    return a.startswith(b) or b.startswith(a) or SequenceMatcher(None, a, b).ratio() >= 0.8
+
+
 def extract_senator_vote(
     roll_call_data: dict | None,
     last_name: str | None = None,
     state: str | None = None,
+    lis_id: str | None = None,
 ) -> str | None:
     """Extract a senator's vote from roll call vote data.
 
@@ -696,11 +745,22 @@ def extract_senator_vote(
         roll_call_data: Parsed roll call vote data from senate.gov.
         last_name: Senator's last name for matching (may be multi-word).
         state: Senator's state code for matching.
+        lis_id: from resolve_senate_lis_ids, when the name and state are
+            shared with someone else: only that member id's vote is theirs
+            ("" matches nothing).
 
     Returns:
         Vote position ("Yea", "Nay", "Not Voting") or None.
     """
     if not roll_call_data or not roll_call_data.get("members"):
+        return None
+
+    if lis_id is not None:
+        if not lis_id:
+            return None
+        for member in roll_call_data["members"]:
+            if member.get("lisId") == lis_id:
+                return member.get("voteCast") or None
         return None
 
     if last_name and state:
