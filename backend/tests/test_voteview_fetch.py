@@ -49,6 +49,7 @@ def _patch_path(monkeypatch, tmp_path):
     return path
 
 
+# A synthetic calibration, not the shipped one (tests read the shipped file separately).
 REL = {"n0": 109.0, "reference_votes": 200.0, "half_weight_votes": 52.2, "uncounted_weight": 0.2}
 
 

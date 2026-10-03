@@ -592,7 +592,14 @@ congress" sidesteps that fragility entirely and is *stricter* than a literal
 6-year term (resets every 2 years, not 6) — it pushes harder on the "no
 resting on laurels" goal, not softer.
 
-**Funding is the one exception**: Funding Independence and Funding Diversity
+The flank-break rule (`party_line_record`, v6.27) is a narrower exception
+that never scores a past position: it reads the last Congress's positions
+only to tell which side of their party a defector sits on, for everyone
+until the new Congress's Voteview section passes its gates, and after that
+for a member whose new record is below the measured `prior_until_votes`
+(`app/data/position_confidence.json`) while their last record is full.
+
+**Funding is the main exception**: Funding Independence and Funding Diversity
 window to the member's **most recent completed election only**
 (`select_recent_elections` in `fetch/fec.py`, `n=1`: general election day
 has passed — a re-election campaign still in progress is the *next*

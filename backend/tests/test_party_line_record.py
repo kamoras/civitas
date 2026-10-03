@@ -190,6 +190,10 @@ def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_ses
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
     del section["votes"]["R4"]  # no count reported: read as thin
     assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    # Only a full last record was measured against a thin new one: a thin
+    # last record (here under reference_votes) leaves this Congress's.
+    section["reliability"]["reference_votes"] = 600
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
 
 def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, monkeypatch):
     """Darline Graham took Lindsey Graham's seat after his death; matched by

@@ -175,7 +175,7 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # so early in a new Congress the last positions classify its breaks
     # rather than every flank break counting (stale beats punitive).
     # Once the new Congress's section is in, its positions rest on a few roll
-    # calls at first, so a member's last-Congress position ("prior",
+    # calls at first, so a member's last-Congress full record ("prior",
     # voteview.previous_positions) decides their side until their new record
     # reaches the measured prior_until_votes (or, in a section calibrated
     # before it was measured, while it is the more reliable). Each section's
@@ -208,15 +208,20 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else {}
     until = reliability.get("prior_until_votes")
     counts = ideal.get("votes") or {}
-    for b, (x, w) in weighted(ideal.get("prior")).items():
+    prior = ideal.get("prior") if isinstance(ideal.get("prior"), dict) else {}
+    prior_counts = prior.get("votes") or {}
+    full = float(reliability.get("reference_votes") or 0)
+    for b, (x, w) in weighted(prior).items():
         if b not in dim1:
             dim1[b] = (x, w)
         elif until is not None:
             # Measured: below `until` roll calls a new record puts a member on
             # their side of the party less often than their last full record
-            # (calibrate_position_confidence.prior_test, drift included).
-            n = counts.get(b)
-            if n is None or n < float(until):
+            # (calibrate_position_confidence.prior_test, drift included). Only
+            # a full record was measured, so a thin last record doesn't
+            # replace this Congress's.
+            n, last = counts.get(b), prior_counts.get(b)
+            if (n is None or n < float(until)) and last is not None and float(last) >= full:
                 dim1[b] = (x, w)
         elif w > dim1[b][1]:
             dim1[b] = (x, w)

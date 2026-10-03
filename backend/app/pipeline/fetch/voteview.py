@@ -254,8 +254,8 @@ def _position_column(rows: list[dict]) -> tuple[str, str]:
 
 
 # Full records the saturation scale needs: below it (early in a Congress)
-# the chamber's last scale is carried. The same floor as the old pooled
-# quantile's (40).
+# the chamber's last scale is carried. The same floor as the old
+# all-member quantile's (40).
 SCALE_MIN_FULL = 40
 
 

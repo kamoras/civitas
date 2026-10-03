@@ -82,11 +82,11 @@ export default function ScoresChapter() {
             samples from producing extreme results
             <Cite id="efron1975" />, in a simpler form: the pull is set by a fixed count of
             observations rather than estimated from the data. Three parts differ. Constituent
-            Alignment&apos;s voting half pulls a thin record toward what a typical member of the
+            Alignment&apos;s voting part pulls a thin record toward what a typical member of the
             same party scores, because 50 sits below nearly every member on that scale. Legislative
             Effectiveness&apos;s bill half isn&apos;t pulled at all, because a member&apos;s bills
             are their whole record, not a sample of it. And Constituent Alignment&apos;s position
-            half is pulled toward 50 by a measured amount, how well a position from that many votes
+            part is pulled toward 50 by a measured amount, how well a position from that many votes
             predicted a full record&apos;s, rather than by a fixed count.
           </P>
         </Sub>
@@ -261,8 +261,8 @@ export default function ScoresChapter() {
             members whose short record in one Congress sits next to a full one in the Congress
             before or after: half at about 25 votes in the Senate and 85 in the House, in full from
             200. A member with no position yet sits at 50. Early in a new Congress, until its
-            positions are published and pass our checks, this part is left out and the score is the
-            voting part alone.
+            positions are published and pass our checks, or whenever a chamber&apos;s positions fail
+            those checks, this part is left out and the score is the voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

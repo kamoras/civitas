@@ -45,7 +45,8 @@ whose short records reflect the date, not partial service.
 A party-line term was tested and is reported, not used: with one drift for
 every Congress, n0 appeared to rise with the share of roll calls on which
 the parties' majorities split, but with drift measured per transition the
-dependence vanishes (research note section 14). So the weight is one curve
+dependence is weak and predicts held-out members worse than no term
+(research note section 14). So the weight is one curve
 per chamber at most, and nothing in it follows the sitting Congress: a
 rerun only adds pairs. Era and the pair's direction (a member who arrived
 or one who left) are tested the same way and reported, not used: neither

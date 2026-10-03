@@ -839,9 +839,9 @@ artifacts go away once drift is measured per transition.
     reaches 0.86² + 0.14² = 0.76). On a logistic fit in log votes that
     happens at 53 votes (90% interval 10 votes to past a full record; it
     comes before a full record in 87% of resamples), so the rule reads
-    the last Congress's position below 53 votes and the new one from
-    there. Only the Congress just before is kept, the case the pairs
-    measure. This first applies in the 120th Congress: a 119th section
+    the last Congress's full record below 53.4 votes and the new one from
+    there. Only the Congress just before is kept, and only a full last
+    record replaces a new one: those are the cases the pairs measure. This first applies in the 120th Congress: a 119th section
     written before v6.27 keeps no earlier positions.
   - On the 119th Congress's party-unity roll calls (majorities opposed,
     Voteview's votes) the weighting alone reclassifies none of 2,351
