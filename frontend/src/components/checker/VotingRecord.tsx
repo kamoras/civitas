@@ -64,13 +64,15 @@ function VoteRow({ vote }: { vote: KeyVote }) {
           // Not clamped: with no bill page to open, this is the only place
           // to read the title. A nomination's names the office, which two
           // lines cut off on a phone.
-          <span className="text-sm text-ink break-words">{title}</span>
+          <span className="block text-sm text-ink break-words">{title}</span>
         )}
         <p className="mt-0.5 text-xs text-ink-min">
           {[rc?.question, rc ? shortDate(rc.date) : vote.date].filter(Boolean).join(" · ")}
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      {/* Stacked below sm: side by side, AGAINST PARTY and the vote badge
+          left a title 121px at 320px, which split or clipped long words. */}
+      <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
         {vote.votedWithParty === false && (
           <span className="border border-signal-magenta/40 bg-signal-magenta/10 px-1.5 py-0.5 font-mono text-xs text-signal-magenta">
             AGAINST PARTY
