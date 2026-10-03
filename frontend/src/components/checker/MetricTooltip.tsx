@@ -96,12 +96,16 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
   }, [open]);
 
   return (
-    // flex-wrap + max-w-full: in a box narrower than the label and the
-    // button together (a third-width stat tile on a phone), the button
-    // drops under the label instead of running past the box's edge, where
-    // a `.panel`'s overflow:hidden cut it off and left it untappable.
+    // flex-wrap + max-w-full: in a box narrower than the label's longest
+    // word and the button together (a third-width stat tile on a phone),
+    // the button drops under the label instead of running past the box's
+    // edge, where a `.panel`'s overflow:hidden cut it off and left it
+    // untappable. The label sits in a `grow basis-0` item so that only its
+    // longest word decides whether the button wraps: as a bare text item it
+    // counts at its full one-line width, and the button fell onto a line of
+    // its own under every label long enough to wrap.
     <span ref={ref} className="relative inline-flex max-w-full flex-wrap items-center">
-      {children}
+      {children != null && <span className="grow basis-0">{children}</span>}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

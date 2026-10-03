@@ -42,7 +42,9 @@ export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
             >
               <td className="py-2 pr-4 text-ink-min">#{i + 1}</td>
               <td className="py-2 pr-4">
-                <div className="text-ink">
+                {/* An FEC employer name can be one unspaced token: wrap it
+                    rather than push AMOUNT and TYPE off a phone's screen. */}
+                <div className="text-ink [overflow-wrap:anywhere]">
                   {donor.type === "PAC" || donor.type === "SuperPAC" ? (
                     <a
                       href={fecCommitteeSearchUrl(donor.name)}

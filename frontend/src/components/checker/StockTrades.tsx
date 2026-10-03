@@ -75,14 +75,14 @@ function TradeRow({ trade }: { trade: StockTrade }) {
         </span>
         {trade.parseConfidence === "ocr" && (
           <MetricTooltip text="Read by OCR from a scanned filing. The amount is one of the form's own ranges, but a digit of the date may be misread, so no timeliness is shown. A president's scanned periodic reports are replaced by the annual report, which lists the year's transactions as text, once it is filed.">
-            <span className="text-xs px-1 py-0.5 border text-signal-amber border-signal-amber/40">
+            <span className="block text-xs px-1 py-0.5 border text-signal-amber border-signal-amber/40">
               READ FROM A SCAN
             </span>
           </MetricTooltip>
         )}
         {trade.reportKind === "annual" && (
           <MetricTooltip text="From the annual report (OGE Form 278e), which lists every transaction of the year. It does not say when each was first reported, so no timeliness is shown.">
-            <span className="text-xs px-1 py-0.5 border text-ink-lo border-white/15">
+            <span className="block text-xs px-1 py-0.5 border text-ink-lo border-white/15">
               ANNUAL REPORT
             </span>
           </MetricTooltip>

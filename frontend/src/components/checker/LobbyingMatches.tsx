@@ -29,7 +29,11 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
           return (
             <div key={i} className="panel p-4 border-l-2 border-l-signal-cyan/40">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className="text-signal-cyan text-sm font-bold">{match.lobbyistOrg}</span>
+                {/* The top donor's name, which can be one unspaced token: wrap it
+                    rather than let the panel cut it off. */}
+                <span className="min-w-0 text-signal-cyan text-sm font-bold [overflow-wrap:anywhere]">
+                  {match.lobbyistOrg}
+                </span>
                 <span className="text-xs px-1.5 py-0.5 border border-white/[0.07] text-ink-min">
                   {match.industry.replace(/_/g, " ")}
                 </span>

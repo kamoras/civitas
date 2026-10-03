@@ -255,7 +255,7 @@ export default function VotingRecord({
 
   const statBoxes = (
     <div className="grid grid-cols-3 gap-2 mb-2 text-center text-sm">
-      <div className="panel p-3">
+      <div className="panel px-2 py-3 sm:p-3">
         <div className="text-xl font-display font-semibold text-ink-hi">
           {totalVotes.toLocaleString()}
         </div>
@@ -265,7 +265,7 @@ export default function VotingRecord({
           </MetricTooltip>
         </div>
       </div>
-      <div className="panel p-3">
+      <div className="panel px-2 py-3 sm:p-3">
         <div className="text-xl font-display font-semibold text-signal-cyan">
           {Math.round(partyLoyaltyPct)}%
         </div>
@@ -276,7 +276,7 @@ export default function VotingRecord({
         </div>
         <div className="text-xs text-ink-lo">votes with party line</div>
       </div>
-      <div className="panel p-3">
+      <div className="panel px-2 py-3 sm:p-3">
         <div className="text-xl font-display font-semibold text-signal-amber">
           {partyIndependencePct}%
         </div>
