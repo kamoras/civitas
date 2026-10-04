@@ -343,7 +343,9 @@ export default function PresidentScorecard({
             {...{ [SHARE_SECTION_ATTR]: "overview" }}
             className={`grid scroll-mt-[var(--header-clearance)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
           >
-            <div className="flex min-w-0 gap-5">
+            {/* Portrait above the name below sm: beside it, the name had
+                about 146px at 320px and long surnames split mid-word. */}
+            <div className="flex min-w-0 flex-col gap-5 sm:flex-row">
               <div
                 className={`flex h-24 w-20 shrink-0 flex-col items-center justify-center border-2 sm:h-28 sm:w-24 ${party.border} ${party.text}`}
                 aria-hidden="true"

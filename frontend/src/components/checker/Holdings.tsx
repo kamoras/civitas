@@ -245,12 +245,17 @@ function CategoryLegend({
 function HoldingRow({ holding, when }: { holding: Holding; when: string }) {
   return (
     <div className="panel p-3">
-      <div className="text-ink text-sm break-words">{holding.assetName}</div>
+      {/* anywhere, not break-word: a filer's asset or account name can be
+          one long unspaced token, and only `anywhere` lets it shrink the
+          row instead of widening it. */}
+      <div className="text-ink text-sm [overflow-wrap:anywhere]">{holding.assetName}</div>
       <div className="flex items-center gap-2 flex-wrap text-xs text-ink-min mt-1">
         <span className="text-ink-lo font-mono">{formatHoldingValue(holding, when)}</span>
         <span>{holding.categoryLabel}</span>
         <span>{OWNER_LABEL[holding.owner]}</span>
-        {holding.account && <span className="truncate max-w-full">in {holding.account}</span>}
+        {holding.account && (
+          <span className="min-w-0 [overflow-wrap:anywhere]">in {holding.account}</span>
+        )}
       </div>
     </div>
   );
@@ -504,12 +509,16 @@ export default function Holdings({
             <ShareSectionButton label="Holdings" anchor={null} />
           </span>
         </header>
-        <div className="grid gap-6 px-5 py-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-          <div>
+        {/* minmax(0,1fr) on phones too: a bare `grid` gives one `auto`
+            column as wide as its longest unbreakable string (an account
+            name, a URL listed as an asset), which pushed the whole panel's
+            contents past its border and off a phone's screen. */}
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 px-5 py-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+          <div className="min-w-0">
             {chart}
             {notes}
           </div>
-          {hasList && <div className="lg:-mt-4">{list}</div>}
+          {hasList && <div className="min-w-0 lg:-mt-4">{list}</div>}
         </div>
       </section>
     );

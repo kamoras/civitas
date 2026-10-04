@@ -114,10 +114,10 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
               {voteTitle(rc?.title, rc?.billLabel, fallback)}
             </Link>
           ) : (
-            // A nomination or a procedural question: no bill to open.
-            <span className="line-clamp-2" title={rc?.title || fallback}>
-              {voteTitle(rc?.title, rc?.billLabel, fallback)}
-            </span>
+            // A nomination or a procedural question: no bill to open, so
+            // not clamped (a title attribute can't be read on a touch
+            // screen, and two lines cut a nomination's office off).
+            <span className="break-words">{voteTitle(rc?.title, rc?.billLabel, fallback)}</span>
           )}
           {rc?.question && <span className="block text-[13px] text-ink-lo">{rc.question}</span>}
         </span>

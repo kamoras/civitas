@@ -67,19 +67,22 @@ function TradeRow({ trade }: { trade: StockTrade }) {
     <div className="panel p-3">
       <div className="flex items-center gap-2 flex-wrap mb-1">
         <TransactionBadge type={trade.transactionType} />
-        <span className="text-ink text-sm">
+        {/* min-w-0 and anywhere, as in Holdings: an asset name copied from
+            a filing can be one long unspaced token, which would otherwise
+            widen the row past its panel and the drawer past the screen. */}
+        <span className="min-w-0 text-ink text-sm [overflow-wrap:anywhere]">
           {trade.ticker ? `${trade.ticker}: ${trade.assetName}` : trade.assetName}
         </span>
         {trade.parseConfidence === "ocr" && (
           <MetricTooltip text="Read by OCR from a scanned filing. The amount is one of the form's own ranges, but a digit of the date may be misread, so no timeliness is shown. A president's scanned periodic reports are replaced by the annual report, which lists the year's transactions as text, once it is filed.">
-            <span className="text-xs px-1 py-0.5 border text-signal-amber border-signal-amber/40">
+            <span className="block text-xs px-1 py-0.5 border text-signal-amber border-signal-amber/40">
               READ FROM A SCAN
             </span>
           </MetricTooltip>
         )}
         {trade.reportKind === "annual" && (
           <MetricTooltip text="From the annual report (OGE Form 278e), which lists every transaction of the year. It does not say when each was first reported, so no timeliness is shown.">
-            <span className="text-xs px-1 py-0.5 border text-ink-lo border-white/15">
+            <span className="block text-xs px-1 py-0.5 border text-ink-lo border-white/15">
               ANNUAL REPORT
             </span>
           </MetricTooltip>
