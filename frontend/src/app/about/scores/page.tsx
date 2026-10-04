@@ -267,7 +267,7 @@ export default function ScoresChapter() {
           </P>
         </Sub>
         <Sub title="Where their voting record sits">
-          {/* The half point (about 46) and the full-strength count (200) come from
+          {/* The half point (about 36) and the full-strength count (200) come from
               backend/app/data/position_confidence.json; test_position_confidence.py fails when
               they drift apart. */}
           <P>
@@ -281,17 +281,16 @@ export default function ScoresChapter() {
             did, and one that put the typical position at 100 did not. A position estimated from
             only a few roll calls is mostly noise, so it counts only as much as its votes support.
             We measured how much it should count using members who have a short record in one
-            Congress and a full one in the Congress before or after, in Congresses since 2007, a
-            dividing line we chose. Measuring on these recent Congresses predicted later ones better
-            overall than using every year we have, though not every time, and by a margin small
-            enough that a later recalibration could reverse it. We had already seen some results
-            that used 2007 as the dividing line before running this comparison, and settled how to
-            choose between the two after one run of this comparison had already favoured the recent
-            years. A position from about 46 votes counts half, and one from 200 or more counts in
-            full (where a full record starts is our convention). A member with no position yet sits
-            at 50 (our choice; nothing measured it). Until a new Congress&apos;s positions are
-            published and pass our checks, this part is left out and the score is the voting part
-            alone.
+            Congress and a full one in the Congress before or after, over every Congress since 1989.
+            Measuring on recent Congresses only (since 2007, or the most recent six
+            Congress-to-Congress changes) predicted later ones slightly better, but by less than the
+            noise in that comparison, and by even less when the starting point had to be picked from
+            earlier Congresses alone, so the one measurement over every year stays. The rule for
+            deciding was settled after earlier versions of this comparison had been seen. A position
+            from about 36 votes counts half, and one from 200 or more counts in full (where a full
+            record starts is our convention). A member with no position yet sits at 50 (our choice;
+            nothing measured it). Until a new Congress&apos;s positions are published and pass our
+            checks, this part is left out and the score is the voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

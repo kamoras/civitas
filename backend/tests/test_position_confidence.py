@@ -184,13 +184,12 @@ def test_shipped_file_documents_its_source_and_intervals():
     data = json.loads(_DATA.read_text())
     script = _script()
     assert "calibrate_position_confidence.py" in data["_source"]
-    # The structure is the forward test's choice: one curve unless an
-    # applicable structure predicts the next Congress better by more than
-    # the standard error.
+    # The structure is the forward test's choice: the simplest applicable
+    # structure within one standard error of the best's error.
     forward = data["forward_test"]
-    passing = [n for n in ("chamber", "era") if forward[n]["above"] < -forward[n]["standard_error"]]
-    assert data["structure"] == forward["chosen"] == (
-        min(passing, key=lambda n: forward[n]["error"]) if passing else "pooled")
+    order = script.FORWARD_CANDIDATES
+    bar = forward[forward["best"]]["error"] + forward["best_standard_error"]
+    assert data["structure"] == forward["chosen"] == next(n for n in order if forward[n]["error"] <= bar + 1e-4)
     held = data["heldout_error"]
     for chamber in ("senate", "house"):
         c = data["chambers"][chamber]
@@ -253,7 +252,7 @@ def test_held_out_error_decides_whether_the_chambers_differ():
     script = _script()
     data = _pairs({"S": 30, "H": 600})
     structure, report = script.choose_structure(data)
-    assert structure == "chamber" and report["pooled"]["above_best"] > report["pooled"]["standard_error"]
+    assert structure == "chamber" and report["pooled"]["above_best"] > report["best_standard_error"]
     assert script.fit_chambers(data, "chamber") == {"senate": 30.0, "house": 600.0}
     rng = __import__("numpy").random.default_rng(1)
     same = [r[:4] + (r[4] + float(rng.normal(0, 0.02)),) + r[5:] if r[5] == "thin" else r
@@ -423,17 +422,22 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert f"about {half} votes counts half" in entry
     assert f"{full} votes or more counts in full" in entry
     assert f"until the new one is full ({switch} votes)" in entry
-    # AGENTS.md and README quote the forward test's margin.
+    # AGENTS.md and README quote the era curve's paired margin and the best's
+    # own standard error, which the shipped rule judges by.
     root = src.parents[1]
     agents = " ".join((root / "AGENTS.md").read_text().split())
     readme = " ".join((root / "README.md").read_text().split())
-    chosen = data["forward_test"][data["structure"]]
-    last = chosen["last_three"]
-    assert f"by {abs(chosen['above']):.3f} (standard error {chosen['standard_error']:.3f};" in agents
-    assert round(abs(chosen["above"]) / chosen["standard_error"]) == 2
+    forward = data["forward_test"]
+    era = forward["era"]
+    last = era["last_three"]
+    assert f"beats one curve by {abs(era['above']):.3f} (standard error of the paired difference " \
+           f"{era['standard_error']:.3f};" in agents
+    assert f"the best's own standard error ({forward['best_standard_error']:.3f})" in agents
+    assert round(abs(era["above"]) / era["standard_error"]) == 2
     assert round(abs(last["above"]) / last["standard_error"]) == 1
-    assert "over the last three transitions alone the gain is about one standard error" in agents
-    assert "by about two standard errors overall, about one over the last three transitions alone" in readme
+    assert "over the last three transitions alone about one standard error" in agents
+    assert "by about two standard errors of the paired difference, about one over the last three " \
+           "transitions alone" in readme
     # ... and the flank rule's switch and where a full record starts.
     assert f"(`app/data/position_confidence.json`: {switch}, a full record)" in agents
     assert f"(`prior_until_votes`, {switch} votes, a convention)" in readme
@@ -444,14 +448,15 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert split in agents and split in readme
     # A position published with no count: "about a fifth" in the entry.
     assert round(data["uncounted_weight"] * 5) == 1 and "about a fifth" in entry
-    # The era the shipped curve is measured on, by its first year. Both texts
-    # describe the era curve; a rerun choosing another structure must
-    # rewrite them (and README and AGENTS.md), so this fails until it does.
-    assert data["structure"] == "era", "rewrite the prose that describes the era curve"
+    # Both texts describe one curve over every Congress; a rerun choosing
+    # another structure must rewrite them (and README and AGENTS.md), so
+    # this fails until it does.
+    assert data["structure"] == "pooled", "rewrite the prose that describes one curve"
+    first = 1789 + 2 * (_script().FIRST_CONGRESS - 1)
+    assert f"every Congress since {first}" in page and f"every Congress since {first}" in agents
+    assert f"the years the data cover ({first} to today)" in entry
     year = 1789 + 2 * (data["era_split"] - 1)
     assert f"since {year}" in page and f"since {year}" in entry
-    first = 1789 + 2 * (_script().FIRST_CONGRESS - 1)
-    assert f"the years the data cover ({first} to today)" in entry
 
 
 def test_the_switch_tests_take_the_pairs_their_names_say(monkeypatch):
@@ -588,22 +593,32 @@ def test_calibrate_ships_the_forward_tests_choice(monkeypatch):
     monkeypatch.setattr(script, "era_test", lambda d, s, split=110: None)
     split_base = []
     monkeypatch.setattr(script, "era_split_test", lambda d, s: split_base.append(s) or {})
-    for name in ("party_line_test", "trend_test", "prior_test", "switcher_test"):
+    grouped = []
+    for name in ("party_line_test", "trend_test"):
+        monkeypatch.setattr(script, name, lambda d, s: grouped.append(s) or {})
+    for name in ("prior_test", "switcher_test"):
         monkeypatch.setattr(script, name, lambda *a, **k: {})
     monkeypatch.setattr(script, "bootstrap", lambda *a, **k: {"house": {"half_weight_votes": [0.0, 0.0]}})
     monkeypatch.setattr(script, "prior_until_votes", lambda t: 200.0)
-    for chosen in ("era", "pooled"):
+    for chosen in ("era", "pooled", "window"):
         monkeypatch.setattr(script, "forward_test", lambda d, c=chosen: {"chosen": c})
         out = script.calibrate()
         assert out["structure"] == chosen and split_base[-1] == "pooled"
         assert out["chambers"]["house"]["n0"] == script.fit_chambers(data, chosen)["house"]
+        # The window has no grouping: those reports take structure_test's choice.
+        assert grouped[-2:] == [chosen if chosen != "window" else "pooled"] * 2
     assert script.fit_chambers(data, "era") != script.fit_chambers(data, "pooled")
+    # The window ships its fit on the last FORWARD_WINDOW thin transitions.
+    monkeypatch.setattr(script, "FORWARD_WINDOW", 1)
+    assert script.fit_chambers(data, "window")["house"] == script.fit_n0([r for r in data if r[6] >= 115])
+    assert script.fit_chambers(data, "window") != script.fit_chambers(data, "pooled")
 
 
 def test_the_forward_test_adopts_a_structure_only_past_the_noise(monkeypatch):
-    """forward_test ships one curve unless chamber or era predicts the next
-    Congress better by more than its standard error, the better of the two
-    if both do; the trend is never chosen."""
+    """forward_test ships the simplest structure within one standard error
+    of the best's own error: one curve unless a structure predicts the next
+    Congress better by more than the noise in the best's error; the trend is
+    never chosen."""
     script = _script()
     base = {f"M{i}": 1.0 for i in range(6)}
 
@@ -617,7 +632,7 @@ def test_the_forward_test_adopts_a_structure_only_past_the_noise(monkeypatch):
                            predict_from=None):
             return {n: table[n] for n in names}, {n: {110: sum(table[n].values())} for n in names}
         return forward_errors
-    for era, chamber, chosen in ((errs(-0.1), errs(0.0), "era"), (errs(-0.01, 0.2), errs(0.0), "pooled"),
+    for era, chamber, chosen in ((errs(-0.1), errs(0.0), "era"), (errs(-0.1, 0.5), errs(0.0), "pooled"),
                                  (errs(0.0), errs(-0.1), "chamber"), (errs(-0.05), errs(-0.1), "chamber"),
                                  (errs(-0.1), errs(-0.05), "era")):
         monkeypatch.setattr(script, "forward_errors", fake(era, chamber))
@@ -732,11 +747,12 @@ def test_the_split_sweep_skips_the_split_it_cannot_test(monkeypatch):
 def test_shipped_file_reports_what_the_docs_cite():
     """The figures the research note and v6.27 cite are in the file."""
     data = json.loads(_DATA.read_text())
-    if data["structure"] != "pooled":  # one curve has nothing to compare with itself
-        chosen = data["forward_test"][data["structure"]]
-        assert {"above", "standard_error"} <= set(chosen["last_three"])
-        shares = chosen["most_helped_share"]
-        assert len(shares) == 3 and shares == sorted(shares, reverse=True)
+    # The era curve beats one curve by more than the paired standard error,
+    # so its diagnostics are reported, as the docs cite them.
+    era = data["forward_test"]["era"]
+    assert {"above", "standard_error"} <= set(era["last_three"])
+    shares = era["most_helped_share"]
+    assert len(shares) == 3 and shares == sorted(shares, reverse=True)
     assert set(data["forward_test"]["training_before_split"]) == set(
         data["forward_test"]["era"].get("gain_by_transition", data["forward_test"]["training_before_split"]))
     assert {"above", "standard_error"} <= set(data["forward_test"]["window_against_era"])
@@ -816,8 +832,9 @@ def test_an_outage_stops_the_calibration_rather_than_dropping_a_congress(monkeyp
 
 def test_the_forward_test_keeps_the_simplest_within_noise_of_the_best(monkeypatch):
     """The one-standard-error rule: a window that beats the era curve by
-    less than the noise doesn't ship over it; the earlier rule (the best
-    of those beating one curve) is reported, and would have."""
+    less than the noise in its own error doesn't ship over it; the paired
+    form and the earlier rule (the best of those beating one curve) are
+    reported. With a noisy best, one curve ships."""
     script = _script()
     base = {f"M{i}": 1.0 for i in range(6)}
 
@@ -832,8 +849,21 @@ def test_the_forward_test_keeps_the_simplest_within_noise_of_the_best(monkeypatc
     monkeypatch.setattr(script, "forward_errors", forward_errors)
     out = script.forward_test([("H", "M0", 20.0, 0.1, 0.1, "thin", 105, 0.5, False)])
     assert out["best"] == "window" and out["best_beating_one_curve"] == "window"
-    assert out["chosen"] == "era"
-    assert out["against_best"]["era"]["above"] <= out["against_best"]["era"]["standard_error"]
+    assert out["chosen"] == "era" == out["paired_rule"]
+    assert out["best_standard_error"] == round(6 ** 0.5 * float(__import__("numpy").std(
+        list(table["window"].values()), ddof=1)), 4)
+    # A noisy best: one curve is within its standard error (and within the
+    # paired one); the earlier rule would ship the era curve.
+    table["window"] = errs(-0.11, 0.5)
+    out = script.forward_test([("H", "M0", 20.0, 0.1, 0.1, "thin", 105, 0.5, False)])
+    assert out["chosen"] == "pooled" == out["paired_rule"] and out["best_beating_one_curve"] == "era"
+    # The rules part: the best's own error is noisy, the paired difference
+    # isn't, so only the paired form adopts the era curve.
+    table["pooled"] = table["chamber"] = {m: 1.0 + (0.3 if i % 2 else -0.3) for i, m in enumerate(base)}
+    table["window"] = {m: v - 0.1 for m, v in table["pooled"].items()}
+    table["era"] = dict(table["window"])
+    out = script.forward_test([("H", "M0", 20.0, 0.1, 0.1, "thin", 105, 0.5, False)])
+    assert out["chosen"] == "pooled" and out["paired_rule"] == "era"
     # Past the noise, the window ships.
     table["window"] = errs(-0.2)
     assert script.forward_test([("H", "M0", 20.0, 0.1, 0.1, "thin", 105, 0.5, False)])["chosen"] == "window"
@@ -863,8 +893,9 @@ def test_the_data_chosen_test_picks_each_parameter_from_earlier_transitions(monk
     out = script.data_chosen_test(data)
     era = out["era"]["chosen_by_transition"]
     assert era["105"] == 109  # the split nearest ERA_SPLIT: 110 is not one tested here
-    assert era["107"] == 103 and era["111"] == 105
+    assert era["107"] == 103 and era["109"] == 103 and era["111"] == 105  # 109: a tie, to the earlier
     win = out["window"]["chosen_by_transition"]
-    assert win["105"] == 3 and win["107"] == 2  # 3: the width nearest FORWARD_WINDOW and win["111"] == 3
+    # 105: 3, the width nearest FORWARD_WINDOW; 109: a tie, to the wider.
+    assert win["105"] == 3 and win["107"] == 2 and win["109"] == 3 and win["111"] == 3
     assert out["window"]["fitted_on_the_last_transitions"]["3"]["half_weight_votes"] == round(
         script.half_point(50.0), 1)

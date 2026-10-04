@@ -276,38 +276,38 @@ inline academic citations.
 
 Key mathematical properties:
 - **Linear shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
-  a senator with 1 campaign promise gets a score near 50, not 0 or 100).
-  Three exceptions: Constituent Alignment's vote part shrinks toward the
-  party's measured typical score (its scale tops out at the seat's norm, so
-  50 is below average); Legislative Effectiveness's bill component doesn't
-  shrink by bill count (a member's bills are the whole record, not a sample)
-  — its leadership component is still pulled toward 50 for short tenure; and
-  a third, Constituent Alignment's position part (below). Apart from the
-  third, the rate is the count confidence below — fixed, not estimated from
-  the population's variance, so do not call it Bayesian or empirical Bayes.
-  The third, whose rate is measured rather than fixed: Constituent
-  Alignment's position part (v6.27) scales a roll-call position's distance
-  from the seat's expected position, when the position rests on n votes, by
-  min(1, w(n) / w(200)) (a full record at 200 votes, a convention), w(n) = n
-  / (n + n0): the measured slope of a member's full-record position on their
-  thin one, a full record counting 1. n0 is fitted on Voteview's own
-  adjacent-Congress records with drift per transition
-  (`scripts/calibrate_position_confidence.py`), one curve for both chambers:
-  the latest era's, since the 110th Congress (a split by convention, fixed
-  before the forward comparisons though era results at it had been reported
-  before). It is chosen by predicting forward, each transition's n0 from the
-  earlier ones only (its drift, shared by every structure, from its own full
-  pairs), as the weight is used: it beats one curve over every Congress by
-  0.066 (standard error 0.034; over the last three transitions alone the
-  gain is about one standard error, computed from `last_three`, so weakly
-  settled) and a curve per chamber predicts no better. A window of the last
-  six transitions predicts slightly better still; the one-standard-error rule
-  (a convention, adopted in review after the window was seen to win; the
-  simplest structure within the standard error of the best, a moving window
-  counted more complex than the fixed split, a stated choice) keeps the era
-  curve, and a rerun decides again. The split is a fixed
-  Congress, so nothing is reset for a new Congress. It is a reliability
-  weight, not a count threshold.
+  a senator with 1 campaign promise gets a score near 50, not 0 or 100). Two
+  exceptions: Constituent Alignment's vote part shrinks toward the party's
+  measured typical score (its scale tops out at the seat's norm, so 50 is
+  below average); Legislative Effectiveness's bill component doesn't shrink
+  by bill count (a member's bills are the whole record, not a sample) — its
+  leadership component is still pulled toward 50 for short tenure. The rate
+  is the count confidence below — fixed, not estimated from the population's
+  variance, so do not call it Bayesian or empirical Bayes — except in
+  Constituent Alignment's position part (v6.27), which shrinks toward 50 at
+  a measured rate: it scales a roll-call position's distance from the seat's
+  expected position, when the position rests on n votes, by min(1, w(n) /
+  w(200)) (a full record at 200 votes, a convention), w(n) = n / (n + n0):
+  the measured slope of a member's full-record position on their thin one, a
+  full record counting 1. n0 is fitted on Voteview's own adjacent-Congress
+  records with drift per transition
+  (`scripts/calibrate_position_confidence.py`), one curve for both chambers
+  over every Congress since 1989. The structure is chosen by predicting
+  forward, each transition's n0 from the earlier ones only (its drift,
+  shared by every structure, from its own full pairs), as the weight is
+  used, by the one-standard-error rule (Hastie, Tibshirani & Friedman; a
+  convention, adopted in review after two other rules had been tried): the
+  simplest structure within one standard error of the best's error. The
+  latest era's curve, since the 110th Congress (a split by convention),
+  beats one curve by 0.066 (standard error of the paired difference 0.034;
+  over the last three transitions alone about one standard error, computed
+  from `last_three`), and a window of the last six transitions does slightly
+  better still, but both are well within the best's own standard error
+  (0.229), a curve per chamber predicts no better, and with the split or the
+  window's width chosen from earlier Congresses alone each is better than
+  one curve only well within the noise. A rerun decides again. Nothing in it
+  follows the sitting Congress. It is a reliability weight, not a count
+  threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Constituent Alignment scores account for Cook

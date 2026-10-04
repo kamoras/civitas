@@ -619,7 +619,7 @@ point, t, and the R² the score adds:
 | Outcome | Linear, pooled (shipped) | Linear, per party | Peaked, pooled | Peaked, per party |
 |---|---|---|---|---|
 | House generals 1994–2010 (N=2,545) | **0.035 (5.2), 0.0090** | 0.035 (5.3), 0.0096 | −0.002 (−0.4), 0.0000 | −0.002 (−0.3), 0.0000 |
-| Senate generals 1990–2024 (N=461) | **0.042 (2.5), 0.0115** | 0.040 (2.5), 0.0108 | −0.010 (−0.7), 0.0009 | −0.008 (−0.6), 0.0007 |
+| Senate generals 1990–2024 (N=461) | **0.042 (2.5), 0.0115** | 0.040 (2.5), 0.0109 | −0.010 (−0.7), 0.0009 | −0.008 (−0.6), 0.0007 |
 | House primaries 1990–2010, contested, primary share (N=1,044) | −0.009 (−0.5), 0.0003 | −0.008 (−0.4), 0.0002 | 0.021 (1.4), 0.0019 | 0.022 (1.4), 0.0022 |
 | drew a primary challenger, per 10 points (N=3,869) | 0.004 (1.2), 0.0006 | 0.005 (1.3), 0.0008 | −0.003 (−1.1), 0.0005 | −0.004 (−1.4), 0.0008 |
 
@@ -648,7 +648,7 @@ point, t, and the R² the score adds:
   party; at 100: 1.6% and 6.1% pooled, 3.8% and 2.6% per party). v6.27's
   weights barely change this, since only 2.3% of senator-Congresses are read
   at less than full weight: with them on, the shipped scale's means are 50.6
-  D and 51.5 R and its shares at 0 are 2.6% and 10.0%. With no evidence for
+  D and 51.5 R and its shares at 0 are 2.6% and 10.1%. With no evidence for
   either, the shipped scale stays (a stated choice: the status quo, which
   the evidence does not decide).
 
@@ -703,109 +703,100 @@ pair counts; whether absences make a thin record say less is tested
 below (attendance). The intervals are reproducible: members are resampled
 in a fixed order, 1,000 times.
 
-- **The latest era's curve, chosen by predicting forward.** The weight is
-  always applied to a Congress the calibration hasn't seen, so the
-  structure is chosen by how well it predicts the next one
-  (`forward_test`): each transition's thin pairs are predicted from a fit
-  (n0) on the earlier transitions only, with the drift, shared by every
-  structure, from the predicted transition's own full pairs, rolling
-  forward one transition at a time (from the fourth with thin pairs:
-  `MIN_TRAIN_TRANSITIONS`, a convention), and the squared errors are
-  summed by member. The structures the score can apply are, in order of
-  simplicity (a stated choice: a boundary that moves every Congress counts
-  as more complex than a fixed one), one curve for both chambers, one per
-  chamber, the latest era's (split at the 110th) and a window of the last
-  six transitions with thin pairs (`FORWARD_WINDOW`, a convention). The
-  simplest whose paired difference from the one that predicts best is
-  within its standard error ships: the one-standard-error rule (Hastie,
-  Tibshirani & Friedman 2009, section 7.10), the rule the leave-one-out
-  comparison below uses. Over 82 members:
+- **One curve, chosen by predicting forward.** The weight is always
+  applied to a Congress the calibration hasn't seen, so the structure is
+  chosen by how well it predicts the next one (`forward_test`): each
+  transition's thin pairs are predicted from a fit (n0) on the earlier
+  transitions only, with the drift, shared by every structure, from the
+  predicted transition's own full pairs, rolling forward one transition at
+  a time (from the fourth with thin pairs: `MIN_TRAIN_TRANSITIONS`, a
+  convention), and the squared errors are summed by member. The structures
+  the score can apply are, in order of simplicity (a stated choice: a
+  boundary that moves every Congress counts as more complex than a fixed
+  one), one curve for both chambers, one per chamber, the latest era's
+  (split at the 110th, a convention: roughly the middle of 101–119) and a
+  window of the last six transitions with thin pairs (`FORWARD_WINDOW`, a
+  convention). The one-standard-error rule decides (Hastie, Tibshirani &
+  Friedman 2009, section 7.10; a convention): the simplest structure whose
+  error is within one standard error of the best's, that standard error
+  the best's own (`best_standard_error`). Over 82 members:
 
-  | n0 fitted on the earlier transitions | Forward squared error | Against one curve |
+  | n0 fitted on the earlier transitions | Forward squared error | Against one curve, paired |
   |---|---|---|
-  | once for both chambers | 1.320 | |
+  | **once for both chambers (shipped)** | **1.320** | |
   | once per chamber | 1.359 | 0.038 worse (standard error 0.040) |
-  | **the latest era's, since the 110th (shipped)** | **1.254** | 0.066 better (0.034) |
+  | the latest era's, since the 110th | 1.254 | 0.066 better (0.034) |
   | the last six transitions | 1.243 | 0.078 better (0.036) |
   | a time trend (reported only) | 1.251 | 0.069 better (0.089) |
 
-  The window predicts best (`best`); the era curve is 0.011 worse than it
-  (standard error 0.012, `against_best`), within the bar by 0.001
-  (computed), so the era curve ships, and one curve, 0.078 worse than the
-  window (0.036), does not. This rule was adopted in review, after the
-  window had been seen to beat the era curve: the rule before it, the best
-  of the structures beating one curve by more than the standard error
-  (`best_beating_one_curve`), would ship the window, whose curve fitted on
-  its last six transitions sits at the end of the n0 grid (a half point of
-  98, the most the grid allows: `data_chosen_test`'s
-  `fitted_on_the_last_transitions`), an end of the search, not an estimate.
-
-  The latest era's curve predicts the next Congress better than one curve
-  by about two standard errors (computed from `forward_test`'s above and
-  standard_error), but the decision is weakly settled, for five reasons,
-  all in the script's output:
-  - **Where the gain is.** It comes from the transitions predicted from the
-    112th on; at the 111th the two curves predict alike
+  The window predicts best (`best`), and its error's standard error is
+  0.229, so every structure is within it and one curve ships. Paired member
+  by member, the era curve and the window each beat one curve by about two
+  standard errors of the difference (computed from `forward_test`'s above
+  and standard_error), so recent thin records may say less than one curve
+  credits, but the textbook rule judges a structure by the noise in the
+  best's own error, which is far larger, and the rest of the evidence
+  doesn't support either:
+  - **Where the gain is.** The era curve's comes from the transitions
+    predicted from the 112th on; at the 111th the two curves predict alike
     (`gain_by_transition`: 0.0). Most of it is at the 112th and 114th (0.024
     each), when the one curve it beats was fitted on about two thirds and
     half pre-110 records (65% and 48% of its thin pairs,
     `training_before_split`). At the last three transitions, whose training
     data look most like today's, it is 0.009 with a standard error of 0.009
-    (`last_three`).
-  - **Members.** One member supplies 44% of it (`most_helped_share`). Left
-    out of the comparison (fits unchanged), the one, two and three members
-    it helps most leave it better by 0.037, 0.031 and 0.026 (standard
-    errors 0.017, 0.016, 0.016); left out of the data and refitted, by
-    0.180, 0.180 and 0.151 (0.077, 0.078, 0.072). The sign holds; the size
-    doesn't.
-  - **The split.** At every split from the 103rd to the 117th the era curve
-    predicts better, but the rule would adopt it at 11 of these 15, not at
-    the 108th, 109th, 115th or 116th (at the 118th the two curves can't
-    differ: no later transition has thin pairs). The 110th is a convention
-    (roughly the middle of 101–119), fixed before the forward comparisons,
-    though era results at it had been reported before; it is kept at the
-    110th on reruns, never re-centred.
-  - **Recency or a break.** The window of the last six transitions, with
-    no split, predicts as well (0.011 better than the era curve, standard
-    error 0.012, `window_against_era`): these tests can't tell recency from
-    a break at the split. The time trend predicts about as well over every
-    transition. Its forward fits sit at the ends of their search grids through the
-    112th, where it predicts worse than one curve; from the 113th, with
-    every fit inside the grids, it beats one curve by 0.142 (standard error
-    0.065) and the era curve by 0.100 (0.053) (`trend.inside_grids`, a range
-    picked after seeing where the fits sit, and one that drops the stretch
-    where it did worse overall, through the 112th). Over every predicted
-    transition, the range the rule judges, it is 0.069 better than one curve
-    (standard error 0.089), and it predicts no better than the window, so
-    the rule would not choose it even as a candidate; it is reported, not
-    chosen (that it was added after the other tests is a further reason, a
-    stated choice). It suggests, without testing, a curve still slower than
-    the shipped one.
+    (`last_three`; the window's, 0.014 with 0.012).
+  - **Members.** One member supplies 44% of the era curve's gain
+    (`most_helped_share`; 36% of the window's). Left out of the comparison
+    (fits unchanged), the one, two and three members it helps most leave it
+    better by 0.037, 0.031 and 0.026 (standard errors 0.017, 0.016, 0.016);
+    left out of the data and refitted, by 0.180, 0.180 and 0.151 (0.077,
+    0.078, 0.072). The sign holds; the size doesn't.
   - **The split and the width, chosen as a forecast must.** The 110th and
     the six are conventions. Chosen instead at each transition from the
     forward errors of the transitions before it (`data_chosen_test`, widths
-    of 2 to 10 transitions, a convention), neither structure beats one
-    curve over every predicted transition: the era curve is 0.008 better
-    (standard error 0.050), the window 0.014 better (0.037). Both lose 0.042
+    of 2 to 10 transitions, a convention), each structure is only slightly
+    better than one curve over every predicted transition, well within the
+    noise: the era curve by 0.008 (standard error 0.050), the window by
+    0.014 (0.037). Both lose 0.042
     at the 110th, where the choices made on the few earlier transitions
     predict badly, and gain at most transitions from the 113th on
     (`gain_by_transition`). Over every transition the data would choose a
     split at the 113th and a width of seven, whose curve's half point is 58
     (`chosen_on_every_transition`, `fitted_on_the_last_transitions`).
+  - **The split.** At every split from the 103rd to the 117th the era curve
+    predicts better than one curve, by more than the paired standard error
+    at 11 of these 15, not at the 108th, 109th, 115th or 116th (at the 118th
+    the two curves can't differ: no later transition has thin pairs). The
+    rule ships one curve at all 15 (`era_at_every_split`'s ships).
+  - **Recency or a break.** The window predicts as well as the era curve
+    (0.011 better, standard error 0.012, `window_against_era`): these tests
+    can't tell recency from a break at the split. The time trend predicts
+    about as well over every transition. Its forward fits sit at the ends
+    of their search grids through the 112th, where it predicts worse than
+    one curve; from the 113th, with every fit inside the grids, it beats one
+    curve by 0.142 (standard error 0.065) and the era curve by 0.100 (0.053)
+    (`trend.inside_grids`, a range picked after seeing where the fits sit,
+    and one that drops the stretch where it did worse overall, through the
+    112th). Over every predicted transition, the range the rule judges, it
+    is 0.069 better than one curve (standard error 0.089); it is reported,
+    not a candidate (added after the other tests, a stated choice). It
+    suggests, without testing, a curve that keeps slowing.
 
-  So the evidence supports recent thin records saying less than one curve
-  over every Congress credits; how much less is not settled. The half point
-  is 36 for one curve, 46 for the shipped era curve, 58 for the width the
-  data would choose and 98 (the grid's end) for the last six transitions;
-  the shipped and one curve's each lie inside the other's interval (26–98
-  with the era structure held fixed; 21–77 for one curve,
-  `half_weight_votes_pooled_interval_90`). The forward rules, and the
-  one-standard-error bar they use (a convention, with no adjustment for the
-  number of candidates), were adopted in review: the third rule in this
-  change, after two that left one member out (below), was adopted after a
-  forward check had been run once and had already shown the era curve
-  winning, and the fourth, the one that ships, after the window had been
-  seen to beat the era curve. A rerun with more recent pairs decides again.
+  So the evidence suggests recent thin records say less than one curve
+  credits, without settling how much less: the half point is 36 for one
+  curve (21–77, `interval_90`), 46 for the era curve, 58 for the width the
+  data would choose and 98 (the grid's end) for the last six transitions.
+  The rule was adopted in review, after earlier rules had been run and
+  seen: two that left one member out (below); then the best of the
+  structures beating one curve by more than the paired standard error
+  (`best_beating_one_curve`), which would ship the window, at the end of
+  the n0 grid; then the rule's paired form, the simplest whose
+  member-by-member difference from the best is within that difference's
+  standard error (`paired_rule`), which ships the era curve at the 110th
+  (within the bar by 0.001, computed) but the window at 9 of the 15 splits
+  (`ships_paired_rule`). The textbook form is the cited one and keeps one
+  curve whatever the split; it makes no adjustment for the number of
+  candidates. A rerun with more recent pairs decides again.
 - **Leave-one-member-out comparisons, reported.** Each thin member's
   pairs predicted from a fit (n0 and drift) made without that member, on
   all 95 thin pairs:
@@ -832,8 +823,8 @@ in a fixed order, 1,000 times.
   members alone (`era_test`), the latest era's curve does no better than one
   curve, 0.0025 worse with a standard error of 0.0195 over 67 members. That
   comparison lets one curve learn from the very Congresses it is judged on,
-  which the forward test doesn't; the two disagree, and the forward test is
-  the one that matches the use. Repeated at every split (`era_split_test`),
+  which the forward test doesn't; the forward test is the one that matches
+  the use. Repeated at every split (`era_split_test`),
   a recent era's curve would be adopted (beats one curve by more than a
   standard error) at 4 of 16 splits (113th–115th, 117th), by 1.0 to 1.5
   standard errors (computed from `era_split_test`'s above and
@@ -843,8 +834,8 @@ in a fixed order, 1,000 times.
   adopted at the 113th and 114th (half points 75.5 and 82.6) and no single
   member moves the 117th's (n0 stays 5,000 with each left out). A time trend
   (one line, log n0 linear in decades since the 110th, `trend_test`) beats
-  the shipped grouping by 0.0975 (standard error 0.0769) over every member
-  and 0.0818 (0.0755) over the latest era's (0.036, 0.064, without its most
+  one curve by 0.1546 (standard error 0.0935) over every member and 0.0793
+  (0.0741) over the latest era's (0.0368, 0.0624, without its most
   influential member), with its half point by the 118th at the slowest curve
   the form allows (about 100 votes). Left one member out, the latest era
   does better at the 113th to 117th splits (the 116th barely) and in the
@@ -855,29 +846,28 @@ in a fixed order, 1,000 times.
   reliable before 2007" is not a finding: the contrast rests on a small
   early base.
 
-| | Estimate | 90% interval (members resampled, 1,000 times, the era structure held fixed) |
+| | Estimate | 90% interval (members resampled, 1,000 times, the structure held fixed) |
 |---|---|---|
-| Votes at which a position counts half | **46** | 26–98 |
-| n0 | 86 | 36 to the search grid's limit of 5,000 |
+| Votes at which a position counts half | **36** | 21–77 |
+| n0 | 56 | 26–326 |
 | Weight of a position with no count | **0.21** | 0.01–0.39 |
 
-- **The curve is weakly determined.** The half point is n0 written
-  another way, so it is no better determined; it is only bounded. The
-  curve can't put it above 100 votes (as n0 grows, w(n) / w(200) falls
-  to n / 200, which is 0.5 at 100), so the upper end, 98, is where the
-  n0 search stops: the data allow anything up to the linear curve. The
-  no-count weight is measured over every era (too few no-count pairs to
-  split).
+- **The curve is weakly determined.** The half point is n0 written another
+  way, so it is no better determined; it is only bounded. The curve can't
+  put it above 100 votes (as n0 grows, w(n) / w(200) falls to n / 200,
+  which is 0.5 at 100); the era curve's interval (26–98) runs to where the
+  n0 search stops. The no-count weight is measured over every era (too few
+  no-count pairs to split).
 - **A party-line term was tested and is not used.** That would make n0 a
   line in the share of roll calls on which the parties' majorities split,
   since in a more party-line Congress each vote might say less about a
-  member's place within their party. Added to the era structure it
-  predicts held-out members worse (1.322 against 1.279, 0.043 worse with a
-  standard error of 0.024), and its slope isn't stable: +2.75 here, and
-  negative in an earlier run with the party switchers counted (on a
-  narrower grid). An earlier draft of this change found a positive slope
-  by forcing one drift on every Congress, which loaded the era differences
-  in drift onto n0.
+  member's place within their party. Added to one curve it predicts
+  held-out members no better (1.345 against 1.336, 0.008 worse with a
+  standard error of 0.033), and its slope isn't stable: +7.75 here, +2.75
+  added to the era structure in an earlier draft, and negative in a run
+  with the party switchers counted (on a narrower grid). An earlier draft
+  of this change found a positive slope by forcing one drift on every
+  Congress, which loaded the era differences in drift onto n0.
 - **Positions with no count carry some information.** They are members
   Voteview has barely scaled (newly sworn in, or with very few scalable
   votes). Measured only where the member also has a career DW-NOMINATE
@@ -912,14 +902,13 @@ in a fixed order, 1,000 times.
   member's record early in a Congress is thin too, on a different agenda;
   whether those records behave like these is untested.
 
-**Nine approaches replaced.** Each appeared in a draft of this change and
+**Ten approaches replaced.** Each appeared in a draft of this change and
 was replaced after review; the fourth, fifth and sixth were not shown to
 help rather than shown not to, and a rerun with more pairs tests them
 again. Every figure below except the career-gap proxy's and those quoted
-from the current output (the best switch of 101 votes at 36%,
-`switch_test.all`; one curve's half point of 36,
-`half_weight_votes_pooled`) comes from that draft's own run and is not
-reproduced by the current scripts.
+from the current output (the best switch of 119 votes at 30%,
+`switch_test.all`; the era curve's half point of 46) comes from that
+draft's own run and is not reproduced by the current scripts.
 
 *The career-gap proxy.* The first draft fit gap² = drift + k / votes, where
 the gap is between a member's Nokken-Poole position and their career
@@ -960,7 +949,7 @@ assumed independent everywhere. The sixth switched at 92, the best
 switch over all thin pairs, without testing it out of bag or on the
 pairs shaped like the rule's case; there it can't be shown to help: too
 few pairs have the rule's shape to measure one, and over all thin pairs
-the best switch (101 votes) saves sides in only 36% of resamples
+the best switch (119 votes) saves sides in only 30% of resamples
 (below).
 
 *Thin pairs restricted to arrivals and departures.* The seventh draft
@@ -983,25 +972,36 @@ itself a sign of how little these data settle.
 *Choosing by leaving one member out.* Later drafts chose the structure
 by leaving one member out: first over every member, which picked the era
 structure on a gain that was all in the earlier era; then, judging the
-era curve only on the latest era's members, one curve (half point 36).
-Both let a curve learn from the Congresses it is judged on. Predicting
-forward, the use the weight is put to, the latest era's curve does
-better (above).
+era curve only on the latest era's members, one curve. Both let a curve
+learn from the Congresses it is judged on, so the structure is now chosen
+by predicting forward, the use the weight is put to (above).
+
+*The latest era's curve.* The ninth draft shipped the era curve (half
+point 46), chosen forward by the best of the structures beating one curve
+by more than the paired standard error, and the tenth by the
+one-standard-error rule's paired form, after a window of the last six
+transitions was seen to predict slightly better. Under the first the
+window would ship; under the second the outcome turns on the split (the
+era curve at the 110th, the window at 9 of 15 splits). The textbook rule,
+judged by the noise in the best's own error, keeps one curve at every
+split, and with the split or the width chosen from the data as a
+forecast must, each is better than one curve only well within the noise
+(above).
 
 **Shipped (v6.27).**
 - The member's extremity is scaled by weight(n) before it is read against
-  the saturation point. A position from 46 votes counts half, and one
+  the saturation point. A position from 36 votes counts half, and one
   from 200 or more counts in full; n is the member's scaled roll calls
   this Congress (Voteview's `nominate_number_of_votes`).
   - A position with no reported count is weighted 0.21 when the member
     has a career DW-NOMINATE position, and read as no votes (50) when
     not.
-  - One curve serves both chambers: the latest era's, fitted on the
-    transitions since the 110th Congress. The split is a fixed Congress,
-    so nothing in it follows the sitting Congress. A new Congress needs
-    no rerun and no setting. Rerunning the calibration (its Congress
-    range follows the clock, and a Congress still thin by the calendar is
-    skipped) only adds the newest pairs, to the latest era.
+  - One curve serves both chambers, fitted on every transition since the
+    101st Congress (n0 56). Nothing in it follows the sitting Congress. A
+    new Congress needs no rerun and no setting. Rerunning the calibration
+    (its Congress range follows the clock, and a Congress still thin by
+    the calendar is skipped) adds the newest pairs and decides the
+    structure again.
   - A member Voteview lists twice in one Congress (a party switch during
     it) is read on the record since the switch, and only that one enters
     the seat fits. That is a choice, not a measurement: the score is
@@ -1054,8 +1054,8 @@ better (above).
     the floor the ingest already used), the chamber's last scale is
     carried. It describes the chamber's seats, not any member's record.
   - So the weights do pull thin positions toward 50: with every record at 5
-    votes, a position at saturation scores about 46 instead of 0 (computed
-    from the shipped curve, n0 86).
+    votes, a position at saturation scores about 45 instead of 0 (computed
+    from the shipped curve, n0 56).
 - Voteview's placeholders are dropped. A member a current section has no
   position for (those, or anyone Voteview hasn't placed yet) counts nothing,
   so the part sits at 50, instead of having the component left out (a stated
@@ -1118,7 +1118,7 @@ better (above).
     | Votes | Pairs | Same side |
     |---|---|---|
     | 1–25 | 19 | 68% |
-    | 26–50 | 24 | 54% |
+    | 26–50 | 24 | 50% |
     | 51–100 | 20 | 70% |
     | 101–150 | 20 | 85% |
     | 151–199 | 12 | 92% |
@@ -1152,7 +1152,7 @@ better (above).
     whole Congress with many absences and then retired or lost), no
     switch short of a full record does better even in sample, and one
     saves sides in 3% of resamples out of bag; over all thin pairs, the
-    best switch is 101 votes and 36%. None comes near the bar, so the
+    best switch is 119 votes and 30%. None comes near the bar, so the
     attendance convention doesn't decide it.
   - So the switch rests on its conventions: keeping the last full record
     until the new one is full is the rule as designed, the one count at
@@ -1172,7 +1172,7 @@ better (above).
     positions.
   - On the 119th Congress's party-unity roll calls (majorities opposed,
     Voteview's votes) the weighting alone reclassifies none of 2,351
-    Senate breaks and 2 of 6,055 House breaks.
+    Senate breaks and none of 6,055 House breaks.
 
 **Effect on the 119th Congress** (Voteview exports of 2026-10-03, through
 the pipeline's own build with Cook PVI seat lean). This compares v6.26,
@@ -1181,19 +1181,19 @@ which read placeholders as positions and weighted nothing, with v6.27:
 | | Senate | House |
 |---|---|---|
 | Saturation | 0.258 → 0.268 | 0.224 → 0.221 |
-| Mean absolute change in the component | 1.69 | 0.58 |
+| Mean absolute change in the component | 1.68 | 0.56 |
 | Mean absolute change in Constituent Alignment, through the position part | 0.51 | 0.17 |
 
 These are the change through the position part (30% of Constituent
 Alignment). The vote part's change is not in them: weighting the flank
-rule's means reclassifies 0 of 2,351 Senate and 2 of 6,055 House breaks
+rule's means reclassifies 0 of 2,351 Senate and 0 of 6,055 House breaks
 (above), and reading departed senators' positions is not measured here.
 
 - Full records move only through the scale and the refit seat lines. Of
-  the Senate's mean change of 1.69 over 102 members, about 0.49 is its
+  the Senate's mean change of 1.68 over 102 members, about 0.49 is its
   placeholder's own move to 50 and about 0.56 the four senators below 200
   votes or with no position together (computed from the per-member lines);
-  the other 1.13 or so is the full records' move, through the refit seat
+  the other 1.12 or so is the full records' move, through the refit seat
   lines (the Republican slope moves from +0.0033 to +0.0018, with the
   placeholder dropped from its fit) and the scale, now measured on full
   records, which the output does not separate.
@@ -1201,10 +1201,10 @@ rule's means reclassifies 0 of 2,351 Senate and 2 of 6,055 House breaks
   four in the Senate and eleven in the House.
   - Two recently sworn-in representatives with no count and no career
     position move from 23.3 and 31.1 to 50.
-  - Representatives with 77 and 72 votes move from 93.2 to 79.7 and from
-    75.3 to 66.7.
+  - Representatives with 77 and 72 votes move from 93.2 to 82.5 and from
+    75.3 to 68.4.
   - A representative far beyond saturation (135 votes) stays at its end;
-    the others with 116–171 votes move about 1 to 4 points.
+    the others with 116–171 votes move under 1 to about 3 points.
   - Senators with 53 and 187 votes move by under 1.
   - A representative who left their party during the Congress is read on
     their record since the switch, as before; with no major party there,
@@ -1246,20 +1246,17 @@ rule's means reclassifies 0 of 2,351 Senate and 2 of 6,055 House breaks
   near 0 and near 100.
 - **The thin-record weight rests on 95 thin pairs.** Few members have a
   thin record next to a full one, so the half point has a wide interval
-  (26–98 votes, the upper end where the n0 search stops), and the
-  structure rests on a forward test of about two standard errors
-  (computed from `forward_test`'s above and standard_error) that
-  leaving one member out doesn't show, that a window of recent transitions
-  matches, and that neither the split nor the window's width keeps when
-  chosen from the data as a forecast must (`data_chosen_test`); a rerun
-  with new pairs could return to one curve or move to the window. Whether
-  recent Congresses follow a slower curve still is open: left one member
-  out, later splits lean that way, and the time
-  trend, from the 113th where its fits are inside the search grids (a
-  range picked after seeing the fits), predicts better than the era curve
-  by 0.100 (standard error 0.053); over every transition it predicts about
-  as well as the era curve (1.251 against 1.254), and the forward sweep
-  adopts the era curve at neither the 115th nor the 116th. The pairs are
+  (21–77 votes). Whether recent Congresses follow a slower curve is open:
+  paired member by member, the era curve and a window of recent
+  transitions each beat one curve by about two standard errors of the
+  difference (computed from `forward_test`'s above and standard_error),
+  but not by the noise in the best's own error, which the shipped rule
+  judges by, and not when the split or the width is chosen from the data
+  as a forecast must (`data_chosen_test`); left one member out, later
+  splits lean that way, and the time trend, from the 113th where its fits
+  are inside the search grids (a range picked after seeing the fits),
+  predicts better than the era curve by 0.100 (standard error 0.053). A
+  rerun with new pairs could move to a slower curve. The pairs are
   centered on the party, not the seat's expectation, which, if seat lean
   explained a similar share in the Congresses the pairs come from, makes
   the weight too generous, most for Democrats (Limits, section 14). The
