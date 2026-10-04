@@ -15,13 +15,17 @@ const DEPTH_STYLES = {
   "cross-cutting": { text: "text-signal-cyan", label: "CROSS-CUTTING" },
 };
 
-// The spectrum bar's ends. overallLean is the mean over policy areas of
-// (R-aligned - D-aligned) / partisan votes (party_platform.py), so it is
-// bounded by +/-1 by definition: an end means every partisan vote went with
-// that party. This is the formula's own bound, not a calibration. The bar
-// used to divide by 0.15, the saturation point of the embedding margins
-// campaign promises were once scored on, which pinned most members at an end
-// once leans moved to the vote scale (measured leans reach -0.30 and +0.43).
+// The spectrum bar's ends. A member's vote lean is the mean over policy areas
+// of (R-aligned - D-aligned) / counted Yea and Nay votes, each vote's side
+// taken from its bill's platform alignment in that area (party_platform.py
+// _alignments_from_votes), so it lies within +/-1: an end would mean every
+// counted vote went the way of one party's platform in every area. That is
+// the measure's own bound, not a calibration. (A member with few votes is
+// blended toward a cosponsorship prior, an extrapolated line that could in
+// principle pass +/-1; the bar draws that at the end.) The bar used to divide
+// by 0.15, the saturation point of the embedding margins campaign promises
+// were once scored on, which pinned most members at an end once leans moved
+// to the vote scale (leans observed in 2026-07 ran from -0.30 to +0.43).
 const LEAN_EXTENT = 1;
 
 function PolicyLabel({ area }: { area: string }) {
@@ -48,7 +52,7 @@ function PartisanDepthPanel({
       <div className="flex items-baseline justify-between mb-3">
         <h4 className="text-sm font-mono text-signal-cyan">
           {">"}{" "}
-          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's platform positions. Based on what they voted for, not what they say. The bar runs from every partisan vote with Democrats (left end) to every partisan vote with Republicans (right end); the label beside it ranks this member within their own party, so a short bar can still be among the most partisan in it.">
+          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's platform positions. Based on what they voted for, not what they say. The bar's ends are the limits of the measure: the left end would mean every counted vote went the way of the Democratic platform in every policy area, the right end the Republican platform. The label beside it ranks this member within their own party, so a short bar can still be among the most partisan in it.">
             PARTISAN DEPTH ANALYSIS
           </MetricTooltip>
         </h4>

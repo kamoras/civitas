@@ -45,6 +45,14 @@ describe("PlatformTracker spectrum bar", () => {
     expect(marker).toContain("35%");
   });
 
+  // A member with few votes is blended toward an extrapolated cosponsorship
+  // prior, which could pass +/-1: drawn at the end, never past it.
+  it("draws a lean past -1 at the end", async () => {
+    const { marker, fill } = await spectrum(-1.5);
+    expect(fill).toBe("50%");
+    expect(marker).toMatch(/^clamp\(2px, -25%, /);
+  });
+
   it("keeps the marker inside the track at an end", async () => {
     const { marker } = await spectrum(1);
     expect(marker).toMatch(/^clamp\(2px, 100%, /);
