@@ -275,14 +275,14 @@ export default function ScoresChapter() {
             tested against House and Senate general elections, this shape predicted how incumbents
             did, and one that put the typical position at 100 did not. A position estimated from
             only a few roll calls is mostly noise, so it counts only as much as its votes support.
-            We measured how much on members with a short record in one Congress beside a full one in
-            the Congress before or after, since 2007. Measuring on these recent Congresses predicted
-            later ones better overall than using every year we have, though not every time. A
-            position from about 46 votes counts half, and one from 200 or more counts in full (where
-            a full record starts is our convention). A member with no position yet sits at 50. Early
-            in a new Congress, until its positions are published and pass our checks, or whenever a
-            chamber&apos;s positions don&apos;t pass them, this part is left out and the score is
-            the voting part alone.
+            We measured how much it should count using members who have a short record in one
+            Congress and a full one in the Congress before or after, since 2007. Measuring on these
+            recent Congresses predicted later ones better overall than using every year we have,
+            though not every time. A position from about 46 votes counts half, and one from 200 or
+            more counts in full (where a full record starts is our convention). A member with no
+            position yet sits at 50. Early in a new Congress, until its positions are published and
+            pass our checks, or whenever a chamber&apos;s positions don&apos;t pass them, this part
+            is left out and the score is the voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

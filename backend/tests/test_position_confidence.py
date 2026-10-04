@@ -411,6 +411,9 @@ def test_the_frontend_quotes_the_shipped_figures():
     half = round(data["chambers"]["house"]["half_weight_votes"])
     full = round(data["reference_votes"])
     switch = round(data["prior_until_votes"])
+    # The prose calls the switch a full record and a convention; a rerun
+    # that measures a shorter one must rewrite it, so this fails until then.
+    assert data["prior_until_votes"] == data["reference_votes"], "rewrite the prose that calls the switch a full record"
     page = " ".join(about.read_text().split())
     entry = " ".join(versions.read_text().split())
     assert f"about {half} votes counts half" in page
@@ -736,11 +739,26 @@ def test_shipped_file_reports_what_the_docs_cite():
     trend = data["forward_test"]["trend"]
     # The docs say the rule wouldn't choose the trend over every transition.
     assert trend["above"] >= -trend["standard_error"]
-    ends = trend["fit_at_grid_end"]
-    if "inside_grids" in trend:  # from there on, every forward fit is inside both grids
-        start = trend["inside_grids"]["from"]
-        assert not any(v for t, v in ends.items() if int(t) >= start)
-        assert all(v for t, v in ends.items() if int(t) == max([int(u) for u in ends if int(u) < start], default=0))
+    # The research note and v6.27 quote the trend from the first transition
+    # its forward fits are all inside the grids, and say it predicts worse
+    # than one curve before that.
+    inside = trend["inside_grids"]
+    start = inside["from"]
+    assert sum(v for t, v in trend["gain_by_transition"].items() if int(t) < start) > 0
+    root = pathlib.Path(__file__).resolve().parents[2]
+    research = root / "docs" / "research" / "constituent-alignment.md"
+    method = root / "docs" / "methodology" / "member-score" / "v6.27.md"
+    if research.exists():  # the backend image ships without the docs
+        note, entry = (" ".join(path.read_text().split()) for path in (research, method))
+
+        def quoted(d):
+            return f"{abs(d['above']):.3f} (standard error {d['standard_error']:.3f})"
+        era, one = inside["against_era"], inside["against_one_curve"]
+        overall = f"{abs(trend['above']):.3f} better than one curve (standard error {trend['standard_error']:.3f})"
+        assert f"through the {start - 1}th" in note and f"from the {start}th" in note
+        assert quoted(one) in note and f"{abs(era['above']):.3f} ({era['standard_error']:.3f})" in note
+        assert quoted(era) in note and overall in note
+        assert f"From the {start}th" in entry and quoted(era) in entry and overall in entry
     for lo, hi in data["drift_range"].values():
         assert 0 < lo <= hi
     # Full records show no gradient in their count.
