@@ -286,9 +286,10 @@ Key mathematical properties:
   For these, the rate is the count confidence below — fixed, not estimated
   from the population's variance, so do not call it Bayesian or empirical
   Bayes.
-  The third, whose rate is measured rather than fixed: Constituent Alignment's position part (v6.27)
-  scales a roll-call position's distance from the seat's expected
-  position, when the position rests on n votes, by min(1, w(n) / w(200)),
+  The third, whose rate is measured rather than fixed: Constituent
+  Alignment's position part (v6.27) scales a roll-call position's
+  distance from the seat's expected position, when the position rests on
+  n votes, by min(1, w(n) / w(200)),
   w(n) = n / (n + n0): the measured slope of a member's full-record
   position on their thin one, a full record counting 1. n0 is fitted on
   Voteview's own adjacent-Congress records with drift per transition

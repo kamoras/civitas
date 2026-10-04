@@ -62,7 +62,7 @@ prior_test is the evidence for the flank rule's use of the last
 Congress's full record (party_line_record), on pairs centered as that
 rule centers; its switch test uses the pairs shaped like the rule's case,
 a full record then a member's first, attended votes of the next Congress
-(pairs()'s last field).
+(pairs()'s tenth field, `run`).
 
 Run from the repo (network required; the vote files are large, so pass a
 cache directory to keep them):
@@ -239,7 +239,8 @@ def _usable(chamber: str, congress: int, cache: pathlib.Path | None) -> bool:
 def pairs(cache: pathlib.Path | None = None, span: range | None = None, weight=None,
           shares: dict | None = None) -> tuple[list[tuple], dict]:
     """(chamber, icpsr, n, thin-or-earlier deviation, full deviation, kind,
-    transition, party-line share, thin side is the later) with kind "full"
+    transition, party-line share, thin side is the later, run, moved) with
+    kind "full"
     (both sides full records: n is the earlier side's), "thin" (one side
     counted under RELIABLE_VOTES: n is that side's) or "uncounted" (one
     side with no count but a career position, the case the score weights
@@ -365,7 +366,7 @@ STRUCTURES = {
     "chamber": lambda r: r[0],
     "era": lambda r: r[6] >= 110,
     "direction": lambda r: r[8],
-    # Attended arrivals and departures (pairs()'s last field) apart from the
+    # Attended arrivals and departures (pairs()'s tenth field) apart from the
     # rest: whether absences make a thin record say less.
     "attendance": lambda r: r[9] if len(r) > 9 else False,
 }

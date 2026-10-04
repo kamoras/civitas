@@ -58,9 +58,9 @@ def _pair_rows():
 
 def test_every_thin_record_is_paired_and_the_flank_rules_case_flagged(monkeypatch):
     """Every thin record next to a full one is a pair (the score sees thin
-    records from partial service and from absence alike). The last field
+    records from partial service and from absence alike). The tenth field
     flags the flank rule's case: arrived or left, attending as full records
-    do. 70 arrived; 71 sat in the 100th; 72 and 73 serve on into the 103rd
+    do; the eleventh, arrived or left at all. 70 arrived; 71 sat in the 100th; 72 and 73 serve on into the 103rd
     at first; once they're gone 73 counts and 72, who missed most of their
     span, doesn't; once the 103rd isn't published a leaver can't be
     checked."""
@@ -410,3 +410,26 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert f"once it rests on {switch} roll calls" in page
     assert f"about {half} votes counts half" in entry
     assert f"{full} votes or more counts in full" in entry
+
+
+def test_the_switch_tests_take_the_pairs_their_names_say(monkeypatch):
+    """rule_shape takes later-thin attended leavers, leavers every later-thin
+    member who left (attended or not, never one who stayed), all every
+    counted pair; full pairs go to each, uncounted ones to none."""
+    script = _script()
+    seen = {}
+    calls = iter(("rule_shape", "leavers", "all"))
+    monkeypatch.setattr(script, "switch_test", lambda rows: seen.__setitem__(next(calls), {r[1] for r in rows}))
+    monkeypatch.setattr(script, "prior_crossover", lambda rows: None)
+    row = lambda i, kind, later, run, moved: ("H", i, 50.0, 0.2, 0.3, kind, 110, 0.5, later, run, moved)
+    script.prior_test([
+        row("full", "full", False, False, False),
+        row("run", "thin", True, True, True),
+        row("unattended", "thin", True, False, True),
+        row("stayer", "thin", True, False, False),
+        row("arrival", "thin", False, True, True),
+        row("uncounted", "uncounted", True, True, True),
+    ])
+    assert seen["rule_shape"] == {"full", "run"}
+    assert seen["leavers"] == {"full", "run", "unattended"}
+    assert seen["all"] == {"full", "run", "unattended", "stayer", "arrival"}
