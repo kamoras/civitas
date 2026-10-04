@@ -99,7 +99,8 @@ def _toward_other_party(party: str, cast: list[tuple]) -> bool:
     resting on a few roll calls barely moves their mean. A lone defector's
     side is its own position's sign against the party's, whatever its
     weight, which is why party_line_records reads a member's last-Congress
-    full record until their new record reaches a measured count."""
+    full record until their new record reaches prior_until_votes (a full
+    record by default)."""
     everyone = [d for _, p, _, _, d in cast if p == party and d is not None and d[1] > 0]
     broke = [d for _, p, _, with_party, d in cast if p == party and not with_party and d is not None and d[1] > 0]
     if not broke:

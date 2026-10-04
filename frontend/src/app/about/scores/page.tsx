@@ -214,8 +214,8 @@ export default function ScoresChapter() {
               member sits is already scored by where their record sits (below)
               <Cite id="kirkland2017" />. Which side of their party a member sits on comes from this
               Congress&apos;s record once it is a full one (200 votes); until then, from their last
-              Congress&apos;s full record, which is never scored. Every break on a profile shows
-              that roll call&apos;s party tallies.
+              Congress&apos;s record if it was a full one, which is never scored. Every break on a
+              profile shows that roll call&apos;s party tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in

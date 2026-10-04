@@ -482,9 +482,9 @@ Two things produced that:
 
 **Changed (v6.20).** A break counts only when, on that roll call, the
 party's members who broke sit on average nearer the other party (mean
-first-dimension position, from the same Voteview section position
-congruence reads; since v6.27 each position weighted by its reliability,
-section 14) than the party does (`party_line_record._toward_other_party`). Other breaks are listed on the
+first-dimension position from the chamber's Voteview data, of the last
+Congress early in a new one; since v6.27 each position weighted by its
+reliability, section 14) than the party does (`party_line_record._toward_other_party`). Other breaks are listed on the
 scorecard as from the flank, and not counted. The rate is measured over
 every roll call the chamber recorded this Congress, not a sample.
 
@@ -726,7 +726,7 @@ resampled in a fixed order, 1,000 times.
   leaving out one member at a time moves it between 0.13 and 0.26. A
   no-count position with no career position at all (a member just sworn
   in, with nothing yet to anchor it) is not measured by these pairs, and
-  the score reads it as a position from no votes (50).
+  it counts nothing, so the part sits at 50.
 - **Each pair is predicted in its own direction.** A member whose thin
   record is the earlier one (an entrant) is predicted with the
   transition's forward drift, the slope of the later full position on the
@@ -742,8 +742,8 @@ resampled in a fixed order, 1,000 times.
   untested.
 
 **Six approaches replaced.** Each appeared in a draft of this change and
-was replaced after review; the fourth and the sixth were not shown to
-help rather than shown not to, and a rerun with more pairs tests them
+was replaced after review; the fourth, fifth and sixth were not shown
+to help rather than shown not to, and a rerun with more pairs tests them
 again.
 
 *The career-gap proxy.* The first draft fit gap² = drift + k / votes, where
@@ -811,8 +811,8 @@ pairs shaped like the rule's case; there it doesn't hold up (below).
   - So the weights do pull thin positions toward 50: with every record at
     5 votes, a position at saturation scores about 46 instead of 0.
 - Voteview's placeholders are dropped. A member a current section has no
-  position for (those, or anyone Voteview hasn't placed yet) sits at 50,
-  as a position from no votes would, instead of having the component
+  position for (those, or anyone Voteview hasn't placed yet) counts
+  nothing, so the part sits at 50, instead of having the component
   left out. A section written before v6.27 has no counts and is read as
   before, unweighted, until the first v6.27 ingest rewrites it.
 - Each section records its Congress, and a position counts only for roll
@@ -856,8 +856,9 @@ pairs shaped like the rule's case; there it doesn't hold up (below).
     | 101–150 | 21 | 86% |
     | 151–199 | 13 | 92% |
 
-    A thin record is compared across a Congress there, the rule's
-    comparison within one, so one Congress's drift has to be taken out.
+    Those pairs compare a thin record with the other Congress's full
+    record; the rule compares within one Congress, so one Congress's
+    drift has to be taken out.
     Both flip a side mostly near the party's center (full records agree
     62% within 0.02 of it, over 99% beyond 0.2), so the model
     (`switch_model`) works within three strata of distance from the
@@ -893,8 +894,9 @@ pairs shaped like the rule's case; there it doesn't hold up (below).
     one-standard-error rule puts on a more complex curve. Neither row
     clears it, so the rule keeps the last full record until the new one
     is full. The stakes are small: the best switch saves 0.3% of sides on
-    the rule-shaped pairs, and on the 119th Congress the weighting changed
-    2 of 8,406 breaks. The data can't tell a switch near 161 from a full
+    the rule-shaped pairs (the prior itself first applies in the 120th;
+    on the 119th the reliability weighting alone changed 2 of 8,406
+    breaks). The data can't tell a switch near 161 from a full
     record; they don't favor an early one. Over all thin pairs a switch
     at 92 votes looked better in sample, but members who arrived
     mid-Congress pull it down, and they are not the rule's case; the
@@ -902,7 +904,7 @@ pairs shaped like the rule's case; there it doesn't hold up (below).
     proposed, for that reason.
   - At very low counts the model's logistic in log votes extrapolates
     below a coin flip (a 1-vote record's own-Congress agreement comes out
-    near 0.26, clipped), which makes early switches look worse than they
+    near 0.26), which makes early switches look worse than they
     are; it moves the lower tail of the table, not the decision, which
     turns on counts above 100. This first applies in the 120th Congress:
     a 119th section written before v6.27 keeps no earlier positions.

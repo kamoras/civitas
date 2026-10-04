@@ -598,8 +598,10 @@ that never scores a past position: it reads the last Congress's positions
 only to tell which side of their party a defector sits on, for everyone
 until the new Congress's Voteview section passes its gates, and after that
 for a member whose last record is full and whose new one has no count or
-fewer than the measured `prior_until_votes` (currently 200 votes, a full
-record, in `app/data/position_confidence.json`), or who has no usable
+fewer than `prior_until_votes` (`app/data/position_confidence.json`: a
+full record, 200 votes, by convention, unless a shorter switch saves sides
+out of bag in 95% of resamples, also a convention; none does), or who
+has no usable
 position in the new section. Only the Congress just before is kept as
 the prior.
 

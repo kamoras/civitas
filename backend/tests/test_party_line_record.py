@@ -182,7 +182,7 @@ def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_ses
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
 
     # With a full record's count known, a full last record decides until the
-    # new record reaches the measured switch (a full record without one),
+    # new record reaches the switch (a full record by default, and without one),
     # whatever the weights, and the new one from then.
     section["reliability"] = {"n0": 24, "reference_votes": 200}
     section["votes"]["R4"] = 199

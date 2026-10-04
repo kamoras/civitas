@@ -746,7 +746,8 @@ def main() -> None:
             "reads the last full record (a full record unless a switch short of one, chosen on "
             "resampled members, saves sides on the members left out in 95% of resamples, on pairs "
             "shaped like the rule's case); "
-            "structure_test is the one-standard-error rule's comparison"
+            "structure_test is the one-standard-error rule's comparison; crossover_if_independent is "
+            "the rejected unstratified crossing, reported only"
         ),
         **calibrated,
     }
