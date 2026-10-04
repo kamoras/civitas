@@ -697,17 +697,18 @@ pair counts; whether absences make a thin record say less is tested
 below (attendance). The intervals are reproducible: members are resampled
 in a fixed order, 1,000 times.
 
-- **The latest era's curve, chosen by predicting forward.** The weight
-  is always applied to a Congress the calibration hasn't seen, so the
+- **The latest era's curve, chosen by predicting forward.** The weight is
+  always applied to a Congress the calibration hasn't seen, so the
   structure is chosen by how well it predicts the next one
-  (`forward_test`): each transition's thin pairs are predicted from a
-  fit on the earlier transitions only, rolling forward one transition at
-  a time (from the fourth with thin pairs: `MIN_TRAIN_TRANSITIONS`, a
-  convention), and the squared errors are summed by member. One curve
-  for both chambers ships unless a structure the score can apply (one
-  per chamber, or the latest era's, split at the 110th) predicts better
-  by more than the standard error of the paired difference. Over 82
-  members:
+  (`forward_test`): each transition's thin pairs are predicted from a fit
+  (n0) on the earlier transitions only, with the drift, shared by every
+  structure, from the predicted transition's own full pairs, rolling
+  forward one transition at a time (from the fourth with thin pairs:
+  `MIN_TRAIN_TRANSITIONS`, a convention), and the squared errors are
+  summed by member. One curve for both chambers ships unless a structure
+  the score can apply (one per chamber, or the latest era's, split at the
+  110th) predicts better by more than the standard error of the paired
+  difference. Over 82 members:
 
   | n0 fitted on the earlier transitions | Forward squared error | Against one curve |
   |---|---|---|
@@ -863,8 +864,10 @@ in a fixed order, 1,000 times.
 was replaced after review; the fourth, fifth and sixth were not shown to
 help rather than shown not to, and a rerun with more pairs tests them
 again. Every figure below except the career-gap proxy's and those quoted
-from the current output (the best switch of 101 votes, 36%) comes from
-that draft's own run and is not reproduced by the current scripts.
+from the current output (the best switch of 101 votes at 36%,
+`switch_test.all`; one curve's half point of 36,
+`half_weight_votes_pooled`) comes from that draft's own run and is not
+reproduced by the current scripts.
 
 *The career-gap proxy.* The first draft fit gap² = drift + k / votes, where
 the gap is between a member's Nokken-Poole position and their career
@@ -985,7 +988,9 @@ better (above).
       fails its gates, rather than guess, and raises an ops alert (kept
       data stops being current at the next Congress).
 - The seat fits are taken over every member, since a thin position is
-  noisy but not biased.
+  noisy but not biased: carried back by the drift, a full position differs
+  from its thin one by 0.009 on average (standard error 0.019; 95 pairs,
+  `thin_offset`).
 - The saturation scale is the 90th percentile of full records'
   extremities. A thin record's noise would widen a scale taken over
   everyone, and a scale taken over weighted extremities would cancel the

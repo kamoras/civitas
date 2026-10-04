@@ -530,6 +530,12 @@ class TestPositionCongruence:
         self.patch({"X1": -0.55}, votes={"X1": 24}, reliability={"n0": 24, "half_weight_votes": 24})
         assert "half strength at about 24 roll calls" in self._congruence()["detail"]
 
+    def test_a_weight_just_under_one_never_reads_as_full_strength(self):
+        """199 votes against n0 86 and a full record at 200 weighs 0.998: the
+        detail says 99%, not a 100% that is still pulled toward 50."""
+        self.patch({"X1": -0.55}, votes={"X1": 199}, reliability={"n0": 86, "reference_votes": 200})
+        assert "counts at 99% strength" in self._congruence()["detail"]
+
     def test_the_weight_applies_before_the_scale_saturates(self):
         """The weight is on the position: a position twice past saturation
         on 24 votes (half weight) is still at saturation, 0, not halfway."""

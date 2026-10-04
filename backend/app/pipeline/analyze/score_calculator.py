@@ -2292,7 +2292,7 @@ def _constituent_alignment_core(
         if position_votes is None and weight < 1.0:
             congruence_detail += (
                 f"; Voteview reports no count of the roll calls behind this position, so it counts "
-                f"at {weight:.0%} strength, the measured weight of such positions, pulled toward 50"
+                f"at {math.floor(weight * 100)}% strength, the measured weight of such positions, pulled toward 50"
             )
         elif position_votes == 0 and weight == 0.0:
             congruence_detail += (
@@ -2302,7 +2302,7 @@ def _constituent_alignment_core(
         elif weight < 1.0:
             half = (reliability or {}).get("half_weight_votes")
             congruence_detail += (
-                f"; rests on {position_votes} roll calls, so it counts at {weight:.0%} strength"
+                f"; rests on {position_votes} roll calls, so it counts at {math.floor(weight * 100)}% strength"
                 + (f" (half strength at about {half:.0f} roll calls)" if half else "")
                 + ", pulled toward 50"
             )

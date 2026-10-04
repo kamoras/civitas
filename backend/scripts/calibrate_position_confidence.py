@@ -1108,6 +1108,24 @@ def full_slope_by_votes(data: list[tuple], drift: dict) -> dict[str, float]:
     return out
 
 
+def thin_offset(data: list[tuple]) -> dict:
+    """Whether a thin position is biased, not just noisy: the mean of
+    thin - full / drift (the full position carried back by the pair's
+    drift) over thin pairs, with its standard error, for all of them and
+    for those under 50 votes and from 50 up."""
+    d = drifts(data)
+    rows = [r for r in data if r[5] == "thin" and (r[0], r[6]) in d]
+
+    def summary(sel):
+        x = np.array([r[3] - r[4] / d[(r[0], r[6])][1 if r[8] else 0] for r in sel])
+        if len(x) < 2:
+            return None
+        return {"pairs": len(x), "mean": round(float(x.mean()), 4),
+                "standard_error": round(float(x.std(ddof=1) / np.sqrt(len(x))), 4)}
+    return {"all": summary(rows), "under_50": summary([r for r in rows if r[2] < 50]),
+            "from_50": summary([r for r in rows if r[2] >= 50])}
+
+
 def calibrate(cache: pathlib.Path | None = None) -> dict:
     span = congresses()
     data, shares = pairs(cache, span)
@@ -1174,6 +1192,7 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
             f"{e.start}-{e.stop - 1}": round(half_point(fit_n0([r for r in data if r[6] in e])), 1)
             for e in (range(FIRST_CONGRESS, ERA_SPLIT), range(ERA_SPLIT, last + 1))
         },
+        "thin_offset": thin_offset(data),
         "thin_pairs_by_era": {
             f"{e.start}-{e.stop - 1}": {
                 "thin": sum(1 for r in used if r[5] == "thin" and r[6] in e),
@@ -1279,7 +1298,9 @@ def main() -> None:
             "half_weight_votes_by_chamber_interval_90 are the other structures', beside it); "
             "uncounted_weight is the slope, for both chambers, for positions published with no count "
             "(or 0) but a career DW-NOMINATE position, and uncounted_weight_leave_one_out its range "
-            "with each of its members left out in turn; thin_pairs_by_era counts each era's thin "
+            "with each of its members left out in turn; thin_offset is the mean of thin - full / drift "
+            "over thin pairs (all, under 50 votes, from 50 up) with its standard error, whether a thin "
+            "position is biased rather than noisy; thin_pairs_by_era counts each era's thin "
             "pairs and those under 50 votes; drift_range is the lowest and highest chamber-transition "
             "drift in each direction (earlier_thin, later_thin); full_slope_by_votes is the full records' slope on the drift by their vote count; "
             "party_line_share_by_congress is each Congress's share of party-line roll calls; pairs "

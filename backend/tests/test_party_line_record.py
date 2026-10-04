@@ -467,3 +467,37 @@ def test_a_house_roll_calls_label_reads_its_own_parties(db_session, monkeypatch)
                 "party": m[0], "votingRecord": {"effectiveParty": "D" if m == "I0" else m[0]}} for m in dims]
     records = dict(zip(dims, party_line_records(db_session, "house", members)))
     assert records["D0"]["breaks"] or records["D0"]["flankBreaks"]
+
+
+def test_a_departed_senators_position_classifies_a_break(db_session, monkeypatch):
+    """The Senate's roll calls tie a vote to a position only through the
+    members passed, and the roster lists sitting senators only. A senator
+    who left during the Congress (stored, not passed) is still read with
+    their position: here DX, who sits toward the Republicans, breaks with
+    D0, so D0's break is toward the other party; without DX's position it
+    would read as a flank break."""
+    from app.models import Senator
+    dims = {"D0": -0.45, **{f"D{i}": -0.4 for i in range(1, 6)}, "DX": 0.3, **{f"R{i}": 0.5 for i in range(6)}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points",
+                        lambda chamber: {"members": {f"bio-{m}": d for m, d in dims.items()}})
+    for m in dims:
+        db_session.add(Senator(id=f"S-{m}", bioguide_id=f"bio-{m}", name=f"{m} Last{m}", state="TN", party=m[0],
+                               is_current=m != "DX"))
+    rc = RollCall(chamber="senate", congress=119, session=2, number=41, date="2026-03-01", question="On Passage",
+                  bill_id="S.41")
+    db_session.add(rc)
+    db_session.flush()
+    for m in dims:
+        vote = "Yea" if m in ("D0", "DX") or m.startswith("R") else "Nay"
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=m, last_name=f"Last{m}", first_name=m,
+                                        party=m[0], state="TN", position=vote))
+    db_session.commit()
+    roster = [{"bioguideId": f"bio-{m}", "name": f"{m} Last{m}", "lastNameForVoteMatch": f"Last{m}", "state": "TN",
+               "party": m[0], "votingRecord": {"effectiveParty": m[0]}} for m in dims if m != "DX"]
+    records = party_line_records(db_session, "senate", roster)
+    assert len(records) == len(roster)  # the departed senator's own record isn't returned
+    assert len(records[0]["breaks"]) == 1 and not records[0]["flankBreaks"]
+    db_session.query(Senator).filter_by(id="S-DX").delete()
+    db_session.commit()
+    (alone, *_) = party_line_records(db_session, "senate", roster)
+    assert not alone["breaks"] and len(alone["flankBreaks"]) == 1

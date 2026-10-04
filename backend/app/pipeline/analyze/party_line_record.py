@@ -119,6 +119,36 @@ def _toward_other_party(party: str, cast: list[tuple]) -> bool:
     return mean(broke) > reference if party == "D" else mean(broke) < reference
 
 
+def _words(text: str) -> str:
+    """A name as space-padded words, accents stripped and uppercased, with
+    punctuation dropped, so one name can be found as whole words in another."""
+    return f" {' '.join(re.sub(r'[^\w ]', ' ', _normalize_for_match(text)).split())} "
+
+
+def _departed_senators(db: Session, members: list[dict], positions: dict[int, list]) -> list[dict]:
+    """Stored senators `members` leaves out (one who left during the
+    Congress is off the sitting roster), each with the roll calls' own
+    spelling of their last name: the one surname among their state's
+    voters that is a whole word of their stored name. A name that matches
+    none, or more than one, is left out, as before."""
+    have = {m.get("bioguideId") for m in members}
+    voters: dict[str, set[str]] = defaultdict(set)
+    for ps in positions.values():
+        for p in ps:
+            if p.last_name and p.state:
+                voters[p.state.upper()].add(p.last_name)
+    out = []
+    for bioguide, name, state, party in db.query(Senator.bioguide_id, Senator.name, Senator.state, Senator.party):
+        if not bioguide or bioguide in have:
+            continue
+        words = _words(name or "")
+        last = {ln for ln in voters.get((state or "").upper(), ()) if _words(ln) in words}
+        if len(last) == 1:
+            out.append({"bioguideId": bioguide, "name": name, "state": state, "party": party,
+                        "lastNameForVoteMatch": last.pop()})
+    return out
+
+
 def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[dict | None]:
     """The party-line record of each member dict (bioguideId,
     lastNameForVoteMatch, state, party, leadershipTitle, votingRecord's
@@ -143,16 +173,25 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         # name and state (extract_senator_vote matches the same way).
         return member_id if chamber == "house" else (_normalize_for_match(last_name or ""), (state or "").upper())
 
-    index: dict = defaultdict(list)
-    for i, m in enumerate(members):
-        index[key(m.get("bioguideId") or "", m.get("lastNameForVoteMatch") or "", m.get("state") or "")].append(i)
-
     positions: dict[int, list] = defaultdict(list)
     for p in db.query(
         RollCallPosition.roll_call_id, RollCallPosition.member_id, RollCallPosition.last_name,
         RollCallPosition.first_name, RollCallPosition.state, RollCallPosition.party, RollCallPosition.position,
     ).filter(RollCallPosition.roll_call_id.in_(list(rolls))):
         positions[p.roll_call_id].append(p)
+
+    # The Senate's roll calls tie a vote to a position only through these
+    # members, and the roster lists sitting senators only: a senator who
+    # left during the Congress is added (records not returned), so their
+    # votes are read with their position like everyone else's. The House's
+    # roll calls carry the bioguide id and need nothing added.
+    scored = len(members)
+    if chamber == "senate":
+        members = members + _departed_senators(db, members, positions)
+
+    index: dict = defaultdict(list)
+    for i, m in enumerate(members):
+        index[key(m.get("bioguideId") or "", m.get("lastNameForVoteMatch") or "", m.get("state") or "")].append(i)
 
     # A seat passed to someone of the same surname (resolve_senate_lis_ids):
     # only the member's own LIS id is theirs.
@@ -176,8 +215,8 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         return found_at[0] if len(found_at) == 1 else None
 
     # The chamber's stored members' parties (an independent's caucus party):
-    # every member passed without a voting record (the rest of the chamber
-    # on a filtered run) reads its party from here, and each section's party
+    # every member without a voting record (the rest of the chamber, and a
+    # departed senator added above) reads its party from here, and each section's party
     # centers cover the whole chamber however few members this run scores.
     model = Senator if chamber == "senate" else Representative
     stored: dict[str, str] = {
@@ -327,7 +366,7 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
                 stages[i][unit].append((rc.date, rc.session, rc.number, ref, vote, kind))
 
     out: list[dict | None] = []
-    for i in range(len(members)):
+    for i in range(scored):
         if i not in found:
             out.append(None)
             continue
@@ -344,7 +383,7 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             "breaks": [{"rollCall": v[3], "vote": v[4]} for v in sorted(breaks, reverse=True)],
             "flankBreaks": [{"rollCall": v[3], "vote": v[4]} for v in sorted(flank, reverse=True)],
         })
-    missing = [members[i].get("name") or members[i].get("bioguideId") for i in range(len(members)) if i not in found]
+    missing = [members[i].get("name") or members[i].get("bioguideId") for i in range(scored) if i not in found]
     if missing:
         logger.warning(
             "%d %s members matched no stored roll-call position (scored on stored votes): %s",
