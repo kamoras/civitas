@@ -15,6 +15,15 @@ const DEPTH_STYLES = {
   "cross-cutting": { text: "text-signal-cyan", label: "CROSS-CUTTING" },
 };
 
+// The spectrum bar's ends. overallLean is the mean over policy areas of
+// (R-aligned - D-aligned) / partisan votes (party_platform.py), so it is
+// bounded by +/-1 by definition: an end means every partisan vote went with
+// that party. This is the formula's own bound, not a calibration. The bar
+// used to divide by 0.15, the saturation point of the embedding margins
+// campaign promises were once scored on, which pinned most members at an end
+// once leans moved to the vote scale (measured leans reach -0.30 and +0.43).
+const LEAN_EXTENT = 1;
+
 function PolicyLabel({ area }: { area: string }) {
   const label = usePolicyLabel(area);
   return <>{label}</>;
@@ -28,7 +37,7 @@ function PartisanDepthPanel({
   senatorParty: string;
 }) {
   const depthStyle = DEPTH_STYLES[depth.depth];
-  const leanPct = Math.min((Math.abs(depth.overallLean) / 0.15) * 100, 100);
+  const leanPct = Math.min((Math.abs(depth.overallLean) / LEAN_EXTENT) * 100, 100);
   const leanDirection = depth.overallLean > 0 ? "R" : depth.overallLean < 0 ? "D" : "center";
 
   const matchesParty = depth.overallParty === senatorParty;
@@ -39,7 +48,7 @@ function PartisanDepthPanel({
       <div className="flex items-baseline justify-between mb-3">
         <h4 className="text-sm font-mono text-signal-cyan">
           {">"}{" "}
-          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's platform positions. Based on what they voted for, not what they say.">
+          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's platform positions. Based on what they voted for, not what they say. The bar runs from every partisan vote with Democrats (left end) to every partisan vote with Republicans (right end); the label beside it ranks this member within their own party, so a short bar can still be among the most partisan in it.">
             PARTISAN DEPTH ANALYSIS
           </MetricTooltip>
         </h4>
@@ -66,14 +75,12 @@ function PartisanDepthPanel({
               width: `${leanPct / 2}%`,
             }}
           />
-          {/* Clamped to the track like the fill: a lean past the scale
-              (measured leans reach +0.43) put the marker beyond the bar,
-              where the panel's overflow:hidden cut it off. The 2px inset
-              keeps the 4px marker inside the track at either end. */}
+          {/* The 2px inset keeps the 4px marker inside the track at either
+              end; the clamp also guards a lean outside +/-1. */}
           <div
             className="absolute top-0 bottom-0 w-1 bg-phos"
             style={{
-              left: `clamp(2px, ${50 + (depth.overallLean / 0.15) * 50}%, calc(100% - 2px))`,
+              left: `clamp(2px, ${50 + (depth.overallLean / LEAN_EXTENT) * 50}%, calc(100% - 2px))`,
               transform: "translateX(-50%)",
             }}
           />
