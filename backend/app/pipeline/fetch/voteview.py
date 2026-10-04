@@ -547,6 +547,18 @@ def previous_positions(previous: dict, congress: int | None) -> dict | None:
             "reliability": previous["reliability"]}
 
 
+def _first_rolls(text: str) -> dict[str, int]:
+    """ICPSR id -> its first roll call in a vote export's text."""
+    first: dict[str, int] = {}
+    for row in csv.DictReader(io.StringIO(text)):
+        number = _number(row.get("rollnumber"))
+        if number is None:
+            continue  # no roll call: says nothing about when the id began
+        i = _icpsr(row)
+        first[i] = min(first.get(i, int(number)), int(number))
+    return first
+
+
 async def fetch_first_rolls(
     chamber: str, congress: int, client: httpx.AsyncClient | None = None,
 ) -> dict[str, int] | None:
@@ -563,14 +575,8 @@ async def fetch_first_rolls(
         )
         if resp is None:
             return None
-        first: dict[str, int] = {}
-        for row in csv.DictReader(io.StringIO(resp.text)):
-            number = _number(row.get("rollnumber"))
-            if number is None:
-                continue  # no roll call: says nothing about when the id began
-            i = _icpsr(row)
-            first[i] = min(first.get(i, int(number)), int(number))
-        return first
+        # A whole chamber's votes: parsed off the event loop.
+        return await asyncio.to_thread(_first_rolls, resp.text)
     except Exception:
         logger.warning("Voteview %s votes fetch failed", chamber, exc_info=True)
         return None

@@ -297,9 +297,11 @@ Key mathematical properties:
   chambers: the latest era's, since the 110th Congress (a split by
   convention). It is chosen by predicting forward, each transition from
   the earlier ones only, as the weight is used: it beats one curve over
-  every Congress by 0.066 (standard error 0.034, about one at the latest
-  transitions, so weakly settled) and a curve per chamber does worse; a
-  paired one-standard-error rule decides, and a rerun decides again.
+  every Congress by 0.066 (standard error 0.034; over the last three
+  transitions alone the gain is about one standard error, so weakly
+  settled) and a curve per chamber does worse; a paired
+  one-standard-error rule (a convention, adopted in review after the
+  forward result was seen) decides, and a rerun decides again.
   The split is a fixed Congress, so nothing is reset for a new
   Congress.
   It is a reliability weight, not a count threshold.

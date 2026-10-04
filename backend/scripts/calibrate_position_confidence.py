@@ -23,7 +23,7 @@ Congress):
 
 Drift is how far positions carry from one Congress to the next, and it
 varies by era (a full record's slope on the next Congress's runs from about
-0.66 to 1.01), so each chamber and transition gets its own, set by that
+0.66 to 1.01, drift_range), so each chamber and transition gets its own, set by that
 transition's pairs of full records alone, which show no gradient in their
 count (full records count 1). n0 is then the least-squares fit of the thin
 pairs. The structure shipped is chosen forward in time (forward_test):
@@ -540,7 +540,7 @@ def _paired(a: dict[str, float], b: dict[str, float]) -> dict | None:
 
 def forward_errors(
     data: list[tuple], split: int = ERA_SPLIT, names: tuple = ("pooled", "chamber", "era", "trend"),
-    window: int | None = None,
+    window: int | None = None, predict_from: int | None = None,
 ) -> tuple[dict[str, dict[str, float]], dict[str, dict[int, float]]]:
     """structure -> each thin member's squared error predicting each
     transition's thin pairs from a fit (n0) on the earlier transitions
@@ -552,7 +552,8 @@ def forward_errors(
     chamber, era (the curve since `split`, pooled until that era has thin
     pairs), trend (log n0 linear in decades since ERA_SPLIT, on the A and
     B grids, whose ends it often reaches) and window (the last `window`
-    transitions with thin pairs)."""
+    transitions with thin pairs). With `predict_from`, only transitions
+    from that one on are predicted (fits still use every earlier one)."""
     letters = dict((letter, name) for name, letter in CHAMBERS)
     thin_transitions = sorted({r[6] for r in data if r[5] == "thin"})
     out: dict[str, dict[str, float]] = {k: {} for k in names}
@@ -560,7 +561,7 @@ def forward_errors(
     for t in thin_transitions:
         train = [r for r in data if r[6] < t]
         earlier = sorted({r[6] for r in train if r[5] == "thin"})
-        if len(earlier) < MIN_TRAIN_TRANSITIONS:
+        if len(earlier) < MIN_TRAIN_TRANSITIONS or (predict_from is not None and t < predict_from):
             continue
         test = [r for r in data if r[6] == t]
         drift = drifts(test)
@@ -608,7 +609,10 @@ def forward_test(data: list[tuple]) -> dict:
     transition; the comparison with the one, two and three members it
     helps most left out of it (fits unchanged) and left out of the data
     (refitted); the era comparison at every split; and a window of the
-    last FORWARD_WINDOW transitions, recency without a split."""
+    last FORWARD_WINDOW transitions, recency without a split, against one
+    curve and against the era curve (window_against_era: whether recency
+    and a split can be told apart). last_three is the chosen structure's
+    comparison on the last three predicted transitions alone."""
     errors, by_t = forward_errors(data)
     report = {name: {"error": round(sum(e.values()), 4), **(_paired(e, errors["pooled"]) or {})}
               for name, e in errors.items() if name != "pooled"}
@@ -630,16 +634,22 @@ def forward_test(data: list[tuple]) -> dict:
             e, _ = forward_errors(rest, names=("pooled", chosen))
             refit.append(_paired(e[chosen], e["pooled"]))
         r["without_most_helped_refitted"] = refit
+        e, _ = forward_errors(data, names=("pooled", chosen), predict_from=sorted(by_t["pooled"])[-3:][0])
+        r["last_three"] = _paired(e[chosen], e["pooled"])
     thin = sorted({row[6] for row in data if row[5] == "thin"})
     sweep = {}
-    for cut in thin[1:]:
+    # Every split the forward test can tell from one curve: the era curve
+    # differs only once an earlier transition at or after the split has
+    # thin pairs, so never at the last.
+    for cut in thin[1:-1]:
         e, _ = forward_errors(data, split=cut, names=("pooled", "era"))
         t = _paired(e["era"], e["pooled"])
         if t is not None:
             sweep[str(cut)] = {**t, "adopted": t["above"] < -t["standard_error"]}
     e, _ = forward_errors(data, names=("pooled", "window"), window=FORWARD_WINDOW)
     return {"chosen": chosen, "members": len(errors["pooled"]), **report,
-            "era_at_every_split": sweep, "window": _paired(e["window"], e["pooled"])}
+            "era_at_every_split": sweep, "window": _paired(e["window"], e["pooled"]),
+            "window_against_era": _paired(e["window"], errors["era"])}
 
 
 def era_test(data: list[tuple], structure: str, split: int = ERA_SPLIT) -> dict | None:
@@ -1044,6 +1054,23 @@ def bootstrap(data: list[tuple], structure: str, seed: int = 0) -> dict:
     return out
 
 
+# Vote bands of full records for full_slope_by_votes (presentation only).
+FULL_BANDS = (200, 400, 600, 800, 1100, 10_000)
+
+
+def full_slope_by_votes(data: list[tuple], drift: dict) -> dict[str, float]:
+    """Slope of the later full position on drift * the earlier one, full
+    pairs binned by the earlier record's votes (FULL_BANDS)."""
+    out = {}
+    for lo, hi in zip(FULL_BANDS, FULL_BANDS[1:]):
+        rows = [r for r in data if r[5] == "full" and lo <= r[2] < hi and (r[0], r[6]) in drift]
+        dx = np.array([drift[(r[0], r[6])][0] * r[3] for r in rows])
+        y = np.array([r[4] for r in rows])
+        if len(rows) and (dx ** 2).sum():
+            out[f"{lo}-{hi}"] = round(float((dx * y).sum() / (dx ** 2).sum()), 3)
+    return out
+
+
 def calibrate(cache: pathlib.Path | None = None) -> dict:
     span = congresses()
     data, shares = pairs(cache, span)
@@ -1093,6 +1120,9 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
         "heldout_error": heldout,
         "structure_test": comparison,
         "half_weight_votes_pooled": round(half_point(fit_n0(data)), 1),
+        # One curve's interval, beside the shipped structure's: interval_90
+        # holds the structure fixed, so it leaves out the choice of it.
+        "half_weight_votes_pooled_interval_90": bootstrap(data, "pooled")["house"]["half_weight_votes"],
         "half_weight_votes_by_chamber": {
             name: round(half_point(c), 1) for name, c in fit_chambers(data, "chamber").items()},
         "half_weight_votes_by_chamber_interval_90": {
@@ -1107,6 +1137,18 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
             f"{e.start}-{e.stop - 1}": round(half_point(fit_n0([r for r in data if r[6] in e])), 1)
             for e in (range(FIRST_CONGRESS, ERA_SPLIT), range(ERA_SPLIT, last + 1))
         },
+        "thin_pairs_by_era": {
+            f"{e.start}-{e.stop - 1}": {
+                "thin": sum(1 for r in used if r[5] == "thin" and r[6] in e),
+                "under_50_votes": sum(1 for r in used if r[5] == "thin" and r[6] in e and r[2] < 50)}
+            for e in (range(FIRST_CONGRESS, ERA_SPLIT), range(ERA_SPLIT, last + 1))
+        },
+        # Each chamber-transition's drift, both ways (drifts), and the full
+        # records' slope on the drift by their vote count: a record counts
+        # in full from RELIABLE_VOTES on, so the slope should not rise above it.
+        "drift_range": {way: [round(min(v[i] for v in d.values()), 3), round(max(v[i] for v in d.values()), 3)]
+                        for i, way in enumerate(("earlier_thin", "later_thin"))},
+        "full_slope_by_votes": full_slope_by_votes(data, d),
         "party_line_test": party_line_test(data, structure),
         "trend_test": trend_test(data, structure),
         "prior_test": (test := prior_test(rule_data)),
@@ -1186,7 +1228,13 @@ def main() -> None:
             "uncounted_weight is the slope, for both chambers, for positions published with no "
             "count (or 0) but a career DW-NOMINATE position; transitions with "
             "no full pairs and Congresses still thin by the calendar are left out; interval_90 is "
-            "the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, "
+            "the 5th-95th percentile over members resampled with the structure held fixed (so it leaves "
+            "out the choice of structure; half_weight_votes_pooled_interval_90 is one curve's, beside it); "
+            "thin_pairs_by_era counts each era's thin pairs and those under 50 votes; drift_range is "
+            "each chamber-transition's drift, both ways; full_slope_by_votes is the full records' slope "
+            "on the drift by their vote count; forward_test's last_three is the chosen structure "
+            "against one curve on the last three predicted transitions, and window_against_era the "
+            "window against the era curve; prior_test compares, for the flank rule, "
             "a last full record and a thin record as evidence of a member's side of their party, "
             "centered as the rule centers, and prior_until_votes is the count below which the rule "
             "reads the last full record (a full record unless a switch short of one, chosen on "

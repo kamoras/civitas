@@ -562,8 +562,9 @@ def test_calibrate_ships_the_forward_tests_choice(monkeypatch):
     monkeypatch.setattr(script, "era_test", lambda d, s, split=110: None)
     split_base = []
     monkeypatch.setattr(script, "era_split_test", lambda d, s: split_base.append(s) or {})
-    for name in ("bootstrap", "party_line_test", "trend_test", "prior_test", "switcher_test"):
+    for name in ("party_line_test", "trend_test", "prior_test", "switcher_test"):
         monkeypatch.setattr(script, name, lambda *a, **k: {})
+    monkeypatch.setattr(script, "bootstrap", lambda *a, **k: {"house": {"half_weight_votes": [0.0, 0.0]}})
     monkeypatch.setattr(script, "prior_until_votes", lambda t: 200.0)
     for chosen in ("era", "pooled"):
         monkeypatch.setattr(script, "forward_test", lambda d, c=chosen: {"chosen": c})
@@ -586,7 +587,8 @@ def test_the_forward_test_adopts_a_structure_only_past_the_noise(monkeypatch):
     def fake(era, chamber, trend=-1.0):
         table = {"pooled": base, "chamber": chamber, "era": era, "trend": errs(trend), "window": errs(0.0)}
 
-        def forward_errors(d, split=110, names=("pooled", "chamber", "era", "trend"), window=None):
+        def forward_errors(d, split=110, names=("pooled", "chamber", "era", "trend"), window=None,
+                           predict_from=None):
             return {n: table[n] for n in names}, {n: {110: sum(table[n].values())} for n in names}
         return forward_errors
     for era, chamber, chosen in ((errs(-0.1), errs(0.0), "era"), (errs(-0.01, 0.2), errs(0.0), "pooled"),
@@ -597,6 +599,9 @@ def test_the_forward_test_adopts_a_structure_only_past_the_noise(monkeypatch):
         assert out["chosen"] == chosen
         if chosen != "pooled":
             assert len(out[chosen]["without_most_helped_refitted"]) == 3
+            assert out[chosen]["last_three"]["above"] == round(sum(era.values() if chosen == "era" else chamber.values())
+                                                                   - sum(base.values()), 4)
+        assert out["window_against_era"] is not None
 
 
 def test_the_trend_term_finds_n0_rising_with_time():
@@ -665,3 +670,29 @@ def test_forward_errors_fit_only_on_earlier_transitions(monkeypatch):
     n0 = real([r for r in data if r[6] < 107], "pooled")["house"]
     k = script.drifts([r for r in data if r[6] == 107])[("H", 107)][1]
     assert abs(out["pooled"]["T107"] - (0.1 - float(script.relative_weight(20.0, n0)) * k * 0.2) ** 2) < 1e-12
+    # predict_from predicts only the later transitions, on the same fits.
+    later, later_t = script.forward_errors(data, names=("pooled",), predict_from=109)
+    assert set(later["pooled"]) == {"T109"} and later["pooled"]["T109"] == out["pooled"]["T109"]
+
+
+def test_the_split_sweep_skips_the_split_it_cannot_test():
+    """At the last transition with thin pairs no later one has thin pairs
+    to fit the era curve on, so it equals one curve: not a split tested."""
+    data = json.loads(_DATA.read_text())
+    last = max(int(t) for t in data["forward_test"]["era"]["gain_by_transition"])
+    assert str(last) not in data["forward_test"]["era_at_every_split"]
+
+
+def test_shipped_file_reports_what_the_docs_cite():
+    """The figures the research note and v6.27 cite are in the file."""
+    data = json.loads(_DATA.read_text())
+    era = data["forward_test"][data["structure"]]
+    assert {"above", "standard_error"} <= set(era["last_three"])
+    assert {"above", "standard_error"} <= set(data["forward_test"]["window_against_era"])
+    lo, hi = data["half_weight_votes_pooled_interval_90"]
+    assert lo <= data["half_weight_votes_pooled"] <= hi
+    assert sum(e["thin"] for e in data["thin_pairs_by_era"].values()) == data["pairs"]["thin"]
+    for lo, hi in data["drift_range"].values():
+        assert 0 < lo <= hi
+    # Full records show no gradient in their count.
+    assert all(abs(s - 1) < 0.05 for s in data["full_slope_by_votes"].values())
