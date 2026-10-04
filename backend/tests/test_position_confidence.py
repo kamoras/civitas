@@ -734,6 +734,8 @@ def test_shipped_file_reports_what_the_docs_cite():
     assert lo <= data["half_weight_votes_pooled"] <= hi
     assert sum(e["thin"] for e in data["thin_pairs_by_era"].values()) == data["pairs"]["thin"]
     trend = data["forward_test"]["trend"]
+    # The docs say the rule wouldn't choose the trend over every transition.
+    assert trend["above"] >= -trend["standard_error"]
     ends = trend["fit_at_grid_end"]
     if "inside_grids" in trend:  # from there on, every forward fit is inside both grids
         start = trend["inside_grids"]["from"]

@@ -603,8 +603,10 @@ def forward_test(data: list[tuple]) -> dict:
     next Congress better, forward_errors' total, by more than the
     standard error of its member-by-member difference from one curve (a
     convention; the better of the two if both do). The trend is reported,
-    not chosen: it was added after the other tests. Each structure's total
-    and paired difference from one curve ("above": negative, better).
+    not chosen: it was added after the other tests (a stated choice), and
+    over every predicted transition it doesn't clear the same bar. Each
+    structure's total and paired difference from one curve ("above":
+    negative, better).
     With a choice other than one curve, how much it rests on: its gain by
     transition; the comparison with the one, two and three members it
     helps most left out of it (fits unchanged) and left out of the data

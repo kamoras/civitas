@@ -747,9 +747,14 @@ in a fixed order, 1,000 times.
     through the 112th, where it predicts worse than one curve; from the
     113th, with every fit inside the grids, it beats one curve by 0.142
     (standard error 0.065) and the era curve by 0.100 (0.053)
-    (`trend.inside_grids`, a range picked after seeing where the fits
-    sit). It was added after the other tests, so it is reported, not
-    chosen; it points to a curve still slower than the shipped one.
+    (`trend.inside_grids`, a range picked after seeing where the fits sit,
+    and one that drops exactly the transitions where it did worse). Over
+    every predicted transition, the range the rule judges, it is 0.069
+    better than one curve (standard error 0.089), short of the rule's bar,
+    so the rule would not choose it even as a candidate; it is reported,
+    not chosen (that it was added after the other tests is a further
+    reason, a stated choice). It suggests, without testing, a curve still
+    slower than the shipped one.
 
   So the evidence supports recent thin records saying less than one curve
   over every Congress credits; how much less is not settled, and the
@@ -1153,11 +1158,14 @@ which read placeholders as positions and weighted nothing, with v6.27:
   structure rests on a forward test of about two standard errors that
   leaving one member out doesn't show; a rerun with new pairs could return
   to one curve. Whether recent Congresses follow a slower curve still is
-  the weight's most likely revision: later splits lean that way, and the
-  time trend, from the 113th where its fits are inside the search grids,
-  predicts better than the era curve by 0.100 (standard error 0.053). The
-  thin records mix arrivals, departures and long absences, as the score's
-  do; whether everyone's early records in a Congress behave like these is
+  open: left one member out, later splits lean that way, and the time
+  trend, from the 113th where its fits are inside the search grids (a
+  range picked after seeing the fits), predicts better than the era curve
+  by 0.100 (standard error 0.053); over every transition it predicts about
+  as well as the era curve (1.251 against 1.254), and the forward sweep
+  adopts the era curve at neither the 115th nor the 116th. The thin
+  records mix arrivals, departures and long absences, as the score's do;
+  whether everyone's early records in a Congress behave like these is
   untested. The no-count weight rests on fewer still (25 pairs), and the
   flank rule's switch can't be measured at all: only 3 pairs have the
   rule's shape. Reading a party switcher on their record since the switch
