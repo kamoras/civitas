@@ -794,13 +794,14 @@ in a fixed order, 1,000 times.
   shipped grouping by 0.098 (standard error 0.077) over every member and
   0.082 (0.076) over the latest era's (0.036, 0.064, without its most
   influential member), with its half point by the 118th at the slowest
-  curve the form allows (about 100 votes). At the 113th to 115th and 117th
-  splits, and in the trend, the latest era does better, as in the forward
-  test; at the 103rd to 112th and the 118th, left one member out, it does
-  slightly worse. The early era's n0 sits at the grid's floor, fitted on
-  only 4 thin pairs under 50 votes (of its 24, `thin_pairs_by_era`), so
-  "thin records were reliable before 2007" is not a finding: the contrast
-  rests on a small early base.
+  curve the form allows (about 100 votes). Left one member out, the latest
+  era does better at the 113th to 117th splits (the 116th barely) and in
+  the trend, as in the forward test; at the 103rd to 112th it does
+  slightly worse, and at the 118th worse by 0.14 (standard error 0.15, 10
+  members). The early era's n0 sits at the grid's floor, fitted on only 4
+  thin pairs under 50 votes (of its 24, `thin_pairs_by_era`), so "thin
+  records were reliable before 2007" is not a finding: the contrast rests
+  on a small early base.
 
 | | Estimate | 90% interval (members resampled, 1,000 times, the era structure held fixed) |
 |---|---|---|
@@ -1007,12 +1008,12 @@ better (above).
     position's sign against the party's. So once the new Congress's
     section is in, the rule reads a member's last-Congress full record
     (kept beside the new section for this rule only, never scored) until
-    their new record is full (200 votes). Each Congress's
-    positions are read from their own party's weighted mean, so a
-    party-wide shift between the two can't move a member against a party
-    read from the other. Only the Congress just before is kept, and only
-    a full last record replaces a new one: that is the case the pairs
-    measure. Two stated choices, not measured:
+    their new record is full (200 votes). Each Congress's positions are
+    read from their own party's weighted mean, so a party-wide shift
+    between the two can't move a member against a party read from the
+    other. Only the Congress just before is kept, and only a full last
+    record replaces a new one: that is the case the pairs measure. Two
+    stated choices, not measured:
     - A member whose new position counts for nothing yet (no votes), or
       who has none, is read on their last position however short; the
       alternative, classifying the break on the other defectors alone,
@@ -1106,10 +1107,9 @@ which read placeholders as positions and weighted nothing, with v6.27:
     the others with 116–171 votes move about 1 to 4 points.
   - Senators with 53 and 187 votes move by under 1.
   - A representative who left their party during the Congress is read on
-    their record since the switch, as before; with no major
-    party there, the score reads it against the caucus the pipeline
-    infers from their votes, which this comparison doesn't have, so they
-    are left out of it.
+    their record since the switch, as before; with no major party there,
+    the score reads it against the caucus the pipeline infers from their
+    votes, which this comparison doesn't have, so they are left out of it.
   - Members scored from 1 to 39 votes or a placeholder, all since departed,
     move by up to 50 points.
 

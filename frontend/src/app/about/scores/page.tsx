@@ -222,11 +222,12 @@ export default function ScoresChapter() {
               decides once it rests on 200 roll calls (our convention); until then a full record
               from the last Congress decides, and without one this Congress&apos;s position so far
               does. A member with no position yet this Congress is read on the last Congress&apos;s,
-              however short (our choice; nothing measured it). Neither applies to a member who has
-              switched parties, during this Congress or between the two, since their last position
-              was cast in their old party, and a position recorded under the other major party is
-              never read for the member. The last Congress&apos;s position is used only for this,
-              never scored. Every break on a profile shows that roll call&apos;s party tallies.
+              however short (our choice; nothing measured it). The last Congress&apos;s position is
+              never used for a member who has switched parties, during this Congress or between the
+              two, since it was cast in their old party, and a position recorded under the other
+              major party is never read for the member. The last Congress&apos;s position is used
+              only for this, never scored. Every break on a profile shows that roll call&apos;s
+              party tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
@@ -273,13 +274,13 @@ export default function ScoresChapter() {
             member who sits about where their seat predicts scores about 50 on this part, by design:
             tested against House and Senate general elections, this shape predicted how incumbents
             did, and one that put the typical position at 100 did not. A position estimated from
-            only a few roll calls is mostly noise, so it counts only as much as its votes support,
-            measured on members whose short record in one Congress sits next to a full one in the
-            Congress before or after, since 2007 (measuring on these recent Congresses predicted the
-            following Congresses better overall, though not at every one, than measuring on all the
-            years we have): a position from about 46 votes counts half, and one from 200 or more
-            counts in full (where a full record starts is our convention). A member with no position
-            yet sits at 50. Early in a new Congress, until its positions are published and pass our
+            only a few roll calls is mostly noise, so it counts only as much as its votes support.
+            How much that is was measured on members with a short record in one Congress beside a
+            full one in the Congress before or after, since 2007. Measuring on these recent
+            Congresses predicted later ones better overall than using every year we have, though not
+            every time. A position from about 46 votes counts half, and one from 200 or more counts
+            in full (where a full record starts is our convention). A member with no position yet
+            sits at 50. Early in a new Congress, until its positions are published and pass our
             checks, this part is left out and the score is the voting part alone.
           </P>
           <P>

@@ -418,6 +418,18 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert f"once it rests on {switch} roll calls" in page
     assert f"about {half} votes counts half" in entry
     assert f"{full} votes or more counts in full" in entry
+    assert f"until the new one is full ({switch} votes)" in entry
+    # AGENTS.md and README quote the forward test's margin.
+    root = src.parents[1]
+    agents = " ".join((root / "AGENTS.md").read_text().split())
+    readme = " ".join((root / "README.md").read_text().split())
+    chosen = data["forward_test"][data["structure"]]
+    last = chosen["last_three"]
+    assert f"by {abs(chosen['above']):.3f} (standard error {chosen['standard_error']:.3f};" in agents
+    assert round(abs(chosen["above"]) / chosen["standard_error"]) == 2
+    assert round(abs(last["above"]) / last["standard_error"]) == 1
+    assert "over the last three transitions alone the gain is about one standard error" in agents
+    assert "by about two standard errors overall, about one over the last three transitions alone" in readme
     # A position published with no count: "about a fifth" in the entry.
     assert round(data["uncounted_weight"] * 5) == 1 and "about a fifth" in entry
     # The era the shipped curve is measured on, by its first year. Both texts
