@@ -718,13 +718,13 @@ in a fixed order, 1,000 times.
   standard errors and ships, but the decision is weakly settled, for
   four reasons, all in the script's output:
   - **Where the gain is.** It comes from the transitions predicted from the
-    112th on; at the 111th the era curve, fitted on the 110th's 5 thin pairs
-    alone, sits at the same grid floor as one curve. Most of it is at the
-    112th and 114th (0.024 each), when the one curve it beats was fitted on
-    about two thirds and half pre-110 records (65% and 48% of its thin
-    pairs, `training_before_split`). At the last three transitions, whose
-    training data look most like today's, it is 0.009 with a standard error
-    of 0.009 (`last_three`).
+    112th on; at the 111th the two curves predict alike
+    (`gain_by_transition`: 0.0). Most of it is at the 112th and 114th (0.024
+    each), when the one curve it beats was fitted on about two thirds and
+    half pre-110 records (65% and 48% of its thin pairs,
+    `training_before_split`). At the last three transitions, whose training
+    data look most like today's, it is 0.009 with a standard error of 0.009
+    (`last_three`).
   - **Members.** One member supplies 44% of it (`most_helped_share`). Left
     out of the comparison (fits unchanged), the one, two and three members
     it helps most leave it better by 0.037, 0.031 and 0.026 (standard
@@ -739,22 +739,21 @@ in a fixed order, 1,000 times.
     though era results at it had been reported before; it is kept at the
     110th on reruns, never re-centred.
   - **Recency or a break.** A window of the last six transitions
-    (`FORWARD_WINDOW`, a convention), with no split, does as well (0.078
-    better, 0.036), and against the era curve it is 0.011 better (0.012,
+    (`FORWARD_WINDOW`, a convention), with no split, does as well (0.0775
+    better, 0.0361), and against the era curve it is 0.011 better (0.012,
     `window_against_era`): these tests can't tell recency from a break at
-    the split. The time trend predicts about as well over every
-    transition. Its forward fits sit at the ends of their search grids
-    through the 112th, where it predicts worse than one curve; from the
-    113th, with every fit inside the grids, it beats one curve by 0.142
-    (standard error 0.065) and the era curve by 0.100 (0.053)
-    (`trend.inside_grids`, a range picked after seeing where the fits sit,
-    and one that drops exactly the transitions where it did worse). Over
-    every predicted transition, the range the rule judges, it is 0.069
-    better than one curve (standard error 0.089), short of the rule's bar,
-    so the rule would not choose it even as a candidate; it is reported,
-    not chosen (that it was added after the other tests is a further
-    reason, a stated choice). It suggests, without testing, a curve still
-    slower than the shipped one.
+    the split. The time trend predicts about as well over every transition.
+    Its forward fits sit at the ends of their search grids through the
+    112th, where it predicts worse than one curve; from the 113th, with
+    every fit inside the grids, it beats one curve by 0.142 (standard error
+    0.065) and the era curve by 0.100 (0.053) (`trend.inside_grids`, a range
+    picked after seeing where the fits sit, and one that drops the stretch
+    where it did worse overall, through the 112th). Over every predicted
+    transition, the range the rule judges, it is 0.069 better than one curve
+    (standard error 0.089), short of the rule's bar, so the rule would not
+    choose it even as a candidate; it is reported, not chosen (that it was
+    added after the other tests is a further reason, a stated choice). It
+    suggests, without testing, a curve still slower than the shipped one.
 
   So the evidence supports recent thin records saying less than one curve
   over every Congress credits; how much less is not settled, and the
@@ -799,11 +798,11 @@ in a fixed order, 1,000 times.
   each at the slowest curve the search grid allows (half point 98); that
   extreme rests on one member at the 113th to 115th (leaving one out, n0
   falls to 279–475), but without them the slower curve is still adopted at
-  the 113th and 114th (half points 76 and 83) and no single member moves
-  the 117th's (n0 stays 5,000 with each left out). A time trend (one line,
-  log n0 linear in decades since the 110th, `trend_test`) beats the
-  shipped grouping by 0.098 (standard error 0.077) over every member and
-  0.082 (0.076) over the latest era's (0.036, 0.064, without its most
+  the 113th and 114th (half points 75.5 and 82.6) and no single member
+  moves the 117th's (n0 stays 5,000 with each left out). A time trend (one
+  line, log n0 linear in decades since the 110th, `trend_test`) beats the
+  shipped grouping by 0.0975 (standard error 0.0769) over every member and
+  0.0818 (0.0755) over the latest era's (0.036, 0.064, without its most
   influential member), with its half point by the 118th at the slowest
   curve the form allows (about 100 votes). Left one member out, the latest
   era does better at the 113th to 117th splits (the 116th barely) and in
@@ -859,9 +858,12 @@ in a fixed order, 1,000 times.
   agenda; whether those records behave like these is untested.
 
 **Nine approaches replaced.** Each appeared in a draft of this change and
-was replaced after review; the fourth, fifth and sixth were not shown
-to help rather than shown not to, and a rerun with more pairs tests them
-again.
+was replaced after review; the fourth, fifth and sixth were not shown to
+help rather than shown not to, and a rerun with more pairs tests them
+again. The career-gap proxy's figures are printed by the research script;
+the other drafts' figures below ("1.5 times", "about 10%", the switchers'
+99 pairs, half point 50 and errors 1.597 and 1.456) come from those
+drafts' own runs and are not reproduced by the current scripts.
 
 *The career-gap proxy.* The first draft fit gap² = drift + k / votes, where
 the gap is between a member's Nokken-Poole position and their career
