@@ -245,10 +245,14 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     until = reliability.get("prior_until_votes", full)
     counts = main.get("votes") or {}
     prior_counts = prior.get("votes") or {}
-    # A member who switched parties this Congress: their last record was
-    # cast in their old party, and nothing measured it as evidence of their
-    # side of the new one, so it is never read for them.
-    switched = set(main.get("switched") or ())
+    # A member who switched parties, during this Congress or between the
+    # two: their last record was cast in another party. A stated choice
+    # (nothing measured such a record as evidence of their side of the new
+    # one): it is never read for them, so with no usable position this
+    # Congress they have none, and their breaks count as for any member
+    # with none.
+    now, then = main.get("parties") or {}, prior.get("parties") or {}
+    switched = set(main.get("switched") or ()) | {b for b in then if b in now and then[b] != now[b]}
     for b, (x, w) in weighted(prior).items():
         if b in switched:
             continue

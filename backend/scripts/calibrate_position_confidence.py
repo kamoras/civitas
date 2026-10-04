@@ -210,7 +210,9 @@ def switcher_test(cache: pathlib.Path | None = None, span: range | None = None) 
                 if len(full) != 1 or len(cands) < 2:
                     continue
                 target = _float(full[0]["nokken_poole_dim1"])
-                latest = max(cands, key=lambda c: spans.get(_id(c[0]["icpsr"]), (-1, -1))[0])[1]
+                # As the pipeline (voteview.switcher_latest): an id with no
+                # roll call yet is the newest.
+                latest = max(cands, key=lambda c: spans.get(_id(c[0]["icpsr"]), (float("inf"),))[0])[1]
                 longer = max(cands, key=lambda c: c[2])[1]
                 total = sum(n for _, _, n in cands)
                 weighted = sum(x * n for _, x, n in cands) / total if total else longer

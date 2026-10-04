@@ -370,9 +370,10 @@ def _member_ideal_points(chamber: str) -> dict:
     """Roll-call ideal-point data for one chamber ("senate" or "house"):
     {"members": {bioguideId: dim1}, "votes": {bioguideId: scaled roll calls},
     "fit": {party: {"a", "b"}}, "extremity_p90": float, "measure",
-    "congress", "seats", "seated", "reliability", "scale_congress", "prior"}
-    (votes, congress, seats, seated, reliability, scale_congress and prior
-    since v6.27; prior, the last Congress's positions, is read only by
+    "congress", "seats", "seated", "reliability", "scale_congress", "prior",
+    "parties", "switched"} (votes, congress, seats, seated, reliability,
+    scale_congress, prior, parties and switched since v6.27; parties and
+    switched are read only by the flank rule; prior, the last Congress's positions, is read only by
     party_line_record's flank rule, never scored). Used by _constituent_alignment_core's position-congruence
     component (v6.11): the member's congress-specific Nokken-Poole
     first-dimension position (DW-NOMINATE only as a whole-chamber fallback)

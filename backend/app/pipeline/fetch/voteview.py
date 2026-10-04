@@ -320,8 +320,13 @@ def switcher_latest(
         if len(new) == 1:
             latest[bio] = new[0]
         elif first_roll is not None:
-            # An id with no roll call yet is the newest.
-            latest[bio] = max(ids, key=lambda i: first_roll.get(i, float("inf")))
+            # An id with no roll call yet is the newest; two at the top
+            # (neither has voted) settle nothing.
+            order = sorted(ids, key=lambda i: first_roll.get(i, float("inf")))
+            if first_roll.get(order[-1], float("inf")) == first_roll.get(order[-2], float("inf")):
+                unresolved.append(bio)
+            else:
+                latest[bio] = order[-1]
         else:
             unresolved.append(bio)
     return latest, unresolved
@@ -374,8 +379,8 @@ def build_chamber_ideal_points(
     under a second ICPSR id) is read on their latest record, the one since
     the switch (`latest`, from switcher_latest), and only it enters the
     fits: one seat, one position. Reading the record since the switch is a
-    choice, the current term's record of who the member now is (principle
-    6); the evidence (calibrate_position_confidence.switcher_test) is
+    choice, the record of who the member now is; the evidence
+    (calibrate_position_confidence.switcher_test) is
     consistent with it but can't settle it. Until Voteview places that
     record, the member has no position."""
 
@@ -383,6 +388,7 @@ def build_chamber_ideal_points(
     switched = sorted(_switchers(rows))
     rows = _one_row_per_member(rows, latest)
     members: dict[str, float] = {}
+    parties: dict[str, str | None] = {}
     votes: dict[str, int] = {}
     seats: set[str] = set()
     seated = 0
@@ -393,6 +399,11 @@ def build_chamber_ideal_points(
     for row in rows:
         bio = (row.get("bioguide_id") or "").strip()
         raw_dim1 = (row.get(column) or "").strip()
+        if bio:
+            # Every member's party, placed or not: the flank rule tells a
+            # switch between Congresses by it.
+            code = _number(row.get("party_code"))
+            parties[bio] = (PARTY_CODES.get(int(code)) or str(int(code))) if code is not None else None
         if not bio or not raw_dim1:
             continue  # no estimate yet (e.g. a freshman pre-first-scaling)
         if column == "nokken_poole_dim1" and _is_placeholder(row):
@@ -452,9 +463,11 @@ def build_chamber_ideal_points(
     return {
         "members": members, "votes": votes, "fit": fit, "extremity_p90": extremity_p90,
         "measure": measure, "congress": congress, "seats": len(seats), "seated": seated,
-        # Members who switched parties during this Congress: the flank rule
-        # never reads their last Congress's record, cast in their old party.
-        "switched": switched,
+        # Each position's party, and the members who switched parties during
+        # this Congress: the flank rule never reads a last-Congress record
+        # cast in another party (one of these, or a party that differs
+        # between the two sections).
+        "parties": parties, "switched": switched,
         "reliability": dict(reliability), "scale_congress": congress if extremity_p90 else None,
     }, failures
 
@@ -529,7 +542,8 @@ def previous_positions(previous: dict, congress: int | None) -> dict | None:
         # (calibrate_position_confidence.prior_test) is adjacent Congresses.
         return None
     return {"congress": previous["congress"], "members": previous.get("members") or {},
-            "votes": previous.get("votes") or {}, "reliability": previous["reliability"]}
+            "votes": previous.get("votes") or {}, "parties": previous.get("parties") or {},
+            "reliability": previous["reliability"]}
 
 
 async def fetch_first_rolls(
@@ -550,9 +564,11 @@ async def fetch_first_rolls(
             return None
         first: dict[str, int] = {}
         for row in csv.DictReader(io.StringIO(resp.text)):
-            number = int(_number(row.get("rollnumber")) or 0)
+            number = _number(row.get("rollnumber"))
+            if number is None:
+                continue  # no roll call: says nothing about when the id began
             i = _icpsr(row)
-            first[i] = min(first.get(i, number), number)
+            first[i] = min(first.get(i, int(number)), int(number))
         return first
     except Exception:
         logger.warning("Voteview %s votes fetch failed", chamber, exc_info=True)
@@ -605,10 +621,22 @@ async def refresh_member_ideal_points(
             )
             return False
         latest = await _latest_ids(rows, chamber, congress, client)
+        condition = f"voteview-switcher-{chamber}"
         if latest is None:
             logger.warning(
                 "Voteview %s: a party switcher's latest record can't be told apart — keeping "
                 "previous member_ideal_points data", chamber,
+            )
+            # Kept data stops being current at the next Congress, when the
+            # position part drops out: worth an operator's look, once.
+            from app import ops_alerts
+            ops_alerts.send_ops_alert(
+                f"Voteview {chamber}: party switcher unresolved",
+                f"The {congress}th Congress's {chamber} export lists a member under two ids, and the "
+                "exports needed to tell the record since the switch apart (the last Congress's members, "
+                "the vote export) couldn't be read or didn't settle it. The previous ideal-point section "
+                "is kept until they do.",
+                dedupe_key=f"{condition}-{congress}", condition=condition,
             )
             return False
         data, failures = build_chamber_ideal_points(
@@ -627,6 +655,8 @@ async def refresh_member_ideal_points(
                 logger.warning("Voteview %s ingestion gate failed: %s", chamber, f)
             return False
         write_member_ideal_points(chamber, data)
+        from app import ops_alerts
+        ops_alerts.resolve_ops_alert(condition)
         fits = ", ".join(
             f"{p}: a={f['a']:+.3f} b={f['b']:+.5f} r2={f['r2']:.2f} n={f['n']}"
             for p, f in data["fit"].items()

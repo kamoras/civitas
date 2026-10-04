@@ -884,13 +884,23 @@ itself a sign of how little these data settle.
       switch isn't read.
     - Until Voteview places the record since the switch, the member has
       no position (50), never the old one.
-    - Once the new Congress's section is in, the flank rule never reads
-      such a member's last Congress (cast in their old party).
     - The record since the switch is the id the last Congress's export
       didn't have, or, when both ids are new (a switch in a member's
       first Congress), the one whose first roll call comes last in the
-      vote export. If either export can't be read, the ingest keeps the
-      previous section rather than guess.
+      vote export (two ids with no roll call yet settle nothing).
+  - Two related choices, stated as such (nothing measured them):
+    - Once the new Congress's section is in, the flank rule never reads
+      a last-Congress record cast in another party: a member who
+      switched during the new Congress, or whose party differs between
+      the two sections (a switch between Congresses gives a new id in
+      each; a section written before this change records no parties, so
+      that check starts with the next ingest). With no usable position
+      this Congress such a member has none, and their breaks count, as
+      for any member with none.
+    - If an export needed to tell a switcher's records apart can't be
+      read, the ingest keeps the previous section, as it does for any
+      export that fails its gates, rather than guess, and raises an ops
+      alert (kept data stops being current at the next Congress).
 - The seat fits are taken over every member, since a thin position is
   noisy but not biased.
 - The saturation scale is the 90th percentile of full records'
@@ -1021,7 +1031,7 @@ which read placeholders as positions and weighted nothing, with v6.27:
     the others with 116–171 votes move by under 1 to 3 points.
   - Senators with 53 and 187 votes move by under 1.
   - A representative who left their party during the Congress is read on
-    their record since the switch (182 votes), as before; with no major
+    their record since the switch, as before; with no major
     party there, the score reads it against the caucus the pipeline
     infers from their votes, which this comparison doesn't have, so they
     are left out of it.

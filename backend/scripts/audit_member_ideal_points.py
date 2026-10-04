@@ -31,6 +31,7 @@ from app.pipeline.analyze.score_calculator import (  # noqa: E402
     position_confidence,
 )
 from app.pipeline.fetch.voteview import (  # noqa: E402
+    _latest_ids,
     build_chamber_ideal_points,
     fetch_member_rows,
     ingestion_gates,
@@ -47,9 +48,15 @@ async def main() -> int:
             print(f"{chamber}: FETCH FAILED (congress {congress})")
             any_failures = True
             continue
+        # A party switcher's latest record, as the refresh reads it.
+        latest = await _latest_ids(rows, chamber, congress, None)
+        if latest is None:
+            print(f"{chamber}: a party switcher's latest record can't be told apart (congress {congress})")
+            any_failures = True
+            continue
         data, failures = build_chamber_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),
-            reliability=_position_reliability(chamber), congress=congress,
+            reliability=_position_reliability(chamber), congress=congress, latest=latest,
         )
         if failures == []:
             # As the refresh does: early in a Congress, the last scale on disk.

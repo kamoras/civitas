@@ -10,6 +10,7 @@ published member-export columns (voteview.com/articles/data_help_members).
 
 import json
 import random
+from types import SimpleNamespace
 
 from app.pipeline.analyze import score_calculator
 from app.pipeline.fetch import voteview
@@ -346,7 +347,8 @@ class TestRefresh:
         path.write_text(json.dumps({"senate": last}))
         assert await voteview.refresh_member_ideal_points("senate", 119) is True
         prior = score_calculator._member_ideal_points("senate")["prior"]
-        assert prior == {"congress": 118, "members": {"OLD": 0.4}, "votes": {"OLD": 600}, "reliability": dict(REL)}
+        assert prior == {"congress": 118, "members": {"OLD": 0.4}, "votes": {"OLD": 600}, "parties": {},
+                     "reliability": dict(REL)}
         assert await voteview.refresh_member_ideal_points("senate", 119) is True
         assert score_calculator._member_ideal_points("senate")["prior"] == prior
 
@@ -417,11 +419,16 @@ def test_a_member_listed_twice_is_read_on_their_latest_record():
     data = build([since] + rows, latest=latest)
     assert data["members"][bio] == 0.9 and data["votes"][bio] == 40
     assert data["fit"] == alone["fit"] != base["fit"] and data["seated"] == base["seated"]
-    # Without `latest`, the later row in the export (scripts only).
+    # The section names the switcher and the party of the record it reads.
+    assert data["switched"] == [bio] and data["parties"][bio] == voteview.PARTY_CODES[int(other)]
+    # Without `latest`, the later row in the export (a caller that passes
+    # none; the pipeline and the scripts pass it).
     assert build([since] + rows)["members"][bio] == base["members"][bio]
     # Not placed yet: no position, and the old record stays out of the fits.
     data = build(rows + [{**since, "nominate_dim1": ""}], latest=latest)
     assert bio not in data["members"] and data["fit"] == build(rows[1:])["fit"]
+    # Its party is still recorded: the flank rule tells a switch by it.
+    assert data["parties"][bio] == voteview.PARTY_CODES[int(other)]
 
 
 def test_a_latest_record_that_is_a_placeholder_is_no_position():
@@ -453,3 +460,48 @@ def test_switcher_latest_tells_the_new_id_apart():
     assert latest == {"A1": "90", "B1": "20"} and unresolved == []
     latest, _ = voteview.switcher_latest(rows, {"10", "30"}, {"20": 300})
     assert latest["B1"] == "21"  # no roll call yet: the newest
+    assert voteview.switcher_latest(rows, {"10", "30"}, {})[1] == ["B1"]  # neither has voted
+
+
+
+async def test_first_rolls_are_each_ids_earliest_roll_call(monkeypatch):
+    """fetch_first_rolls: each ICPSR id's earliest roll call with a row,
+    whatever the id's spelling; a row with no roll number says nothing; a
+    failed fetch is None."""
+    text = "icpsr,rollnumber,cast_code\n10.0,7,1\n10,3,1\n90,12,6\n90,,1\n90,40,1\n"
+
+    async def fetched(*a, **k):
+        return SimpleNamespace(text=text)
+    monkeypatch.setattr(voteview, "fetch_with_retry", fetched)
+    assert await voteview.fetch_first_rolls("house", 119, client=SimpleNamespace()) == {"10": 3, "90": 12}
+
+    async def failed(*a, **k):
+        return None
+    monkeypatch.setattr(voteview, "fetch_with_retry", failed)
+    assert await voteview.fetch_first_rolls("house", 119, client=SimpleNamespace()) is None
+
+
+async def test_an_unresolved_switcher_alerts_once_and_clears(monkeypatch, tmp_path):
+    """A switcher whose latest record can't be told apart raises an ops
+    alert (the kept section stops being current at the next Congress); a
+    clean refresh resolves it."""
+    _patch_path(monkeypatch, tmp_path)
+    state_pvi = score_calculator._state_pvi()
+    rows = [{**r, "icpsr": str(1000 + i)} for i, r in enumerate(_synthetic_rows(state_pvi))]
+    since = {**rows[0], "icpsr": "91000"}
+    sent, resolved = [], []
+    from app import ops_alerts
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda *a, **k: sent.append(k["condition"]))
+    monkeypatch.setattr(ops_alerts, "resolve_ops_alert", lambda c: resolved.append(c))
+
+    async def fake_rows(chamber, congress, client=None):
+        return [since] + rows if congress == 119 else None
+    monkeypatch.setattr(voteview, "fetch_member_rows", fake_rows)
+    assert await voteview.refresh_member_ideal_points("senate", 119) is False
+    assert sent == ["voteview-switcher-senate"] and resolved == []
+
+    async def clean(chamber, congress, client=None):
+        return rows
+    monkeypatch.setattr(voteview, "fetch_member_rows", clean)
+    assert await voteview.refresh_member_ideal_points("senate", 119) is True
+    assert resolved == ["voteview-switcher-senate"]

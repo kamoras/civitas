@@ -231,6 +231,14 @@ def test_a_member_who_switched_parties_is_never_read_on_the_last_congress(db_ses
     record = party_line_records(db_session, "house", _members())[4]
     section["switched"] = []
     assert record != party_line_records(db_session, "house", _members())[4]
+    # A switch between the two Congresses (a new id in each, so one row in
+    # each section): told by the parties the sections record.
+    section["members"], section["votes"]["R4"] = current, 2
+    section["parties"] = {m: "R" if m.startswith("R") else "D" for m in DIM1}
+    section["prior"]["parties"] = {**section["parties"], "R4": "D"}
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+    section["prior"]["parties"]["R4"] = "R"
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
 
 
 def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, monkeypatch):
