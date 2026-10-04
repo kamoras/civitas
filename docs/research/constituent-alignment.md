@@ -646,8 +646,9 @@ of how Voteview estimates them. Some members have a thin record in one
 Congress and a full one in the next, or the reverse: a special-election
 winner, a member who left, or one absent for much of a Congress (illness,
 a campaign, a cabinet nomination). They have a thin position and a full
-one for adjacent Congresses, and their thin records arise as the score's
-do. Read each against their party's
+one for adjacent Congresses. Their thin records include the kinds the
+score sees (partial service, long absences), but not everyone's
+early-Congress record, which is untested. Read each against their party's
 center that Congress (the median of its full records), signed toward the
 party's flank, every pair keyed by the transition it spans:
 
@@ -673,10 +674,11 @@ party's flank, every pair keyed by the transition it spans:
 `scripts/calibrate_position_confidence.py` runs this over Congresses
 101–119: 8,098 full pairs, 99 thin and 25 with no count on the thin side
 (and a career DW-NOMINATE position, as the score requires of such a
-position; see below). Thin records arise here as they do in the score:
-from members who arrived or left mid-Congress, and from members absent
-for much of one (illness, a campaign, a cabinet nomination), so every
-thin pair counts. The intervals are reproducible: members are resampled
+position; see below). Thin records arise here from members who arrived
+or left mid-Congress and from members absent for much of one (illness, a
+campaign, a cabinet nomination), as many of the score's do, so every thin
+pair counts; whether absences make a thin record say less is tested
+below (attendance). The intervals are reproducible: members are resampled
 in a fixed order, 1,000 times.
 
 - **One curve for both chambers, chosen by held-out prediction.** Each
@@ -694,13 +696,16 @@ in a fixed order, 1,000 times.
   | once per chamber | 1.436 |
   | once per era (101–109, 110–119) | 1.597 |
   | once per direction (entrant, leaver) | 1.508 |
+  | once per attendance (attended arrivals and departures, the rest) | 1.520 |
   | once, plus a party-line term | 1.561 |
 
   Per chamber is lower by 0.020, but the standard error of that
   difference is 0.070, so the chambers aren't shown to differ: fitted
   apart, the half points are 25 votes (Senate, 1–50) and 85 (House,
-  31–98). Era, direction and the party-line term predict worse than one
-  curve.
+  31–98). Era, direction, attendance and the party-line term predict
+  worse than one curve: attended records (missing no more of their span
+  than nine in ten full records do) don't follow a different curve from
+  mostly absent ones.
 
 | | Estimate | 90% interval (members resampled, 1,000 times) |
 |---|---|---|
@@ -889,12 +894,16 @@ flank rule's switch test is restricted, to attended records.
     then a member's first, attended votes of the next Congress, from a
     member who left during it (absent the Congress after) and missed no
     more of the roll calls in their span than nine in ten of that
-    Congress's full records do. Most leavers' thin records are not that:
-    they are mostly absences on the way out. Only 7 pairs qualify, 2 with
-    over 100 votes, too few to measure a switch (in most resamples the
-    left-out members can't support a model). Over all thin pairs, where
-    absences dominate, a switch at 93 votes saves 3.1% of sides in sample
-    and 44% of resamples out of bag, short of the bar.
+    Congress's full records do, a convention; a roll call with no row
+    counts as missed, as for a Speaker who doesn't vote). Most leavers'
+    thin records are not that: they are mostly absences on the way out.
+    Only 6 pairs qualify, 2 with over 100 votes; in sample their best
+    switch is 91 votes, saving 3.5% of sides, but they are too few to
+    measure one (in most resamples the left-out members can't support a
+    model). Counting every leaver, attended or not (49 pairs), the best
+    switch is 162 votes and saves sides in 12% of resamples out of bag;
+    over all thin pairs, 93 votes and 44%. None comes near the bar, so the
+    attendance convention doesn't decide it.
   - So the switch rests on its conventions: keeping the last full record
     until the new one is full is the rule as designed, the one count at
     which the new record needs no model to be trusted, and nothing in
@@ -935,8 +944,8 @@ which read placeholders as positions and weighted nothing, with v6.27:
   - Representatives with 77 and 72 votes move from 93.2 to 78.6 and from
     75.3 to 66.1.
   - Two representatives far beyond saturation (135 and 182 votes) stay at
-    its end; the other representatives with 116–171 votes move 1 to 4
-    points.
+    its end; the other representatives with 116–171 votes move about 1
+    to 4 points.
   - Senators with 53 and 187 votes move about 1.
   - Members scored from 1 to 39 votes or a placeholder, all since departed,
     move by up to 50 points.
@@ -978,7 +987,7 @@ which read placeholders as positions and weighted nothing, with v6.27:
   The thin records mix arrivals, departures and long absences, as the
   score's do; whether everyone's early records in a Congress behave like
   these is untested. The no-count weight rests on fewer still (25
-  pairs), and the flank rule's switch can't be measured at all: only 7
+  pairs), and the flank rule's switch can't be measured at all: only 6
   pairs have the rule's shape. Rerunning the calibration adds each
   Congress's new pairs, and decides the structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the

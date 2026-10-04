@@ -60,9 +60,10 @@ def test_every_thin_record_is_paired_and_the_flank_rules_case_flagged(monkeypatc
     """Every thin record next to a full one is a pair (the score sees thin
     records from partial service and from absence alike). The last field
     flags the flank rule's case: arrived or left, attending as full records
-    do. 70 arrived; 71 sat in the 100th; 72 left but missed most of their
-    span; 73 served on into the 103rd, and once the 103rd isn't published
-    a leaver can't be checked."""
+    do. 70 arrived; 71 sat in the 100th; 72 and 73 serve on into the 103rd
+    at first; once they're gone 73 counts and 72, who missed most of their
+    span, doesn't; once the 103rd isn't published a leaver can't be
+    checked."""
     import urllib.error
     script = _script()
     rows = _pair_rows()
@@ -105,6 +106,10 @@ def test_attendance_is_the_share_of_a_members_span_missed(tmp_path):
         "congress,chamber,rollnumber,icpsr,cast_code\n" + "".join(
             f"150,Senate,{rc},{i},{c}\n" for rc in range(1, 5) for i, c in ((1, 1), (2, 9 if rc < 4 else 6))))
     assert _script().attendance("S", 150, tmp_path) == {"1": 0.0, "2": 0.75}
+    # No row at all is a roll call missed too (a Speaker who doesn't vote).
+    (tmp_path / "S151_votes.csv").write_text(
+        "congress,chamber,rollnumber,icpsr,cast_code\n151,Senate,1,3,1\n151,Senate,4,3,1\n")
+    assert _script().attendance("S", 151, tmp_path) == {"3": 0.5}
 
 
 def test_fit_recovers_n0_with_a_drift_per_transition():

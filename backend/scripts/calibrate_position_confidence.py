@@ -138,15 +138,17 @@ def party_line_share(chamber: str, congress: int, cache: pathlib.Path | None = N
 
 
 def attendance(chamber: str, congress: int, cache: pathlib.Path | None = None) -> dict[str, float]:
-    """icpsr -> the share of the roll calls in a member's span (first to last
-    roll call they have a row on, Voteview listing every roll call while they
-    serve) on which they didn't vote (cast codes 7-9)."""
+    """icpsr -> the share of the roll calls in a member's span (their first
+    to their last roll call with a row) on which they didn't vote: a cast
+    code of 7-9, or no row at all (Voteview writes none for a Speaker who
+    doesn't vote)."""
     span: dict[str, list[int]] = {}
     for r in _csv(VOTES_URL.format(chamber=chamber, congress=congress), f"{chamber}{congress}_votes.csv", cache):
-        a = span.setdefault(_id(r["icpsr"]), [0, 0])
-        a[0] += 1
-        a[1] += int(_float(r.get("cast_code")) or 0) >= 7
-    return {i: missed / rows for i, (rows, missed) in span.items() if rows}
+        number = int(_float(r.get("rollnumber")) or 0)
+        a = span.setdefault(_id(r["icpsr"]), [number, number, 0])
+        a[0], a[1] = min(a[0], number), max(a[1], number)
+        a[2] += 1 <= int(_float(r.get("cast_code")) or 0) <= 6
+    return {i: 1 - voted / (last - first + 1) for i, (first, last, voted) in span.items()}
 
 
 def _float(value) -> float | None:
@@ -360,6 +362,9 @@ STRUCTURES = {
     "chamber": lambda r: r[0],
     "era": lambda r: r[6] >= 110,
     "direction": lambda r: r[8],
+    # Attended arrivals and departures (pairs()'s last field) apart from the
+    # rest: whether absences make a thin record say less.
+    "attendance": lambda r: r[9] if len(r) > 9 else False,
 }
 USABLE = ("pooled", "chamber")
 
@@ -659,6 +664,8 @@ def prior_test(data: list[tuple]) -> dict:
         if (rows := [r for r in usable if r[5] == "thin" and r[8] and r[9] and lo < r[2] <= hi])}
     out["switch_test"] = {
         "rule_shape": switch_test([r for r in usable if r[5] == "full" or (r[8] and r[9])]),
+        # Every leaver, attended or not: how much the attendance convention matters.
+        "leavers": switch_test([r for r in usable if r[5] == "full" or r[8]]),
         "all": switch_test(usable),
     }
     return out
@@ -803,7 +810,9 @@ def main() -> None:
             "centered as the rule centers, and prior_until_votes is the count below which the rule "
             "reads the last full record (a full record unless a switch short of one, chosen on "
             "resampled members, saves sides on the members left out in 95% of resamples, on pairs "
-            "shaped like the rule's case); "
+            "shaped like the rule's case: a full record, then the thin record of a member who left "
+            "during the next Congress, absent the Congress after, missing no more of the roll calls "
+            "in their span than nine in ten of that Congress's full records, a convention); "
             "structure_test is the one-standard-error rule's comparison; crossover_if_independent is "
             "the rejected unstratified crossing, reported only"
         ),
