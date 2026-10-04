@@ -733,7 +733,27 @@ def test_shipped_file_reports_what_the_docs_cite():
     lo, hi = data["half_weight_votes_pooled_interval_90"]
     assert lo <= data["half_weight_votes_pooled"] <= hi
     assert sum(e["thin"] for e in data["thin_pairs_by_era"].values()) == data["pairs"]["thin"]
+    trend = data["forward_test"]["trend"]
+    ends = trend["fit_at_grid_end"]
+    if "inside_grids" in trend:  # from there on, every forward fit is inside both grids
+        start = trend["inside_grids"]["from"]
+        assert not any(v for t, v in ends.items() if int(t) >= start)
+        assert all(v for t, v in ends.items() if int(t) == max([int(u) for u in ends if int(u) < start], default=0))
     for lo, hi in data["drift_range"].values():
         assert 0 < lo <= hi
     # Full records show no gradient in their count.
     assert all(abs(s - 1) < 0.05 for s in data["full_slope_by_votes"].values())
+
+
+def test_the_docs_quote_a_five_vote_saturated_score():
+    """The research note and v6.27 say what a position at saturation on 5
+    votes scores under the shipped curve."""
+    from app.pipeline.analyze.score_calculator import position_confidence, position_congruence_score
+    data = json.loads(_DATA.read_text())
+    rel = {"n0": data["chambers"]["house"]["n0"], "reference_votes": data["reference_votes"]}
+    score = round(position_congruence_score(0.3, 0.3, position_confidence(5, rel)))
+    root = pathlib.Path(__file__).resolve().parents[2]
+    for doc in ("docs/research/constituent-alignment.md", "docs/methodology/member-score/v6.27.md"):
+        path = root / doc
+        if path.exists():  # the backend image ships without the docs
+            assert f"saturation scores about {score} instead of 0" in " ".join(path.read_text().split())

@@ -655,6 +655,26 @@ def forward_test(data: list[tuple]) -> dict:
     before = {str(t): round(sum(1 for row in fitted if row[6] < min(t, ERA_SPLIT))
                             / max(1, sum(1 for row in fitted if row[6] < t)), 3)
               for t in sorted(by_t["pooled"])}
+    # The trend, by transition: its gain over one curve, and whether its
+    # forward fit reached an end of the A or B grid; and, from the first
+    # transition after which every fit is inside both grids, the trend
+    # against one curve and against the era curve.
+    at_end = {}
+    for t in sorted(by_t["trend"]):
+        b, a, _ = fit_party_line([row for row in data if row[6] < t], "pooled",
+                                 drifts([row for row in data if row[6] < t]), _decades)
+        if not a:
+            continue  # nothing to fit on: no grid to reach
+        a0 = next(iter(a.values()))
+        at_end[t] = bool(a0 in (A_GRID[0], A_GRID[-1]) or b in (B_GRID[0], B_GRID[-1]))
+    inside = [t for t in sorted(at_end) if not any(at_end[u] for u in at_end if u >= t)]
+    trend = report["trend"]
+    trend["gain_by_transition"] = {str(t): round(v - by_t["pooled"][t], 4) for t, v in sorted(by_t["trend"].items())}
+    trend["fit_at_grid_end"] = {str(t): v for t, v in at_end.items()}
+    if inside:
+        late, _ = forward_errors(data, names=("pooled", "era", "trend"), predict_from=inside[0])
+        trend["inside_grids"] = {"from": inside[0], "against_one_curve": _paired(late["trend"], late["pooled"]),
+                                 "against_era": _paired(late["trend"], late["era"])}
     return {"chosen": chosen, "members": len(errors["pooled"]), **report,
             "training_before_split": before,
             "era_at_every_split": sweep, "window": _paired(e["window"], e["pooled"]),
@@ -1217,7 +1237,10 @@ def main() -> None:
             "structure against one curve on the last three predicted transitions), the era comparison "
             "at every split it can test (era_at_every_split), a recent window (window) and the window "
             "against the era curve (window_against_era), and the share of the thin pairs one curve was "
-            "fitted on from before the split, by predicted transition (training_before_split). "
+            "fitted on from before the split, by predicted transition (training_before_split); trend "
+            "also has its gain by transition, whether each forward fit reached an end of a search grid "
+            "(fit_at_grid_end), and inside_grids, from the first transition after which every fit is "
+            "inside the grids, the trend against one curve and against the era curve. "
             "Leave-one-member-out comparisons, reported: heldout_error is the squared error of each "
             "thin member's pairs fitted without that member, by structure; structure_test is one "
             "curve against one per chamber, with reported giving direction, attendance (attended "

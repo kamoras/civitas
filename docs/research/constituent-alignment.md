@@ -739,13 +739,17 @@ in a fixed order, 1,000 times.
     the forward comparisons, though era results at it had been reported
     before; it is kept at the 110th on reruns, never re-centred.
   - **Recency or a break.** A window of the last six transitions
-    (`FORWARD_WINDOW`, a convention), with no split, does as well
-    (0.078 better, 0.036), and against the era curve it is 0.011
-    better (0.012, `window_against_era`): these tests can't tell
-    recency from a break at the split. The time trend predicts about as
-    well, but its forward fits sit at the ends of their search grids,
-    and it was added after the other tests, so it is reported, not
-    chosen.
+    (`FORWARD_WINDOW`, a convention), with no split, does as well (0.078
+    better, 0.036), and against the era curve it is 0.011 better (0.012,
+    `window_against_era`): these tests can't tell recency from a break at
+    the split. The time trend predicts about as well over every
+    transition. Its forward fits sit at the ends of their search grids
+    through the 112th, where it predicts worse than one curve; from the
+    113th, with every fit inside the grids, it beats one curve by 0.142
+    (standard error 0.065) and the era curve by 0.100 (0.053)
+    (`trend.inside_grids`, a range picked after seeing where the fits
+    sit). It was added after the other tests, so it is reported, not
+    chosen; it points to a curve still slower than the shipped one.
 
   So the evidence supports recent thin records saying less than one curve
   over every Congress credits; how much less is not settled, and the
@@ -822,12 +826,12 @@ in a fixed order, 1,000 times.
   line in the share of roll calls on which the parties' majorities split,
   since in a more party-line Congress each vote might say less about a
   member's place within their party. Added to the era structure it
-  predicts held-out members worse (1.322 against 1.279, 0.043 worse with
-  a standard error of 0.024), and its slope isn't stable: +2.75 here,
-  +7.75 added to one curve in an earlier run, and negative in an
-  earlier run with the party switchers counted (on a narrower grid). An
-  earlier draft of this change found a positive slope by forcing one drift
-  on every Congress, which loaded the era differences in drift onto n0.
+  predicts held-out members worse (1.322 against 1.279, 0.043 worse with a
+  standard error of 0.024), and its slope isn't stable: +2.75 here, and
+  negative in an earlier run with the party switchers counted (on a
+  narrower grid). An earlier draft of this change found a positive slope
+  by forcing one drift on every Congress, which loaded the era differences
+  in drift onto n0.
 - **Positions with no count carry some information.** They are members
   Voteview has barely scaled (newly sworn in, or with very few scalable
   votes). Measured only where the member also has a career DW-NOMINATE
@@ -982,7 +986,7 @@ better (above).
     the floor the ingest already used), the chamber's last scale is
     carried. It describes the chamber's seats, not any member's record.
   - So the weights do pull thin positions toward 50: with every record at
-    5 votes, a position at saturation scores about 45 instead of 0.
+    5 votes, a position at saturation scores about 46 instead of 0.
 - Voteview's placeholders are dropped. A member a current section has no
   position for (those, or anyone Voteview hasn't placed yet) counts
   nothing, so the part sits at 50, instead of having the component
@@ -1148,17 +1152,18 @@ which read placeholders as positions and weighted nothing, with v6.27:
   (26–98 votes, the upper end where the n0 search stops), and the
   structure rests on a forward test of about two standard errors that
   leaving one member out doesn't show; a rerun with new pairs could return
-  to one curve. Whether recent Congresses follow a slower curve still
-  (later splits and a time trend lean that way) is the weight's most
-  likely revision. The thin records mix arrivals, departures and long
-  absences, as the score's do; whether everyone's early records in a
-  Congress behave like these is untested. The no-count weight rests on
-  fewer still (25 pairs), and the flank rule's switch can't be measured at
-  all: only 3 pairs have the rule's shape. Reading a party switcher on
-  their record since the switch rests on 8 people, and beats the longer
-  record by about one and a half standard errors. Rerunning the
-  calibration adds each Congress's new pairs, and decides the structure
-  and the switch again.
+  to one curve. Whether recent Congresses follow a slower curve still is
+  the weight's most likely revision: later splits lean that way, and the
+  time trend, from the 113th where its fits are inside the search grids,
+  predicts better than the era curve by 0.100 (standard error 0.053). The
+  thin records mix arrivals, departures and long absences, as the score's
+  do; whether everyone's early records in a Congress behave like these is
+  untested. The no-count weight rests on fewer still (25 pairs), and the
+  flank rule's switch can't be measured at all: only 3 pairs have the
+  rule's shape. Reading a party switcher on their record since the switch
+  rests on 8 people, and beats the longer record by about one and a half
+  standard errors. Rerunning the calibration adds each Congress's new
+  pairs, and decides the structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight
