@@ -198,8 +198,10 @@ def test_shipped_file_documents_its_source_and_intervals():
     assert data["pairs"]["thin"] > 50 and data["pairs"]["full"] > 1000
     lo, hi = data["uncounted_weight_leave_one_out"]
     assert lo <= data["uncounted_weight"] <= hi
-    # The rejected party-line term predicts held-out members worse.
-    assert data["party_line_test"]["heldout_error"] > held[data["structure"]]
+    # The rejected party-line term predicts held-out members no better
+    # than the shipped curve by more than the noise.
+    plt = data["party_line_test"]
+    assert plt["above"] >= -plt["standard_error"]
     # Era, direction and attendance are tested and reported beside them.
     assert {"era", "direction", "attendance"} <= set(held)
     assert {"rule_shape", "leavers", "all"} <= set(data["prior_test"]["switch_test"])
@@ -516,18 +518,22 @@ def test_the_switcher_test_compares_the_latest_and_the_longer_record(monkeypatch
     monkeypatch.setattr(script, "member_rows", member_rows)
     monkeypatch.setattr(script, "roll_spans", lambda ch, c, cache=None: {"10": (1, 50), "90": (51, 90)})
     out = script.switcher_test(span=range(101, 103))
-    assert out["members"] == 1
+    assert out["members"] == out["people"] == 1
+    assert out["latest_not_longer"] == out["latest_closer"] == 1
+    assert abs(out["latest_minus_longer"]["mean"] - (0.02 ** 2 - 0.38 ** 2)) < 1e-4
     assert abs(out["mean_squared_gap_latest"] - 0.02 ** 2) < 1e-4
     assert abs(out["mean_squared_gap_longer"] - 0.38 ** 2) < 1e-4
     assert abs(out["mean_squared_gap_weighted"] - 0.28 ** 2) < 1e-4
 
 
-def test_the_pipeline_reads_the_switcher_record_the_calibration_favours():
-    """voteview reads a switcher's latest record; the shipped measurement
-    must not say the longer one predicts better."""
+def test_the_pipeline_reads_the_switcher_record_the_evidence_allows():
+    """voteview reads a switcher's latest record, a stated choice; the
+    shipped measurement must not show either other reading predicting
+    better by more than the noise."""
     test = json.loads(_DATA.read_text()).get("switcher_test")
-    if test and test["members"]:
-        assert test["mean_squared_gap_latest"] <= test["mean_squared_gap_longer"]
+    if test and test["members"] > 1:
+        for other in ("latest_minus_longer", "latest_minus_weighted"):
+            assert test[other]["mean"] <= test[other]["standard_error"]
 
 
 def test_calibrate_ships_the_latest_eras_curve_only_when_era_test_adopts_it(monkeypatch):

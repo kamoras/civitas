@@ -251,6 +251,35 @@ class TestRefresh:
         assert await voteview.refresh_member_ideal_points("senate", 119) is True
         assert asked == [119]
 
+    async def test_a_switch_that_cant_be_told_apart_keeps_the_previous_section(self, monkeypatch, tmp_path):
+        """No last-Congress export: the refresh keeps the previous section
+        rather than guess. Both ids new (a switch in a first Congress): the
+        vote export's first roll calls decide, and without it, the same."""
+        path = _patch_path(monkeypatch, tmp_path)
+        state_pvi = score_calculator._state_pvi()
+        rows = [{**r, "icpsr": str(1000 + i)} for i, r in enumerate(_synthetic_rows(state_pvi))]
+        since = {**rows[0], "icpsr": "91000", "party_code": "328", "nominate_dim1": "0.9",
+                 "nominate_number_of_votes": "40"}
+        last = {"rows": None}
+
+        async def fake_rows(chamber, congress, client=None):
+            return [since] + rows if congress == 119 else last["rows"]
+        firsts = {"rolls": None}
+
+        async def fake_firsts(chamber, congress, client=None):
+            return firsts["rolls"]
+        monkeypatch.setattr(voteview, "fetch_member_rows", fake_rows)
+        monkeypatch.setattr(voteview, "fetch_first_rolls", fake_firsts)
+        assert await voteview.refresh_member_ideal_points("senate", 119) is False
+        assert not path.exists()
+        last["rows"] = []  # an empty export tells nothing apart either
+        assert await voteview.refresh_member_ideal_points("senate", 119) is False
+        last["rows"] = rows[1:]  # neither of the switcher's ids is in it
+        assert await voteview.refresh_member_ideal_points("senate", 119) is False
+        firsts["rolls"] = {"1000": 1, "91000": 400}
+        assert await voteview.refresh_member_ideal_points("senate", 119) is True
+        assert score_calculator._member_ideal_points("senate")["members"][rows[0]["bioguide_id"]] == 0.9
+
     async def test_successful_refresh_writes_section(self, monkeypatch, tmp_path):
         path = _patch_path(monkeypatch, tmp_path)
         state_pvi = score_calculator._state_pvi()
@@ -366,11 +395,10 @@ class TestRefresh:
 
 def test_a_member_listed_twice_is_read_on_their_latest_record():
     """A party switch during a Congress puts a member in the export twice,
-    under two ICPSR ids. They are read on the record since the switch (the
-    id the last Congress's export didn't have, else the later row), and
+    under two ICPSR ids. They are read on the record since the switch, and
     only it enters the fits and the seated count (one seat, one position);
-    a row with no position, or Voteview's placeholder, never wins over one
-    with."""
+    until Voteview places that record, they have no position, rather than
+    being read on the old one."""
     state_pvi = score_calculator._state_pvi()
     rows = [{**r, "icpsr": str(1000 + i)} for i, r in enumerate(_synthetic_rows(state_pvi))]
     bio = rows[0]["bioguide_id"]
@@ -382,27 +410,45 @@ def test_a_member_listed_twice_is_read_on_their_latest_record():
     def build(rs, **kw):
         return voteview.build_chamber_ideal_points(rs, "senate", state_pvi, {}, reliability=REL, **kw)[0]
     base, alone = build(rows), build(rows[1:] + [since])
-    earlier = {r["icpsr"] for r in rows}
+    latest = {bio: "91000"}
     # The new id, though shorter and listed first, is the latest: it alone
     # enters the other party's fit.
-    data = build([since] + rows, earlier_ids=earlier)
+    data = build([since] + rows, latest=latest)
     assert data["members"][bio] == 0.9 and data["votes"][bio] == 40
     assert data["fit"] == alone["fit"] != base["fit"] and data["seated"] == base["seated"]
-    # Without the last Congress's ids, the later row in the export.
+    # Without `latest`, the later row in the export (scripts only).
     assert build([since] + rows)["members"][bio] == base["members"][bio]
-    assert build(rows + [since])["members"][bio] == 0.9
-    unplaced = {**since, "nominate_dim1": ""}
-    assert build(rows + [unplaced], earlier_ids=earlier)["members"][bio] == base["members"][bio]
+    # Not placed yet: no position, and the old record stays out of the fits.
+    data = build(rows + [{**since, "nominate_dim1": ""}], latest=latest)
+    assert bio not in data["members"] and data["fit"] == build(rows[1:])["fit"]
 
 
-def test_a_placeholder_never_wins_over_a_position():
-    """On Nokken-Poole rows, a switcher's latest row that is Voteview's
-    0, 0 placeholder loses to their placed one."""
+def test_a_latest_record_that_is_a_placeholder_is_no_position():
+    """On Nokken-Poole rows, a switcher whose record since the switch is
+    Voteview's 0, 0 placeholder has no position: never the old record."""
     state_pvi = score_calculator._state_pvi()
     rows = [{**r, "icpsr": str(1000 + i), "nokken_poole_dim1": r["nominate_dim1"], "nokken_poole_dim2": "0.1"}
             for i, r in enumerate(_synthetic_rows(state_pvi))]
     bio = rows[0]["bioguide_id"]
     placeholder = {**rows[0], "icpsr": "91000", "nokken_poole_dim1": "0", "nokken_poole_dim2": "0"}
     data, _ = voteview.build_chamber_ideal_points(
-        rows + [placeholder], "senate", state_pvi, {}, reliability=REL, earlier_ids={r["icpsr"] for r in rows})
-    assert data["members"][bio] == float(rows[0]["nokken_poole_dim1"])
+        rows + [placeholder], "senate", state_pvi, {}, reliability=REL, latest={bio: "91000"})
+    assert bio not in data["members"]
+
+
+def test_switcher_latest_tells_the_new_id_apart():
+    """The latest id is the one the last Congress's export lacked; when both
+    are new (a switch in a member's first Congress), the one whose first
+    roll call comes last, or that has none yet; with neither, unresolved."""
+    rows = [{"bioguide_id": "A1", "icpsr": "10"}, {"bioguide_id": "A1", "icpsr": "90.0"},
+            {"bioguide_id": "B1", "icpsr": "20"}, {"bioguide_id": "B1", "icpsr": "21"},
+            {"bioguide_id": "C1", "icpsr": "30"}]
+    latest, unresolved = voteview.switcher_latest(rows, {"10", "30"})
+    assert latest == {"A1": "90"} and unresolved == ["B1"]
+    # An id spelled "10.0" in either export is the same id.
+    earlier = {voteview._icpsr({"icpsr": "10.0"}), "30"}
+    assert voteview.switcher_latest(rows, earlier)[0] == {"A1": "90"}
+    latest, unresolved = voteview.switcher_latest(rows, {"10", "30"}, {"20": 300, "21": 5, "10": 1})
+    assert latest == {"A1": "90", "B1": "20"} and unresolved == []
+    latest, _ = voteview.switcher_latest(rows, {"10", "30"}, {"20": 300})
+    assert latest["B1"] == "21"  # no roll call yet: the newest

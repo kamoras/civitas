@@ -176,11 +176,14 @@ def switcher_test(cache: pathlib.Path | None = None, span: range | None = None) 
     with a full record in the next, the squared gap between that full
     position and each candidate: the latest record (the id whose first roll
     call comes last), the longer one (more scaled votes), and the
-    vote-weighted mean. The mean over members, how many, and the paired
-    difference of the latest and the longer with its standard error."""
+    vote-weighted mean. The mean over members, how many (and how many
+    people), the paired differences of the latest from the other two with
+    standard errors over people, and, where the latest isn't also the
+    longer, in how many it is the closer."""
     span = span or congresses()
     states = _states()
     gaps: dict[str, list[float]] = {"latest": [], "longer": [], "weighted": []}
+    people: list[str] = []
     for chamber in ("S", "H"):
         for c in span:
             try:
@@ -211,13 +214,23 @@ def switcher_test(cache: pathlib.Path | None = None, span: range | None = None) 
                 weighted = sum(x * n for _, x, n in cands) / total if total else longer
                 for name, x in (("latest", latest), ("longer", longer), ("weighted", weighted)):
                     gaps[name].append((x - target) ** 2)
-    diff = np.array(gaps["latest"]) - np.array(gaps["longer"])
-    return {"members": len(gaps["latest"]),
+                people.append(bio)
+    def paired(other):
+        # Latest minus `other`, averaged within each person first (a member
+        # who switched twice counts once), and its standard error over people.
+        by: dict[str, list[float]] = {}
+        for bio, a, b in zip(people, gaps["latest"], gaps[other]):
+            by.setdefault(bio, []).append(a - b)
+        d = np.array([np.mean(v) for v in by.values()])
+        return {"mean": round(float(d.mean()), 4) if len(d) else None,
+                "standard_error": round(float(d.std(ddof=1) / np.sqrt(len(d))), 4) if len(d) > 1 else None}
+    differ = [(a, b) for a, b in zip(gaps["latest"], gaps["longer"]) if a != b]
+    return {"members": len(gaps["latest"]), "people": len(set(people)),
             **{f"mean_squared_gap_{k}": round(float(np.mean(v)), 4) if v else None for k, v in gaps.items()},
-            # The member-by-member difference, latest minus longer, and its
-            # standard error.
-            "latest_minus_longer": round(float(diff.mean()), 4) if len(diff) else None,
-            "standard_error": round(float(diff.std(ddof=1) / np.sqrt(len(diff))), 4) if len(diff) > 1 else None}
+            "latest_minus_longer": paired("longer"), "latest_minus_weighted": paired("weighted"),
+            # Where the latest record is not also the longer one: how many,
+            # and in how many the latest is the closer.
+            "latest_not_longer": len(differ), "latest_closer": sum(a < b for a, b in differ)}
 
 
 def _float(value) -> float | None:
@@ -537,9 +550,20 @@ def era_test(data: list[tuple], structure: str, split: int = ERA_SPLIT) -> dict 
 def era_split_test(data: list[tuple], structure: str) -> dict:
     """era_test at every split with thin pairs on both sides, a check that
     the result doesn't hang on ERA_SPLIT, and at how many splits the latest
-    era's curve would be adopted."""
+    era's curve would be adopted; where it would, that curve's n0 and its
+    range with each of the era's thin members left out in turn."""
     thin = sorted({r[6] for r in data if r[5] == "thin"})
     out = {str(cut): t for cut in thin[1:] if (t := era_test(data, structure, cut)) is not None}
+    d = drifts(data)
+    for cut, t in out.items():
+        if t["adopted"]:
+            # How much the adopted curve rests on single members: its n0 with
+            # each of the latest era's thin members left out in turn.
+            late = [r for r in data if r[6] >= int(cut)]
+            fits = [fit_n0([r for r in late if r[1] != m], d)
+                    for m in sorted({r[1] for r in late if r[5] == "thin"})]
+            t["n0"] = fit_n0(late, d)
+            t["n0_leaving_one_member_out"] = [min(fits), max(fits)]
     return {"splits": out, "adopted_at": sum(t["adopted"] for t in out.values()), "of": len(out)}
 
 
@@ -853,11 +877,17 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
     used = [r for r in data if r[5] != "full" and (r[0], r[6]) in d]
     last = max(r[6] for r in data) + 1
     base, comparison = choose_structure(data)
+    # The structures that can't be applied, against the chosen one on every
+    # thin pair: reported, never chosen.
+    chosen_errors = heldout_errors(data, base)
+    comparison["reported"] = {name: _paired(heldout_errors(data, name), chosen_errors)
+                              for name in STRUCTURES if name not in USABLE}
     eras = era_test(data, base)
     if eras:
         # The other structure the score could apply, judged the same way.
-        eras["chamber_on_latest"] = _paired(heldout_errors(data, "chamber", only=STRUCTURES["era"]),
-                                            heldout_errors(data, "pooled", only=STRUCTURES["era"]))
+        other = "pooled" if base == "chamber" else "chamber"
+        eras[f"{other}_on_latest"] = _paired(heldout_errors(data, other, only=STRUCTURES["era"]),
+                                             heldout_errors(data, base, only=STRUCTURES["era"]))
     structure = "era" if eras and eras["adopted"] else base
     heldout = {name: round(heldout_error(data, name), 4) for name in STRUCTURES}
     n0 = fit_chambers(data, structure)
@@ -951,12 +981,17 @@ def main() -> None:
             "against the rest, are tested, not usable); era_test judges the latest era's curve (eras "
             f"split at Congress {ERA_SPLIT}), the only one an era structure would apply, against that "
             "choice on the latest era's thin pairs alone, adopting it (structure \"era\") only if "
-            "better by more than the standard error (with its half_weight_votes, and chamber_on_latest, "
-            "the per-chamber structure judged the same way), and era_split_test repeats it at every "
-            "split; switcher_test compares, for a member who switched parties during a Congress, the "
-            "latest record, the longer one and their vote-weighted mean against the next Congress's "
-            "full record (the pipeline reads the latest); party_line_test's above and standard_error "
-            "are its paired difference from the shipped structure; "
+            "better by more than the standard error (with its half_weight_votes, and the other usable "
+            "structure judged the same way: chamber_on_latest while one curve is chosen), and "
+            "era_split_test repeats it at every "
+            "split (at an adopting split, with its n0 leaving one member out in turn); "
+            "structure_test's reported gives direction, attendance and era (each era's curve on its "
+            "own members) against the chosen structure, paired; switcher_test compares, for a member "
+            "who switched parties during a Congress, the latest record, the longer one and their "
+            "vote-weighted mean against the next Congress's full record, paired differences over "
+            "people (the pipeline reads the latest, a stated choice the evidence can't settle); "
+            "party_line_test's above and standard_error are its paired difference from the shipped "
+            "structure; "
             "chambers' thin_pairs count every thin pair; "
             "half_weight_votes is where "
             "weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / "

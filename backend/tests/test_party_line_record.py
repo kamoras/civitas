@@ -209,6 +209,30 @@ def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_ses
     section["congress"] = 118
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
 
+def test_a_member_who_switched_parties_is_never_read_on_the_last_congress(db_session, monkeypatch):
+    """A switcher's last record was cast in their old party, so the prior
+    never decides their side: neither over a thin record since the switch
+    nor in place of a missing one."""
+    current = {**DIM1, "R4": 0.3}
+    section = {"members": current, "votes": {**{m: 500 for m in DIM1}, "R4": 2},
+               "reliability": {"n0": 24, "reference_votes": 200}, "congress": 119,
+               "prior": {"congress": 118, "members": DIM1, "votes": {m: 500 for m in DIM1},
+                         "reliability": {"n0": 24}}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    _roll_call(db_session, "house", 33, "On Passage", "HR.8", {"R4": "Nay"})
+    db_session.commit()
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    section["switched"] = ["R4"]
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+    # With no position since the switch, the old one isn't read either: the
+    # rule falls back as for any member with none.
+    section["members"] = {m: d for m, d in current.items() if m != "R4"}
+    del section["votes"]["R4"]
+    record = party_line_records(db_session, "house", _members())[4]
+    section["switched"] = []
+    assert record != party_line_records(db_session, "house", _members())[4]
+
+
 def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, monkeypatch):
     """Darline Graham took Lindsey Graham's seat after his death; matched by
     last name and state, every roll call he cast in the Congress was hers

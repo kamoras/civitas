@@ -602,8 +602,8 @@ positions from Voteview (Voteview's 0, 0 placeholders dropped), per-party
 fits on seat lean, the scale over full records, and v6.27's reliability
 weight (nearly inert here: almost every incumbent in these panels has a full
 record). The House rows use section 1's panel and controls; seat lean is
-the presidential vote, as throughout this note, not the pipeline's Cook PVI. Coefficient per
-score point, t, and the R² the score adds:
+the presidential vote, as throughout this note, not the pipeline's Cook
+PVI. Coefficient per score point, t, and the R² the score adds:
 
 | Outcome | Linear, pooled (shipped) | Linear, per party | Peaked, pooled | Peaked, per party |
 |---|---|---|---|---|
@@ -709,7 +709,9 @@ in a fixed order, 1,000 times.
   Senate and 55 for the House), and judged only on the latest era's
   members, as the era curve is below, worse again (0.049 above one
   curve, standard error 0.041). Direction and attendance can't be known
-  for a sitting member's record, so they are reported only. The direction
+  for a sitting member's record, so they are reported only; against one
+  curve, direction is worse (0.025 above it, standard error 0.014) and
+  attendance within the noise (0.009 below, 0.037). The direction
   split is which side of the pair is thin (the earlier, mostly members
   who arrived; the later, mostly members who left or were absent at the
   end of a Congress), and the attendance split is mostly the arrivals
@@ -719,8 +721,8 @@ in a fixed order, 1,000 times.
   Congress scored from now on falls in it. All of its gain, and a little
   more, is on the members with thin records before the 110th Congress,
   an era that would never be applied, and it rests on a few early
-  records (the early era's n0 runs to the search grid's lower limit, 1). So the era
-  curve is judged on the latest era's members alone (`era_test`): there
+  records (the early era's n0 runs to the search grid's lower limit,
+  1). So the era curve is judged on the latest era's members alone (`era_test`): there
   the latest era's curve (half point 46 votes) predicts no better than
   one curve, 0.0025 worse with a standard error of 0.0195 over 67
   members, and one curve stays. The 110th was the split before this
@@ -731,10 +733,12 @@ in a fixed order, 1,000 times.
   weak evidence of a slower recent curve, for three reasons. At every one
   of those splits the recent curve is the slowest the form allows (n0 at
   the search grid's upper limit, a half point of 98 votes, the linear
-  curve n / 200). It rests largely on one member, whose short
-  lame-duck record sits far from their next full one; without them the
-  recent curve's n0 falls from 5,000 to about 300. And the 16 splits are
-  nested and correlated, so 4 adoptions are not 4 pieces of evidence.
+  curve n / 200). At three of the four (the 113th to 115th) it rests
+  largely on one member, who arrived mid-Congress and whose short first
+  record sits far from their next full one: leaving out one member at a
+  time, n0 falls from 5,000 to between 279 and 475; at the 117th no
+  single member moves it. And the 16 splits are nested and correlated,
+  so 4 adoptions are not 4 pieces of evidence.
   Adopting one now would also mean choosing the split after seeing the
   data, so the fixed split decides, and a rerun with more recent pairs
   tests it again.
@@ -757,8 +761,8 @@ in a fixed order, 1,000 times.
   0.033), and its slope isn't stable: +7.75 here, and
   negative in an earlier run with the party switchers counted (on a
   narrower grid). An earlier draft of this change found a positive slope
-  by forcing one drift on every Congress, which loaded the era differences in drift
-  onto n0.
+  by forcing one drift on every Congress, which loaded the era
+  differences in drift onto n0.
 - **Positions with no count carry some information.** They are members
   Voteview has barely scaled (newly sworn in, or with very few scalable
   votes). Measured only where the member also has a career DW-NOMINATE
@@ -862,15 +866,30 @@ itself a sign of how little these data settle.
     clock, and a Congress still thin by the calendar is skipped) only
     adds the newest pairs.
   - A member Voteview lists twice in one Congress (a party switch during
-    it) is read on the record since the switch, their latest, and only
-    that one enters the seat fits. On the 9 such
-    members with a full record in the next Congress, it predicts that
-    record better (squared gap 0.039) than the longer record (0.083) or
-    the vote-weighted mean of the two (0.060); latest minus longer is
-    −0.044 with a standard error of 0.041 (`switcher_test`). The switch
-    moves a position more than a short record's noise does, and the
-    weight already discounts the noise. The latest record is the id the
-    last Congress's export didn't have (else the later row).
+    it) is read on the record since the switch, and only that one enters
+    the seat fits. That is a choice, not a measurement: the score is
+    about the current term, and the record since the switch is the one
+    of who the member now is. The evidence is consistent with it but
+    can't settle it (`switcher_test`). Over the 9 such member-Congresses
+    (8 people) with a full record in the next Congress, the record since
+    the switch is nearer that record (squared gap 0.039) than the longer
+    record (0.083) or the vote-weighted mean of the two (0.060). Counting
+    each person once, it beats the longer by 0.050 (standard error 0.032)
+    and the mean by 0.030 (0.022); in 4 of the 9 the record since the
+    switch is also the longer, and of the other 5 it is nearer in 4.
+    Consequences of the choice:
+    - Just after a switch the record since is short, so it counts little
+      and the part sits near 50; the longer record from before the
+      switch isn't read.
+    - Until Voteview places the record since the switch, the member has
+      no position (50), never the old one.
+    - The flank rule never reads such a member's last Congress (cast in
+      their old party).
+    - The record since the switch is the id the last Congress's export
+      didn't have, or, when both ids are new (a switch in a member's
+      first Congress), the one whose first roll call comes last in the
+      vote export. If either export can't be read, the ingest keeps the
+      previous section rather than guess.
 - The seat fits are taken over every member, since a thin position is
   noisy but not biased.
 - The saturation scale is the 90th percentile of full records'
@@ -923,7 +942,7 @@ itself a sign of how little these data settle.
     | Votes | Pairs | Same side |
     |---|---|---|
     | 1–25 | 19 | 68% |
-    | 26–50 | 24 | 54% |
+    | 26–50 | 24 | 50% |
     | 51–100 | 20 | 70% |
     | 101–150 | 20 | 85% |
     | 151–199 | 12 | 92% |
@@ -1043,10 +1062,13 @@ which read placeholders as positions and weighted nothing, with v6.27:
   their own members, a recent era's curve beats one curve by about one
   to one and a half standard errors at a few later splits (the 113th,
   114th, 115th and 117th), not at the fixed one. The thin records mix
-  arrivals, departures and long absences, as the score's do; whether everyone's early records in a Congress behave like
-  these is untested. The no-count weight rests on fewer still (25
-  pairs), and the flank rule's switch can't be measured at all: only 3
-  pairs have the rule's shape. Rerunning the calibration adds each
+  arrivals, departures and long absences, as the score's do; whether
+  everyone's early records in a Congress behave like these is untested.
+  The no-count weight rests on fewer still (25 pairs), and the flank
+  rule's switch can't be measured at all: only 3 pairs have the rule's
+  shape. Reading a party switcher on their record since the switch rests
+  on 8 people, and beats the longer record by about one and a half
+  standard errors. Rerunning the calibration adds each
   Congress's new pairs, and decides the structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority

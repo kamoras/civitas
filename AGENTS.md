@@ -602,8 +602,9 @@ v6.27) is a narrower exception that never scores a past position. It
 reads the last Congress's positions only to tell which side of their
 party a defector sits on: for everyone until the new Congress's
 Voteview section passes its gates; after that, for a member whose new
-record has no count or fewer than `prior_until_votes` votes (`app/data/position_confidence.json`: 200, a
-full record) if their last record was full; and, whatever the last
+record has no count or fewer than `prior_until_votes` votes
+(`app/data/position_confidence.json`: 200, a full record) if their last
+record was full; and, whatever the last
 record, for a member the new section gives no usable position. The 200
 and the bar for replacing it are conventions: the calibration would
 adopt a shorter switch only if it placed members on the right side

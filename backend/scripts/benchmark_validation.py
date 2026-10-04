@@ -168,7 +168,7 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
             out[r["bioguide"]] = seat_relative_vote_score(residual, scale, r["n_votes"], typical)
     return out
 
-def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, float]:
+def position_congruence(member_rows: list[dict], chamber: str, latest: dict[str, str] | None = None) -> dict[str, float]:
     """bioguide -> the position-congruence score of the member's Nokken-Poole
     (or DW-NOMINATE) position minus the per-party fit on seat lean, signed
     toward the party flank — the pipeline's own build_chamber_ideal_points
@@ -184,10 +184,11 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
     from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points, latest_rows
 
     # One row per member, as the build reads them (a party switcher's
-    # latest; without the last Congress's ids, the later row in the export).
-    member_rows = latest_rows(member_rows)
+    # latest, `latest` from switcher_latest).
+    member_rows = latest_rows(member_rows, latest)
     data, failures = build_chamber_ideal_points(
         member_rows, chamber, _state_pvi(), _district_pvi(), reliability=_position_reliability(chamber),
+        latest=latest,
     )
     saturation = data.get("extremity_p90")
     if failures or not saturation:
@@ -294,7 +295,14 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
         if breaks.get(icpsr) and breaks[icpsr][1] >= CONSTITUENT_FULL_CONFIDENCE_VOTES
     ]
     vote_shape = seat_relative_vote_shape(rows)
-    congruence = position_congruence(member_rows, chamber)
+    # A party switcher's latest id: the one whose first roll call comes last.
+    from app.pipeline.fetch.voteview import switcher_latest
+    first: dict[str, int] = {}
+    for v in vote_rows:
+        i, n = str(int(float(v["icpsr"]))), int(float(v["rollnumber"]))
+        first[i] = min(first.get(i, n), n)
+    latest, _ = switcher_latest(member_rows, set(), first)
+    congruence = position_congruence(member_rows, chamber, latest)
     # The score's own combination: position at its weight where an ideal
     # point exists, the vote shape alone where one doesn't.
     recomputed = {

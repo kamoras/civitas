@@ -1011,19 +1011,23 @@ def _sitting_effect(p):
         rel = score_calculator._position_reliability(chamber)
         raw = pd.read_csv(p[f"{letter}119_members.csv"], dtype=str).fillna("").to_dict("records")
         raw = [r for r in raw if r["chamber"] != "President"]
-        # One row per member, as v6.27's build reads them (a party switcher's
-        # latest record, told apart by the 118th's ids).
-        earlier = ({voteview._icpsr(r) for r in pd.read_csv(p[f"{letter}118_members.csv"], dtype=str)
-                    .fillna("").to_dict("records")} if f"{letter}118_members.csv" in p else None)
-        rows = latest_rows(raw, earlier)
+        # One row per member, as v6.27's build reads them: a party
+        # switcher's latest record (voteview.switcher_latest, from the 118th's
+        # ids and the 119th's first roll calls).
+        earlier = {voteview._icpsr(r) for r in pd.read_csv(p[f"{letter}118_members.csv"], dtype=str)
+                   .fillna("").to_dict("records")}
+        votes = pd.read_csv(p[f"{letter}119_votes.csv"], usecols=["icpsr", "rollnumber"])
+        first = {str(int(i)): int(n) for i, n in votes.groupby("icpsr")["rollnumber"].min().items()}
+        latest, _ = voteview.switcher_latest(raw, earlier, first)
+        rows = latest_rows(raw, latest)
         # v6.26 had no placeholder test (mark them so the build keeps them)
         # and read every row, the last one listed winning.
         old_rows = [dict(r, nokken_poole_dim2="kept") if r["nokken_poole_dim1"] in ("0", "0.0")
                     and r["nokken_poole_dim2"] in ("0", "0.0") else r for r in raw]
         spvi, dpvi = score_calculator._state_pvi(), score_calculator._district_pvi()
-        with mock.patch.object(voteview, "_one_row_per_member", lambda rs, column, earlier_ids=None: rs):
+        with mock.patch.object(voteview, "_one_row_per_member", lambda rs, latest=None: rs):
             old, _ = build_chamber_ideal_points(old_rows, chamber, spvi, dpvi, reliability={})
-        new, _ = build_chamber_ideal_points(rows, chamber, spvi, dpvi, reliability=rel, earlier_ids=earlier)
+        new, _ = build_chamber_ideal_points(rows, chamber, spvi, dpvi, reliability=rel, latest=latest)
         e_old, e_new = _extremities(old, old_rows, chamber, spvi, dpvi), _extremities(new, rows, chamber, spvi, dpvi)
         changes, thin, unmeasured = [], [], []
         party_of = {r["bioguide_id"]: voteview.PARTY_CODES.get(int(float(r["party_code"] or 0))) for r in rows}

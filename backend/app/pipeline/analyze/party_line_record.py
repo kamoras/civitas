@@ -245,7 +245,13 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     until = reliability.get("prior_until_votes", full)
     counts = main.get("votes") or {}
     prior_counts = prior.get("votes") or {}
+    # A member who switched parties this Congress: their last record was
+    # cast in their old party, and nothing measured it as evidence of their
+    # side of the new one, so it is never read for them.
+    switched = set(main.get("switched") or ())
     for b, (x, w) in weighted(prior).items():
+        if b in switched:
+            continue
         if b not in dim1:
             dim1[b] = (x, w)
         elif full:

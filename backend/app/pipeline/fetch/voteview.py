@@ -134,6 +134,7 @@ from app.pipeline.rate_limiter import RateLimiter
 logger = logging.getLogger(__name__)
 
 MEMBERS_URL = "https://voteview.com/static/data/out/members/{letter}{congress}_members.csv"
+VOTES_URL = "https://voteview.com/static/data/out/votes/{letter}{congress}_votes.csv"
 
 SOURCE_DESC = (
     "Voteview (Lewis et al., voteview.com) per-congress member-ideology "
@@ -291,46 +292,72 @@ def _icpsr(row: dict) -> str:
 def switched_members(rows: list[dict]) -> bool:
     """Whether any member is listed under two ICPSR ids: a party switch
     during the Congress."""
-    ids: dict[str, set[str]] = {}
+    return bool(_switchers(rows))
+
+
+def _switchers(rows: list[dict]) -> dict[str, list[str]]:
+    """bioguide -> its ICPSR ids, in the export's order, for each member
+    listed under more than one."""
+    ids: dict[str, list[str]] = {}
     for row in rows:
-        if bio := (row.get("bioguide_id") or "").strip():
-            ids.setdefault(bio, set()).add(_icpsr(row))
-    return any(len(v) > 1 for v in ids.values())
+        if (bio := (row.get("bioguide_id") or "").strip()) and _icpsr(row) not in ids.setdefault(bio, []):
+            ids[bio].append(_icpsr(row))
+    return {bio: v for bio, v in ids.items() if len(v) > 1}
 
 
-def _one_row_per_member(rows: list[dict], column: str, earlier_ids: set[str] | None = None) -> list[dict]:
-    """Each bioguide id's latest row with a position in `column` (any row,
-    if none has one), in the export's order; rows with no bioguide id pass
-    through. Latest: an id not in the last Congress's export (`earlier_ids`;
-    the id Voteview opened at the switch) over one that is, then the later
-    in the export's order."""
-    def rank(row, index):
-        # Placed as the build reads a position: a number, and not Voteview's
-        # placeholder.
-        placed = _number(row.get(column)) is not None and not (
-            column == "nokken_poole_dim1" and _is_placeholder(row))
-        return placed, earlier_ids is not None and _icpsr(row) not in earlier_ids, index
-    best: dict[str, tuple] = {}
-    for index, row in enumerate(rows):
+def switcher_latest(
+    rows: list[dict], earlier_ids: set[str], first_roll: dict[str, int] | None = None,
+) -> tuple[dict[str, str], list[str]]:
+    """Each switcher's latest ICPSR id, the one Voteview opened at the
+    switch: the only one of their ids not in the last Congress's export
+    (`earlier_ids`), or, when that doesn't single one out (a member who
+    switched in their first Congress has two new ids), the one whose first
+    roll call (`first_roll`) comes last, or that has none yet. Returns ({bioguide: id}, the
+    bioguides neither settles)."""
+    latest, unresolved = {}, []
+    for bio, ids in _switchers(rows).items():
+        new = [i for i in ids if i not in earlier_ids]
+        if len(new) == 1:
+            latest[bio] = new[0]
+        elif first_roll is not None:
+            # An id with no roll call yet is the newest.
+            latest[bio] = max(ids, key=lambda i: first_roll.get(i, float("inf")))
+        else:
+            unresolved.append(bio)
+    return latest, unresolved
+
+
+def _one_row_per_member(rows: list[dict], latest: dict[str, str] | None = None) -> list[dict]:
+    """One row per bioguide id, in the export's order; rows with no
+    bioguide id pass through. A switcher keeps the row of their latest id
+    (`latest`, from switcher_latest), whether or not Voteview has placed it
+    yet (a record since the switch with no position is no position yet,
+    never a reason to read the old one); without `latest`, the later row in
+    the export's order, which is usually but not always the latest."""
+    keep: dict[str, dict] = {}
+    for row in rows:
         bio = (row.get("bioguide_id") or "").strip()
-        if bio and (bio not in best or rank(row, index) > best[bio][0]):
-            best[bio] = (rank(row, index), row)
-    best = {bio: row for bio, (_, row) in best.items()}
-    return [row for row in rows
-            if not (bio := (row.get("bioguide_id") or "").strip()) or best[bio] is row]
+        if not bio:
+            continue
+        if latest and bio in latest:
+            if _icpsr(row) == latest[bio] and bio not in keep:
+                keep[bio] = row
+        else:
+            keep[bio] = row
+    return [row for row in rows if not (bio := (row.get("bioguide_id") or "").strip()) or keep.get(bio) is row]
 
 
-def latest_rows(rows: list[dict], earlier_ids: set[str] | None = None) -> list[dict]:
+def latest_rows(rows: list[dict], latest: dict[str, str] | None = None) -> list[dict]:
     """The rows build_chamber_ideal_points reads: one per member, a party
     switcher's latest (see _one_row_per_member). For scripts that read the
     rows beside the built section."""
-    return _one_row_per_member(rows, _position_column(rows)[0], earlier_ids)
+    return _one_row_per_member(rows, latest)
 
 
 def build_chamber_ideal_points(
     rows: list[dict], chamber: str,
     state_pvi: dict[str, int], district_pvi: dict[str, int],
-    *, reliability: dict, congress: int | None = None, earlier_ids: set[str] | None = None,
+    *, reliability: dict, congress: int | None = None, latest: dict[str, str] | None = None,
 ) -> tuple[dict, list[str]]:
     """One chamber's {members, votes, fit, extremity_p90, ...} section from
     parsed Voteview rows, plus build-stage failure strings (empty = clean).
@@ -345,15 +372,16 @@ def build_chamber_ideal_points(
 
     A member Voteview lists twice in one Congress (a party switch during it,
     under a second ICPSR id) is read on their latest record, the one since
-    the switch, and only it enters the fits: one seat, one position. That
-    predicts where a switcher sits in the next Congress better than the
-    longer record or a vote-weighted mean (calibrate_position_confidence.
-    switcher_test); the weight then applies to its own count. Which record
-    is the latest: the id that isn't in the last Congress's export
-    (`earlier_ids`), else the later row in the export's order."""
+    the switch (`latest`, from switcher_latest), and only it enters the
+    fits: one seat, one position. Reading the record since the switch is a
+    choice, the current term's record of who the member now is (principle
+    6); the evidence (calibrate_position_confidence.switcher_test) is
+    consistent with it but can't settle it. Until Voteview places that
+    record, the member has no position."""
 
     column, measure = _position_column(rows)
-    rows = _one_row_per_member(rows, column, earlier_ids)
+    switched = sorted(_switchers(rows))
+    rows = _one_row_per_member(rows, latest)
     members: dict[str, float] = {}
     votes: dict[str, int] = {}
     seats: set[str] = set()
@@ -424,6 +452,9 @@ def build_chamber_ideal_points(
     return {
         "members": members, "votes": votes, "fit": fit, "extremity_p90": extremity_p90,
         "measure": measure, "congress": congress, "seats": len(seats), "seated": seated,
+        # Members who switched parties during this Congress: the flank rule
+        # never reads their last Congress's record, cast in their old party.
+        "switched": switched,
         "reliability": dict(reliability), "scale_congress": congress if extremity_p90 else None,
     }, failures
 
@@ -501,6 +532,56 @@ def previous_positions(previous: dict, congress: int | None) -> dict | None:
             "votes": previous.get("votes") or {}, "reliability": previous["reliability"]}
 
 
+async def fetch_first_rolls(
+    chamber: str, congress: int, client: httpx.AsyncClient | None = None,
+) -> dict[str, int] | None:
+    """ICPSR id -> the first roll call with a row in one chamber's vote
+    export for one Congress, or None on fetch failure. Large, so fetched
+    only when a switcher's latest id can't be told apart otherwise."""
+    url = VOTES_URL.format(letter=_CHAMBER_LETTER[chamber], congress=congress)
+    own_client = client is None
+    if own_client:
+        client = make_async_client(follow_redirects=True)
+    try:
+        resp = await fetch_with_retry(
+            client, _rate_limiter, "GET", url, retry_on_4xx=False, log_label=f"voteview {chamber} votes",
+        )
+        if resp is None:
+            return None
+        first: dict[str, int] = {}
+        for row in csv.DictReader(io.StringIO(resp.text)):
+            number = int(_number(row.get("rollnumber")) or 0)
+            i = _icpsr(row)
+            first[i] = min(first.get(i, number), number)
+        return first
+    except Exception:
+        logger.warning("Voteview %s votes fetch failed", chamber, exc_info=True)
+        return None
+    finally:
+        if own_client:
+            await client.aclose()
+
+
+async def _latest_ids(
+    rows: list[dict], chamber: str, congress: int, client: httpx.AsyncClient | None,
+) -> dict[str, str] | None:
+    """switcher_latest for this export: {} with no switcher, None when a
+    switcher's latest id can't be settled (an export that can't be read):
+    the caller keeps the previous section rather than guess."""
+    if not switched_members(rows):
+        return {}
+    last = await fetch_member_rows(chamber, congress - 1, client=client)
+    if last is None:
+        return None
+    latest, unresolved = switcher_latest(rows, {_icpsr(r) for r in last})
+    if unresolved:
+        first = await fetch_first_rolls(chamber, congress, client=client)
+        if first is None:
+            return None
+        latest, unresolved = switcher_latest(rows, {_icpsr(r) for r in last}, first)
+    return None if unresolved else latest
+
+
 async def refresh_member_ideal_points(
     chamber: str, congress: int, client: httpx.AsyncClient | None = None,
 ) -> bool:
@@ -523,15 +604,16 @@ async def refresh_member_ideal_points(
                 "Voteview %s unreachable — keeping previous member_ideal_points data", chamber,
             )
             return False
-        # A member who switched parties is read on their latest record,
-        # told apart by which id the last Congress's export already had.
-        earlier = None
-        if switched_members(rows):
-            last = await fetch_member_rows(chamber, congress - 1, client=client)
-            earlier = {_icpsr(r) for r in last} if last else None
+        latest = await _latest_ids(rows, chamber, congress, client)
+        if latest is None:
+            logger.warning(
+                "Voteview %s: a party switcher's latest record can't be told apart — keeping "
+                "previous member_ideal_points data", chamber,
+            )
+            return False
         data, failures = build_chamber_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),
-            reliability=_position_reliability(chamber), congress=congress, earlier_ids=earlier,
+            reliability=_position_reliability(chamber), congress=congress, latest=latest,
         )
         previous = _member_ideal_points(chamber) or {}
         if failures == []:
