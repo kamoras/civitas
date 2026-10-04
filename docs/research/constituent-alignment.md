@@ -488,15 +488,15 @@ first-dimension position from the chamber's Voteview data; early in a new
 Congress, the last Congress's) than the party does
 (`party_line_record._toward_other_party`). Since v6.27 each position is
 weighted by its reliability, and until a member's new record reaches 200
-roll calls their last Congress's full record, where they have one, decides
-their side (section 14; never for a member who switched parties, during
-this Congress or between the two); before the new section passes its gates
-everyone's last positions do (except a position recorded under the other
-major party, which is never read for the member), and a member with no
-usable position this Congress is read on the last one. Other breaks are
-listed on the scorecard as from the flank, and not counted. The rate is
-measured over every roll call the chamber recorded this Congress, not a
-sample.
+roll calls (a convention) their last Congress's full record, where they have
+one, decides their side (section 14; never for a member who switched
+parties, during this Congress or between the two); before the new section
+passes its gates everyone's last positions do (except a position recorded
+under the other major party, which is never read for the member), and a
+member with no usable position this Congress is read on the last one (a
+stated choice, not measured). Other breaks are listed on the scorecard as
+from the flank, and not counted. The rate is measured over every roll call
+the chamber recorded this Congress, not a sample.
 
 **What the evidence says.** The same tests as section 10, recomputed with
 only centerward breaks counted (the denominator is still every party-unity
@@ -1193,9 +1193,10 @@ rule's means reclassifies 0 of 2,351 Senate and 2 of 6,055 House breaks
   and one per party predict elections equally well, and the test of which
   unit voters respond to is inconclusive in both chambers (section 14). The
   pooled scale stays because nothing favors changing it. Unweighted, it
-  leaves the party whose senators spread more widely around the seat's
-  norm (Republicans, in most Senates since 1989) with more members near 0
-  and near 100.
+  leaves the party whose senators spread more widely around the seat's norm
+  (Republicans: over every Senate since 1989, unweighted, 10.1% against 2.9%
+  at 0 and 6.1% against 1.6% at 100, and more at 0 in 18 of the 19 Senates)
+  with more members near 0 and near 100.
 - **The thin-record weight rests on 95 thin pairs.** Few members have a
   thin record next to a full one, so the half point has a wide interval
   (26–98 votes, the upper end where the n0 search stops), and the
