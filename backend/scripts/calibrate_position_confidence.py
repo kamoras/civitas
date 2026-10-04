@@ -462,7 +462,8 @@ def fit_n0(data: list[tuple], drift: dict | None = None) -> float:
 CHAMBERS = (("senate", "S"), ("house", "H"))
 # The era structure's split: the first Congress of the later era. A
 # convention (roughly the middle of 101-119 when it was set, fixed before
-# the comparisons that use it); it stays at 110 on reruns, never
+# the forward comparisons, though era results at it from the earlier
+# leave-one-out tests had been reported); it stays at 110 on reruns, never
 # re-centred, so the latest era only grows.
 ERA_SPLIT = 110
 # Candidate structures for n0: the group a pair's n0 is fitted within.

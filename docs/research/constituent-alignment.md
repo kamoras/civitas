@@ -1194,9 +1194,9 @@ rule's means reclassifies 0 of 2,351 Senate and 2 of 6,055 House breaks
   unit voters respond to is inconclusive in both chambers (section 14). The
   pooled scale stays because nothing favors changing it. Unweighted, it
   leaves the party whose senators spread more widely around the seat's norm
-  (Republicans: over every Senate since 1989, unweighted, 10.1% against 2.9%
-  at 0 and 6.1% against 1.6% at 100, and more at 0 in 18 of the 19 Senates)
-  with more members near 0 and near 100.
+  (Republicans: over every Senate since 1989, 10.1% against 2.9% at 0 and
+  6.1% against 1.6% at 100, and more at 0 in 18 of the 19 Senates) with more
+  members near 0 and near 100.
 - **The thin-record weight rests on 95 thin pairs.** Few members have a
   thin record next to a full one, so the half point has a wide interval
   (26–98 votes, the upper end where the n0 search stops), and the
