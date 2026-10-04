@@ -597,27 +597,26 @@ congress" sidesteps that fragility entirely and is *stricter* than a literal
 6-year term (resets every 2 years, not 6) — it pushes harder on the "no
 resting on laurels" goal, not softer.
 
-Besides funding (below), the flank-break rule (`party_line_record`,
-v6.27) is a narrower exception that never scores a past position. It
-reads the last Congress's positions only to tell which side of their
-party a defector sits on: for everyone until the new Congress's
-Voteview section passes its gates; after that, for a member whose new
-record has no count or fewer than `prior_until_votes` votes
+Besides funding (below), the flank-break rule (`party_line_record`, v6.27)
+is a narrower exception that never scores a past position. It reads the
+last Congress's positions only to tell which side of their party a
+defector sits on: for everyone until the new Congress's Voteview section
+passes its gates; after that, for a member whose new record has no count
+or fewer than `prior_until_votes` votes
 (`app/data/position_confidence.json`: 200, a full record) if their last
 record was full; and, whatever the last record, for a member the new
-section gives no usable position (a stated choice, not measured).
-Never, once the new section is in, for a member who switched parties
-during the new Congress (`switched` in the section) or whose party
-differs between the two sections (`parties`; sections written before
-this change record none, so that check starts with the next Congress's
-section): their last positions were cast in another party. A position
-recorded under the other major party is never read for the member, in
-any section, nor counted in that party's mean. The 200
-and the bar for replacing it are conventions: the calibration would
-adopt a shorter switch only if it placed members on the right side
-better out of bag in 95% of resamples, and too few thin records have the
-rule's shape to measure one. Only the Congress
-just before is kept.
+section gives no usable position (a stated choice, not measured). Never,
+once the new section is in, for a member who switched parties during the
+new Congress (`switched` in the section) or whose party differs between
+the two sections (`parties`; sections written before this change record
+none, so that check starts with the next Congress's section): their last
+positions were cast in another party. A position recorded under the other
+major party is never read for the member, in any section, nor counted in
+that party's mean. The 200 and the bar for replacing it are conventions:
+the calibration would adopt a shorter switch only if it placed members on
+the right side better out of bag in 95% of resamples, and too few thin
+records have the rule's shape to measure one. Only the Congress just
+before is kept.
 
 **Funding is the main exception**: Funding Independence and Funding Diversity
 window to the member's **most recent completed election only**

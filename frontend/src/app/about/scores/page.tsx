@@ -219,13 +219,14 @@ export default function ScoresChapter() {
               <Cite id="kirkland2017" />. Which side of their party a member sits on: before this
               Congress&apos;s positions are published and pass our checks, everyone is read on the
               last Congress&apos;s position. After that, a member&apos;s own position this Congress
-              decides once it rests on 200 roll calls; until then a full record from the last
-              Congress decides, and without one this Congress&apos;s position so far does. A member
-              with no position yet this Congress is read on the last Congress&apos;s, however short
-              (our choice; nothing measured it), unless they have switched parties, since that
-              position was cast in their old party. A position recorded under the other major party
-              is never read for the member. The last Congress&apos;s position is used only for this,
-              never scored. Every break on a profile shows that roll call&apos;s party tallies.
+              decides once it rests on 200 roll calls (our convention); until then a full record
+              from the last Congress decides, and without one this Congress&apos;s position so far
+              does. A member with no position yet this Congress is read on the last Congress&apos;s,
+              however short (our choice; nothing measured it), unless they have switched parties,
+              since that position was cast in their old party. A position recorded under the other
+              major party is never read for the member. The last Congress&apos;s position is used
+              only for this, never scored. Every break on a profile shows that roll call&apos;s
+              party tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
