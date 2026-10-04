@@ -936,7 +936,8 @@ which read placeholders as positions and weighted nothing, with v6.27:
   record next to a full one, so the half point has a wide interval
   (24–98 votes, the upper end where the n0 search stops), and whether
   the chambers differ can't be settled: fitted apart they come to 25 and
-  85 votes, a difference well within the noise. A member's thin Congress
+  85 votes, but a curve per chamber predicts held-out members better by
+  only 0.020, under a third of that difference's standard error (0.070). A member's thin Congress
   is also often their first or last, though a curve per direction
   (entrants, leavers) predicts worse than one for both, and whether early
   records in a Congress behave like these is untested. The no-count

@@ -12,9 +12,9 @@ election results (docs/research/constituent-alignment.md, sections 11-12):
 - A break counts only toward the other party. On that roll call, the party
   members who broke sit, on average, nearer the other party (first-dimension
   position from the chamber's Voteview section, of any Congress, each
-  weighted by its reliability and read from its party's mean since v6.27,
-  with the last Congress's full record standing in for a thin new one)
-  than their party as a whole. Hardliners voting down their
+  weighted by its reliability and read from its party's mean since v6.27;
+  until a member's new record reaches prior_until_votes, their last
+  Congress's full record decides their side) than their party as a whole. Hardliners voting down their
   own party's bill from the flank vote against it too, but that is not
   independence toward the seat, and the member's flank position is already
   scored, by position congruence. Such votes are kept as flankBreaks: shown,
@@ -184,8 +184,10 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # Once the new Congress's section is in, its positions rest on a few roll
     # calls at first, so a member's last-Congress full record ("prior",
     # voteview.previous_positions) decides their side until their new record
-    # reaches the measured prior_until_votes (without a full record's count,
-    # while it is the more reliable). Each section's
+    # reaches the measured prior_until_votes (position_confidence.json:
+    # below it, the last full record places a member on their side more
+    # reliably; a section without the key falls back to a full record's
+    # count, or without that to the more reliable). Each section's
     # positions are read from their own party's mean in that section, so a
     # party-wide shift between the two Congresses can't move a member who is
     # read from one against a party read from the other.

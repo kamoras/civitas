@@ -75,8 +75,9 @@ preferences and score each member against the break rate same-party
 members of their chamber show at the same seat lean — a senator in a safe
 R+20 state voting with their party is representing constituents, not
 failing at independence, while the same loyalty in a swing state diverges
-from the median voter. Roll-call position is scored the same way against
-a seat-conditional norm (Canes-Wrone, Brady & Cogan 2002, "Out of Step,
+from the median voter. Roll-call position is scored against a
+seat-conditional norm too, linearly: 50 at the norm, rising toward the
+seat's center (tested in v6.27) (Canes-Wrone, Brady & Cogan 2002, "Out of Step,
 Out of Office," APSR 96:1). This is the delegate model of representation
 (Miller & Stokes 1963, "Constituency Influence in Congress," APSR 57:1),
 with seat partisan lean standing in for issue-level constituent opinion.
@@ -150,7 +151,7 @@ References
 - Harbridge, L. & Malhotra, N. (2011). AJPS, 55(3), 494-510.
 - Harbridge-Yong, L., Volden, C. & Wiseman, A.E. (2023). J. Politics, 85(3).
 - Lewis, J.B. et al. Voteview: Congressional Roll-Call Votes Database
-  (voteview.com) — DW-NOMINATE member estimates.
+  (voteview.com) — Nokken-Poole and DW-NOMINATE member estimates.
 
 Version history
 ---------------
