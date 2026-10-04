@@ -409,7 +409,10 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             "breaks": [{"rollCall": v[3], "vote": v[4]} for v in sorted(breaks, reverse=True)],
             "flankBreaks": [{"rollCall": v[3], "vote": v[4]} for v in sorted(flank, reverse=True)],
         })
-    missing = [members[i].get("name") or members[i].get("bioguideId") for i in range(scored) if i not in found]
+    # Only the members this run scores (the rest of the chamber is passed
+    # without a voting record, for the means alone).
+    missing = [members[i].get("name") or members[i].get("bioguideId") for i in range(scored)
+               if i not in found and members[i].get("votingRecord") is not None]
     if missing:
         logger.warning(
             "%d %s members matched no stored roll-call position (scored on stored votes): %s",
