@@ -52,7 +52,7 @@ function PartisanDepthPanel({
       <div className="flex items-baseline justify-between mb-3">
         <h4 className="text-sm font-mono text-signal-cyan">
           {">"}{" "}
-          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's platform positions. Based on what they voted for, not what they say. The bar's ends are the limits of the measure: the left end would mean every counted vote went the way of the Democrats' positions in every policy area, the right end the Republicans'. The label above the bar (deep, moderate or centrist) ranks this member within their own party, so a short bar can still be among the most partisan in it; cross-cutting means more than 30% of their positions sit with the other party.">
+          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's positions. Based on what they voted for, not what they say. The bar's ends are the limits of the measure: the left end would mean every counted vote went the way of the Democrats' positions in every policy area, the right end the Republicans'. The label above the bar (deeply or moderately partisan, or centrist) ranks this member within their own party, so a short bar can still be among the most partisan in it. Cross-cutting means the policy areas where they side with the other party carry more than 30% of their lean, each area weighted by how strongly it leans.">
             PARTISAN DEPTH ANALYSIS
           </MetricTooltip>
         </h4>
@@ -148,6 +148,10 @@ function PartisanDepthPanel({
                 with {senatorParty === "R" ? "Republican" : "Democratic"} positions.
               </span>
             )
+          ) : depth.overallParty === "centrist" ? (
+            // |lean| < 0.02 (party_platform._label): neither party's way,
+            // which the else branch below used to call Democratic.
+            <span>Voting record sits at the center overall.</span>
           ) : (
             <span>
               Despite being {senatorParty === "R" ? "Republican" : "Democrat"}, voting record leans{" "}

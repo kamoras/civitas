@@ -58,3 +58,17 @@ describe("PlatformTracker spectrum bar", () => {
     expect(marker).toMatch(/^clamp\(2px, 100%, /);
   });
 });
+
+describe("PlatformTracker interpretation", () => {
+  it("calls a lean at the center centrist, not the other party's", async () => {
+    render(
+      <PlatformTracker
+        partisanDepth={{ ...depth(0.01), overallParty: "centrist", depth: "centrist" }}
+        senatorParty="R"
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: /POSITIONS vs\. VOTES/ }));
+    expect(screen.getByText("Voting record sits at the center overall.")).toBeInTheDocument();
+    expect(screen.queryByText(/voting record leans/)).not.toBeInTheDocument();
+  });
+});

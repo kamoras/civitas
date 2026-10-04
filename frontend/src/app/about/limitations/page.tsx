@@ -141,9 +141,10 @@ export default async function LimitationsChapter() {
         </Limitation>
         <Limitation title="Some bills are labelled by content">
           <P>
-            Where a bill had no roll call, its party lean comes from comparing it with party
-            platforms. Bipartisan or cross-cutting bills can be misread. This affects only the
-            policy-area breakdown of partisan depth, never whether a member broke with their party.
+            Partisan depth (the lean bar and its policy-area breakdown) labels every bill a member
+            voted on by comparing it with each party&apos;s positions in that area, and a bill with
+            no roll call gets its party badge the same way. Bipartisan or cross-cutting bills can be
+            misread. It never decides whether a member broke with their party.
           </P>
         </Limitation>
       </Section>
