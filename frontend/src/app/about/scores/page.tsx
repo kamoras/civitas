@@ -303,7 +303,7 @@ export default function ScoresChapter() {
             for sitting nearer the seat&apos;s center, so a member who matches both scores about 85.
             Because each party&apos;s yardstick is measured from its own members, a party that
             happens to be more unified isn&apos;t scored higher for it: across every Senate from
-            1989 on, the two parties&apos; averages differed by 1.8 points on average, and which one
+            1989 on, the two parties&apos; averages differed by 2.1 points on average, and which one
             was higher changed from Congress to Congress.
           </P>
         </Sub>

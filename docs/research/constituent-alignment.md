@@ -856,20 +856,24 @@ in a fixed order, 1,000 times.
   predicted with the reverse slope, of the earlier on the later.
 - **Limits.** The pairs are centered on the party, but the score reads a
   position from the seat's expectation. Seat lean explains part of
-  within-party position (in the 119th, 0.236 of it for Senate Democrats,
-  0.283 for House Democrats, 0.004 for Senate Republicans and 0.095 for
-  House Republicans), and if that part is steady across Congresses, a thin
-  record says less in the score's frame than these pairs credit: the
-  weight is too generous, most for Democrats. Under a simple
-  signal-plus-noise reading, n0 would be larger by 1 / (1 − r²), about two
-  fifths for House Democrats (a reading, not tested). The calibration
-  centers on the party because its pairs run from the 101st Congress to
-  the 119th, and the seat lean this note uses (the presidential vote by
-  district) covers only 1994–2010 for the House (a stated choice, and a
-  possible revision). The thin records here come from members who arrived
-  or left mid-Congress or were absent for much of one. Every member's
-  record early in a Congress is thin too, on a different agenda; whether
-  those records behave like these is untested.
+  within-party position (in the 119th, on the pipeline's Cook PVI, the
+  score's own frame: 0.236 of it for Senate Democrats, 0.283 for House
+  Democrats, 0.004 for Senate Republicans and 0.095 for House
+  Republicans), and if it explained a similar share in the Congresses the
+  pairs come from (only the 119th's is measured, on a fit that includes
+  thin records), a thin record says less in the score's frame than these
+  pairs credit: the weight is too generous, most for Democrats. Under a
+  simple signal-plus-noise reading, n0 would be larger by 1 / (1 − r²),
+  about two fifths for House Democrats (a reading, with noise taken as
+  independent of seat lean; not tested). The calibration centers every
+  pair on the party, a stated choice: the district presidential vote this
+  note loads covers 1992–2016, so the House's pairs before the 103rd
+  Congress and after the 115th have no seat lean here, while the Senate's
+  could be centered on the state vote the note already uses (untested). It
+  is a possible revision. The thin records here come from members who
+  arrived or left mid-Congress or were absent for much of one. Every
+  member's record early in a Congress is thin too, on a different agenda;
+  whether those records behave like these is untested.
 
 **Nine approaches replaced.** Each appeared in a draft of this change and
 was replaced after review; the fourth, fifth and sixth were not shown to
@@ -1204,15 +1208,15 @@ rule's means reclassifies 0 of 2,351 Senate and 2 of 6,055 House breaks
   by 0.100 (standard error 0.053); over every transition it predicts about
   as well as the era curve (1.251 against 1.254), and the forward sweep
   adopts the era curve at neither the 115th nor the 116th. The pairs are
-  centered on the party, not the seat's expectation, which, if the
-  seat-explained part of a position is steady, makes the weight too
-  generous, most for Democrats (Limits, section 14). The thin records mix
-  arrivals, departures and long absences, as the score's do; whether
-  everyone's early records in a Congress behave like these is untested.
-  The no-count weight rests on fewer still (25 pairs), and the flank
-  rule's switch can't be measured at all: only 3 pairs have the rule's
-  shape. Reading a party switcher on their record since the switch rests
-  on 8 people, and beats the longer record by about one and a half
+  centered on the party, not the seat's expectation, which, if seat lean
+  explained a similar share in the Congresses the pairs come from, makes
+  the weight too generous, most for Democrats (Limits, section 14). The
+  thin records mix arrivals, departures and long absences, as the score's
+  do; whether everyone's early records in a Congress behave like these is
+  untested. The no-count weight rests on fewer still (25 pairs), and the
+  flank rule's switch can't be measured at all: only 3 pairs have the
+  rule's shape. Reading a party switcher on their record since the switch
+  rests on 8 people, and beats the longer record by about one and a half
   standard errors. Rerunning the calibration adds each Congress's new
   pairs, and decides the structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
