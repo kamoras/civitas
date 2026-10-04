@@ -83,6 +83,31 @@ describe("WhatYouCanDo", () => {
     expect(screen.queryByRole("link", { name: "Directory →" })).toBeNull();
   });
 
+  it("says why each member is listed once, in the reason's own words", () => {
+    const member = {
+      state: "NM",
+      party: "D" as const,
+      overallScore: 50,
+      leadershipScore: null,
+      chamber: "senate" as const,
+    };
+    render(
+      <WhatYouCanDo
+        issue={issue({
+          relatedSenators: [
+            { ...member, id: "S1", name: "Maria Alvarez", matchReason: "named in coverage" },
+            { ...member, id: "S2", name: "Ann Cole", matchReason: "referenced in coverage" },
+          ],
+        })}
+        today="2026-09-29"
+      />
+    );
+    const [named, referenced] = rows();
+    expect(within(named).getByText("Named in coverage")).toBeInTheDocument();
+    expect(within(named).queryByText(/named in coverage.*named in coverage/i)).toBeNull();
+    expect(within(referenced).getByText("Referenced in coverage")).toBeInTheDocument();
+  });
+
   it("lists a bill once, even when a track action points at it too", () => {
     const url = "https://www.congress.gov/bill/119th-congress/house-bill/5371";
     render(
