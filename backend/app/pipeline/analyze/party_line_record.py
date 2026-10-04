@@ -285,13 +285,17 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         cast = section.get("parties") or {}
         other = {b for b in points if {cast.get(b), party_of.get(b)} == {"R", "D"}}
         points = {b: xw for b, xw in points.items() if b not in other}
+
+        def party(b):
+            # A member no longer stored (deleted after the grace period) and
+            # absent from the roll calls reads the party the section records.
+            return party_of.get(b) or cast.get(b)
         center = {}
-        for party in ("R", "D"):
-            mine = [(x, w) for b, (x, w) in points.items()
-                    if party_of.get(b) == party and w > 0]
+        for side in ("R", "D"):
+            mine = [(x, w) for b, (x, w) in points.items() if party(b) == side and w > 0]
             if mine:
-                center[party] = sum(x * w for x, w in mine) / sum(w for _, w in mine)
-        return {b: (x - center.get(party_of.get(b), 0.0), w) for b, (x, w) in points.items()}
+                center[side] = sum(x * w for x, w in mine) / sum(w for _, w in mine)
+        return {b: (x - center.get(party(b), 0.0), w) for b, (x, w) in points.items()}
     # The positions of the roll calls' Congress lead: the section's, or, when
     # the section is already the next Congress's (refreshed after Jan 3,
     # before its first roll call is stored), the prior it keeps; a section

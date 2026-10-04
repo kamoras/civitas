@@ -1036,7 +1036,9 @@ better (above).
     is a whole word of their stored name, and only when their first name
     matches exactly one voter under that surname whom no sitting senator's
     first name matches (otherwise left out, as before). The House's roll
-    calls carry the member's id and need nothing added.
+    calls carry the member's id and need nothing added. In either chamber, a
+    member no longer stored counts in their party's center by the party the
+    section records.
   - Weighting means cannot help a lone defector, whose side is its own
     position's sign against the party's. So once the new Congress's
     section is in, the rule reads a member's last-Congress full record

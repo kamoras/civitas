@@ -576,3 +576,44 @@ def test_namesakes_take_the_lis_id_their_first_name_matches_in_any_order(db_sess
                            {"L-ANN": "Ann", "L-BOB": "Bob"})
     roster = [_sitting("Ann Lastg", "bio-ANN")]
     assert [m["bioguideId"] for m in party_line_record._departed_senators(db_session, roster, positions)] == ["bio-B"]
+
+
+def test_a_member_no_longer_stored_counts_in_their_recorded_partys_center(db_session, monkeypatch):
+    """Positions read from different sections are compared from each
+    section's party center, and a Senate section's center includes a member
+    deleted after the grace period (not stored, not on the roster) by the
+    party the section records. D0, thin this Congress, is read on the last
+    Congress's full record (-0.0375 from that center); the other Democrats
+    on this one, whose center GONE (a Democrat at +0.4) pulls right, so
+    they read -0.2 and D0's lone break is toward the Republicans. Without
+    GONE's recorded party they read 0 and it is a flank break."""
+    from app.models import Senator
+    dems = {f"D{i}": -0.4 for i in range(1, 4)}
+    reps = {f"R{i}": 0.5 for i in range(4)}
+    names = ["D0", *dems, *reps]
+    section = {"congress": 119, "reliability": {"n0": 86, "reference_votes": 200},
+               "members": {**{f"bio-{m}": d for m, d in {"D0": -0.45, **dems, **reps}.items()}, "bio-GONE": 0.4},
+               "votes": {**{f"bio-{m}": 500 for m in names}, "bio-D0": 10, "bio-GONE": 500},
+               "parties": {**{f"bio-{m}": m[0] for m in names}, "bio-GONE": "D"},
+               "prior": {"congress": 118, "reliability": {"n0": 86, "reference_votes": 200},
+                         "members": {f"bio-{m}": d for m, d in {"D0": -0.45, **dems, **reps}.items()},
+                         "votes": {f"bio-{m}": 500 for m in names},
+                         "parties": {f"bio-{m}": m[0] for m in names}}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    for m in names:
+        db_session.add(Senator(id=f"S-{m}", bioguide_id=f"bio-{m}", name=f"{m} Last{m}", state="TN", party=m[0]))
+    rc = RollCall(chamber="senate", congress=119, session=2, number=44, date="2026-03-01", question="On Passage",
+                  bill_id="S.44")
+    db_session.add(rc)
+    db_session.flush()
+    for m in names:
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=m, last_name=f"Last{m}", first_name=m,
+                                        party=m[0], state="TN", position="Yea" if m == "D0" or m[0] == "R" else "Nay"))
+    db_session.commit()
+    roster = [{"bioguideId": f"bio-{m}", "name": f"{m} Last{m}", "lastNameForVoteMatch": f"Last{m}", "state": "TN",
+               "party": m[0], "votingRecord": {"effectiveParty": m[0]}} for m in names]
+    (record, *_) = party_line_records(db_session, "senate", roster)
+    assert len(record["breaks"]) == 1
+    section["parties"].pop("bio-GONE")
+    (record, *_) = party_line_records(db_session, "senate", roster)
+    assert not record["breaks"] and len(record["flankBreaks"]) == 1
