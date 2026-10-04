@@ -1072,22 +1072,18 @@ def _sitting_effect(p):
 
 
 def _full_record_gradient(p):
-    """Full records' attenuation by their vote count: the slope of each
-    adjacent-Congress pair of full records, relative to its chamber and
-    transition's drift, by band of the earlier side's count, and the range
-    of the drifts themselves: calibrate_position_confidence's own pairs,
-    drift and full_slope_by_votes, so this prints what its file holds."""
-    import calibrate_position_confidence as cal
-
-    cache = pathlib.Path(p["S101_members.csv"]).parent
-    data, _ = cal.pairs(cache, cal.congresses())
-    drift = cal.drifts(data)
-    forward = [v[0] for v in drift.values()]
-    print(f"  per-transition drift: {min(forward):.2f} to {max(forward):.2f} "
-          f"over {len(drift)} chamber-transitions")
-    slopes = cal.full_slope_by_votes(data, drift)
-    print("  full records' slope relative to drift, by votes: "
-          + ", ".join(f"{band}: {v:.3f}" for band, v in slopes.items()))
+    """Full records' attenuation by their vote count (the slope of each
+    adjacent-Congress pair of full records relative to its chamber and
+    transition's drift, by band of the earlier side's count) and the range
+    of the drifts: printed from the calibration's own file, which
+    scripts/calibrate_position_confidence.py computes on its pairs (this
+    script doesn't fetch every export those need)."""
+    shipped = json.loads((pathlib.Path(__file__).resolve().parents[1] / "app" / "data"
+                          / "position_confidence.json").read_text())
+    lo, hi = shipped["drift_range"]["earlier_thin"]
+    print(f"  per-transition drift (position_confidence.json): {lo:.2f} to {hi:.2f}")
+    print("  full records' slope relative to drift, by votes (position_confidence.json): "
+          + ", ".join(f"{band}: {v:.3f}" for band, v in shipped["full_slope_by_votes"].items()))
 
 
 def _flank_effect(p):

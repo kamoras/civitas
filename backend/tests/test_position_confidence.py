@@ -711,7 +711,7 @@ def test_the_split_sweep_skips_the_split_it_cannot_test(monkeypatch):
     assert out["era"]["last_three"]["above"] == -1.0
     # The shipped file: its last thin transition is never a split tested.
     shipped = json.loads(_DATA.read_text())
-    last = max(int(t) for t in shipped["era_split_test"]["splits"])
+    last = max(int(t) for t in shipped["forward_test"]["training_before_split"])
     assert str(last) not in shipped["forward_test"]["era_at_every_split"]
 
 

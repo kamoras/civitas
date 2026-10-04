@@ -721,8 +721,8 @@ in a fixed order, 1,000 times.
     the 112th on; at the 111th the era curve, fitted on the 110th's 5
     thin pairs alone, sits at the same grid floor as one curve. Most of
     it is at the 112th and 114th (0.024 each), when the one curve it
-    beats was fitted mostly on pre-110 records (65% and 48% of its thin
-    pairs, `training_before_split`). At the last three transitions,
+    beats was fitted on about two thirds and half pre-110 records (65%
+    and 48% of its thin pairs, `training_before_split`). At the last three transitions,
     whose training data look most like today's, it is 0.009 with a
     standard error of 0.009 (`last_three`).
   - **Members.** One member supplies 44% of it (`most_helped_share`). Left
