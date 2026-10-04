@@ -894,7 +894,7 @@ flank rule's switch test is restricted, to attended records.
     then a member's first, attended votes of the next Congress, from a
     member who left during it (absent the Congress after) and missed no
     more of the roll calls in their span than nine in ten of that
-    Congress's full records do, a convention; a roll call with no row
+    Congress's full records do (a convention; a roll call with no row
     counts as missed, as for a Speaker who doesn't vote). Most leavers'
     thin records are not that: they are mostly absences on the way out.
     Only 6 pairs qualify, 2 with over 100 votes; in sample their best

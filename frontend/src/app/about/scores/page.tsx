@@ -217,7 +217,8 @@ export default function ScoresChapter() {
               <Cite id="kirkland2017" />. Which side of their party a member sits on comes from
               their voting position this Congress once it rests on 200 roll calls. Until then it
               comes from their last Congress&apos;s position if that one was a full record (used
-              only for this, never scored), and otherwise from this Congress&apos;s so far; before
+              only for this, never scored), and otherwise from this Congress&apos;s so far (or, with
+              no position yet this Congress, from the last one&apos;s whatever its length); before
               this Congress&apos;s positions are published and pass our checks, everyone is read on
               the last Congress&apos;s. Every break on a profile shows that roll call&apos;s party
               tallies.

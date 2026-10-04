@@ -277,7 +277,7 @@ inline academic citations.
 Key mathematical properties:
 - **Linear shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
   a senator with 1 campaign promise gets a score near 50, not 0 or 100).
-  Two exceptions: Constituent Alignment's vote part shrinks toward the
+  Three exceptions: Constituent Alignment's vote part shrinks toward the
   party's measured typical score (its scale tops out at the seat's norm, so
   50 is below average), and Legislative Effectiveness's bill component
   doesn't shrink by bill count (a member's bills are the whole record, not
@@ -285,7 +285,7 @@ Key mathematical properties:
   tenure.
   The rate is the count confidence below — fixed, not estimated from the
   population's variance, so do not call it Bayesian or empirical Bayes.
-  One measured exception: Constituent Alignment's position part (v6.27)
+  The third, measured: Constituent Alignment's position part (v6.27)
   scales a roll-call position's distance from the seat's expected
   position, when the position rests on n votes, by min(1, w(n) / w(200)),
   w(n) = n / (n + n0): the measured slope of a member's full-record
@@ -594,8 +594,8 @@ congress" sidesteps that fragility entirely and is *stricter* than a literal
 resting on laurels" goal, not softer.
 
 Besides funding (below), the flank-break rule (`party_line_record`,
-v6.27) is a narrower exception that never scores a past position. It reads the last Congress's positions
-only to tell which side of their party a defector sits on: for everyone
+v6.27) is a narrower exception that never scores a past position. It
+reads the last Congress's positions only to tell which side of their party a defector sits on: for everyone
 until the new Congress's Voteview section passes its gates; after that,
 for a member whose new record has no count or fewer than
 `prior_until_votes` votes (`app/data/position_confidence.json`: 200, a

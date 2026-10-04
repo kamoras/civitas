@@ -249,7 +249,7 @@ export default function AlignmentColumn({
             On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further from
             the {OTHER_PARTY[facts.party] ?? "other party"} than the party does. How far toward the
             flank the member sits is scored as position congruence
-            {positionScored ? " below." : ", once this Congress's positions pass our checks."}
+            {positionScored ? " below." : ", which isn't scored for this member yet."}
           </p>
           <ul className="flex flex-col gap-2.5">
             {flank.slice(0, FLANK_SHOWN).map((v, i) => (
