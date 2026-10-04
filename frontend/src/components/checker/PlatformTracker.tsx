@@ -17,9 +17,9 @@ const DEPTH_STYLES = {
 
 // The spectrum bar's ends. A member's vote lean is the mean over policy areas
 // of (R-aligned - D-aligned) / counted Yea and Nay votes, each vote's side
-// taken from its bill's platform alignment in that area (party_platform.py
+// taken from how its bill compares with each party's positions in that area (party_platform.py
 // _alignments_from_votes), so it lies within +/-1: an end would mean every
-// counted vote went the way of one party's platform in every area. That is
+// counted vote went the way of one party's positions in every area. That is
 // the measure's own bound, not a calibration. (A member with few votes is
 // blended toward a cosponsorship prior, an extrapolated line that could in
 // principle pass +/-1; the bar draws that at the end.) The bar used to divide
@@ -52,7 +52,7 @@ function PartisanDepthPanel({
       <div className="flex items-baseline justify-between mb-3">
         <h4 className="text-sm font-mono text-signal-cyan">
           {">"}{" "}
-          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's platform positions. Based on what they voted for, not what they say. The bar's ends are the limits of the measure: the left end would mean every counted vote went the way of the Democratic platform in every policy area, the right end the Republican platform. The label beside it ranks this member within their own party, so a short bar can still be among the most partisan in it.">
+          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's platform positions. Based on what they voted for, not what they say. The bar's ends are the limits of the measure: the left end would mean every counted vote went the way of the Democrats' positions in every policy area, the right end the Republicans'. The label above the bar (deep, moderate or centrist) ranks this member within their own party, so a short bar can still be among the most partisan in it; cross-cutting means more than 30% of their positions sit with the other party.">
             PARTISAN DEPTH ANALYSIS
           </MetricTooltip>
         </h4>

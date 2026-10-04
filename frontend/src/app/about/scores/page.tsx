@@ -500,35 +500,37 @@ export default function ScoresChapter() {
           </P>
           <P>
             Partisan depth (how strongly a member leans within each policy area) comes mainly from
-            their votes, each counted toward the party whose platform its bill matches in that area
+            their votes, each counted toward the party whose positions its bill matches in that area
             (see <A href="#party-labels">how a bill gets a party label</A>
-            ). The lean bar runs from every counted vote going the Democratic platform&apos;s way to
-            every one going the Republican platform&apos;s way. The ideology score only steadies it
-            for members with few votes, fading to no weight at 15. The label (deep, moderate or
-            centrist) is the member&apos;s third within their own party, or
-            &ldquo;cross-cutting&rdquo; when more than 30% of their positions sit with the other
-            party, so a fixed cut-off can&apos;t make one party look more extreme just because the
-            two parties sit on different ranges. The one-line description on a profile (say,
-            &ldquo;Progressive Democrat leader&rdquo;) combines ideology, party and a leadership
-            tier.
+            ). The lean bar runs from every counted vote going the Democrats&apos; way to every one
+            going the Republicans&apos; way. The ideology score only steadies it for members with
+            few votes, fading to no weight at 15. The label (deep, moderate or centrist) is the
+            member&apos;s third within their own party, or &ldquo;cross-cutting&rdquo; when more
+            than 30% of their positions sit with the other party, so a fixed cut-off can&apos;t make
+            one party look more extreme just because the two parties sit on different ranges. The
+            one-line description on a profile (say, &ldquo;Progressive Democrat leader&rdquo;)
+            combines ideology, party and a leadership tier.
           </P>
         </Sub>
       </Section>
 
       <Section id="party-labels" title="How a bill gets a party label">
         <P>
-          Whether a member broke with their party is defined by how the parties actually voted on
-          the bill whenever there was a roll call, so a bill that reads partisan but passed with
-          both parties&apos; majorities is not a party-line vote.
+          Whether a member broke with their party is defined only by how the parties actually voted
+          on that roll call, so a bill that reads partisan but passed with both parties&apos;
+          majorities is not a party-line vote, and no break is counted without a roll call. The
+          party badge on a bill is that split where there was a roll call, and its content
+          otherwise.
         </P>
         <P>
           The bill&apos;s content decides partisan depth (the lean bar and its policy-area
-          breakdown), and never a break: there, each bill a member voted on is compared with each
-          party&apos;s platform positions in that policy area
+          breakdown), and never a break. For it, each bill a member voted on is compared with each
+          party&apos;s positions in that policy area
           <Cite id="manning2008" />, with its direction (does it strengthen or roll back?)
           separating cases where both parties have positions on the same topic
-          <Cite id="laver2000" />. Bills sponsored by one party&apos;s members refine those
-          positions over time
+          <Cite id="laver2000" />. Each party&apos;s position in an area starts from its platform
+          and is refined over time by the bills earlier runs labelled for that party, by the
+          parties&apos; actual split where there was a roll call
           <Cite id="yarowsky1995" />.
         </P>
         <More label="Why votes win over content">
