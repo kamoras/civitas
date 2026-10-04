@@ -1122,8 +1122,9 @@ def thin_offset(data: list[tuple]) -> dict:
         x = np.array([r[3] - r[4] / d[(r[0], r[6])][1 if r[8] else 0] for r in sel])
         if len(x) < 2:
             return None
-        return {"pairs": len(x), "mean": round(float(x.mean()), 4),
-                "standard_error": round(float(x.std(ddof=1) / np.sqrt(len(x))), 4)}
+        se = float(x.std(ddof=1) / np.sqrt(len(x)))
+        return {"pairs": len(x), "mean": round(float(x.mean()), 4), "standard_error": round(se, 4),
+                "upper_95": round(float(x.mean()) + 1.96 * se, 4)}
     full = [r for r in data if r[5] == "full" and (r[0], r[6]) in d]
     baseline = np.array([r[3] - r[4] / d[(r[0], r[6])][0] for r in full])
     return {"all": summary(rows), "under_50": summary([r for r in rows if r[2] < 50]),
@@ -1308,7 +1309,8 @@ def main() -> None:
             "uncounted_weight is the slope, for both chambers, for positions published with no count "
             "(or 0) but a career DW-NOMINATE position, and uncounted_weight_leave_one_out its range "
             "with each of its members left out in turn; thin_offset is the mean of thin - full / drift "
-            "over thin pairs (all, under 50 votes, from 50 up) with its standard error, and full_baseline "
+            "over thin pairs (all, under 50 votes, from 50 up) with its standard error and upper_95, the "
+            "mean plus 1.96 standard errors, and full_baseline "
             "the same over full pairs (not exactly 0 without bias): a test for a constant shift, not a "
             "proportional one; thin_pairs_by_era counts each era's thin "
             "pairs and those under 50 votes; drift_range is the lowest and highest chamber-transition "

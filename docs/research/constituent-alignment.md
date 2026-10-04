@@ -856,11 +856,11 @@ in a fixed order, 1,000 times.
   predicted with the reverse slope, of the earlier on the later.
 - **Limits.** Centering on the party median rather than the seat's
   expectation understates the noise slightly, by the share of within-party
-  position that seat lean explains (10% for House Republicans in the
-  119th, under 1% for Senate Republicans). The thin records here come from
-  members who arrived or left mid-Congress or were absent for much of one.
-  Every member's record early in a Congress is thin too, on a different
-  agenda; whether those records behave like these is untested.
+  position that seat lean explains (about 9.5% for House Republicans in
+  the 119th, under 1% for Senate Republicans). The thin records here come
+  from members who arrived or left mid-Congress or were absent for much of
+  one. Every member's record early in a Congress is thin too, on a
+  different agenda; whether those records behave like these is untested.
 
 **Nine approaches replaced.** Each appeared in a draft of this change and
 was replaced after review; the fourth, fifth and sixth were not shown to
@@ -993,8 +993,9 @@ better (above).
   back by the drift, a full position differs from its thin one by 0.009 on
   average (standard error 0.019; 95 pairs, `thin_offset`; full pairs give
   0.006 by the same measure, `full_baseline`), so no constant offset is
-  detected, though one up to about 0.05 toward the flank can't be ruled
-  out, and these pairs can't tell a proportional distortion from noise.
+  detected, though one up to 0.046 toward the flank (the 95% upper bound,
+  `upper_95`) can't be ruled out, and these pairs can't tell a
+  proportional distortion from noise.
 - The saturation scale is the 90th percentile of full records'
   extremities. A thin record's noise would widen a scale taken over
   everyone, and a scale taken over weighted extremities would cancel the
@@ -1002,8 +1003,9 @@ better (above).
   - Early in a Congress, with fewer than 40 full records (a convention,
     the floor the ingest already used), the chamber's last scale is
     carried. It describes the chamber's seats, not any member's record.
-  - So the weights do pull thin positions toward 50: with every record at
-    5 votes, a position at saturation scores about 46 instead of 0.
+  - So the weights do pull thin positions toward 50: with every record at 5
+    votes, a position at saturation scores about 46 instead of 0 (computed
+    from the shipped curve, n0 86).
 - Voteview's placeholders are dropped. A member a current section has no
   position for (those, or anyone Voteview hasn't placed yet) counts
   nothing, so the part sits at 50, instead of having the component

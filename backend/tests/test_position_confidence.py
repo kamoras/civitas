@@ -786,7 +786,10 @@ def test_the_docs_quote_a_five_vote_saturated_score():
     for doc in ("docs/research/constituent-alignment.md", "docs/methodology/member-score/v6.27.md"):
         path = root / doc
         if path.exists():  # the backend image ships without the docs
-            assert f"saturation scores about {score} instead of 0" in " ".join(path.read_text().split())
+            text = " ".join(path.read_text().split())
+            assert f"saturation scores about {score} instead of 0" in text
+            # ... and the bias check's upper bound.
+            assert f"up to {data['thin_offset']['all']['upper_95']:.3f}" in text
 
 
 def test_an_outage_stops_the_calibration_rather_than_dropping_a_congress(monkeypatch):
