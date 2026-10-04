@@ -430,6 +430,10 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert round(abs(last["above"]) / last["standard_error"]) == 1
     assert "over the last three transitions alone the gain is about one standard error" in agents
     assert "by about two standard errors overall, about one over the last three transitions alone" in readme
+    # ... and the flank rule's switch and where a full record starts.
+    assert f"(`app/data/position_confidence.json`: {switch}, a full record)" in agents
+    assert f"(`prior_until_votes`, {switch} votes, a convention)" in readme
+    assert f"({full} votes or more, a convention)" in readme
     # A position published with no count: "about a fifth" in the entry.
     assert round(data["uncounted_weight"] * 5) == 1 and "about a fifth" in entry
     # The era the shipped curve is measured on, by its first year. Both texts
