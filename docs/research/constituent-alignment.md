@@ -720,7 +720,8 @@ in a fixed order, 1,000 times.
   | a time trend (reported only) | 1.251 | 0.069 better (0.089) |
 
   The latest era's curve predicts the next Congress better by about two
-  standard errors and ships, but the decision is weakly settled, for
+  standard errors (computed from `forward_test`'s above and
+  standard_error) and ships, but the decision is weakly settled, for
   four reasons, all in the script's output:
   - **Where the gain is.** It comes from the transitions predicted from the
     112th on; at the 111th the two curves predict alike
@@ -1199,12 +1200,14 @@ rule's means reclassifies 0 of 2,351 Senate and 2 of 6,055 House breaks
   pooled scale stays because nothing favors changing it. Unweighted, it
   leaves the party whose senators spread more widely around the seat's norm
   (Republicans: over every Senate since 1989, 10.1% against 2.9% at 0 and
-  6.1% against 1.6% at 100, and more at 0 in 18 of the 19 Senates) with more
-  members near 0 and near 100.
+  6.1% against 1.6% at 100, and more at 0 in 18 of the 19 Senates,
+  counted from the script's share-at-0-by-Senate line) with more members
+  near 0 and near 100.
 - **The thin-record weight rests on 95 thin pairs.** Few members have a
   thin record next to a full one, so the half point has a wide interval
   (26–98 votes, the upper end where the n0 search stops), and the
-  structure rests on a forward test of about two standard errors that
+  structure rests on a forward test of about two standard errors
+  (computed from `forward_test`'s above and standard_error) that
   leaving one member out doesn't show; a rerun with new pairs could return
   to one curve. Whether recent Congresses follow a slower curve still is
   open: left one member out, later splits lean that way, and the time

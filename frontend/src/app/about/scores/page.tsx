@@ -84,7 +84,7 @@ export default function ScoresChapter() {
             observations rather than estimated from the data. Three parts differ. Constituent
             Alignment&apos;s voting part pulls a thin record toward what a typical member of the
             same party scores, because 50 sits below nearly every member on that scale. Legislative
-            Effectiveness&apos;s bill half isn&apos;t pulled at all, because a member&apos;s bills
+            Effectiveness&apos;s bill part isn&apos;t pulled at all, because a member&apos;s bills
             are their whole record, not a sample of it. And Constituent Alignment&apos;s position
             part is pulled toward 50 by a measured amount, how well a position from that many votes
             predicted a full record&apos;s, rather than by a fixed count.
@@ -230,8 +230,9 @@ export default function ScoresChapter() {
               member. The last Congress&apos;s position is used only for this, never scored. Using
               the last Congress&apos;s record once this Congress&apos;s positions are in (a full
               record, or any record for a member with no position yet) begins with the 120th
-              Congress, from January 2027: the 119th Congress&apos;s data was stored before this
-              change. Every break on a profile shows that roll call&apos;s party tallies.
+              Congress, from January 2027: the 118th Congress&apos;s positions weren&apos;t kept
+              before this change. Every break on a profile shows that roll call&apos;s party
+              tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
