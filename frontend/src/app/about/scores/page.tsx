@@ -522,7 +522,8 @@ export default function ScoresChapter() {
           actually voted on that roll call, so a bill that reads partisan but passed with both
           parties&apos; majorities is not a party-line vote, and no break is counted without a roll
           call. The party badge on a member&apos;s sponsored bill is the split on that bill&apos;s
-          own roll call when it is one of the key bills Civitas follows, and its content otherwise.
+          own roll call when it is one of the key bills Civitas follows and that roll call split the
+          parties, and its content otherwise.
         </P>
         <P>
           The bill&apos;s content decides partisan depth (the lean bar and its policy-area
