@@ -249,8 +249,8 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # two: their last record was cast in another party. A stated choice
     # (nothing measured such a record as evidence of their side of the new
     # one): it is never read for them, so with no usable position this
-    # Congress they have none, and their breaks count as for any member
-    # with none.
+    # Congress they have none, and their breaks are classified on the
+    # other defectors' positions (counting when no defector has one).
     now, then = main.get("parties") or {}, prior.get("parties") or {}
     switched = set(main.get("switched") or ()) | {b for b in then if b in now and then[b] != now[b]}
     for b, (x, w) in weighted(prior).items():

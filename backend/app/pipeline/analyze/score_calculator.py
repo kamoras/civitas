@@ -373,8 +373,9 @@ def _member_ideal_points(chamber: str) -> dict:
     "congress", "seats", "seated", "reliability", "scale_congress", "prior",
     "parties", "switched"} (votes, congress, seats, seated, reliability,
     scale_congress, prior, parties and switched since v6.27; parties and
-    switched are read only by the flank rule; prior, the last Congress's positions, is read only by
-    party_line_record's flank rule, never scored). Used by _constituent_alignment_core's position-congruence
+    switched are read only by the flank rule; prior, the last Congress's
+    positions, is read only by party_line_record's flank rule, never
+    scored). Used by _constituent_alignment_core's position-congruence
     component (v6.11): the member's congress-specific Nokken-Poole
     first-dimension position (DW-NOMINATE only as a whole-chamber fallback)
     scored against a seat-conditional expectation.

@@ -582,7 +582,7 @@ async def _latest_ids(
     rows: list[dict], chamber: str, congress: int, client: httpx.AsyncClient | None,
 ) -> dict[str, str] | None:
     """switcher_latest for this export: {} with no switcher, None when a
-    switcher's latest id can't be settled (an export that can't be read):
+    switcher's latest id can't be settled (an export that can't be read, or two new ids neither of which has voted):
     the caller keeps the previous section rather than guess."""
     if not switched_members(rows):
         return {}

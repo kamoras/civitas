@@ -994,7 +994,7 @@ def _senate_positions(p, c, st, nat):
 
 
 def _sitting_effect(p):
-    """v6.26 against v6.27 on the sitting Congress's Voteview exports,
+    """v6.26 against v6.27 on the 119th Congress's Voteview exports,
     through the pipeline's own build and score. v6.26 read Voteview's
     placeholders as positions (in the fits and the scale) and weighted
     nothing; v6.27 drops them (that member then sits at 50) and weights
@@ -1095,7 +1095,7 @@ def _full_record_gradient(p):
 
 
 def _flank_effect(p):
-    """The flank-break rule (section 11) on the sitting Congress's roll
+    """The flank-break rule (section 11) on the 119th Congress's roll
     calls, with and without v6.27's weights: how many of a party's breaks
     change between counted (toward the other party) and flank."""
     from app.pipeline.analyze.party_line_record import _toward_other_party
@@ -1290,7 +1290,7 @@ def position_scale_test(p, m):
     for c, by in shipped["party_line_share_by_congress"].items():
         print(f"  {c} party-line share by Congress: " + ", ".join(f"{k}:{v:.2f}" for k, v in by.items()))
     _full_record_gradient(p)
-    print(" v6.26 -> v6.27 on the sitting Congress (the pipeline's own build: Cook PVI seat lean):")
+    print(" v6.26 -> v6.27 on the 119th Congress (the pipeline's own build: Cook PVI seat lean):")
     _sitting_effect(p)
     _flank_effect(p)
 

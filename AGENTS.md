@@ -607,8 +607,9 @@ record has no count or fewer than `prior_until_votes` votes
 record was full; and, whatever the last record, for a member the new
 section gives no usable position. Never, once the new section is in, for
 a member who switched parties during the new Congress (`switched` in the
-section) or whose party differs between the two sections (`parties`):
-their last positions were cast in another party. The 200
+section) or whose party differs between the two sections (`parties`;
+sections written before this change record none, so that check starts
+with the next ingest): their last positions were cast in another party. The 200
 and the bar for replacing it are conventions: the calibration would
 adopt a shorter switch only if it placed members on the right side
 better out of bag in 95% of resamples, and too few thin records have the
