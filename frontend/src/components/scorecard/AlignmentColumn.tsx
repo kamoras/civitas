@@ -172,9 +172,9 @@ export default function AlignmentColumn({
   onMore: () => void;
 }) {
   const facts = dimension?.facts as AlignmentFacts | undefined;
-  // Early in a Congress, before its positions pass our checks (or whenever a
-  // chamber has no positions at all), the position part is left out while
-  // breaks are still sorted on the last positions.
+  // Early in a Congress, before its positions pass our checks, the position
+  // part is left out while breaks are still sorted on the last positions;
+  // with no positions at all, it is left out and every break counts.
   const positionScored = !!dimension?.components?.some((c) => c.label === "Position congruence");
   // The breaks the score counts, served with it. Until the member's
   // whole-Congress record is measured, the stored votes against the party.

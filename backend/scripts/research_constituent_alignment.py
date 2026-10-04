@@ -1149,14 +1149,15 @@ def position_scale_test(p, m):
         g["w"] = _weights(g, "house")
         parts.append(_congruence_scales(g))
     S = contested(pd.concat(parts)).reset_index(drop=True)
-    print(f" House generals 1994-2010 (Nokken-Poole, N={len(S)}), own-party share:")
+    print(f" House generals 1994-2010 (Nokken-Poole, N={len(S)}), own-party share "
+          f"(read at less than full weight: {(S.w < 1).mean():.1%}):")
     _compare_designs(S, "y", "x + lterms + C(fe)", S.id)
     print("  which unit of extremity voters respond to:")
     _which_unit(S, "y", "x + lterms + C(fe)", S.id)
 
     # Senate generals 1990-2024 on congress-specific Nokken-Poole positions.
     st, nat, tot, cands = _senate_returns(p)
-    rows, balance = [], []
+    rows, balance, weighted, weights = [], [], [], []
     for c in SENATES:
         M = _congruence_scales(_per_party_extremity(_senate_positions(p, c, st, nat)))
         if c == max(SENATES):
@@ -1172,6 +1173,13 @@ def position_scale_test(p, m):
                 x = sc[(M.party == party).values]
                 balance.append({"chamber": "Senate", "congress": c, "design": label, "party": party,
                                 "mean": x.mean(), "sd": x.std(), "at0": (x <= 0).mean(), "at100": (x >= 100).mean()})
+        # The same for the shipped design with v6.27's weights on.
+        label, shape, sat = CONGRUENCE_DESIGNS[0]
+        sc = shape(M.ext, M[sat], M.w.values)
+        for party in ("D", "R"):
+            x = sc[(M.party == party).values]
+            weighted.append({"congress": c, "party": party, "mean": x.mean(), "at0": (x <= 0).mean()})
+        weights.extend(M.w.tolist())
         if c < max(SENATES):
             rows.append(_attach_senate_share(M, 1788 + 2 * c, tot, cands).assign(year=1788 + 2 * c))
     S = pd.concat(rows, ignore_index=True)
@@ -1230,6 +1238,10 @@ def position_scale_test(p, m):
               f"SD D {w['sd'].D.mean():4.1f} R {w['sd'].R.mean():4.1f} | "
               f"worst-Senate |at-0 gap| {(w['at0'].D - w['at0'].R).abs().max():.1%}")
     w = B[B.design == CONGRUENCE_DESIGNS[0][0]].pivot(index="congress", columns="party", values="at0")
+    v = pd.DataFrame(weighted).pivot(index="congress", columns="party", values=["mean", "at0"])
+    print(f"  shipped, with v6.27's weights ({np.mean(np.array(weights) < 1):.1%} of senator-Congresses "
+          f"under full weight): mean D {v['mean'].D.mean():5.1f} R {v['mean'].R.mean():5.1f} | "
+          f"at 0: D {v['at0'].D.mean():5.1%} R {v['at0'].R.mean():5.1%}")
     print("  shipped, share at 0 by Senate (R minus D): "
           + ", ".join(f"{c}:{(w.R[c] - w.D[c]) * 100:+.0f}" for c in w.index))
 

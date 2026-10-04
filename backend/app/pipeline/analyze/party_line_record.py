@@ -17,8 +17,7 @@ election results (docs/research/constituent-alignment.md, sections 11-12):
   their last Congress's full record, where they have one, decides their
   side) than their party as a whole. Hardliners voting down their
   own party's bill from the flank vote against it too, but that is not
-  independence toward the seat, and the member's flank position is already
-  scored, by position congruence. Such votes are kept as flankBreaks: shown,
+  independence toward the seat, and the member's flank position is measured by position congruence (scored once the Congress's section passes its gates). Such votes are kept as flankBreaks: shown,
   not counted.
 - Each measure counts once. A nominee's cloture and confirmation votes, or a
   bill's motion to proceed, cloture and passage, are one decision voted on
@@ -237,8 +236,9 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
 
     # The chamber's stored members' parties (an independent's caucus party):
     # every member without a voting record (the rest of the chamber, and a
-    # departed senator added above) reads its party from here, and each section's party
-    # centers cover the whole chamber however few members this run scores.
+    # departed senator added above) reads its party from here, and each
+    # section's party centers cover the whole chamber however few members
+    # this run scores.
     model = Senator if chamber == "senate" else Representative
     stored: dict[str, str] = {
         b: caucus or p for b, p, caucus in db.query(model.bioguide_id, model.party, model.caucus_party) if b}
@@ -249,17 +249,17 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # Any Congress's section: this rule needs only which side of their party
     # the defectors sit, and positions carry from one Congress to the next,
     # so early in a new Congress the last positions classify its breaks
-    # rather than every flank break counting (stale beats punitive).
-    # Once the new Congress's section is in, its positions rest on a few roll
+    # rather than every flank break counting (stale beats punitive). Once
+    # the new Congress's section is in, its positions rest on a few roll
     # calls at first, so a member's last-Congress full record ("prior",
     # voteview.previous_positions) decides their side until their new record
     # reaches prior_until_votes (position_confidence.json: a full record,
     # unless a shorter switch is shown to place members better; a section
     # without the key falls back to a full record's count, or without that
-    # to the more reliable). Each section's
-    # positions are read from their own party's mean in that section, so a
-    # party-wide shift between the two Congresses can't move a member who is
-    # read from one against a party read from the other.
+    # to the more reliable). Each section's positions are read from their
+    # own party's mean in that section, so a party-wide shift between the
+    # two Congresses can't move a member who is read from one against a
+    # party read from the other.
     ideal = _member_ideal_points(chamber) or {}
 
     party_of: dict[str, str] = {}

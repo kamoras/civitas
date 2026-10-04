@@ -215,7 +215,8 @@ export default function ScoresChapter() {
               members who broke on that vote sit nearer the other party than the party does. A vote
               against the party from its own flank (hardliners voting down their party&apos;s bill)
               is listed on the profile but not counted here, because how far toward the flank a
-              member sits is already scored by where their record sits (below)
+              member sits is measured by where their record sits (below), which is scored once this
+              Congress&apos;s positions pass our checks
               <Cite id="kirkland2017" />. Which side of their party a member sits on: before this
               Congress&apos;s positions are published and pass our checks, everyone is read on the
               last Congress&apos;s position. After that, a member&apos;s own position this Congress

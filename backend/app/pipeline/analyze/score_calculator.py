@@ -76,13 +76,12 @@ members of their chamber show at the same seat lean — a senator in a safe
 R+20 state voting with their party is representing constituents, not
 failing at independence, while the same loyalty in a swing state diverges
 from the median voter. Roll-call position is scored against a
-seat-conditional norm too, linearly: 50 at the norm, rising toward the
-seat's center, a shape tested in v6.27 (Canes-Wrone, Brady & Cogan
-2002, "Out of Step, Out of Office," APSR 96:1). This is the delegate
-model of representation (Miller & Stokes 1963, "Constituency Influence
-in Congress," APSR 57:1),
-with seat partisan lean standing in for issue-level constituent opinion.
-Both studies validate their measures by the incumbent's vote share; v6.13
+seat-conditional norm too (Canes-Wrone, Brady & Cogan 2002, "Out of Step,
+Out of Office," APSR 96:1), linearly: 50 at the norm, rising toward the
+seat's center, a shape tested in v6.27. This is the delegate model of
+representation (Miller & Stokes 1963, "Constituency Influence in
+Congress," APSR 57:1), with seat partisan lean standing in for
+issue-level constituent opinion. Both studies validate their measures by the incumbent's vote share; v6.13
 used that same test to choose this dimension's design
 (docs/research/constituent-alignment.md). Because the member was elected
 under a party label as well as by a seat (Fenno 1978's concentric
@@ -537,18 +536,17 @@ _position_reliability_cache: dict | None = None
 
 def _position_reliability(chamber: str) -> dict:
     """{"n0", "reference_votes", "half_weight_votes", "uncounted_weight",
-    "prior_until_votes"} (the last for party_line_record's flank rule):
-    the reliability weight a congress-specific (Nokken-Poole) position in
+    "prior_until_votes"} (the last for party_line_record's flank rule): the
+    reliability weight a congress-specific (Nokken-Poole) position in
     `chamber` gets (v6.27, position_confidence). Measured by
     scripts/calibrate_position_confidence.py on Voteview's own positions:
     members with a thin record in one Congress and a full one in the next
-    (or the reverse),
-    against full records' drift over the same transition (research note
-    section 14). As calibrated now, one curve for both chambers, the
-    latest era's (since a fixed Congress): the calibration chooses among
-    one curve, one per chamber and the latest era's by how well each
-    predicts the next Congress from the earlier ones (a party-line term
-    was tested and found no support). Nothing in it follows the sitting
+    (or the reverse), against full records' drift over the same transition
+    (research note section 14). As calibrated now, one curve for both
+    chambers, the latest era's (since a fixed Congress): the calibration
+    chooses among one curve, one per chamber and the latest era's by how
+    well each predicts the next Congress from the earlier ones (a party-line
+    term was tested and found no support). Nothing in it follows the sitting
     Congress.
 
     Read from app/data/position_confidence.json, and stored in each
@@ -2105,11 +2103,11 @@ def position_confidence(votes: int | None, reliability: dict | None) -> float:
     `votes` scaled roll calls. A full record (reference_votes or more)
     counts in full; the calibration measures how much less a thin one says.
     A position Voteview published with no count (None: a member it has
-    barely scaled who has a career DW-NOMINATE position; one with neither
-    is stored as 0 votes at ingest) gets the weight measured for such
-    positions, uncounted_weight. Always in [0, 1]; 1
-    without a usable reliability (a section written before v6.27, or no
-    calibration available)."""
+    barely scaled who has a career DW-NOMINATE position; one with neither is
+    stored as 0 votes at ingest) gets the weight measured for such
+    positions, uncounted_weight. Always in [0, 1]; 1 without a usable
+    reliability (a section written before v6.27, or no calibration
+    available)."""
     rel = reliability or {}
     n0 = float(rel.get("n0") or 0)
     if n0 <= 0:
@@ -2132,16 +2130,16 @@ def _shown_percent(weight: float) -> int:
 def position_congruence_score(extremity: float, saturation: float, weight: float = 1.0) -> float:
     """Constituent Alignment's position-congruence component: 50 at the
     position a same-party member of this seat is expected to hold, falling
-    to 0 at `saturation` (the chamber's 90th-percentile extremity) toward
-    the party flank and rising to 100 as far toward the seat's center —
-    symmetric, as the 2004 House test found (docstring below). `extremity` is
-    signed toward the flank. It is first scaled by the position's
+    to 0 at `saturation` (the 90th-percentile extremity of the chamber's
+    full records, or its last scale carried early in a Congress) toward the
+    party flank and rising to 100 as far toward the seat's center —
+    symmetric, as the 2004 House test found (docstring below). `extremity`
+    is signed toward the flank. It is first scaled by the position's
     reliability `weight` (position_confidence, v6.27): the measured slope of
     a member's full-record position on one resting on that many votes,
     relative to a full record, so the score is read at the best linear
-    estimate of where the member sits. The
-    one implementation the score and scripts/benchmark_validation.py both
-    call.
+    estimate of where the member sits. The one implementation the score and
+    scripts/benchmark_validation.py both call.
 
     Linear and 50 at the expectation, not 100 there like the vote part:
     across House generals 1994-2010 and Senate generals 1990-2024 this
@@ -2177,13 +2175,13 @@ def _calc_constituent_alignment(
 
     Components:
       1. Seat-relative vote alignment (70%, or 100% without a current
-         Voteview section): how far the member's break rate on party-labeled votes sits
-         from the rate their chamber's same-party members show at the same
-         seat lean (compute_constituent_reference, measured each run), in
-         standard deviations per vote (seat_residual, v6.16). 100 at the
-         expectation, falling linearly to 0 at CROSSING_ZERO_GAPS times the
-         90th-percentile |residual| of the member's party in the chamber
-         above it and LOYAL_ZERO_GAPS times it below.
+         Voteview section): how far the member's break rate on party-labeled
+         votes sits from the rate their chamber's same-party members show at
+         the same seat lean (compute_constituent_reference, measured each
+         run), in standard deviations per vote (seat_residual, v6.16). 100
+         at the expectation, falling linearly to 0 at CROSSING_ZERO_GAPS
+         times the 90th-percentile |residual| of the member's party in the
+         chamber above it and LOYAL_ZERO_GAPS times it below.
            - Measured in standard deviations, not percentage points (v6.16):
              four extra points on a seat whose members break 1.5% of the time
              is far more out of pattern than on one whose members break 7%.

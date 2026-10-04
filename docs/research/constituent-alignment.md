@@ -607,10 +607,11 @@ had never been put in front of election results:
 per congress the way the pipeline scores it: congress-specific Nokken-Poole
 positions from Voteview (Voteview's 0, 0 placeholders dropped), per-party
 fits on seat lean, the scale over full records, and v6.27's reliability
-weight (nearly inert here: almost every incumbent in these panels has a full
-record). The House rows use section 1's panel and controls; seat lean is
-the presidential vote, as throughout this note, not the pipeline's Cook
-PVI. Coefficient per score point, t, and the R² the score adds:
+weight (nearly inert here: 0.4% of the House panel's incumbents and 2.3% of
+the Senates' members are read at less than full weight). The House rows use
+section 1's panel and controls; seat lean is the presidential vote, as
+throughout this note, not the pipeline's Cook PVI. Coefficient per score
+point, t, and the R² the score adds:
 
 | Outcome | Linear, pooled (shipped) | Linear, per party | Peaked, pooled | Peaked, per party |
 |---|---|---|---|---|
@@ -632,19 +633,20 @@ PVI. Coefficient per score point, t, and the R² the score adds:
   slope alone is not significant.
 - **Scale: kept, as not settled.** Pooled and per-party scales predict
   equally well. The direct test asks whether voters respond to a NOMINATE
-  unit of extremity (pooled) or to a unit of the member's own party's
-  spread (per party): the right unit is the one with the same slope for
-  both parties. Neither is distinguishable. Republicans minus Democrats,
-  per NOMINATE unit: House +1.44 (t=0.5, p=0.65), Senate −3.31 (t=−0.5,
-  p=0.61). Per own-party unit: House −0.15 (p=0.80), Senate −1.32 (p=0.34).
-  Unlike the vote part's case, the pooled scale leaves the parties'
-  averages about a point apart (over every Senate, unweighted: 50.5 D and
-  51.6 R pooled, 50.8 and 50.9 per party). It widens the spread for the
-  party that spreads more (unweighted, share at 0: 2.9% D and 10.1% R
-  pooled, 5.8% and 6.8% per party; at 100: 1.6% and 6.1% pooled, 3.8% and
-  2.6% per party). v6.27's weights don't change this, since nearly every
-  senator's record is full. With no evidence for either, the shipped
-  scale stays.
+  unit of extremity (pooled) or to a unit of the member's own party's spread
+  (per party): the right unit is the one with the same slope for both
+  parties. Neither is distinguishable. Republicans minus Democrats, per
+  NOMINATE unit: House +1.44 (t=0.5, p=0.65), Senate −3.31 (t=−0.5, p=0.61).
+  Per own-party unit: House −0.15 (p=0.80), Senate −1.32 (p=0.34). Unlike
+  the vote part's case, the pooled scale leaves the parties' averages about
+  a point apart (over every Senate, unweighted: 50.5 D and 51.6 R pooled,
+  50.8 and 50.9 per party). It widens the spread for the party that spreads
+  more (unweighted, share at 0: 2.9% D and 10.1% R pooled, 5.8% and 6.8% per
+  party; at 100: 1.6% and 6.1% pooled, 3.8% and 2.6% per party). v6.27's
+  weights barely change this, since only 2.3% of senator-Congresses are read
+  at less than full weight: with them on, the shipped scale's means are 50.6
+  D and 51.5 R and its shares at 0 are 2.6% and 10.0%. With no evidence for
+  either, the shipped scale stays.
 
 **Thin records: what a position from n votes is worth.** The score should
 read a member's position at the strength it predicts where the member
@@ -1121,8 +1123,8 @@ which read placeholders as positions and weighted nothing, with v6.27:
 | | Senate | House |
 |---|---|---|
 | Saturation | 0.258 → 0.268 | 0.224 → 0.221 |
-| Mean change in the component | 1.69 | 0.58 |
-| Mean change in Constituent Alignment, through the position part | 0.51 | 0.17 |
+| Mean absolute change in the component | 1.69 | 0.58 |
+| Mean absolute change in Constituent Alignment, through the position part | 0.51 | 0.17 |
 
 These are the change through the position part (30% of Constituent
 Alignment). The vote part's change is not in them: weighting the flank

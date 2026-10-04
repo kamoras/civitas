@@ -383,9 +383,9 @@ def build_chamber_ideal_points(
     the switch (`latest`, from switcher_latest), and only it enters the
     fits: one seat, one position. Reading the record since the switch is a
     choice, the record of who the member now is; the evidence
-    (calibrate_position_confidence.switcher_test) is
-    consistent with it but can't settle it. Until Voteview places that
-    record, the member has no position."""
+    (calibrate_position_confidence.switcher_test) is consistent with it but
+    can't settle it. Until Voteview places that record, the member has no
+    position."""
 
     column, measure = _position_column(rows)
     switched = sorted(_switchers(rows))
