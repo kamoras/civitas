@@ -677,8 +677,10 @@ resampled in a fixed order, 1,000 times.
   are predicted from a fit (n0 and drift) made without that member, and
   the squared errors are summed. A more complex structure is used only if
   it beats the simpler one by more than a standard error of the
-  member-by-member difference (the one-standard-error rule; Hastie,
-  Tibshirani & Friedman 2009, section 7.10). A rerun decides again. Over
+  member-by-member difference (the one-standard-error rule of Hastie,
+  Tibshirani & Friedman 2009, section 7.10, in its paired form: their
+  standard error of the best model's error, 0.234 here, is looser and
+  agrees). A rerun decides again. Over
   the 99 thin pairs:
 
   | n0 fitted | Held-out squared error |
@@ -691,8 +693,9 @@ resampled in a fixed order, 1,000 times.
 
   Per chamber is lower by 0.020, but the standard error of that
   difference is 0.070, so the chambers aren't shown to differ: fitted
-  apart, their half points are 25 votes (Senate) and 85 (House), each
-  interval holding the pooled 50. A rerun with more pairs could choose
+  apart, their half points are 25 votes (Senate) and 85 (House). The
+  House's interval (31–98) holds the pooled 50; the Senate's (1–50)
+  reaches it only at its top. A rerun with more pairs could choose
   per chamber; it would have to win by more than the noise. Era, direction
   and the party-line term predict worse than one curve.
 
@@ -738,7 +741,7 @@ resampled in a fixed order, 1,000 times.
   on a different agenda; whether those records behave like these is
   untested.
 
-**Three approaches that don't work.** Each appeared in a draft of this
+**Six approaches that don't work.** Each appeared in a draft of this
 change and was replaced after review.
 
 *The career-gap proxy.* The first draft fit gap² = drift + k / votes, where
@@ -768,6 +771,19 @@ logit per roll call. It failed for three reasons:
 single drift. That made n0 appear to rise with party-line voting, and it
 let a full record's own attenuation shrink every member about 10%. Both
 artifacts go away once drift is measured per transition.
+
+*One curve per chamber.* The fourth draft fitted the chambers apart
+because they predicted held-out members slightly better, a margin within
+the noise of the comparison. The one-standard-error rule now decides,
+and keeps one curve.
+
+*Flank-rule switches without the right centering or strata.* The fifth
+draft switched the flank rule at 53 votes, on pairs centered on the
+median of each party's full records rather than as the rule centers, and
+with noise and drift assumed independent everywhere. The sixth kept the
+last full record until a new one was full, on a mistaken reading that the
+dependence couldn't be modelled; within strata of distance from the
+center it can (below).
 
 **Shipped (v6.27).**
 - The member's extremity is scaled by weight(n) before it is read against
@@ -820,11 +836,12 @@ artifacts go away once drift is measured per transition.
     position's sign against the party's. So once the new Congress's
     section is in, the rule reads a member's last-Congress full record
     (kept beside the new section for this rule only, never scored) until
-    their new record is full (200 votes). Each Congress's positions are
-    read from their own party's weighted mean, so a party-wide shift
-    between the two can't move a member against a party read from the
-    other. Only the Congress just before is kept, and only a full last
-    record replaces a new one: those are the cases the pairs measure.
+    their new record reaches a measured count, 92 votes. Each Congress's
+    positions are read from their own party's weighted mean, so a
+    party-wide shift between the two can't move a member against a party
+    read from the other. Only the Congress just before is kept, and only
+    a full last record replaces a new one (unless the new one counts for
+    nothing yet, no votes): those are the cases the pairs measure.
   - The pairs, centered as the rule centers, are the evidence. A full
     record is on the same side of its party as the next Congress's full
     record 86% of the time. Thin records, against their pair's full
@@ -838,17 +855,24 @@ artifacts go away once drift is measured per transition.
     | 101–150 | 21 | 86% |
     | 151–199 | 13 | 92% |
 
-    A thin record is compared across a Congress there, which handicaps
-    it by one Congress's drift that the rule's comparison doesn't carry.
-    Taking that out needs a model of how a record's noise and the drift
-    combine. If they were independent, a thin record would match a last
-    full record at 95 votes; but they aren't: drift flips a full record's
-    side mostly near the party's center (62% agreement within 0.02 of it,
-    over 99% beyond 0.2), where a thin record's noise flips it too, so
-    independence puts the switch too early, by an amount these pairs
-    don't fix. No count short of a full record is established, so the
-    rule switches there. This first applies in the 120th Congress: a 119th section
-    written before v6.27 keeps no earlier positions.
+    A thin record is compared across a Congress there, the rule's
+    comparison within one, so one Congress's drift has to be taken out.
+    How much depends on how a record's noise and the drift combine: both
+    flip a side mostly near the party's center (full records agree 62%
+    within 0.02 of it, over 99% beyond 0.2). So the switch is modelled
+    within three strata of distance from the center (under 0.05,
+    0.05–0.1, beyond), noise and drift independent within each, agreement
+    a logistic in log votes with an intercept per stratum. A thin record
+    matches a last full record at 92 votes, in the full pairs' mix of
+    strata (`prior_switch`); without the strata the figure is 95.
+  - That point estimate is the switch: of the counts the data allow, it
+    misplaces the fewest sides in expectation. It is uncertain: resampling
+    members puts it between 34 and 525 votes (5th to 95th percentile),
+    before a full record in 85% of resamples, since only 34 thin pairs
+    have over 100 votes. A switch past a full record would be a full
+    record, which is where the rule switches at the latest. This first
+    applies in the 120th Congress: a 119th section written before v6.27
+    keeps no earlier positions.
   - On the 119th Congress's party-unity roll calls (majorities opposed,
     Voteview's votes) the weighting alone reclassifies none of 2,351
     Senate breaks and 2 of 6,055 House breaks.
@@ -877,7 +901,8 @@ which read placeholders as positions and weighted nothing, with v6.27:
   - Senators with 53 and 187 votes move about 1.
   - Members scored from 1 to 39 votes or a placeholder, all since departed,
     move by up to 50 points.
-  - Two far beyond saturation (135 and 182 votes) stay at its end.
+  - Of these, two far beyond saturation (135 and 182 votes) stay at its
+    end.
 
 ## What the evidence does not settle
 
@@ -915,8 +940,10 @@ which read placeholders as positions and weighted nothing, with v6.27:
   is also often their first or last, though a curve per direction
   (entrants, leavers) predicts worse than one for both, and whether early
   records in a Congress behave like these is untested. The no-count
-  weight rests on fewer still. Rerunning the calibration adds each
-  Congress's new pairs, and decides the structure again.
+  weight rests on fewer still, and the flank rule's switch (92 votes) on
+  34 thin pairs above 100 votes, so its interval runs from 34 to past a
+  full record. Rerunning the calibration adds each Congress's new pairs,
+  and decides the structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight

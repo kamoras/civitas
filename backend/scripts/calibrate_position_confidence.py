@@ -470,9 +470,59 @@ def prior_crossover(data: list[tuple]) -> float | None:
 
 
 DISTANCE_BANDS = ((0.0, 0.02), (0.02, 0.05), (0.05, 0.1), (0.1, 0.2), (0.2, 10.0))
+# Strata of distance from the party's center for the switch's model: the
+# side flips mostly near the center, by drift and noise alike.
+SWITCH_STRATA = (0.0, 0.05, 0.1)
+SWITCH_GRID = np.exp(np.linspace(0.0, np.log(5000.0), 2000))
 
 
-def prior_test(data: list[tuple]) -> dict:
+def _stratum(x: float) -> int:
+    return sum(abs(x) >= edge for edge in SWITCH_STRATA) - 1
+
+
+def prior_switch(data: list[tuple]) -> float | None:
+    """The flank rule's switch: the count at which a thin record places a
+    member on their side of the party as reliably as their last full record.
+
+    By distance from the center of the record it is compared with (strata,
+    SWITCH_STRATA), a last full record agrees with this Congress's at q_s,
+    the full pairs' rate. A thin record is observed only against the other
+    Congress's full record; with its noise and the drift independent within
+    a stratum, its observed rate there is a_s(n) = p_s q_s + (1 - p_s)(1 -
+    q_s), p_s its agreement with its own Congress's full record. a_s(n) is
+    a logistic in log n with an intercept per stratum; the switch is where
+    p(n) = q over the strata in the full pairs' mix. None if that is past
+    the search (5,000 votes) or agreement doesn't rise with the count."""
+    full = [r for r in data if r[5] == "full"]
+    thin = [r for r in data if r[5] == "thin" and r[2] > 0]
+    k = len(SWITCH_STRATA)
+    if not full or len(thin) < k + 1:
+        return None
+    mix = np.array([sum(_stratum(r[4]) == s for r in full) for s in range(k)], float) / len(full)
+    q = np.array([np.mean([_same_side(r) for r in full if _stratum(r[4]) == s] or [0.5]) for s in range(k)])
+    x = np.column_stack([np.array([[_stratum(r[4]) == s for s in range(k)] for r in thin], float),
+                         np.log([r[2] for r in thin])])
+    y = np.array([_same_side(r) for r in thin], float)
+    beta = np.zeros(k + 1)
+    for _ in range(100):  # Newton's method on the logistic likelihood, lightly ridged
+        p = 1 / (1 + np.exp(-x @ beta))
+        hessian = x.T @ (x * (p * (1 - p))[:, None]) + 1e-6 * np.eye(k + 1)
+        step = np.linalg.solve(hessian, x.T @ (y - p) - 1e-6 * beta)
+        beta += step
+        if np.abs(step).max() < 1e-10:
+            break
+    present = mix > 0  # strata with full pairs: only they enter the mix
+    if beta[-1] <= 0 or np.any(2 * q[present] - 1 <= 0):
+        return None
+    a = 1 / (1 + np.exp(-(beta[:k][None, present] + beta[-1] * np.log(SWITCH_GRID)[:, None])))
+    own = (a - (1 - q[present])) / (2 * q[present] - 1)
+    reached = np.nonzero(own @ mix[present] >= q[present] @ mix[present])[0]
+    return float(SWITCH_GRID[reached[0]]) if len(reached) else None
+
+
+
+
+def prior_test(data: list[tuple], seed: int = 0) -> dict:
     """The flank rule's choice (party_line_record): read a member's side of
     their party from their last full record or from this Congress's thin
     one? `data` is centered as the rule centers (each party's weighted mean
@@ -480,12 +530,12 @@ def prior_test(data: list[tuple]) -> dict:
     the same side as their full record in the other Congress, and the mean
     squared gap: full records against the next Congress's full record,
     thin records by count band against their pair's full one. A thin
-    record is handicapped here by one Congress's drift that the rule's
-    comparison doesn't carry; removing it needs a model of how noise and
-    drift combine, and full_by_distance shows they aren't independent, so
-    the rule keeps the last full record until the new one is full, the one
-    count at which the new record is established to be at least as good.
-    crossover_if_independent is the rejected alternative (prior_crossover)."""
+    record is compared across a Congress here, the rule's comparison
+    within one, so one Congress's drift is taken out by prior_switch, which
+    models it within strata of distance from the center (full_by_distance:
+    drift flips a side mostly near it, as noise does). switch_votes is that
+    switch with its interval over members resampled; crossover_if_independent
+    is the same without the strata, reported for comparison."""
     def summary(rows):
         return {"pairs": len(rows),
                 "same_side": round(sum(map(_same_side, rows)) / len(rows), 3),
@@ -502,7 +552,29 @@ def prior_test(data: list[tuple]) -> dict:
     }
     crossover = prior_crossover(data)
     out["crossover_if_independent"] = None if crossover is None else round(crossover, 1)
+    switch = prior_switch(data)
+    rng = np.random.default_rng(seed)
+    by_member: dict[str, list[tuple]] = {}
+    for row in data:
+        if row[5] != "uncounted":
+            by_member.setdefault(row[1], []).append(row)
+    ids = sorted(by_member)
+    draws = np.array([np.inf if (v := prior_switch([row for i in rng.choice(ids, len(ids)) for row in by_member[i]]))
+                      is None else v for _ in range(BOOTSTRAP)])
+    out["switch_votes"] = None if switch is None else round(switch, 1)
+    out["switch_interval_90"] = [round(float(v), 1) if np.isfinite(v) else None
+                                 for v in np.percentile(draws, (5, 95))]
+    out["switch_share_before_full_record"] = round(float((draws < RELIABLE_VOTES).mean()), 3)
     return out
+
+
+def prior_until_votes(test: dict) -> float:
+    """The count below which the flank rule reads the last full record: the
+    switch's point estimate (the choice with the fewest expected misplaced
+    sides, its uncertainty reported beside it), or a full record when the
+    switch is past one or not found."""
+    switch = test.get("switch_votes")
+    return float(RELIABLE_VOTES if switch is None else min(switch, RELIABLE_VOTES))
 
 
 def bootstrap(data: list[tuple], structure: str, seed: int = 0) -> dict:
@@ -564,12 +636,18 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
         "heldout_error": heldout,
         "structure_test": comparison,
         "half_weight_votes_pooled": round(half_point(fit_n0(data)), 1),
+        "half_weight_votes_by_chamber": {
+            name: round(half_point(c), 1) for name, c in fit_chambers(data, "chamber").items()},
+        "half_weight_votes_by_chamber_interval_90": {
+            name: b["half_weight_votes"] for name, b in bootstrap(data, "chamber").items()
+            if name != "uncounted_weight"},
         "half_weight_votes_by_era": {
             f"{e.start}-{e.stop - 1}": round(half_point(fit_n0([r for r in data if r[6] in e])), 1)
             for e in (range(FIRST_CONGRESS, 110), range(110, last + 1))
         },
         "party_line_test": party_line_test(data, structure),
-        "prior_test": prior_test(rule_data),
+        "prior_test": (test := prior_test(rule_data)),
+        "prior_until_votes": prior_until_votes(test),
         "party_line_share_by_congress": {
             name: {str(c): round(u, 3) for c, u in shares[letter].items()}
             for name, letter in CHAMBERS
@@ -587,10 +665,12 @@ def main() -> None:
     ap.add_argument("--cache", type=pathlib.Path)
     ap.add_argument("--out", type=pathlib.Path, default=OUT)
     args = ap.parse_args()
+    calibrated = calibrate(args.cache)
     data = {
         "_source": (
             f"Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses "
-            f"{congresses().start}-{congresses().stop - 1}, retrieved {datetime.date.today().isoformat()}; "
+            f"{FIRST_CONGRESS}-{calibrated['calibrated_through']} (later ones still thin by the calendar "
+            f"are left out), retrieved {datetime.date.today().isoformat()}; "
             "regenerate with backend/scripts/calibrate_position_confidence.py"
         ),
         "_method": (
@@ -612,9 +692,11 @@ def main() -> None:
             "no full pairs and Congresses still thin by the calendar are left out; interval_90 is "
             "the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, "
             "a last full record and a thin record as evidence of a member's side of their party, "
-            "centered as the rule centers; structure_test is the one-standard-error rule's comparison"
+            "centered as the rule centers, and prior_until_votes is the count below which the rule "
+            "reads the last full record (prior_test's switch_votes, at most a full record); "
+            "structure_test is the one-standard-error rule's comparison"
         ),
-        **calibrate(args.cache),
+        **calibrated,
     }
     args.out.write_text(json.dumps(data, indent=1) + "\n")
     print(f"wrote {args.out}: {data['structure']}, {data['chambers']}, intervals {data['interval_90']}, "

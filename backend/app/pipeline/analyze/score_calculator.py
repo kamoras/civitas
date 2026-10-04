@@ -532,7 +532,8 @@ _position_reliability_cache: dict | None = None
 
 
 def _position_reliability(chamber: str) -> dict:
-    """{"n0", "reference_votes", "half_weight_votes", "uncounted_weight"}:
+    """{"n0", "reference_votes", "half_weight_votes", "uncounted_weight",
+    "prior_until_votes"} (the last for party_line_record's flank rule):
     the reliability weight a congress-specific (Nokken-Poole) position in
     `chamber` gets (v6.27, position_confidence). Measured by
     scripts/calibrate_position_confidence.py on Voteview's own positions:
@@ -559,7 +560,8 @@ def _position_reliability(chamber: str) -> dict:
             _position_reliability_cache = {
                 name: {"n0": float(c["n0"]), "half_weight_votes": float(c["half_weight_votes"]),
                        "reference_votes": float(raw["reference_votes"]),
-                       "uncounted_weight": float(raw["uncounted_weight"])}
+                       "uncounted_weight": float(raw["uncounted_weight"]),
+                       "prior_until_votes": float(raw["prior_until_votes"])}
                 for name, c in raw["chambers"].items()
             }
         except Exception:

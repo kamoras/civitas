@@ -99,7 +99,7 @@ def _toward_other_party(party: str, cast: list[tuple]) -> bool:
     resting on a few roll calls barely moves their mean. A lone defector's
     side is its own position's sign against the party's, whatever its
     weight, which is why party_line_records reads a member's last-Congress
-    full record until their new record is full."""
+    full record until their new record reaches a measured count."""
     everyone = [d for _, p, _, _, d in cast if p == party and d is not None and d[1] > 0]
     broke = [d for _, p, _, with_party, d in cast if p == party and not with_party and d is not None and d[1] > 0]
     if not broke:
@@ -184,7 +184,8 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # Once the new Congress's section is in, its positions rest on a few roll
     # calls at first, so a member's last-Congress full record ("prior",
     # voteview.previous_positions) decides their side until their new record
-    # is full (reference_votes; without one, while it is the more reliable). Each section's
+    # reaches the measured prior_until_votes (without a full record's count,
+    # while it is the more reliable). Each section's
     # positions are read from their own party's mean in that section, so a
     # party-wide shift between the two Congresses can't move a member who is
     # read from one against a party read from the other.
@@ -194,7 +195,8 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # section's party centers cover the whole chamber however few members
     # this run passes (a run for one senator).
     model = Senator if chamber == "senate" else Representative
-    party_of: dict[str, str] = {b: p for b, p in db.query(model.bioguide_id, model.party) if b}
+    party_of: dict[str, str] = {
+        b: caucus or p for b, p, caucus in db.query(model.bioguide_id, model.party, model.caucus_party) if b}
     if chamber == "house":
         # The House's roll calls name every member's bioguide and party.
         party_of.update({p.member_id: p.party for ps in positions.values() for p in ps if p.member_id})
@@ -217,20 +219,28 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     dim1 = weighted(ideal)
     reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else {}
     full = reliability.get("reference_votes")
+    until = reliability.get("prior_until_votes", full)
     counts = ideal.get("votes") or {}
-    prior = ideal.get("prior") if isinstance(ideal.get("prior"), dict) else {}
+    # A section carried from the last Congress (its successor not yet in)
+    # is itself the last Congress's; its own prior would be older still.
+    current = ideal.get("congress") is not None and int(ideal["congress"]) == int(congress)
+    prior = ideal.get("prior") if current and isinstance(ideal.get("prior"), dict) else {}
     prior_counts = prior.get("votes") or {}
     for b, (x, w) in weighted(prior).items():
         if b not in dim1:
             dim1[b] = (x, w)
         elif full:
-            # A last full record decides until the new record is full
-            # (calibrate_position_confidence.prior_test: no count short of a
-            # full record is established to place a member as well). Only a
-            # full last record was measured, so a thin one doesn't replace
-            # this Congress's.
+            # A last full record decides until the new record reaches the
+            # measured switch (calibrate_position_confidence.prior_switch:
+            # where a new record places a member on their side of the party
+            # as reliably). Only a full last record was measured, so a thin
+            # one doesn't replace this Congress's.
             n, last = counts.get(b), prior_counts.get(b)
-            if (n is None or n < float(full)) and last is not None and float(last) >= float(full):
+            if (n is None or n < float(until)) and last is not None and float(last) >= float(full):
+                dim1[b] = (x, w)
+            elif dim1[b][1] == 0 and w > 0:
+                # This Congress's position counts for nothing yet (no votes):
+                # any usable last position beats none.
                 dim1[b] = (x, w)
         elif w > dim1[b][1]:
             dim1[b] = (x, w)

@@ -129,6 +129,8 @@ def test_shipped_file_documents_its_source_and_intervals():
     # dependence that rejects it: drift flips a side mostly near the center.
     by_distance = list(data["prior_test"]["full_by_distance"].values())
     assert by_distance == sorted(by_distance)
+    # The flank rule's switch: the measured one, at most a full record.
+    assert data["prior_until_votes"] == _script().prior_until_votes(data["prior_test"]) <= 200
 
 
 def test_the_congress_range_follows_the_sitting_congress(monkeypatch):
@@ -144,7 +146,8 @@ def test_scorer_reads_the_shipped_file(monkeypatch):
     for chamber in ("senate", "house"):
         assert score_calculator._position_reliability(chamber) == {
             "n0": data["chambers"][chamber]["n0"], "half_weight_votes": data["chambers"][chamber]["half_weight_votes"],
-            "reference_votes": data["reference_votes"], "uncounted_weight": data["uncounted_weight"]}
+            "reference_votes": data["reference_votes"], "uncounted_weight": data["uncounted_weight"],
+            "prior_until_votes": data["prior_until_votes"]}
     assert score_calculator._position_reliability("presidency") == {}
 
 
@@ -197,3 +200,52 @@ def test_the_independence_crossover_is_where_thin_records_would_match_full_ones(
     # Agreement that doesn't rise with the count never crosses.
     flat = [("H", f"T{i}", float(10 + i), 0.1, -0.1, "thin", 110, 0.5, False) for i in range(10)]
     assert script.prior_crossover(full + flat) is None
+
+
+def test_weight():
+    """Relative to a full record (reference_votes or more counts 1), in [0, 1]."""
+    rel = {"n0": 40.0, "reference_votes": 360.0, "uncounted_weight": 0.2}
+    assert score_calculator.position_confidence(40, rel) == 0.5 / 0.9
+    assert score_calculator.position_confidence(0, rel) == 0.0
+    assert score_calculator.position_confidence(360, rel) == 1.0
+    assert score_calculator.position_confidence(900, rel) == 1.0  # capped
+    assert score_calculator.position_confidence(None, rel) == 0.2  # no count reported: its measured weight
+    assert score_calculator.position_confidence(None, {**rel, "uncounted_weight": -0.1}) == 0.0  # clamped
+    assert score_calculator.position_confidence(40, {"n0": 40.0}) == 0.5  # no reference
+    assert score_calculator.position_confidence(5, {"n0": -3.0}) == 1.0  # unusable calibration
+    assert score_calculator.position_confidence(5, None) == 1.0  # a pre-v6.27 section
+    assert score_calculator.position_confidence(5, {}) == 1.0  # no calibration
+
+
+def test_deviations_can_center_as_the_flank_rule_does():
+    """With a weight, each party's center is its weighted mean over every
+    member, not the median of its full records."""
+    rows = [_row("1", "100", "-0.5", "300"), _row("2", "100", "-0.3", "300"), _row("3", "100", "-0.9", "0")]
+    plain = _script().deviations(rows)
+    weighted = _script().deviations(rows, lambda votes, career: 1.0 if votes else 0.5)
+    assert abs(plain["3"][1] - 0.5) < 1e-12  # 0.5 left of the full records' median (-0.4)
+    center = (-0.5 - 0.3 - 0.9 * 0.5) / 2.5
+    assert abs(weighted["3"][1] - (center + 0.9)) < 1e-12
+
+
+def test_the_switch_takes_the_drift_out_within_each_distance_stratum():
+    """Full pairs agree 60% near the center and 100% far from it, half and
+    half. Thin records near the center are observed at 0.6 p + 0.4 (1 - p),
+    so where they look as good as full ones there (60%), they are better
+    within their own Congress: the switch comes before the raw crossing.
+    No switch when agreement doesn't rise with the count."""
+    script = _script()
+    full = [("H", f"N{i}", 600.0, 0.01, 0.01 if i % 5 < 3 else -0.01, "full", 110, 0.5, False) for i in range(50)]
+    full += [("H", f"F{i}", 600.0, 0.3, 0.3, "full", 110, 0.5, False) for i in range(50)]
+    thin = []
+    for n, near, far in ((10, 3, 6), (30, 5, 8), (100, 6, 10), (300, 8, 10)):
+        thin += [("H", f"T{n}n{i}", float(n), 0.01, 0.01 if i < near else -0.01, "thin", 110, 0.5, False)
+                 for i in range(10)]
+        thin += [("H", f"T{n}f{i}", float(n), 0.3, 0.3 if i < far else -0.3, "thin", 110, 0.5, False)
+                 for i in range(10)]
+    switch = script.prior_switch(full + thin)
+    assert switch is not None and 10 < switch < 300
+    assert script.prior_until_votes({"switch_votes": switch}) == min(switch, 200.0)
+    assert script.prior_until_votes({"switch_votes": None}) == 200.0
+    flat = [r[:2] + (float(10 + i),) + r[3:] for i, r in enumerate(t for t in thin if t[2] == 10.0)]
+    assert script.prior_switch(full + flat) is None

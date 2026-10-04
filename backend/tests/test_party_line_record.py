@@ -168,13 +168,13 @@ def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_ses
     A full current position is kept over the prior."""
     current = {**DIM1, "R4": 0.3}
     section = {"members": current, "votes": {**{m: 500 for m in DIM1}, "R4": 2}, "reliability": {"n0": 24},
-               "congress": 120}
+               "congress": 119}
     monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
     _roll_call(db_session, "house", 32, "On Passage", "HR.7", {"R4": "Nay"})
     db_session.commit()
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
 
-    section["prior"] = {"congress": 119, "members": DIM1, "votes": {m: 500 for m in DIM1}, "reliability": {"n0": 24}}
+    section["prior"] = {"congress": 118, "members": DIM1, "votes": {m: 500 for m in DIM1}, "reliability": {"n0": 24}}
     record = party_line_records(db_session, "house", _members())[4]
     assert record["breaks"] == [] and record["flankBreaks"] != []
 
@@ -182,17 +182,31 @@ def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_ses
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
 
     # With a full record's count known, a full last record decides until the
-    # new record is full, whatever the weights, and the new one from then.
+    # new record reaches the measured switch (a full record without one),
+    # whatever the weights, and the new one from then.
     section["reliability"] = {"n0": 24, "reference_votes": 200}
     section["votes"]["R4"] = 199
     assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
     section["votes"]["R4"] = 200
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+    section["reliability"]["prior_until_votes"] = 90
+    section["votes"]["R4"] = 89
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    section["votes"]["R4"] = 90
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
     del section["votes"]["R4"]  # no count reported: read as thin
     assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
     # Only a full last record was measured against a thin new one: a thin
-    # last record (here under reference_votes) leaves this Congress's.
+    # last record (here under reference_votes) leaves this Congress's...
     section["reliability"]["reference_votes"] = 600
+    section["votes"]["R4"] = 2
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+    # ...unless this Congress's counts for nothing yet (no votes).
+    section["votes"]["R4"] = 0
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    # A section carried from the last Congress (the roll calls' is newer)
+    # brings an older prior, which isn't read.
+    section["congress"] = 118
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
 
 def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, monkeypatch):
@@ -229,20 +243,21 @@ def test_each_congresss_positions_are_read_from_their_own_partys_mean(db_session
     current = {**DIM1, "R0": 0.4, "R1": 0.5, "R2": 0.5, "R3": 0.5, "R4": 0.45}
     prior = {**DIM1, "R0": 0.9, "R1": 0.8, "R2": 0.8, "R3": 0.8, "R4": 0.6}
     full = {m: 500 for m in DIM1}
-    section = {"members": current, "votes": {**full, "R4": 2}, "reliability": {"n0": 24}, "congress": 120,
-               "prior": {"congress": 119, "members": prior, "votes": full, "reliability": {"n0": 24}}}
+    section = {"members": current, "votes": {**full, "R4": 2}, "reliability": {"n0": 24}, "congress": 119,
+               "prior": {"congress": 118, "members": prior, "votes": full, "reliability": {"n0": 24}}}
     monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
     _roll_call(db_session, "house", 33, "On Passage", "HR.8", {"R4": "Nay"})
     db_session.commit()
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
 
 
-def test_a_run_for_one_senator_reads_their_breaks_as_the_full_chamber_would(db_session, monkeypatch):
-    """A single-senator run passes one member, so no colleague's roll-call
-    vote can be tied to a position. R0 breaking from the center still
-    counts and R4 breaking from the flank still doesn't: each is read
-    against the party's own center in the section, taken over the
-    chamber's stored senators."""
+def test_a_lone_defector_is_read_against_the_party_center_without_colleagues(db_session, monkeypatch):
+    """Passed one senator, no colleague's roll-call vote can be tied to a
+    position. A lone defector is still placed: R0 breaking from the center
+    counts and R4 breaking from the flank doesn't, each read against the
+    party's own center in the section, taken over the chamber's stored
+    senators. (The Senate pipeline passes the whole roster on a filtered
+    run, so breaks with several defectors are read as in a full run.)"""
     from app.models import Senator
     monkeypatch.setattr(party_line_record, "_member_ideal_points",
                         lambda chamber: {"members": {f"bio-{m}": d for m, d in DIM1.items()}})

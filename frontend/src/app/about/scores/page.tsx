@@ -261,8 +261,7 @@ export default function ScoresChapter() {
             members whose short record in one Congress sits next to a full one in the Congress
             before or after: half at about 50 votes, in full from 200. A member with no position yet
             sits at 50. Early in a new Congress, until its positions are published and pass our
-            checks, or whenever a chamber&apos;s positions fail those checks, this part is left out
-            and the score is the voting part alone.
+            checks, this part is left out and the score is the voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

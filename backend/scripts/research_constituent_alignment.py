@@ -880,7 +880,10 @@ def _weights(M, chamber):
     election panels, where almost every incumbent has a full record."""
     rel = score_calculator._position_reliability(chamber)
     n = pd.to_numeric(M.get("nominate_number_of_votes"), errors="coerce")
-    career = pd.to_numeric(M["nominate_dim1"], errors="coerce").notna() if "nominate_dim1" in M else n.notna()
+    # A panel without career positions: nearly every historical member has
+    # one, so a missing count reads as uncounted.
+    career = (pd.to_numeric(M["nominate_dim1"], errors="coerce").notna() if "nominate_dim1" in M
+              else pd.Series(True, index=M.index))
     # As the pipeline stores them (fetch/voteview.py): no count (or 0) with a
     # career position is uncounted; with neither, no votes.
     return np.array([score_calculator.position_confidence(
@@ -1253,13 +1256,14 @@ def position_scale_test(p, m):
     print(f" thin records, shipped (scripts/calibrate_position_confidence.py, adjacent-Congress pairs "
           f"{shipped['pairs']}, through the {shipped['calibrated_through']}th): structure {shipped['structure']} "
           f"(held-out error {shipped['heldout_error']}); per chamber {shipped['chambers']}, 90% intervals "
-          f"{shipped['interval_90']}; pooled half weight {shipped['half_weight_votes_pooled']}; by era "
+          f"{shipped['interval_90']}; pooled half weight {shipped['half_weight_votes_pooled']}; by chamber "
+          f"{shipped['half_weight_votes_by_chamber']} ({shipped['half_weight_votes_by_chamber_interval_90']}); by era "
           f"{shipped['half_weight_votes_by_era']}; reference {shipped['reference_votes']}; party-line test "
           f"{shipped['party_line_test']}; no-count weight {shipped['uncounted_weight']} (one member left out: "
           f"{shipped['uncounted_weight_leave_one_out']})")
     print(f"  flank rule, last full record against a thin one (same side of the party as the full record "
-          f"across a Congress, centered as the rule centers): {shipped['prior_test']}; structure test "
-          f"{shipped['structure_test']}")
+          f"across a Congress, centered as the rule centers): {shipped['prior_test']}; reads the last full "
+          f"record below {shipped['prior_until_votes']} votes; structure test {shipped['structure_test']}")
     for c, by in shipped["party_line_share_by_congress"].items():
         print(f"  {c} party-line share by Congress: " + ", ".join(f"{k}:{v:.2f}" for k, v in by.items()))
     _full_record_gradient(p)
