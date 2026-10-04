@@ -1,6 +1,6 @@
 {
- "_source": "Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses 101-119 (later ones still thin by the calendar are left out), retrieved 2026-10-03; regenerate with backend/scripts/calibrate_position_confidence.py",
- "_method": "Members of the 50 states with positions in adjacent Congresses, each read from the party's center toward its flank, keyed by the transition they span: full = drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / w(200)), w(n) = n / (n + n0); drift from each transition's pairs of full records (both sides 200 or more scaled votes) in the pair's direction, n0 the least-squares fit of the thin pairs on a grid to 5000, for every Congress, under one n0 for both chambers unless one per chamber has a heldout_error (the squared error of each thin member's pairs fitted without that member) smaller by more than the standard error of the difference (structure_test; era and direction are tested, not usable); half_weight_votes is where weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / reference_votes), so an interval reaching that limit is open above; uncounted_weight is the slope, for both chambers, for positions published with no count (or 0) but a career DW-NOMINATE position; party_line_test is the rejected alternative with log n0 linear in the Congress's party-line share; transitions with no full pairs and Congresses still thin by the calendar are left out; interval_90 is the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, a last full record and a thin record as evidence of a member's side of their party, centered as the rule centers, and prior_until_votes is the count below which the rule reads the last full record (prior_test's switch_votes, at most a full record); structure_test is the one-standard-error rule's comparison",
+ "_source": "Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses 101-119 (later ones still thin by the calendar are left out), exports retrieved 2026-10-03; regenerate with backend/scripts/calibrate_position_confidence.py",
+ "_method": "Members of the 50 states with positions in adjacent Congresses, each read from the party's center toward its flank, keyed by the transition they span: full = drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / w(200)), w(n) = n / (n + n0); drift from each transition's pairs of full records (both sides 200 or more scaled votes) in the pair's direction, n0 the least-squares fit of the thin pairs on a grid to 5000, for every Congress, under one n0 for both chambers unless one per chamber has a heldout_error (the squared error of each thin member's pairs fitted without that member) smaller by more than the standard error of the difference (structure_test; era and direction are tested, not usable); half_weight_votes is where weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / reference_votes), so an interval reaching that limit is open above; uncounted_weight is the slope, for both chambers, for positions published with no count (or 0) but a career DW-NOMINATE position; party_line_test is the rejected alternative with log n0 linear in the Congress's party-line share; transitions with no full pairs and Congresses still thin by the calendar are left out; interval_90 is the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, a last full record and a thin record as evidence of a member's side of their party, centered as the rule centers, and prior_until_votes is the count below which the rule reads the last full record (a full record unless a switch short of one saves sides out of sample in 95% of resamples on pairs shaped like the rule's case, prior_until_votes); structure_test is the one-standard-error rule's comparison",
  "calibrated_through": 119,
  "structure": "pooled",
  "chambers": {
@@ -129,14 +129,30 @@
    "0.2-10.0": 0.995
   },
   "crossover_if_independent": 95.4,
-  "switch_votes": 91.5,
-  "switch_interval_90": [
-   33.6,
-   524.9
-  ],
-  "switch_share_before_full_record": 0.852
+  "switch_test": {
+   "rule_shape": {
+    "switch_votes": 161,
+    "saved": 0.0028,
+    "saved_out_of_sample": [
+     -0.0426,
+     0.0,
+     0.0026
+    ],
+    "share_saving": 0.179
+   },
+   "all": {
+    "switch_votes": 92,
+    "saved": 0.0314,
+    "saved_out_of_sample": [
+     0.0,
+     0.0259,
+     0.0313
+    ],
+    "share_saving": 0.816
+   }
+  }
  },
- "prior_until_votes": 91.5,
+ "prior_until_votes": 200.0,
  "party_line_share_by_congress": {
   "senate": {
    "101": 0.458,

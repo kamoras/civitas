@@ -438,16 +438,16 @@ def _same_side(r) -> bool:
 
 
 def prior_crossover(data: list[tuple]) -> float | None:
-    """A rejected alternative for the flank rule's switch, reported only:
+    """An unstratified crossing for the flank rule's switch, reported only:
     the count at which a thin record would match the last Congress's full
     record if a thin record's noise and the drift between Congresses were
     independent. A last full record agrees with this Congress's at q, the
     full pairs' rate; a thin record is observed only against the other
     Congress's full record, a(n) = p q + (1 - p)(1 - q), so p = q where
     a(n) = q^2 + (1 - q)^2, solved on a logistic fit of agreement on log n.
-    The data reject the independence (full_by_distance: drift flips a side
-    mostly near the party's center, as noise does), which puts this too
-    early. None when agreement doesn't rise with the count."""
+    full_by_distance shows drift flips a side mostly near the party's
+    center, as noise does, which switch_model allows for by strata. None
+    when agreement doesn't rise with the count."""
     full = [r for r in data if r[5] == "full"]
     thin = [r for r in data if r[5] == "thin" and r[2] > 0]
     if not full or len(thin) < 3:
@@ -473,26 +473,24 @@ DISTANCE_BANDS = ((0.0, 0.02), (0.02, 0.05), (0.05, 0.1), (0.1, 0.2), (0.2, 10.0
 # Strata of distance from the party's center for the switch's model: the
 # side flips mostly near the center, by drift and noise alike.
 SWITCH_STRATA = (0.0, 0.05, 0.1)
-SWITCH_GRID = np.exp(np.linspace(0.0, np.log(5000.0), 2000))
+SWITCH_COUNTS = np.arange(1, RELIABLE_VOTES)  # the counts a switch can fall among
 
 
 def _stratum(x: float) -> int:
     return sum(abs(x) >= edge for edge in SWITCH_STRATA) - 1
 
 
-def prior_switch(data: list[tuple]) -> float | None:
-    """The flank rule's switch: the count at which a thin record places a
-    member on their side of the party as reliably as their last full record.
-
-    By distance from the center of the record it is compared with (strata,
-    SWITCH_STRATA), a last full record agrees with this Congress's at q_s,
-    the full pairs' rate. A thin record is observed only against the other
+def switch_model(data: list[tuple]):
+    """How well each record places a member on their side of the party,
+    by distance from the center of the record compared with (strata,
+    SWITCH_STRATA): (last full record's rate in the full pairs' mix, a thin
+    record's own-Congress rate at each of SWITCH_COUNTS in that mix), or
+    None. A last full record agrees with the next Congress's at q_s, the
+    full pairs' rate. A thin record is observed only against the other
     Congress's full record; with its noise and the drift independent within
     a stratum, its observed rate there is a_s(n) = p_s q_s + (1 - p_s)(1 -
-    q_s), p_s its agreement with its own Congress's full record. a_s(n) is
-    a logistic in log n with an intercept per stratum; the switch is where
-    p(n) = q over the strata in the full pairs' mix. None if that is past
-    the search (5,000 votes) or agreement doesn't rise with the count."""
+    q_s), p_s its agreement with its own Congress's full record (clipped to
+    [0, 1]). a_s(n) is a logistic in log n with an intercept per stratum."""
     full = [r for r in data if r[5] == "full"]
     thin = [r for r in data if r[5] == "thin" and r[2] > 0]
     k = len(SWITCH_STRATA)
@@ -511,31 +509,73 @@ def prior_switch(data: list[tuple]) -> float | None:
         beta += step
         if np.abs(step).max() < 1e-10:
             break
-    present = mix > 0  # strata with full pairs: only they enter the mix
-    if beta[-1] <= 0 or np.any(2 * q[present] - 1 <= 0):
+    present = (mix > 0) & np.array([any(_stratum(r[4]) == s for r in thin) for s in range(k)])
+    if not present.any() or np.any(2 * q[present] - 1 <= 0):
         return None
-    a = 1 / (1 + np.exp(-(beta[:k][None, present] + beta[-1] * np.log(SWITCH_GRID)[:, None])))
-    own = (a - (1 - q[present])) / (2 * q[present] - 1)
-    reached = np.nonzero(own @ mix[present] >= q[present] @ mix[present])[0]
-    return float(SWITCH_GRID[reached[0]]) if len(reached) else None
+    w = mix[present] / mix[present].sum()
+    a = 1 / (1 + np.exp(-(beta[:k][None, present] + beta[-1] * np.log(SWITCH_COUNTS)[:, None])))
+    own = np.clip((a - (1 - q[present])) / (2 * q[present] - 1), 0.0, 1.0)
+    return float(q[present] @ w), own @ w
 
 
+def misplaced(model, switch: float) -> float:
+    """The share of sides misplaced over counts 1 to RELIABLE_VOTES - 1,
+    each equally likely, reading the last full record below `switch` and
+    the new record from it."""
+    last, own = model
+    return float(np.mean(np.where(SWITCH_COUNTS < switch, 1 - last, 1 - own)))
 
 
-def prior_test(data: list[tuple], seed: int = 0) -> dict:
+def best_switch(model) -> int:
+    """The switch with the fewest misplaced sides; RELIABLE_VOTES is no
+    switch short of a full record."""
+    return min(range(1, RELIABLE_VOTES + 1), key=lambda s: misplaced(model, s))
+
+
+def switch_test(data: list[tuple], seed: int = 0) -> dict | None:
+    """Whether a switch short of a full record places members better than
+    keeping the last full record until the new one is full: the best switch
+    on `data`, the share of sides it saves there, and the share saved out of
+    sample (a switch chosen on members resampled, judged on all of them),
+    with its 5th, 50th and 95th percentiles and how often it saves any."""
+    model = switch_model(data)
+    if model is None:
+        return None
+    switch = best_switch(model)
+    rng = np.random.default_rng(seed)
+    by_member: dict[str, list[tuple]] = {}
+    for row in data:
+        by_member.setdefault(row[1], []).append(row)
+    ids = sorted(by_member)
+    saved = []
+    for _ in range(BOOTSTRAP):
+        drawn = switch_model([row for i in rng.choice(ids, len(ids)) for row in by_member[i]])
+        chosen = RELIABLE_VOTES if drawn is None else best_switch(drawn)
+        saved.append(misplaced(model, RELIABLE_VOTES) - misplaced(model, chosen))
+    saved = np.array(saved)
+    return {"switch_votes": switch,
+            "saved": round(misplaced(model, RELIABLE_VOTES) - misplaced(model, switch), 4),
+            "saved_out_of_sample": [round(float(v), 4) for v in np.percentile(saved, (5, 50, 95))],
+            "share_saving": round(float((saved > 0).mean()), 3)}
+
+
+def prior_test(data: list[tuple]) -> dict:
     """The flank rule's choice (party_line_record): read a member's side of
     their party from their last full record or from this Congress's thin
     one? `data` is centered as the rule centers (each party's weighted mean
     in that Congress). Over the pairs, how often each puts the member on
     the same side as their full record in the other Congress, and the mean
     squared gap: full records against the next Congress's full record,
-    thin records by count band against their pair's full one. A thin
-    record is compared across a Congress here, the rule's comparison
-    within one, so one Congress's drift is taken out by prior_switch, which
-    models it within strata of distance from the center (full_by_distance:
-    drift flips a side mostly near it, as noise does). switch_votes is that
-    switch with its interval over members resampled; crossover_if_independent
-    is the same without the strata, reported for comparison."""
+    thin records by count band against their pair's full one.
+
+    switch_test asks whether a switch short of a full record does better,
+    on the pairs shaped like the rule's case ("rule_shape": a full record,
+    then the first votes of the next Congress, members who left) and on
+    all of them. A thin record is compared across a Congress here, the
+    rule within one, so switch_model takes one Congress's drift out within
+    strata of distance from the center (full_by_distance: drift flips a
+    side mostly near it, as noise does). crossover_if_independent is the
+    unstratified crossing, reported for comparison."""
     def summary(rows):
         return {"pairs": len(rows),
                 "same_side": round(sum(map(_same_side, rows)) / len(rows), 3),
@@ -552,29 +592,24 @@ def prior_test(data: list[tuple], seed: int = 0) -> dict:
     }
     crossover = prior_crossover(data)
     out["crossover_if_independent"] = None if crossover is None else round(crossover, 1)
-    switch = prior_switch(data)
-    rng = np.random.default_rng(seed)
-    by_member: dict[str, list[tuple]] = {}
-    for row in data:
-        if row[5] != "uncounted":
-            by_member.setdefault(row[1], []).append(row)
-    ids = sorted(by_member)
-    draws = np.array([np.inf if (v := prior_switch([row for i in rng.choice(ids, len(ids)) for row in by_member[i]]))
-                      is None else v for _ in range(BOOTSTRAP)])
-    out["switch_votes"] = None if switch is None else round(switch, 1)
-    out["switch_interval_90"] = [round(float(v), 1) if np.isfinite(v) else None
-                                 for v in np.percentile(draws, (5, 95))]
-    out["switch_share_before_full_record"] = round(float((draws < RELIABLE_VOTES).mean()), 3)
+    usable = [r for r in data if r[5] != "uncounted"]
+    out["switch_test"] = {
+        "rule_shape": switch_test([r for r in usable if r[5] == "full" or r[8]]),
+        "all": switch_test(usable),
+    }
     return out
 
 
 def prior_until_votes(test: dict) -> float:
-    """The count below which the flank rule reads the last full record: the
-    switch's point estimate (the choice with the fewest expected misplaced
-    sides, its uncertainty reported beside it), or a full record when the
-    switch is past one or not found."""
-    switch = test.get("switch_votes")
-    return float(RELIABLE_VOTES if switch is None else min(switch, RELIABLE_VOTES))
+    """The count below which the flank rule reads the last full record: a
+    full record (no switch short of one) unless, on the pairs shaped like
+    the rule's case, a switch chosen from the data saves sides out of sample
+    in at least 95% of resamples (its 5th percentile above 0); then that
+    switch."""
+    shape = (test.get("switch_test") or {}).get("rule_shape")
+    if shape and shape["saved_out_of_sample"][0] > 0:
+        return float(shape["switch_votes"])
+    return float(RELIABLE_VOTES)
 
 
 def bootstrap(data: list[tuple], structure: str, seed: int = 0) -> dict:
@@ -666,11 +701,14 @@ def main() -> None:
     ap.add_argument("--out", type=pathlib.Path, default=OUT)
     args = ap.parse_args()
     calibrated = calibrate(args.cache)
+    # With a cache, the exports are as old as the newest cached file.
+    cached = [f.stat().st_mtime for f in args.cache.glob("*.csv")] if args.cache else []
+    retrieved = (datetime.date.fromtimestamp(max(cached)) if cached else datetime.date.today()).isoformat()
     data = {
         "_source": (
             f"Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses "
             f"{FIRST_CONGRESS}-{calibrated['calibrated_through']} (later ones still thin by the calendar "
-            f"are left out), retrieved {datetime.date.today().isoformat()}; "
+            f"are left out), exports retrieved {retrieved}; "
             "regenerate with backend/scripts/calibrate_position_confidence.py"
         ),
         "_method": (
@@ -693,7 +731,8 @@ def main() -> None:
             "the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, "
             "a last full record and a thin record as evidence of a member's side of their party, "
             "centered as the rule centers, and prior_until_votes is the count below which the rule "
-            "reads the last full record (prior_test's switch_votes, at most a full record); "
+            "reads the last full record (a full record unless a switch short of one saves sides out "
+            "of sample in 95% of resamples on pairs shaped like the rule's case, prior_until_votes); "
             "structure_test is the one-standard-error rule's comparison"
         ),
         **calibrated,

@@ -174,7 +174,15 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             found_at = [i for i in found_at if _normalize_for_match((members[i].get("name") or "").split(" ")[0]) == first]
         return found_at[0] if len(found_at) == 1 else None
 
-    parties = [(m.get("votingRecord") or {}).get("effectiveParty") or m.get("party") for m in members]
+    # The chamber's stored members' parties (an independent's caucus party):
+    # every member passed without a voting record (the rest of the chamber
+    # on a filtered run) reads its party from here, and each section's party
+    # centers cover the whole chamber however few members this run scores.
+    model = Senator if chamber == "senate" else Representative
+    stored: dict[str, str] = {
+        b: caucus or p for b, p, caucus in db.query(model.bioguide_id, model.party, model.caucus_party) if b}
+    parties = [(m.get("votingRecord") or {}).get("effectiveParty") or stored.get(m.get("bioguideId") or "")
+               or m.get("party") for m in members]
     tenures = load_leadership_tenures()
     spans = [majority_leader_spans(m.get("leadershipTitle"), tenures.get(m.get("bioguideId"))) for m in members]
     # Any Congress's section: this rule needs only which side of their party
@@ -184,21 +192,16 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # Once the new Congress's section is in, its positions rest on a few roll
     # calls at first, so a member's last-Congress full record ("prior",
     # voteview.previous_positions) decides their side until their new record
-    # reaches the measured prior_until_votes (position_confidence.json:
-    # below it, the last full record places a member on their side more
-    # reliably; a section without the key falls back to a full record's
-    # count, or without that to the more reliable). Each section's
+    # reaches prior_until_votes (position_confidence.json: a full record,
+    # unless a shorter switch is shown to place members better; a section
+    # without the key falls back to a full record's count, or without that
+    # to the more reliable). Each section's
     # positions are read from their own party's mean in that section, so a
     # party-wide shift between the two Congresses can't move a member who is
     # read from one against a party read from the other.
     ideal = _member_ideal_points(chamber) or {}
 
-    # Every member's party, the chamber's stored members first, so each
-    # section's party centers cover the whole chamber however few members
-    # this run passes (a run for one senator).
-    model = Senator if chamber == "senate" else Representative
-    party_of: dict[str, str] = {
-        b: caucus or p for b, p, caucus in db.query(model.bioguide_id, model.party, model.caucus_party) if b}
+    party_of: dict[str, str] = dict(stored)
     if chamber == "house":
         # The House's roll calls name every member's bioguide and party.
         party_of.update({p.member_id: p.party for ps in positions.values() for p in ps if p.member_id})
@@ -218,24 +221,35 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             if mine:
                 center[party] = sum(x * w for x, w in mine) / sum(w for _, w in mine)
         return {b: (x - center.get(party_of.get(b), 0.0), w) for b, (x, w) in points.items()}
-    dim1 = weighted(ideal)
+    # The positions of the roll calls' Congress lead: the section's, or, when
+    # the section is already the next Congress's (refreshed after Jan 3,
+    # before its first roll call is stored), the prior it keeps; a section
+    # carried from the last Congress (its successor not yet in) is itself
+    # the last Congress's, and its own prior would be older still.
+    kept = ideal.get("prior") if isinstance(ideal.get("prior"), dict) else {}
+
+    def of(section) -> int | None:
+        return int(section["congress"]) if section.get("congress") is not None else None
+    if kept and of(ideal) != congress and of(kept) == congress:
+        main, prior = kept, {}
+    else:
+        main, prior = ideal, kept if of(ideal) == congress else {}
+    dim1 = weighted(main)
+    for b, xw in weighted(ideal if main is kept else {}).items():
+        dim1.setdefault(b, xw)
     reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else {}
     full = reliability.get("reference_votes")
     until = reliability.get("prior_until_votes", full)
-    counts = ideal.get("votes") or {}
-    # A section carried from the last Congress (its successor not yet in)
-    # is itself the last Congress's; its own prior would be older still.
-    current = ideal.get("congress") is not None and int(ideal["congress"]) == int(congress)
-    prior = ideal.get("prior") if current and isinstance(ideal.get("prior"), dict) else {}
+    counts = main.get("votes") or {}
     prior_counts = prior.get("votes") or {}
     for b, (x, w) in weighted(prior).items():
         if b not in dim1:
             dim1[b] = (x, w)
         elif full:
-            # A last full record decides until the new record reaches the
-            # measured switch (calibrate_position_confidence.prior_switch:
-            # where a new record places a member on their side of the party
-            # as reliably). Only a full last record was measured, so a thin
+            # A last full record decides until the new record reaches
+            # prior_until_votes (calibrate_position_confidence: a full record,
+            # unless a switch short of one is shown to place members better
+            # out of sample). Only a full last record was measured, so a thin
             # one doesn't replace this Congress's.
             n, last = counts.get(b), prior_counts.get(b)
             if (n is None or n < float(until)) and last is not None and float(last) >= float(full):

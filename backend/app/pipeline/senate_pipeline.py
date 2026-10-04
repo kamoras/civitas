@@ -2003,7 +2003,7 @@ async def run_senate_pipeline(
         scored = [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared]
         ids = {m.get("id") for m in scored}
         rest = [s for s in roster if s.get("id") not in ids] if senator_filter else []
-        for p, record in zip(senator_prepared, party_line_records(db, "senate", scored + rest)):
+        for p, record in zip(senator_prepared, party_line_records(db, "senate", scored + rest) if scored else []):
             p["votingRecord"]["partyLineRecord"] = record
 
         funding_reference = live_funding_reference(

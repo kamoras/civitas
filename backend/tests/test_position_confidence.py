@@ -129,7 +129,8 @@ def test_shipped_file_documents_its_source_and_intervals():
     # dependence that rejects it: drift flips a side mostly near the center.
     by_distance = list(data["prior_test"]["full_by_distance"].values())
     assert by_distance == sorted(by_distance)
-    # The flank rule's switch: the measured one, at most a full record.
+    # The flank rule's switch: a full record unless a shorter one is shown
+    # to save sides out of sample on pairs shaped like the rule's case.
     assert data["prior_until_votes"] == _script().prior_until_votes(data["prior_test"]) <= 200
 
 
@@ -228,24 +229,68 @@ def test_deviations_can_center_as_the_flank_rule_does():
     assert abs(weighted["3"][1] - (center + 0.9)) < 1e-12
 
 
-def test_the_switch_takes_the_drift_out_within_each_distance_stratum():
-    """Full pairs agree 60% near the center and 100% far from it, half and
-    half. Thin records near the center are observed at 0.6 p + 0.4 (1 - p),
-    so where they look as good as full ones there (60%), they are better
-    within their own Congress: the switch comes before the raw crossing.
-    No switch when agreement doesn't rise with the count."""
-    script = _script()
-    full = [("H", f"N{i}", 600.0, 0.01, 0.01 if i % 5 < 3 else -0.01, "full", 110, 0.5, False) for i in range(50)]
-    full += [("H", f"F{i}", 600.0, 0.3, 0.3, "full", 110, 0.5, False) for i in range(50)]
+def _switch_pairs(near_rates, far_rates, counts=(10, 30, 100, 300)):
+    """Full pairs agreeing 60% near the party's center, 100% far from it,
+    half and half; ten thin pairs per count and stratum, agreeing as given."""
+    full = [("H", f"N{i}", 600.0, 0.01, 0.01 if i % 5 < 3 else -0.01, "full", 110, 0.5, True) for i in range(50)]
+    full += [("H", f"F{i}", 600.0, 0.3, 0.3, "full", 110, 0.5, True) for i in range(50)]
     thin = []
-    for n, near, far in ((10, 3, 6), (30, 5, 8), (100, 6, 10), (300, 8, 10)):
-        thin += [("H", f"T{n}n{i}", float(n), 0.01, 0.01 if i < near else -0.01, "thin", 110, 0.5, False)
+    for n, near, far in zip(counts, near_rates, far_rates):
+        thin += [("H", f"T{n}n{i}", float(n), 0.01, 0.01 if i < near else -0.01, "thin", 110, 0.5, True)
                  for i in range(10)]
-        thin += [("H", f"T{n}f{i}", float(n), 0.3, 0.3 if i < far else -0.3, "thin", 110, 0.5, False)
+        thin += [("H", f"T{n}f{i}", float(n), 0.3, 0.3 if i < far else -0.3, "thin", 110, 0.5, True)
                  for i in range(10)]
-    switch = script.prior_switch(full + thin)
-    assert switch is not None and 10 < switch < 300
-    assert script.prior_until_votes({"switch_votes": switch}) == min(switch, 200.0)
-    assert script.prior_until_votes({"switch_votes": None}) == 200.0
-    flat = [r[:2] + (float(10 + i),) + r[3:] for i, r in enumerate(t for t in thin if t[2] == 10.0)]
-    assert script.prior_switch(full + flat) is None
+    return full + thin
+
+
+def test_the_switch_takes_the_drift_out_within_each_distance_stratum():
+    """Thin records near the center are observed at 0.6 p + 0.4 (1 - p):
+    where they look as good as full ones (60%), they are better within their
+    own Congress. With the drift taken out the best switch comes earlier
+    than without it (the observed rates read as own-Congress ones)."""
+    script = _script()
+    data = _switch_pairs((3, 5, 6, 8), (6, 8, 10, 10))
+    model = script.switch_model(data)
+    switch = script.best_switch(model)
+    last, own = model
+    raw = min(range(1, 201), key=lambda s: float(sum((1 - last) if n < s else (1 - a)
+              for n, a in zip(script.SWITCH_COUNTS, _observed(script, data)))))
+    assert switch < raw
+    assert script.misplaced(model, switch) <= script.misplaced(model, 200)
+    # No switch beats a full record when agreement doesn't rise with the count.
+    flat = _switch_pairs((3, 3, 3, 3), (6, 6, 6, 6))
+    assert script.best_switch(script.switch_model(flat)) == 200 or script.switch_model(flat) is None
+
+
+def _observed(script, data):
+    """The fitted observed (cross-Congress) agreement at each count, in the
+    full pairs' mix: the model without the drift taken out."""
+    import numpy as np
+    full = [r for r in data if r[5] == "full"]
+    thin = [r for r in data if r[5] == "thin"]
+    k = len(script.SWITCH_STRATA)
+    mix = np.array([sum(script._stratum(r[4]) == s for r in full) for s in range(k)], float) / len(full)
+    x = np.column_stack([np.array([[script._stratum(r[4]) == s for s in range(k)] for r in thin], float),
+                         np.log([r[2] for r in thin])])
+    y = np.array([script._same_side(r) for r in thin], float)
+    b = np.zeros(k + 1)
+    for _ in range(100):
+        p = 1 / (1 + np.exp(-x @ b))
+        b += np.linalg.solve(x.T @ (x * (p * (1 - p))[:, None]) + 1e-6 * np.eye(k + 1), x.T @ (y - p) - 1e-6 * b)
+    present = mix > 0
+    a = 1 / (1 + np.exp(-(b[:k][None, present] + b[-1] * np.log(script.SWITCH_COUNTS)[:, None])))
+    return a @ (mix[present] / mix[present].sum())
+
+
+def test_a_switch_short_of_a_full_record_must_save_sides_out_of_sample(monkeypatch):
+    """prior_until_votes is a full record unless the rule-shaped pairs'
+    switch saves sides out of sample in 95% of resamples."""
+    script = _script()
+    monkeypatch.setattr(script, "BOOTSTRAP", 40)
+    strong = script.switch_test(_switch_pairs((6, 9, 10, 10), (8, 10, 10, 10)))
+    assert strong["switch_votes"] < 200 and strong["saved"] > 0
+    assert script.prior_until_votes({"switch_test": {"rule_shape": strong}}) == (
+        strong["switch_votes"] if strong["saved_out_of_sample"][0] > 0 else 200.0)
+    weak = {"switch_votes": 150, "saved": 0.001, "saved_out_of_sample": [-0.01, 0.0, 0.001], "share_saving": 0.4}
+    assert script.prior_until_votes({"switch_test": {"rule_shape": weak}}) == 200.0
+    assert script.prior_until_votes({"switch_test": {"rule_shape": None}}) == 200.0
