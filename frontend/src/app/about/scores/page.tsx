@@ -217,22 +217,22 @@ export default function ScoresChapter() {
               is listed on the profile but not counted here, because how far toward the flank a
               member sits is measured by where their record sits (below), which is scored once this
               Congress&apos;s positions pass our checks
-              <Cite id="kirkland2017" />. Which side of their party a member sits on: before this
-              Congress&apos;s positions are published and pass our checks, everyone is read on the
-              last Congress&apos;s position. After that, a member&apos;s own position this Congress
-              decides once it rests on 200 roll calls (our convention); until then a full record
-              from the last Congress decides, and without one this Congress&apos;s position so far
-              does. A member with no position yet this Congress is read on the last Congress&apos;s,
-              however short (our choice; nothing measured it). Once this Congress&apos;s positions
-              are in, the last Congress&apos;s position is never used for a member who has switched
-              parties, during this Congress or between the two, since it was cast in their old
-              party, and a position recorded under the other major party is never read for the
-              member. The last Congress&apos;s position is used only for this, never scored. Using
-              the last Congress&apos;s record once this Congress&apos;s positions are in (a full
-              record, or any record for a member with no position yet) begins with the 120th
-              Congress, from January 2027: the 118th Congress&apos;s positions weren&apos;t kept
-              before this change. Every break on a profile shows that roll call&apos;s party
-              tallies.
+              <Cite id="kirkland2017" />. Which side of their party a member sits on is read from
+              their voting position. Before this Congress&apos;s positions are published and pass
+              our checks, everyone is read on the last Congress&apos;s position. After that, a
+              member&apos;s own position this Congress decides once it rests on 200 roll calls (our
+              convention); until then a full record from the last Congress decides, and without one
+              this Congress&apos;s position so far does. A member with no position yet this Congress
+              is read on the last Congress&apos;s, however short (our choice; nothing measured it).
+              Once this Congress&apos;s positions are in, the last Congress&apos;s position is never
+              used for a member who has switched parties, during this Congress or between the two,
+              since it was cast in their old party, and a position recorded under the other major
+              party is never read for the member. The last Congress&apos;s position is used only for
+              this, never scored. Using the last Congress&apos;s record once this Congress&apos;s
+              positions are in (a full record, or any record for a member with no position yet)
+              begins with the 120th Congress, from January 2027: the 118th Congress&apos;s positions
+              weren&apos;t kept before this change. Every break on a profile shows that roll
+              call&apos;s party tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
