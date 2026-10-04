@@ -288,21 +288,23 @@ Key mathematical properties:
   The third, whose rate is measured rather than fixed: Constituent
   Alignment's position part (v6.27) scales a roll-call position's distance
   from the seat's expected position, when the position rests on n votes, by
-  min(1, w(n) / w(200)), w(n) = n / (n + n0): the measured slope of a
-  member's full-record position on their thin one, a full record counting 1.
-  n0 is fitted on Voteview's own adjacent-Congress records with drift per
-  transition (`scripts/calibrate_position_confidence.py`), one curve for
-  both chambers: the latest era's, since the 110th Congress (a split by
-  convention). It is chosen by predicting forward, each transition's n0 from
-  the earlier ones only (its drift, shared by every structure, from its own
-  full pairs), as the weight is used: it beats one curve over every Congress
-  by 0.066 (standard error 0.034; over the last three transitions alone the
-  gain is about one standard error, so weakly settled) and a curve per
-  chamber predicts no better; a paired one-standard-error rule (a
-  convention, adopted in review after the forward result was seen) decides,
-  and a rerun decides again. The split is a fixed Congress, so nothing is
-  reset for a new Congress. It is a reliability weight, not a count
-  threshold.
+  min(1, w(n) / w(200)) (a full record at 200 votes, a convention), w(n) = n
+  / (n + n0): the measured slope of a member's full-record position on their
+  thin one, a full record counting 1. n0 is fitted on Voteview's own
+  adjacent-Congress records with drift per transition
+  (`scripts/calibrate_position_confidence.py`), one curve for both chambers:
+  the latest era's, since the 110th Congress (a split by convention, fixed
+  before the forward comparisons though era results at it had been reported
+  before). It is chosen by predicting forward, each transition's n0 from the
+  earlier ones only (its drift, shared by every structure, from its own full
+  pairs), as the weight is used: it beats one curve over every Congress by
+  0.066 (standard error 0.034; over the last three transitions alone the
+  gain is about one standard error, computed from `last_three`, so weakly
+  settled) and a curve per chamber predicts no better; a paired
+  one-standard-error rule (a convention, adopted in review after the forward
+  result was seen) decides, and a rerun decides again. The split is a fixed
+  Congress, so nothing is reset for a new Congress. It is a reliability
+  weight, not a count threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Constituent Alignment scores account for Cook

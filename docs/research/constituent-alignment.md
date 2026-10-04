@@ -800,7 +800,8 @@ in a fixed order, 1,000 times.
   the one that matches the use. Repeated at every split (`era_split_test`),
   a recent era's curve would be adopted (beats one curve by more than a
   standard error) at 4 of 16 splits (113th–115th, 117th), by 1.0 to 1.5
-  standard errors, each at the slowest curve the search grid allows (half
+  standard errors (computed from `era_split_test`'s above and
+  standard_error), each at the slowest curve the search grid allows (half
   point 98); that extreme rests on one member at the 113th to 115th (leaving
   one out, n0 falls to 279–475), but without them the slower curve is still
   adopted at the 113th and 114th (half points 75.5 and 82.6) and no single
@@ -1220,8 +1221,9 @@ rule's means reclassifies 0 of 2,351 Senate and 2 of 6,055 House breaks
   flank rule's switch can't be measured at all: only 3 pairs have the
   rule's shape. Reading a party switcher on their record since the switch
   rests on 8 people, and beats the longer record by about one and a half
-  standard errors. Rerunning the calibration adds each Congress's new
-  pairs, and decides the structure and the switch again.
+  standard errors (computed from `switcher_test`). Rerunning the
+  calibration adds each Congress's new pairs, and decides the structure
+  and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight
