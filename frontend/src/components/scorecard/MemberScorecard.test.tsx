@@ -349,7 +349,7 @@ describe("MemberScorecard", () => {
         committees={[]}
       />
     );
-    expect(screen.getByText(/belongs to position congruence, scored below\./)).toBeInTheDocument();
+    expect(screen.getByText(/measured by position congruence, scored below\./)).toBeInTheDocument();
   });
 
   it("shows constituents' approval by party in the alignment column, marked not scored", async () => {

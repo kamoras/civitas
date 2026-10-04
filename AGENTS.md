@@ -604,8 +604,10 @@ party a defector sits on: for everyone until the new Congress's
 Voteview section passes its gates; after that, for a member whose new
 record has no count or fewer than `prior_until_votes` votes
 (`app/data/position_confidence.json`: 200, a full record) if their last
-record was full; and, whatever the last
-record, for a member the new section gives no usable position. The 200
+record was full; and, whatever the last record, for a member the new
+section gives no usable position. Never, once the new section is in, for
+a member who switched parties during the new Congress (`switched` in the
+section): their last positions were cast in their old party. The 200
 and the bar for replacing it are conventions: the calibration would
 adopt a shorter switch only if it placed members on the right side
 better out of bag in 95% of resamples, and too few thin records have the

@@ -208,7 +208,8 @@ export default function ScoresChapter() {
               party lines as a matter of course. Each bill or nomination counts once, however many
               times it came to a vote: cloture and then confirmation on one nominee is one decision.
             </Step>
-            {/* The 200 below is prior_until_votes in backend/app/data/position_confidence.json, pinned by test_position_confidence.py. */}
+            {/* The 200 below is prior_until_votes in backend/app/data/position_confidence.json,
+                pinned by test_position_confidence.py. */}
             <Step n={2} title="Count breaks toward the other party">
               A member breaks when they vote with the other side <em>and</em> the party&apos;s
               members who broke on that vote sit nearer the other party than the party does. A vote
@@ -219,10 +220,12 @@ export default function ScoresChapter() {
               their position this Congress once it rests on 200 roll calls. Until then, a full
               record from the last Congress decides it; without one, this Congress&apos;s position
               so far does, and a member with no position yet this Congress is read on the last
-              Congress&apos;s, however short. Before this Congress&apos;s positions are published
-              and pass our checks, everyone is read on the last Congress&apos;s. The last
-              Congress&apos;s position is used only for this, never scored. Every break on a profile
-              shows that roll call&apos;s party tallies.
+              Congress&apos;s, however short. Once this Congress&apos;s positions are in, a member
+              who has switched parties is never read on the last Congress&apos;s position, which was
+              cast in their old party. Before they are published and pass our checks, everyone is
+              read on the last Congress&apos;s. The last Congress&apos;s position is used only for
+              this, never scored. Every break on a profile shows that roll call&apos;s party
+              tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
@@ -257,7 +260,9 @@ export default function ScoresChapter() {
           </P>
         </Sub>
         <Sub title="Where their voting record sits">
-          {/* The half point (about 36) and the full-strength count (200) come from backend/app/data/position_confidence.json; test_position_confidence.py fails when they drift apart. */}
+          {/* The half point (about 36) and the full-strength count (200) come from
+              backend/app/data/position_confidence.json; test_position_confidence.py fails when
+              they drift apart. */}
           <P>
             The other 30% compares the member&apos;s overall roll-call position from Voteview: the
             congress-specific Nokken-Poole estimate

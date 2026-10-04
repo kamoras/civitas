@@ -248,7 +248,7 @@ export default function AlignmentColumn({
           <p className="text-xs leading-relaxed text-ink-min">
             On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further from
             the {OTHER_PARTY[facts.party] ?? "other party"} than the party does. How far toward the
-            flank the member sits belongs to position congruence
+            flank the member sits is measured by position congruence
             {positionScored ? ", scored below." : ", which isn't scored yet this Congress."}
           </p>
           <ul className="flex flex-col gap-2.5">

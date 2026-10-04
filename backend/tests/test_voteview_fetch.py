@@ -254,7 +254,8 @@ class TestRefresh:
     async def test_a_switch_that_cant_be_told_apart_keeps_the_previous_section(self, monkeypatch, tmp_path):
         """No last-Congress export: the refresh keeps the previous section
         rather than guess. Both ids new (a switch in a first Congress): the
-        vote export's first roll calls decide, and without it, the same."""
+        vote export's first roll calls decide; if that export can't be
+        read either, the previous section is kept."""
         path = _patch_path(monkeypatch, tmp_path)
         state_pvi = score_calculator._state_pvi()
         rows = [{**r, "icpsr": str(1000 + i)} for i, r in enumerate(_synthetic_rows(state_pvi))]

@@ -62,7 +62,9 @@ the earlier, mostly members who arrived, or the later, mostly members who
 left or were absent at the end) and attendance (attended arrivals and
 departures against the rest) are tested the same way and reported, not
 used: neither can be known for a sitting member's record. Members who
-switched parties during a Congress are left out (deviations).
+switched parties during a Congress are left out of the fit
+(deviations()); switcher_test reports which of their records best
+predicts the next Congress's.
 
 prior_test is the evidence for the flank rule's use of the last
 Congress's full record (party_line_record), on pairs centered as that

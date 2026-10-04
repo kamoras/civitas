@@ -487,7 +487,8 @@ new Congress, the last Congress's) than the party does
 (`party_line_record._toward_other_party`). Since v6.27 each position is
 weighted by its reliability, and until a member's new record reaches 200
 roll calls their last Congress's full record, where they have one,
-decides their side (section 14). Other breaks are listed on the
+decides their side (section 14; never for a member who switched parties
+this Congress). Other breaks are listed on the
 scorecard as from the flank, and not counted. The rate is measured over
 every roll call the chamber recorded this Congress, not a sample.
 
@@ -883,8 +884,8 @@ itself a sign of how little these data settle.
       switch isn't read.
     - Until Voteview places the record since the switch, the member has
       no position (50), never the old one.
-    - The flank rule never reads such a member's last Congress (cast in
-      their old party).
+    - Once the new Congress's section is in, the flank rule never reads
+      such a member's last Congress (cast in their old party).
     - The record since the switch is the id the last Congress's export
       didn't have, or, when both ids are new (a switch in a member's
       first Congress), the one whose first roll call comes last in the
