@@ -181,12 +181,12 @@ def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_ses
     section["votes"]["R4"] = 500
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
 
-    # With the measured switch point, the last record decides below it
-    # whatever the weights, and the new one from it.
-    section["reliability"] = {"n0": 24, "prior_until_votes": 50}
-    section["votes"]["R4"] = 49
+    # With a full record's count known, a full last record decides until the
+    # new record is full, whatever the weights, and the new one from then.
+    section["reliability"] = {"n0": 24, "reference_votes": 200}
+    section["votes"]["R4"] = 199
     assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
-    section["votes"]["R4"] = 50
+    section["votes"]["R4"] = 200
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
     del section["votes"]["R4"]  # no count reported: read as thin
     assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
@@ -235,3 +235,28 @@ def test_each_congresss_positions_are_read_from_their_own_partys_mean(db_session
     _roll_call(db_session, "house", 33, "On Passage", "HR.8", {"R4": "Nay"})
     db_session.commit()
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+
+
+def test_a_run_for_one_senator_reads_their_breaks_as_the_full_chamber_would(db_session, monkeypatch):
+    """A single-senator run passes one member, so no colleague's roll-call
+    vote can be tied to a position. R0 breaking from the center still
+    counts and R4 breaking from the flank still doesn't: each is read
+    against the party's own center in the section, taken over the
+    chamber's stored senators."""
+    from app.models import Senator
+    monkeypatch.setattr(party_line_record, "_member_ideal_points",
+                        lambda chamber: {"members": {f"bio-{m}": d for m, d in DIM1.items()}})
+    for m in DIM1:
+        db_session.add(Senator(id=f"S-{m}", bioguide_id=f"bio-{m}", name=f"{m} Last{m}", state="TN", party=m[0]))
+    _roll_call(db_session, "senate", 24, "On Passage", "S.24", {"R0": "Nay"})
+    _roll_call(db_session, "senate", 25, "On Passage", "S.25", {"R4": "Nay"})
+    db_session.commit()
+    members = _members()
+    for m in members:
+        m["bioguideId"] = f"bio-{m['bioguideId']}"
+    full = party_line_records(db_session, "senate", members)
+    for i, rc in ((0, "senate-119-2-24"), (4, "senate-119-2-25")):
+        (alone,) = party_line_records(db_session, "senate", [members[i]])
+        assert alone["breaks"] == full[i]["breaks"] and alone["flankBreaks"] == full[i]["flankBreaks"]
+    assert full[0]["breaks"] == [{"rollCall": "senate-119-2-24", "vote": "Nay"}]
+    assert full[4]["flankBreaks"] == [{"rollCall": "senate-119-2-25", "vote": "Nay"}]

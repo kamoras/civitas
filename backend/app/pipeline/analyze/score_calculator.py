@@ -532,15 +532,15 @@ _position_reliability_cache: dict | None = None
 
 
 def _position_reliability(chamber: str) -> dict:
-    """{"n0", "reference_votes", "half_weight_votes", "uncounted_weight",
-    "prior_until_votes"} (the last for party_line_record's flank rule):
+    """{"n0", "reference_votes", "half_weight_votes", "uncounted_weight"}:
     the reliability weight a congress-specific (Nokken-Poole) position in
     `chamber` gets (v6.27, position_confidence). Measured by
     scripts/calibrate_position_confidence.py on Voteview's own positions:
     members with a thin record in one Congress and a full one in the next,
     against full records' drift over the same transition (research note
-    section 14). One curve per chamber or one for both, whichever predicts
-    held-out members better, for every Congress (a party-line term was
+    section 14). One curve for both chambers unless one per chamber
+    predicts held-out members better by more than the noise, for every
+    Congress (a party-line term was
     tested and found no support), so nothing in it follows the sitting
     Congress.
 
@@ -559,8 +559,7 @@ def _position_reliability(chamber: str) -> dict:
             _position_reliability_cache = {
                 name: {"n0": float(c["n0"]), "half_weight_votes": float(c["half_weight_votes"]),
                        "reference_votes": float(raw["reference_votes"]),
-                       "uncounted_weight": float(raw["uncounted_weight"]),
-                       "prior_until_votes": float(raw["prior_until_votes"])}
+                       "uncounted_weight": float(raw["uncounted_weight"])}
                 for name, c in raw["chambers"].items()
             }
         except Exception:

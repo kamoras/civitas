@@ -880,7 +880,11 @@ def _weights(M, chamber):
     election panels, where almost every incumbent has a full record."""
     rel = score_calculator._position_reliability(chamber)
     n = pd.to_numeric(M.get("nominate_number_of_votes"), errors="coerce")
-    return np.array([score_calculator.position_confidence(None if v != v else int(v), rel) for v in n])
+    career = pd.to_numeric(M["nominate_dim1"], errors="coerce").notna() if "nominate_dim1" in M else n.notna()
+    # As the pipeline stores them (fetch/voteview.py): no count (or 0) with a
+    # career position is uncounted; with neither, no votes.
+    return np.array([score_calculator.position_confidence(
+        (None if c else 0) if v != v or v <= 0 else int(v), rel) for v, c in zip(n, career)])
 
 
 def _drop_placeholders(M):
@@ -1254,8 +1258,8 @@ def position_scale_test(p, m):
           f"{shipped['party_line_test']}; no-count weight {shipped['uncounted_weight']} (one member left out: "
           f"{shipped['uncounted_weight_leave_one_out']})")
     print(f"  flank rule, last full record against a thin one (same side of the party as the full record "
-          f"across a Congress): {shipped['prior_test']}; reads the last full record below "
-          f"{shipped['prior_until_votes']} votes")
+          f"across a Congress, centered as the rule centers): {shipped['prior_test']}; structure test "
+          f"{shipped['structure_test']}")
     for c, by in shipped["party_line_share_by_congress"].items():
         print(f"  {c} party-line share by Congress: " + ", ".join(f"{k}:{v:.2f}" for k, v in by.items()))
     _full_record_gradient(p)

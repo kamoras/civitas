@@ -291,10 +291,10 @@ Key mathematical properties:
   w(n) = n / (n + n0): the measured slope of a member's full-record
   position on their thin one, a full record counting 1. n0 is fitted on
   Voteview's own adjacent-Congress records with drift per transition
-  (`scripts/calibrate_position_confidence.py`), one curve per chamber
-  (or one for both, whichever predicts held-out members better; the
-  calibration decides) for every Congress, so nothing is reset for a new
-  Congress.
+  (`scripts/calibrate_position_confidence.py`), one curve for both
+  chambers unless one per chamber predicts held-out members better by
+  more than the noise (the calibration decides, by the one-standard-error
+  rule), for every Congress, so nothing is reset for a new Congress.
   It is a reliability weight, not a count threshold
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
@@ -596,8 +596,8 @@ The flank-break rule (`party_line_record`, v6.27) is a narrower exception
 that never scores a past position: it reads the last Congress's positions
 only to tell which side of their party a defector sits on, for everyone
 until the new Congress's Voteview section passes its gates, and after that
-for a member whose new record is below the measured `prior_until_votes`
-(`app/data/position_confidence.json`) while their last record is full.
+for a member whose last record is full and whose new one is not yet
+(`calibrate_position_confidence.prior_test` is the evidence).
 
 **Funding is the main exception**: Funding Independence and Funding Diversity
 window to the member's **most recent completed election only**

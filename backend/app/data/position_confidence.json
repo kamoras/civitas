@@ -1,17 +1,17 @@
 {
  "_source": "Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses 101-119, retrieved 2026-10-03; regenerate with backend/scripts/calibrate_position_confidence.py",
- "_method": "Members of the 50 states with positions in adjacent Congresses, each read from the party's center toward its flank, keyed by the transition they span: full = drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / w(200)), w(n) = n / (n + n0); drift from each transition's pairs of full records (both sides 200 or more scaled votes) in the pair's direction, n0 the least-squares fit of the thin pairs on a grid to 5000, for every Congress, under the structure (one n0 for both chambers, or one per chamber) with the smaller heldout_error, the squared error of each thin member's pairs fitted without that member (era and direction are tested, not usable); half_weight_votes is where weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / reference_votes), so an interval reaching that limit is open above; uncounted_weight is the slope, for both chambers, for positions published with no count (or 0) but a career DW-NOMINATE position; party_line_test is the rejected alternative with log n0 linear in the Congress's party-line share; transitions with no full pairs and Congresses still thin by the calendar are left out; interval_90 is the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, a last full record and a thin record as evidence of a member's side of their party, and prior_until_votes is the count below which the rule reads the last full record",
+ "_method": "Members of the 50 states with positions in adjacent Congresses, each read from the party's center toward its flank, keyed by the transition they span: full = drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / w(200)), w(n) = n / (n + n0); drift from each transition's pairs of full records (both sides 200 or more scaled votes) in the pair's direction, n0 the least-squares fit of the thin pairs on a grid to 5000, for every Congress, under one n0 for both chambers unless one per chamber has a heldout_error (the squared error of each thin member's pairs fitted without that member) smaller by more than the standard error of the difference (structure_test; era and direction are tested, not usable); half_weight_votes is where weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / reference_votes), so an interval reaching that limit is open above; uncounted_weight is the slope, for both chambers, for positions published with no count (or 0) but a career DW-NOMINATE position; party_line_test is the rejected alternative with log n0 linear in the Congress's party-line share; transitions with no full pairs and Congresses still thin by the calendar are left out; interval_90 is the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, a last full record and a thin record as evidence of a member's side of their party, centered as the rule centers; structure_test is the one-standard-error rule's comparison",
  "calibrated_through": 119,
- "structure": "chamber",
+ "structure": "pooled",
  "chambers": {
   "senate": {
-   "n0": 33.0,
-   "half_weight_votes": 24.8,
+   "n0": 100.0,
+   "half_weight_votes": 50.0,
    "thin_pairs": 26
   },
   "house": {
-   "n0": 575.0,
-   "half_weight_votes": 85.2,
+   "n0": 100.0,
+   "half_weight_votes": 50.0,
    "thin_pairs": 73
   }
  },
@@ -24,21 +24,21 @@
  "interval_90": {
   "senate": {
    "n0": [
-    1.0,
-    100.0
+    31.0,
+    5000.0
    ],
    "half_weight_votes": [
-    0.99,
-    50.0
+    23.664,
+    98.039
    ]
   },
   "house": {
    "n0": [
-    44.95,
+    31.0,
     5000.0
    ],
    "half_weight_votes": [
-    31.011,
+    23.664,
     98.039
    ]
   },
@@ -53,56 +53,69 @@
   "era": 1.597,
   "direction": 1.5083
  },
+ "structure_test": {
+  "pooled": {
+   "heldout_error": 1.4561,
+   "above_best": 0.02,
+   "standard_error": 0.0702
+  },
+  "chamber": {
+   "heldout_error": 1.4361,
+   "above_best": 0.0,
+   "standard_error": 0.0
+  }
+ },
  "half_weight_votes_pooled": 50.0,
  "half_weight_votes_by_era": {
   "101-109": 62.1,
   "110-119": 45.9
  },
  "party_line_test": {
-  "b": 2.5,
-  "loss_with": 1.3358,
-  "loss_without": 1.3397,
-  "heldout_error": 1.4968
+  "b": -4.25,
+  "loss_with": 1.3844,
+  "loss_without": 1.3962,
+  "heldout_error": 1.5605
  },
  "prior_test": {
   "full": {
    "pairs": 8098,
-   "same_side": 0.858,
-   "mean_squared_gap": 0.0049
+   "same_side": 0.864,
+   "mean_squared_gap": 0.0048
   },
   "thin 0-25": {
    "pairs": 19,
-   "same_side": 0.684,
-   "mean_squared_gap": 0.062
+   "same_side": 0.632,
+   "mean_squared_gap": 0.0617
   },
   "thin 25-50": {
    "pairs": 24,
-   "same_side": 0.583,
-   "mean_squared_gap": 0.03
+   "same_side": 0.542,
+   "mean_squared_gap": 0.0294
   },
   "thin 50-100": {
    "pairs": 22,
-   "same_side": 0.773,
-   "mean_squared_gap": 0.0236
+   "same_side": 0.727,
+   "mean_squared_gap": 0.0233
   },
   "thin 100-150": {
    "pairs": 21,
    "same_side": 0.857,
-   "mean_squared_gap": 0.0183
+   "mean_squared_gap": 0.0176
   },
   "thin 150-200": {
    "pairs": 13,
    "same_side": 0.923,
-   "mean_squared_gap": 0.0027
+   "mean_squared_gap": 0.0028
   },
-  "crossover_votes": 53.4,
-  "crossover_interval_90": [
-   10.4,
-   null
-  ],
-  "share_crossing_before_full_record": 0.868
+  "full_by_distance": {
+   "0.0-0.02": 0.615,
+   "0.02-0.05": 0.72,
+   "0.05-0.1": 0.861,
+   "0.1-0.2": 0.963,
+   "0.2-10.0": 0.995
+  },
+  "crossover_if_independent": 95.4
  },
- "prior_until_votes": 53.4,
  "party_line_share_by_congress": {
   "senate": {
    "101": 0.458,

@@ -11,8 +11,10 @@ election results (docs/research/constituent-alignment.md, sections 11-12):
 
 - A break counts only toward the other party. On that roll call, the party
   members who broke sit, on average, nearer the other party (first-dimension
-  position from the Voteview section position congruence reads, each
-  weighted by its reliability since v6.27) than their party as a whole. Hardliners voting down their
+  position from the chamber's Voteview section, of any Congress, each
+  weighted by its reliability and read from its party's mean since v6.27,
+  with the last Congress's full record standing in for a thin new one)
+  than their party as a whole. Hardliners voting down their
   own party's bill from the flank vote against it too, but that is not
   independence toward the seat, and the member's flank position is already
   scored, by position congruence. Such votes are kept as flankBreaks: shown,
@@ -35,7 +37,7 @@ from collections import defaultdict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import RollCall, RollCallPosition
+from app.models import Representative, RollCall, RollCallPosition, Senator
 from app.pipeline.analyze.score_calculator import _member_ideal_points, position_confidence
 from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
@@ -97,10 +99,10 @@ def _toward_other_party(party: str, cast: list[tuple]) -> bool:
     resting on a few roll calls barely moves their mean. A lone defector's
     side is its own position's sign against the party's, whatever its
     weight, which is why party_line_records reads a member's last-Congress
-    position until their new record reaches a measured count."""
+    full record until their new record is full."""
     everyone = [d for _, p, _, _, d in cast if p == party and d is not None and d[1] > 0]
     broke = [d for _, p, _, with_party, d in cast if p == party and not with_party and d is not None and d[1] > 0]
-    if not everyone or not broke:
+    if not broke:
         # ponytail: no usable position for any defector (a member Voteview
         # hasn't estimated) counts the break, as every break did before
         # v6.20; mostly a Congress's first weeks.
@@ -108,7 +110,12 @@ def _toward_other_party(party: str, cast: list[tuple]) -> bool:
 
     def mean(points):
         return sum(x * w for x, w in points) / sum(w for _, w in points)
-    return mean(broke) > mean(everyone) if party == "D" else mean(broke) < mean(everyone)
+    # Positions are read from their party's mean in their section
+    # (party_line_records), so with no position for anyone who voted with
+    # the party (a run for one senator, whose colleagues' roll-call votes
+    # can't be tied to a position) the party's own center, 0, stands in.
+    reference = mean(everyone) if len(everyone) > len(broke) else 0.0
+    return mean(broke) > reference if party == "D" else mean(broke) < reference
 
 
 def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[dict | None]:
@@ -177,14 +184,17 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # Once the new Congress's section is in, its positions rest on a few roll
     # calls at first, so a member's last-Congress full record ("prior",
     # voteview.previous_positions) decides their side until their new record
-    # reaches the measured prior_until_votes (or, in a section calibrated
-    # before it was measured, while it is the more reliable). Each section's
+    # is full (reference_votes; without one, while it is the more reliable). Each section's
     # positions are read from their own party's mean in that section, so a
     # party-wide shift between the two Congresses can't move a member who is
     # read from one against a party read from the other.
     ideal = _member_ideal_points(chamber) or {}
 
-    party_of: dict[str, str] = {}
+    # Every member's party, the chamber's stored members first, so each
+    # section's party centers cover the whole chamber however few members
+    # this run passes (a run for one senator).
+    model = Senator if chamber == "senate" else Representative
+    party_of: dict[str, str] = {b: p for b, p in db.query(model.bioguide_id, model.party) if b}
     if chamber == "house":
         # The House's roll calls name every member's bioguide and party.
         party_of.update({p.member_id: p.party for ps in positions.values() for p in ps if p.member_id})
@@ -206,22 +216,21 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         return {b: (x - center.get(party_of.get(b), 0.0), w) for b, (x, w) in points.items()}
     dim1 = weighted(ideal)
     reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else {}
-    until = reliability.get("prior_until_votes")
+    full = reliability.get("reference_votes")
     counts = ideal.get("votes") or {}
     prior = ideal.get("prior") if isinstance(ideal.get("prior"), dict) else {}
     prior_counts = prior.get("votes") or {}
-    full = float(reliability.get("reference_votes") or 0)
     for b, (x, w) in weighted(prior).items():
         if b not in dim1:
             dim1[b] = (x, w)
-        elif until is not None:
-            # Measured: below `until` roll calls a new record puts a member on
-            # their side of the party less often than their last full record
-            # (calibrate_position_confidence.prior_test, drift included). Only
-            # a full record was measured, so a thin last record doesn't
-            # replace this Congress's.
+        elif full:
+            # A last full record decides until the new record is full
+            # (calibrate_position_confidence.prior_test: no count short of a
+            # full record is established to place a member as well). Only a
+            # full last record was measured, so a thin one doesn't replace
+            # this Congress's.
             n, last = counts.get(b), prior_counts.get(b)
-            if (n is None or n < float(until)) and last is not None and float(last) >= full:
+            if (n is None or n < float(full)) and last is not None and float(last) >= float(full):
                 dim1[b] = (x, w)
         elif w > dim1[b][1]:
             dim1[b] = (x, w)

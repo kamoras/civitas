@@ -24,12 +24,14 @@ varies by era (a full record's slope on the next Congress's runs from about
 0.66 to 1.00), so each chamber and transition gets its own, set by that
 transition's pairs of full records alone, which show no gradient in their
 count (full records count 1). n0 is then the least-squares fit of the thin
-pairs, either one for both chambers or one per chamber: whichever predicts
-held-out members better (leave one member out, STRUCTURES), so the data,
-not a choice, decide whether the chambers differ; a rerun decides again.
-n0 is weakly determined, and so is the count at which a position counts
-half (half_weight_votes, a reparametrisation of it, bounded above at
-RELIABLE_VOTES / 2), reported with its interval. Positions Voteview publishes with no count get their own
+pairs, one for both chambers unless one per chamber predicts held-out
+members (leave one member out) better by more than a standard error of
+the difference (choose_structure: the one-standard-error rule), so the
+data, not a choice, decide whether the chambers differ; a rerun decides
+again. n0 is weakly determined, and so is the count at which a position
+counts half (half_weight_votes, a reparametrisation of it, bounded above
+at RELIABLE_VOTES / 2), reported with its interval. Positions Voteview
+publishes with no count get their own
 measured weight, on the same drift: those with a career DW-NOMINATE
 position, as the score applies it (a member with neither a count nor a
 career, such as one just sworn in, reads as no votes).
@@ -46,11 +48,16 @@ A party-line term was tested and is reported, not used: with one drift for
 every Congress, n0 appeared to rise with the share of roll calls on which
 the parties' majorities split, but with drift measured per transition the
 dependence is weak and predicts held-out members worse than no term
-(research note section 14). So the weight is one curve
-per chamber at most, and nothing in it follows the sitting Congress: a
-rerun only adds pairs. Era and the pair's direction (a member who arrived
-or one who left) are tested the same way and reported, not used: neither
-could be applied to a sitting member's record in any case.
+(research note section 14). So the weight is one curve per chamber at
+most, and nothing in it follows the sitting Congress: a rerun only adds
+pairs. Era and the pair's direction (a member who arrived or one who left)
+are tested the same way and reported, not used: an era's curve would
+apply only as the latest era's, and a direction can't be known for a
+sitting member's record.
+
+prior_test is the evidence for the flank rule's use of the last
+Congress's full record (party_line_record), on pairs centered as that
+rule centers.
 
 Run from the repo (network required; the vote files are large, so pass a
 cache directory to keep them):
@@ -151,13 +158,15 @@ def _states() -> set[str]:
     return {key.split("-")[0] for key in _district_pvi()}
 
 
-def deviations(rows: list[dict]) -> dict[str, tuple[float, float, bool]]:
+def deviations(rows: list[dict], weight=None) -> dict[str, tuple[float, float, bool]]:
     """icpsr -> (scaled votes, 0 when none or 0 reported; position from the
     party's center signed toward its flank; whether Voteview has a career
     DW-NOMINATE position for the member) for each major-party member of a
     state with a position, one row each (a member listed twice, after a
     party switch, is left out). The center is the median of the party's
-    full records."""
+    full records, or, with `weight` ((votes, career) -> reliability weight),
+    the weighted mean of all its members, as the flank rule centers
+    (party_line_record)."""
     states = _states()
     seen: dict[str, list[dict]] = {}
     for r in rows:
@@ -173,10 +182,17 @@ def deviations(rows: list[dict]) -> dict[str, tuple[float, float, bool]]:
             continue
         career = _float(r.get("nominate_dim1")) is not None
         members.append((icpsr, party, x, _float(r.get("nominate_number_of_votes")) or 0.0, career))
-    center = {
-        p: statistics.median([x for _, q, x, n, _ in members if q == p and n >= RELIABLE_VOTES] or [0.0])
-        for p in (100.0, 200.0)
-    }
+    if weight is None:
+        center = {
+            p: statistics.median([x for _, q, x, n, _ in members if q == p and n >= RELIABLE_VOTES] or [0.0])
+            for p in (100.0, 200.0)
+        }
+    else:
+        center = {}
+        for p in (100.0, 200.0):
+            ws = [(x, weight(n, career)) for _, q, x, n, career in members if q == p]
+            total = sum(w for _, w in ws)
+            center[p] = sum(x * w for x, w in ws) / total if total else 0.0
     return {i: (n, (x - center[p]) * (-1.0 if p == 100.0 else 1.0), career) for i, p, x, n, career in members}
 
 
@@ -198,7 +214,8 @@ def _usable(chamber: str, congress: int, cache: pathlib.Path | None) -> bool:
     return bool(counts) and statistics.median(counts) >= RELIABLE_VOTES
 
 
-def pairs(cache: pathlib.Path | None = None, span: range | None = None) -> tuple[list[tuple], dict]:
+def pairs(cache: pathlib.Path | None = None, span: range | None = None, weight=None,
+          shares: dict | None = None) -> tuple[list[tuple], dict]:
     """(chamber, icpsr, n, thin-or-earlier deviation, full deviation, kind,
     transition, party-line share, thin side is the later) with kind "full"
     (both sides full records: n is the earlier side's), "thin" (one side
@@ -206,17 +223,21 @@ def pairs(cache: pathlib.Path | None = None, span: range | None = None) -> tuple
     side with no count but a career position, the case the score weights
     by uncounted_weight), every pair keyed by the transition it spans (its
     earlier Congress) and that Congress's party-line share; and each
-    chamber's party-line share by usable Congress."""
+    chamber's party-line share by usable Congress (`shares`, when given, is
+    reused). `weight` ({chamber: (votes, career) -> weight}) centers each
+    Congress as the flank rule does (deviations)."""
     span = span or congresses()
-    out, shares = [], {}
+    out, shares = [], dict(shares or {})
     for chamber in ("S", "H"):
         usable = [c for c in span if _usable(chamber, c, cache)]
-        share = shares[chamber] = {c: party_line_share(chamber, c, cache) for c in usable}
+        share = shares[chamber] if chamber in shares else {c: party_line_share(chamber, c, cache) for c in usable}
+        shares[chamber] = share
         for earlier, later in zip(usable, usable[1:]):
             if later != earlier + 1:
                 continue
-            prev = deviations(member_rows(chamber, earlier, cache))
-            cur = deviations(member_rows(chamber, later, cache))
+            w = (weight or {}).get(chamber)
+            prev = deviations(member_rows(chamber, earlier, cache), w)
+            cur = deviations(member_rows(chamber, later, cache), w)
             for icpsr in prev.keys() & cur.keys():
                 (na, xa, ca), (nb, xb, cb) = prev[icpsr], cur[icpsr]
                 if na >= RELIABLE_VOTES and nb >= RELIABLE_VOTES:
@@ -298,12 +319,13 @@ STRUCTURES = {
 USABLE = ("pooled", "chamber")
 
 
-def heldout_error(data: list[tuple], structure: str) -> float:
-    """Squared error of each thin member's pairs predicted by n0 fitted (in
-    its group) and drift measured without that member."""
+def heldout_errors(data: list[tuple], structure: str) -> dict[str, float]:
+    """Each thin member's squared error, their pairs predicted by n0 fitted
+    (in its group) and drift measured without that member."""
     group = STRUCTURES[structure]
-    err = 0.0
+    out: dict[str, float] = {}
     for m in sorted({r[1] for r in data if r[5] == "thin"}):
+        err = 0.0
         train = [r for r in data if r[1] != m]
         d = drifts(train)
         fits: dict = {}
@@ -315,7 +337,31 @@ def heldout_error(data: list[tuple], structure: str) -> float:
                 fits[g] = fit_n0([x for x in train if group(x) == g], d)
             k = d[(r[0], r[6])][1 if r[8] else 0]
             err += (r[4] - float(relative_weight(r[2], fits[g])) * k * r[3]) ** 2
-    return err
+        out[m] = err
+    return out
+
+
+def heldout_error(data: list[tuple], structure: str) -> float:
+    return sum(heldout_errors(data, structure).values())
+
+
+def choose_structure(data: list[tuple]) -> tuple[str, dict]:
+    """The simplest usable structure (USABLE is in order of simplicity) whose
+    held-out error is within one standard error of the best's, the standard
+    error of the member-by-member difference (the one-standard-error rule:
+    Hastie, Tibshirani & Friedman 2009, section 7.10): a more complex curve
+    has to predict better by more than the noise in the comparison."""
+    errors = {name: heldout_errors(data, name) for name in USABLE}
+    total = {name: sum(e.values()) for name, e in errors.items()}
+    best = min(USABLE, key=lambda name: total[name])
+    report = {}
+    for name in USABLE:
+        diff = np.array([errors[name][m] - errors[best][m] for m in errors[best]])
+        report[name] = {"heldout_error": round(total[name], 4),
+                        "above_best": round(float(diff.sum()), 4),
+                        "standard_error": round(float(np.sqrt(len(diff)) * diff.std(ddof=1)), 4) if len(diff) > 1 else 0.0}
+    chosen = next(name for name in USABLE if report[name]["above_best"] <= report[name]["standard_error"])
+    return chosen, report
 
 
 def fit_chambers(data: list[tuple], structure: str) -> dict[str, float]:
@@ -392,18 +438,16 @@ def _same_side(r) -> bool:
 
 
 def prior_crossover(data: list[tuple]) -> float | None:
-    """The count at which a thin record is as likely as the last Congress's
-    full record to put a member on the same side of their party as their
-    full record this Congress.
-
-    A last full record agrees with this Congress's at q, the full pairs'
-    rate. A thin record is observed only against the other Congress's full
-    record, so its agreement there, a(n), includes one Congress's drift too:
-    with the record's own noise and the drift independent, a = p q + (1 -
-    p)(1 - q), p its agreement with its own Congress's full record. p = q
-    where a(n) = q^2 + (1 - q)^2: solved on a logistic fit of agreement on
-    log n over the thin pairs. None when agreement doesn't rise with the
-    count (no crossover)."""
+    """A rejected alternative for the flank rule's switch, reported only:
+    the count at which a thin record would match the last Congress's full
+    record if a thin record's noise and the drift between Congresses were
+    independent. A last full record agrees with this Congress's at q, the
+    full pairs' rate; a thin record is observed only against the other
+    Congress's full record, a(n) = p q + (1 - p)(1 - q), so p = q where
+    a(n) = q^2 + (1 - q)^2, solved on a logistic fit of agreement on log n.
+    The data reject the independence (full_by_distance: drift flips a side
+    mostly near the party's center, as noise does), which puts this too
+    early. None when agreement doesn't rise with the count."""
     full = [r for r in data if r[5] == "full"]
     thin = [r for r in data if r[5] == "thin" and r[2] > 0]
     if not full or len(thin) < 3:
@@ -425,50 +469,40 @@ def prior_crossover(data: list[tuple]) -> float | None:
     return float(np.exp((np.log(rate / (1 - rate)) - beta[0]) / beta[1]))
 
 
-def prior_test(data: list[tuple], seed: int = 0) -> dict:
-    """The flank rule's choice (party_line_record): early in a Congress,
-    read a member's side of their party from their last full record or from
-    the new thin one? Over the pairs, how often each agrees in sign with the
-    member's full record in the other Congress (the side the rule needs),
-    and the mean squared gap: full records against the next Congress's
-    full record, thin records by count band against their pair's full one.
-    crossover_votes is where a thin record catches up (prior_crossover),
-    with its interval over members resampled (None: past a full record, or
-    never) and the share of resamples in which it catches up before a full
-    record."""
+DISTANCE_BANDS = ((0.0, 0.02), (0.02, 0.05), (0.05, 0.1), (0.1, 0.2), (0.2, 10.0))
+
+
+def prior_test(data: list[tuple]) -> dict:
+    """The flank rule's choice (party_line_record): read a member's side of
+    their party from their last full record or from this Congress's thin
+    one? `data` is centered as the rule centers (each party's weighted mean
+    in that Congress). Over the pairs, how often each puts the member on
+    the same side as their full record in the other Congress, and the mean
+    squared gap: full records against the next Congress's full record,
+    thin records by count band against their pair's full one. A thin
+    record is handicapped here by one Congress's drift that the rule's
+    comparison doesn't carry; removing it needs a model of how noise and
+    drift combine, and full_by_distance shows they aren't independent, so
+    the rule keeps the last full record until the new one is full, the one
+    count at which the new record is established to be at least as good.
+    crossover_if_independent is the rejected alternative (prior_crossover)."""
     def summary(rows):
         return {"pairs": len(rows),
                 "same_side": round(sum(map(_same_side, rows)) / len(rows), 3),
                 "mean_squared_gap": round(sum((r[4] - r[3]) ** 2 for r in rows) / len(rows), 4)}
-    out: dict = {"full": summary([r for r in data if r[5] == "full"])}
+    full = [r for r in data if r[5] == "full"]
+    out: dict = {"full": summary(full)}
     for lo, hi in PRIOR_BANDS:
         rows = [r for r in data if r[5] == "thin" and lo < r[2] <= hi]
         if rows:
             out[f"thin {lo}-{hi}"] = summary(rows)
-    rng = np.random.default_rng(seed)
-    by_member: dict[str, list[tuple]] = {}
-    for row in data:
-        if row[5] != "uncounted":
-            by_member.setdefault(row[1], []).append(row)
-    ids = sorted(by_member)
-    draws = [prior_crossover([row for i in rng.choice(ids, len(ids)) for row in by_member[i]])
-             for _ in range(BOOTSTRAP)]
-    values = np.array([np.inf if v is None else v for v in draws])
+    out["full_by_distance"] = {
+        f"{lo}-{hi}": summary(rows)["same_side"]
+        for lo, hi in DISTANCE_BANDS if (rows := [r for r in full if lo <= abs(r[3]) < hi])
+    }
     crossover = prior_crossover(data)
-    out["crossover_votes"] = None if crossover is None else round(crossover, 1)
-    # Past a full record the fit is extrapolation: such an end reads None.
-    out["crossover_interval_90"] = [round(float(v), 1) if v <= RELIABLE_VOTES else None
-                                    for v in np.percentile(values, (5, 95))]
-    out["share_crossing_before_full_record"] = round(float((values < RELIABLE_VOTES).mean()), 3)
+    out["crossover_if_independent"] = None if crossover is None else round(crossover, 1)
     return out
-
-
-def prior_until_votes(test: dict) -> float:
-    """The count below which the flank rule reads the last Congress's full
-    record rather than this one's (party_line_record): the crossover, or a
-    full record when there is none before it."""
-    crossover = test.get("crossover_votes")
-    return float(RELIABLE_VOTES if crossover is None else min(crossover, RELIABLE_VOTES))
 
 
 def bootstrap(data: list[tuple], structure: str, seed: int = 0) -> dict:
@@ -500,9 +534,19 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
     d = drifts(data)
     used = [r for r in data if r[5] != "full" and (r[0], r[6]) in d]
     last = max(r[6] for r in data) + 1
+    structure, comparison = choose_structure(data)
     heldout = {name: round(heldout_error(data, name), 4) for name in STRUCTURES}
-    structure = min(USABLE, key=lambda name: heldout[name])
     n0 = fit_chambers(data, structure)
+    uncounted = uncounted_weight(data)
+    left_out = [uncounted_weight([r for r in data if r[1] != m])
+                for m in sorted({r[1] for r in used if r[5] == "uncounted"})]
+
+    def rule_weight(chamber_n0):
+        # The flank rule's weight (score_calculator.position_confidence).
+        return lambda votes, career: (uncounted if career else 0.0) if votes <= 0 else float(
+            relative_weight(votes, chamber_n0))
+    rule_data, _ = pairs(cache, span, weight={letter: rule_weight(n0[name]) for name, letter in CHAMBERS},
+                         shares=shares)
     return {
         "calibrated_through": last,
         "structure": structure,
@@ -515,19 +559,17 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
         "uncounted_weight": round(uncounted_weight(data), 3),
         # Its range with each of its pairs' members left out in turn: few
         # pairs, so one member can move it a lot.
-        "uncounted_weight_leave_one_out": [round(f(vals), 3) for f in (min, max) for vals in [[
-            uncounted_weight([r for r in data if r[1] != m])
-            for m in sorted({r[1] for r in used if r[5] == "uncounted"})]]],
+        "uncounted_weight_leave_one_out": [round(f(left_out), 3) for f in (min, max)],
         "interval_90": bootstrap(data, structure),
         "heldout_error": heldout,
+        "structure_test": comparison,
         "half_weight_votes_pooled": round(half_point(fit_n0(data)), 1),
         "half_weight_votes_by_era": {
             f"{e.start}-{e.stop - 1}": round(half_point(fit_n0([r for r in data if r[6] in e])), 1)
             for e in (range(FIRST_CONGRESS, 110), range(110, last + 1))
         },
         "party_line_test": party_line_test(data, structure),
-        "prior_test": (test := prior_test(data)),
-        "prior_until_votes": prior_until_votes(test),
+        "prior_test": prior_test(rule_data),
         "party_line_share_by_congress": {
             name: {str(c): round(u, 3) for c, u in shares[letter].items()}
             for name, letter in CHAMBERS
@@ -558,9 +600,10 @@ def main() -> None:
             f"w({RELIABLE_VOTES})), w(n) = n / (n + n0); drift from each transition's pairs of full "
             f"records (both sides {RELIABLE_VOTES} or more scaled votes) in the pair's direction, n0 "
             "the least-squares fit of the thin pairs on a grid to 5000, for every Congress, under "
-            "the structure (one n0 for both chambers, or one per chamber) with the smaller "
-            "heldout_error, the squared error of each thin member's pairs fitted without that "
-            "member (era and direction are tested, not usable); half_weight_votes is where "
+            "one n0 for both chambers unless one per chamber has a heldout_error (the squared error "
+            "of each thin member's pairs fitted without that member) smaller by more than the "
+            "standard error of the difference (structure_test; era and direction are tested, not "
+            "usable); half_weight_votes is where "
             "weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / "
             "reference_votes), so an interval reaching that limit is open above; "
             "uncounted_weight is the slope, for both chambers, for positions published with no "
@@ -568,8 +611,8 @@ def main() -> None:
             "alternative with log n0 linear in the Congress's party-line share; transitions with "
             "no full pairs and Congresses still thin by the calendar are left out; interval_90 is "
             "the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, "
-            "a last full record and a thin record as evidence of a member's side of their party, and "
-            "prior_until_votes is the count below which the rule reads the last full record"
+            "a last full record and a thin record as evidence of a member's side of their party, "
+            "centered as the rule centers; structure_test is the one-standard-error rule's comparison"
         ),
         **calibrate(args.cache),
     }
