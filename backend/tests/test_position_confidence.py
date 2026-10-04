@@ -552,7 +552,7 @@ def test_calibrate_ships_the_latest_eras_curve_only_when_era_test_adopts_it(monk
     monkeypatch.setattr(script, "heldout_error", lambda d, s: 0.0)
     split_base = []
     monkeypatch.setattr(script, "era_split_test", lambda d, s: split_base.append(s) or {})
-    for name in ("bootstrap", "party_line_test", "prior_test", "switcher_test"):
+    for name in ("bootstrap", "party_line_test", "trend_test", "prior_test", "switcher_test"):
         monkeypatch.setattr(script, name, lambda *a, **k: {})
     monkeypatch.setattr(script, "prior_until_votes", lambda t: 200.0)
     monkeypatch.setattr(script, "fit_chambers", script.fit_chambers)
@@ -562,3 +562,44 @@ def test_calibrate_ships_the_latest_eras_curve_only_when_era_test_adopts_it(monk
         assert out["structure"] == shipped and split_base[-1] == "pooled"
         assert out["chambers"]["house"]["n0"] == script.fit_chambers(data, shipped)["house"]
     assert script.fit_chambers(data, "era") != script.fit_chambers(data, "pooled")
+
+
+def test_the_trend_term_finds_n0_rising_with_time():
+    """fit_party_line with the decades term: thin records that predict full
+    ones in full early and only weakly late give n0 rising with time (b >
+    0); trend_test reports it beside the paired comparisons."""
+    script = _script()
+    full = [("H", f"F{c}{k}", 300.0, x, x, "full", c, 0.5, False) for c in (101, 116)
+            for k, x in enumerate((-0.3, -0.1, 0.1, 0.3))]
+    early = [("H", f"E{k}", 20.0, x, x, "thin", 101, 0.5, False) for k, x in enumerate((-0.3, 0.3, -0.2, 0.2))]
+    late = [("H", f"L{k}", 20.0, x, x / 4, "thin", 116, 0.5, False) for k, x in enumerate((-0.3, 0.3, -0.2, 0.2))]
+    data = full + early + late
+    b, _, _ = script.fit_party_line(data, "pooled", script.drifts(data), script._decades)
+    assert b > 0
+    out = script.trend_test(data, "pooled")
+    assert out["b"] == round(b, 2) and out["latest_congress"] == 116
+    assert {"all", "latest", "latest_without_most_influential_member"} <= set(out)
+
+
+def test_an_adopting_split_reports_its_most_influential_member(monkeypatch):
+    """At a split where the recent curve would be adopted, era_split_test
+    reports its n0, the range with each of the era's thin members left out,
+    and the test rerun without the member whose absence moves n0 most; with
+    no member moving it, none."""
+    script = _script()
+    data = [("H", f"M{c}{k}", 50.0, 0.2, 0.2, "thin", c, 0.5, False) for c in (101, 110) for k in range(3)]
+    reran = []
+
+    def era_test(rows, structure, split=110):
+        reran.append({r[1] for r in rows})
+        return {"above": -1.0, "standard_error": 0.1, "members": 3, "adopted": True, "half_weight_votes": 98.0}
+    monkeypatch.setattr(script, "era_test", era_test)
+    monkeypatch.setattr(script, "drifts", lambda rows: {})
+    fits = {"M1100": 300.0, "M1101": 5000.0, "M1102": 5000.0}
+    monkeypatch.setattr(script, "fit_n0", lambda rows, d=None: min(
+        (fits[m] for m in fits if m not in {r[1] for r in rows}), default=5000.0))
+    out = script.era_split_test(data, "pooled")["splits"]["110"]
+    assert out["n0"] == 5000.0 and out["n0_leaving_one_member_out"] == [300.0, 5000.0]
+    assert "M1100" not in reran[-1] and out["without_most_influential_member"]["adopted"]
+    fits["M1100"] = 5000.0
+    assert script.era_split_test(data, "pooled")["splits"]["110"]["without_most_influential_member"] is None

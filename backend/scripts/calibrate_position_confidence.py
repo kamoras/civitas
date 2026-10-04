@@ -567,11 +567,13 @@ def era_split_test(data: list[tuple], structure: str) -> dict:
             late = [r for r in data if r[6] >= int(cut)]
             fits = {m: fit_n0([r for r in late if r[1] != m], d)
                     for m in sorted({r[1] for r in late if r[5] == "thin"})}
-            t["n0"] = fit_n0(late, d)
+            t["n0"] = n0 = fit_n0(late, d)
             t["n0_leaving_one_member_out"] = [min(fits.values()), max(fits.values())]
-            # The test again without the member whose absence moves n0 most.
-            most = min(fits, key=fits.get)
-            again = era_test([r for r in data if r[1] != most], structure, int(cut))
+            # The test again without the member whose absence moves n0 most
+            # (on a log scale); none when no member moves it.
+            most = max(fits, key=lambda m: abs(np.log(fits[m]) - np.log(n0)))
+            again = (era_test([r for r in data if r[1] != most], structure, int(cut))
+                     if fits[most] != n0 else None)
             t["without_most_influential_member"] = again and {
                 k: again[k] for k in ("above", "standard_error", "adopted", "half_weight_votes")}
     return {"splits": out, "adopted_at": sum(t["adopted"] for t in out.values()), "of": len(out)}
@@ -591,9 +593,21 @@ def fit_chambers(data: list[tuple], structure: str) -> dict[str, float]:
     return {name: fit_n0([r for r in data if r[0] == letter], d) for name, letter in CHAMBERS}
 
 
-def fit_party_line(data: list[tuple], structure: str, drift: dict | None = None) -> tuple[float, dict, float]:
-    """The rejected alternative: log n0 = a[group] + b * (party-line share -
-    CENTER), groups as in `structure`. (b, {group: a}, squared error)."""
+def _party_line(r) -> float:
+    return r[7] - CENTER
+
+
+def _decades(r) -> float:
+    # Decades (five Congresses) from ERA_SPLIT: the time-trend test's term.
+    return (r[6] - ERA_SPLIT) / 5
+
+
+def fit_party_line(data: list[tuple], structure: str, drift: dict | None = None,
+                   term=_party_line) -> tuple[float, dict, float]:
+    """The rejected alternative: log n0 = a[group] + b * term(pair), the
+    term the Congress's party-line share less CENTER unless given (the
+    time-trend test passes _decades), groups as in `structure`.
+    (b, {group: a}, squared error)."""
     d = drifts(data) if drift is None else drift
     group = STRUCTURES[structure]
     parts = {}
@@ -602,11 +616,11 @@ def fit_party_line(data: list[tuple], structure: str, drift: dict | None = None)
         thin = [r for r in rows if r[5] == "thin" and (r[0], r[6]) in d]
         if thin:
             n, dx, y = _thin(rows, drift=d)
-            parts[g] = (n, dx, y, np.array([r[7] for r in thin]))
+            parts[g] = (n, dx, y, np.array([term(r) for r in thin]))
 
     def at(b):
         # The intercepts are separate per group, so each is fitted alone.
-        fits = {g: min((_loss(n, dx, y, np.exp(a + b * (u - CENTER))), a) for a in A_GRID)
+        fits = {g: min((_loss(n, dx, y, np.exp(a + b * u)), a) for a in A_GRID)
                 for g, (n, dx, y, u) in parts.items()}
         return sum(f[0] for f in fits.values()), {g: f[1] for g, f in fits.items()}
     best = None
@@ -630,21 +644,56 @@ def party_line_test(data: list[tuple], structure: str) -> dict:
     loss_without = sum(
         _loss(*_thin([r for r in data if group(r) == g], drift=d), fit_n0([r for r in data if group(r) == g], d))
         for g in {group(r) for r in data})
-    errors: dict[str, float] = {}
-    for m in sorted({r[1] for r in data if r[5] == "thin"}):
-        train = [r for r in data if r[1] != m]
-        dm = drifts(train)
-        fb, fa, _ = fit_party_line(train, structure, dm)
-        err = 0.0
-        for r in data:
-            if r[1] == m and r[5] == "thin" and (r[0], r[6]) in dm and group(r) in fa:
-                n0 = float(np.exp(fa[group(r)] + fb * (r[7] - CENTER)))
-                k = dm[(r[0], r[6])][1 if r[8] else 0]
-                err += (r[4] - float(relative_weight(r[2], n0)) * k * r[3]) ** 2
-        errors[m] = err
+    errors = _term_errors(data, structure, _party_line)
     return {"b": round(b, 2), "loss_with": round(loss_with, 4), "loss_without": round(loss_without, 4),
             "heldout_error": round(sum(errors.values()), 4),
             **(_paired(errors, heldout_errors(data, structure)) or {})}
+
+
+def _term_errors(data: list[tuple], structure: str, term, only=None) -> dict[str, float]:
+    """heldout_errors for log n0 = a[group] + b * term(pair): each thin
+    member's pairs (those `only` keeps, if given) predicted by a and b
+    fitted, and drift measured, without that member."""
+    group = STRUCTURES[structure]
+    errors: dict[str, float] = {}
+    for m in sorted({r[1] for r in data if r[5] == "thin" and (only is None or only(r))}):
+        train = [r for r in data if r[1] != m]
+        dm = drifts(train)
+        fb, fa, _ = fit_party_line(train, structure, dm, term)
+        err = 0.0
+        for r in data:
+            if (r[1] == m and r[5] == "thin" and (r[0], r[6]) in dm and group(r) in fa
+                    and (only is None or only(r))):
+                n0 = float(np.exp(fa[group(r)] + fb * term(r)))
+                k = dm[(r[0], r[6])][1 if r[8] else 0]
+                err += (r[4] - float(relative_weight(r[2], n0)) * k * r[3]) ** 2
+        errors[m] = err
+    return errors
+
+
+def trend_test(data: list[tuple], structure: str) -> dict:
+    """A time trend in n0, log n0 = a + b * decades since ERA_SPLIT: the
+    split-free form of the era question, added after the era tests (so
+    reported, not adopted, by this calibration). Its b, the half point it
+    implies at the latest Congress with thin pairs, and, against
+    `structure`, its paired difference over every thin member ("all") and
+    over the latest era's ("latest", as era_test judges), the latter also
+    without the member whose own difference favours the trend most."""
+    d = drifts(data)
+    b, a, _ = fit_party_line(data, structure, d, _decades)
+    last = max(r[6] for r in data if r[5] == "thin")
+    n0_last = float(np.exp(next(iter(a.values())) + b * (last - ERA_SPLIT) / 5)) if a else None
+    late = STRUCTURES["era"]
+    trend_late, base_late = (_term_errors(data, structure, _decades, only=late),
+                             heldout_errors(data, structure, only=late))
+    most = min(trend_late, key=lambda m: trend_late[m] - base_late[m]) if trend_late else None
+    rest = [r for r in data if r[1] != most]
+    return {"b": round(b, 2), "latest_congress": last,
+            "half_weight_votes_latest": round(half_point(n0_last), 1) if n0_last else None,
+            "all": _paired(_term_errors(data, structure, _decades), heldout_errors(data, structure)),
+            "latest": _paired(trend_late, base_late),
+            "latest_without_most_influential_member": _paired(
+                _term_errors(rest, structure, _decades, only=late), heldout_errors(rest, structure, only=late))}
 
 
 def uncounted_weight(data: list[tuple]) -> float:
@@ -941,6 +990,7 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
             for e in (range(FIRST_CONGRESS, ERA_SPLIT), range(ERA_SPLIT, last + 1))
         },
         "party_line_test": party_line_test(data, structure),
+        "trend_test": trend_test(data, structure),
         "prior_test": (test := prior_test(rule_data)),
         "prior_until_votes": prior_until_votes(test),
         "party_line_share_by_congress": {
@@ -995,7 +1045,9 @@ def main() -> None:
             "structure judged the same way: chamber_on_latest while one curve is chosen), and "
             "era_split_test repeats it at every "
             "split (at an adopting split, with its n0 leaving one member out in turn, and the test "
-            "rerun without the most influential member); "
+            "rerun without the member whose absence moves n0 most, none if no member moves it); "
+            "trend_test is the split-free form, log n0 linear in decades since the split, added after "
+            "the era tests and reported, not adopted; "
             "structure_test's reported gives direction, attendance and era (each era's curve on its "
             "own members) against the chosen structure, paired; switcher_test compares, for a member "
             "who switched parties during a Congress, the latest record, the longer one and their "

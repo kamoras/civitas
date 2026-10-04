@@ -298,7 +298,9 @@ Key mathematical properties:
   held-out members decides: a curve per chamber predicted worse, and the
   latest era's curve (split at the 110th Congress), judged on the latest
   era's members, the only era it would apply to, predicted no
-  better (+0.0025, standard error 0.0195); a rerun decides again.
+  better (+0.0025, standard error 0.0195); a rerun decides again. Later
+  splits and a time trend (added after the fact, reported, not adopted)
+  lean toward a slower curve for recent Congresses.
   Nothing is reset for a new Congress.
   It is a reliability weight, not a count threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
@@ -612,7 +614,7 @@ the two sections (`parties`; sections written before this change record
 none, so that check starts with the next Congress's section): their last
 positions were cast in another party. A position recorded under the other
 major party is never read for the member, in any section, nor counted in
-that party's mean. The 200 and the bar for replacing it are conventions:
+that party's mean (a stated choice). The 200 and the bar for replacing it are conventions:
 the calibration would adopt a shorter switch only if it placed members on
 the right side better out of bag in 95% of resamples, and too few thin
 records have the rule's shape to measure one. Only the Congress just

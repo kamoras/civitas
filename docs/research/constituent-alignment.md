@@ -733,7 +733,8 @@ in a fixed order, 1,000 times.
   there the latest era's curve (half point 46 votes) predicts no better
   than one curve, 0.0025 worse with a standard error of 0.0195 over 67
   members, and one curve stays. The 110th was the split before this
-  comparison was made; repeated at every split with thin pairs on both
+  comparison was made (a convention: roughly the middle of 101–119, with
+  no measured reason to prefer it); repeated at every split with thin pairs on both
   sides (`era_split_test`), a recent era's curve beats one curve by more
   than a standard error at 4 of 16, the splits at the 113th, 114th, 115th
   and 117th, by 1.0 to 1.5 standard errors on 16 to 49 members. That is
@@ -746,13 +747,30 @@ in a fixed order, 1,000 times.
   115th (at the 117th no single member moves it). The slower curve itself
   doesn't rest on them: without that member the recent curve is still
   adopted at the 113th and 114th, with half points of 76 and 83 votes,
-  near or above the top of the shipped curve's interval (77), and at the
-  117th (98), though no longer at the 115th. The 16 splits are nested and
+  near or above the top of the shipped curve's interval (77), and the
+  117th's stands (no member moves it), though no longer at the 115th. The 16 splits are nested and
   correlated, so 4 adoptions are not 4 pieces of evidence, and the margins
   are 1.0 to 1.5 standard errors. Adopting one now would mean choosing the
   split after seeing the data, so the fixed split decides; a rerun with
   more recent pairs tests it again, and this is the weight's most likely
   revision.
+- **A time trend: reported, not adopted.** Choosing a split is not the
+  only way to ask whether the curve changed. A trend, log n0 linear in
+  decades since the 110th (`trend_test`), asks it without one, and it
+  does better: over every thin member it predicts held-out pairs better
+  than one curve by 0.155 (standard error 0.094), and over the latest
+  era's members, judged as the era curve is, by 0.079 (0.074), which
+  the era test's own bar would adopt. It is not adopted, a stated
+  choice, for three reasons. It was added after the era tests, so
+  adopting it would be choosing the model after seeing the data. Its
+  fit is degenerate: thin records about as reliable as full ones before
+  2007 and, by the 118th, the slowest curve the form allows (half point
+  about 100 votes, a weight of n / 200). And on the latest era's
+  members its gain rests on one member: without them it is 0.037
+  (0.062). Taken with the later splits, the evidence leans toward thin
+  records saying less in recent Congresses than the one curve credits,
+  so the shipped half point (36) is probably a mixture that understates
+  recent ones; a rerun with more recent pairs tests that again.
 
 | | Estimate | 90% interval (members resampled, 1,000 times) |
 |---|---|---|
@@ -1090,7 +1108,8 @@ which read placeholders as positions and weighted nothing, with v6.27:
   one and a half standard errors at a few later splits (the 113th, 114th,
   115th and 117th, each at the slowest curve the search grid allows, a
   half point of 98 votes; without the most influential member, 76 and 83
-  at the 113th and 114th), not at the fixed one. The thin records mix
+  at the 113th and 114th), not at the fixed one, and a time trend (`trend_test`) leans the same
+  way. The thin records mix
   arrivals, departures and long absences, as the score's do; whether
   everyone's early records in a Congress behave like these is untested.
   The no-count weight rests on fewer still (25 pairs), and the flank

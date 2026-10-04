@@ -239,6 +239,10 @@ def test_a_member_who_switched_parties_is_never_read_on_the_last_congress(db_ses
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
     section["prior"]["parties"]["R4"] = "R"
     assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    # A change to or from a code that isn't a major party (an independent
+    # caucusing as before) is a switch too.
+    section["parties"]["R4"] = "328"
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
 
 
 def test_a_position_cast_in_the_other_party_stays_out_of_its_mean(db_session, monkeypatch):
