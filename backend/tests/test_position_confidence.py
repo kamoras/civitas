@@ -436,3 +436,51 @@ def test_the_switch_tests_take_the_pairs_their_names_say(monkeypatch):
     assert seen["rule_shape"] == {"full", "run"}
     assert seen["leavers"] == {"full", "run", "unattended"}
     assert seen["all"] == {"full", "run", "unattended", "stayer", "arrival"}
+
+
+def test_a_member_who_switched_parties_mid_congress_is_left_out():
+    """Voteview lists a mid-Congress party switch under a second ICPSR id
+    with the same bioguide id; neither id's partial record is a thin record
+    of one member, so both are left out. Members without a bioguide id, or
+    with one id, stay."""
+    script = _script()
+    rows = [_row(str(i), "100" if i % 2 else "200", "0.3" if i % 2 == 0 else "-0.3", "500") for i in range(10)]
+    rows += [{**_row("80", "200", "0.1", "161"), "bioguide_id": "X000001"},
+             {**_row("81", "100", "-0.3", "428"), "bioguide_id": "X000001"},
+             {**_row("82", "100", "-0.4", "500"), "bioguide_id": "Y000002"}]
+    kept = script.deviations(rows)
+    assert "80" not in kept and "81" not in kept
+    assert "82" in kept and "0" in kept
+
+
+def test_the_era_split_is_checked_at_every_split(monkeypatch):
+    """era_split_test tries every split with thin pairs on both sides and
+    counts those where the era structure beats one curve by more than one
+    standard error."""
+    script = _script()
+    data = [("H", f"M{c}{k}", 50.0, 0.2, 0.2, "thin", c, 0.5, False) for c in (101, 105, 110) for k in range(3)]
+    gain = {"105": -1.0, "110": -0.001}
+
+    def errors(rows, structure):
+        if structure == "pooled":
+            return {r[1]: 1.0 for r in rows}
+        cut = next(c for c in (105, 110) if not script.STRUCTURES["_split"](("H", "", 0, 0, 0, "thin", c - 1))
+                   and script.STRUCTURES["_split"](("H", "", 0, 0, 0, "thin", c)))
+        return {r[1]: 1.0 + gain[str(cut)] / 9 + (0.01 if r[1].endswith("0") else 0.0) for r in rows}
+    monkeypatch.setattr(script, "heldout_errors", errors)
+    out = script.era_split_test(data)
+    assert set(out["splits"]) == {"105", "110"}
+    assert out["beats_by_more_than_one_se"] == 1 and out["of"] == 2
+    assert "_split" not in script.STRUCTURES
+
+
+def test_the_era_structure_fits_the_latest_era():
+    """Adopted, an era structure applies its latest era's curve to both
+    chambers: the era every Congress scored from now on falls in."""
+    script = _script()
+    full = [("H", f"F{c}{k}", 300.0, x, x, "full", c, 0.5, False) for c in (101, 115)
+            for k, x in enumerate((-0.3, -0.1, 0.1, 0.3))]
+    early = [("H", f"E{k}", 20.0, x, x, "thin", 101, 0.5, False) for k, x in enumerate((-0.3, 0.3))]
+    late = [("H", f"L{k}", 20.0, x, x / 3, "thin", 115, 0.5, False) for k, x in enumerate((-0.3, 0.3))]
+    n0 = script.fit_chambers(full + early + late, "era")
+    assert n0["senate"] == n0["house"] == script.fit_n0(full + late, script.drifts(full + early + late))

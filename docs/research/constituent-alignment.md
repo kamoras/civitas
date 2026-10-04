@@ -657,22 +657,28 @@ party's flank, every pair keyed by the transition it spans:
 
 - **Drift per transition, from full records.** Drift is how far positions
   carry from one Congress to the next. It varies by era (a full record's
-  slope on the next Congress's runs from about 0.66 to 1.00), so each
+  slope on the next Congress's runs from about 0.66 to 1.01), so each
   chamber and transition gets its own, set by that transition's pairs of
   full records (both sides at least 200 scaled votes).
 - **Full records count in full.** Full records show no gradient in their
-  count: their slope relative to the drift is 0.99 to 1.01 from 200 to
+  count: their slope relative to the drift is 0.99 to 1.02 from 200 to
   over 1,100 votes. So a full record counts 1, and n0 is the least-squares
   fit of the thin pairs alone.
 - **What is left out:**
   - Members from outside the 50 states: the House's delegates have thin
     records because they vote only in the Committee of the Whole, not
     because they served part of a Congress.
+  - Members who switched parties during a Congress. Voteview lists them
+    under a new ICPSR id with the same bioguide id, so each id's record
+    covers part of the Congress: the old id reads as a member who left,
+    the new one as a member who arrived, and the change of party would be
+    booked as a thin record's noise. (A switch between Congresses changes
+    the id too, so it never forms a pair.)
   - Transitions with no full pairs.
   - A Congress still thin by the calendar.
 
 `scripts/calibrate_position_confidence.py` runs this over Congresses
-101–119: 8,098 full pairs, 99 thin and 25 with no count on the thin side
+101–119: 8,079 full pairs, 95 thin and 25 with no count on the thin side
 (and a career DW-NOMINATE position, as the score requires of such a
 position; see below). Thin records arise here from members who arrived
 or left mid-Congress and from members absent for much of one (illness, a
@@ -681,39 +687,52 @@ pair counts; whether absences make a thin record say less is tested
 below (attendance). The intervals are reproducible: members are resampled
 in a fixed order, 1,000 times.
 
-- **One curve for both chambers, chosen by held-out prediction.** Each
-  candidate structure is judged the same way: each thin member's pairs
-  are predicted from a fit (n0 and drift) made without that member, and
-  the squared errors are summed. A more complex structure is used only if
-  it beats the simpler one by more than a standard error of the
-  member-by-member difference (a paired variant of the one-standard-error
-  rule of Hastie, Tibshirani & Friedman 2009, section 7.10). A rerun
-  decides again. Over the 99 thin pairs:
+- **One curve per era, chosen by held-out prediction.** Each candidate
+  structure is judged the same way: each thin member's pairs are
+  predicted from a fit (n0 and drift) made without that member, and the
+  squared errors are summed. The simplest structure within one standard
+  error of the member-by-member difference from the best is used (a
+  paired variant of the one-standard-error rule of Hastie, Tibshirani &
+  Friedman 2009, section 7.10). The candidates the score can apply are
+  one curve, one per chamber, and one per era, split at the 110th
+  Congress (2007), a split fixed before this comparison; a sitting
+  member's Congress is always in the latest era, so the era structure
+  applies the latest era's curve to both chambers. A rerun decides again.
+  Over the 95 thin pairs:
 
   | n0 fitted | Held-out squared error |
   |---|---|
-  | **once for both chambers (shipped)** | **1.456** |
-  | once per chamber | 1.436 |
-  | once per era (101–109, 110–119) | 1.597 |
-  | once per direction (entrant, leaver) | 1.508 |
-  | once per attendance (attended arrivals and departures, the rest) | 1.520 |
-  | once, plus a party-line term | 1.561 |
+  | once for both chambers | 1.336 |
+  | once per chamber | 1.368 |
+  | **once per era (101–109, 110–119; the latest's shipped)** | **1.279** |
+  | once per direction (which side of the pair is thin) | 1.362 |
+  | once per attendance (attended arrivals and departures, the rest) | 1.327 |
+  | once per era, plus a party-line term | 1.326 |
 
-  Per chamber is lower by 0.020, but the standard error of that
-  difference is 0.070, so the chambers aren't shown to differ: fitted
-  apart, the half points are 25 votes (Senate, 1–50) and 85 (House,
-  31–98). Era, direction, attendance and the party-line term predict
-  worse than one curve: attended arrivals and departures (missing no
-  more of their span than nine in ten full records do) aren't shown to
-  follow a different curve from the rest. That split is mostly the
-  entrants against the leavers, so it largely repeats the direction
-  test.
+  One curve's error is above the era structure's by 0.057, and the
+  standard error of that difference is 0.054, so by the rule the eras
+  differ; the margin is narrow, and a rerun with new pairs could reverse
+  it. Fitted apart, the eras' half points are 1 vote (101–109: thin
+  records then predicted full ones nearly as well as full records do)
+  and 46 (110–119). The split was not chosen on these data, but other
+  splits were checked (`era_split_test`): an era split beats one curve
+  by more than a standard error at 10 of the 16 splits with thin pairs
+  on both sides (every split from the 104th to the 111th, and the 115th
+  and 117th), so the result doesn't hang on the 110th.
+  The chambers aren't shown to differ (fitted apart, 25 votes for the
+  Senate and 55 for the House, with per chamber 0.089 worse than per
+  era). Direction and attendance can't be known for a sitting member's
+  record, so they are reported only; neither beats the era structure.
+  The direction split is which side of the pair is thin (the earlier,
+  mostly members who arrived; the later, mostly members who left or were
+  absent at the end of a Congress), and the attendance split is mostly
+  the arrivals against the departures, so it largely repeats it.
 
 | | Estimate | 90% interval (members resampled, 1,000 times) |
 |---|---|---|
-| Votes at which a position counts half | **50** | 24–98 |
-| n0 | 100 | 31 to the search grid's limit of 5,000 |
-| Weight of a position with no count | **0.21** | 0.03–0.38 |
+| Votes at which a position counts half | **46** | 26–98 |
+| n0 | 86 | 36 to the search grid's limit of 5,000 |
+| Weight of a position with no count | **0.21** | 0.01–0.39 |
 
 - **The curve is weakly determined.** The half point is n0 written
   another way, so it is no better determined; it is only bounded. The
@@ -723,12 +742,12 @@ in a fixed order, 1,000 times.
 - **A party-line term was tested and is not used.** That would make n0 a
   line in the share of roll calls on which the parties' majorities split,
   since in a more party-line Congress each vote might say less about a
-  member's place within their party. Its slope is −4.25, the wrong
-  direction; it lowers the in-sample error a little (1.396 to 1.384) but
-  predicts held-out members worse (1.561 against 1.456). An earlier
-  draft of this change found a positive slope; it came from forcing one
-  drift on every Congress, which loaded the era differences in drift
-  onto n0.
+  member's place within their party. Added to the era structure it
+  predicts held-out members worse (1.326 against 1.279), and its slope
+  isn't stable: +3.0 here, −4.25 with the party switchers counted. An
+  earlier draft of this change found a larger positive slope; it came
+  from forcing one drift on every Congress, which loaded the era
+  differences in drift onto n0.
 - **Positions with no count carry some information.** They are members
   Voteview has barely scaled (newly sworn in, or with very few scalable
   votes). Measured only where the member also has a career DW-NOMINATE
@@ -752,7 +771,7 @@ in a fixed order, 1,000 times.
   on a different agenda; whether those records behave like these is
   untested.
 
-**Seven approaches replaced.** Each appeared in a draft of this change and
+**Eight approaches replaced.** Each appeared in a draft of this change and
 was replaced after review; the fourth, fifth and sixth were not shown
 to help rather than shown not to, and a rerun with more pairs tests them
 again.
@@ -787,8 +806,7 @@ artifacts go away once drift is measured per transition.
 
 *One curve per chamber.* The fourth draft fitted the chambers apart
 because they predicted held-out members slightly better, a margin within
-the noise of the comparison. The one-standard-error rule now decides,
-and keeps one curve.
+the noise of the comparison. The one-standard-error rule now decides.
 
 *Flank-rule switches chosen in sample.* The fifth draft switched the
 flank rule at 53 votes, on pairs centered on the median of each party's
@@ -797,7 +815,8 @@ assumed independent everywhere. The sixth switched at 92, the best
 switch over all thin pairs, without testing it out of bag or on the
 pairs shaped like the rule's case; there it can't be shown to help: too
 few pairs have the rule's shape to measure one, and over all thin pairs
-the best switch (93) saves sides in only 44% of resamples (below).
+the best switch (101 votes) saves sides in only 36% of resamples
+(below).
 
 *Thin pairs restricted to arrivals and departures.* The seventh draft
 kept only members absent the Congress before or after, taking that to
@@ -807,19 +826,30 @@ campaign for another office, a cabinet nomination), and the score's thin
 records include absences too. The weight uses every thin pair; only the
 flank rule's switch test is restricted, to attended records.
 
+*Party switchers counted, one curve for every era.* The eighth draft
+counted a member who switched parties during a Congress as two thin
+records, one who left and one who arrived. Four of its 99 thin pairs
+were such switches, and three of the six pairs it took for the flank
+rule's case. Without them one curve no longer predicts held-out members
+as well as one per era, and the era split was eligible all along: a
+sitting member's Congress is always in the latest era. The half point
+moves from 50 votes (one curve, switchers counted) to 46 (the latest
+era).
+
 **Shipped (v6.27).**
 - The member's extremity is scaled by weight(n) before it is read against
-  the saturation point. A position from 50 votes counts half, and one
+  the saturation point. A position from 46 votes counts half, and one
   from 200 or more counts in full; n is the member's scaled roll calls
   this Congress (Voteview's `nominate_number_of_votes`).
   - A position with no reported count is weighted 0.21 when the member
     has a career DW-NOMINATE position, and read as no votes (50) when
     not.
-  - One curve serves both chambers and every Congress, so nothing in it
-    follows the sitting Congress. A new Congress needs no rerun and no
-    setting. Rerunning the calibration (its Congress range follows the
-    clock, and a Congress still thin by the calendar is skipped) only
-    adds the newest pairs.
+  - One curve serves both chambers, the latest era's (since the 110th
+    Congress). The split is a fixed Congress, so nothing in it follows
+    the sitting Congress. A new Congress needs no rerun and no setting.
+    Rerunning the calibration (its Congress range follows the clock, and
+    a Congress still thin by the calendar is skipped) only adds the
+    newest pairs, to the latest era.
 - The seat fits are taken over every member, since a thin position is
   noisy but not biased.
 - The saturation scale is the 90th percentile of full records'
@@ -871,11 +901,11 @@ flank rule's switch test is restricted, to attended records.
 
     | Votes | Pairs | Same side |
     |---|---|---|
-    | 1–25 | 19 | 63% |
+    | 1–25 | 19 | 68% |
     | 26–50 | 24 | 54% |
-    | 51–100 | 22 | 73% |
-    | 101–150 | 21 | 86% |
-    | 151–199 | 13 | 92% |
+    | 51–100 | 20 | 70% |
+    | 101–150 | 20 | 85% |
+    | 151–199 | 12 | 92% |
 
     Those pairs compare a thin record with the other Congress's full
     record; the rule compares within one Congress, so one Congress's
@@ -898,15 +928,15 @@ flank rule's switch test is restricted, to attended records.
     more of the roll calls in their span than nine in ten of that
     Congress's full records do (a convention; a roll call with no row
     counts as missed, as for a Speaker who doesn't vote). Most leavers
-    missed more of their span than the convention allows. Only 6 pairs
-    qualify, 2 with over 100 votes; in sample their best
-    switch is 91 votes, saving 3.5% of sides, but they are too few to
-    measure one (in most resamples the left-out members can't support a
-    model). Counting every member who left, attended or not (36 pairs, 11
-    with over 100 votes), no switch short of a full record does better
-    even in sample, and one saves sides in 6% of resamples out of bag;
-    over all thin pairs, the best switch is 93 votes and 44%. None comes
-    near the bar, so the attendance convention doesn't decide it.
+    missed more of their span than the convention allows. Only 3 pairs
+    qualify, none with over 100 votes: too few to fit the model at all.
+    Counting every member absent the Congress after, attended or not (33
+    pairs, 9 with over 100 votes; this includes members who served the
+    whole Congress with many absences and then retired or lost), no
+    switch short of a full record does better even in sample, and one
+    saves sides in 3% of resamples out of bag; over all thin pairs, the
+    best switch is 101 votes and 36%. None comes near the bar, so the
+    attendance convention doesn't decide it.
   - So the switch rests on its conventions: keeping the last full record
     until the new one is full is the rule as designed, the one count at
     which the new record needs no model to be trusted, and nothing in
@@ -933,8 +963,8 @@ which read placeholders as positions and weighted nothing, with v6.27:
 | | Senate | House |
 |---|---|---|
 | Saturation | 0.258 → 0.268 | 0.224 → 0.221 |
-| Mean change in the component | 1.69 | 0.58 |
-| Mean change in Constituent Alignment | 0.51 | 0.18 |
+| Mean change in the component | 1.69 | 0.57 |
+| Mean change in Constituent Alignment | 0.51 | 0.17 |
 
 - Full records move only through the scale and the refit seat lines. The
   Senate's mean change comes from dropping its placeholder, which moves
@@ -944,8 +974,8 @@ which read placeholders as positions and weighted nothing, with v6.27:
   four in the Senate and twelve in the House.
   - Two recently sworn-in representatives with no count and no career
     position move from 23.3 and 31.1 to 50.
-  - Representatives with 77 and 72 votes move from 93.2 to 78.6 and from
-    75.3 to 66.1.
+  - Representatives with 77 and 72 votes move from 93.2 to 79.6 and from
+    75.3 to 66.7.
   - Two representatives far beyond saturation (135 and 182 votes) stay at
     its end; the other representatives with 116–171 votes move about 1
     to 4 points.
@@ -981,16 +1011,16 @@ which read placeholders as positions and weighted nothing, with v6.27:
   leaves the party whose senators spread more widely around the seat's
   norm (Republicans, in most Senates since 1989) with more members near 0
   and near 100.
-- **The thin-record weight rests on 99 thin pairs.** Few members have a
+- **The thin-record weight rests on 95 thin pairs.** Few members have a
   thin record next to a full one, so the half point has a wide interval
-  (24–98 votes, the upper end where the n0 search stops), and whether
-  the chambers differ can't be settled: fitted apart they come to 25 and
-  85 votes, but a curve per chamber predicts held-out members better by
-  only 0.020, under a third of that difference's standard error (0.070).
-  The thin records mix arrivals, departures and long absences, as the
+  (26–98 votes, the upper end where the n0 search stops). The era
+  structure beats one curve by just over a standard error of the
+  difference (0.057 against 0.054), so a rerun with new pairs could
+  return to one curve, moving the half point to about 36 votes. The
+  thin records mix arrivals, departures and long absences, as the
   score's do; whether everyone's early records in a Congress behave like
   these is untested. The no-count weight rests on fewer still (25
-  pairs), and the flank rule's switch can't be measured at all: only 6
+  pairs), and the flank rule's switch can't be measured at all: only 3
   pairs have the rule's shape. Rerunning the calibration adds each
   Congress's new pairs, and decides the structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the

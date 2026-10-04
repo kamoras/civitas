@@ -25,11 +25,12 @@ varies by era (a full record's slope on the next Congress's runs from about
 0.66 to 1.00), so each chamber and transition gets its own, set by that
 transition's pairs of full records alone, which show no gradient in their
 count (full records count 1). n0 is then the least-squares fit of the thin
-pairs, one for both chambers unless one per chamber predicts held-out
-members (leave one member out) better by more than a standard error of
-the difference (choose_structure: the one-standard-error rule), so the
-data, not a choice, decide whether the chambers differ; a rerun decides
-again. n0 is weakly determined, and so is the count at which a position
+pairs, one for both chambers unless one per chamber, or one per era (split
+at ERA_SPLIT, fixed in advance; the latest era's applies to both
+chambers), predicts held-out members (leave one member out) better by
+more than a standard error of the difference (choose_structure: the
+one-standard-error rule), so the data, not a choice, decide whether the
+chambers or the eras differ; a rerun decides again. n0 is weakly determined, and so is the count at which a position
 counts half (half_weight_votes, a reparametrisation of it, bounded above
 at RELIABLE_VOTES / 2), reported with its interval. Positions Voteview
 publishes with no count get their own
@@ -47,16 +48,19 @@ whose short records reflect the date, not partial service.
 
 A party-line term was tested and is reported, not used: with one drift for
 every Congress, n0 appeared to rise with the share of roll calls on which
-the parties' majorities split, but with drift measured per transition the
-slope reverses sign (-4.25) and predicts held-out members worse than no
-term
-(research note section 14). So the weight is at most one curve per
-chamber (one for both, as calibrated now), and nothing in it follows the
-sitting Congress: a rerun only adds pairs. Era, the pair's direction (a member who arrived or one who left)
-and attendance (attended arrivals and departures against the rest) are
-tested the same way and reported, not used: an era's curve would
-apply only as the latest era's, and a direction can't be known for a
-sitting member's record.
+the parties' majorities split, but with drift measured per transition its
+slope is unstable (its sign has flipped between reruns) and it predicts
+held-out members worse than no term
+(research note section 14). Nothing in the weight follows the sitting
+Congress: the era split is a fixed Congress, so a rerun only adds pairs
+(to the latest era). The pair's direction (which side of the pair is
+thin: the earlier, mostly members who arrived, or the later, mostly
+members who left or were absent at the end) and attendance (attended
+arrivals and departures against the rest) are tested the same way and
+reported, not used: neither can be known for a sitting member's record.
+era_split_test repeats the era comparison at every split, as a check that
+the result doesn't hang on ERA_SPLIT. Members who switched parties
+during a Congress are left out (deviations).
 
 prior_test is the evidence for the flank rule's use of the last
 Congress's full record (party_line_record), on pairs centered as that
@@ -184,21 +188,29 @@ def deviations(rows: list[dict], weight=None) -> dict[str, tuple[float, float, b
     """icpsr -> (scaled votes, 0 when none or 0 reported; position from the
     party's center signed toward its flank; whether Voteview has a career
     DW-NOMINATE position for the member) for each major-party member of a
-    state with a position, one row each (a member listed twice, after a
-    party switch, is left out). The center is the median of the party's
+    state with a position, one row each. A member who switched parties
+    during the Congress is left out: Voteview lists them under a new ICPSR
+    id with the same bioguide id, so each id's record covers only part of
+    the Congress, and the old one would read as a member who left, the new
+    one as a member who arrived, with a change of party booked as a thin
+    record's noise. The center is the median of the party's
     full records, or, with `weight` ((votes, career) -> reliability weight),
     the weighted mean of all its members, as the flank rule centers
     (party_line_record)."""
     states = _states()
     seen: dict[str, list[dict]] = {}
+    ids_of: dict[str, set[str]] = {}
     for r in rows:
         seen.setdefault(_id(r["icpsr"]), []).append(r)
+        if bioguide := (r.get("bioguide_id") or "").strip():
+            ids_of.setdefault(bioguide, set()).add(_id(r["icpsr"]))
+    switched = {i for ids in ids_of.values() if len(ids) > 1 for i in ids}
     members = []
     for icpsr, rs in seen.items():
         r = rs[0]
         party = _float(r.get("party_code"))
         x = _float(r.get("nokken_poole_dim1"))
-        if len(rs) != 1 or party not in (100.0, 200.0) or x is None or is_placeholder(r):
+        if len(rs) != 1 or icpsr in switched or party not in (100.0, 200.0) or x is None or is_placeholder(r):
             continue
         if (r.get("state_abbrev") or "").strip().upper() not in states:
             continue
@@ -358,19 +370,25 @@ def fit_n0(data: list[tuple], drift: dict | None = None) -> float:
 
 
 CHAMBERS = (("senate", "S"), ("house", "H"))
+# The era structure's split: the first Congress of the later era.
+ERA_SPLIT = 110
 # Candidate structures for n0: the group a pair's n0 is fitted within.
-# "pooled" and "chamber" can be applied to a sitting member's record; era,
-# direction and attendance are tested and reported only.
+# "pooled", "chamber" and "era" can be applied to a sitting member's record
+# (an era as its latest era's curve, the era every Congress scored from now
+# on falls in); direction and attendance can't be known for one, so they
+# are tested and reported only. The era split is fixed in advance, not
+# chosen on the data; era_split_test reports every other split as a
+# sensitivity check.
 STRUCTURES = {
     "pooled": lambda r: "all",
     "chamber": lambda r: r[0],
-    "era": lambda r: r[6] >= 110,
+    "era": lambda r: r[6] >= ERA_SPLIT,
     "direction": lambda r: r[8],
     # Attended arrivals and departures (pairs()'s tenth field) apart from the
     # rest: whether absences make a thin record say less.
     "attendance": lambda r: r[9] if len(r) > 9 else False,
 }
-USABLE = ("pooled", "chamber")
+USABLE = ("pooled", "chamber", "era")
 
 
 def heldout_errors(data: list[tuple], structure: str) -> dict[str, float]:
@@ -418,8 +436,35 @@ def choose_structure(data: list[tuple]) -> tuple[str, dict]:
     return chosen, report
 
 
+def era_split_test(data: list[tuple]) -> dict:
+    """The era structure at every split with thin pairs on both sides, a
+    sensitivity check on ERA_SPLIT: how much its held-out error falls short
+    of one curve's (negative: better) and the standard error of that
+    difference, by the first Congress of the later era; and at how many
+    splits it beats one curve by more than one standard error."""
+    base = heldout_errors(data, "pooled")
+    thin = sorted({r[6] for r in data if r[5] == "thin"})
+    out: dict = {}
+    for cut in thin[1:]:
+        STRUCTURES["_split"] = lambda r, cut=cut: r[6] >= cut
+        try:
+            errors = heldout_errors(data, "_split")
+        finally:
+            del STRUCTURES["_split"]
+        diff = np.array([errors[m] - base[m] for m in base])
+        out[str(cut)] = {"above_pooled": round(float(diff.sum()), 4),
+                         "standard_error": round(float(np.sqrt(len(diff)) * diff.std(ddof=1)), 4)}
+    return {"splits": out, "beats_by_more_than_one_se": sum(
+        v["above_pooled"] < -v["standard_error"] for v in out.values()), "of": len(out)}
+
+
 def fit_chambers(data: list[tuple], structure: str) -> dict[str, float]:
-    """n0 for each chamber under `structure` ("pooled": the same for both)."""
+    """n0 for each chamber under `structure` ("pooled": the same for both;
+    "era": the same for both, the latest era's, which every Congress scored
+    from now on falls in)."""
+    if structure == "era":
+        n0 = fit_n0([r for r in data if r[6] >= ERA_SPLIT], drifts(data))
+        return {name: n0 for name, _ in CHAMBERS}
     if structure == "pooled":
         n0 = fit_n0(data)
         return {name: n0 for name, _ in CHAMBERS}
@@ -752,9 +797,10 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
         "half_weight_votes_by_chamber_interval_90": {
             name: b["half_weight_votes"] for name, b in bootstrap(data, "chamber").items()
             if name != "uncounted_weight"},
+        "era_split_test": era_split_test(data),
         "half_weight_votes_by_era": {
             f"{e.start}-{e.stop - 1}": round(half_point(fit_n0([r for r in data if r[6] in e])), 1)
-            for e in (range(FIRST_CONGRESS, 110), range(110, last + 1))
+            for e in (range(FIRST_CONGRESS, ERA_SPLIT), range(ERA_SPLIT, last + 1))
         },
         "party_line_test": party_line_test(data, structure),
         "prior_test": (test := prior_test(rule_data)),
@@ -794,16 +840,20 @@ def main() -> None:
             "regenerate with backend/scripts/calibrate_position_confidence.py"
         ),
         "_method": (
-            "Members of the 50 states with positions in adjacent Congresses, each read from the "
+            "Members of the 50 states with positions in adjacent Congresses (a member who switched "
+            "parties during a Congress is left out), each read from the "
             "party's center toward its flank, keyed by the transition they span: full = "
             "drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / "
             f"w({RELIABLE_VOTES})), w(n) = n / (n + n0); drift from each transition's pairs of full "
             f"records (both sides {RELIABLE_VOTES} or more scaled votes) in the pair's direction, n0 "
-            "the least-squares fit of the thin pairs on a grid to 5000, for every Congress, under "
-            "one n0 for both chambers unless one per chamber has a heldout_error (the squared error "
-            "of each thin member's pairs fitted without that member) smaller by more than the "
-            "standard error of the difference (structure_test; era, direction and attendance, "
-            "attended arrivals and departures against the rest, are tested, not usable); "
+            "the least-squares fit of the thin pairs on a grid to 5000, under the simplest usable "
+            "structure (one n0 for both chambers, one per chamber, or one per era split at "
+            f"Congress {ERA_SPLIT}, applied as the latest era's to both chambers) whose heldout_error "
+            "(the squared error of each thin member's pairs fitted without that member) is within one "
+            "standard error of the difference from the best's (structure_test; direction and "
+            "attendance, attended arrivals and departures against the rest, are tested, not usable); "
+            "era_split_test repeats the era comparison at every split; chambers' thin_pairs count "
+            "every thin pair, whichever era it falls in; "
             "half_weight_votes is where "
             "weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / "
             "reference_votes), so an interval reaching that limit is open above; "
