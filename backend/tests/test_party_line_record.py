@@ -196,6 +196,17 @@ def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_ses
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
     del section["votes"]["R4"]  # no count reported: read as thin
     assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    # ... even when a position with no count weighs something on its own: the
+    # full last record still decides.
+    section["reliability"]["uncounted_weight"] = 0.2
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    del section["reliability"]["uncounted_weight"]
+    # A last record of exactly a full record's count is full.
+    section["votes"]["R4"] = 10
+    section["prior"]["votes"]["R4"] = 200
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    section["prior"]["votes"]["R4"] = 500
+    del section["votes"]["R4"]
     # Only a full last record was measured against a thin new one: a thin
     # last record (here under reference_votes) leaves this Congress's...
     section["reliability"]["reference_votes"] = 600
@@ -619,3 +630,40 @@ def test_a_member_no_longer_stored_counts_in_their_recorded_partys_center(db_ses
     section["parties"].pop("bio-GONE")
     (record, *_) = party_line_records(db_session, "senate", roster)
     assert not record["breaks"] and len(record["flankBreaks"]) == 1
+
+
+
+def test_namesakes_sharing_a_first_name_prefix_go_by_the_exact_match_in_either_order(db_session, monkeypatch):
+    """Two departed namesakes whose first names both loosely match the one
+    free LIS id ("Rob" and "Robert" against "Robert"): the exact match takes
+    it, whichever is stored first."""
+    for first, second in (("bio-A", "bio-B"), ("bio-B", "bio-A")):
+        db_session.query(RollCallPosition).delete()
+        db_session.query(RollCall).delete()
+        from app.models import Senator
+        db_session.query(Senator).delete()
+        db_session.commit()
+        positions = _namesakes(db_session, monkeypatch, [("Rob Lastg", first, False), ("Robert Lastg", second, False)],
+                               {"L-R": "Robert"})
+        assert [m["bioguideId"] for m in party_line_record._departed_senators(db_session, [], positions)] == [second]
+
+
+def test_a_lone_defector_is_read_against_the_center_when_colleagues_weigh_nothing():
+    """Party colleagues whose positions weigh nothing (no votes, no career
+    position) can't stand in for the party: the lone defector is read
+    against the party's center, 0."""
+    cast = [(0, "R", "Nay", False, (-0.1, 1.0)), (1, "R", "Yea", True, (0.5, 0.0)), (2, "R", "Yea", True, (0.4, 0.0))]
+    assert party_line_record._toward_other_party("R", cast) is True
+
+
+def test_the_warning_names_only_the_members_a_run_scores(db_session, monkeypatch, caplog):
+    """The rest of the chamber is passed for the means alone: one of them
+    matching no roll call isn't scored on stored votes, so the warning
+    doesn't name them."""
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": DIM1})
+    _roll_call(db_session, "house", 45, "On Passage", "HR.45", {})
+    db_session.commit()
+    rest = {"bioguideId": "Z9", "name": "Zed Nobody", "state": "TN", "party": "R"}
+    with caplog.at_level("WARNING"):
+        party_line_records(db_session, "house", _members() + [rest])
+    assert "Zed Nobody" not in caplog.text

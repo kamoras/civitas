@@ -544,3 +544,13 @@ def test_a_carried_scale_keeps_a_sections_own_and_names_where_it_was_measured():
     carried = {"extremity_p90": 0.2, "congress": 119, "scale_congress": 118}
     assert voteview.with_carried_scale(thin, carried)["scale_congress"] == 118
     assert voteview.with_carried_scale(thin, {}) is thin
+
+
+def test_an_at_large_seat_counts_once_however_voteview_codes_it():
+    """Voteview codes some at-large seats 1 and others 0: a state with one
+    seat resolves to district 0 either way, so the seat gate counts it once;
+    a districted state keeps its number."""
+    district_pvi = {"WY-0": 25, "TX-3": 10}
+    assert voteview._seat_district({"state_abbrev": "WY", "district_code": "1"}, district_pvi) == 0
+    assert voteview._seat_district({"state_abbrev": "WY", "district_code": "0"}, district_pvi) == 0
+    assert voteview._seat_district({"state_abbrev": "TX", "district_code": "3"}, district_pvi) == 3

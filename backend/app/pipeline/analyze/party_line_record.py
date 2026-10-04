@@ -134,8 +134,8 @@ def _departed_senators(db: Session, members: list[dict], positions: dict[int, li
     first name matches one LIS id that voted under it which no member
     passed has the first name of (a predecessor who never voted, or a
     successor who hasn't yet, takes no one's votes; each LIS id goes to one
-    senator, whatever order they are stored in). Anyone else is left out,
-    as before."""
+    senator, an exact first-name match over a looser one, whatever order
+    they are stored in). Anyone else is left out, as before."""
     have = {m.get("bioguideId") for m in members}
     voters: dict[str, set[str]] = defaultdict(set)
     people: dict[tuple, dict[str, str]] = defaultdict(dict)
@@ -151,9 +151,8 @@ def _departed_senators(db: Session, members: list[dict], positions: dict[int, li
     free = {k: {lis: first for lis, first in ids.items()
                 if not any(_same_first_name(own, first) for own in firsts.get(k, ()))}
             for k, ids in people.items()}
-    out = []
-    for bioguide, name, state, party in db.query(
-            Senator.bioguide_id, Senator.name, Senator.state, Senator.party).order_by(Senator.bioguide_id):
+    candidates = []
+    for bioguide, name, state, party in db.query(Senator.bioguide_id, Senator.name, Senator.state, Senator.party):
         if not bioguide or bioguide in have:
             continue
         words = _words(name or "")
@@ -161,13 +160,21 @@ def _departed_senators(db: Session, members: list[dict], positions: dict[int, li
         if len(last) != 1:
             continue
         surname = last.pop()
-        k = (_normalize_for_match(surname), (state or "").upper())
-        mine = [lis for lis, first in free.get(k, {}).items() if _same_first_name((name or "").split(" ")[0], first)]
-        if len(mine) == 1:
-            del free[k][mine[0]]
-            out.append({"bioguideId": bioguide, "name": name, "state": state, "party": party,
-                        "lastNameForVoteMatch": surname})
-    return out
+        candidates.append(((_normalize_for_match(surname), (state or "").upper()), (name or "").split(" ")[0],
+                           {"bioguideId": bioguide, "name": name, "state": state, "party": party,
+                            "lastNameForVoteMatch": surname}))
+    # Each free LIS id to the one candidate whose first name matches it, an
+    # exact match over a looser one; an id two candidates match equally,
+    # or a candidate two ids match, is left out: no order decides it.
+    taken: dict[int, list[str]] = defaultdict(list)
+    for k, ids in free.items():
+        for lis, first in ids.items():
+            near = [i for i, (ck, own, _) in enumerate(candidates) if ck == k and _same_first_name(own, first)]
+            exact = [i for i in near if _normalize_for_match(candidates[i][1]) == _normalize_for_match(first)]
+            pick = exact or near
+            if len(pick) == 1:
+                taken[pick[0]].append(lis)
+    return [candidates[i][2] for i in sorted(taken) if len(taken[i]) == 1]
 
 
 def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[dict | None]:
