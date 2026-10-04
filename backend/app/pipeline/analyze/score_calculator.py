@@ -2086,8 +2086,9 @@ def seat_break_residual(
     return seat_residual(break_rate, expected, n_votes), scale, typical
 
 
-# Weight of position congruence when a roll-call ideal point exists; the
-# seat-relative vote component carries the rest. A design weight, not a
+# Weight of position congruence when the chamber has a current Voteview
+# section (a member with no position in it scores 50 on this part, v6.27);
+# the seat-relative vote component carries the rest. A design weight, not a
 # calibrated one — see the research note: the one election where both
 # could be tested (2004 House) gave the vote component the larger
 # independent association with re-election vote share, so the vote
@@ -2175,8 +2176,8 @@ def _calc_constituent_alignment(
     (reproduce with scripts/research_constituent_alignment.py).
 
     Components:
-      1. Seat-relative vote alignment (70%, or 100% without ideal-point
-         data): how far the member's break rate on party-labeled votes sits
+      1. Seat-relative vote alignment (70%, or 100% without a current
+         Voteview section): how far the member's break rate on party-labeled votes sits
          from the rate their chamber's same-party members show at the same
          seat lean (compute_constituent_reference, measured each run), in
          standard deviations per vote (seat_residual, v6.16). 100 at the
@@ -2210,7 +2211,8 @@ def _calc_constituent_alignment(
              — research note section 8. The score represents both: the seat
              that elected the member and the party label it elected them
              under.
-      2. Position congruence (30%, when Voteview ideal points exist): the
+      2. Position congruence (30%, when the chamber has a current Voteview
+         section; 50 for a member without a position in it): the
          member's congress-specific Nokken-Poole first-dimension position
          minus what a same-party member of a seat with this lean holds
          (per-party OLS on seat PVI, fit each run by fetch/voteview.py).

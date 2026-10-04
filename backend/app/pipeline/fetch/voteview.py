@@ -370,7 +370,8 @@ def build_chamber_ideal_points(
     parsed Voteview rows, plus build-stage failure strings (empty = clean).
     `reliability` (score_calculator._position_reliability) is stored for the
     score's weight. It doesn't filter the fits (no constant offset of a thin
-    position is detected: position_confidence.json's thin_offset). The saturation scale is the 90th percentile of the full records'
+    position is detected: position_confidence.json's thin_offset). The
+    saturation scale is the 90th percentile of the full records'
     extremities (reliability's reference_votes or more, which count in
     full): a thin record's noise would widen it, and scaling it by the
     weights would cancel them whenever every record is equally thin. With
@@ -590,8 +591,9 @@ async def _latest_ids(
     rows: list[dict], chamber: str, congress: int, client: httpx.AsyncClient | None,
 ) -> dict[str, str] | None:
     """switcher_latest for this export: {} with no switcher, None when a
-    switcher's latest id can't be settled (an export that can't be read, or two new ids neither of which has voted):
-    the caller keeps the previous section rather than guess."""
+    switcher's latest id can't be settled (an export that can't be read,
+    or two new ids neither of which has voted): the caller keeps the
+    previous section rather than guess."""
     if not switched_members(rows):
         return {}
     last = await fetch_member_rows(chamber, congress - 1, client=client)

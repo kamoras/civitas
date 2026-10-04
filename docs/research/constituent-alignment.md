@@ -1122,7 +1122,12 @@ which read placeholders as positions and weighted nothing, with v6.27:
 |---|---|---|
 | Saturation | 0.258 → 0.268 | 0.224 → 0.221 |
 | Mean change in the component | 1.69 | 0.58 |
-| Mean change in Constituent Alignment | 0.51 | 0.17 |
+| Mean change in Constituent Alignment, through the position part | 0.51 | 0.17 |
+
+These are the change through the position part (30% of Constituent
+Alignment). The vote part's change is not in them: weighting the flank
+rule's means reclassifies 0 of 2,351 Senate and 2 of 6,055 House breaks
+(above), and reading departed senators' positions is not measured here.
 
 - Full records move only through the scale and the refit seat lines. The
   Senate's mean change comes from dropping its placeholder, which moves

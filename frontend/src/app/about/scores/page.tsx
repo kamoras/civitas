@@ -279,13 +279,13 @@ export default function ScoresChapter() {
             Congress and a full one in the Congress before or after, in Congresses since 2007, a
             dividing line we chose. Measuring on these recent Congresses predicted later ones better
             overall than using every year we have, though not every time, and by a margin small
-            enough that a later recalibration could reverse it. We had seen some results for 2007
-            beforehand, and settled how to choose between the two after one run of this comparison
-            had already favoured the recent years. A position from about 46 votes counts half, and
-            one from 200 or more counts in full (where a full record starts is our convention). A
-            member with no position yet sits at 50. Until a new Congress&apos;s positions are
-            published and pass our checks, this part is left out and the score is the voting part
-            alone.
+            enough that a later recalibration could reverse it. We had already seen some results
+            that used 2007 as the dividing line before running this comparison, and settled how to
+            choose between the two after one run of this comparison had already favoured the recent
+            years. A position from about 46 votes counts half, and one from 200 or more counts in
+            full (where a full record starts is our convention). A member with no position yet sits
+            at 50. Until a new Congress&apos;s positions are published and pass our checks, this
+            part is left out and the score is the voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run
