@@ -543,13 +543,12 @@ def _position_reliability(chamber: str) -> dict:
     members with a thin record in one Congress and a full one in the next
     (or the reverse),
     against full records' drift over the same transition (research note
-    section 14). One curve for both chambers and every Congress, as
-    calibrated now: the calibration would fit one per chamber if it
-    predicted held-out members better by more than the noise, or apply a
-    recent era's if that predicted the recent era's members better by
-    more than the noise, and
-    a party-line term was tested and found no support. Nothing in it
-    follows the sitting Congress.
+    section 14). As calibrated now, one curve for both chambers, the
+    latest era's (since a fixed Congress): the calibration chooses among
+    one curve, one per chamber and the latest era's by how well each
+    predicts the next Congress from the earlier ones (a party-line term
+    was tested and found no support). Nothing in it follows the sitting
+    Congress.
 
     Read from app/data/position_confidence.json, and stored in each
     member_ideal_points section at ingest: the score reads the section's

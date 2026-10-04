@@ -183,12 +183,13 @@ def test_shipped_file_documents_its_source_and_intervals():
     data = json.loads(_DATA.read_text())
     script = _script()
     assert "calibrate_position_confidence.py" in data["_source"]
-    # The structure is the simplest within one standard error of the best,
-    # or the latest era's curve if it beats that on the latest era's pairs.
-    test = data["structure_test"]
-    base = next(n for n in script.USABLE if test[n]["above_best"] <= test[n]["standard_error"])
-    era = data["era_test"]
-    assert data["structure"] == ("era" if era and era["above"] < -era["standard_error"] else base)
+    # The structure is the forward test's choice: one curve unless an
+    # applicable structure predicts the next Congress better by more than
+    # the standard error.
+    forward = data["forward_test"]
+    passing = [n for n in ("chamber", "era") if forward[n]["above"] < -forward[n]["standard_error"]]
+    assert data["structure"] == forward["chosen"] == (
+        min(passing, key=lambda n: forward[n]["error"]) if passing else "pooled")
     held = data["heldout_error"]
     for chamber in ("senate", "house"):
         c = data["chambers"][chamber]
@@ -536,10 +537,10 @@ def test_the_pipeline_reads_the_switcher_record_the_evidence_allows():
             assert test[other]["mean"] <= test[other]["standard_error"]
 
 
-def test_calibrate_ships_the_latest_eras_curve_only_when_era_test_adopts_it(monkeypatch):
-    """calibrate: the structure is the one-standard-error rule's choice
-    unless era_test adopts the latest era's curve, which then ships for both
-    chambers; era_split_test is judged against that choice."""
+def test_calibrate_ships_the_forward_tests_choice(monkeypatch):
+    """calibrate ships the structure forward_test chooses, fitting the
+    latest era's curve for both chambers when it is "era"; era_split_test
+    is judged against the one-standard-error rule's own choice."""
     script = _script()
     full = [("H", f"F{c}{k}", 300.0, x, x, "full", c, 0.5, False, False, False) for c in (101, 115)
             for k, x in enumerate((-0.3, -0.1, 0.1, 0.3))]
@@ -550,18 +551,35 @@ def test_calibrate_ships_the_latest_eras_curve_only_when_era_test_adopts_it(monk
     monkeypatch.setattr(script, "choose_structure", lambda d: ("pooled", {}))
     monkeypatch.setattr(script, "heldout_errors", lambda d, s, only=None: {"L0": 1.0, "L1": 1.0})
     monkeypatch.setattr(script, "heldout_error", lambda d, s: 0.0)
+    monkeypatch.setattr(script, "era_test", lambda d, s, split=110: None)
     split_base = []
     monkeypatch.setattr(script, "era_split_test", lambda d, s: split_base.append(s) or {})
     for name in ("bootstrap", "party_line_test", "trend_test", "prior_test", "switcher_test"):
         monkeypatch.setattr(script, name, lambda *a, **k: {})
     monkeypatch.setattr(script, "prior_until_votes", lambda t: 200.0)
-    monkeypatch.setattr(script, "fit_chambers", script.fit_chambers)
-    for adopted, shipped in ((True, "era"), (False, "pooled")):
-        monkeypatch.setattr(script, "era_test", lambda d, s, a=adopted: {"adopted": a})
+    for chosen in ("era", "pooled"):
+        monkeypatch.setattr(script, "forward_test", lambda d, c=chosen: {"chosen": c})
         out = script.calibrate()
-        assert out["structure"] == shipped and split_base[-1] == "pooled"
-        assert out["chambers"]["house"]["n0"] == script.fit_chambers(data, shipped)["house"]
+        assert out["structure"] == chosen and split_base[-1] == "pooled"
+        assert out["chambers"]["house"]["n0"] == script.fit_chambers(data, chosen)["house"]
     assert script.fit_chambers(data, "era") != script.fit_chambers(data, "pooled")
+
+
+def test_the_forward_test_adopts_a_structure_only_past_the_noise(monkeypatch):
+    """forward_test ships one curve unless chamber or era predicts the next
+    Congress better by more than its standard error; the trend is never
+    chosen."""
+    script = _script()
+    base = {f"M{i}": 1.0 for i in range(6)}
+
+    def errors(gain_era, noise_era, gain_trend=-1.0):
+        return {"pooled": base, "chamber": dict(base),
+                "era": {m: 1.0 + gain_era + (noise_era if i % 2 else -noise_era) for i, m in enumerate(base)},
+                "trend": {m: 1.0 + gain_trend for m in base}}
+    monkeypatch.setattr(script, "forward_errors", lambda d: errors(-0.1, 0.0))
+    assert script.forward_test([])["chosen"] == "era"
+    monkeypatch.setattr(script, "forward_errors", lambda d: errors(-0.01, 0.2))
+    assert script.forward_test([])["chosen"] == "pooled"
 
 
 def test_the_trend_term_finds_n0_rising_with_time():
@@ -603,3 +621,23 @@ def test_an_adopting_split_reports_its_most_influential_member(monkeypatch):
     assert "M1100" not in reran[-1] and out["without_most_influential_member"]["adopted"]
     fits["M1100"] = 5000.0
     assert script.era_split_test(data, "pooled")["splits"]["110"]["without_most_influential_member"] is None
+
+
+def test_forward_errors_fit_only_on_earlier_transitions(monkeypatch):
+    """Each transition is predicted from fits on earlier transitions alone,
+    and only once at least MIN_TRAIN_TRANSITIONS of them have thin pairs."""
+    script = _script()
+    data = []
+    for c in (101, 103, 105, 107, 109):
+        data += [("H", f"F{c}{k}", 300.0, x, x, "full", c, 0.5, False) for k, x in enumerate((-0.3, 0.3))]
+        data += [("H", f"T{c}", 20.0, 0.2, 0.1, "thin", c, 0.5, False)]
+    seen = []
+    real = script.fit_chambers
+
+    def fit(rows, structure):
+        seen.append(max(r[6] for r in rows))
+        return real(rows, structure)
+    monkeypatch.setattr(script, "fit_chambers", fit)
+    out = script.forward_errors(data)
+    assert set(out["pooled"]) == {"T107", "T109"}  # the first three transitions only train
+    assert max(seen) == 107  # never a fit that saw the transition it predicts

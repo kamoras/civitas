@@ -1,17 +1,17 @@
 {
  "_source": "Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House: pairs from Congresses 101-119 (later ones still thin by the calendar are left out), with the exports either side read for who was seated; exports retrieved 2026-10-03 to 2026-10-04; regenerate with backend/scripts/calibrate_position_confidence.py",
- "_method": "Members of the 50 states with positions in adjacent Congresses (a member who switched parties during a Congress is left out), each read from the party's center toward its flank, keyed by the transition they span: full = drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / w(200)), w(n) = n / (n + n0); drift from each transition's pairs of full records (both sides 200 or more scaled votes) in the pair's direction, n0 the least-squares fit of the thin pairs on a grid to 5000, one n0 for both chambers unless one per chamber has a heldout_error (the squared error of each thin member's pairs fitted without that member) smaller by more than the standard error of the difference (structure_test; direction and attendance, attended arrivals and departures against the rest, are tested, not usable); era_test judges the latest era's curve (eras split at Congress 110), the only one an era structure would apply, against that choice on the latest era's thin pairs alone, adopting it (structure \"era\") only if better by more than the standard error (with its half_weight_votes, and the other usable structure judged the same way: chamber_on_latest while one curve is chosen), and era_split_test repeats it at every split (at an adopting split, with its n0 leaving one member out in turn, and the test rerun without the member whose absence moves n0 most, none if no member moves it); trend_test is the split-free form, log n0 linear in decades since the split, added after the era tests and reported, not adopted; structure_test's reported gives direction, attendance and era (each era's curve on its own members) against the chosen structure, paired; switcher_test compares, for a member who switched parties during a Congress, the latest record, the longer one and their vote-weighted mean against the next Congress's full record, paired differences over people (the pipeline reads the latest, a stated choice the evidence can't settle); party_line_test's above and standard_error are its paired difference from the shipped structure; chambers' thin_pairs count every thin pair; half_weight_votes is where weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / reference_votes), so an interval reaching that limit is open above; uncounted_weight is the slope, for both chambers, for positions published with no count (or 0) but a career DW-NOMINATE position; party_line_test is the rejected alternative with log n0 linear in the Congress's party-line share; transitions with no full pairs and Congresses still thin by the calendar are left out; interval_90 is the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, a last full record and a thin record as evidence of a member's side of their party, centered as the rule centers, and prior_until_votes is the count below which the rule reads the last full record (a full record unless a switch short of one, chosen on resampled members, saves sides on the members left out in 95% of resamples, on pairs shaped like the rule's case: a full record, then the thin record of a member who left during the next Congress, absent the Congress after, missing no more of the roll calls in their span than nine in ten of that Congress's full records, a convention); structure_test is the one-standard-error rule's comparison; switch_test also reports every member who left (leavers) and every thin pair (all); crossover_if_independent is the rejected unstratified crossing, reported only",
+ "_method": "Members of the 50 states with positions in adjacent Congresses (a member who switched parties during a Congress is left out), each read from the party's center toward its flank, keyed by the transition they span: full = drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / w(200)), w(n) = n / (n + n0); drift from each transition's pairs of full records (both sides 200 or more scaled votes) in the pair's direction, n0 the least-squares fit of the thin pairs on a grid to 5000, under the structure forward_test chooses (each transition predicted from fits on the earlier ones; one curve unless one per chamber or the latest era's, split at the given Congress, predicts the next Congress better by more than the paired standard error); reported beside it, one n0 for both chambers unless one per chamber has a heldout_error (the squared error of each thin member's pairs fitted without that member) smaller by more than the standard error of the difference (structure_test; direction and attendance, attended arrivals and departures against the rest, are tested, not usable); era_test judges the latest era's curve (eras split at Congress 110), the only one an era structure would apply, against that choice on the latest era's thin pairs alone, adopting it (structure \"era\") only if better by more than the standard error (with its half_weight_votes, and the other usable structure judged the same way: chamber_on_latest while one curve is chosen), and era_split_test repeats it at every split (at an adopting split, with its n0 leaving one member out in turn, and the test rerun without the member whose absence moves n0 most, none if no member moves it); trend_test is the split-free form, log n0 linear in decades since the split, added after the era tests and reported, not adopted; structure_test's reported gives direction, attendance and era (each era's curve on its own members) against the chosen structure, paired; switcher_test compares, for a member who switched parties during a Congress, the latest record, the longer one and their vote-weighted mean against the next Congress's full record, paired differences over people (the pipeline reads the latest, a stated choice the evidence can't settle); party_line_test's above and standard_error are its paired difference from the shipped structure; chambers' thin_pairs count every thin pair; half_weight_votes is where weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / reference_votes), so an interval reaching that limit is open above; uncounted_weight is the slope, for both chambers, for positions published with no count (or 0) but a career DW-NOMINATE position; party_line_test is the rejected alternative with log n0 linear in the Congress's party-line share; transitions with no full pairs and Congresses still thin by the calendar are left out; interval_90 is the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, a last full record and a thin record as evidence of a member's side of their party, centered as the rule centers, and prior_until_votes is the count below which the rule reads the last full record (a full record unless a switch short of one, chosen on resampled members, saves sides on the members left out in 95% of resamples, on pairs shaped like the rule's case: a full record, then the thin record of a member who left during the next Congress, absent the Congress after, missing no more of the roll calls in their span than nine in ten of that Congress's full records, a convention); structure_test is the one-standard-error rule's comparison; switch_test also reports every member who left (leavers) and every thin pair (all); crossover_if_independent is the rejected unstratified crossing, reported only",
  "calibrated_through": 119,
- "structure": "pooled",
+ "structure": "era",
  "chambers": {
   "senate": {
-   "n0": 56.0,
-   "half_weight_votes": 35.9,
+   "n0": 86.0,
+   "half_weight_votes": 46.2,
    "thin_pairs": 23
   },
   "house": {
-   "n0": 56.0,
-   "half_weight_votes": 35.9,
+   "n0": 86.0,
+   "half_weight_votes": 46.2,
    "thin_pairs": 72
   }
  },
@@ -24,22 +24,22 @@
  "interval_90": {
   "senate": {
    "n0": [
-    26.0,
-    326.45
+    36.0,
+    5000.0
    ],
    "half_weight_votes": [
-    20.635,
-    76.55
+    26.471,
+    98.039
    ]
   },
   "house": {
    "n0": [
-    26.0,
-    326.45
+    36.0,
+    5000.0
    ],
    "half_weight_votes": [
-    20.635,
-    76.55
+    26.471,
+    98.039
    ]
   },
   "uncounted_weight": [
@@ -94,6 +94,28 @@
    23.664,
    98.039
   ]
+ },
+ "forward_test": {
+  "chosen": "era",
+  "members": 82,
+  "chamber": {
+   "error": 1.3587,
+   "above": 0.0383,
+   "standard_error": 0.0403
+  },
+  "era": {
+   "error": 1.2543,
+   "above": -0.0662,
+   "standard_error": 0.0335
+  },
+  "trend": {
+   "error": 1.2513,
+   "above": -0.0691,
+   "standard_error": 0.0893
+  },
+  "pooled": {
+   "error": 1.3204
+  }
  },
  "era_test": {
   "above": 0.0025,
@@ -285,28 +307,28 @@
   "110-119": 46.2
  },
  "party_line_test": {
-  "b": 7.75,
-  "loss_with": 1.2865,
-  "loss_without": 1.3066,
-  "heldout_error": 1.3446,
-  "above": 0.0084,
-  "standard_error": 0.0328
+  "b": 2.75,
+  "loss_with": 1.238,
+  "loss_without": 1.2449,
+  "heldout_error": 1.3221,
+  "above": 0.043,
+  "standard_error": 0.024
  },
  "trend_test": {
-  "b": 5.75,
+  "b": 8.5,
   "latest_congress": 118,
-  "half_weight_votes_latest": 99.6,
+  "half_weight_votes_latest": 100.0,
   "all": {
-   "above": -0.1546,
-   "standard_error": 0.0935
+   "above": -0.1287,
+   "standard_error": 0.087
   },
   "latest": {
-   "above": -0.0793,
-   "standard_error": 0.0741
+   "above": -0.0958,
+   "standard_error": 0.082
   },
   "latest_without_most_influential_member": {
-   "above": -0.0368,
-   "standard_error": 0.0624
+   "above": -0.0489,
+   "standard_error": 0.0715
   }
  },
  "prior_test": {
@@ -318,11 +340,11 @@
   "thin 0-25": {
    "pairs": 19,
    "same_side": 0.684,
-   "mean_squared_gap": 0.0611
+   "mean_squared_gap": 0.0612
   },
   "thin 25-50": {
    "pairs": 24,
-   "same_side": 0.5,
+   "same_side": 0.542,
    "mean_squared_gap": 0.0296
   },
   "thin 50-100": {
@@ -341,13 +363,13 @@
    "mean_squared_gap": 0.0029
   },
   "full_by_distance": {
-   "0.0-0.02": 0.618,
+   "0.0-0.02": 0.616,
    "0.02-0.05": 0.719,
    "0.05-0.1": 0.859,
    "0.1-0.2": 0.963,
    "0.2-10.0": 0.995
   },
-  "crossover_if_independent": 132.9,
+  "crossover_if_independent": 109.7,
   "rule_shape_bands": {
    "thin 0-25": {
     "pairs": 2,
@@ -369,24 +391,24 @@
     "saved": 0.0,
     "draws_judged": 1000,
     "saved_out_of_bag": [
-     -0.2202,
+     -0.22,
      0.0,
      0.0
     ],
     "share_saving": 0.033
    },
    "all": {
-    "switch_votes": 119,
+    "switch_votes": 101,
     "thin_pairs": 95,
     "thin_pairs_over_100": 32,
-    "saved": 0.0156,
+    "saved": 0.0244,
     "draws_judged": 1000,
     "saved_out_of_bag": [
-     -0.1768,
+     -0.177,
      0.0,
-     0.0394
+     0.0443
     ],
-    "share_saving": 0.302
+    "share_saving": 0.357
    }
   }
  },

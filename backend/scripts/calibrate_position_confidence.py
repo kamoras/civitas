@@ -26,14 +26,17 @@ varies by era (a full record's slope on the next Congress's runs from about
 0.66 to 1.01), so each chamber and transition gets its own, set by that
 transition's pairs of full records alone, which show no gradient in their
 count (full records count 1). n0 is then the least-squares fit of the thin
-pairs, one for both chambers unless one per chamber predicts held-out
-members (leave one member out) better by more than a standard error of
-the difference (choose_structure: the one-standard-error rule), so the
-data, not a choice, decide whether the chambers differ; a rerun decides
-again. A curve per era could be applied only as the latest era's, so it
-is judged on the latest era's pairs alone (era_test, split at ERA_SPLIT;
-era_split_test repeats it at every split): it replaces the chosen curve
-only if it predicts those members better by more than a standard error.
+pairs. The structure shipped is chosen forward in time (forward_test):
+each transition's thin pairs predicted from a fit on the earlier
+transitions only, as the weight is always applied to a Congress the
+calibration hasn't seen; one curve for both chambers unless one per
+chamber, or the latest era's (split at ERA_SPLIT, a convention), predicts
+the next Congress better by more than a standard error of the paired
+difference. That rule was adopted in review, after a forward check had
+been run once (research note section 14). The leave-one-member-out
+comparisons (choose_structure's one-standard-error rule over all
+members; era_test on the latest era's; era_split_test at every split;
+trend_test) are reported beside it; a rerun decides again.
 n0 is weakly determined, and so is the count at which a position counts
 half (half_weight_votes, a reparametrisation of it, bounded above
 at RELIABLE_VOTES / 2), reported with its interval. Positions Voteview
@@ -101,6 +104,9 @@ FETCH_TIMEOUT_S = 120
 RELIABLE_VOTES = 200  # a full record; the pairs measure the weight below it
 N0_GRID = np.concatenate([np.arange(1.0, 400.0, 1.0), np.arange(400.0, 5001.0, 25.0)])
 BOOTSTRAP = 1000
+# The forward test predicts a transition only from at least this many
+# earlier transitions with thin pairs (a convention: fewer give no fit).
+MIN_TRAIN_TRANSITIONS = 3
 CENTER = 0.6  # the party-line test's log n0 = a + b * (share - CENTER)
 A_GRID = np.arange(-1.0, 8.6, 0.05)
 B_GRID = np.arange(-25.0, 25.25, 0.25)
@@ -529,6 +535,59 @@ def _paired(a: dict[str, float], b: dict[str, float]) -> dict | None:
             "standard_error": round(float(np.sqrt(len(diff)) * diff.std(ddof=1)), 4)}
 
 
+def forward_errors(data: list[tuple]) -> dict[str, dict[str, float]]:
+    """structure -> each thin member's squared error predicting each
+    transition's thin pairs from a fit (n0) on the earlier transitions
+    only, rolling forward one transition at a time: how well a curve
+    measured on the past predicts the next Congress, the use the weight is
+    put to. The drift of the predicted transition comes from its own full
+    pairs (drift is not part of the curve). Structures: pooled, chamber,
+    era (the latest era's curve, pooled until the era has thin pairs) and
+    trend (log n0 linear in decades since ERA_SPLIT)."""
+    names = dict((letter, name) for name, letter in CHAMBERS)
+    thin_transitions = sorted({r[6] for r in data if r[5] == "thin"})
+    out: dict[str, dict[str, float]] = {k: {} for k in ("pooled", "chamber", "era", "trend")}
+    for t in thin_transitions:
+        train = [r for r in data if r[6] < t]
+        if len({r[6] for r in train if r[5] == "thin"}) < MIN_TRAIN_TRANSITIONS:
+            continue
+        test = [r for r in data if r[6] == t]
+        drift = drifts(test)
+        fits = {"pooled": fit_chambers(train, "pooled"), "chamber": fit_chambers(train, "chamber")}
+        late = any(STRUCTURES["era"](r) and r[5] == "thin" for r in train)
+        fits["era"] = fit_chambers(train, "era") if late else fits["pooled"]
+        b, a, _ = fit_party_line(train, "pooled", drifts(train), _decades)
+        a0 = next(iter(a.values()))
+        for r in test:
+            if r[5] != "thin" or (r[0], r[6]) not in drift:
+                continue
+            k = drift[(r[0], r[6])][1 if r[8] else 0]
+            n0s = {name: f[names[r[0]]] for name, f in fits.items()}
+            n0s["trend"] = min(float(np.exp(a0 + b * _decades(r))), 1e6)
+            for name, n0 in n0s.items():
+                err = (r[4] - float(relative_weight(r[2], n0)) * k * r[3]) ** 2
+                out[name][r[1]] = out[name].get(r[1], 0.0) + err
+    return out
+
+
+def forward_test(data: list[tuple]) -> dict:
+    """The structure the calibration ships: one curve unless a structure
+    the score can apply (per chamber, or the latest era's) predicts the
+    next Congress better, forward_errors' total, by more than the
+    standard error of its member-by-member difference from one curve (the
+    better of the two if both do). The trend is reported, not chosen: it
+    was added after the other tests. Each structure's total and paired
+    difference from one curve ("above": negative, better)."""
+    errors = forward_errors(data)
+    report = {name: {"error": round(sum(e.values()), 4), **(_paired(e, errors["pooled"]) or {})}
+              for name, e in errors.items() if name != "pooled"}
+    report["pooled"] = {"error": round(sum(errors["pooled"].values()), 4)}
+    passing = [n for n in ("chamber", "era") if report[n].get("above") is not None
+               and report[n]["above"] < -report[n]["standard_error"]]
+    chosen = min(passing, key=lambda n: report[n]["error"]) if passing else "pooled"
+    return {"chosen": chosen, "members": len(errors["pooled"]), **report}
+
+
 def era_test(data: list[tuple], structure: str, split: int = ERA_SPLIT) -> dict | None:
     """The era structure as it would be applied: the latest era's curve
     (eras split at `split`) against `structure`, both judged on the latest
@@ -947,7 +1006,8 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
         other = "pooled" if base == "chamber" else "chamber"
         eras[f"{other}_on_latest"] = _paired(heldout_errors(data, other, only=STRUCTURES["era"]),
                                              heldout_errors(data, base, only=STRUCTURES["era"]))
-    structure = "era" if eras and eras["adopted"] else base
+    forward = forward_test(data)
+    structure = forward["chosen"]
     heldout = {name: round(heldout_error(data, name), 4) for name in STRUCTURES}
     n0 = fit_chambers(data, structure)
     uncounted = uncounted_weight(data)
@@ -982,6 +1042,7 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
         "half_weight_votes_by_chamber_interval_90": {
             name: b["half_weight_votes"] for name, b in bootstrap(data, "chamber").items()
             if name != "uncounted_weight"},
+        "forward_test": forward,
         "era_test": eras,
         "switcher_test": switcher_test(cache, span),
         "era_split_test": era_split_test(data, base),
@@ -1034,7 +1095,10 @@ def main() -> None:
             "drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / "
             f"w({RELIABLE_VOTES})), w(n) = n / (n + n0); drift from each transition's pairs of full "
             f"records (both sides {RELIABLE_VOTES} or more scaled votes) in the pair's direction, n0 "
-            "the least-squares fit of the thin pairs on a grid to 5000, one n0 for both chambers "
+            "the least-squares fit of the thin pairs on a grid to 5000, under the structure forward_test "
+            "chooses (each transition predicted from fits on the earlier ones; one curve unless one per "
+            "chamber or the latest era's, split at the given Congress, predicts the next Congress better "
+            "by more than the paired standard error); reported beside it, one n0 for both chambers "
             "unless one per chamber has a heldout_error (the squared error of each thin member's "
             "pairs fitted without that member) smaller by more than the standard error of the "
             "difference (structure_test; direction and attendance, attended arrivals and departures "

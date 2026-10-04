@@ -294,14 +294,13 @@ Key mathematical properties:
   record counting 1. n0 is fitted on Voteview's own adjacent-Congress
   records with drift per transition
   (`scripts/calibrate_position_confidence.py`), one curve for both
-  chambers and every Congress. A paired one-standard-error rule on
-  held-out members decides: a curve per chamber predicted worse, and the
-  latest era's curve (split at the 110th Congress), judged on the latest
-  era's members, the only era it would apply to, predicted no
-  better (+0.0025, standard error 0.0195); a rerun decides again. Later
-  splits and a time trend (added after the fact, reported, not adopted)
-  lean toward a slower curve for recent Congresses.
-  Nothing is reset for a new Congress.
+  chambers: the latest era's, since the 110th Congress (a split by
+  convention). It is chosen by predicting forward, each transition from
+  the earlier ones only, as the weight is used: it beats one curve over
+  every Congress by 0.066 (standard error 0.034) and a curve per chamber
+  does worse; a paired one-standard-error rule decides, and a rerun
+  decides again. The split is a fixed Congress, so nothing is reset for a
+  new Congress.
   It is a reliability weight, not a count threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores

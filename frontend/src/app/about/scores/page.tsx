@@ -261,7 +261,7 @@ export default function ScoresChapter() {
           </P>
         </Sub>
         <Sub title="Where their voting record sits">
-          {/* The half point (about 36) and the full-strength count (200) come from
+          {/* The half point (about 46) and the full-strength count (200) come from
               backend/app/data/position_confidence.json; test_position_confidence.py fails when
               they drift apart. */}
           <P>
@@ -275,10 +275,11 @@ export default function ScoresChapter() {
             did, and one that put the typical position at 100 did not. A position estimated from
             only a few roll calls is mostly noise, so it counts only as much as its votes support,
             measured on members whose short record in one Congress sits next to a full one in the
-            Congress before or after: a position from about 36 votes counts half, and one from 200
-            or more counts in full (where a full record starts is our convention). A member with no
-            position yet sits at 50. Early in a new Congress, until its positions are published and
-            pass our checks, this part is left out and the score is the voting part alone.
+            Congress before or after, since 2007 (the measurement that best predicts each next
+            Congress): a position from about 46 votes counts half, and one from 200 or more counts
+            in full (where a full record starts is our convention). A member with no position yet
+            sits at 50. Early in a new Congress, until its positions are published and pass our
+            checks, this part is left out and the score is the voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run
