@@ -522,8 +522,8 @@ export default function ScoresChapter() {
           Whether a member broke with their party on a vote is defined only by how the parties
           actually voted on that roll call, so a bill that reads partisan but passed with both
           parties&apos; majorities is not a party-line vote, and no break is counted without a roll
-          call. The party badge on a bill is that split where there was a roll call, and its content
-          otherwise.
+          call. The party badge on a bill is the split on the bill&apos;s own roll call where
+          Civitas has it, and its content otherwise.
         </P>
         <P>
           The bill&apos;s content decides partisan depth (the lean bar and its policy-area
