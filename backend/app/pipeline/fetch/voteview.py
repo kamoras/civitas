@@ -319,7 +319,9 @@ def build_chamber_ideal_points(
     under a second ICPSR id) is read on the record with more scaled votes,
     and only that one enters the fits: one seat, one position. Which of the
     two to read is a convention (nothing measures it); the longer is the
-    more reliable estimate, and the weight then applies to its count."""
+    more reliable estimate, and the weight then applies to its count. The
+    longer record may predate the switch: it is still read against the
+    seat expectation of the member's party as the score has it."""
 
     column, measure = _position_column(rows)
     rows = _one_row_per_member(rows, column)

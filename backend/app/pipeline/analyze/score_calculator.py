@@ -544,7 +544,8 @@ def _position_reliability(chamber: str) -> dict:
     section 14). One curve for both chambers and every Congress, as
     calibrated now: the calibration would fit one per chamber if it
     predicted held-out members better by more than the noise, or apply a
-    recent era's if that predicted the recent era's members better, and
+    recent era's if that predicted the recent era's members better by
+    more than the noise, and
     a party-line term was tested and found no support. Nothing in it
     follows the sitting Congress.
 

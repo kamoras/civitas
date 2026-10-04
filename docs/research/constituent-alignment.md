@@ -714,10 +714,10 @@ in a fixed order, 1,000 times.
   against the departures, so it largely repeats it.
 - **Eras: judged where they would apply.** The era row is lower, but a
   curve per era could only ever be applied as the latest era's: every
-  Congress scored from now on falls in it. Its whole gain is on the
-  20 members with thin records before the 110th Congress, an era that
-  would never be applied, and it rests on a few early records (the
-  early era's n0 runs to the search grid's lower limit, 1). So the era
+  Congress scored from now on falls in it. All of its gain, and a little
+  more, is on the members with thin records before the 110th Congress,
+  an era that would never be applied, and it rests on a few early
+  records (the early era's n0 runs to the search grid's lower limit, 1). So the era
   curve is judged on the latest era's members alone (`era_test`): there
   the latest era's curve (half point 46 votes) predicts no better than
   one curve, 0.0025 worse with a standard error of 0.0195 over 67
@@ -745,10 +745,10 @@ in a fixed order, 1,000 times.
   line in the share of roll calls on which the parties' majorities split,
   since in a more party-line Congress each vote might say less about a
   member's place within their party. It predicts held-out members worse
-  (1.340 against 1.336), and its slope isn't stable: +7.75 here, −4.25
-  with the party switchers counted, both fitted with one curve. An
-  earlier draft of this change found a positive slope by forcing one
-  drift on every Congress, which loaded the era differences in drift
+  (1.340 against 1.336), and its slope isn't stable: +7.75 here, and
+  negative in an earlier run with the party switchers counted (on a
+  narrower grid). An earlier draft of this change found a positive slope
+  by forcing one drift on every Congress, which loaded the era differences in drift
   onto n0.
 - **Positions with no count carry some information.** They are members
   Voteview has barely scaled (newly sworn in, or with very few scalable
@@ -855,7 +855,9 @@ itself a sign of how little these data settle.
   - A member Voteview lists twice in one Congress (a party switch during
     it) is read on the record with more scaled votes, and only that one
     enters the seat fits. Which to read is a convention: nothing
-    measures it, and the longer is the more reliable.
+    measures it, and the longer is the more reliable. The longer record
+    may predate the switch; it is still read against the seat
+    expectation of the member's current party.
 - The seat fits are taken over every member, since a thin position is
   noisy but not biased.
 - The saturation scale is the 90th percentile of full records'
@@ -1024,9 +1026,9 @@ which read placeholders as positions and weighted nothing, with v6.27:
   (21–77 votes). Four party-switch pairs moved it from 50 to 36. Whether
   the most recent Congresses follow a slower curve is open: judged on
   their own members, a recent era's curve beats one curve by about one
-  to one and a half standard errors at a few later splits (113th–117th),
-  not at the fixed one. The thin records mix arrivals, departures and long absences, as the
-  score's do; whether everyone's early records in a Congress behave like
+  to one and a half standard errors at a few later splits (the 113th,
+  114th, 115th and 117th), not at the fixed one. The thin records mix
+  arrivals, departures and long absences, as the score's do; whether everyone's early records in a Congress behave like
   these is untested. The no-count weight rests on fewer still (25
   pairs), and the flank rule's switch can't be measured at all: only 3
   pairs have the rule's shape. Rerunning the calibration adds each

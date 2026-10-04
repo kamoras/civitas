@@ -1,9 +1,10 @@
 """The reliability weight on a congress-specific roll-call position (v6.27):
 scripts/calibrate_position_confidence.py measures it from Voteview's own
 positions and writes app/data/position_confidence.json, which the scorer
-reads. One n0 for both chambers, one per chamber, or the latest era's
-(split at a fixed Congress), whichever the one-standard-error rule picks
-on held-out members, so nothing in it follows the sitting Congress."""
+reads. One n0 for both chambers or one per chamber (the one-standard-error
+rule on held-out members), replaced by the latest era's only if it
+predicts that era's members better by more than the noise, so nothing in
+it follows the sitting Congress."""
 
 import importlib.util
 import json

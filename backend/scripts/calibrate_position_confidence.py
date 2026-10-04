@@ -14,9 +14,10 @@ Measured on Voteview's own positions, with no model of how Voteview
 estimates them. A member with a thin record in one Congress and a full one
 in the next, or the reverse, has a thin position and a full one for
 adjacent Congresses: one who arrived or left mid-Congress, or one absent
-for much of it (illness, a campaign), as the score's thin records are. Read each against their party's center that
-Congress, signed toward the party's flank, every pair keyed by the
-transition it spans (its earlier Congress):
+for much of it (illness, a campaign), as the score's thin records are.
+Read each against their party's center that Congress, signed toward the
+party's flank, every pair keyed by the transition it spans (its earlier
+Congress):
 
     full = drift[chamber, transition] * weight(n) * thin + error
 
@@ -32,8 +33,9 @@ data, not a choice, decide whether the chambers differ; a rerun decides
 again. A curve per era could be applied only as the latest era's, so it
 is judged on the latest era's pairs alone (era_test, split at ERA_SPLIT;
 era_split_test repeats it at every split): it replaces the chosen curve
-only if it predicts those members better by more than a standard error. n0 is weakly determined, and so is the count at which a position
-counts half (half_weight_votes, a reparametrisation of it, bounded above
+only if it predicts those members better by more than a standard error.
+n0 is weakly determined, and so is the count at which a position counts
+half (half_weight_votes, a reparametrisation of it, bounded above
 at RELIABLE_VOTES / 2), reported with its interval. Positions Voteview
 publishes with no count get their own
 measured weight, on the same drift: those with a career DW-NOMINATE

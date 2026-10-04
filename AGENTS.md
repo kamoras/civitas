@@ -283,20 +283,21 @@ Key mathematical properties:
   doesn't shrink by bill count (a member's bills are the whole record, not
   a sample) — its leadership component is still pulled toward 50 for short
   tenure.
-  For these, the rate is the count confidence below — fixed, not estimated
-  from the population's variance, so do not call it Bayesian or empirical
-  Bayes.
+  Apart from the third (below), the rate is the count confidence below —
+  fixed, not estimated from the population's variance, so do not call it
+  Bayesian or empirical Bayes.
   The third, whose rate is measured rather than fixed: Constituent
   Alignment's position part (v6.27) scales a roll-call position's
   distance from the seat's expected position, when the position rests on
   n votes, by min(1, w(n) / w(200)), w(n) = n / (n + n0): the measured
-  slope of a member's full-record position on their thin one, a full record counting 1. n0 is fitted on
-  Voteview's own adjacent-Congress records with drift per transition
+  slope of a member's full-record position on their thin one, a full
+  record counting 1. n0 is fitted on Voteview's own adjacent-Congress
+  records with drift per transition
   (`scripts/calibrate_position_confidence.py`), one curve for both
   chambers and every Congress. A paired one-standard-error rule on
   held-out members decides: a curve per chamber predicted worse, and the
   latest era's curve (split at the 110th Congress), judged on the latest
-  era's members, the only ones it would be applied to, predicted no
+  era's members, the only era it would apply to, predicted no
   better (+0.0025, standard error 0.0195); a rerun decides again.
   Nothing is reset for a new Congress.
   It is a reliability weight, not a count threshold.
@@ -600,8 +601,8 @@ Besides funding (below), the flank-break rule (`party_line_record`,
 v6.27) is a narrower exception that never scores a past position. It
 reads the last Congress's positions only to tell which side of their
 party a defector sits on: for everyone until the new Congress's
-Voteview section passes its gates; after that, for a member whose new record has no count or fewer than
-`prior_until_votes` votes (`app/data/position_confidence.json`: 200, a
+Voteview section passes its gates; after that, for a member whose new
+record has no count or fewer than `prior_until_votes` votes (`app/data/position_confidence.json`: 200, a
 full record) if their last record was full; and, whatever the last
 record, for a member the new section gives no usable position. The 200
 and the bar for replacing it are conventions: the calibration would
