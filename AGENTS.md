@@ -617,7 +617,9 @@ counted in that party's mean (a stated choice). The 200 and the bar for
 replacing it are conventions: the calibration would adopt a shorter switch
 only if it placed members on the right side better out of bag in 95% of
 resamples, and too few thin records have the rule's shape to measure one.
-Only the Congress just before is kept.
+Only the Congress just before is kept, and only by a section written since
+v6.27, so the prior is first read in the Congress after the one v6.27
+shipped in.
 
 **Funding is the main exception**: Funding Independence and Funding Diversity
 window to the member's **most recent completed election only**

@@ -784,39 +784,39 @@ in a fixed order, 1,000 times.
   | once per era, plus a party-line term | 1.322 |
 
   A curve per chamber predicts no better (fitted apart, 25 votes for the
-  Senate and 55 for the House). Direction and attendance can't be known
-  for a sitting member's record; against one curve, direction is worse
-  (0.025 above it, standard error 0.014) and attendance within the noise
-  (0.009 below, 0.037). The direction split is which side of the pair is
-  thin (the earlier, mostly members who arrived; the later, mostly members
-  who left or were absent at the end of a Congress), and the attendance
-  split is mostly the arrivals against the departures. Left out one member
-  at a time, the era structure's gain over one curve is all in the earlier
-  era (whose n0 runs to the search grid's lower limit, 1): judged on the
-  latest era's members alone (`era_test`), the latest era's curve does no
-  better than one curve, 0.0025 worse with a standard error of 0.0195 over
-  67 members. That comparison lets one curve learn from the very
-  Congresses it is judged on, which the forward test doesn't; the two
-  disagree, and the forward test is the one that matches the use. Repeated
-  at every split (`era_split_test`), a recent era's curve beats one curve
-  at 4 of 16 splits (113th–115th, 117th) by 1.0 to 1.5 standard errors,
-  each at the slowest curve the search grid allows (half point 98); that
-  extreme rests on one member at the 113th to 115th (leaving one out, n0
-  falls to 279–475), but without them the slower curve is still adopted at
-  the 113th and 114th (half points 75.5 and 82.6) and no single member
-  moves the 117th's (n0 stays 5,000 with each left out). A time trend (one
-  line, log n0 linear in decades since the 110th, `trend_test`) beats the
-  shipped grouping by 0.0975 (standard error 0.0769) over every member and
-  0.0818 (0.0755) over the latest era's (0.036, 0.064, without its most
-  influential member), with its half point by the 118th at the slowest
-  curve the form allows (about 100 votes). Left one member out, the latest
-  era does better at the 113th to 117th splits (the 116th barely) and in
-  the trend, as in the forward test; at the 103rd to 112th it does
-  slightly worse, and at the 118th worse by 0.14 (standard error 0.15, 10
-  members). The early era's n0 sits at the grid's floor, fitted on only 4
-  thin pairs under 50 votes (of its 24, `thin_pairs_by_era`), so "thin
-  records were reliable before 2007" is not a finding: the contrast rests
-  on a small early base.
+  Senate and 55 for the House). Direction and attendance can't be known for
+  a sitting member's record; against one curve, direction is worse (0.025
+  above it, standard error 0.014) and attendance within the noise (0.009
+  below, 0.037). The direction split is which side of the pair is thin (the
+  earlier, mostly members who arrived; the later, mostly members who left or
+  were absent at the end of a Congress), and the attendance split is mostly
+  the arrivals against the departures. Left out one member at a time, the
+  era structure's gain over one curve is all in the earlier era (whose n0
+  runs to the search grid's lower limit, 1): judged on the latest era's
+  members alone (`era_test`), the latest era's curve does no better than one
+  curve, 0.0025 worse with a standard error of 0.0195 over 67 members. That
+  comparison lets one curve learn from the very Congresses it is judged on,
+  which the forward test doesn't; the two disagree, and the forward test is
+  the one that matches the use. Repeated at every split (`era_split_test`),
+  a recent era's curve would be adopted (beats one curve by more than a
+  standard error) at 4 of 16 splits (113th–115th, 117th), by 1.0 to 1.5
+  standard errors, each at the slowest curve the search grid allows (half
+  point 98); that extreme rests on one member at the 113th to 115th (leaving
+  one out, n0 falls to 279–475), but without them the slower curve is still
+  adopted at the 113th and 114th (half points 75.5 and 82.6) and no single
+  member moves the 117th's (n0 stays 5,000 with each left out). A time trend
+  (one line, log n0 linear in decades since the 110th, `trend_test`) beats
+  the shipped grouping by 0.0975 (standard error 0.0769) over every member
+  and 0.0818 (0.0755) over the latest era's (0.036, 0.064, without its most
+  influential member), with its half point by the 118th at the slowest curve
+  the form allows (about 100 votes). Left one member out, the latest era
+  does better at the 113th to 117th splits (the 116th barely) and in the
+  trend, as in the forward test; at the 103rd to 112th it does slightly
+  worse, and at the 118th worse by 0.14 (standard error 0.15, 10 members).
+  The early era's n0 sits at the grid's floor, fitted on only 4 thin pairs
+  under 50 votes (of its 24, `thin_pairs_by_era`), so "thin records were
+  reliable before 2007" is not a finding: the contrast rests on a small
+  early base.
 
 | | Estimate | 90% interval (members resampled, 1,000 times, the era structure held fixed) |
 |---|---|---|

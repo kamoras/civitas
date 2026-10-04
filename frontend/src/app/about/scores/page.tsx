@@ -227,7 +227,9 @@ export default function ScoresChapter() {
               are in, the last Congress&apos;s position is never used for a member who has switched
               parties, during this Congress or between the two, since it was cast in their old
               party, and a position recorded under the other major party is never read for the
-              member. The last Congress&apos;s position is used only for this, never scored. Every
+              member. The last Congress&apos;s position is used only for this, never scored. Reading
+              a full record from the last Congress once this Congress&apos;s positions are in starts
+              with the next Congress (this Congress&apos;s data was stored before the change). Every
               break on a profile shows that roll call&apos;s party tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
