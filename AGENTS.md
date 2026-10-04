@@ -283,9 +283,10 @@ Key mathematical properties:
   doesn't shrink by bill count (a member's bills are the whole record, not
   a sample) — its leadership component is still pulled toward 50 for short
   tenure.
-  The rate is the count confidence below — fixed, not estimated from the
-  population's variance, so do not call it Bayesian or empirical Bayes.
-  The third, measured: Constituent Alignment's position part (v6.27)
+  For these, the rate is the count confidence below — fixed, not estimated
+  from the population's variance, so do not call it Bayesian or empirical
+  Bayes.
+  The third, whose rate is measured rather than fixed: Constituent Alignment's position part (v6.27)
   scales a roll-call position's distance from the seat's expected
   position, when the position rests on n votes, by min(1, w(n) / w(200)),
   w(n) = n / (n + n0): the measured slope of a member's full-record
@@ -595,8 +596,8 @@ resting on laurels" goal, not softer.
 
 Besides funding (below), the flank-break rule (`party_line_record`,
 v6.27) is a narrower exception that never scores a past position. It
-reads the last Congress's positions only to tell which side of their party a defector sits on: for everyone
-until the new Congress's Voteview section passes its gates; after that,
+reads the last Congress's positions only to tell which side of their
+party a defector sits on: for everyone until the new Congress's Voteview section passes its gates; after that,
 for a member whose new record has no count or fewer than
 `prior_until_votes` votes (`app/data/position_confidence.json`: 200, a
 full record) if their last record was full; and, whatever the last

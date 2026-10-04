@@ -390,11 +390,23 @@ def test_the_out_of_bag_test_judges_on_the_members_left_out(monkeypatch):
     assert script.prior_until_votes({"switch_test": {"rule_shape": {**sparse, "saved_out_of_bag": None}}}) == 200.0
 
 
-def test_the_about_page_quotes_the_shipped_half_point():
-    """The public methodology page states the half point in prose; a rerun
-    that moves it must move the page too."""
-    page = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "app" / "about" / "scores" / "page.tsx"
-    if not page.exists():  # the backend image ships without the frontend
+def test_the_frontend_quotes_the_shipped_figures():
+    """The about page and the v6.27 changelog entry state the half point,
+    the full-strength count and the flank rule's switch in prose; a rerun
+    that moves one must move them too."""
+    src = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src"
+    about = src / "app" / "about" / "scores" / "page.tsx"
+    versions = src / "lib" / "scoreVersions.ts"
+    if not about.exists():  # the backend image ships without the frontend
         return
-    half = round(json.loads(_DATA.read_text())["chambers"]["house"]["half_weight_votes"])
-    assert f"about {half} votes counts half" in " ".join(page.read_text().split())
+    data = json.loads(_DATA.read_text())
+    half = round(data["chambers"]["house"]["half_weight_votes"])
+    full = round(data["reference_votes"])
+    switch = round(data["prior_until_votes"])
+    page = " ".join(about.read_text().split())
+    entry = " ".join(versions.read_text().split())
+    assert f"about {half} votes counts half" in page
+    assert f"{full} or more counts in full" in page
+    assert f"once it rests on {switch} roll calls" in page
+    assert f"about {half} votes counts half" in entry
+    assert f"{full} votes or more counts in full" in entry

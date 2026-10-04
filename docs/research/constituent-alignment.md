@@ -482,8 +482,8 @@ Two things produced that:
 
 **Changed (v6.20).** A break counts only when, on that roll call, the
 party's members who broke sit on average nearer the other party (mean
-first-dimension position from the chamber's Voteview data, of the last
-Congress early in a new one) than the party does
+first-dimension position from the chamber's Voteview data; early in a
+new Congress, the last Congress's) than the party does
 (`party_line_record._toward_other_party`). Since v6.27 each position is
 weighted by its reliability, and until a member's new record reaches 200
 roll calls their last Congress's full record, where they have one,

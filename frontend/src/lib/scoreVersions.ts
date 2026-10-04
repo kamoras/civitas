@@ -32,6 +32,8 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    // The half point (about 50 votes) and the full-strength count (200) quoted here come
+    // from backend/app/data/position_confidence.json; test_position_confidence.py pins them.
     version: "v6.27",
     date: "2026-10-03",
     title:

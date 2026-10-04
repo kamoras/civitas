@@ -99,9 +99,9 @@ export default function ScoresChapter() {
             legitimately raise little money outside election years, so funding covers the
             member&apos;s most recent completed election: the campaign that won the current seat,
             not a re-election campaign still under way. Separately, the last Congress&apos;s voting
-            position can decide which side of their party a member&apos;s breaks fall on, never
-            their score (see below). Score trend charts mark the start of each Congress so a reset
-            reads as what it is.
+            position can decide which side of their party a member&apos;s breaks fall on, and so
+            whether they count (see below). The position itself is never scored. Score trend charts
+            mark the start of each Congress so a reset reads as what it is.
           </P>
         </Sub>
       </Section>
@@ -208,6 +208,7 @@ export default function ScoresChapter() {
               party lines as a matter of course. Each bill or nomination counts once, however many
               times it came to a vote: cloture and then confirmation on one nominee is one decision.
             </Step>
+            {/* The 200 below is prior_until_votes in backend/app/data/position_confidence.json, pinned by test_position_confidence.py. */}
             <Step n={2} title="Count breaks toward the other party">
               A member breaks when they vote with the other side <em>and</em> the party&apos;s
               members who broke on that vote sit nearer the other party than the party does. A vote
@@ -215,13 +216,13 @@ export default function ScoresChapter() {
               is listed on the profile but not counted here, because how far toward the flank a
               member sits is already scored by where their record sits (below)
               <Cite id="kirkland2017" />. Which side of their party a member sits on comes from
-              their voting position this Congress once it rests on 200 roll calls. Until then it
-              comes from their last Congress&apos;s position if that one was a full record (used
-              only for this, never scored), and otherwise from this Congress&apos;s so far (or, with
-              no position yet this Congress, from the last one&apos;s whatever its length); before
-              this Congress&apos;s positions are published and pass our checks, everyone is read on
-              the last Congress&apos;s. Every break on a profile shows that roll call&apos;s party
-              tallies.
+              their position this Congress once it rests on 200 roll calls. Until then, a full
+              record from the last Congress decides it; without one, this Congress&apos;s position
+              so far does, and a member with no position yet this Congress is read on the last
+              Congress&apos;s, however short. Before this Congress&apos;s positions are published
+              and pass our checks, everyone is read on the last Congress&apos;s. The last
+              Congress&apos;s position is used only for this, never scored. Every break on a profile
+              shows that roll call&apos;s party tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
@@ -256,6 +257,7 @@ export default function ScoresChapter() {
           </P>
         </Sub>
         <Sub title="Where their voting record sits">
+          {/* The half point (about 50) and the full-strength count (200) come from backend/app/data/position_confidence.json; test_position_confidence.py fails when they drift apart. */}
           <P>
             The other 30% compares the member&apos;s overall roll-call position from Voteview: the
             congress-specific Nokken-Poole estimate

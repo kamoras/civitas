@@ -77,8 +77,8 @@ R+20 state voting with their party is representing constituents, not
 failing at independence, while the same loyalty in a swing state diverges
 from the median voter. Roll-call position is scored against a
 seat-conditional norm too, linearly: 50 at the norm, rising toward the
-seat's center (tested in v6.27) (Canes-Wrone, Brady & Cogan 2002, "Out of Step,
-Out of Office," APSR 96:1). This is the delegate model of representation
+seat's center, a shape tested in v6.27 (Canes-Wrone, Brady & Cogan 2002,
+"Out of Step, Out of Office," APSR 96:1). This is the delegate model of representation
 (Miller & Stokes 1963, "Constituency Influence in Congress," APSR 57:1),
 with seat partisan lean standing in for issue-level constituent opinion.
 Both studies validate their measures by the incumbent's vote share; v6.13
@@ -2292,8 +2292,8 @@ def _constituent_alignment_core(
             )
         elif position_votes == 0 and weight == 0.0:
             congruence_detail += (
-                "; Voteview has counted no roll calls behind this position yet, so it doesn't count "
-                "and this part sits at 50"
+                "; Voteview reports no count of the roll calls behind this position and the member "
+                "has no career position yet, so it doesn't count and this part sits at 50"
             )
         elif weight < 1.0:
             half = (reliability or {}).get("half_weight_votes")
