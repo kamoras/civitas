@@ -1025,6 +1025,16 @@ better (above).
   positions carry across Congresses. Early in a new Congress the last
   positions therefore classify its breaks, rather than every flank break
   counting.
+  - The Senate's roll calls name a voter only by surname and state, and the
+    roster lists sitting senators only, so a senator who left during the
+    Congress (and, on a filtered run, every senator not being scored) had no
+    position: their votes were left out of both the party's and the
+    defectors' means. The rule now reads the whole chamber, adding a stored
+    senator who has left by the one surname among their state's voters that
+    is a whole word of their stored name, and only while more senators voted
+    under that surname than are already matched to it (none, several, or all
+    claimed: left out, as before). The House's roll calls carry the member's
+    id and need nothing added.
   - Weighting means cannot help a lone defector, whose side is its own
     position's sign against the party's. So once the new Congress's
     section is in, the rule reads a member's last-Congress full record
