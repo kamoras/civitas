@@ -1031,10 +1031,10 @@ better (above).
     position: their votes were left out of both the party's and the
     defectors' means. The rule now reads the whole chamber, adding a stored
     senator who has left by the one surname among their state's voters that
-    is a whole word of their stored name, and only while more senators voted
-    under that surname than are already matched to it (none, several, or all
-    claimed: left out, as before). The House's roll calls carry the member's
-    id and need nothing added.
+    is a whole word of their stored name, and only when their first name
+    matches exactly one voter under that surname whom no sitting senator's
+    first name matches (otherwise left out, as before). The House's roll
+    calls carry the member's id and need nothing added.
   - Weighting means cannot help a lone defector, whose side is its own
     position's sign against the party's. So once the new Congress's
     section is in, the rule reads a member's last-Congress full record

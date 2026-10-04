@@ -530,3 +530,49 @@ def test_a_stored_namesake_who_never_voted_takes_no_ones_votes(db_session, monke
     assert party_line_records(db_session, "senate", roster)[0] is not None
     assert party_line_record._departed_senators(db_session, roster, {rc.id: list(
         db_session.query(RollCallPosition).filter_by(roll_call_id=rc.id))}) == []
+
+
+def _namesakes(db_session, monkeypatch, stored, voted):
+    """Senators of one state sharing a surname: `stored` (name, bioguide,
+    is_current), `voted` {LIS id: first name} on one roll call."""
+    from app.models import Senator
+    monkeypatch.setattr(party_line_record, "_member_ideal_points",
+                        lambda chamber: {"members": {b: 0.0 for _, b, _ in stored}})
+    for name, bioguide, current in stored:
+        db_session.add(Senator(id=f"S-{bioguide}", bioguide_id=bioguide, name=name, state="SC", party="R",
+                               is_current=current))
+    rc = RollCall(chamber="senate", congress=119, session=2, number=43, date="2026-03-01", question="On Passage",
+                  bill_id="S.43")
+    db_session.add(rc)
+    db_session.flush()
+    for lis, first in voted.items():
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=lis, last_name="Lastg", first_name=first,
+                                        party="R", state="SC", position="Yea"))
+    db_session.commit()
+    return {rc.id: list(db_session.query(RollCallPosition).filter_by(roll_call_id=rc.id))}
+
+
+def _sitting(name, bioguide):
+    return {"bioguideId": bioguide, "name": name, "lastNameForVoteMatch": "Lastg", "state": "SC", "party": "R",
+            "votingRecord": {"effectiveParty": "R"}}
+
+
+def test_a_successor_who_hasnt_voted_takes_no_votes_from_their_predecessor(db_session, monkeypatch):
+    """A sitting senator with no vote yet doesn't claim the departed
+    namesake's LIS id: the departed one is added, and their votes stay
+    theirs, so the successor has no record yet."""
+    positions = _namesakes(db_session, monkeypatch, [("Ann Lastg", "bio-ANN", True), ("Bob Lastg", "bio-BOB", False)],
+                           {"L-BOB": "Bob"})
+    roster = [_sitting("Ann Lastg", "bio-ANN")]
+    assert [m["bioguideId"] for m in party_line_record._departed_senators(db_session, roster, positions)] == ["bio-BOB"]
+    assert party_line_records(db_session, "senate", roster) == [None]
+
+
+def test_namesakes_take_the_lis_id_their_first_name_matches_in_any_order(db_session, monkeypatch):
+    """Two departed namesakes, one free LIS id: it goes to the one whose
+    first name voted under it, not to whichever is stored first."""
+    positions = _namesakes(db_session, monkeypatch,
+                           [("Carl Lastg", "bio-A", False), ("Ann Lastg", "bio-ANN", True), ("Bob Lastg", "bio-B", False)],
+                           {"L-ANN": "Ann", "L-BOB": "Bob"})
+    roster = [_sitting("Ann Lastg", "bio-ANN")]
+    assert [m["bioguideId"] for m in party_line_record._departed_senators(db_session, roster, positions)] == ["bio-B"]

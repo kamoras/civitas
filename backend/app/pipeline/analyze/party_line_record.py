@@ -33,7 +33,7 @@ leader's reconsider switch are left out, as everywhere else.
 import json
 import logging
 import re
-from collections import Counter, defaultdict
+from collections import defaultdict
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -130,23 +130,30 @@ def _departed_senators(db: Session, members: list[dict], positions: dict[int, li
     """Stored senators `members` leaves out (one who left during the
     Congress is off the sitting roster), each with the roll calls' own
     spelling of their last name: the one surname among their state's
-    voters that is a whole word of their stored name. A name that matches
-    none, or more than one, is left out, as before; so is one whose
-    surname's votes are all claimed already (as many members keyed to it
-    as LIS ids voted under it: a predecessor of a sitting senator's
-    surname who never voted this Congress must not take their votes)."""
+    voters that is a whole word of their stored name, and only when their
+    first name matches one LIS id that voted under it which no member
+    passed has the first name of (a predecessor who never voted, or a
+    successor who hasn't yet, takes no one's votes; each LIS id goes to one
+    senator, whatever order they are stored in). Anyone else is left out,
+    as before."""
     have = {m.get("bioguideId") for m in members}
     voters: dict[str, set[str]] = defaultdict(set)
-    ids: dict[tuple, set[str]] = defaultdict(set)
+    people: dict[tuple, dict[str, str]] = defaultdict(dict)
     for ps in positions.values():
         for p in ps:
             if p.last_name and p.state:
                 voters[p.state.upper()].add(p.last_name)
-                ids[(_normalize_for_match(p.last_name), p.state.upper())].add(p.member_id)
-    claimed = Counter((_normalize_for_match(m.get("lastNameForVoteMatch") or ""), (m.get("state") or "").upper())
-                      for m in members)
+                people[(_normalize_for_match(p.last_name), p.state.upper())][p.member_id] = p.first_name or ""
+    firsts: dict[tuple, list[str]] = defaultdict(list)
+    for m in members:
+        firsts[(_normalize_for_match(m.get("lastNameForVoteMatch") or ""), (m.get("state") or "").upper())].append(
+            (m.get("name") or "").split(" ")[0])
+    free = {k: {lis: first for lis, first in ids.items()
+                if not any(_same_first_name(own, first) for own in firsts.get(k, ()))}
+            for k, ids in people.items()}
     out = []
-    for bioguide, name, state, party in db.query(Senator.bioguide_id, Senator.name, Senator.state, Senator.party):
+    for bioguide, name, state, party in db.query(
+            Senator.bioguide_id, Senator.name, Senator.state, Senator.party).order_by(Senator.bioguide_id):
         if not bioguide or bioguide in have:
             continue
         words = _words(name or "")
@@ -155,8 +162,9 @@ def _departed_senators(db: Session, members: list[dict], positions: dict[int, li
             continue
         surname = last.pop()
         k = (_normalize_for_match(surname), (state or "").upper())
-        if len(ids[k]) > claimed[k]:
-            claimed[k] += 1
+        mine = [lis for lis, first in free.get(k, {}).items() if _same_first_name((name or "").split(" ")[0], first)]
+        if len(mine) == 1:
+            del free[k][mine[0]]
             out.append({"bioguideId": bioguide, "name": name, "state": state, "party": party,
                         "lastNameForVoteMatch": surname})
     return out
