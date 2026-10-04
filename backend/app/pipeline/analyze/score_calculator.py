@@ -2203,7 +2203,8 @@ def _calc_constituent_alignment(
          member's congress-specific Nokken-Poole first-dimension position
          minus what a same-party member of a seat with this lean holds
          (per-party OLS on seat PVI, fit each run by fetch/voteview.py).
-         Symmetric, saturating at the chamber's 90th-percentile extremity.
+         Symmetric, saturating at the 90th-percentile extremity of the
+         chamber's full records.
            - 1 SD toward the party flank cost 0.8-1.0 pts of vote share,
              robust to flexible partisanship controls; the center-ward side
              earned the same slope (equal-slopes p=0.92), so it is credited
@@ -2298,7 +2299,7 @@ def _constituent_alignment_core(
             half = (reliability or {}).get("half_weight_votes")
             congruence_detail += (
                 f"; rests on {position_votes} roll calls, so it counts at {weight:.0%} strength"
-                + (f" (half strength at about {half:.0f})" if half else "")
+                + (f" (half strength at about {half:.0f} roll calls)" if half else "")
                 + ", pulled toward 50"
             )
     elif reliability and position_fit is not None and congruence_sat and bioguide_id:

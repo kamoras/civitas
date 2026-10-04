@@ -483,9 +483,11 @@ Two things produced that:
 **Changed (v6.20).** A break counts only when, on that roll call, the
 party's members who broke sit on average nearer the other party (mean
 first-dimension position from the chamber's Voteview data, of the last
-Congress early in a new one; since v6.27 each position weighted by its
-reliability, and until a member's new record reaches 200 votes their last
-Congress's full record decides their side, section 14) than the party does (`party_line_record._toward_other_party`). Other breaks are listed on the
+Congress early in a new one) than the party does
+(`party_line_record._toward_other_party`). Since v6.27 each position is
+weighted by its reliability, and until a member's new record reaches 200
+roll calls their last Congress's full record, where they have one,
+decides their side (section 14). Other breaks are listed on the
 scorecard as from the flank, and not counted. The rate is measured over
 every roll call the chamber recorded this Congress, not a sample.
 
@@ -640,11 +642,12 @@ score point, t, and the R² the score adds:
 **Thin records: what a position from n votes is worth.** The score should
 read a member's position at the strength it predicts where the member
 really sits. Voteview's own positions measure that directly, with no model
-of how Voteview estimates them. Some members served part of one Congress
-and all of the next, or all of one and part of the next: a special-election
-winner, or a member who left. They have a thin position and a full one for
-adjacent Congresses, and a thin record that arises this way is a run of
-consecutive votes, just as in the score. Read each against their party's
+of how Voteview estimates them. Some members have a thin record in one
+Congress and a full one in the next, or the reverse: a special-election
+winner, a member who left, or one absent for much of a Congress (illness,
+a campaign, a cabinet nomination). They have a thin position and a full
+one for adjacent Congresses, and their thin records arise as the score's
+do. Read each against their party's
 center that Congress (the median of its full records), signed toward the
 party's flank, every pair keyed by the transition it spans:
 
@@ -737,7 +740,8 @@ in a fixed order, 1,000 times.
   within-party position that seat lean explains (10% for House
   Republicans in the 119th, under 1% for Senate Republicans).
   The thin records here come from members who arrived or left
-  mid-Congress. Every member's record early in a Congress is thin too,
+  mid-Congress or were absent for much of one. Every member's record
+  early in a Congress is thin too,
   on a different agenda; whether those records behave like these is
   untested.
 
@@ -784,7 +788,9 @@ flank rule at 53 votes, on pairs centered on the median of each party's
 full records rather than as the rule centers, with noise and drift
 assumed independent everywhere. The sixth switched at 92, the best
 switch over all thin pairs, without testing it out of bag or on the
-pairs shaped like the rule's case; there it doesn't hold up (below).
+pairs shaped like the rule's case; there it can't be shown to help: too
+few pairs have the rule's shape to measure one, and over all thin pairs
+the best switch (93) saves sides in only 44% of resamples (below).
 
 *Thin pairs restricted to arrivals and departures.* The seventh draft
 kept only members absent the Congress before or after, taking that to

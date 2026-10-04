@@ -296,7 +296,7 @@ Key mathematical properties:
   members better by 0.020, under the 0.070 standard error, so a paired
   one-standard-error rule keeps one; a rerun decides again), so nothing
   is reset for a new Congress.
-  It is a reliability weight, not a count threshold
+  It is a reliability weight, not a count threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Constituent Alignment scores account for Cook
@@ -593,8 +593,8 @@ congress" sidesteps that fragility entirely and is *stricter* than a literal
 6-year term (resets every 2 years, not 6) — it pushes harder on the "no
 resting on laurels" goal, not softer.
 
-The flank-break rule (`party_line_record`, v6.27) is a narrower exception
-that never scores a past position. It reads the last Congress's positions
+Besides funding (below), the flank-break rule (`party_line_record`,
+v6.27) is a narrower exception that never scores a past position. It reads the last Congress's positions
 only to tell which side of their party a defector sits on: for everyone
 until the new Congress's Voteview section passes its gates; after that,
 for a member whose new record has no count or fewer than

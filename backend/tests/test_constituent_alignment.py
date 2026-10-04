@@ -528,7 +528,7 @@ class TestPositionCongruence:
         assert self._congruence()["score"] == 25.0
         assert "rests on 24 roll calls, so it counts at 50% strength" in self._congruence()["detail"]
         self.patch({"X1": -0.55}, votes={"X1": 24}, reliability={"n0": 24, "half_weight_votes": 24})
-        assert "half strength at about 24" in self._congruence()["detail"]
+        assert "half strength at about 24 roll calls" in self._congruence()["detail"]
 
     def test_the_weight_applies_before_the_scale_saturates(self):
         """The weight is on the position: a position twice past saturation

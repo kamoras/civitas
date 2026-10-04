@@ -98,8 +98,10 @@ export default function ScoresChapter() {
             official records don&apos;t publish. Funding is the main exception: senators
             legitimately raise little money outside election years, so funding covers the
             member&apos;s most recent completed election: the campaign that won the current seat,
-            not a re-election campaign still under way. Score trend charts mark the start of each
-            Congress so a reset reads as what it is.
+            not a re-election campaign still under way. Separately, the last Congress&apos;s voting
+            position can decide which side of their party a member&apos;s breaks fall on, never
+            their score (see below). Score trend charts mark the start of each Congress so a reset
+            reads as what it is.
           </P>
         </Sub>
       </Section>
@@ -212,11 +214,13 @@ export default function ScoresChapter() {
               against the party from its own flank (hardliners voting down their party&apos;s bill)
               is listed on the profile but not counted here, because how far toward the flank a
               member sits is already scored by where their record sits (below)
-              <Cite id="kirkland2017" />. Which side of their party a member sits on comes from this
-              Congress&apos;s record once it reaches 200 votes. Until then it comes from their last
-              Congress&apos;s record if that one was full (used only for this, never scored), and
-              otherwise from this Congress&apos;s record so far. Every break on a profile shows that
-              roll call&apos;s party tallies.
+              <Cite id="kirkland2017" />. Which side of their party a member sits on comes from
+              their voting position this Congress once it rests on 200 roll calls. Until then it
+              comes from their last Congress&apos;s position if that one was a full record (used
+              only for this, never scored), and otherwise from this Congress&apos;s so far; before
+              this Congress&apos;s positions are published and pass our checks, everyone is read on
+              the last Congress&apos;s. Every break on a profile shows that roll call&apos;s party
+              tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
