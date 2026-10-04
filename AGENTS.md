@@ -292,13 +292,13 @@ Key mathematical properties:
   n votes, by min(1, w(n) / w(200)), w(n) = n / (n + n0): the measured
   slope of a member's full-record position on their thin one, a full record counting 1. n0 is fitted on
   Voteview's own adjacent-Congress records with drift per transition
-  (`scripts/calibrate_position_confidence.py`). A paired
-  one-standard-error rule on held-out members picks the structure: one
-  curve, one per chamber, or one per era split at the 110th Congress
-  (fixed in advance), applied as the latest era's. It picks the era
-  split now (held-out error 1.279 against one curve's 1.336, standard
-  error 0.054), for both chambers; a rerun decides again. The split is a
-  fixed Congress, so nothing is reset for a new Congress.
+  (`scripts/calibrate_position_confidence.py`), one curve for both
+  chambers and every Congress. A paired one-standard-error rule on
+  held-out members decides: a curve per chamber predicted worse, and the
+  latest era's curve (split at the 110th Congress), judged on the latest
+  era's members, the only ones it would be applied to, predicted no
+  better (+0.0025, standard error 0.0195); a rerun decides again.
+  Nothing is reset for a new Congress.
   It is a reliability weight, not a count threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
@@ -599,8 +599,8 @@ resting on laurels" goal, not softer.
 Besides funding (below), the flank-break rule (`party_line_record`,
 v6.27) is a narrower exception that never scores a past position. It
 reads the last Congress's positions only to tell which side of their
-party a defector sits on: for everyone until the new Congress's Voteview section passes its gates; after that,
-for a member whose new record has no count or fewer than
+party a defector sits on: for everyone until the new Congress's
+Voteview section passes its gates; after that, for a member whose new record has no count or fewer than
 `prior_until_votes` votes (`app/data/position_confidence.json`: 200, a
 full record) if their last record was full; and, whatever the last
 record, for a member the new section gives no usable position. The 200

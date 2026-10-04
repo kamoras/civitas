@@ -282,6 +282,23 @@ def _is_placeholder(row: dict) -> bool:
     return _number(row.get("nokken_poole_dim1")) == 0 and _number(row.get("nokken_poole_dim2")) == 0
 
 
+def _one_row_per_member(rows: list[dict], column: str) -> list[dict]:
+    """Each bioguide id's row with the most scaled votes among those with a
+    position in `column` (any row, if none has one; the first, on a tie),
+    in the export's order; rows with no bioguide id pass through."""
+    def rank(row):
+        placed = bool((row.get(column) or "").strip()) and not (
+            column == "nokken_poole_dim1" and _is_placeholder(row))
+        return placed, _vote_count(row) or 0
+    best: dict[str, dict] = {}
+    for row in rows:
+        bio = (row.get("bioguide_id") or "").strip()
+        if bio and (bio not in best or rank(row) > rank(best[bio])):
+            best[bio] = row
+    return [row for row in rows
+            if not (bio := (row.get("bioguide_id") or "").strip()) or best[bio] is row]
+
+
 def build_chamber_ideal_points(
     rows: list[dict], chamber: str,
     state_pvi: dict[str, int], district_pvi: dict[str, int],
@@ -296,9 +313,16 @@ def build_chamber_ideal_points(
     full): a thin record's noise would widen it, and scaling it by the
     weights would cancel them whenever every record is equally thin. With
     fewer than SCALE_MIN_FULL full records (early in a Congress) it is None
-    and refresh_member_ideal_points carries the chamber's last scale."""
+    and refresh_member_ideal_points carries the chamber's last scale.
+
+    A member Voteview lists twice in one Congress (a party switch during it,
+    under a second ICPSR id) is read on the record with more scaled votes,
+    and only that one enters the fits: one seat, one position. Which of the
+    two to read is a convention (nothing measures it); the longer is the
+    more reliable estimate, and the weight then applies to its count."""
 
     column, measure = _position_column(rows)
+    rows = _one_row_per_member(rows, column)
     members: dict[str, float] = {}
     votes: dict[str, int] = {}
     seats: set[str] = set()

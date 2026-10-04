@@ -1,8 +1,9 @@
 """The reliability weight on a congress-specific roll-call position (v6.27):
 scripts/calibrate_position_confidence.py measures it from Voteview's own
 positions and writes app/data/position_confidence.json, which the scorer
-reads. One n0 per chamber (or one for both, whichever predicts held-out
-members better), so nothing in it follows the sitting Congress."""
+reads. One n0 for both chambers, one per chamber, or the latest era's
+(split at a fixed Congress), whichever the one-standard-error rule picks
+on held-out members, so nothing in it follows the sitting Congress."""
 
 import importlib.util
 import json
@@ -181,9 +182,12 @@ def test_shipped_file_documents_its_source_and_intervals():
     data = json.loads(_DATA.read_text())
     script = _script()
     assert "calibrate_position_confidence.py" in data["_source"]
-    # The structure is the simplest within one standard error of the best.
+    # The structure is the simplest within one standard error of the best,
+    # or the latest era's curve if it beats that on the latest era's pairs.
     test = data["structure_test"]
-    assert data["structure"] == next(n for n in script.USABLE if test[n]["above_best"] <= test[n]["standard_error"])
+    base = next(n for n in script.USABLE if test[n]["above_best"] <= test[n]["standard_error"])
+    era = data["era_test"]
+    assert data["structure"] == ("era" if era and era["above"] < -era["standard_error"] else base)
     held = data["heldout_error"]
     for chamber in ("senate", "house"):
         c = data["chambers"][chamber]
@@ -453,25 +457,31 @@ def test_a_member_who_switched_parties_mid_congress_is_left_out():
     assert "82" in kept and "0" in kept
 
 
-def test_the_era_split_is_checked_at_every_split(monkeypatch):
-    """era_split_test tries every split with thin pairs on both sides and
-    counts those where the era structure beats one curve by more than one
-    standard error."""
+def test_the_era_curve_is_judged_only_where_it_would_apply(monkeypatch):
+    """era_test compares the latest era's curve with the chosen structure on
+    the latest era's pairs alone: a better fit to an earlier era, whose
+    curve is never applied, doesn't count. era_split_test repeats it at
+    every split with thin pairs on both sides."""
     script = _script()
     data = [("H", f"M{c}{k}", 50.0, 0.2, 0.2, "thin", c, 0.5, False) for c in (101, 105, 110) for k in range(3)]
-    gain = {"105": -1.0, "110": -0.001}
+    seen = []
 
-    def errors(rows, structure):
-        if structure == "pooled":
-            return {r[1]: 1.0 for r in rows}
-        cut = next(c for c in (105, 110) if not script.STRUCTURES["_split"](("H", "", 0, 0, 0, "thin", c - 1))
-                   and script.STRUCTURES["_split"](("H", "", 0, 0, 0, "thin", c)))
-        return {r[1]: 1.0 + gain[str(cut)] / 9 + (0.01 if r[1].endswith("0") else 0.0) for r in rows}
+    def errors(rows, structure, only=None):
+        kept = [r for r in rows if r[5] == "thin" and (only is None or only(r))]
+        seen.append((structure, len(kept)))
+        # On the late pairs the era curve is better for two members, worse
+        # for one: no better than the noise.
+        if structure != "_split":
+            return {r[1]: 1.0 for r in kept}
+        return {r[1]: 1.002 if r[1].endswith("0") else 0.999 for r in kept}
     monkeypatch.setattr(script, "heldout_errors", errors)
-    out = script.era_split_test(data)
-    assert set(out["splits"]) == {"105", "110"}
-    assert out["beats_by_more_than_one_se"] == 1 and out["of"] == 2
+    out = script.era_test(data, "pooled", 110)
+    assert out["members"] == 3 and not out["adopted"]
+    assert all(n == 3 for _, n in seen)  # only the latest era's pairs judged
     assert "_split" not in script.STRUCTURES
+    split = script.era_split_test(data, "pooled")
+    assert set(split["splits"]) == {"105", "110"} and split["of"] == 2
+    assert script.era_test(data[:1], "pooled", 101) is None
 
 
 def test_the_era_structure_fits_the_latest_era():

@@ -332,3 +332,25 @@ class TestRefresh:
 
         monkeypatch.setattr(voteview, "fetch_member_rows", boom)
         assert await voteview.refresh_member_ideal_points("senate", 119) is False
+
+
+def test_a_member_listed_twice_is_read_on_their_longer_record():
+    """A party switch during a Congress puts a member in the export twice,
+    under two ICPSR ids. They are read on the record with more scaled votes,
+    and only it enters the fits (one seat, one position); a row with no
+    position never wins over one with."""
+    state_pvi = score_calculator._state_pvi()
+    rows = _synthetic_rows(state_pvi)
+    bio = rows[0]["bioguide_id"]
+    short = {**rows[0], "icpsr": "99999", "party_code": "328", "nominate_dim1": "0.9",
+             "nominate_number_of_votes": "40"}
+    data, _ = voteview.build_chamber_ideal_points(rows + [short], "senate", state_pvi, {}, reliability=REL)
+    base, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+    assert data["members"][bio] == base["members"][bio] and data["votes"][bio] == base["votes"][bio]
+    assert data["fit"] == base["fit"]
+    longer = {**short, "nominate_number_of_votes": "900"}
+    data, _ = voteview.build_chamber_ideal_points(rows + [longer], "senate", state_pvi, {}, reliability=REL)
+    assert data["members"][bio] == 0.9 and data["votes"][bio] == 900
+    unplaced = {**longer, "nominate_dim1": ""}
+    data, _ = voteview.build_chamber_ideal_points(rows + [unplaced], "senate", state_pvi, {}, reliability=REL)
+    assert data["members"][bio] == base["members"][bio]
