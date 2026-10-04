@@ -610,7 +610,9 @@ Never, once the new section is in, for a member who switched parties
 during the new Congress (`switched` in the section) or whose party
 differs between the two sections (`parties`; sections written before
 this change record none, so that check starts with the next Congress's
-section): their last positions were cast in another party. The 200
+section): their last positions were cast in another party. A position
+recorded under the other major party is never read for the member, in
+any section, nor counted in that party's mean. The 200
 and the bar for replacing it are conventions: the calibration would
 adopt a shorter switch only if it placed members on the right side
 better out of bag in 95% of resamples, and too few thin records have the

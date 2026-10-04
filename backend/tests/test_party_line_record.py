@@ -259,6 +259,36 @@ def test_a_position_cast_in_the_other_party_stays_out_of_its_mean(db_session, mo
     assert party_line_records(db_session, "house", _members())[3]["breaks"] != []
 
 
+def test_a_position_cast_in_the_other_party_is_never_read(db_session, monkeypatch):
+    """Before the new Congress's section is in, every member is read on the
+    last one; a position it records under the other major party (R4 was a
+    Democrat then) is not read for the member even there."""
+    section = {"members": DIM1, "votes": {m: 500 for m in DIM1}, "reliability": {"n0": 24}, "congress": 118,
+               "parties": {m: m[0] for m in DIM1}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    _roll_call(db_session, "house", 35, "On Passage", "HR.10", {"R4": "Nay"})
+    db_session.commit()
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    section["parties"]["R4"] = "D"
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+
+
+def test_an_independent_stays_in_the_mean_of_the_party_they_caucus_with(db_session, monkeypatch):
+    """Voteview codes an independent 328; caucusing with the Democrats, they
+    are no other-party record and stay in the Democrats' mean (D0 here,
+    far right, pulls it past D1's thin record, read on its prior)."""
+    prior = {**DIM1, "D0": 3.0, "D1": -0.35}
+    section = {"members": DIM1, "votes": {**{m: 500 for m in DIM1}, "D1": 2},
+               "reliability": {"n0": 24, "reference_votes": 200}, "congress": 119,
+               "parties": {**{m: m[0] for m in DIM1}, "D0": "328"},
+               "prior": {"congress": 118, "members": prior, "votes": {m: 500 for m in DIM1},
+                         "parties": {**{m: m[0] for m in DIM1}, "D0": "328"}, "reliability": {"n0": 24}}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    _roll_call(db_session, "house", 36, "On Passage", "HR.11", {"D1": "Yea"})
+    db_session.commit()
+    assert party_line_records(db_session, "house", _members())[6]["flankBreaks"] != []
+
+
 def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, monkeypatch):
     """Darline Graham took Lindsey Graham's seat after his death; matched by
     last name and state, every roll call he cast in the Congress was hers

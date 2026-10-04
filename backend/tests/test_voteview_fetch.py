@@ -510,5 +510,7 @@ async def test_an_unresolved_switcher_alerts_once_and_clears(monkeypatch, tmp_pa
     async def clean(chamber, congress, client=None):
         return rows
     monkeypatch.setattr(voteview, "fetch_member_rows", clean)
-    assert await voteview.refresh_member_ideal_points("senate", 119) is True
+    # Settled, the alert clears even if a later gate keeps the old section.
+    monkeypatch.setattr(voteview, "ingestion_gates", lambda chamber, data: ["synthetic gate failure"])
+    assert await voteview.refresh_member_ideal_points("senate", 119) is False
     assert resolved == ["voteview-switcher-senate"]

@@ -735,18 +735,22 @@ in a fixed order, 1,000 times.
   sides (`era_split_test`), a recent era's curve beats one curve by more
   than a standard error at 4 of 16, the splits at the 113th, 114th, 115th
   and 117th, by 1.0 to 1.5 standard errors on 16 to 49 members. That is
-  weak evidence of a slower recent curve, for three reasons. At every one
-  of those splits the recent curve is the slowest the form allows (n0 at
-  the search grid's upper limit, a half point of 98 votes, the linear
-  curve n / 200). At three of the four (the 113th to 115th) it rests
-  largely on one member, who arrived mid-Congress and whose short first
-  record sits far from their next full one: leaving out one member at a
-  time, n0 falls from 5,000 to between 279 and 475; at the 117th no
-  single member moves it. And the 16 splits are nested and correlated,
-  so 4 adoptions are not 4 pieces of evidence.
-  Adopting one now would also mean choosing the split after seeing the
-  data, so the fixed split decides, and a rerun with more recent pairs
-  tests it again.
+  some evidence that the newest Congresses follow a slower curve, but
+  weak. At every one of those splits the recent curve is the slowest the
+  search grid allows (n0 at its upper limit, 5,000, a half point of 98
+  votes). That extreme rests on one member, who arrived mid-Congress and
+  whose short first record sits far from their next full one: leaving
+  out one member at a time, n0 falls to between 279 and 475 at the
+  113th to 115th (at the 117th no single member moves it). The slower
+  curve itself doesn't rest on them: without that member the recent
+  curve is still adopted at the 113th and 114th, with half points of 76
+  and 83 votes, near or above the top of the shipped curve's interval
+  (77), though no longer at the 115th. The 16 splits are nested and
+  correlated, so 4 adoptions are not 4 pieces of evidence, and the
+  margins are 1.0 to 1.5 standard errors. Adopting one now would mean
+  choosing the split after seeing the data, so the fixed split decides;
+  a rerun with more recent pairs tests it again, and this is the
+  weight's most likely revision.
 
 | | Estimate | 90% interval (members resampled, 1,000 times) |
 |---|---|---|
@@ -955,9 +959,10 @@ itself a sign of how little these data settle.
       who has none, is read on their last position however short; the
       alternative, classifying the break on the other defectors alone,
       wasn't compared.
-    - A last-Congress position recorded under the other major party (a
-      switch since) is left out of that party's mean, as it is never
-      read for the member.
+    - A position a section records under the other major party (a
+      switch since) is left out of that party's mean and never read for
+      the member, in any section: before the new Congress's section is
+      in too, when everyone is read on the last one.
   - The pairs, centered as the rule centers, are the evidence. A full
     record is on the same side of its party as the next Congress's full
     record 86% of the time. Thin records, against their pair's full
@@ -1085,7 +1090,8 @@ which read placeholders as positions and weighted nothing, with v6.27:
   the most recent Congresses follow a slower curve is open: judged on
   their own members, a recent era's curve beats one curve by about one
   to one and a half standard errors at a few later splits (the 113th,
-  114th, 115th and 117th), not at the fixed one. The thin records mix
+  114th, 115th and 117th, with half points of about 75 to 98 votes),
+  not at the fixed one. The thin records mix
   arrivals, departures and long absences, as the score's do; whether
   everyone's early records in a Congress behave like these is untested.
   The no-count weight rests on fewer still (25 pairs), and the flank

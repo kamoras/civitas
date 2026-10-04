@@ -1016,7 +1016,7 @@ def _sitting_effect(p):
         # ids and the 119th's first roll calls).
         earlier = {voteview._icpsr(r) for r in pd.read_csv(p[f"{letter}118_members.csv"], dtype=str)
                    .fillna("").to_dict("records")}
-        votes = pd.read_csv(p[f"{letter}119_votes.csv"], usecols=["icpsr", "rollnumber"])
+        votes = pd.read_csv(p[f"{letter}119_votes.csv"], usecols=["icpsr", "rollnumber"]).dropna()
         first = {str(int(i)): int(n) for i, n in votes.groupby("icpsr")["rollnumber"].min().items()}
         latest, unresolved = voteview.switcher_latest(raw, earlier, first)
         if unresolved:

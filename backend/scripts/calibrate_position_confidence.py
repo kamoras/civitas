@@ -554,8 +554,9 @@ def era_test(data: list[tuple], structure: str, split: int = ERA_SPLIT) -> dict 
 def era_split_test(data: list[tuple], structure: str) -> dict:
     """era_test at every split with thin pairs on both sides, a check that
     the result doesn't hang on ERA_SPLIT, and at how many splits the latest
-    era's curve would be adopted; where it would, that curve's n0 and its
-    range with each of the era's thin members left out in turn."""
+    era's curve would be adopted; where it would, that curve's n0, its
+    range with each of the era's thin members left out in turn, and the
+    test rerun without the member whose absence moves n0 most."""
     thin = sorted({r[6] for r in data if r[5] == "thin"})
     out = {str(cut): t for cut in thin[1:] if (t := era_test(data, structure, cut)) is not None}
     d = drifts(data)
@@ -564,10 +565,15 @@ def era_split_test(data: list[tuple], structure: str) -> dict:
             # How much the adopted curve rests on single members: its n0 with
             # each of the latest era's thin members left out in turn.
             late = [r for r in data if r[6] >= int(cut)]
-            fits = [fit_n0([r for r in late if r[1] != m], d)
-                    for m in sorted({r[1] for r in late if r[5] == "thin"})]
+            fits = {m: fit_n0([r for r in late if r[1] != m], d)
+                    for m in sorted({r[1] for r in late if r[5] == "thin"})}
             t["n0"] = fit_n0(late, d)
-            t["n0_leaving_one_member_out"] = [min(fits), max(fits)]
+            t["n0_leaving_one_member_out"] = [min(fits.values()), max(fits.values())]
+            # The test again without the member whose absence moves n0 most.
+            most = min(fits, key=fits.get)
+            again = era_test([r for r in data if r[1] != most], structure, int(cut))
+            t["without_most_influential_member"] = again and {
+                k: again[k] for k in ("above", "standard_error", "adopted", "half_weight_votes")}
     return {"splits": out, "adopted_at": sum(t["adopted"] for t in out.values()), "of": len(out)}
 
 
@@ -988,7 +994,8 @@ def main() -> None:
             "better by more than the standard error (with its half_weight_votes, and the other usable "
             "structure judged the same way: chamber_on_latest while one curve is chosen), and "
             "era_split_test repeats it at every "
-            "split (at an adopting split, with its n0 leaving one member out in turn); "
+            "split (at an adopting split, with its n0 leaving one member out in turn, and the test "
+            "rerun without the most influential member); "
             "structure_test's reported gives direction, attendance and era (each era's curve on its "
             "own members) against the chosen structure, paired; switcher_test compares, for a member "
             "who switched parties during a Congress, the latest record, the longer one and their "
