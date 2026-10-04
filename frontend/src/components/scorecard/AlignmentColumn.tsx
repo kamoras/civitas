@@ -172,6 +172,9 @@ export default function AlignmentColumn({
   onMore: () => void;
 }) {
   const facts = dimension?.facts as AlignmentFacts | undefined;
+  // Early in a Congress, before its positions pass our checks, the position
+  // part is left out while breaks are still sorted on the last positions.
+  const positionScored = !!dimension?.components?.some((c) => c.label === "Position congruence");
   // The breaks the score counts, served with it. Until the member's
   // whole-Congress record is measured, the stored votes against the party.
   const counted = facts?.breakVotes;
@@ -245,7 +248,8 @@ export default function AlignmentColumn({
           <p className="text-xs leading-relaxed text-ink-min">
             On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further from
             the {OTHER_PARTY[facts.party] ?? "other party"} than the party does. How far toward the
-            flank the member sits is scored as position congruence below.
+            flank the member sits is scored as position congruence
+            {positionScored ? " below." : ", once this Congress's positions are in."}
           </p>
           <ul className="flex flex-col gap-2.5">
             {flank.slice(0, FLANK_SHOWN).map((v, i) => (

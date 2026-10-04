@@ -111,9 +111,8 @@ def _toward_other_party(party: str, cast: list[tuple]) -> bool:
     def mean(points):
         return sum(x * w for x, w in points) / sum(w for _, w in points)
     # Positions are read from their party's mean in their section
-    # (party_line_records), so with no position for anyone who voted with
-    # the party (a run for one senator, whose colleagues' roll-call votes
-    # can't be tied to a position) the party's own center, 0, stands in.
+    # (party_line_records), so with no usable position for anyone who voted
+    # with the party the party's own center, 0, stands in.
     reference = mean(everyone) if len(everyone) > len(broke) else 0.0
     return mean(broke) > reference if party == "D" else mean(broke) < reference
 

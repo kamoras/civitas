@@ -741,8 +741,10 @@ resampled in a fixed order, 1,000 times.
   on a different agenda; whether those records behave like these is
   untested.
 
-**Six approaches that don't work.** Each appeared in a draft of this
-change and was replaced after review.
+**Six approaches replaced.** Each appeared in a draft of this change and
+was replaced after review; the fourth and the sixth were not shown to
+help rather than shown not to, and a rerun with more pairs tests them
+again.
 
 *The career-gap proxy.* The first draft fit gap² = drift + k / votes, where
 the gap is between a member's Nokken-Poole position and their career
@@ -877,8 +879,9 @@ pairs shaped like the rule's case; there it doesn't hold up (below).
     | all thin pairs | 92 | 3.1% | 0 / 2.6% / 3.1% | 82% |
 
     Neither clears the bar, so the rule keeps the last full record until
-    the new one is full. Pooled, a switch near 92 votes looks better, but
-    the entrants pull it down, and they are not the rule's case. Only 34 thin pairs have over 100 votes, so a
+    the new one is full. Pooled, a switch at 92 votes looks better, but
+    the entrants pull it down, and they are not the rule's case. Only 34 thin pairs have over 100 votes, fewer of them members who
+    left (the rule's case), so a
     rerun with more pairs could still find a switch that clears it. This
     first applies in the 120th Congress: a 119th section written before
     v6.27 keeps no earlier positions.
@@ -950,9 +953,10 @@ which read placeholders as positions and weighted nothing, with v6.27:
   is also often their first or last, though a curve per direction
   (entrants, leavers) predicts worse than one for both, and whether early
   records in a Congress behave like these is untested. The no-count
-  weight rests on fewer still, and the flank rule's test of an earlier
-  switch on 34 thin pairs above 100 votes; whether returning members'
-  early records behave like those of members who left is untested too.
+  weight rests on fewer still (25 pairs). The flank rule's switch test
+  rests on the members who left among the 34 thin pairs above 100 votes,
+  and whether returning members' early records behave like theirs is
+  untested too.
   Rerunning the calibration adds each Congress's new pairs, and decides
   the structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the

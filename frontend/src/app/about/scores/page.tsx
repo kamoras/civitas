@@ -95,11 +95,11 @@ export default function ScoresChapter() {
             A member who did great work a decade ago and has coasted since shouldn&apos;t get credit
             for it every night, so votes, bills and sponsorship cover the current two-year Congress.
             That is stricter than a six-year Senate term, and it avoids guessing term boundaries the
-            official records don&apos;t publish. Funding is the exception: senators legitimately
-            raise little money outside election years, so funding covers the member&apos;s most
-            recent completed election: the campaign that won the current seat, not a re-election
-            campaign still under way. Score trend charts mark the start of each Congress so a reset
-            reads as what it is.
+            official records don&apos;t publish. Funding is the main exception: senators
+            legitimately raise little money outside election years, so funding covers the
+            member&apos;s most recent completed election: the campaign that won the current seat,
+            not a re-election campaign still under way. Score trend charts mark the start of each
+            Congress so a reset reads as what it is.
           </P>
         </Sub>
       </Section>
@@ -212,8 +212,10 @@ export default function ScoresChapter() {
               against the party from its own flank (hardliners voting down their party&apos;s bill)
               is listed on the profile but not counted here, because how far toward the flank a
               member sits is already scored by where their record sits (below)
-              <Cite id="kirkland2017" />. Every break on a profile shows that roll call&apos;s party
-              tallies.
+              <Cite id="kirkland2017" />. Which side of their party a member sits on comes from this
+              Congress&apos;s record once it is a full one (200 votes); until then, from their last
+              Congress&apos;s full record, which is never scored. Every break on a profile shows
+              that roll call&apos;s party tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in

@@ -732,7 +732,7 @@ def main() -> None:
             "a last full record and a thin record as evidence of a member's side of their party, "
             "centered as the rule centers, and prior_until_votes is the count below which the rule "
             "reads the last full record (a full record unless a switch short of one saves sides out "
-            "of sample in 95% of resamples on pairs shaped like the rule's case, prior_until_votes); "
+            "of sample in 95% of resamples on pairs shaped like the rule's case); "
             "structure_test is the one-standard-error rule's comparison"
         ),
         **calibrated,

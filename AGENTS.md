@@ -597,10 +597,11 @@ The flank-break rule (`party_line_record`, v6.27) is a narrower exception
 that never scores a past position: it reads the last Congress's positions
 only to tell which side of their party a defector sits on, for everyone
 until the new Congress's Voteview section passes its gates, and after that
-for a member whose last record is full and whose new one is below the
-measured `prior_until_votes` (a full record at present, in
-`app/data/position_confidence.json`), or who has no usable position in
-the new section. Only the Congress just before is read.
+for a member whose last record is full and whose new one has no count or
+fewer than the measured `prior_until_votes` (currently 200 votes, a full
+record, in `app/data/position_confidence.json`), or who has no usable
+position in the new section. Only the Congress just before is kept as
+the prior.
 
 **Funding is the main exception**: Funding Independence and Funding Diversity
 window to the member's **most recent completed election only**
