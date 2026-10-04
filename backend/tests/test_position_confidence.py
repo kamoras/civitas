@@ -418,10 +418,14 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert f"once it rests on {switch} roll calls" in page
     assert f"about {half} votes counts half" in entry
     assert f"{full} votes or more counts in full" in entry
-    # The era the shipped curve is measured on, by its first year.
-    if data["structure"] == "era":
-        year = 1789 + 2 * (data["era_split"] - 1)
-        assert f"since {year}" in page and f"since {year}" in entry
+    # A position published with no count: "about a fifth" in the entry.
+    assert round(data["uncounted_weight"] * 5) == 1 and "about a fifth" in entry
+    # The era the shipped curve is measured on, by its first year. Both texts
+    # describe the era curve; a rerun choosing another structure must
+    # rewrite them (and README and AGENTS.md), so this fails until it does.
+    assert data["structure"] == "era", "rewrite the prose that describes the era curve"
+    year = 1789 + 2 * (data["era_split"] - 1)
+    assert f"since {year}" in page and f"since {year}" in entry
 
 
 def test_the_switch_tests_take_the_pairs_their_names_say(monkeypatch):

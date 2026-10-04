@@ -299,8 +299,9 @@ Key mathematical properties:
   the earlier ones only, as the weight is used: it beats one curve over
   every Congress by 0.066 (standard error 0.034, about one at the latest
   transitions, so weakly settled) and a curve per chamber does worse; a
-  paired one-standard-error rule decides, and a rerun decides again. The split is a fixed Congress, so nothing is reset for a
-  new Congress.
+  paired one-standard-error rule decides, and a rerun decides again.
+  The split is a fixed Congress, so nothing is reset for a new
+  Congress.
   It is a reliability weight, not a count threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores

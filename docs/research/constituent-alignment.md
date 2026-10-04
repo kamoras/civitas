@@ -729,8 +729,9 @@ in a fixed order, 1,000 times.
     0.180 and 0.151 (0.077, 0.078, 0.072). The sign holds; the size
     doesn't.
   - **The split.** At every other split from the 103rd to the 117th the
-    era curve also predicts better, but the rule would adopt it at 11
-    of the 16, not at the 108th, 109th, 115th or 116th. The 110th is a
+    era curve also predicts better, but of the 16 splits from the 103rd to
+    the 118th the rule would adopt it at 11, not at the 108th, 109th,
+    115th or 116th, nor at the 118th, where the two curves coincide. The 110th is a
     convention (roughly the middle of 101–119), fixed before the
     forward comparisons, though era results at it had been reported
     before; it is kept at the 110th on reruns, never re-centred.
