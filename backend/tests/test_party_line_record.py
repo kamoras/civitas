@@ -356,3 +356,30 @@ def test_a_house_independents_stored_caucus_reads_over_the_roll_calls_party(db_s
     db_session.commit()
     with_caucus = party_line_records(db_session, "house", _members())[4]
     assert alone["breaks"] != [] and with_caucus["flankBreaks"] != []
+
+
+def test_a_house_roll_calls_label_reads_its_own_parties(db_session, monkeypatch):
+    """The label (a party-line roll call or not) reads the roll call's own
+    parties, as its stored partySplit does. All Republicans vote Yea; 2 of 7
+    Democrats join them (29%, a party line), and so does an independent ("I"
+    on the roll call) who caucuses with the Democrats. Counted as a Democrat
+    the independent would make it 3 of 8 (38%, no party line); read by the
+    roll call it isn't, so the Democrats who joined broke with their party."""
+    from app.models import Representative
+    dims = {**{f"R{i}": 0.5 for i in range(5)}, **{f"D{i}": -0.4 for i in range(7)}, "I0": -0.3}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": dims})
+    db_session.add(Representative(id="H-I0", bioguide_id="I0", name="I0 LastI0", state="TN", district=9,
+                                  party="I", caucus_party="D"))
+    rc = RollCall(chamber="house", congress=119, session=2, number=60, date="2026-03-01", question="On Passage",
+                  bill_id="HR.60")
+    db_session.add(rc)
+    db_session.flush()
+    for m in dims:
+        vote = "Yea" if m.startswith("R") or m in ("D0", "D1", "I0") else "Nay"
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=m, last_name=f"Last{m}", first_name=m,
+                                        party="I" if m == "I0" else m[0], state="TN", position=vote))
+    db_session.commit()
+    members = [{"bioguideId": m, "name": f"{m} Last{m}", "lastNameForVoteMatch": f"Last{m}", "state": "TN",
+                "party": m[0], "votingRecord": {"effectiveParty": "D" if m == "I0" else m[0]}} for m in dims]
+    records = dict(zip(dims, party_line_records(db_session, "house", members)))
+    assert records["D0"]["breaks"] or records["D0"]["flankBreaks"]

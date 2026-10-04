@@ -703,9 +703,11 @@ in a fixed order, 1,000 times.
   difference is 0.070, so the chambers aren't shown to differ: fitted
   apart, the half points are 25 votes (Senate, 1–50) and 85 (House,
   31–98). Era, direction, attendance and the party-line term predict
-  worse than one curve: attended records (missing no more of their span
-  than nine in ten full records do) don't follow a different curve from
-  mostly absent ones.
+  worse than one curve: attended arrivals and departures (missing no
+  more of their span than nine in ten full records do) aren't shown to
+  follow a different curve from the rest. That split is mostly the
+  entrants against the leavers, so it largely repeats the direction
+  test.
 
 | | Estimate | 90% interval (members resampled, 1,000 times) |
 |---|---|---|
@@ -895,15 +897,16 @@ flank rule's switch test is restricted, to attended records.
     member who left during it (absent the Congress after) and missed no
     more of the roll calls in their span than nine in ten of that
     Congress's full records do (a convention; a roll call with no row
-    counts as missed, as for a Speaker who doesn't vote). Most leavers'
-    thin records are not that: they are mostly absences on the way out.
-    Only 6 pairs qualify, 2 with over 100 votes; in sample their best
+    counts as missed, as for a Speaker who doesn't vote). Most leavers
+    missed more of their span than the convention allows. Only 6 pairs
+    qualify, 2 with over 100 votes; in sample their best
     switch is 91 votes, saving 3.5% of sides, but they are too few to
     measure one (in most resamples the left-out members can't support a
-    model). Counting every leaver, attended or not (49 pairs), the best
-    switch is 162 votes and saves sides in 12% of resamples out of bag;
-    over all thin pairs, 93 votes and 44%. None comes near the bar, so the
-    attendance convention doesn't decide it.
+    model). Counting every member who left, attended or not (36 pairs, 11
+    with over 100 votes), no switch short of a full record does better
+    even in sample, and one saves sides in 6% of resamples out of bag;
+    over all thin pairs, the best switch is 93 votes and 44%. None comes
+    near the bar, so the attendance convention doesn't decide it.
   - So the switch rests on its conventions: keeping the last full record
     until the new one is full is the rule as designed, the one count at
     which the new record needs no model to be trusted, and nothing in

@@ -51,8 +51,9 @@ the parties' majorities split, but with drift measured per transition the
 dependence is weak and predicts held-out members worse than no term
 (research note section 14). So the weight is at most one curve per
 chamber (one for both, as calibrated now), and nothing in it follows the
-sitting Congress: a rerun only adds pairs. Era and the pair's direction (a member who arrived or one who left)
-are tested the same way and reported, not used: an era's curve would
+sitting Congress: a rerun only adds pairs. Era, the pair's direction (a member who arrived or one who left)
+and attendance (attended arrivals and departures against the rest) are
+tested the same way and reported, not used: an era's curve would
 apply only as the latest era's, and a direction can't be known for a
 sitting member's record.
 
@@ -243,11 +244,12 @@ def pairs(cache: pathlib.Path | None = None, span: range | None = None, weight=N
     side with no count but a career position, the case the score weights
     by uncounted_weight), every pair keyed by the transition it spans (its
     earlier Congress), that Congress's party-line share, whether the thin
-    side is the later, and whether the thin record is a run of attended
-    consecutive votes from a member who arrived or left (absent the
-    Congress before it, or after it, and missing no more of the roll calls
-    in their span than nine in ten of that Congress's full records do: the
-    flank rule's case); and each
+    side is the later, whether the thin record is a run of attended
+    consecutive votes from a member who arrived or left (missing no more
+    of the roll calls in their span than nine in ten of that Congress's
+    full records do: the flank rule's case), and whether the member arrived
+    or left at all (absent the Congress before it, or after it; the newest
+    Congress's leavers can't be checked until the next export); and each
     chamber's party-line share by usable Congress (`shares`, when given, is
     reused). `weight` ({chamber: (votes, career) -> weight}) centers each
     Congress as the flank rule does (deviations)."""
@@ -282,7 +284,7 @@ def pairs(cache: pathlib.Path | None = None, span: range | None = None, weight=N
             for icpsr in prev.keys() & cur.keys():
                 (na, xa, ca), (nb, xb, cb) = prev[icpsr], cur[icpsr]
                 if na >= RELIABLE_VOTES and nb >= RELIABLE_VOTES:
-                    out.append((chamber, icpsr, na, xa, xb, "full", earlier, share[earlier], False, False))
+                    out.append((chamber, icpsr, na, xa, xb, "full", earlier, share[earlier], False, False, False))
                 elif nb >= RELIABLE_VOTES or na >= RELIABLE_VOTES:
                     later_thin = na >= RELIABLE_VOTES
                     n, thin, full, career = (nb, xb, xa, cb) if later_thin else (na, xa, xb, ca)
@@ -296,9 +298,9 @@ def pairs(cache: pathlib.Path | None = None, span: range | None = None, weight=N
                     # Congress's leavers can't be checked until the next
                     # export), and attended through their span.
                     other, side = (after, later) if later_thin else (before, earlier)
-                    run = (other is not None and icpsr not in other
-                           and absent[side].get(icpsr, 0.0) <= usual[side])
-                    out.append((chamber, icpsr, n, thin, full, kind, earlier, share[earlier], later_thin, run))
+                    moved = other is not None and icpsr not in other
+                    run = moved and absent[side].get(icpsr, 0.0) <= usual[side]
+                    out.append((chamber, icpsr, n, thin, full, kind, earlier, share[earlier], later_thin, run, moved))
     return out, shares
 
 
@@ -355,8 +357,8 @@ def fit_n0(data: list[tuple], drift: dict | None = None) -> float:
 
 CHAMBERS = (("senate", "S"), ("house", "H"))
 # Candidate structures for n0: the group a pair's n0 is fitted within.
-# "pooled" and "chamber" can be applied to a sitting member's record; era
-# and direction are tested and reported only.
+# "pooled" and "chamber" can be applied to a sitting member's record; era,
+# direction and attendance are tested and reported only.
 STRUCTURES = {
     "pooled": lambda r: "all",
     "chamber": lambda r: r[0],
@@ -664,8 +666,9 @@ def prior_test(data: list[tuple]) -> dict:
         if (rows := [r for r in usable if r[5] == "thin" and r[8] and r[9] and lo < r[2] <= hi])}
     out["switch_test"] = {
         "rule_shape": switch_test([r for r in usable if r[5] == "full" or (r[8] and r[9])]),
-        # Every leaver, attended or not: how much the attendance convention matters.
-        "leavers": switch_test([r for r in usable if r[5] == "full" or r[8]]),
+        # Every member who left, attended or not: how much the attendance
+        # convention matters.
+        "leavers": switch_test([r for r in usable if r[5] == "full" or (r[8] and len(r) > 10 and r[10])]),
         "all": switch_test(usable),
     }
     return out
@@ -797,8 +800,9 @@ def main() -> None:
             "the least-squares fit of the thin pairs on a grid to 5000, for every Congress, under "
             "one n0 for both chambers unless one per chamber has a heldout_error (the squared error "
             "of each thin member's pairs fitted without that member) smaller by more than the "
-            "standard error of the difference (structure_test; era and direction are tested, not "
-            "usable); half_weight_votes is where "
+            "standard error of the difference (structure_test; era, direction and attendance, "
+            "attended arrivals and departures against the rest, are tested, not usable); "
+            "half_weight_votes is where "
             "weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / "
             "reference_votes), so an interval reaching that limit is open above; "
             "uncounted_weight is the slope, for both chambers, for positions published with no "
@@ -813,7 +817,8 @@ def main() -> None:
             "shaped like the rule's case: a full record, then the thin record of a member who left "
             "during the next Congress, absent the Congress after, missing no more of the roll calls "
             "in their span than nine in ten of that Congress's full records, a convention); "
-            "structure_test is the one-standard-error rule's comparison; crossover_if_independent is "
+            "structure_test is the one-standard-error rule's comparison; switch_test also reports every "
+            "member who left (leavers) and every thin pair (all); crossover_if_independent is "
             "the rejected unstratified crossing, reported only"
         ),
         **calibrated,

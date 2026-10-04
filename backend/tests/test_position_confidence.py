@@ -81,9 +81,11 @@ def test_every_thin_record_is_paired_and_the_flank_rules_case_flagged(monkeypatc
     flags = {r[1]: r[9] for r in data if r[0] == "S" and r[5] == "thin"}
     assert set(flags) == {"70", "71", "72", "73"}
     assert {i for i, run in flags.items() if run} == {"70"}
+    assert {r[1] for r in data if r[0] == "S" and r[5] == "thin" and r[10]} == {"70"}  # 71 sat before; 72, 73 stay
     rows[103] = rows[100]  # 73 gone by the 103rd: a checked leaver
     data, _ = script.pairs(None, range(101, 103))
     assert {r[1] for r in data if r[0] == "S" and r[5] == "thin" and r[9]} == {"70", "73"}
+    assert {r[1] for r in data if r[0] == "S" and r[5] == "thin" and r[10]} == {"70", "72", "73"}  # 72 left, absent
     del rows[103]  # unpublished: 73 can't be checked
     data, _ = script.pairs(None, range(101, 103))
     assert {r[1] for r in data if r[0] == "S" and r[5] == "thin" and r[9]} == {"70"}
@@ -193,6 +195,9 @@ def test_shipped_file_documents_its_source_and_intervals():
     assert lo <= data["uncounted_weight"] <= hi
     # The rejected party-line term predicts held-out members worse.
     assert data["party_line_test"]["heldout_error"] > held[data["structure"]]
+    # Era, direction and attendance are tested and reported beside them.
+    assert {"era", "direction", "attendance"} <= set(held)
+    assert {"rule_shape", "leavers", "all"} <= set(data["prior_test"]["switch_test"])
     # The rejected independence model's switch point is reported, and the
     # dependence that rejects it: drift flips a side mostly near the center.
     by_distance = list(data["prior_test"]["full_by_distance"].values())
