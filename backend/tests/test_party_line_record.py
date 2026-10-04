@@ -347,6 +347,8 @@ def test_a_lone_defector_is_read_against_the_party_center_without_colleagues(db_
                         lambda chamber: {"members": {f"bio-{m}": d for m, d in DIM1.items()}})
     for m in DIM1:
         db_session.add(Senator(id=f"S-{m}", bioguide_id=f"bio-{m}", name=f"{m} Last{m}", state="TN", party=m[0]))
+    # Stored but not passed: they mustn't be read back in as departed senators.
+    monkeypatch.setattr(party_line_record, "_departed_senators", lambda *a: [])
     _roll_call(db_session, "senate", 24, "On Passage", "S.24", {"R0": "Nay"})
     _roll_call(db_session, "senate", 25, "On Passage", "S.25", {"R4": "Nay"})
     db_session.commit()
@@ -514,7 +516,7 @@ def test_a_stored_namesake_who_never_voted_takes_no_ones_votes(db_session, monke
                         lambda chamber: {"members": {f"bio-{m}": d for m, d in dims.items()}})
     for m in dims:
         db_session.add(Senator(id=f"S-{m}", bioguide_id=f"bio-{m}", name=f"{m} Last{m}", state="VT", party=m[0]))
-    db_session.add(Senator(id="S-OLD", bioguide_id="bio-OLD", name="Frank LastD0", state="VT", party="D",
+    db_session.add(Senator(id="S-OLD", bioguide_id="bio-OLD", name="D0nny LastD0", state="VT", party="D",
                            is_current=False))
     rc = RollCall(chamber="senate", congress=119, session=2, number=42, date="2026-03-01", question="On Passage",
                   bill_id="S.42")

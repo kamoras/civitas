@@ -278,6 +278,8 @@ class TestRefresh:
         assert await voteview.refresh_member_ideal_points("senate", 119) is False
         last["rows"] = rows[1:]  # neither of the switcher's ids is in it
         assert await voteview.refresh_member_ideal_points("senate", 119) is False
+        firsts["rolls"] = {}  # read, but neither id has voted: still unsettled
+        assert await voteview.refresh_member_ideal_points("senate", 119) is False
         firsts["rolls"] = {"1000": 1, "91000": 400}
         assert await voteview.refresh_member_ideal_points("senate", 119) is True
         assert score_calculator._member_ideal_points("senate")["members"][rows[0]["bioguide_id"]] == 0.9
@@ -514,3 +516,31 @@ async def test_an_unresolved_switcher_alerts_once_and_clears(monkeypatch, tmp_pa
     monkeypatch.setattr(voteview, "ingestion_gates", lambda chamber, data: ["synthetic gate failure"])
     assert await voteview.refresh_member_ideal_points("senate", 119) is False
     assert resolved == ["voteview-switcher-senate"]
+
+
+def test_the_seat_gate_bounds_each_chamber_both_ways():
+    """Seats with a positioned member must fall within the chamber's size:
+    more than 435 House seats (or 50 Senate states) is a bad join, too few
+    a truncated export."""
+    def data(seats):
+        return {"members": {}, "seats": seats, "seated": 435,
+                "fit": {"D": {"a": -0.4, "b": 0.01}, "R": {"a": 0.4, "b": 0.01}}, "extremity_p90": 0.2}
+    def seat_failures(chamber, seats):
+        return [f for f in voteview.ingestion_gates(chamber, data(seats)) if "seats with a member" in f]
+    assert seat_failures("house", 435) == [] and seat_failures("house", 380) == []
+    assert seat_failures("house", 436) and seat_failures("house", 379)
+    assert seat_failures("senate", 50) == [] and seat_failures("senate", 51) and seat_failures("senate", 44)
+
+
+def test_a_carried_scale_keeps_a_sections_own_and_names_where_it_was_measured():
+    """A section with its own scale keeps it; one without takes the last
+    section's, named by the Congress it was measured on, through a chain of
+    carries (the scale_congress of a carried scale, not the section's)."""
+    own = {"extremity_p90": 0.3, "congress": 120}
+    assert voteview.with_carried_scale(own, {"extremity_p90": 0.2, "congress": 119}) is own
+    thin = {"extremity_p90": None, "congress": 120}
+    assert voteview.with_carried_scale(thin, {"extremity_p90": 0.2, "congress": 119}) == {
+        "extremity_p90": 0.2, "congress": 120, "scale_congress": 119}
+    carried = {"extremity_p90": 0.2, "congress": 119, "scale_congress": 118}
+    assert voteview.with_carried_scale(thin, carried)["scale_congress"] == 118
+    assert voteview.with_carried_scale(thin, {}) is thin
