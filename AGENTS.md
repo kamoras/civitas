@@ -293,8 +293,9 @@ Key mathematical properties:
   Voteview's own adjacent-Congress records with drift per transition
   (`scripts/calibrate_position_confidence.py`), one curve for both
   chambers and every Congress (a curve per chamber predicted held-out
-  members no better, so a paired one-standard-error rule keeps one; a
-  rerun decides again), so nothing is reset for a new Congress.
+  members better by 0.020, under the 0.070 standard error, so a paired
+  one-standard-error rule keeps one; a rerun decides again), so nothing
+  is reset for a new Congress.
   It is a reliability weight, not a count threshold
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
@@ -602,7 +603,8 @@ full record) if their last record was full; and, whatever the last
 record, for a member the new section gives no usable position. The 200
 and the bar for replacing it are conventions: the calibration would
 adopt a shorter switch only if it placed members on the right side
-better out of bag in 95% of resamples, and none does. Only the Congress
+better out of bag in 95% of resamples, and too few thin records have the
+rule's shape to measure one. Only the Congress
 just before is kept.
 
 **Funding is the main exception**: Funding Independence and Funding Diversity

@@ -606,7 +606,7 @@ score point, t, and the R² the score adds:
 | Outcome | Linear, pooled (shipped) | Linear, per party | Peaked, pooled | Peaked, per party |
 |---|---|---|---|---|
 | House generals 1994–2010 (N=2,545) | **0.035 (5.2), 0.0090** | 0.035 (5.3), 0.0096 | −0.002 (−0.4), 0.0000 | −0.002 (−0.3), 0.0000 |
-| Senate generals 1990–2024 (N=461) | **0.042 (2.5), 0.0115** | 0.040 (2.5), 0.0108 | −0.010 (−0.7), 0.0009 | −0.008 (−0.6), 0.0007 |
+| Senate generals 1990–2024 (N=461) | **0.042 (2.5), 0.0114** | 0.040 (2.5), 0.0108 | −0.010 (−0.7), 0.0009 | −0.008 (−0.6), 0.0007 |
 | House primaries 1990–2010, contested, primary share (N=1,044) | −0.009 (−0.5), 0.0003 | −0.008 (−0.4), 0.0002 | 0.021 (1.4), 0.0019 | 0.022 (1.4), 0.0022 |
 | drew a primary challenger, per 10 points (N=3,869) | 0.004 (1.2), 0.0006 | 0.005 (1.3), 0.0008 | −0.003 (−1.1), 0.0005 | −0.004 (−1.4), 0.0008 |
 
@@ -668,13 +668,12 @@ party's flank, every pair keyed by the transition it spans:
   - A Congress still thin by the calendar.
 
 `scripts/calibrate_position_confidence.py` runs this over Congresses
-101–119: 8,098 full pairs, 85 thin and 24 with no count on the thin side
+101–119: 8,098 full pairs, 99 thin and 25 with no count on the thin side
 (and a career DW-NOMINATE position, as the score requires of such a
-position; see below). A thin pair counts only for a member who really
-arrived (absent the Congress before) or left (absent the one after): a
-member who served on both sides has a thin record from absences spread
-over the Congress (a presidential campaign, say), not a run of
-consecutive votes. The intervals are reproducible: members are resampled
+position; see below). Thin records arise here as they do in the score:
+from members who arrived or left mid-Congress, and from members absent
+for much of one (illness, a campaign, a cabinet nomination), so every
+thin pair counts. The intervals are reproducible: members are resampled
 in a fixed order, 1,000 times.
 
 - **One curve for both chambers, chosen by held-out prediction.** Each
@@ -684,26 +683,27 @@ in a fixed order, 1,000 times.
   it beats the simpler one by more than a standard error of the
   member-by-member difference (a paired variant of the one-standard-error
   rule of Hastie, Tibshirani & Friedman 2009, section 7.10). A rerun
-  decides again. Over the 85 thin pairs:
+  decides again. Over the 99 thin pairs:
 
   | n0 fitted | Held-out squared error |
   |---|---|
-  | **once for both chambers (shipped)** | **1.404** |
-  | once per chamber | 1.405 |
-  | once per era (101–109, 110–119) | 1.542 |
-  | once per direction (entrant, leaver) | 1.456 |
-  | once, plus a party-line term | 1.513 |
+  | **once for both chambers (shipped)** | **1.456** |
+  | once per chamber | 1.436 |
+  | once per era (101–109, 110–119) | 1.597 |
+  | once per direction (entrant, leaver) | 1.508 |
+  | once, plus a party-line term | 1.561 |
 
-  Per chamber is no better (0.001 worse, the difference's standard error
-  0.066): fitted apart, the half points are 25 votes (Senate, 1–50) and
-  81 (House, 25–98), and the data don't separate them. Era, direction
-  and the party-line term predict worse than one curve.
+  Per chamber is lower by 0.020, but the standard error of that
+  difference is 0.070, so the chambers aren't shown to differ: fitted
+  apart, the half points are 25 votes (Senate, 1–50) and 85 (House,
+  31–98). Era, direction and the party-line term predict worse than one
+  curve.
 
 | | Estimate | 90% interval (members resampled, 1,000 times) |
 |---|---|---|
-| Votes at which a position counts half | **46** | 22–98 |
-| n0 | 85 | 28 to the search grid's limit of 5,000 |
-| Weight of a position with no count | **0.25** | 0.07–0.43 |
+| Votes at which a position counts half | **50** | 24–98 |
+| n0 | 100 | 31 to the search grid's limit of 5,000 |
+| Weight of a position with no count | **0.21** | 0.03–0.38 |
 
 - **The curve is weakly determined.** The half point is n0 written
   another way, so it is no better determined; it is only bounded. The
@@ -713,17 +713,17 @@ in a fixed order, 1,000 times.
 - **A party-line term was tested and is not used.** That would make n0 a
   line in the share of roll calls on which the parties' majorities split,
   since in a more party-line Congress each vote might say less about a
-  member's place within their party. Its slope is −4.0, the wrong
-  direction; it lowers the in-sample error a little (1.345 to 1.335) but
-  predicts held-out members worse (1.513 against 1.404). An earlier
+  member's place within their party. Its slope is −4.25, the wrong
+  direction; it lowers the in-sample error a little (1.396 to 1.384) but
+  predicts held-out members worse (1.561 against 1.456). An earlier
   draft of this change found a positive slope; it came from forcing one
   drift on every Congress, which loaded the era differences in drift
   onto n0.
 - **Positions with no count carry some information.** They are members
   Voteview has barely scaled (newly sworn in, or with very few scalable
   votes). Measured only where the member also has a career DW-NOMINATE
-  position, they count 0.25 from 24 pairs, but a few members carry it:
-  leaving out one member at a time moves it between 0.17 and 0.31. A
+  position, they count 0.21 from 25 pairs, but a few members carry it:
+  leaving out one member at a time moves it between 0.13 and 0.26. A
   no-count position with no career position at all (a member just sworn
   in, with nothing yet to anchor it) is not measured by these pairs, and
   it counts nothing, so the part sits at 50.
@@ -741,7 +741,7 @@ in a fixed order, 1,000 times.
   on a different agenda; whether those records behave like these is
   untested.
 
-**Six approaches replaced.** Each appeared in a draft of this change and
+**Seven approaches replaced.** Each appeared in a draft of this change and
 was replaced after review; the fourth, fifth and sixth were not shown
 to help rather than shown not to, and a rerun with more pairs tests them
 again.
@@ -776,24 +776,30 @@ artifacts go away once drift is measured per transition.
 
 *One curve per chamber.* The fourth draft fitted the chambers apart
 because they predicted held-out members slightly better, a margin within
-the noise of the comparison (and it vanished once members who served on
-both sides of a thin record were left out). The one-standard-error rule
-now decides, and keeps one curve.
+the noise of the comparison. The one-standard-error rule now decides,
+and keeps one curve.
 
 *Flank-rule switches chosen in sample.* The fifth draft switched the
 flank rule at 53 votes, on pairs centered on the median of each party's
 full records rather than as the rule centers, with noise and drift
-assumed independent everywhere. The sixth switched at 92, then the best
-switch over all thin pairs (163 once members who served on both sides of
-a thin record are left out), without testing it out of bag or on the
+assumed independent everywhere. The sixth switched at 92, the best
+switch over all thin pairs, without testing it out of bag or on the
 pairs shaped like the rule's case; there it doesn't hold up (below).
+
+*Thin pairs restricted to arrivals and departures.* The seventh draft
+kept only members absent the Congress before or after, taking that to
+make every thin record a run of consecutive votes. It doesn't: many such
+records are mostly absences (illness before a death or retirement, a
+campaign for another office, a cabinet nomination), and the score's thin
+records include absences too. The weight uses every thin pair; only the
+flank rule's switch test is restricted, to attended records.
 
 **Shipped (v6.27).**
 - The member's extremity is scaled by weight(n) before it is read against
-  the saturation point. A position from 46 votes counts half, and one
+  the saturation point. A position from 50 votes counts half, and one
   from 200 or more counts in full; n is the member's scaled roll calls
   this Congress (Voteview's `nominate_number_of_votes`).
-  - A position with no reported count is weighted 0.25 when the member
+  - A position with no reported count is weighted 0.21 when the member
     has a career DW-NOMINATE position, and read as no votes (50) when
     not.
   - One curve serves both chambers and every Congress, so nothing in it
@@ -853,10 +859,10 @@ pairs shaped like the rule's case; there it doesn't hold up (below).
     | Votes | Pairs | Same side |
     |---|---|---|
     | 1–25 | 19 | 63% |
-    | 26–50 | 22 | 59% |
-    | 51–100 | 19 | 68% |
-    | 101–150 | 17 | 82% |
-    | 151–199 | 8 | 100% |
+    | 26–50 | 24 | 54% |
+    | 51–100 | 22 | 73% |
+    | 101–150 | 21 | 86% |
+    | 151–199 | 13 | 92% |
 
     Those pairs compare a thin record with the other Congress's full
     record; the rule compares within one Congress, so one Congress's
@@ -867,43 +873,30 @@ pairs shaped like the rule's case; there it doesn't hold up (below).
     center (under 0.05, 0.05–0.1, beyond), noise and drift independent
     within each, agreement a logistic in log votes with an intercept per
     stratum, implied rates clipped to [0, 1].
-  - Whether to switch before a full record is then tested out of bag
+  - Whether to switch before a full record is tested out of bag
     (`switch_test`): a switch is chosen, as the one misplacing the fewest
     sides over counts 1–199, on members resampled 1,000 times, and judged
     by the same model fitted to the members that resample left out,
-    against keeping the last full record. The test is on the pairs shaped
-    like the rule's case: a full record, then the first votes of the next
-    Congress (members who left; an entrant's thin record is the end of a
-    Congress). Their bands:
-
-    | Votes | Pairs | Same side |
-    |---|---|---|
-    | 1–25 | 13 | 54% |
-    | 26–50 | 4 | 75% |
-    | 51–100 | 12 | 58% |
-    | 101–150 | 10 | 80% |
-    | 151–199 | 3 | 100% |
-
-    | Pairs | Thin (over 100 votes) | Best switch | Sides saved | Saved out of bag (5th / 50th / 95th) | Resamples saving |
-    |---|---|---|---|---|---|
-    | **shaped like the rule's case (shipped)** | 42 (13) | none (200) | 0 | −24% / 0 / 0 | 3% |
-    | all thin pairs | 85 (25) | 163 | 0.2% | −18% / 0 / 1.8% | 12% |
-
-  - On the rule-shaped pairs no switch short of a full record does better
-    even in sample, so the rule keeps the last full record until the new
-    one is full. A switch would be adopted only if it saved sides on the
-    left-out members in at least 95% of resamples; that bar is a
-    convention, as is keeping the last full record by default (the rule
-    as designed, and the one count at which the new record needs no model
-    to be trusted). It is a strict bar, stricter than the
-    one-standard-error rule's: any resample whose own best is a full
-    record saves exactly nothing. Neither row clears even a lower one.
-    The stakes are small (the best switch over all pairs saves 0.2% of
-    sides), and the prior first applies in the 120th Congress. The test
-    was narrowed to the rule's shape after an all-pairs switch at 92 votes
-    was first proposed, because members who arrived mid-Congress are not
-    the rule's case; with members who served on both sides of a thin
-    record now left out, neither row favors an early switch.
+    against keeping the last full record. A switch would be adopted only
+    if it saved sides in at least 95% of resamples.
+  - The test belongs on pairs shaped like the rule's case: a full record,
+    then a member's first, attended votes of the next Congress, from a
+    member who left during it (absent the Congress after) and missed no
+    more of the roll calls in their span than nine in ten of that
+    Congress's full records do. Most leavers' thin records are not that:
+    they are mostly absences on the way out. Only 7 pairs qualify, 2 with
+    over 100 votes, too few to measure a switch (in most resamples the
+    left-out members can't support a model). Over all thin pairs, where
+    absences dominate, a switch at 93 votes saves 3.1% of sides in sample
+    and 44% of resamples out of bag, short of the bar.
+  - So the switch rests on its conventions: keeping the last full record
+    until the new one is full is the rule as designed, the one count at
+    which the new record needs no model to be trusted, and nothing in
+    these data is shaped closely enough like the rule's case to replace
+    it. The 95% bar is a convention too, and strict: any resample whose
+    own best is a full record saves exactly nothing. The stakes are
+    small, and the prior first applies in the 120th Congress; a rerun
+    with more attended leavers could find a switch that clears the bar.
   - At very low counts the model's logistic in log votes extrapolates
     below a coin flip; flooring it at one changes nothing measurable.
     Early in a real Congress the party's center is itself measured on
@@ -922,8 +915,8 @@ which read placeholders as positions and weighted nothing, with v6.27:
 | | Senate | House |
 |---|---|---|
 | Saturation | 0.258 → 0.268 | 0.224 → 0.221 |
-| Mean change in the component | 1.69 | 0.57 |
-| Mean change in Constituent Alignment | 0.51 | 0.17 |
+| Mean change in the component | 1.69 | 0.58 |
+| Mean change in Constituent Alignment | 0.51 | 0.18 |
 
 - Full records move only through the scale and the refit seat lines. The
   Senate's mean change comes from dropping its placeholder, which moves
@@ -933,12 +926,12 @@ which read placeholders as positions and weighted nothing, with v6.27:
   four in the Senate and twelve in the House.
   - Two recently sworn-in representatives with no count and no career
     position move from 23.3 and 31.1 to 50.
-  - Representatives with 77 and 72 votes move from 93.2 to 79.7 and from
-    75.3 to 66.8.
+  - Representatives with 77 and 72 votes move from 93.2 to 78.6 and from
+    75.3 to 66.1.
   - Two representatives far beyond saturation (135 and 182 votes) stay at
     its end; the other representatives with 116–171 votes move 1 to 4
     points.
-  - Senators with 53 and 187 votes move under 1.
+  - Senators with 53 and 187 votes move about 1.
   - Members scored from 1 to 39 votes or a placeholder, all since departed,
     move by up to 50 points.
 
@@ -970,18 +963,17 @@ which read placeholders as positions and weighted nothing, with v6.27:
   leaves the party whose senators spread more widely around the seat's
   norm (Republicans, in most Senates since 1989) with more members near 0
   and near 100.
-- **The thin-record weight rests on 85 thin pairs.** Few members have a thin
-  record next to a full one, so the half point has a wide interval
-  (22–98 votes, the upper end where the n0 search stops), and whether
+- **The thin-record weight rests on 99 thin pairs.** Few members have a
+  thin record next to a full one, so the half point has a wide interval
+  (24–98 votes, the upper end where the n0 search stops), and whether
   the chambers differ can't be settled: fitted apart they come to 25 and
-  81 votes, and a curve per chamber predicts held-out members no better.
-  A member's thin Congress is also often their first or last, though a
-  curve per direction (entrants, leavers) predicts worse than one for
-  both, and whether early records in a Congress behave like these is
-  untested. The no-count weight rests on fewer still (24 pairs). The
-  flank rule's switch test rests on the 42 pairs of members who left, 13
-  with over 100 votes, and whether returning members' early records
-  behave like theirs is untested too. Rerunning the calibration adds each
+  85 votes, but a curve per chamber predicts held-out members better by
+  only 0.020, under a third of that difference's standard error (0.070).
+  The thin records mix arrivals, departures and long absences, as the
+  score's do; whether everyone's early records in a Congress behave like
+  these is untested. The no-count weight rests on fewer still (25
+  pairs), and the flank rule's switch can't be measured at all: only 7
+  pairs have the rule's shape. Rerunning the calibration adds each
   Congress's new pairs, and decides the structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority

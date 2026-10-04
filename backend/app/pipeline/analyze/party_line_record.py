@@ -270,8 +270,10 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     stages: list[dict] = [defaultdict(list) for _ in members]
     for rid, rc in rolls.items():
         ps = positions.get(rid, [])
+        # The House's parties as the cast reads them (an independent's caucus).
         label = None if is_housekeeping(rc.question) else compute_party_split(
-            {"members": [{"party": p.party, "voteCast": p.position} for p in ps]},
+            {"members": [{"party": (party_of.get(p.member_id) if chamber == "house" else None) or p.party,
+                          "voteCast": p.position} for p in ps]},
         )
         cast = []
         for p in ps:

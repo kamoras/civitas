@@ -37,6 +37,7 @@ def test_only_a_no_count_position_with_a_career_is_calibrated_as_uncounted(tmp_p
     late = full + [_row("90", "100", "-0.5", "500", career="-0.4"), _row("91", "100", "-0.6", "500")]
     rows = {101: early, 102: late}
     monkeypatch.setattr(script, "member_rows", lambda chamber, congress, cache=None: rows.get(congress, []))
+    monkeypatch.setattr(script, "attendance", lambda chamber, congress, cache=None: {})
     monkeypatch.setattr(script, "_usable", lambda chamber, congress, cache: True)
     monkeypatch.setattr(script, "party_line_share", lambda chamber, congress, cache=None: 0.5)
     data, _ = script.pairs(None, range(101, 103))
@@ -45,22 +46,65 @@ def test_only_a_no_count_position_with_a_career_is_calibrated_as_uncounted(tmp_p
 
 
 
-def test_a_thin_record_counts_only_for_a_member_who_arrived_or_left(monkeypatch):
-    """A thin record is a run of consecutive votes for a member who arrived
-    (absent the Congress before) or left (absent the one after); one who
-    served on both sides (a campaign's absences) is left out."""
-    script = _script()
+def _pair_rows():
     full = [_row(str(i), "100" if i % 2 else "200", f"{0.1 * (i % 5) - (0.4 if i % 2 else -0.4):.2f}", "500")
             for i in range(40)]
-    rows = {101: full + [_row("80", "100", "-0.5", "500"), _row("81", "100", "-0.5", "500")],
-            102: full + [_row("80", "100", "-0.6", "50"), _row("81", "100", "-0.6", "50")],
-            103: full + [_row("81", "100", "-0.5", "500")]}
-    monkeypatch.setattr(script, "member_rows", lambda chamber, congress, cache=None: rows.get(congress, []))
+    return {100: full + [_row("71", "100", "-0.5", "500")],
+            101: full + [_row("70", "100", "-0.6", "50"), _row("71", "100", "-0.6", "50"),
+                         _row("72", "100", "-0.5", "500"), _row("73", "100", "-0.5", "500")],
+            102: full + [_row("70", "100", "-0.5", "500"), _row("71", "100", "-0.5", "500"),
+                         _row("72", "100", "-0.6", "50"), _row("73", "100", "-0.6", "50")]}
+
+
+def test_every_thin_record_is_paired_and_the_flank_rules_case_flagged(monkeypatch):
+    """Every thin record next to a full one is a pair (the score sees thin
+    records from partial service and from absence alike). The last field
+    flags the flank rule's case: arrived or left, attending as full records
+    do. 70 arrived; 71 sat in the 100th; 72 left but missed most of their
+    span; 73 served on into the 103rd, and once the 103rd isn't published
+    a leaver can't be checked."""
+    import urllib.error
+    script = _script()
+    rows = _pair_rows()
+    rows[103] = rows[101]
+
+    def member_rows(chamber, congress, cache=None):
+        if congress not in rows:
+            raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
+        return rows[congress]
+    monkeypatch.setattr(script, "member_rows", member_rows)
+    monkeypatch.setattr(script, "attendance", lambda chamber, congress, cache=None: {"72": 0.6})
     monkeypatch.setattr(script, "_usable", lambda chamber, congress, cache: congress in (101, 102))
     monkeypatch.setattr(script, "party_line_share", lambda chamber, congress, cache=None: 0.5)
-    data, _ = script.pairs(None, range(101, 104))
-    thin = {r[1] for r in data if r[0] == "S" and r[5] == "thin"}
-    assert thin == {"80"}  # 81 served on in the 103rd
+    data, _ = script.pairs(None, range(101, 103))
+    flags = {r[1]: r[9] for r in data if r[0] == "S" and r[5] == "thin"}
+    assert set(flags) == {"70", "71", "72", "73"}
+    assert {i for i, run in flags.items() if run} == {"70"}
+    rows[103] = rows[100]  # 73 gone by the 103rd: a checked leaver
+    data, _ = script.pairs(None, range(101, 103))
+    assert {r[1] for r in data if r[0] == "S" and r[5] == "thin" and r[9]} == {"70", "73"}
+    del rows[103]  # unpublished: 73 can't be checked
+    data, _ = script.pairs(None, range(101, 103))
+    assert {r[1] for r in data if r[0] == "S" and r[5] == "thin" and r[9]} == {"70"}
+
+    def failing(chamber, congress, cache=None):
+        if congress not in rows:
+            raise urllib.error.HTTPError("u", 503, "Unavailable", None, None)
+        return rows[congress]
+    monkeypatch.setattr(script, "member_rows", failing)
+    try:
+        script.pairs(None, range(101, 103))
+    except urllib.error.HTTPError:
+        pass
+    else:
+        raise AssertionError("an outage must stop the run, not switch the check off")
+
+
+def test_attendance_is_the_share_of_a_members_span_missed(tmp_path):
+    (tmp_path / "S150_votes.csv").write_text(
+        "congress,chamber,rollnumber,icpsr,cast_code\n" + "".join(
+            f"150,Senate,{rc},{i},{c}\n" for rc in range(1, 5) for i, c in ((1, 1), (2, 9 if rc < 4 else 6))))
+    assert _script().attendance("S", 150, tmp_path) == {"1": 0.0, "2": 0.75}
 
 
 def test_fit_recovers_n0_with_a_drift_per_transition():

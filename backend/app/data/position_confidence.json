@@ -1,94 +1,94 @@
 {
- "_source": "Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses 101-119 (later ones still thin by the calendar are left out), exports retrieved 2026-10-03 to 2026-10-04; regenerate with backend/scripts/calibrate_position_confidence.py",
+ "_source": "Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House: pairs from Congresses 101-119 (later ones still thin by the calendar are left out), with the exports either side read for who was seated; exports retrieved 2026-10-03 to 2026-10-04; regenerate with backend/scripts/calibrate_position_confidence.py",
  "_method": "Members of the 50 states with positions in adjacent Congresses, each read from the party's center toward its flank, keyed by the transition they span: full = drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / w(200)), w(n) = n / (n + n0); drift from each transition's pairs of full records (both sides 200 or more scaled votes) in the pair's direction, n0 the least-squares fit of the thin pairs on a grid to 5000, for every Congress, under one n0 for both chambers unless one per chamber has a heldout_error (the squared error of each thin member's pairs fitted without that member) smaller by more than the standard error of the difference (structure_test; era and direction are tested, not usable); half_weight_votes is where weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / reference_votes), so an interval reaching that limit is open above; uncounted_weight is the slope, for both chambers, for positions published with no count (or 0) but a career DW-NOMINATE position; party_line_test is the rejected alternative with log n0 linear in the Congress's party-line share; transitions with no full pairs and Congresses still thin by the calendar are left out; interval_90 is the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, a last full record and a thin record as evidence of a member's side of their party, centered as the rule centers, and prior_until_votes is the count below which the rule reads the last full record (a full record unless a switch short of one, chosen on resampled members, saves sides on the members left out in 95% of resamples, on pairs shaped like the rule's case); structure_test is the one-standard-error rule's comparison; crossover_if_independent is the rejected unstratified crossing, reported only",
  "calibrated_through": 119,
  "structure": "pooled",
  "chambers": {
   "senate": {
-   "n0": 85.0,
-   "half_weight_votes": 45.9,
-   "thin_pairs": 21
+   "n0": 100.0,
+   "half_weight_votes": 50.0,
+   "thin_pairs": 26
   },
   "house": {
-   "n0": 85.0,
-   "half_weight_votes": 45.9,
-   "thin_pairs": 64
+   "n0": 100.0,
+   "half_weight_votes": 50.0,
+   "thin_pairs": 73
   }
  },
  "reference_votes": 200,
- "uncounted_weight": 0.252,
+ "uncounted_weight": 0.212,
  "uncounted_weight_leave_one_out": [
-  0.17,
-  0.306
+  0.132,
+  0.256
  ],
  "interval_90": {
   "senate": {
    "n0": [
-    28.0,
+    31.0,
     5000.0
    ],
    "half_weight_votes": [
-    21.875,
+    23.664,
     98.039
    ]
   },
   "house": {
    "n0": [
-    28.0,
+    31.0,
     5000.0
    ],
    "half_weight_votes": [
-    21.875,
+    23.664,
     98.039
    ]
   },
   "uncounted_weight": [
-   0.067,
-   0.431
+   0.028,
+   0.379
   ]
  },
  "heldout_error": {
-  "pooled": 1.4035,
-  "chamber": 1.4048,
-  "era": 1.5415,
-  "direction": 1.4564
+  "pooled": 1.4561,
+  "chamber": 1.4361,
+  "era": 1.597,
+  "direction": 1.5083
  },
  "structure_test": {
   "pooled": {
-   "heldout_error": 1.4035,
-   "above_best": 0.0,
-   "standard_error": 0.0
+   "heldout_error": 1.4561,
+   "above_best": 0.02,
+   "standard_error": 0.0702
   },
   "chamber": {
-   "heldout_error": 1.4048,
-   "above_best": 0.0013,
-   "standard_error": 0.066
+   "heldout_error": 1.4361,
+   "above_best": 0.0,
+   "standard_error": 0.0
   }
  },
- "half_weight_votes_pooled": 45.9,
+ "half_weight_votes_pooled": 50.0,
  "half_weight_votes_by_chamber": {
   "senate": 24.8,
-  "house": 81.0
+  "house": 85.2
  },
  "half_weight_votes_by_chamber_interval_90": {
   "senate": [
    0.99,
-   49.508
+   50.0
   ],
   "house": [
-   24.812,
+   31.011,
    98.039
   ]
  },
  "half_weight_votes_by_era": {
-  "101-109": 59.8,
-  "110-119": 41.9
+  "101-109": 62.1,
+  "110-119": 45.9
  },
  "party_line_test": {
-  "b": -4.0,
-  "loss_with": 1.3348,
-  "loss_without": 1.3451,
-  "heldout_error": 1.5131
+  "b": -4.25,
+  "loss_with": 1.3844,
+  "loss_without": 1.3962,
+  "heldout_error": 1.5605
  },
  "prior_test": {
   "full": {
@@ -102,24 +102,24 @@
    "mean_squared_gap": 0.0617
   },
   "thin 25-50": {
-   "pairs": 22,
-   "same_side": 0.591,
-   "mean_squared_gap": 0.0301
+   "pairs": 24,
+   "same_side": 0.542,
+   "mean_squared_gap": 0.0294
   },
   "thin 50-100": {
-   "pairs": 19,
-   "same_side": 0.684,
-   "mean_squared_gap": 0.0255
+   "pairs": 22,
+   "same_side": 0.727,
+   "mean_squared_gap": 0.0233
   },
   "thin 100-150": {
-   "pairs": 17,
-   "same_side": 0.824,
-   "mean_squared_gap": 0.0205
+   "pairs": 21,
+   "same_side": 0.857,
+   "mean_squared_gap": 0.0176
   },
   "thin 150-200": {
-   "pairs": 8,
-   "same_side": 1.0,
-   "mean_squared_gap": 0.0021
+   "pairs": 13,
+   "same_side": 0.923,
+   "mean_squared_gap": 0.0028
   },
   "full_by_distance": {
    "0.0-0.02": 0.615,
@@ -128,60 +128,60 @@
    "0.1-0.2": 0.963,
    "0.2-10.0": 0.995
   },
-  "crossover_if_independent": 126.3,
+  "crossover_if_independent": 95.4,
   "rule_shape_bands": {
    "thin 0-25": {
-    "pairs": 13,
-    "same_side": 0.538,
-    "mean_squared_gap": 0.0596
+    "pairs": 2,
+    "same_side": 0.5,
+    "mean_squared_gap": 0.0184
    },
    "thin 25-50": {
-    "pairs": 4,
-    "same_side": 0.75,
-    "mean_squared_gap": 0.0257
+    "pairs": 1,
+    "same_side": 0.0,
+    "mean_squared_gap": 0.0339
    },
    "thin 50-100": {
-    "pairs": 12,
-    "same_side": 0.583,
-    "mean_squared_gap": 0.0164
+    "pairs": 2,
+    "same_side": 0.5,
+    "mean_squared_gap": 0.0265
    },
    "thin 100-150": {
-    "pairs": 10,
-    "same_side": 0.8,
-    "mean_squared_gap": 0.0057
+    "pairs": 1,
+    "same_side": 1.0,
+    "mean_squared_gap": 0.0039
    },
    "thin 150-200": {
-    "pairs": 3,
+    "pairs": 1,
     "same_side": 1.0,
-    "mean_squared_gap": 0.0012
+    "mean_squared_gap": 0.0003
    }
   },
   "switch_test": {
    "rule_shape": {
-    "switch_votes": 200,
-    "thin_pairs": 42,
-    "thin_pairs_over_100": 13,
-    "saved": 0.0,
-    "draws_judged": 1000,
+    "switch_votes": 90,
+    "thin_pairs": 7,
+    "thin_pairs_over_100": 2,
+    "saved": 0.0742,
+    "draws_judged": 241,
     "saved_out_of_bag": [
-     -0.2387,
+     -0.3488,
      0.0,
      0.0
     ],
-    "share_saving": 0.028
+    "share_saving": 0.0
    },
    "all": {
-    "switch_votes": 163,
-    "thin_pairs": 85,
-    "thin_pairs_over_100": 25,
-    "saved": 0.0022,
+    "switch_votes": 93,
+    "thin_pairs": 99,
+    "thin_pairs_over_100": 34,
+    "saved": 0.031,
     "draws_judged": 1000,
     "saved_out_of_bag": [
-     -0.1824,
+     -0.1367,
      0.0,
-     0.0183
+     0.0545
     ],
-    "share_saving": 0.118
+    "share_saving": 0.44
    }
   }
  },
@@ -232,7 +232,7 @@
  },
  "pairs": {
   "full": 8098,
-  "thin": 85,
-  "uncounted": 24
+  "thin": 99,
+  "uncounted": 25
  }
 }

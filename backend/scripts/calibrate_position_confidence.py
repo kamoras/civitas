@@ -11,9 +11,10 @@ so a full record (RELIABLE_VOTES or more) counts in full and a thin one
 counts by how much less it says.
 
 Measured on Voteview's own positions, with no model of how Voteview
-estimates them. A member who served part of one Congress and all of the
-next (or all of one and part of the next) has a thin position and a full
-one for adjacent Congresses. Read each against their party's center that
+estimates them. A member with a thin record in one Congress and a full one
+in the next, or the reverse, has a thin position and a full one for
+adjacent Congresses: one who arrived or left mid-Congress, or one absent
+for much of it (illness, a campaign), as the score's thin records are. Read each against their party's center that
 Congress, signed toward the party's flank, every pair keyed by the
 transition it spans (its earlier Congress):
 
@@ -57,7 +58,9 @@ sitting member's record.
 
 prior_test is the evidence for the flank rule's use of the last
 Congress's full record (party_line_record), on pairs centered as that
-rule centers.
+rule centers; its switch test uses the pairs shaped like the rule's case,
+a full record then a member's first, attended votes of the next Congress
+(pairs()'s last field).
 
 Run from the repo (network required; the vote files are large, so pass a
 cache directory to keep them):
@@ -72,6 +75,7 @@ import json
 import pathlib
 import statistics
 import sys
+import urllib.error
 import urllib.request
 
 import numpy as np
@@ -83,6 +87,7 @@ from app.contact import BOT_USER_AGENT  # noqa: E402
 MEMBERS_URL = "https://voteview.com/static/data/out/members/{chamber}{congress}_members.csv"
 VOTES_URL = "https://voteview.com/static/data/out/votes/{chamber}{congress}_votes.csv"
 FIRST_CONGRESS = 101  # the first with Nokken-Poole positions and counts throughout
+FETCH_TIMEOUT_S = 120
 RELIABLE_VOTES = 200  # a full record; the pairs measure the weight below it
 N0_GRID = np.concatenate([np.arange(1.0, 400.0, 1.0), np.arange(400.0, 5001.0, 25.0)])
 BOOTSTRAP = 1000
@@ -97,7 +102,8 @@ def _csv(url: str, name: str, cache: pathlib.Path | None) -> list[dict]:
     if cache is not None and (cache / name).exists():
         text = (cache / name).read_text()
     else:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})) as resp:
+        request = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+        with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_S) as resp:
             text = resp.read().decode()
         if cache is not None:
             cache.mkdir(parents=True, exist_ok=True)
@@ -129,6 +135,18 @@ def party_line_share(chamber: str, congress: int, cache: pathlib.Path | None = N
     opposed = [(d[0] > d[1]) != (r[0] > r[1]) for d, r in (v.values() for v in tally.values())
                if sum(d) and sum(r)]
     return sum(opposed) / len(opposed)
+
+
+def attendance(chamber: str, congress: int, cache: pathlib.Path | None = None) -> dict[str, float]:
+    """icpsr -> the share of the roll calls in a member's span (first to last
+    roll call they have a row on, Voteview listing every roll call while they
+    serve) on which they didn't vote (cast codes 7-9)."""
+    span: dict[str, list[int]] = {}
+    for r in _csv(VOTES_URL.format(chamber=chamber, congress=congress), f"{chamber}{congress}_votes.csv", cache):
+        a = span.setdefault(_id(r["icpsr"]), [0, 0])
+        a[0] += 1
+        a[1] += int(_float(r.get("cast_code")) or 0) >= 7
+    return {i: missed / rows for i, (rows, missed) in span.items() if rows}
 
 
 def _float(value) -> float | None:
@@ -222,7 +240,12 @@ def pairs(cache: pathlib.Path | None = None, span: range | None = None, weight=N
     counted under RELIABLE_VOTES: n is that side's) or "uncounted" (one
     side with no count but a career position, the case the score weights
     by uncounted_weight), every pair keyed by the transition it spans (its
-    earlier Congress) and that Congress's party-line share; and each
+    earlier Congress), that Congress's party-line share, whether the thin
+    side is the later, and whether the thin record is a run of attended
+    consecutive votes from a member who arrived or left (absent the
+    Congress before it, or after it, and missing no more of the roll calls
+    in their span than nine in ten of that Congress's full records do: the
+    flank rule's case); and each
     chamber's party-line share by usable Congress (`shares`, when given, is
     reused). `weight` ({chamber: (votes, career) -> weight}) centers each
     Congress as the flank rule does (deviations)."""
@@ -232,15 +255,16 @@ def pairs(cache: pathlib.Path | None = None, span: range | None = None, weight=N
         usable = [c for c in span if _usable(chamber, c, cache)]
         share = shares[chamber] if chamber in shares else {c: party_line_share(chamber, c, cache) for c in usable}
         shares[chamber] = share
-        def seated(congress: int) -> set[str]:
-            # Everyone in a Congress's export: a thin record is a run of
-            # consecutive votes only for a member who arrived or left, so an
-            # entrant must be absent the Congress before and a leaver the one
-            # after (an absence mid-Congress, such as a campaign, isn't).
+        def seated(congress: int) -> set[str] | None:
+            # Everyone in a Congress's export, or None when it isn't published
+            # (404). Any other failure stops the run rather than switching the
+            # check off.
             try:
                 return {_id(r["icpsr"]) for r in member_rows(chamber, congress, cache)}
-            except OSError:
-                return set()
+            except urllib.error.HTTPError as err:
+                if err.code == 404:
+                    return None
+                raise
         for earlier, later in zip(usable, usable[1:]):
             if later != earlier + 1:
                 continue
@@ -248,14 +272,17 @@ def pairs(cache: pathlib.Path | None = None, span: range | None = None, weight=N
             prev = deviations(member_rows(chamber, earlier, cache), w)
             cur = deviations(member_rows(chamber, later, cache), w)
             before, after = seated(earlier - 1), seated(later + 1)
+            absent = {earlier: attendance(chamber, earlier, cache), later: attendance(chamber, later, cache)}
+            # Nine in ten full records miss no more than this share of their span.
+            usual = {c: float(np.percentile([absent[c].get(i, 0.0) for i, (n, _, _) in dev.items()
+                                             if n >= RELIABLE_VOTES] or [0.0], 90))
+                     for c, dev in ((earlier, prev), (later, cur))}
             for icpsr in prev.keys() & cur.keys():
                 (na, xa, ca), (nb, xb, cb) = prev[icpsr], cur[icpsr]
                 if na >= RELIABLE_VOTES and nb >= RELIABLE_VOTES:
-                    out.append((chamber, icpsr, na, xa, xb, "full", earlier, share[earlier], False))
+                    out.append((chamber, icpsr, na, xa, xb, "full", earlier, share[earlier], False, False))
                 elif nb >= RELIABLE_VOTES or na >= RELIABLE_VOTES:
                     later_thin = na >= RELIABLE_VOTES
-                    if icpsr in (after if later_thin else before):
-                        continue  # served on: the thin record isn't an arrival or a departure
                     n, thin, full, career = (nb, xb, xa, cb) if later_thin else (na, xa, xb, ca)
                     if n > 0:
                         kind = "thin"
@@ -263,7 +290,13 @@ def pairs(cache: pathlib.Path | None = None, span: range | None = None, weight=N
                         kind = "uncounted"  # the score's no-count case: a career position, no count
                     else:
                         continue  # no count and no career position: the score reads it as no votes
-                    out.append((chamber, icpsr, n, thin, full, kind, earlier, share[earlier], later_thin))
+                    # The flank rule's case: arrived or left (the newest
+                    # Congress's leavers can't be checked until the next
+                    # export), and attended through their span.
+                    other, side = (after, later) if later_thin else (before, earlier)
+                    run = (other is not None and icpsr not in other
+                           and absent[side].get(icpsr, 0.0) <= usual[side])
+                    out.append((chamber, icpsr, n, thin, full, kind, earlier, share[earlier], later_thin, run))
     return out, shares
 
 
@@ -597,7 +630,8 @@ def prior_test(data: list[tuple]) -> dict:
 
     switch_test asks whether a switch short of a full record does better,
     on the pairs shaped like the rule's case ("rule_shape": a full record,
-    then the first votes of the next Congress, members who left) and on
+    then the first, attended votes of the next Congress, from a member who
+    left during it) and on
     all of them. A thin record is compared across a Congress here, the
     rule within one, so switch_model takes one Congress's drift out within
     strata of distance from the center (full_by_distance: drift flips a
@@ -622,9 +656,9 @@ def prior_test(data: list[tuple]) -> dict:
     usable = [r for r in data if r[5] != "uncounted"]
     out["rule_shape_bands"] = {
         f"thin {lo}-{hi}": summary(rows) for lo, hi in PRIOR_BANDS
-        if (rows := [r for r in usable if r[5] == "thin" and r[8] and lo < r[2] <= hi])}
+        if (rows := [r for r in usable if r[5] == "thin" and r[8] and r[9] and lo < r[2] <= hi])}
     out["switch_test"] = {
-        "rule_shape": switch_test([r for r in usable if r[5] == "full" or r[8]]),
+        "rule_shape": switch_test([r for r in usable if r[5] == "full" or (r[8] and r[9])]),
         "all": switch_test(usable),
     }
     return out
@@ -732,16 +766,19 @@ def main() -> None:
     args = ap.parse_args()
     calibrated = calibrate(args.cache)
     # With a cache, the dates the exports used were fetched.
-    used = range(FIRST_CONGRESS - 1, calibrated["calibrated_through"] + 1)  # the 100th: who was seated before
+    # Every export read: the paired Congresses, and the ones either side of
+    # them for who was seated before and after.
+    used = range(FIRST_CONGRESS - 1, calibrated["calibrated_through"] + 2)
     cached = [f.stat().st_mtime for c in used for ch in "SH" for kind in ("members", "votes")
               if (f := args.cache / f"{ch}{c}_{kind}.csv").exists()] if args.cache else []
     dates = sorted({datetime.date.fromtimestamp(t).isoformat() for t in cached}) or [datetime.date.today().isoformat()]
     retrieved = dates[0] if len(dates) == 1 else f"{dates[0]} to {dates[-1]}"
     data = {
         "_source": (
-            f"Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses "
-            f"{FIRST_CONGRESS}-{calibrated['calibrated_through']} (later ones still thin by the calendar "
-            f"are left out), exports retrieved {retrieved}; "
+            f"Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House: pairs from "
+            f"Congresses {FIRST_CONGRESS}-{calibrated['calibrated_through']} (later ones still thin by the "
+            f"calendar are left out), with the exports either side read for who was seated; exports "
+            f"retrieved {retrieved}; "
             "regenerate with backend/scripts/calibrate_position_confidence.py"
         ),
         "_method": (
