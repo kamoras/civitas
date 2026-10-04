@@ -735,8 +735,16 @@ in a fixed order, 1,000 times.
   standard errors of the difference (computed from `forward_test`'s above
   and standard_error), so recent thin records may say less than one curve
   credits, but the textbook rule judges a structure by the noise in the
-  best's own error, which is far larger, and the rest of the evidence
-  doesn't support either:
+  best's own error, which is far larger: the structures' per-member errors
+  move together (the window's and one curve's correlate at 0.99), so the
+  best's own standard error is about six times the paired one, and the
+  rule leaves one curve only for a structure that cuts the total forward
+  error by about 17% (0.229 of 1.320), where the era curve and the window
+  cut it by 5% and 6% (all computed from `forward_test`'s per-member
+  errors and totals). On these data it could not have chosen anything but
+  one curve (it ships one curve at every split, below), so its choice says
+  that no structure has shown a large gain, not that none exists. The rest
+  of the evidence doesn't settle it either:
   - **Where the gain is.** The era curve's comes from the transitions
     predicted from the 112th on; at the 111th the two curves predict alike
     (`gain_by_transition`: 0.0). Most of it is at the 112th and 114th (0.024
@@ -808,7 +816,7 @@ in a fixed order, 1,000 times.
   | once per era (101–109, 110–119), each era's curve on its own members | 1.279 |
   | once per direction (which side of the pair is thin) | 1.362 |
   | once per attendance (attended arrivals and departures, the rest) | 1.327 |
-  | once per era, plus a party-line term | 1.322 |
+  | once for both chambers, plus a party-line term | 1.345 |
 
   A curve per chamber predicts no better (fitted apart, 25 votes for the
   Senate and 55 for the House). Direction and attendance can't be known for
@@ -855,9 +863,10 @@ in a fixed order, 1,000 times.
 - **The curve is weakly determined.** The half point is n0 written another
   way, so it is no better determined; it is only bounded. The curve can't
   put it above 100 votes (as n0 grows, w(n) / w(200) falls to n / 200,
-  which is 0.5 at 100); the era curve's interval (26–98) runs to where the
-  n0 search stops. The no-count weight is measured over every era (too few
-  no-count pairs to split).
+  which is 0.5 at 100); the era curve's interval (26–98,
+  `half_weight_votes_era_interval_90`) runs to where the n0 search stops.
+  The no-count weight is measured over every era (too few no-count pairs
+  to split).
 - **A party-line term was tested and is not used.** That would make n0 a
   line in the share of roll calls on which the parties' majorities split,
   since in a more party-line Congress each vote might say less about a
@@ -1251,7 +1260,9 @@ rule's means reclassifies 0 of 2,351 Senate and 0 of 6,055 House breaks
   transitions each beat one curve by about two standard errors of the
   difference (computed from `forward_test`'s above and standard_error),
   but not by the noise in the best's own error, which the shipped rule
-  judges by, and not when the split or the width is chosen from the data
+  judges by (a bar of about a 17% cut in forward error on these data,
+  computed, against the 5% and 6% they show: the rule could not have left
+  one curve here), and not when the split or the width is chosen from the data
   as a forecast must (`data_chosen_test`); left one member out, later
   splits lean that way, and the time trend, from the 113th where its fits
   are inside the search grids (a range picked after seeing the fits),

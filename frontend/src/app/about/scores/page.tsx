@@ -283,14 +283,17 @@ export default function ScoresChapter() {
             We measured how much it should count using members who have a short record in one
             Congress and a full one in the Congress before or after, over every Congress since 1989.
             Measuring on recent Congresses only (since 2007, or the most recent six
-            Congress-to-Congress changes) predicted later ones slightly better, but by less than the
-            noise in that comparison, and by even less when the starting point had to be picked from
-            earlier Congresses alone, so the one measurement over every year stays. The rule for
-            deciding was settled after earlier versions of this comparison had been seen. A position
-            from about 36 votes counts half, and one from 200 or more counts in full (where a full
-            record starts is our convention). A member with no position yet sits at 50 (our choice;
-            nothing measured it). Until a new Congress&apos;s positions are published and pass our
-            checks, this part is left out and the score is the voting part alone.
+            Congress-to-Congress changes) predicted later ones slightly better, and consistently so
+            member by member, but by much less than the spread in how well any one measurement
+            predicts, the bar our rule uses (a standard rule and our convention), and by even less
+            when the starting point had to be picked from earlier Congresses alone, so the one
+            measurement over every year stays. With these data only a large improvement could have
+            cleared that bar. The rule for deciding was settled after earlier versions of this
+            comparison had been seen. A position from about 36 votes counts half, and one from 200
+            or more counts in full (where a full record starts is our convention). A member with no
+            position yet sits at 50 (our choice; nothing measured it). Until a new Congress&apos;s
+            positions are published and pass our checks, this part is left out and the score is the
+            voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

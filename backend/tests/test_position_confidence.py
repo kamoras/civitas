@@ -11,6 +11,8 @@ import json
 import urllib.error
 import pathlib
 
+import pytest
+
 from app.ordinals import ordinal
 from app.pipeline.analyze import score_calculator
 
@@ -889,7 +891,8 @@ def test_the_data_chosen_test_picks_each_parameter_from_earlier_transitions(monk
         return {}, {}
     monkeypatch.setattr(script, "forward_errors", forward_errors)
     monkeypatch.setattr(script, "WINDOW_WIDTHS", (2, 3))
-    monkeypatch.setattr(script, "fit_n0", lambda rows, drift=None: 50.0)
+    # n0 the first transition fitted on: each width's own fit is reported.
+    monkeypatch.setattr(script, "fit_n0", lambda rows, drift=None: float(min(r[6] for r in rows)))
     out = script.data_chosen_test(data)
     era = out["era"]["chosen_by_transition"]
     assert era["105"] == 109  # the split nearest ERA_SPLIT: 110 is not one tested here
@@ -897,5 +900,40 @@ def test_the_data_chosen_test_picks_each_parameter_from_earlier_transitions(monk
     win = out["window"]["chosen_by_transition"]
     # 105: 3, the width nearest FORWARD_WINDOW; 109: a tie, to the wider.
     assert win["105"] == 3 and win["107"] == 2 and win["109"] == 3 and win["111"] == 3
-    assert out["window"]["fitted_on_the_last_transitions"]["3"]["half_weight_votes"] == round(
-        script.half_point(50.0), 1)
+    fitted = out["window"]["fitted_on_the_last_transitions"]
+    assert fitted["3"]["n0"] == 107.0 and fitted[str(script.FORWARD_WINDOW)]["n0"] == 101.0
+    assert fitted["3"]["half_weight_votes"] == round(script.half_point(107.0), 1)
+
+
+def test_the_split_sweep_reports_what_each_rule_ships(monkeypatch):
+    """At each split the sweep reports what the rule ships and what its
+    paired form would: a large gain ships the era curve under both, a loss
+    one curve under both; a gain
+    the best's own error swamps, though every member shares it, ships one
+    curve under the rule and the era curve under the paired form. The
+    window is always given its width."""
+    script = _script()
+    pooled = {f"M{i}": 1.0 + (0.3 if i % 2 else -0.3) for i in range(4)}
+
+    def forward_errors(d, split=110, names=("pooled", "chamber", "era", "trend"), window=None,
+                       predict_from=None):
+        assert "window" not in names or window == script.FORWARD_WINDOW
+        gain = {105: 1.0, 110: 0.1}.get(split, -0.5)
+        table = {"pooled": pooled, "era": {m: v - gain for m, v in pooled.items()}}
+        errs = {n: table.get(n, {m: v + 1.0 for m, v in pooled.items()}) for n in names}
+        return errs, {n: {t: sum(errs[n].values()) for t in range(110, 116)} for n in names}
+    monkeypatch.setattr(script, "forward_errors", forward_errors)
+    data = [("H", "M0", 20.0, 0.1, 0.1, "thin", c, 0.5, False) for c in (101, 105, 110, 115, 117)]
+    sweep = script.forward_test(data)["era_at_every_split"]
+    assert (sweep["115"]["ships"], sweep["115"]["ships_paired_rule"]) == ("pooled", "pooled")
+    assert (sweep["105"]["ships"], sweep["105"]["ships_paired_rule"]) == ("era", "era")
+    assert (sweep["110"]["ships"], sweep["110"]["ships_paired_rule"]) == ("pooled", "era")
+    # The window needs a width: without one the forward test refuses.
+    with pytest.raises(ValueError):
+        _script().forward_errors(data, names=("pooled", "window"))
+
+
+def test_the_shipped_method_text_is_the_scripts():
+    """position_confidence.json's _method is what the script writes now."""
+    data = json.loads(_DATA.read_text())
+    assert data["_method"] == _script().method_text()

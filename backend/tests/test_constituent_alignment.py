@@ -531,9 +531,9 @@ class TestPositionCongruence:
         assert "half strength at about 24 roll calls" in self._congruence()["detail"]
 
     def test_a_weight_just_under_one_never_reads_as_full_strength(self):
-        """199 votes against n0 86 and a full record at 200 weighs 0.998: the
+        """199 votes against n0 56 and a full record at 200 weighs 0.999: the
         detail says 99%, not a 100% that is still pulled toward 50."""
-        self.patch({"X1": -0.55}, votes={"X1": 199}, reliability={"n0": 86, "reference_votes": 200})
+        self.patch({"X1": -0.55}, votes={"X1": 199}, reliability={"n0": 56, "reference_votes": 200})
         assert "counts at 99% strength" in self._congruence()["detail"]
 
     def test_the_shown_percentage_survives_float_error(self):
