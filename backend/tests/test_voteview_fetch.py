@@ -150,6 +150,15 @@ class TestBuildAndGates:
         data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
         assert failures == [] and voteview.ingestion_gates("senate", data) == []
 
+    def test_a_nan_party_code_reads_as_no_party(self):
+        """A NaN code (some exports write "nan") is no party, not a crash
+        that keeps the stale section."""
+        state_pvi = score_calculator._state_pvi()
+        rows = _synthetic_rows(state_pvi)
+        rows[0]["party_code"] = "nan"
+        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+        assert data["parties"][rows[0]["bioguide_id"]] is None
+
     def test_one_senator_per_state_fails_the_gate(self):
         state_pvi = score_calculator._state_pvi()
         rows = _synthetic_rows(state_pvi)[::2]

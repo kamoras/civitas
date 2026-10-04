@@ -29,11 +29,15 @@ their count (full records count 1). n0 is then the least-squares fit of the
 thin pairs. The structure shipped is chosen forward in time (forward_test):
 each transition's thin pairs predicted from a fit on the earlier transitions
 only, as the weight is always applied to a Congress the calibration hasn't
-seen; one curve for both chambers unless one per chamber, or the latest
-era's (split at ERA_SPLIT, a convention), predicts the next Congress better
-by more than a standard error of the paired difference. That rule was
-adopted in review, after a forward check had been run once (research note
-section 14). The leave-one-member-out comparisons (choose_structure's
+seen; of one curve for both chambers, one per chamber, the latest era's
+(split at ERA_SPLIT, a convention) and a window of the last FORWARD_WINDOW
+transitions (a convention), the simplest whose paired difference from the
+best is within its standard error (the one-standard-error rule). That rule
+was adopted in review, after the window had been seen to beat the era curve
+by less than its standard error, and the rule before it after a forward
+check had been run once (research note section 14); data_chosen_test
+reports the split and the width chosen from the data instead. The
+leave-one-member-out comparisons (choose_structure's
 one-standard-error rule over all members; era_test on the latest era's;
 era_split_test at every split; trend_test) are reported beside it; a rerun
 decides again. n0 is weakly determined, and so is the count at which a
@@ -545,7 +549,7 @@ def _paired(a: dict[str, float], b: dict[str, float]) -> dict | None:
 
 def forward_errors(
     data: list[tuple], split: int = ERA_SPLIT, names: tuple = ("pooled", "chamber", "era", "trend"),
-    window: int | None = None, predict_from: int | None = None,
+    window: int | None = None, predict_from: int | None = None, detail: dict | None = None,
 ) -> tuple[dict[str, dict[str, float]], dict[str, dict[int, float]]]:
     """structure -> each thin member's squared error predicting each
     transition's thin pairs from a fit (n0) on the earlier transitions
@@ -558,7 +562,9 @@ def forward_errors(
     pairs), trend (log n0 linear in decades since ERA_SPLIT, on the A and
     B grids, whose ends it often reaches) and window (the last `window`
     transitions with thin pairs). With `predict_from`, only transitions
-    from that one on are predicted (fits still use every earlier one)."""
+    from that one on are predicted (fits still use every earlier one).
+    With `detail`, each error is also added to it under (structure,
+    member, transition)."""
     letters = dict((letter, name) for name, letter in CHAMBERS)
     thin_transitions = sorted({r[6] for r in data if r[5] == "thin"})
     out: dict[str, dict[str, float]] = {k: {} for k in names}
@@ -595,19 +601,29 @@ def forward_errors(
                 err = (r[4] - float(relative_weight(r[2], n0)) * k * r[3]) ** 2
                 out[name][r[1]] = out[name].get(r[1], 0.0) + err
                 by_t[name][t] = by_t[name].get(t, 0.0) + err
+                if detail is not None:
+                    detail[(name, r[1], t)] = detail.get((name, r[1], t), 0.0) + err
     return out, by_t
 
 
-# The forward window structure's width, reported only (a convention).
+# The forward window structure's width (a convention).
 FORWARD_WINDOW = 6
+# The structures forward_test chooses among, in order of simplicity: one
+# curve; one per chamber; the latest era's (one boundary, fixed, so its
+# data only grows); the window (a boundary that moves every Congress).
+FORWARD_CANDIDATES = ("pooled", "chamber", "era", "window")
 
 
 def forward_test(data: list[tuple]) -> dict:
-    """The structure the calibration ships: one curve unless a structure
-    the score can apply (per chamber, or the latest era's) predicts the
-    next Congress better, forward_errors' total, by more than the
-    standard error of its member-by-member difference from one curve (a
-    convention; the better of the two if both do). The trend is reported,
+    """The structure the calibration ships, by the one-standard-error
+    rule (choose_structure's) on forward_errors' totals: among the
+    structures the score can apply (FORWARD_CANDIDATES, in order of
+    simplicity), the simplest whose member-by-member difference from the
+    one that predicts the next Congress best is within its standard error
+    (adopted in review, after a window of the last FORWARD_WINDOW
+    transitions was seen to beat the era curve by less than its standard
+    error; the earlier rule, the best of those beating one curve by more
+    than it, is reported as best_beating_one_curve). The trend is reported,
     not chosen: it was added after the other tests (a stated choice), and
     over every predicted transition it doesn't clear the same bar. Each
     structure's total and paired difference from one curve ("above":
@@ -620,13 +636,17 @@ def forward_test(data: list[tuple]) -> dict:
     curve and against the era curve (window_against_era: whether recency
     and a split can be told apart). last_three is the chosen structure's
     comparison on the last three predicted transitions alone."""
-    errors, by_t = forward_errors(data)
+    errors, by_t = forward_errors(data, names=FORWARD_CANDIDATES + ("trend",), window=FORWARD_WINDOW)
     report = {name: {"error": round(sum(e.values()), 4), **(_paired(e, errors["pooled"]) or {})}
               for name, e in errors.items() if name != "pooled"}
     report["pooled"] = {"error": round(sum(errors["pooled"].values()), 4)}
-    passing = [n for n in ("chamber", "era") if report[n].get("above") is not None
+    best = min(FORWARD_CANDIDATES, key=lambda n: report[n]["error"])
+    against_best = {n: _paired(errors[n], errors[best]) for n in FORWARD_CANDIDATES if n != best}
+    chosen = next((n for n in FORWARD_CANDIDATES if n == best or (
+        against_best[n] is not None and against_best[n]["above"] <= against_best[n]["standard_error"])), best)
+    passing = [n for n in FORWARD_CANDIDATES if n != "pooled" and report[n].get("above") is not None
                and report[n]["above"] < -report[n]["standard_error"]]
-    chosen = min(passing, key=lambda n: report[n]["error"]) if passing else "pooled"
+    earlier_rule = min(passing, key=lambda n: report[n]["error"]) if passing else "pooled"
     if chosen != "pooled":
         r = report[chosen]
         r["gain_by_transition"] = {str(t): round(v - by_t["pooled"][t], 4) for t, v in sorted(by_t[chosen].items())}
@@ -638,12 +658,13 @@ def forward_test(data: list[tuple]) -> dict:
         refit = []
         for k in (1, 2, 3):
             rest = [row for row in data if row[1] not in order[:k]]
-            e, _ = forward_errors(rest, names=("pooled", chosen))
+            e, _ = forward_errors(rest, names=("pooled", chosen), window=FORWARD_WINDOW)
             refit.append(_paired(e[chosen], e["pooled"]))
         r["without_most_helped_refitted"] = refit
         # The share of the gain each of the three members it helps most supplies.
         r["most_helped_share"] = [round(gain[m] / sum(gain.values()), 3) for m in order[:3]]
-        e, _ = forward_errors(data, names=("pooled", chosen), predict_from=sorted(by_t["pooled"])[-3:][0])
+        e, _ = forward_errors(data, names=("pooled", chosen), window=FORWARD_WINDOW,
+                              predict_from=sorted(by_t["pooled"])[-3:][0])
         r["last_three"] = _paired(e[chosen], e["pooled"])
     thin = sorted({row[6] for row in data if row[5] == "thin"})
     sweep = {}
@@ -655,7 +676,6 @@ def forward_test(data: list[tuple]) -> dict:
         t = _paired(e["era"], e["pooled"])
         if t is not None:
             sweep[str(cut)] = {**t, "adopted": t["above"] < -t["standard_error"]}
-    e, _ = forward_errors(data, names=("pooled", "window"), window=FORWARD_WINDOW)
     # What the one curve was fitted on when each transition was predicted:
     # the share of its thin pairs from before ERA_SPLIT.
     fitted = [row for row in data if row[5] == "thin" and (row[0], row[6]) in drifts(data)]
@@ -682,10 +702,81 @@ def forward_test(data: list[tuple]) -> dict:
         late, _ = forward_errors(data, names=("pooled", "era", "trend"), predict_from=inside[0])
         trend["inside_grids"] = {"from": inside[0], "against_one_curve": _paired(late["trend"], late["pooled"]),
                                  "against_era": _paired(late["trend"], late["era"])}
-    return {"chosen": chosen, "members": len(errors["pooled"]), **report,
+    return {"chosen": chosen, "best": best, "against_best": against_best,
+            "best_beating_one_curve": earlier_rule, "members": len(errors["pooled"]), **report,
             "training_before_split": before,
-            "era_at_every_split": sweep, "window": _paired(e["window"], e["pooled"]),
-            "window_against_era": _paired(e["window"], errors["era"])}
+            "era_at_every_split": sweep, "window_against_era": _paired(errors["window"], errors["era"])}
+
+
+# The window widths data_chosen_test chooses among (in transitions with
+# thin pairs; a convention, from two to ten).
+WINDOW_WIDTHS = tuple(range(2, 11))
+
+
+def data_chosen_test(data: list[tuple]) -> dict:
+    """The era curve and the window with their free parameter (the split,
+    the width) chosen from the data as a forecast would have to choose it:
+    each transition predicted with the split, or the width, whose forward
+    errors (forward_errors) were lowest over the transitions predicted
+    before it (ties to the one fitted on more transitions; the first
+    predicted transition takes ERA_SPLIT and FORWARD_WINDOW, or the
+    option nearest it). Each against
+    one curve, and against each other, over every predicted transition
+    (paired by member, "above" negative: better), with its gain by
+    transition and the parameter chosen at each. The parameter the whole
+    record would choose, and for the window the curve fitted on its last
+    transitions as it would ship (whether that n0 sits at the end of the
+    grid). Reported: the shipped structure is forward_test's."""
+    thin = sorted({r[6] for r in data if r[5] == "thin"})
+    base: dict = {}
+    forward_errors(data, names=("pooled",), detail=base)
+    pooled = {m: 0.0 for (_, m, _t) in base}
+    for (_, m, _t), v in base.items():
+        pooled[m] += v
+    predicted = sorted({t for (_, _, t) in base})
+    by_t_pooled = {t: sum(v for (_, _, u), v in base.items() if u == t) for t in predicted}
+
+    def nested(options, run, start, prefer):
+        if not options or not predicted:
+            return {}, None
+        # The first predicted transition has nothing earlier to choose by:
+        # the convention, or the option nearest it.
+        start = min(options, key=lambda o: (abs(o - start), prefer(o)))
+        detail = {o: {} for o in options}
+        for o in options:
+            run(o, detail[o])
+
+        def total(o, ts):
+            return sum(v for (_, _, t), v in detail[o].items() if t in ts)
+        chosen, errors, by_t = {}, {m: 0.0 for m in pooled}, {}
+        for i, t in enumerate(predicted):
+            o = start if i == 0 else min(options, key=lambda o: (total(o, predicted[:i]), prefer(o)))
+            chosen[str(t)] = o
+            for (_, m, u), v in detail[o].items():
+                if u == t:
+                    errors[m] += v
+            by_t[str(t)] = round(total(o, [t]) - by_t_pooled[t], 4)
+        whole = min(options, key=lambda o: (total(o, predicted), prefer(o)))
+        return errors, {"against_one_curve": _paired(errors, pooled), "gain_by_transition": by_t,
+                        "chosen_by_transition": chosen, "chosen_on_every_transition": whole}
+
+    splits = thin[1:-1]
+    era_errors, era = nested(
+        splits, lambda s, d: forward_errors(data, split=s, names=("era",), detail=d), ERA_SPLIT, lambda s: s)
+    widths = WINDOW_WIDTHS
+    win_errors, win = nested(
+        widths, lambda w, d: forward_errors(data, names=("window",), window=w, detail=d),
+        FORWARD_WINDOW, lambda w: -w)
+    if win is None:
+        return {"era": era, "window": None}
+    win["against_era"] = _paired(win_errors, era_errors) if era else None
+    shipped = {}
+    for w in sorted({FORWARD_WINDOW, win["chosen_on_every_transition"]} & set(range(1, len(thin) + 1))):
+        n0 = fit_n0([r for r in data if r[6] >= thin[-w]])
+        shipped[str(w)] = {"n0": n0, "half_weight_votes": round(half_point(n0), 1),
+                           "at_grid_end": bool(n0 in (N0_GRID[0], N0_GRID[-1]))}
+    win["fitted_on_the_last_transitions"] = shipped
+    return {"era": era, "window": win}
 
 
 def era_test(data: list[tuple], structure: str, split: int = ERA_SPLIT) -> dict | None:
@@ -748,6 +839,11 @@ def fit_chambers(data: list[tuple], structure: str, split: int = ERA_SPLIT) -> d
         return {name: n0 for name, _ in CHAMBERS}
     if structure == "pooled":
         n0 = fit_n0(data)
+        return {name: n0 for name, _ in CHAMBERS}
+    if structure == "window":
+        thin = sorted({r[6] for r in data if r[5] == "thin"})
+        since = thin[-FORWARD_WINDOW] if len(thin) >= FORWARD_WINDOW else thin[0]
+        n0 = fit_n0([r for r in data if r[6] >= since])
         return {name: n0 for name, _ in CHAMBERS}
     d = drifts(data)
     return {name: fit_n0([r for r in data if r[0] == letter], d) for name, letter in CHAMBERS}
@@ -1195,6 +1291,7 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
             if name != "uncounted_weight"},
         "era_split": ERA_SPLIT,
         "forward_test": forward,
+        "data_chosen_test": data_chosen_test(data),
         "era_test": eras,
         "switcher_test": switcher_test(cache, span),
         "era_split_test": era_split_test(data, base),
@@ -1264,22 +1361,33 @@ def main() -> None:
             "full-record count, the w(...) in the denominator); transitions with no full pairs "
             "and Congresses still thin by the calendar are left out. "
             "structure is the one forward_test chooses (each transition predicted from fits on the "
-            "earlier ones; one curve unless one per chamber or the latest era's, split at era_split "
-            "by convention, predicts the next Congress better by more than the paired standard error, "
-            "a convention); forward_test reports chosen, members (the thin members predicted), each "
+            "earlier ones; of one curve, one per chamber, the latest era's, split at era_split by "
+            "convention, and a window of the last FORWARD_WINDOW "
+            f"({FORWARD_WINDOW}, a convention) transitions, in that order of simplicity, the simplest "
+            "whose paired difference from the best is within its standard error, the "
+            "one-standard-error rule, adopted in review after the window was seen to beat the era "
+            "curve by less than its standard error); forward_test reports chosen, best, against_best, "
+            "best_beating_one_curve (the earlier rule: the best of those beating one curve by more than "
+            "the paired standard error), members (the thin members predicted), each "
             "structure's error and paired difference from one "
             "curve (trend included, reported only), the chosen one's gain by transition, its comparison "
             "without the members it helps most (left out of it, and refitted) and the share of the gain "
             "each supplies (most_helped_share), last_three (the chosen "
             "structure against one curve on the last three predicted transitions), the era comparison "
             "at every split it can test (era_at_every_split, each with adopted: whether the rule would adopt "
-            "it), a window of the last FORWARD_WINDOW "
-            f"({FORWARD_WINDOW}, a convention) transitions with no split (window) and the window "
-            "against the era curve (window_against_era), and the share of the thin pairs one curve was "
+            "it), the window against the era curve (window_against_era), and the share of the thin "
+            "pairs one curve was "
             "fitted on from before the split, by predicted transition (training_before_split); trend "
             "also has its gain by transition, whether each forward fit reached an end of a search grid "
             "(fit_at_grid_end), and inside_grids, from the first transition from which every fit is "
             "inside the grids, the trend against one curve and against the era curve. "
+            "data_chosen_test, reported: the era curve and the window with the split, or the width (of "
+            f"{WINDOW_WIDTHS[0]} to {WINDOW_WIDTHS[-1]} transitions, a convention), chosen at each "
+            "predicted transition by the lowest forward error over the transitions predicted before it "
+            "(ties to more transitions; the first takes era_split and FORWARD_WINDOW), each against one "
+            "curve, the window against the era curve so chosen, the gain and the choice by transition, "
+            "the choice over every transition (chosen_on_every_transition) and the window's curve fitted "
+            "on its last transitions as it would ship (at_grid_end: its n0 at an end of the grid). "
             "Leave-one-member-out comparisons, reported: heldout_error is the squared error of each "
             "thin member's pairs fitted without that member, by structure; structure_test is one "
             "curve against one per chamber (each with heldout_error, above_best, its paired "
@@ -1340,7 +1448,9 @@ def main() -> None:
             "absent the Congress after, missing no more of the roll calls in their span than nine in "
             "ten of that Congress's full records, a convention); switch_test's rule_shape is that "
             "test (null when too few such pairs support its model), and it also reports every member "
-            "who left (leavers) and every thin pair (all), each with switch_votes (the best switch), "
+            "who left (leavers) and every thin pair (all), each with switch_votes (the best switch: the "
+            f"fewest sides misplaced over counts 1 to {RELIABLE_VOTES - 1}, each equally likely, a "
+            "convention), "
             "saved (the share of sides it saves in sample), saved_out_of_bag (its 5th, 50th and 95th "
             "percentiles on members left out), draws_judged, share_saving (how often it saves any) and "
             "the thin pairs behind it, all and over 100 votes; crossover_if_independent is the rejected "

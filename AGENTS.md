@@ -300,9 +300,12 @@ Key mathematical properties:
   pairs), as the weight is used: it beats one curve over every Congress by
   0.066 (standard error 0.034; over the last three transitions alone the
   gain is about one standard error, computed from `last_three`, so weakly
-  settled) and a curve per chamber predicts no better; a paired
-  one-standard-error rule (a convention, adopted in review after the forward
-  result was seen) decides, and a rerun decides again. The split is a fixed
+  settled) and a curve per chamber predicts no better. A window of the last
+  six transitions predicts slightly better still; the one-standard-error rule
+  (a convention, adopted in review after the window was seen to win; the
+  simplest structure within the standard error of the best, a moving window
+  counted more complex than the fixed split, a stated choice) keeps the era
+  curve, and a rerun decides again. The split is a fixed
   Congress, so nothing is reset for a new Congress. It is a reliability
   weight, not a count threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample

@@ -812,3 +812,59 @@ def test_an_outage_stops_the_calibration_rather_than_dropping_a_congress(monkeyp
         raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
     monkeypatch.setattr(script, "member_rows", unpublished)
     assert script._usable("H", 110, None) is False
+
+
+def test_the_forward_test_keeps_the_simplest_within_noise_of_the_best(monkeypatch):
+    """The one-standard-error rule: a window that beats the era curve by
+    less than the noise doesn't ship over it; the earlier rule (the best
+    of those beating one curve) is reported, and would have."""
+    script = _script()
+    base = {f"M{i}": 1.0 for i in range(6)}
+
+    def errs(gain, noise=0.0):
+        return {m: 1.0 + gain + (noise if i % 2 else -noise) for i, m in enumerate(base)}
+    table = {"pooled": base, "chamber": errs(0.0), "era": errs(-0.1), "trend": errs(0.0),
+             "window": errs(-0.11, 0.05)}
+
+    def forward_errors(d, split=110, names=("pooled", "chamber", "era", "trend"), window=None,
+                       predict_from=None):
+        return {n: table[n] for n in names}, {n: {110: sum(table[n].values())} for n in names}
+    monkeypatch.setattr(script, "forward_errors", forward_errors)
+    out = script.forward_test([("H", "M0", 20.0, 0.1, 0.1, "thin", 105, 0.5, False)])
+    assert out["best"] == "window" and out["best_beating_one_curve"] == "window"
+    assert out["chosen"] == "era"
+    assert out["against_best"]["era"]["above"] <= out["against_best"]["era"]["standard_error"]
+    # Past the noise, the window ships.
+    table["window"] = errs(-0.2)
+    assert script.forward_test([("H", "M0", 20.0, 0.1, 0.1, "thin", 105, 0.5, False)])["chosen"] == "window"
+
+
+def test_the_data_chosen_test_picks_each_parameter_from_earlier_transitions(monkeypatch):
+    """At each transition the split (or width) is the one that predicted
+    the earlier transitions best, never the one that predicts it; the
+    first takes the convention, or the option nearest it."""
+    script = _script()
+    data = [("H", "M0", 20.0, 0.1, 0.1, "thin", c, 0.5, False) for c in (101, 103, 105, 107, 109, 111)]
+    # Option errors by transition: 103 (and width 2) is best at 105 only,
+    # 105 (and width 3) from 107 on; each is worst where the other is best.
+    # Peeking at the transition predicted would choose 105 at 107.
+    good = {103: (105,), 105: (107, 109, 111)}
+
+    def forward_errors(d, split=110, names=("pooled",), window=None, predict_from=None, detail=None):
+        option = split if "era" in names else {2: 103, 3: 105}.get(window, 0)
+        for t in (105, 107, 109, 111):
+            for name in names:
+                v = 1.0 if name == "pooled" else (0.5 if t in good.get(option, ()) else 2.0)
+                detail[(name, "M0", t)] = v
+        return {}, {}
+    monkeypatch.setattr(script, "forward_errors", forward_errors)
+    monkeypatch.setattr(script, "WINDOW_WIDTHS", (2, 3))
+    monkeypatch.setattr(script, "fit_n0", lambda rows, drift=None: 50.0)
+    out = script.data_chosen_test(data)
+    era = out["era"]["chosen_by_transition"]
+    assert era["105"] == 109  # the split nearest ERA_SPLIT: 110 is not one tested here
+    assert era["107"] == 103 and era["111"] == 105
+    win = out["window"]["chosen_by_transition"]
+    assert win["105"] == 3 and win["107"] == 2  # 3: the width nearest FORWARD_WINDOW and win["111"] == 3
+    assert out["window"]["fitted_on_the_last_transitions"]["3"]["half_weight_votes"] == round(
+        script.half_point(50.0), 1)
