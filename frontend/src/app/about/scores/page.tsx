@@ -216,16 +216,15 @@ export default function ScoresChapter() {
               against the party from its own flank (hardliners voting down their party&apos;s bill)
               is listed on the profile but not counted here, because how far toward the flank a
               member sits is already scored by where their record sits (below)
-              <Cite id="kirkland2017" />. Which side of their party a member sits on comes from
-              their position this Congress once it rests on 200 roll calls. Until then, a full
-              record from the last Congress decides it; without one, this Congress&apos;s position
-              so far does, and a member with no position yet this Congress is read on the last
-              Congress&apos;s, however short. Once this Congress&apos;s positions are in, a member
-              who has switched parties is never read on the last Congress&apos;s position, which was
-              cast in their old party. Before they are published and pass our checks, everyone is
-              read on the last Congress&apos;s. The last Congress&apos;s position is used only for
-              this, never scored. Every break on a profile shows that roll call&apos;s party
-              tallies.
+              <Cite id="kirkland2017" />. Which side of their party a member sits on: before this
+              Congress&apos;s positions are published and pass our checks, everyone is read on the
+              last Congress&apos;s position. After that, a member&apos;s own position this Congress
+              decides once it rests on 200 roll calls; until then a full record from the last
+              Congress decides, and without one this Congress&apos;s position so far does. A member
+              with no position yet this Congress is read on the last Congress&apos;s, however short,
+              unless they have switched parties, since that position was cast in their old party.
+              The last Congress&apos;s position is used only for this, never scored. Every break on
+              a profile shows that roll call&apos;s party tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
@@ -270,14 +269,14 @@ export default function ScoresChapter() {
             similarly-leaning seat typically holds. Toward the party&apos;s flank scores below
             neutral; toward the seat&apos;s center scores above, by the same amount either way. So a
             member who sits about where their seat predicts scores about 50 on this part, by design:
-            tested against House and Senate elections, this shape predicted how incumbents did, and
-            one that put the typical position at 100 did not. A position estimated from only a few
-            roll calls is mostly noise, so it counts only as much as its votes support, measured on
-            members whose short record in one Congress sits next to a full one in the Congress
-            before or after: a position from about 36 votes counts half, and one from 200 or more
-            counts in full. A member with no position yet sits at 50. Early in a new Congress, until
-            its positions are published and pass our checks, this part is left out and the score is
-            the voting part alone.
+            tested against House and Senate general elections, this shape predicted how incumbents
+            did, and one that put the typical position at 100 did not. A position estimated from
+            only a few roll calls is mostly noise, so it counts only as much as its votes support,
+            measured on members whose short record in one Congress sits next to a full one in the
+            Congress before or after: a position from about 36 votes counts half, and one from 200
+            or more counts in full. A member with no position yet sits at 50. Early in a new
+            Congress, until its positions are published and pass our checks, this part is left out
+            and the score is the voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

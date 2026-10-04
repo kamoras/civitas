@@ -310,7 +310,7 @@ describe("MemberScorecard", () => {
     expect(screen.getByText("Votes against party (1)")).toBeInTheDocument();
     expect(screen.getByText("From the right flank, not counted (1)")).toBeInTheDocument();
     // The fixture scores no position part: the flank note says it comes later.
-    expect(screen.getByText(/which isn't scored yet this Congress/)).toBeInTheDocument();
+    expect(screen.getByText(/which isn't scored for this Congress yet/)).toBeInTheDocument();
     expect(screen.getByText(/Each bill or nomination counts once/)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "H.R. 8800" })).toHaveLength(2);
     // Served with the score: nothing to fetch.

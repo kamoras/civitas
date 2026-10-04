@@ -488,7 +488,9 @@ new Congress, the last Congress's) than the party does
 weighted by its reliability, and until a member's new record reaches 200
 roll calls their last Congress's full record, where they have one,
 decides their side (section 14; never for a member who switched parties,
-during this Congress or between the two). Other breaks are listed on the
+during this Congress or between the two); before the new section passes
+its gates everyone's last positions do, and a member with no usable
+position this Congress is read on the last one. Other breaks are listed on the
 scorecard as from the flank, and not counted. The rate is measured over
 every roll call the chamber recorded this Congress, not a sample.
 
@@ -726,8 +728,8 @@ in a fixed order, 1,000 times.
   an era that would never be applied, and it rests on a few early
   records (the early era's n0 runs to the search grid's lower limit,
   1). So the era curve is judged on the latest era's members alone
-  (`era_test`): there the latest era's curve (half point 46 votes) predicts no better than
-  one curve, 0.0025 worse with a standard error of 0.0195 over 67
+  (`era_test`): there the latest era's curve (half point 46 votes)
+  predicts no better than one curve, 0.0025 worse with a standard error of 0.0195 over 67
   members, and one curve stays. The 110th was the split before this
   comparison was made; repeated at every split with thin pairs on both
   sides (`era_split_test`), a recent era's curve beats one curve by more
@@ -896,14 +898,15 @@ itself a sign of how little these data settle.
       switched during the new Congress, or whose party differs between
       the two sections (a switch between Congresses gives a new id in
       each; a section written before this change records no parties, so
-      that check starts with the next Congress's section). With no usable position
-      this Congress such a member has none: their breaks are classified
-      on the other defectors' positions, and count when no defector has
-      one.
+      that check starts with the next Congress's section). With no
+      usable position this Congress such a member has none: their
+      breaks are classified on the other defectors' positions, and
+      count when no defector has one.
     - If the exports needed to tell a switcher's records apart can't be
-      read or don't settle it (two new ids with no roll call yet), the ingest keeps the previous section, as it does for any
-      export that fails its gates, rather than guess, and raises an ops
-      alert (kept data stops being current at the next Congress).
+      read or don't settle it (two new ids with no roll call yet), the
+      ingest keeps the previous section, as it does for any export that
+      fails its gates, rather than guess, and raises an ops alert (kept
+      data stops being current at the next Congress).
 - The seat fits are taken over every member, since a thin position is
   noisy but not biased.
 - The saturation scale is the 90th percentile of full records'
