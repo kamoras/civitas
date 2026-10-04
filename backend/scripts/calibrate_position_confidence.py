@@ -23,27 +23,26 @@ Congress):
 
 Drift is how far positions carry from one Congress to the next, and it
 varies by era (a full record's slope on the next Congress's runs from about
-0.66 to 1.01, drift_range), so each chamber and transition gets its own, set by that
-transition's pairs of full records alone, which show no gradient in their
-count (full records count 1). n0 is then the least-squares fit of the thin
-pairs. The structure shipped is chosen forward in time (forward_test):
-each transition's thin pairs predicted from a fit on the earlier
-transitions only, as the weight is always applied to a Congress the
-calibration hasn't seen; one curve for both chambers unless one per
-chamber, or the latest era's (split at ERA_SPLIT, a convention), predicts
-the next Congress better by more than a standard error of the paired
-difference. That rule was adopted in review, after a forward check had
-been run once (research note section 14). The leave-one-member-out
-comparisons (choose_structure's one-standard-error rule over all
-members; era_test on the latest era's; era_split_test at every split;
-trend_test) are reported beside it; a rerun decides again.
-n0 is weakly determined, and so is the count at which a position counts
-half (half_weight_votes, a reparametrisation of it, bounded above
-at RELIABLE_VOTES / 2), reported with its interval. Positions Voteview
-publishes with no count get their own
-measured weight, on the same drift: those with a career DW-NOMINATE
-position, as the score applies it (a member with neither a count nor a
-career, such as one just sworn in, reads as no votes).
+0.66 to 1.01, drift_range), so each chamber and transition gets its own, set
+by that transition's pairs of full records alone, which show no gradient in
+their count (full records count 1). n0 is then the least-squares fit of the
+thin pairs. The structure shipped is chosen forward in time (forward_test):
+each transition's thin pairs predicted from a fit on the earlier transitions
+only, as the weight is always applied to a Congress the calibration hasn't
+seen; one curve for both chambers unless one per chamber, or the latest
+era's (split at ERA_SPLIT, a convention), predicts the next Congress better
+by more than a standard error of the paired difference. That rule was
+adopted in review, after a forward check had been run once (research note
+section 14). The leave-one-member-out comparisons (choose_structure's
+one-standard-error rule over all members; era_test on the latest era's;
+era_split_test at every split; trend_test) are reported beside it; a rerun
+decides again. n0 is weakly determined, and so is the count at which a
+position counts half (half_weight_votes, a reparametrisation of it, bounded
+above at RELIABLE_VOTES / 2), reported with its interval. Positions Voteview
+publishes with no count get their own measured weight, on the same drift:
+those with a career DW-NOMINATE position, as the score applies it (a member
+with neither a count nor a career, such as one just sworn in, reads as no
+votes).
 
 Left out: Voteview's 0, 0 placeholders (no position); members from outside
 the 50 states (the House's delegates, whose records are thin because they
@@ -57,17 +56,16 @@ A party-line term was tested and is reported, not used: with one drift for
 every Congress, n0 appeared to rise with the share of roll calls on which
 the parties' majorities split, but with drift measured per transition its
 slope is unstable (its sign has flipped between reruns) and it predicts
-held-out members no better than no term
-(research note section 14). Nothing in the weight follows the sitting
-Congress (the era split, if adopted, is a fixed Congress), so a rerun
-only adds pairs. The pair's direction (which side of the pair is thin:
-the earlier, mostly members who arrived, or the later, mostly members who
-left or were absent at the end) and attendance (attended arrivals and
-departures against the rest) are tested the same way and reported, not
-used: neither can be known for a sitting member's record. Members who
-switched parties during a Congress are left out of the fit
-(deviations()); switcher_test reports which of their records best
-predicts the next Congress's.
+held-out members no better than no term (research note section 14). Nothing
+in the weight follows the sitting Congress (the era split, if adopted, is a
+fixed Congress), so a rerun only adds pairs. The pair's direction (which
+side of the pair is thin: the earlier, mostly members who arrived, or the
+later, mostly members who left or were absent at the end) and attendance
+(attended arrivals and departures against the rest) are tested the same way
+and reported, not used: neither can be known for a sitting member's record.
+Members who switched parties during a Congress are left out of the fit
+(deviations()); switcher_test reports which of their records best predicts
+the next Congress's.
 
 prior_test is the evidence for the flank rule's use of the last
 Congress's full record (party_line_record), on pairs centered as that

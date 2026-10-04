@@ -314,8 +314,8 @@ def switcher_latest(
     switch: the only one of their ids not in the last Congress's export
     (`earlier_ids`), or, when that doesn't single one out (a member who
     switched in their first Congress has two new ids), the one whose first
-    roll call (`first_roll`) comes last, or that has none yet. Returns ({bioguide: id}, the
-    bioguides neither settles)."""
+    roll call (`first_roll`) comes last, or that has none yet. Returns
+    ({bioguide: id}, the bioguides neither settles)."""
     latest, unresolved = {}, []
     for bio, ids in _switchers(rows).items():
         new = [i for i in ids if i not in earlier_ids]

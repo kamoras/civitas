@@ -15,10 +15,11 @@ election results (docs/research/constituent-alignment.md, sections 11-12):
   Congress's, each weighted by its reliability and read from its party's
   mean since v6.27; until a member's new record reaches prior_until_votes,
   their last Congress's full record, where they have one, decides their
-  side) than their party as a whole. Hardliners voting down their
-  own party's bill from the flank vote against it too, but that is not
-  independence toward the seat, and the member's flank position is measured by position congruence (scored once the Congress's section passes its gates). Such votes are kept as flankBreaks: shown,
-  not counted.
+  side) than their party as a whole. Hardliners voting down their own
+  party's bill from the flank vote against it too, but that is not
+  independence toward the seat, and the member's flank position is measured
+  by position congruence (scored once the Congress's section passes its
+  gates). Such votes are kept as flankBreaks: shown, not counted.
 - Each measure counts once. A nominee's cloture and confirmation votes, or a
   bill's motion to proceed, cloture and passage, are one decision voted on
   several times; in the 119th Senate 37% of roll calls repeat a measure

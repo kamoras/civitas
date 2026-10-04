@@ -80,20 +80,20 @@ seat-conditional norm too (Canes-Wrone, Brady & Cogan 2002, "Out of Step,
 Out of Office," APSR 96:1), linearly: 50 at the norm, rising toward the
 seat's center, a shape tested in v6.27. This is the delegate model of
 representation (Miller & Stokes 1963, "Constituency Influence in
-Congress," APSR 57:1), with seat partisan lean standing in for
-issue-level constituent opinion. Both studies validate their measures by the incumbent's vote share; v6.13
-used that same test to choose this dimension's design
-(docs/research/constituent-alignment.md). Because the member was elected
-under a party label as well as by a seat (Fenno 1978's concentric
-constituencies), the vote score is highest where a member breaks about as
-often as same-party members of similarly-leaning seats and falls both ways
-(v6.16) — the shape the member's own party's primary voters reward; the
-general electorate rewards breaking more, and the research note says so.
-Donor independence via lobbying
-matches follows Stratmann (2005) with the methodological caution from
-Ansolabehere, de Figueiredo & Snyder (2003, "Why Is There So Little
-Money in U.S. Politics?" JEP 17:1) that donation-vote correlations are
-not causal evidence of influence.
+Congress," APSR 57:1), with seat partisan lean standing in for issue-level
+constituent opinion. Both studies validate their measures by the
+incumbent's vote share; v6.13 used that same test to choose this
+dimension's design (docs/research/constituent-alignment.md). Because the
+member was elected under a party label as well as by a seat (Fenno 1978's
+concentric constituencies), the vote score is highest where a member
+breaks about as often as same-party members of similarly-leaning seats and
+falls both ways (v6.16) — the shape the member's own party's primary
+voters reward; the general electorate rewards breaking more, and the
+research note says so. Donor independence via lobbying matches follows
+Stratmann (2005) with the methodological caution from Ansolabehere, de
+Figueiredo & Snyder (2003, "Why Is There So Little Money in U.S.
+Politics?" JEP 17:1) that donation-vote correlations are not causal
+evidence of influence.
 
 Funding Diversity: the inverse Herfindahl-Hirschman Index (HHI) applied
 to industry-level donation shares — concentrated funding from a single
