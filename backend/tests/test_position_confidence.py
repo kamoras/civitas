@@ -687,19 +687,44 @@ def test_forward_errors_fit_only_on_earlier_transitions(monkeypatch):
     assert set(later["pooled"]) == {"T109"} and later["pooled"]["T109"] == out["pooled"]["T109"]
 
 
-def test_the_split_sweep_skips_the_split_it_cannot_test():
+def test_the_split_sweep_skips_the_split_it_cannot_test(monkeypatch):
     """At the last transition with thin pairs no later one has thin pairs
-    to fit the era curve on, so it equals one curve: not a split tested."""
-    data = json.loads(_DATA.read_text())
-    last = max(int(t) for t in data["forward_test"]["era"]["gain_by_transition"])
-    assert str(last) not in data["forward_test"]["era_at_every_split"]
+    to fit the era curve on, so it equals one curve: not a split tested.
+    last_three predicts from the third-from-last predicted transition."""
+    script = _script()
+    calls = []
+    members = {f"M{i}": 1.0 for i in range(4)}
+
+    def forward_errors(d, split=110, names=("pooled", "chamber", "era", "trend"), window=None,
+                       predict_from=None):
+        calls.append((split, names, predict_from))
+        gain = -0.5 if predict_from is None else -0.25
+        errs = {n: {m: v + (gain if n == "era" else 0.0) + (0.1 if i % 2 else -0.1) * (n == "era")
+                    for i, (m, v) in enumerate(members.items())} for n in names}
+        return errs, {n: {t: sum(errs[n].values()) for t in range(110, 116)} for n in names}
+    monkeypatch.setattr(script, "forward_errors", forward_errors)
+    data = [("H", "M0", 20.0, 0.1, 0.1, "thin", c, 0.5, False) for c in (101, 105, 110, 115)]
+    out = script.forward_test(data)
+    assert set(out["era_at_every_split"]) == {"105", "110"}
+    assert out["chosen"] == "era"
+    assert (110, ("pooled", "era"), 113) in calls
+    assert out["era"]["last_three"]["above"] == -1.0
+    # The shipped file: its last thin transition is never a split tested.
+    shipped = json.loads(_DATA.read_text())
+    last = max(int(t) for t in shipped["era_split_test"]["splits"])
+    assert str(last) not in shipped["forward_test"]["era_at_every_split"]
 
 
 def test_shipped_file_reports_what_the_docs_cite():
     """The figures the research note and v6.27 cite are in the file."""
     data = json.loads(_DATA.read_text())
-    era = data["forward_test"][data["structure"]]
-    assert {"above", "standard_error"} <= set(era["last_three"])
+    if data["structure"] != "pooled":  # one curve has nothing to compare with itself
+        chosen = data["forward_test"][data["structure"]]
+        assert {"above", "standard_error"} <= set(chosen["last_three"])
+        shares = chosen["most_helped_share"]
+        assert len(shares) == 3 and shares == sorted(shares, reverse=True)
+    assert set(data["forward_test"]["training_before_split"]) == set(
+        data["forward_test"]["era"].get("gain_by_transition", data["forward_test"]["training_before_split"]))
     assert {"above", "standard_error"} <= set(data["forward_test"]["window_against_era"])
     lo, hi = data["half_weight_votes_pooled_interval_90"]
     assert lo <= data["half_weight_votes_pooled"] <= hi

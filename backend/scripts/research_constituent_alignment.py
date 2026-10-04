@@ -1074,29 +1074,20 @@ def _sitting_effect(p):
 def _full_record_gradient(p):
     """Full records' attenuation by their vote count: the slope of each
     adjacent-Congress pair of full records, relative to its chamber and
-    transition's drift (calibrate_position_confidence's own pairs and
-    drift), by band of the earlier side's count, and the range of the
-    drifts themselves."""
+    transition's drift, by band of the earlier side's count, and the range
+    of the drifts themselves: calibrate_position_confidence's own pairs,
+    drift and full_slope_by_votes, so this prints what its file holds."""
     import calibrate_position_confidence as cal
 
     cache = pathlib.Path(p["S101_members.csv"]).parent
-    full = []
-    for chamber in ("S", "H"):
-        for earlier in range(101, 119):
-            prev = cal.deviations(cal.member_rows(chamber, earlier, cache))
-            cur = cal.deviations(cal.member_rows(chamber, earlier + 1, cache))
-            for i in prev.keys() & cur.keys():
-                (na, xa, _), (nb, xb, _) = prev[i], cur[i]
-                if na >= cal.RELIABLE_VOTES and nb >= cal.RELIABLE_VOTES:
-                    full.append((chamber, i, na, xa, xb, "full", earlier, 0.0, False))
-    drift = {k: v[0] for k, v in cal.drifts(full).items()}
-    print(f"  per-transition drift: {min(drift.values()):.2f} to {max(drift.values()):.2f} "
+    data, _ = cal.pairs(cache, cal.congresses())
+    drift = cal.drifts(data)
+    forward = [v[0] for v in drift.values()]
+    print(f"  per-transition drift: {min(forward):.2f} to {max(forward):.2f} "
           f"over {len(drift)} chamber-transitions")
-    F = pd.DataFrame([(r[2], r[3] * drift[(r[0], r[6])], r[4]) for r in full], columns=["n", "dx", "y"])
-    F["band"] = pd.cut(F.n, [200, 400, 600, 800, 1100, 10_000], include_lowest=True)
-    slopes = F.groupby("band", observed=True).apply(lambda g: (g.dx * g.y).sum() / (g.dx ** 2).sum())
+    slopes = cal.full_slope_by_votes(data, drift)
     print("  full records' slope relative to drift, by votes: "
-          + ", ".join(f"{b}: {v:.3f}" for b, v in slopes.items()))
+          + ", ".join(f"{band}: {v:.3f}" for band, v in slopes.items()))
 
 
 def _flank_effect(p):

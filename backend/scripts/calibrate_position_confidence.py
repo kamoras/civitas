@@ -634,6 +634,8 @@ def forward_test(data: list[tuple]) -> dict:
             e, _ = forward_errors(rest, names=("pooled", chosen))
             refit.append(_paired(e[chosen], e["pooled"]))
         r["without_most_helped_refitted"] = refit
+        # The share of the gain each of the three members it helps most supplies.
+        r["most_helped_share"] = [round(gain[m] / sum(gain.values()), 3) for m in order[:3]]
         e, _ = forward_errors(data, names=("pooled", chosen), predict_from=sorted(by_t["pooled"])[-3:][0])
         r["last_three"] = _paired(e[chosen], e["pooled"])
     thin = sorted({row[6] for row in data if row[5] == "thin"})
@@ -647,7 +649,14 @@ def forward_test(data: list[tuple]) -> dict:
         if t is not None:
             sweep[str(cut)] = {**t, "adopted": t["above"] < -t["standard_error"]}
     e, _ = forward_errors(data, names=("pooled", "window"), window=FORWARD_WINDOW)
+    # What the one curve was fitted on when each transition was predicted:
+    # the share of its thin pairs from before ERA_SPLIT.
+    fitted = [row for row in data if row[5] == "thin" and (row[0], row[6]) in drifts(data)]
+    before = {str(t): round(sum(1 for row in fitted if row[6] < min(t, ERA_SPLIT))
+                            / max(1, sum(1 for row in fitted if row[6] < t)), 3)
+              for t in sorted(by_t["pooled"])}
     return {"chosen": chosen, "members": len(errors["pooled"]), **report,
+            "training_before_split": before,
             "era_at_every_split": sweep, "window": _paired(e["window"], e["pooled"]),
             "window_against_era": _paired(e["window"], errors["era"])}
 
@@ -1201,10 +1210,12 @@ def main() -> None:
             "by convention, predicts the next Congress better by more than the paired standard error, "
             "a convention); forward_test reports each structure's error and paired difference from one "
             "curve (trend included, reported only), the chosen one's gain by transition, its comparison "
-            "without the members it helps most (left out of it, and refitted), last_three (the chosen "
+            "without the members it helps most (left out of it, and refitted) and the share of the gain "
+            "each supplies (most_helped_share), last_three (the chosen "
             "structure against one curve on the last three predicted transitions), the era comparison "
             "at every split it can test (era_at_every_split), a recent window (window) and the window "
-            "against the era curve (window_against_era). "
+            "against the era curve (window_against_era), and the share of the thin pairs one curve was "
+            "fitted on from before the split, by predicted transition (training_before_split). "
             "Leave-one-member-out comparisons, reported: heldout_error is the squared error of each "
             "thin member's pairs fitted without that member, by structure; structure_test is one "
             "curve against one per chamber, with reported giving direction, attendance (attended "
