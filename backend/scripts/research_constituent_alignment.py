@@ -66,6 +66,7 @@ warnings.filterwarnings("ignore")
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.ordinals import ordinal  # noqa: E402
 from app.pipeline.analyze import score_calculator  # noqa: E402
 from app.pipeline.analyze.party_line_record import measure_key  # noqa: E402
 
@@ -1159,7 +1160,7 @@ def position_scale_test(p, m):
     for c in SENATES:
         M = _congruence_scales(_per_party_extremity(_senate_positions(p, c, st, nat)))
         if c == max(SENATES):
-            print(f" the {c}th Senate's saturation (seat lean from the presidential vote, as in this "
+            print(f" the {ordinal(c)} Senate's saturation (seat lean from the presidential vote, as in this "
                   f"section, not the pipeline's Cook PVI): pooled {M.sat_pooled.iloc[0]:.3f}, "
                   + ", ".join(f"{q} {M[M.party == q].sat_party.iloc[0]:.3f}" for q in ("D", "R"))
                   + f"; Republicans at 0: {(_linear(M.ext, M.sat_pooled, np.ones(len(M)))[(M.party == 'R').values] <= 0).mean():.1%}")
@@ -1269,7 +1270,7 @@ def position_scale_test(p, m):
     shipped = json.loads((pathlib.Path(__file__).resolve().parents[1] / "app" / "data"
                           / "position_confidence.json").read_text())
     print(f" thin records, shipped (scripts/calibrate_position_confidence.py, adjacent-Congress pairs "
-          f"{shipped['pairs']}, through the {shipped['calibrated_through']}th): structure {shipped['structure']} "
+          f"{shipped['pairs']}, through the {ordinal(shipped['calibrated_through'])}): structure {shipped['structure']} "
           f"(held-out error {shipped['heldout_error']}); per chamber {shipped['chambers']}, 90% intervals "
           f"{shipped['interval_90']}; pooled half weight {shipped['half_weight_votes_pooled']}; by chamber "
           f"{shipped['half_weight_votes_by_chamber']} ({shipped['half_weight_votes_by_chamber_interval_90']}); by era "

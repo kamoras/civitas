@@ -731,13 +731,13 @@ in a fixed order, 1,000 times.
     errors 0.017, 0.016, 0.016); left out of the data and refitted, by
     0.180, 0.180 and 0.151 (0.077, 0.078, 0.072). The sign holds; the size
     doesn't.
-  - **The split.** At every other split from the 103rd to the 117th the
-    era curve also predicts better, but the rule would adopt it at 11 of
-    these 15, not at the 108th, 109th, 115th or 116th (at the 118th the
-    two curves can't differ: no later transition has thin pairs). The
-    110th is a convention (roughly the middle of 101–119), fixed before
-    the forward comparisons, though era results at it had been reported
-    before; it is kept at the 110th on reruns, never re-centred.
+  - **The split.** At every split from the 103rd to the 117th the era curve
+    predicts better, but the rule would adopt it at 11 of these 15, not at
+    the 108th, 109th, 115th or 116th (at the 118th the two curves can't
+    differ: no later transition has thin pairs). The 110th is a convention
+    (roughly the middle of 101–119), fixed before the forward comparisons,
+    though era results at it had been reported before; it is kept at the
+    110th on reruns, never re-centred.
   - **Recency or a break.** A window of the last six transitions
     (`FORWARD_WINDOW`, a convention), with no split, does as well (0.078
     better, 0.036), and against the era curve it is 0.011 better (0.012,
@@ -1080,9 +1080,9 @@ better (above).
     which the new record needs no model to be trusted, and nothing in
     these data is shaped closely enough like the rule's case to replace
     it. The 95% bar is a convention too, and strict: any resample whose
-    own best is a full record saves exactly nothing. The stakes are
-    small, and the prior first applies in the 120th Congress; a rerun
-    with more attended leavers could find a switch that clears the bar.
+    own best is a full record saves exactly nothing. The stakes are small;
+    a rerun with more attended leavers could find a switch that clears the
+    bar.
   - At very low counts the model's logistic in log votes extrapolates
     below a coin flip; flooring it at one changes nothing measurable.
     Early in a real Congress the party's center is itself measured on

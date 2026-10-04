@@ -8,8 +8,10 @@ it follows the sitting Congress."""
 
 import importlib.util
 import json
+import urllib.error
 import pathlib
 
+from app.ordinals import ordinal
 from app.pipeline.analyze import score_calculator
 
 _SCRIPT = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "calibrate_position_confidence.py"
@@ -66,7 +68,6 @@ def test_every_thin_record_is_paired_and_the_flank_rules_case_flagged(monkeypatc
     at first; once they're gone 73 counts and 72, who missed most of their
     span, doesn't; once the 103rd isn't published a leaver can't be
     checked."""
-    import urllib.error
     script = _script()
     rows = _pair_rows()
     rows[103] = rows[101]
@@ -437,6 +438,8 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert f"(`app/data/position_confidence.json`: {switch}, a full record)" in agents
     assert f"(`prior_until_votes`, {switch} votes, a convention)" in readme
     assert f"({full} votes or more, a convention)" in readme
+    split = f"since the {ordinal(data['era_split'])} Congress"
+    assert split in agents and split in readme
     # A position published with no count: "about a fifth" in the entry.
     assert round(data["uncounted_weight"] * 5) == 1 and "about a fifth" in entry
     # The era the shipped curve is measured on, by its first year. Both texts
@@ -445,6 +448,8 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert data["structure"] == "era", "rewrite the prose that describes the era curve"
     year = 1789 + 2 * (data["era_split"] - 1)
     assert f"since {year}" in page and f"since {year}" in entry
+    first = 1789 + 2 * (_script().FIRST_CONGRESS - 1)
+    assert f"the years the data cover ({first} to today)" in entry
 
 
 def test_the_switch_tests_take_the_pairs_their_names_say(monkeypatch):
@@ -541,7 +546,7 @@ def test_the_switcher_test_compares_the_latest_and_the_longer_record(monkeypatch
 
     def member_rows(chamber, congress, cache=None):
         if chamber != "H" or congress not in rows:
-            raise OSError
+            raise urllib.error.HTTPError("u", 404, "Not Found", None, None)  # unpublished
         return rows[congress]
     monkeypatch.setattr(script, "member_rows", member_rows)
     monkeypatch.setattr(script, "roll_spans", lambda ch, c, cache=None: {"10": (1, 50), "90": (51, 90)})
@@ -755,10 +760,10 @@ def test_shipped_file_reports_what_the_docs_cite():
             return f"{abs(d['above']):.3f} (standard error {d['standard_error']:.3f})"
         era, one = inside["against_era"], inside["against_one_curve"]
         overall = f"{abs(trend['above']):.3f} better than one curve (standard error {trend['standard_error']:.3f})"
-        assert f"through the {start - 1}th" in note and f"from the {start}th" in note
+        assert f"through the {ordinal(start - 1)}" in note and f"from the {ordinal(start)}" in note
         assert quoted(one) in note and f"{abs(era['above']):.3f} ({era['standard_error']:.3f})" in note
         assert quoted(era) in note and overall in note
-        assert f"From the {start}th" in entry and quoted(era) in entry and overall in entry
+        assert f"From the {ordinal(start)}" in entry and quoted(era) in entry and overall in entry
     for lo, hi in data["drift_range"].values():
         assert 0 < lo <= hi
     # Full records show no gradient in their count.
@@ -777,3 +782,25 @@ def test_the_docs_quote_a_five_vote_saturated_score():
         path = root / doc
         if path.exists():  # the backend image ships without the docs
             assert f"saturation scores about {score} instead of 0" in " ".join(path.read_text().split())
+
+
+def test_an_outage_stops_the_calibration_rather_than_dropping_a_congress(monkeypatch):
+    """Only an unpublished export (404) leaves a Congress out; a 503 or a
+    timeout reading one stops the run, in pairs and in the switcher test."""
+    script = _script()
+    for err in (urllib.error.HTTPError("u", 503, "Unavailable", None, None), urllib.error.URLError("timed out")):
+        def failing(chamber, congress, cache=None, err=err):
+            raise err
+        monkeypatch.setattr(script, "member_rows", failing)
+        for call in (lambda: script._usable("H", 110, None), lambda: script.switcher_test(None, range(110, 111))):
+            try:
+                call()
+            except OSError:
+                pass
+            else:
+                raise AssertionError("an outage must stop the run")
+
+    def unpublished(chamber, congress, cache=None):
+        raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
+    monkeypatch.setattr(script, "member_rows", unpublished)
+    assert script._usable("H", 110, None) is False

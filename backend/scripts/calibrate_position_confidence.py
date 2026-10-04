@@ -196,8 +196,10 @@ def switcher_test(cache: pathlib.Path | None = None, span: range | None = None) 
         for c in span:
             try:
                 rows, after = member_rows(chamber, c, cache), member_rows(chamber, c + 1, cache)
-            except OSError:
-                continue
+            except urllib.error.HTTPError as err:
+                if err.code == 404:
+                    continue  # not published (the Congress after the sitting one)
+                raise  # an outage stops the run rather than dropping a Congress
             ids: dict[str, list[dict]] = {}
             for r in rows:
                 bio = (r.get("bioguide_id") or "").strip()
@@ -325,11 +327,15 @@ def congresses() -> range:
 
 
 def _usable(chamber: str, congress: int, cache: pathlib.Path | None) -> bool:
-    """A Congress whose export exists and isn't thin by the calendar."""
+    """A Congress whose export exists and isn't thin by the calendar. Only
+    an export that isn't published (404) is unusable; any other failure
+    stops the run rather than dropping a Congress from the calibration."""
     try:
         rows = member_rows(chamber, congress, cache)
-    except OSError:
-        return False
+    except urllib.error.HTTPError as err:
+        if err.code == 404:
+            return False
+        raise
     counts = [_float(r.get("nominate_number_of_votes")) or 0.0 for r in rows]
     return bool(counts) and statistics.median(counts) >= RELIABLE_VOTES
 
@@ -1264,8 +1270,9 @@ def main() -> None:
             "grouping (under era, each era's own curve), b the term's slope, loss_with and loss_without "
             "the in-sample losses and heldout_error the held-out error with it. "
             "chambers' thin_pairs count every thin pair; half_weight_votes is where weight(n) = 0.5, "
-            "never above reference_votes / 2 (as n0 grows the curve tends to n / reference_votes), so "
-            "an interval reaching that limit is open above; half_weight_votes_pooled, _by_chamber and "
+            "never above reference_votes / 2 (as n0 grows the curve tends to n / reference_votes), and "
+            "at most about 98 on the n0 grid (to 5000), so an interval reaching the grid's end is "
+            "open above; half_weight_votes_pooled, _by_chamber and "
             "_by_era are the half points one curve, a curve per chamber and a curve per era would give; "
             "interval_90 is the 5th-95th percentile over members resampled with the structure held "
             "fixed (so it leaves out the choice of structure; half_weight_votes_pooled_interval_90 and "
@@ -1282,7 +1289,7 @@ def main() -> None:
             "record, paired differences over people (the pipeline reads the latest, a stated choice "
             "the evidence can't settle): members and people counted, each record's mean squared gap, "
             "latest_minus_longer and latest_minus_weighted the paired means, latest_not_longer the "
-            "people whose latest record is not their longer one and latest_closer those of them it "
+            "member-Congresses whose latest record is not their longer one and latest_closer those of them it "
             "places nearer. "
             "prior_test compares, for the flank rule, a last full record and a thin record as "
             "evidence of a member's side of their party, centered as the rule centers, by band of the "
