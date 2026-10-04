@@ -223,12 +223,12 @@ export default function ScoresChapter() {
               decides once it rests on 200 roll calls (our convention); until then a full record
               from the last Congress decides, and without one this Congress&apos;s position so far
               does. A member with no position yet this Congress is read on the last Congress&apos;s,
-              however short (our choice; nothing measured it). The last Congress&apos;s position is
-              never used for a member who has switched parties, during this Congress or between the
-              two, since it was cast in their old party, and a position recorded under the other
-              major party is never read for the member. The last Congress&apos;s position is used
-              only for this, never scored. Every break on a profile shows that roll call&apos;s
-              party tallies.
+              however short (our choice; nothing measured it). Once this Congress&apos;s positions
+              are in, the last Congress&apos;s position is never used for a member who has switched
+              parties, during this Congress or between the two, since it was cast in their old
+              party, and a position recorded under the other major party is never read for the
+              member. The last Congress&apos;s position is used only for this, never scored. Every
+              break on a profile shows that roll call&apos;s party tallies.
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
@@ -285,8 +285,9 @@ export default function ScoresChapter() {
             choose between the two after one run of this comparison had already favoured the recent
             years. A position from about 46 votes counts half, and one from 200 or more counts in
             full (where a full record starts is our convention). A member with no position yet sits
-            at 50. Until a new Congress&apos;s positions are published and pass our checks, this
-            part is left out and the score is the voting part alone.
+            at 50 (our choice; nothing measured it). Until a new Congress&apos;s positions are
+            published and pass our checks, this part is left out and the score is the voting part
+            alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run
@@ -300,11 +301,12 @@ export default function ScoresChapter() {
             breaks with their party about as often as members of their own party in seats that lean
             the same way, and a 0 means they break far more often than that, or, much more rarely,
             far less. On the position part, sitting where the seat predicts is 50, with more only
-            for sitting nearer the seat&apos;s center, so a member who matches both scores about 85.
-            On the voting part, because each party&apos;s yardstick is measured from its own
-            members, a party that happens to be more unified isn&apos;t scored higher for it: across
-            every Senate from 1989 on, the two parties&apos; average voting-part scores differed by
-            2.1 points on average, and which one was higher changed from Congress to Congress.
+            for sitting nearer the seat&apos;s center, so a member who matches both scores about 85
+            (70% of 100 plus 30% of 50). On the voting part, because each party&apos;s yardstick is
+            measured from its own members, a party that happens to be more unified isn&apos;t scored
+            higher for it: across every Senate from 1989 on, the two parties&apos; average
+            voting-part scores differed by 2.1 points on average, and which one was higher changed
+            from Congress to Congress.
           </P>
         </Sub>
         <More label="Where the numbers come from, with September 2026 examples (before v6.20)">

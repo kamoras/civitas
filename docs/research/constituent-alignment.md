@@ -846,9 +846,9 @@ in a fixed order, 1,000 times.
   votes). Measured only where the member also has a career DW-NOMINATE
   position, they count 0.21 from 25 pairs, but a few members carry it:
   leaving out one member at a time moves it between 0.13 and 0.26. A
-  no-count position with no career position at all (a member just sworn
-  in, with nothing yet to anchor it) is not measured by these pairs, and
-  it counts nothing, so the part sits at 50.
+  no-count position with no career position at all (a member just sworn in,
+  with nothing yet to anchor it) is not measured by these pairs, and it
+  counts nothing, so the part sits at 50 (a stated choice).
 - **Each pair is predicted in its own direction.** A member whose thin
   record is the earlier one (an entrant) is predicted with the
   transition's forward drift, the slope of the later full position on the
@@ -1020,16 +1020,16 @@ better (above).
     votes, a position at saturation scores about 46 instead of 0 (computed
     from the shipped curve, n0 86).
 - Voteview's placeholders are dropped. A member a current section has no
-  position for (those, or anyone Voteview hasn't placed yet) counts
-  nothing, so the part sits at 50, instead of having the component
-  left out. A section written before v6.27 has no counts and is read as
-  before, unweighted, until the first v6.27 ingest rewrites it.
+  position for (those, or anyone Voteview hasn't placed yet) counts nothing,
+  so the part sits at 50, instead of having the component left out (a stated
+  choice, not measured). A section written before v6.27 has no counts and is
+  read as before, unweighted, until the first v6.27 ingest rewrites it.
 - Each section records its Congress, and a position counts only for roll
   calls of that same Congress (or the sitting one, for a member matched
   to no roll call).
-  - Once a new Congress's roll calls are being scored, the component is
-    left out until that Congress's Voteview export passes the ingest
-    gates, as when no data exists.
+  - Once a new Congress's roll calls are being scored, the component is left
+    out until that Congress's Voteview export passes the ingest gates, as
+    when no data exists (also a stated choice).
   - A stored score's "show the math" keeps reading the positions it was
     scored on, while that Congress's section is on disk, until the next
     run rescores it.
@@ -1085,14 +1085,15 @@ better (above).
     | 101–150 | 20 | 85% |
     | 151–199 | 12 | 92% |
 
-    Those pairs compare a thin record with the other Congress's full
-    record; the rule compares within one Congress, so one Congress's drift
-    has to be taken out. Both flip a side mostly near the party's center
-    (full records agree 62% within 0.02 of it, over 99% beyond 0.2), so
-    the model (`switch_model`) works within three strata of distance from
-    the center (under 0.05, 0.05–0.1, beyond), noise and drift independent
-    within each, agreement a logistic in log votes with an intercept per
-    stratum, implied rates clipped to [0, 1].
+    Those pairs compare a thin record with the other Congress's full record;
+    the rule compares within one Congress, so one Congress's drift has to be
+    taken out. Both flip a side mostly near the party's center (full records
+    agree 62% within 0.02 of it, over 99% beyond 0.2), so the model
+    (`switch_model`) works within three strata of distance from the center
+    (under 0.05, 0.05–0.1, beyond; the edges and the logistic form are
+    conventions), noise and drift independent within each, agreement a
+    logistic in log votes with an intercept per stratum, implied rates
+    clipped to [0, 1].
   - Whether to switch before a full record is tested out of bag
     (`switch_test`): a switch is chosen, as the one misplacing the fewest
     sides over counts 1–199, on members resampled 1,000 times, and judged

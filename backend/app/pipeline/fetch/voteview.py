@@ -18,8 +18,10 @@ out until its Voteview export passes the gates, as when no data exists.
 Source: Voteview / Lewis et al., "Voteview: Congressional Roll-Call
 Votes Database" (voteview.com), per-congress member-ideology exports —
 the canonical academic source for NOMINATE estimates, updated weekly
-while a congress sits. Two small CSVs per run (~15KB Senate, ~60KB
-House).
+while a congress sits. One members CSV per chamber per run (~15KB
+Senate, ~60KB House), plus the last Congress's when the export lists a
+mid-Congress party switcher, and that Congress's (large) vote export
+only when the two member exports don't settle the switcher's latest id.
 
 Which position (v6.13): the congress-specific Nokken-Poole first
 dimension (Nokken & Poole 2004), not career-constrained DW-NOMINATE.
