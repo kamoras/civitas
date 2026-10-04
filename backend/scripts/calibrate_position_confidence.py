@@ -663,7 +663,7 @@ def forward_test(data: list[tuple]) -> dict:
               for t in sorted(by_t["pooled"])}
     # The trend, by transition: its gain over one curve, and whether its
     # forward fit reached an end of the A or B grid; and, from the first
-    # transition after which every fit is inside both grids, the trend
+    # transition from which every fit is inside both grids, the trend
     # against one curve and against the era curve.
     at_end = {}
     for t in sorted(by_t["trend"]):
@@ -835,9 +835,10 @@ def trend_test(data: list[tuple], against: str) -> dict:
     split-free form of the era question, added after the era tests (so
     reported, not adopted, by this calibration). Its b, the half point it
     implies at the latest Congress with thin pairs, and, against the
-    structure `against`, its paired difference over every thin member ("all") and
-    over the latest era's ("latest", as era_test judges), the latter also
-    without the member whose own difference favours the trend most."""
+    structure `against`, its paired difference over every thin member
+    ("all") and over the latest era's ("latest", as era_test judges), the
+    latter also without the member whose own difference favours the trend
+    most."""
     # One line for every pair (pooled): the split-free form.
     d = drifts(data)
     b, a, _ = fit_party_line(data, "pooled", d, _decades)
@@ -1058,8 +1059,8 @@ def prior_until_votes(test: dict) -> float:
     """The count below which the flank rule reads the last full record: a
     full record (no switch short of one) unless, on the pairs shaped like
     the rule's case, a switch chosen on resampled members saves sides on the
-    members left out in at least 95% of resamples (its 5th percentile above 0); then that
-    switch."""
+    members left out in at least 95% of resamples (its 5th percentile above
+    0); then that switch."""
     shape = (test.get("switch_test") or {}).get("rule_shape")
     if shape and shape.get("saved_out_of_bag") and shape["saved_out_of_bag"][0] > 0:
         return float(shape["switch_votes"])
@@ -1270,17 +1271,18 @@ def main() -> None:
             "without the members it helps most (left out of it, and refitted) and the share of the gain "
             "each supplies (most_helped_share), last_three (the chosen "
             "structure against one curve on the last three predicted transitions), the era comparison "
-            "at every split it can test (era_at_every_split), a window of the last FORWARD_WINDOW "
+            "at every split it can test (era_at_every_split, each with adopted: whether the rule would adopt "
+            "it), a window of the last FORWARD_WINDOW "
             f"({FORWARD_WINDOW}, a convention) transitions with no split (window) and the window "
             "against the era curve (window_against_era), and the share of the thin pairs one curve was "
             "fitted on from before the split, by predicted transition (training_before_split); trend "
             "also has its gain by transition, whether each forward fit reached an end of a search grid "
-            "(fit_at_grid_end), and inside_grids, from the first transition after which every fit is "
+            "(fit_at_grid_end), and inside_grids, from the first transition from which every fit is "
             "inside the grids, the trend against one curve and against the era curve. "
             "Leave-one-member-out comparisons, reported: heldout_error is the squared error of each "
             "thin member's pairs fitted without that member, by structure; structure_test is one "
-            "curve against one per chamber (each with heldout_error and above_best, its paired "
-            "difference from the better), with reported giving direction, attendance (attended "
+            "curve against one per chamber (each with heldout_error, above_best, its paired "
+            "difference from the better, and its standard_error), with reported giving direction, attendance (attended "
             "arrivals and departures against the rest) and era (each era's curve on its own members) "
             "against its choice, paired; era_test judges the latest era's curve against that choice "
             "on the latest era's thin pairs alone (members; adopted, whether it would be), with its "

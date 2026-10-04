@@ -301,10 +301,10 @@ export default function ScoresChapter() {
             the same way, and a 0 means they break far more often than that, or, much more rarely,
             far less. On the position part, sitting where the seat predicts is 50, with more only
             for sitting nearer the seat&apos;s center, so a member who matches both scores about 85.
-            Because each party&apos;s yardstick is measured from its own members, a party that
-            happens to be more unified isn&apos;t scored higher for it: across every Senate from
-            1989 on, the two parties&apos; averages differed by 2.1 points on average, and which one
-            was higher changed from Congress to Congress.
+            On the voting part, because each party&apos;s yardstick is measured from its own
+            members, a party that happens to be more unified isn&apos;t scored higher for it: across
+            every Senate from 1989 on, the two parties&apos; average voting-part scores differed by
+            2.1 points on average, and which one was higher changed from Congress to Congress.
           </P>
         </Sub>
         <More label="Where the numbers come from, with September 2026 examples (before v6.20)">
@@ -350,7 +350,7 @@ export default function ScoresChapter() {
             what maximizes their vote share.
           </P>
           <P>
-            The position half uses per-party fits, which avoid the swing-seat artifact a single
+            The position part uses per-party fits, which avoid the swing-seat artifact a single
             pooled fit creates
             <Cite id="bafumi2010" />, and the congress-specific position predicted results better
             than career-long DW-NOMINATE. The full study, including where the evidence is weak (the
