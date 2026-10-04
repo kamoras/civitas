@@ -218,9 +218,15 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         counts = section.get("votes") or {}
         points = {b: (float(x), position_confidence(counts.get(b), reliability))
                   for b, x in (section.get("members") or {}).items()}
+        # A position the section records under the other major party (a
+        # switch since) is not that party's: it stays out of its mean (a
+        # stated choice, as the rule never reads it for the member).
+        cast = section.get("parties") or {}
+        other = {b for b in points if {cast.get(b), party_of.get(b)} == {"R", "D"}}
         center = {}
         for party in ("R", "D"):
-            mine = [(x, w) for b, (x, w) in points.items() if party_of.get(b) == party and w > 0]
+            mine = [(x, w) for b, (x, w) in points.items()
+                    if party_of.get(b) == party and w > 0 and b not in other]
             if mine:
                 center[party] = sum(x * w for x, w in mine) / sum(w for _, w in mine)
         return {b: (x - center.get(party_of.get(b), 0.0), w) for b, (x, w) in points.items()}
@@ -269,7 +275,8 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
                 dim1[b] = (x, w)
             elif dim1[b][1] == 0 and w > 0:
                 # This Congress's position counts for nothing yet (no votes):
-                # any usable last position beats none.
+                # read on the last one, however short (a stated choice; the
+                # alternative wasn't measured).
                 dim1[b] = (x, w)
         elif w > dim1[b][1]:
             dim1[b] = (x, w)

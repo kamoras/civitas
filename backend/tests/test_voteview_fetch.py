@@ -349,6 +349,11 @@ class TestRefresh:
         prior = score_calculator._member_ideal_points("senate")["prior"]
         assert prior == {"congress": 118, "members": {"OLD": 0.4}, "votes": {"OLD": 600}, "parties": {},
                      "reliability": dict(REL)}
+        # A section that records parties passes them on: the flank rule
+        # tells a switch between Congresses by them.
+        assert voteview.previous_positions(
+            {"congress": 118, "members": {"OLD": 0.4}, "parties": {"OLD": "D"}, "reliability": dict(REL)}, 119,
+        )["parties"] == {"OLD": "D"}
         assert await voteview.refresh_member_ideal_points("senate", 119) is True
         assert score_calculator._member_ideal_points("senate")["prior"] == prior
 
@@ -463,7 +468,6 @@ def test_switcher_latest_tells_the_new_id_apart():
     assert voteview.switcher_latest(rows, {"10", "30"}, {})[1] == ["B1"]  # neither has voted
 
 
-
 async def test_first_rolls_are_each_ids_earliest_roll_call(monkeypatch):
     """fetch_first_rolls: each ICPSR id's earliest roll call with a row,
     whatever the id's spelling; a row with no roll number says nothing; a
@@ -491,14 +495,17 @@ async def test_an_unresolved_switcher_alerts_once_and_clears(monkeypatch, tmp_pa
     since = {**rows[0], "icpsr": "91000"}
     sent, resolved = [], []
     from app import ops_alerts
-    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda *a, **k: sent.append(k["condition"]))
+    monkeypatch.setattr(ops_alerts, "send_ops_alert",
+                        lambda subject, body, **k: sent.append((k["condition"], k["dedupe_key"], body)))
     monkeypatch.setattr(ops_alerts, "resolve_ops_alert", lambda c: resolved.append(c))
 
     async def fake_rows(chamber, congress, client=None):
         return [since] + rows if congress == 119 else None
     monkeypatch.setattr(voteview, "fetch_member_rows", fake_rows)
     assert await voteview.refresh_member_ideal_points("senate", 119) is False
-    assert sent == ["voteview-switcher-senate"] and resolved == []
+    # Once a Congress: the dedupe key names it.
+    assert [(c, d) for c, d, _ in sent] == [("voteview-switcher-senate", "voteview-switcher-senate-119")]
+    assert "119th Congress" in sent[0][2] and resolved == []
 
     async def clean(chamber, congress, client=None):
         return rows

@@ -120,6 +120,7 @@ Congress the last good section stays, and a new Congress's component waits
 for a run that passes.
 """
 
+import asyncio
 import csv
 import io
 import logging
@@ -628,17 +629,22 @@ async def refresh_member_ideal_points(
                 "previous member_ideal_points data", chamber,
             )
             # Kept data stops being current at the next Congress, when the
-            # position part drops out: worth an operator's look, once.
+            # position part drops out: worth an operator's look, once a
+            # Congress.
             from app import ops_alerts
-            ops_alerts.send_ops_alert(
+            from app.ordinals import ordinal
+            await asyncio.to_thread(
+                ops_alerts.send_ops_alert,
                 f"Voteview {chamber}: party switcher unresolved",
-                f"The {congress}th Congress's {chamber} export lists a member under two ids, and the "
-                "exports needed to tell the record since the switch apart (the last Congress's members, "
-                "the vote export) couldn't be read or didn't settle it. The previous ideal-point section "
-                "is kept until they do.",
+                f"The {ordinal(congress)} Congress's {chamber} export lists a member under two ids, and "
+                "the exports needed to tell the record since the switch apart (the last Congress's "
+                "members, the vote export) couldn't be read or didn't settle it. The previous "
+                "ideal-point section is kept until they do.",
                 dedupe_key=f"{condition}-{congress}", condition=condition,
             )
             return False
+        from app import ops_alerts
+        await asyncio.to_thread(ops_alerts.resolve_ops_alert, condition)
         data, failures = build_chamber_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),
             reliability=_position_reliability(chamber), congress=congress, latest=latest,
@@ -655,8 +661,6 @@ async def refresh_member_ideal_points(
                 logger.warning("Voteview %s ingestion gate failed: %s", chamber, f)
             return False
         write_member_ideal_points(chamber, data)
-        from app import ops_alerts
-        ops_alerts.resolve_ops_alert(condition)
         fits = ", ".join(
             f"{p}: a={f['a']:+.3f} b={f['b']:+.5f} r2={f['r2']:.2f} n={f['n']}"
             for p, f in data["fit"].items()

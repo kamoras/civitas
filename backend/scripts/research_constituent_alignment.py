@@ -1018,7 +1018,12 @@ def _sitting_effect(p):
                    .fillna("").to_dict("records")}
         votes = pd.read_csv(p[f"{letter}119_votes.csv"], usecols=["icpsr", "rollnumber"])
         first = {str(int(i)): int(n) for i, n in votes.groupby("icpsr")["rollnumber"].min().items()}
-        latest, _ = voteview.switcher_latest(raw, earlier, first)
+        latest, unresolved = voteview.switcher_latest(raw, earlier, first)
+        if unresolved:
+            # The pipeline would keep its previous section rather than
+            # guess; here such a member is left out.
+            print(f"  {chamber}: switchers left out, latest record unsettled: {len(unresolved)}")
+            raw = [r for r in raw if r["bioguide_id"] not in unresolved]
         rows = latest_rows(raw, latest)
         # v6.26 had no placeholder test (mark them so the build keeps them)
         # and read every row, the last one listed winning.

@@ -241,6 +241,24 @@ def test_a_member_who_switched_parties_is_never_read_on_the_last_congress(db_ses
     assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
 
 
+def test_a_position_cast_in_the_other_party_stays_out_of_its_mean(db_session, monkeypatch):
+    """A last-Congress position recorded under the other major party (R0
+    was a Democrat then) is not the Republicans' then: it stays out of their
+    mean, so it can't pull a thin member's side (R3's, read on the prior)."""
+    section = {"members": DIM1, "votes": {**{m: 500 for m in DIM1}, "R3": 2},
+               "reliability": {"n0": 24, "reference_votes": 200}, "congress": 119,
+               "parties": {m: m[0] for m in DIM1},
+               "prior": {"congress": 118, "members": {**DIM1, "R0": -3.0}, "votes": {m: 500 for m in DIM1},
+                         "parties": {m: m[0] for m in DIM1}, "reliability": {"n0": 24}}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    _roll_call(db_session, "house", 34, "On Passage", "HR.9", {"R3": "Nay"})
+    db_session.commit()
+    # Counted in the mean, R0's -3.0 puts R3's 0.5 on the flank side.
+    assert party_line_records(db_session, "house", _members())[3]["flankBreaks"] != []
+    section["prior"]["parties"]["R0"] = "D"
+    assert party_line_records(db_session, "house", _members())[3]["breaks"] != []
+
+
 def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, monkeypatch):
     """Darline Graham took Lindsey Graham's seat after his death; matched by
     last name and state, every roll call he cast in the Congress was hers

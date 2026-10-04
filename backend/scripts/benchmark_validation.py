@@ -299,9 +299,16 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
     from app.pipeline.fetch.voteview import switcher_latest
     first: dict[str, int] = {}
     for v in vote_rows:
+        if not (v.get("rollnumber") or "").strip():
+            continue  # no roll call: says nothing about when the id began
         i, n = str(int(float(v["icpsr"]))), int(float(v["rollnumber"]))
         first[i] = min(first.get(i, n), n)
-    latest, _ = switcher_latest(member_rows, set(), first)
+    latest, unresolved = switcher_latest(member_rows, set(), first)
+    if unresolved:
+        # The pipeline would keep its previous section rather than guess;
+        # here such a member is left without a position.
+        print(f"party switchers whose latest record can't be told apart, left without a position: {unresolved}")
+        member_rows = [r for r in member_rows if (r.get("bioguide_id") or "").strip() not in unresolved]
     congruence = position_congruence(member_rows, chamber, latest)
     # The score's own combination: position at its weight where an ideal
     # point exists, the vote shape alone where one doesn't.

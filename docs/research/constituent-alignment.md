@@ -664,7 +664,9 @@ party's flank, every pair keyed by the transition it spans:
 - **Full records count in full.** Full records show no gradient in their
   count: their slope relative to the drift is 0.99 to 1.02 from 200 to
   over 1,100 votes. So a full record counts 1, and n0 is the least-squares
-  fit of the thin pairs alone.
+  fit of the thin pairs alone. Where a full record starts, 200 votes, is
+  a convention: the data show no gradient from there up, but nothing
+  chose it over a lower count.
 - **What is left out:**
   - Members from outside the 50 states: the House's delegates have thin
     records because they vote only in the Committee of the Whole, not
@@ -894,7 +896,7 @@ itself a sign of how little these data settle.
       switched during the new Congress, or whose party differs between
       the two sections (a switch between Congresses gives a new id in
       each; a section written before this change records no parties, so
-      that check starts with the next ingest). With no usable position
+      that check starts with the next Congress's section). With no usable position
       this Congress such a member has none: their breaks are classified
       on the other defectors' positions, and count when no defector has
       one.
@@ -908,9 +910,9 @@ itself a sign of how little these data settle.
   extremities. A thin record's noise would widen a scale taken over
   everyone, and a scale taken over weighted extremities would cancel the
   weights whenever every record is equally thin.
-  - Early in a Congress, with fewer than 40 full records, the chamber's
-    last scale is carried. It describes the chamber's seats, not any
-    member's record.
+  - Early in a Congress, with fewer than 40 full records (a convention,
+    the floor the ingest already used), the chamber's last scale is
+    carried. It describes the chamber's seats, not any member's record.
   - So the weights do pull thin positions toward 50: with every record at
     5 votes, a position at saturation scores about 45 instead of 0.
 - Voteview's placeholders are dropped. A member a current section has no
@@ -944,8 +946,15 @@ itself a sign of how little these data settle.
     positions are read from their own party's weighted mean, so a
     party-wide shift between the two can't move a member against a party
     read from the other. Only the Congress just before is kept, and only
-    a full last record replaces a new one (unless the new one counts for
-    nothing yet, no votes): those are the cases the pairs measure.
+    a full last record replaces a new one: that is the case the pairs
+    measure. Two stated choices, not measured:
+    - A member whose new position counts for nothing yet (no votes), or
+      who has none, is read on their last position however short; the
+      alternative, classifying the break on the other defectors alone,
+      wasn't compared.
+    - A last-Congress position recorded under the other major party (a
+      switch since) is left out of that party's mean, as it is never
+      read for the member.
   - The pairs, centered as the rule centers, are the evidence. A full
     record is on the same side of its party as the next Congress's full
     record 86% of the time. Thin records, against their pair's full
