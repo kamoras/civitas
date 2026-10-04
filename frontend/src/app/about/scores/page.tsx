@@ -281,9 +281,9 @@ export default function ScoresChapter() {
             using every year we have, though not every time, and by a margin small enough that a
             later recalibration could reverse it. A position from about 46 votes counts half, and
             one from 200 or more counts in full (where a full record starts is our convention). A
-            member with no position yet sits at 50. Early in a new Congress, until its positions are
-            published and pass our checks, or while none of this Congress&apos;s positions for a
-            chamber have passed them, this part is left out and the score is the voting part alone.
+            member with no position yet sits at 50. Until a new Congress&apos;s positions are
+            published and pass our checks, this part is left out and the score is the voting part
+            alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

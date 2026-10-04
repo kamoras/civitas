@@ -10,7 +10,9 @@ other, and says which the score follows and why.
 
 Every number here is printed by
 [`backend/scripts/research_constituent_alignment.py`](../../backend/scripts/research_constituent_alignment.py),
-which downloads the public data at pinned commits and runs every test.
+which downloads the public data at pinned commits and runs every test,
+except the earlier drafts' figures in section 14, which are marked as
+such.
 
 ## The question and the test
 
@@ -778,7 +780,7 @@ in a fixed order, 1,000 times.
   | once per attendance (attended arrivals and departures, the rest) | 1.327 |
   | once per era, plus a party-line term | 1.322 |
 
-  A curve per chamber predicts worse (fitted apart, 25 votes for the
+  A curve per chamber predicts no better (fitted apart, 25 votes for the
   Senate and 55 for the House). Direction and attendance can't be known
   for a sitting member's record; against one curve, direction is worse
   (0.025 above it, standard error 0.014) and attendance within the noise
@@ -860,10 +862,9 @@ in a fixed order, 1,000 times.
 **Nine approaches replaced.** Each appeared in a draft of this change and
 was replaced after review; the fourth, fifth and sixth were not shown to
 help rather than shown not to, and a rerun with more pairs tests them
-again. The career-gap proxy's figures are printed by the research script;
-the other drafts' figures below ("1.5 times", "about 10%", the switchers'
-99 pairs, half point 50 and errors 1.597 and 1.456) come from those
-drafts' own runs and are not reproduced by the current scripts.
+again. Every figure below except the career-gap proxy's and those quoted
+from the current output (the best switch of 101 votes, 36%) comes from
+that draft's own run and is not reproduced by the current scripts.
 
 *The career-gap proxy.* The first draft fit gap² = drift + k / votes, where
 the gap is between a member's Nokken-Poole position and their career

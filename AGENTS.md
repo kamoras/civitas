@@ -297,10 +297,11 @@ Key mathematical properties:
   earlier ones only, as the weight is used: it beats one curve over every
   Congress by 0.066 (standard error 0.034; over the last three transitions
   alone the gain is about one standard error, so weakly settled) and a curve
-  per chamber does worse; a paired one-standard-error rule (a convention,
-  adopted in review after the forward result was seen) decides, and a rerun
-  decides again. The split is a fixed Congress, so nothing is reset for a
-  new Congress. It is a reliability weight, not a count threshold.
+  per chamber predicts no better; a paired one-standard-error rule (a
+  convention, adopted in review after the forward result was seen) decides,
+  and a rerun decides again. The split is a fixed Congress, so nothing is
+  reset for a new Congress. It is a reliability weight, not a count
+  threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Constituent Alignment scores account for Cook

@@ -438,6 +438,8 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert f"(`app/data/position_confidence.json`: {switch}, a full record)" in agents
     assert f"(`prior_until_votes`, {switch} votes, a convention)" in readme
     assert f"({full} votes or more, a convention)" in readme
+    # "A curve per chamber predicts no better" (AGENTS.md, README, the changelog).
+    assert data["forward_test"]["chamber"]["above"] >= -data["forward_test"]["chamber"]["standard_error"]
     split = f"since the {ordinal(data['era_split'])} Congress"
     assert split in agents and split in readme
     # A position published with no count: "about a fifth" in the entry.
