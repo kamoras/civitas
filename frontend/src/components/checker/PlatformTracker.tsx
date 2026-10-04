@@ -52,7 +52,7 @@ function PartisanDepthPanel({
       <div className="flex items-baseline justify-between mb-3">
         <h4 className="text-sm font-mono text-signal-cyan">
           {">"}{" "}
-          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's positions. Based on what they voted for, not what they say. The bar's ends are the limits of the measure: the left end would mean every counted vote went the way of the Democrats' positions in every policy area, the right end the Republicans'. The label above the bar (deeply or moderately partisan, or centrist) ranks this member within their own party, so a short bar can still be among the most partisan in it. Cross-cutting means the policy areas where they side with the other party carry more than 30% of their lean, each area weighted by how strongly it leans.">
+          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's positions. Based on what they voted for, not what they say. The bar's ends are the limits of the measure: the left end would mean every counted vote went the way of the Democrats' positions in every policy area, the right end the Republicans'. The label above the bar (deeply or moderately partisan, or centrist) ranks this member within their own party, so a short bar can still be among the most partisan in it. Cross-cutting means the areas where they side with the other party make up more than 30% of their areas, each area counted by how strongly it leans.">
             PARTISAN DEPTH ANALYSIS
           </MetricTooltip>
         </h4>
@@ -100,7 +100,7 @@ function PartisanDepthPanel({
             {depth.overallParty === "centrist" ? "CTR" : depth.overallParty}
           </div>
           <div className="[&>span]:justify-center text-xs text-ink-min">
-            <MetricTooltip text="Overall ideological direction derived from roll-call votes. R = votes lean Republican, D = votes lean Democrat, CTR = centrist.">
+            <MetricTooltip text="Overall ideological direction derived from roll-call votes. R = votes lean Republican, D = votes lean Democrat, CTR = at the center (within 0.02).">
               LEAN
             </MetricTooltip>
           </div>
@@ -120,7 +120,7 @@ function PartisanDepthPanel({
             {depth.crossPartyCount}
           </div>
           <div className="[&>span]:justify-center text-xs text-ink-min">
-            <MetricTooltip text="Number of policy areas where this member's votes align with the opposite party's platform. Higher = more ideologically independent.">
+            <MetricTooltip text="Number of policy areas where this member's votes align with the opposite party's positions. Higher = more ideologically independent.">
               CROSS
             </MetricTooltip>
           </div>
