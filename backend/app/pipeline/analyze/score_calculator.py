@@ -538,7 +538,8 @@ def _position_reliability(chamber: str) -> dict:
     the reliability weight a congress-specific (Nokken-Poole) position in
     `chamber` gets (v6.27, position_confidence). Measured by
     scripts/calibrate_position_confidence.py on Voteview's own positions:
-    members with a thin record in one Congress and a full one in the next,
+    members with a thin record in one Congress and a full one in the next
+    (or the reverse),
     against full records' drift over the same transition (research note
     section 14). One curve for both chambers unless one per chamber
     predicts held-out members better by more than the noise, for every

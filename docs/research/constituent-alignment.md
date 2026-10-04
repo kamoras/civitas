@@ -484,7 +484,8 @@ Two things produced that:
 party's members who broke sit on average nearer the other party (mean
 first-dimension position from the chamber's Voteview data, of the last
 Congress early in a new one; since v6.27 each position weighted by its
-reliability, section 14) than the party does (`party_line_record._toward_other_party`). Other breaks are listed on the
+reliability, and until a member's new record reaches 200 votes their last
+Congress's full record decides their side, section 14) than the party does (`party_line_record._toward_other_party`). Other breaks are listed on the
 scorecard as from the flank, and not counted. The rate is measured over
 every roll call the chamber recorded this Congress, not a sample.
 
@@ -782,8 +783,9 @@ now decides, and keeps one curve.
 *Flank-rule switches chosen in sample.* The fifth draft switched the
 flank rule at 53 votes, on pairs centered on the median of each party's
 full records rather than as the rule centers, with noise and drift
-assumed independent everywhere. The sixth switched at 92, the best
-switch over all thin pairs, without testing it out of bag or on the
+assumed independent everywhere. The sixth switched at 92, then the best
+switch over all thin pairs (163 once members who served on both sides of
+a thin record are left out), without testing it out of bag or on the
 pairs shaped like the rule's case; there it doesn't hold up (below).
 
 **Shipped (v6.27).**
@@ -933,12 +935,12 @@ which read placeholders as positions and weighted nothing, with v6.27:
     position move from 23.3 and 31.1 to 50.
   - Representatives with 77 and 72 votes move from 93.2 to 79.7 and from
     75.3 to 66.8.
-  - Representatives with 116–171 votes move 1 to 4 points.
+  - Two representatives far beyond saturation (135 and 182 votes) stay at
+    its end; the other representatives with 116–171 votes move 1 to 4
+    points.
   - Senators with 53 and 187 votes move under 1.
   - Members scored from 1 to 39 votes or a placeholder, all since departed,
     move by up to 50 points.
-  - Of these, two far beyond saturation (135 and 182 votes) stay at its
-    end.
 
 ## What the evidence does not settle
 
@@ -968,7 +970,7 @@ which read placeholders as positions and weighted nothing, with v6.27:
   leaves the party whose senators spread more widely around the seat's
   norm (Republicans, in most Senates since 1989) with more members near 0
   and near 100.
-- **The thin-record weight rests on 85 members.** Few members have a thin
+- **The thin-record weight rests on 85 thin pairs.** Few members have a thin
   record next to a full one, so the half point has a wide interval
   (22–98 votes, the upper end where the n0 search stops), and whether
   the chambers differ can't be settled: fitted apart they come to 25 and
@@ -977,7 +979,7 @@ which read placeholders as positions and weighted nothing, with v6.27:
   curve per direction (entrants, leavers) predicts worse than one for
   both, and whether early records in a Congress behave like these is
   untested. The no-count weight rests on fewer still (24 pairs). The
-  flank rule's switch test rests on the 42 members who left, 13 of them
+  flank rule's switch test rests on the 42 pairs of members who left, 13
   with over 100 votes, and whether returning members' early records
   behave like theirs is untested too. Rerunning the calibration adds each
   Congress's new pairs, and decides the structure and the switch again.

@@ -334,3 +334,13 @@ def test_the_out_of_bag_test_judges_on_the_members_left_out(monkeypatch):
     if sparse["draws_judged"] == 0:
         assert sparse["saved_out_of_bag"] is None
     assert script.prior_until_votes({"switch_test": {"rule_shape": {**sparse, "saved_out_of_bag": None}}}) == 200.0
+
+
+def test_the_about_page_quotes_the_shipped_half_point():
+    """The public methodology page states the half point in prose; a rerun
+    that moves it must move the page too."""
+    page = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "app" / "about" / "scores" / "page.tsx"
+    if not page.exists():  # the backend image ships without the frontend
+        return
+    half = round(json.loads(_DATA.read_text())["chambers"]["house"]["half_weight_votes"])
+    assert f"about {half} votes counts half" in " ".join(page.read_text().split())

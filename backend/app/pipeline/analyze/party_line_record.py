@@ -11,10 +11,11 @@ election results (docs/research/constituent-alignment.md, sections 11-12):
 
 - A break counts only toward the other party. On that roll call, the party
   members who broke sit, on average, nearer the other party (first-dimension
-  position from the chamber's Voteview section, of any Congress, each
-  weighted by its reliability and read from its party's mean since v6.27;
-  until a member's new record reaches prior_until_votes, their last
-  Congress's full record decides their side) than their party as a whole. Hardliners voting down their
+  position from the chamber's Voteview section, the current or the last
+  Congress's, each weighted by its reliability and read from its party's
+  mean since v6.27; until a member's new record reaches prior_until_votes,
+  their last Congress's full record decides their side) than their party
+  as a whole. Hardliners voting down their
   own party's bill from the flank vote against it too, but that is not
   independence toward the seat, and the member's flank position is already
   scored, by position congruence. Such votes are kept as flankBreaks: shown,

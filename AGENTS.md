@@ -593,16 +593,17 @@ congress" sidesteps that fragility entirely and is *stricter* than a literal
 resting on laurels" goal, not softer.
 
 The flank-break rule (`party_line_record`, v6.27) is a narrower exception
-that never scores a past position: it reads the last Congress's positions
-only to tell which side of their party a defector sits on, for everyone
-until the new Congress's Voteview section passes its gates, and after that
-for a member whose last record is full and whose new one has no count or
-fewer than `prior_until_votes` (`app/data/position_confidence.json`: a
-full record, 200 votes, by convention, unless a shorter switch saves sides
-out of bag in 95% of resamples, also a convention; none does), or who
-has no usable
-position in the new section. Only the Congress just before is kept as
-the prior.
+that never scores a past position. It reads the last Congress's positions
+only to tell which side of their party a defector sits on: for everyone
+until the new Congress's Voteview section passes its gates; after that,
+for a member whose new record has no count or fewer than
+`prior_until_votes` votes (`app/data/position_confidence.json`: 200, a
+full record) if their last record was full; and, whatever the last
+record, for a member the new section gives no usable position. The 200
+and the bar for replacing it are conventions: the calibration would
+adopt a shorter switch only if it placed members on the right side
+better out of bag in 95% of resamples, and none does. Only the Congress
+just before is kept.
 
 **Funding is the main exception**: Funding Independence and Funding Diversity
 window to the member's **most recent completed election only**
