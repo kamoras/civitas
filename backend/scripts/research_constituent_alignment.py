@@ -1066,7 +1066,7 @@ def _sitting_effect(p):
         print(f"  {chamber}: v6.27 component mean {np.mean(after_all):.1f} over {len(after_all)} positioned members")
         print(f"  {chamber}: saturation {old['extremity_p90']} -> {new['extremity_p90']} ({fits}); mean |change| "
               f"{np.mean(changes):.2f} on the component, {0.3 * np.mean(changes):.2f} on Constituent Alignment, "
-              f"over {len(changes)} members; r2 R {new['fit']['R']['r2']}")
+              f"over {len(changes)} members; r2 D {new['fit']['D']['r2']} R {new['fit']['R']['r2']}")
         print(f"   under {RELIABLE_VOTES} votes, no count or no position: " + "; ".join(thin))
         if unmeasured:
             print(f"   of no major party since a switch, not compared: {len(unmeasured)}")
@@ -1293,7 +1293,7 @@ def position_scale_test(p, m):
           f"across a Congress, centered as the rule centers): {shipped['prior_test']}; reads the last full "
           f"record below {shipped['prior_until_votes']} votes; structure test {shipped['structure_test']}")
     for key in ("forward_test", "era_test", "era_split_test", "trend_test", "switcher_test", "thin_pairs_by_era",
-                "half_weight_votes_pooled_interval_90"):
+                "half_weight_votes_pooled_interval_90", "thin_offset"):
         print(f"  {key}: {shipped[key]}")
     for c, by in shipped["party_line_share_by_congress"].items():
         print(f"  {c} party-line share by Congress: " + ", ".join(f"{k}:{v:.2f}" for k, v in by.items()))
