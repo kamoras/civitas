@@ -125,6 +125,90 @@ def test_the_breakdown_serves_each_counted_break_with_its_roll_call(db_session):
     assert facts["flankBreakVotes"][0]["rollCall"]["billId"] == "HR.2"
 
 
+def test_a_thin_records_position_barely_moves_the_direction_of_a_break(db_session, monkeypatch):
+    """v6.27: R0 (center) and R4 (flank) break together. Read at full weight
+    the defectors average 0.55, flank-side of the party's 0.51; but R4's
+    position rests on 2 roll calls, so it counts at 2 / (2 + 24) and the
+    break is toward the Democrats. Ten Republicans, so two defectors still
+    leave a party-line vote."""
+    roster = {**DIM1, **{f"R{i}": 0.5 for i in range(5, 10)}}
+    monkeypatch.setitem(globals(), "DIM1", roster)
+    full = {m: 500 for m in roster}
+    section = {"members": roster, "votes": full, "reliability": {"n0": 24}}
+    _roll_call(db_session, "house", 30, "On Passage", "HR.5", {"R0": "Nay", "R4": "Nay"})
+    db_session.commit()
+
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    assert party_line_records(db_session, "house", _members())[0]["flankBreaks"] != []
+
+    section["votes"] = {**full, "R4": 2}
+    records = party_line_records(db_session, "house", _members())
+    assert records[0]["breaks"] == [{"rollCall": "house-119-2-30", "vote": "Nay"}]
+    assert records[4]["breaks"] == [{"rollCall": "house-119-2-30", "vote": "Nay"}]
+
+
+def test_another_congresss_positions_still_set_a_breaks_direction(db_session, monkeypatch):
+    """The flank rule needs only which side of their party the defectors sit,
+    and positions carry across Congresses: a section from another Congress
+    still classifies these roll calls (stale beats punitive), so R4's break
+    from the flank stays a flank break rather than counting."""
+    monkeypatch.setattr(party_line_record, "_member_ideal_points",
+                        lambda chamber: {"members": DIM1, "congress": 120})
+    _roll_call(db_session, "house", 31, "On Passage", "HR.6", {"R4": "Nay"})
+    db_session.commit()
+    record = party_line_records(db_session, "house", _members())[4]
+    assert record["breaks"] == [] and record["flankBreaks"] != []
+
+
+def test_a_lone_thin_defector_is_placed_by_the_last_congresss_full_record(db_session, monkeypatch):
+    """A lone defector's side is its own position's, whatever its weight, so
+    early in a Congress the last Congress's full record ("prior") decides it:
+    R4's 2-vote position reads center-side (0.3), its full record flank-side
+    (0.9). Without the prior the break counts; with it, it is a flank break.
+    A full current position is kept over the prior."""
+    current = {**DIM1, "R4": 0.3}
+    section = {"members": current, "votes": {**{m: 500 for m in DIM1}, "R4": 2}, "reliability": {"n0": 24},
+               "congress": 119}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    _roll_call(db_session, "house", 32, "On Passage", "HR.7", {"R4": "Nay"})
+    db_session.commit()
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+
+    section["prior"] = {"congress": 118, "members": DIM1, "votes": {m: 500 for m in DIM1}, "reliability": {"n0": 24}}
+    record = party_line_records(db_session, "house", _members())[4]
+    assert record["breaks"] == [] and record["flankBreaks"] != []
+
+    section["votes"]["R4"] = 500
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+
+    # With a full record's count known, a full last record decides until the
+    # new record reaches the switch (a full record by default, and without one),
+    # whatever the weights, and the new one from then.
+    section["reliability"] = {"n0": 24, "reference_votes": 200}
+    section["votes"]["R4"] = 199
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    section["votes"]["R4"] = 200
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+    section["reliability"]["prior_until_votes"] = 90
+    section["votes"]["R4"] = 89
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    section["votes"]["R4"] = 90
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+    del section["votes"]["R4"]  # no count reported: read as thin
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    # Only a full last record was measured against a thin new one: a thin
+    # last record (here under reference_votes) leaves this Congress's...
+    section["reliability"]["reference_votes"] = 600
+    section["votes"]["R4"] = 2
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+    # ...unless this Congress's counts for nothing yet (no votes).
+    section["votes"]["R4"] = 0
+    assert party_line_records(db_session, "house", _members())[4]["flankBreaks"] != []
+    # A section carried from the last Congress (the roll calls' is newer)
+    # brings an older prior, which isn't read.
+    section["congress"] = 118
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+
 def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, monkeypatch):
     """Darline Graham took Lindsey Graham's seat after his death; matched by
     last name and state, every roll call he cast in the Congress was hers
@@ -148,3 +232,154 @@ def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, m
         "party": "R", "votingRecord": {"effectiveParty": "R"},
     }])
     assert record["votes"] == 1, record
+
+
+def test_each_congresss_positions_are_read_from_their_own_partys_mean(db_session, monkeypatch):
+    """The whole Republican conference sits 0.3 further right in the last
+    Congress's positions. R4 (2 votes now) is read from those, the rest from
+    this Congress's: R4's last position, 0.6, is right of every current
+    Republican but left of its own Congress's party mean (0.82), so its break
+    is toward the Democrats, not from the flank."""
+    current = {**DIM1, "R0": 0.4, "R1": 0.5, "R2": 0.5, "R3": 0.5, "R4": 0.45}
+    prior = {**DIM1, "R0": 0.9, "R1": 0.8, "R2": 0.8, "R3": 0.8, "R4": 0.6}
+    full = {m: 500 for m in DIM1}
+    section = {"members": current, "votes": {**full, "R4": 2}, "reliability": {"n0": 24}, "congress": 119,
+               "prior": {"congress": 118, "members": prior, "votes": full, "reliability": {"n0": 24}}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    _roll_call(db_session, "house", 33, "On Passage", "HR.8", {"R4": "Nay"})
+    db_session.commit()
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+
+
+def test_a_lone_defector_is_read_against_the_party_center_without_colleagues(db_session, monkeypatch):
+    """Passed one senator, no colleague's roll-call vote can be tied to a
+    position. A lone defector is still placed: R0 breaking from the center
+    counts and R4 breaking from the flank doesn't, each read against the
+    party's own center in the section, taken over the chamber's stored
+    senators. (The Senate pipeline passes the whole roster on a filtered
+    run, so breaks with several defectors are read as in a full run.)"""
+    from app.models import Senator
+    monkeypatch.setattr(party_line_record, "_member_ideal_points",
+                        lambda chamber: {"members": {f"bio-{m}": d for m, d in DIM1.items()}})
+    for m in DIM1:
+        db_session.add(Senator(id=f"S-{m}", bioguide_id=f"bio-{m}", name=f"{m} Last{m}", state="TN", party=m[0]))
+    _roll_call(db_session, "senate", 24, "On Passage", "S.24", {"R0": "Nay"})
+    _roll_call(db_session, "senate", 25, "On Passage", "S.25", {"R4": "Nay"})
+    db_session.commit()
+    members = _members()
+    for m in members:
+        m["bioguideId"] = f"bio-{m['bioguideId']}"
+    full = party_line_records(db_session, "senate", members)
+    for i, rc in ((0, "senate-119-2-24"), (4, "senate-119-2-25")):
+        (alone,) = party_line_records(db_session, "senate", [members[i]])
+        assert alone["breaks"] == full[i]["breaks"] and alone["flankBreaks"] == full[i]["flankBreaks"]
+    assert full[0]["breaks"] == [{"rollCall": "senate-119-2-24", "vote": "Nay"}]
+    assert full[4]["flankBreaks"] == [{"rollCall": "senate-119-2-25", "vote": "Nay"}]
+
+
+def test_members_passed_without_a_voting_record_take_their_stored_caucus(db_session, monkeypatch):
+    """A filtered Senate run passes the rest of the chamber as roster
+    entries with no voting record. An independent among them reads as the
+    party they caucus with (stored), as in a full run: here I0, caucusing
+    with the Democrats, breaks with D0, and D0's break reads the same."""
+    from app.models import Senator
+    dims = {"D0": -0.5, **{f"D{i}": -0.4 for i in range(1, 6)}, "I0": -0.05, **{f"R{i}": 0.5 for i in range(6)}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points",
+                        lambda chamber: {"members": {f"bio-{m}": d for m, d in dims.items()}})
+    for m in dims:
+        db_session.add(Senator(id=f"S-{m}", bioguide_id=f"bio-{m}", name=f"{m} Last{m}", state="TN", party=m[0],
+                               caucus_party="D" if m == "I0" else None))
+    rc = RollCall(chamber="senate", congress=119, session=2, number=40, date="2026-03-01", question="On Passage",
+                  bill_id="S.40")
+    db_session.add(rc)
+    db_session.flush()
+    for m in dims:
+        vote = "Yea" if m in ("D0", "I0") or m.startswith("R") else "Nay"
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=m, last_name=f"Last{m}", first_name=m,
+                                        party=m[0], state="TN", position=vote))
+    db_session.commit()
+
+    def member(m, scored):
+        out = {"bioguideId": f"bio-{m}", "name": f"{m} Last{m}", "lastNameForVoteMatch": f"Last{m}", "state": "TN",
+               "party": m[0]}
+        return {**out, "votingRecord": {"effectiveParty": "D" if m == "I0" else m[0]}} if scored else out
+    full = party_line_records(db_session, "senate", [member(m, True) for m in dims])
+    filtered = party_line_records(db_session, "senate", [member("D0", True)] + [member(m, False) for m in dims if m != "D0"])
+    assert filtered[0]["breaks"] == full[0]["breaks"] and filtered[0]["flankBreaks"] == full[0]["flankBreaks"]
+
+
+def test_a_section_a_congress_ahead_reads_the_roll_calls_congress_from_its_prior(db_session, monkeypatch):
+    """After Jan 3 the section can be the new Congress's before its first
+    roll call is stored: the 119th roll calls are then read on the prior it
+    keeps, the 119th's own positions (R4 flank-side there)."""
+    current = {**DIM1, "R4": 0.3}
+    section = {"members": current, "reliability": {"n0": 24, "reference_votes": 200}, "congress": 120,
+               "prior": {"congress": 119, "members": DIM1, "votes": {m: 500 for m in DIM1},
+                         "reliability": {"n0": 24, "reference_votes": 200}}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    _roll_call(db_session, "house", 41, "On Passage", "HR.41", {"R4": "Nay"})
+    db_session.commit()
+    record = party_line_records(db_session, "house", _members())[4]
+    assert record["breaks"] == [] and record["flankBreaks"] != []
+    # A member only the newer section has (sworn in since) is read from it.
+    section["prior"]["members"] = {m: d for m, d in DIM1.items() if m != "R4"}
+    section["members"]["R4"], section["votes"] = 0.9, {**{m: 500 for m in DIM1}, "R4": 40}
+    record = party_line_records(db_session, "house", _members())[4]
+    assert record["flankBreaks"] != []
+    del section["members"]["R4"]
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+
+
+def test_a_house_independents_stored_caucus_reads_over_the_roll_calls_party(db_session, monkeypatch):
+    """The House's roll calls give every member's party, an independent's as
+    "I"; the stored caucus party reads over it. R9 ("I" on the roll calls,
+    caucusing with the Republicans, sitting far right) breaks with R4, who
+    sits center-side: read as a Republican, R9 pulls the defectors' mean to
+    the flank, so R4's break is a flank break; read as "I", R9 is left out
+    and R4's break counts."""
+    from app.models import Representative
+    dims = {**DIM1, "R4": 0.3, "R9": 2.0}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": dims})
+    rc = RollCall(chamber="house", congress=119, session=2, number=50, date="2026-03-01", question="On Passage",
+                  bill_id="HR.50")
+    db_session.add(rc)
+    db_session.flush()
+    for m in dims:
+        party = "I" if m == "R9" else m[0]
+        vote = "Nay" if m in ("R4", "R9") else ("Yea" if m[0] == "R" else "Nay")
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=m, last_name=f"Last{m}", first_name=m,
+                                        party=party, state="TN", position=vote))
+    db_session.commit()
+    alone = party_line_records(db_session, "house", _members())[4]
+    db_session.add(Representative(id="H-R9", bioguide_id="R9", name="R9 LastR9", state="TN", district=9,
+                                  party="I", caucus_party="R"))
+    db_session.commit()
+    with_caucus = party_line_records(db_session, "house", _members())[4]
+    assert alone["breaks"] != [] and with_caucus["flankBreaks"] != []
+
+
+def test_a_house_roll_calls_label_reads_its_own_parties(db_session, monkeypatch):
+    """The label (a party-line roll call or not) reads the roll call's own
+    parties, as its stored partySplit does. All Republicans vote Yea; 2 of 7
+    Democrats join them (29%, a party line), and so does an independent ("I"
+    on the roll call) who caucuses with the Democrats. Counted as a Democrat
+    the independent would make it 3 of 8 (38%, no party line); read by the
+    roll call it isn't, so the Democrats who joined broke with their party."""
+    from app.models import Representative
+    dims = {**{f"R{i}": 0.5 for i in range(5)}, **{f"D{i}": -0.4 for i in range(7)}, "I0": -0.3}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": dims})
+    db_session.add(Representative(id="H-I0", bioguide_id="I0", name="I0 LastI0", state="TN", district=9,
+                                  party="I", caucus_party="D"))
+    rc = RollCall(chamber="house", congress=119, session=2, number=60, date="2026-03-01", question="On Passage",
+                  bill_id="HR.60")
+    db_session.add(rc)
+    db_session.flush()
+    for m in dims:
+        vote = "Yea" if m.startswith("R") or m in ("D0", "D1", "I0") else "Nay"
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=m, last_name=f"Last{m}", first_name=m,
+                                        party="I" if m == "I0" else m[0], state="TN", position=vote))
+    db_session.commit()
+    members = [{"bioguideId": m, "name": f"{m} Last{m}", "lastNameForVoteMatch": f"Last{m}", "state": "TN",
+                "party": m[0], "votingRecord": {"effectiveParty": "D" if m == "I0" else m[0]}} for m in dims]
+    records = dict(zip(dims, party_line_records(db_session, "house", members)))
+    assert records["D0"]["breaks"] or records["D0"]["flankBreaks"]

@@ -1095,6 +1095,7 @@ async def run_senate_pipeline(
             logger.info("--- Phase 2: TRANSFORM (members) ---")
             progress.begin("normalize_members")
             senators = normalize_members(raw_members, member_details)
+            roster = list(senators)  # the whole chamber, kept through a filtered run
             logger.info("Normalized %d senators", len(senators))
             progress.complete("normalize_members", detail=f"{len(senators)} senators")
 
@@ -1996,9 +1997,13 @@ async def run_senate_pipeline(
 
         # Each senator's party-line record over the whole Congress (v6.20),
         # before the reference is measured on it.
-        for p, record in zip(senator_prepared, party_line_records(
-            db, "senate", [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared],
-        )):
+        # A filtered run passes the rest of the chamber too: a break is read
+        # against the other defectors and the party, whose roll-call votes
+        # are tied to positions only through these members.
+        scored = [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared]
+        ids = {m.get("id") for m in scored}
+        rest = [s for s in roster if s.get("id") not in ids] if senator_filter else []
+        for p, record in zip(senator_prepared, party_line_records(db, "senate", scored + rest) if scored else []):
             p["votingRecord"]["partyLineRecord"] = record
 
         funding_reference = live_funding_reference(

@@ -277,14 +277,29 @@ inline academic citations.
 Key mathematical properties:
 - **Linear shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
   a senator with 1 campaign promise gets a score near 50, not 0 or 100).
-  Two exceptions: Constituent Alignment's vote part shrinks toward the
+  Three exceptions: Constituent Alignment's vote part shrinks toward the
   party's measured typical score (its scale tops out at the seat's norm, so
   50 is below average), and Legislative Effectiveness's bill component
   doesn't shrink by bill count (a member's bills are the whole record, not
   a sample) — its leadership component is still pulled toward 50 for short
   tenure.
-  The rate is the count confidence below — fixed, not estimated from the
-  population's variance, so do not call it Bayesian or empirical Bayes
+  For these, the rate is the count confidence below — fixed, not estimated
+  from the population's variance, so do not call it Bayesian or empirical
+  Bayes.
+  The third, whose rate is measured rather than fixed: Constituent
+  Alignment's position part (v6.27) scales a roll-call position's
+  distance from the seat's expected position, when the position rests on
+  n votes, by min(1, w(n) / w(200)), w(n) = n / (n + n0): the measured
+  slope of a member's full-record position on their thin one, a full record counting 1. n0 is fitted on
+  Voteview's own adjacent-Congress records with drift per transition
+  (`scripts/calibrate_position_confidence.py`). A paired
+  one-standard-error rule on held-out members picks the structure: one
+  curve, one per chamber, or one per era split at the 110th Congress
+  (fixed in advance), applied as the latest era's. It picks the era
+  split now (held-out error 1.279 against one curve's 1.336, standard
+  error 0.054), for both chambers; a rerun decides again. The split is a
+  fixed Congress, so nothing is reset for a new Congress.
+  It is a reliability weight, not a count threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Constituent Alignment scores account for Cook
@@ -581,7 +596,21 @@ congress" sidesteps that fragility entirely and is *stricter* than a literal
 6-year term (resets every 2 years, not 6) — it pushes harder on the "no
 resting on laurels" goal, not softer.
 
-**Funding is the one exception**: Funding Independence and Funding Diversity
+Besides funding (below), the flank-break rule (`party_line_record`,
+v6.27) is a narrower exception that never scores a past position. It
+reads the last Congress's positions only to tell which side of their
+party a defector sits on: for everyone until the new Congress's Voteview section passes its gates; after that,
+for a member whose new record has no count or fewer than
+`prior_until_votes` votes (`app/data/position_confidence.json`: 200, a
+full record) if their last record was full; and, whatever the last
+record, for a member the new section gives no usable position. The 200
+and the bar for replacing it are conventions: the calibration would
+adopt a shorter switch only if it placed members on the right side
+better out of bag in 95% of resamples, and too few thin records have the
+rule's shape to measure one. Only the Congress
+just before is kept.
+
+**Funding is the main exception**: Funding Independence and Funding Diversity
 window to the member's **most recent completed election only**
 (`select_recent_elections` in `fetch/fec.py`, `n=1`: general election day
 has passed — a re-election campaign still in progress is the *next*

@@ -23,6 +23,7 @@ in a swing seat) and 3 below (never reached there: 0% is 1.11 below).
 
 import pytest
 
+from app.config import settings
 from app.pipeline.analyze import score_calculator
 from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
 from app.pipeline.analyze.score_calculator import (
@@ -477,14 +478,22 @@ class TestPositionCongruence:
 
     @pytest.fixture(autouse=True)
     def ideal_points(self, monkeypatch):
-        def patch(members):
-            monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", {"senate": {
+        def patch(members, votes=None, reliability=None, **extra):
+            section = {
                 "members": members,
                 "fit": {"D": {"a": -0.35, "b": 0.006}, "R": {"a": 0.35, "b": 0.006}},
                 "extremity_p90": 0.2,
                 "measure": "Nokken-Poole",
-            }})
+                **extra,
+            }
+            if votes is not None:
+                section.update(votes=votes, reliability=reliability or {"n0": 24})
+            monkeypatch.setattr(score_calculator, "_member_ideal_points_cache", {"senate": section})
         self.patch = patch
+
+    def _congruence(self, bioguide_id="X1"):
+        core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id=bioguide_id)
+        return {c["label"]: c for c in core["components"]}["Position congruence"]
 
     def test_flank_ward_scores_below_neutral(self):
         self.patch({"X1": -0.55})
@@ -511,6 +520,105 @@ class TestPositionCongruence:
         core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id="X1")
         assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
         assert core["components"][0]["weight"] == 1.0
+
+    def test_a_position_is_weighted_by_its_reliability(self):
+        """v6.27: 24 roll calls against n0 24 (no reference), so a position
+        at saturation toward the flank counts half: 25, not 0."""
+        self.patch({"X1": -0.55}, votes={"X1": 24})
+        assert self._congruence()["score"] == 25.0
+        assert "rests on 24 roll calls, so it counts at 50% strength" in self._congruence()["detail"]
+        self.patch({"X1": -0.55}, votes={"X1": 24}, reliability={"n0": 24, "half_weight_votes": 24})
+        assert "half strength at about 24 roll calls" in self._congruence()["detail"]
+
+    def test_the_weight_applies_before_the_scale_saturates(self):
+        """The weight is on the position: a position twice past saturation
+        on 24 votes (half weight) is still at saturation, 0, not halfway."""
+        self.patch({"X1": -0.75}, votes={"X1": 24})
+        assert self._congruence()["score"] == 0.0
+
+    def test_a_full_record_is_barely_weighted(self):
+        self.patch({"X1": -0.55}, votes={"X1": 576})
+        assert self._congruence()["score"] == 2.0  # 50 - 50 * 576 / 600
+        self.patch({"X1": -0.15}, votes={"X1": 576})
+        assert self._congruence()["score"] == 98.0
+
+    def test_no_count_gets_the_measured_uncounted_weight(self):
+        """Voteview reports no count: the position counts at the weight
+        measured for such positions (0.2 here), and the breakdown says so
+        rather than "0 roll calls"."""
+        self.patch({"X1": -0.55}, votes={}, reliability={"n0": 24, "uncounted_weight": 0.2})
+        assert self._congruence()["score"] == 40.0
+        assert "reports no count" in self._congruence()["detail"]
+        assert "0 roll calls" not in self._congruence()["detail"]
+
+    def test_a_position_from_no_counted_votes_sits_at_neutral(self):
+        """No count and no career position: stored as 0 votes at ingest, so
+        the position counts nothing, and the breakdown says that plainly."""
+        self.patch({"X1": -0.55}, votes={"X1": 0}, reliability={"n0": 24, "uncounted_weight": 0.2})
+        assert self._congruence()["score"] == 50.0
+        assert "has no career position yet" in self._congruence()["detail"]
+        # With no calibration the position counts in full, and the text says nothing of 50.
+        self.patch({"X1": -0.55}, votes={"X1": 0}, reliability={"n0": 0})
+        assert self._congruence()["score"] == 0.0
+        assert "has no career position yet" not in self._congruence()["detail"]
+
+    def test_a_full_record_counts_in_full(self):
+        """A full record (here the reference, 576 votes, or more) counts in full."""
+        self.patch({"X1": -0.55}, votes={"X1": 800},
+                   reliability={"n0": 24, "reference_votes": 576})
+        assert self._congruence()["score"] == 0.0
+
+    def test_no_position_in_a_current_section_sits_at_neutral(self):
+        """A seated member Voteview hasn't placed (or gave its 0, 0
+        placeholder) gets the neutral 50 a position from no votes would,
+        not a dropped component that would let the vote part carry it all."""
+        self.patch({"X2": -0.4}, votes={"X2": 500})
+        core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id="X1")
+        by_label = {c["label"]: c for c in core["components"]}
+        assert by_label["Position congruence"]["score"] == 50.0
+        assert "no position" in by_label["Position congruence"]["detail"]
+
+    def test_a_section_without_counts_is_not_weighted(self):
+        """A file written before v6.27 has no counts or reliability."""
+        self.patch({"X1": -0.55})
+        assert self._congruence()["score"] == 0.0
+        self.patch({})
+        core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id="X1")
+        assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
+
+    def test_no_calibration_no_weighting(self):
+        self.patch({"X1": -0.55}, votes={"X1": 5}, reliability={"n0": 0})
+        assert self._congruence()["score"] == 0.0
+
+    def test_another_congresss_section_is_not_read(self):
+        """A refresh that failed after Jan 3 leaves the last Congress's
+        positions on disk; they are not this term's record (principle 6)."""
+        rec = {**record(10), "partyLineRecord": {"congress": 120, "votes": 0, "breaks": []}}
+        self.patch({"X1": -0.55}, votes={"X1": 500}, congress=119)
+        core = _constituent_alignment_core(rec, [], {}, state="SW", party="D", bioguide_id="X1")
+        assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
+        self.patch({"X1": -0.55}, votes={"X1": 500}, congress=120)
+        core = _constituent_alignment_core(rec, [], {}, state="SW", party="D", bioguide_id="X1")
+        assert {c["label"]: c for c in core["components"]}["Position congruence"]["score"] < 5
+
+    def test_a_member_with_no_party_line_record_is_judged_by_the_sitting_congress(self, monkeypatch):
+        """Matched to no roll call, a member has no record's Congress, so the
+        section is judged against the sitting one."""
+        monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
+        self.patch({"X1": -0.55}, votes={"X1": 500}, congress=119)
+        core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id="X1")
+        assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
+        self.patch({"X1": -0.55}, votes={"X1": 500}, congress=120)
+        assert self._congruence()["score"] < 5
+
+    def test_the_breakdown_reads_the_positions_of_the_records_congress(self, monkeypatch):
+        """Across Jan 3, a stored 119th score's breakdown still reads the
+        119th positions it was scored on, until the next run rescores it."""
+        monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
+        self.patch({"X1": -0.55}, votes={"X1": 500}, congress=119)
+        rec = {**record(10), "partyLineRecord": {"congress": 119, "votes": 0, "breaks": []}}
+        core = _constituent_alignment_core(rec, [], {}, state="SW", party="D", bioguide_id="X1")
+        assert "Position congruence" in [c["label"] for c in core["components"]]
 
     def test_breakdown_weights_and_measure(self):
         self.patch({"X1": -0.15})
@@ -540,7 +648,7 @@ class TestPositionMeasure:
         assert _position_column(self._rows(with_np=False))[0] == "nominate_dim1"
 
     def test_build_records_the_measure_and_uses_its_values(self):
-        data, _ = build_chamber_ideal_points(self._rows(), "senate", {"SW": 0}, {})
+        data, _ = build_chamber_ideal_points(self._rows(), "senate", {"SW": 0}, {}, reliability={})
         assert data["measure"] == "Nokken-Poole"
         assert set(data["members"].values()) == {0.5}
 

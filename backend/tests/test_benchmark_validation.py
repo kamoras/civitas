@@ -46,7 +46,8 @@ def senate(tmp_path, monkeypatch):
         members.append({"chamber": "Senate", "icpsr": str(i), "bioguide_id": f"B{i}",
                         "state_abbrev": st, "district_code": "0",
                         "party_code": "100" if party == "D" else "200",
-                        "nominate_dim1": f"{position:.4f}", "nokken_poole_dim1": f"{position:.4f}"})
+                        "nominate_dim1": f"{position:.4f}", "nokken_poole_dim1": f"{position:.4f}",
+                        "nominate_number_of_votes": "500"})
         rate = min(max(0.05 + 0.004 * lean_away + 0.03 * personal, 0.0), 0.9)
         vote_part = max(0.0, 100 - (40 * personal if personal > 0 else -20 * personal))
         position_part = 50 + 50 * max(-1.0, min(personal / 2, 1.0))
@@ -73,6 +74,17 @@ def test_the_constructs_correlate_in_the_expected_direction(senate, capsys):
     out = capsys.readouterr().out
     assert "CA vs seat-relative vote shape (Voteview): r = +" in out
     assert "CA vs Constituent Alignment recomputed from Voteview: r = +" in out
+
+
+def test_the_position_part_is_built_not_silently_skipped(senate, capsys):
+    """The recomputed score claims both parts; with no position part it says so."""
+    members = bv.fetch_csv("/members/")
+    assert len(bv.position_congruence(members, "senate")) == 100
+    assert "position part not built" not in capsys.readouterr().out
+    for m in members:
+        m["party_code"] = "100"  # one party: no Republican fit
+    assert bv.position_congruence(members, "senate") == {}
+    assert "position part not built" in capsys.readouterr().out
 
 
 def test_les_is_checked_when_supplied(senate, tmp_path):
