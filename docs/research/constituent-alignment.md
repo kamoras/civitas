@@ -1117,19 +1117,20 @@ better (above).
     attendance convention doesn't decide it.
   - So the switch rests on its conventions: keeping the last full record
     until the new one is full is the rule as designed, the one count at
-    which the new record needs no model to be trusted, and nothing in
-    these data is shaped closely enough like the rule's case to replace
-    it. The 95% bar is a convention too, and strict: any resample whose
-    own best is a full record saves exactly nothing. The stakes are small;
-    a rerun with more attended leavers could find a switch that clears the
-    bar.
-  - At very low counts the model's logistic in log votes extrapolates
-    below a coin flip; flooring it at one changes nothing measurable.
-    Early in a real Congress the party's center is itself measured on
-    thin records, so the pairs, centered on a whole Congress, flatter a
-    new record; that points toward keeping the last full record too. This
-    first applies in the 120th Congress: a 119th section written before
-    v6.27 keeps no earlier positions.
+    which the new record needs no model to be trusted, and nothing in these
+    data is shaped closely enough like the rule's case to replace it. The
+    95% bar is a convention too, and strict: any resample whose own best is
+    a full record saves exactly nothing. How many members or breaks the
+    switch would affect is not measured; a rerun with more attended leavers
+    could find a switch that clears the bar.
+  - At very low counts the model's logistic in log votes extrapolates below
+    a coin flip; flooring it at a coin flip changed no switch in a review
+    check outside these scripts (not reproduced by them). Early in a real
+    Congress the party's center is itself measured on thin records, so the
+    pairs, centered on a whole Congress, flatter a new record; that points
+    toward keeping the last full record too. This first applies in the 120th
+    Congress: a 119th section written before v6.27 keeps no earlier
+    positions.
   - On the 119th Congress's party-unity roll calls (majorities opposed,
     Voteview's votes) the weighting alone reclassifies none of 2,351
     Senate breaks and 2 of 6,055 House breaks.
