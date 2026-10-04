@@ -293,9 +293,8 @@ Key mathematical properties:
   Voteview's own adjacent-Congress records with drift per transition
   (`scripts/calibrate_position_confidence.py`), one curve for both
   chambers and every Congress (a curve per chamber predicted held-out
-  members better by 0.020, under the 0.070 standard error, so the
-  one-standard-error rule keeps one; a rerun decides again), so nothing
-  is reset for a new Congress.
+  members no better, so a paired one-standard-error rule keeps one; a
+  rerun decides again), so nothing is reset for a new Congress.
   It is a reliability weight, not a count threshold
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores

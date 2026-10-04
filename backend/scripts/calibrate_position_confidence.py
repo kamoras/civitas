@@ -232,18 +232,30 @@ def pairs(cache: pathlib.Path | None = None, span: range | None = None, weight=N
         usable = [c for c in span if _usable(chamber, c, cache)]
         share = shares[chamber] if chamber in shares else {c: party_line_share(chamber, c, cache) for c in usable}
         shares[chamber] = share
+        def seated(congress: int) -> set[str]:
+            # Everyone in a Congress's export: a thin record is a run of
+            # consecutive votes only for a member who arrived or left, so an
+            # entrant must be absent the Congress before and a leaver the one
+            # after (an absence mid-Congress, such as a campaign, isn't).
+            try:
+                return {_id(r["icpsr"]) for r in member_rows(chamber, congress, cache)}
+            except OSError:
+                return set()
         for earlier, later in zip(usable, usable[1:]):
             if later != earlier + 1:
                 continue
             w = (weight or {}).get(chamber)
             prev = deviations(member_rows(chamber, earlier, cache), w)
             cur = deviations(member_rows(chamber, later, cache), w)
+            before, after = seated(earlier - 1), seated(later + 1)
             for icpsr in prev.keys() & cur.keys():
                 (na, xa, ca), (nb, xb, cb) = prev[icpsr], cur[icpsr]
                 if na >= RELIABLE_VOTES and nb >= RELIABLE_VOTES:
                     out.append((chamber, icpsr, na, xa, xb, "full", earlier, share[earlier], False))
                 elif nb >= RELIABLE_VOTES or na >= RELIABLE_VOTES:
                     later_thin = na >= RELIABLE_VOTES
+                    if icpsr in (after if later_thin else before):
+                        continue  # served on: the thin record isn't an arrival or a departure
                     n, thin, full, career = (nb, xb, xa, cb) if later_thin else (na, xa, xb, ca)
                     if n > 0:
                         kind = "thin"
@@ -482,8 +494,9 @@ def _stratum(x: float) -> int:
 
 def switch_model(data: list[tuple]):
     """How well each record places a member on their side of the party,
-    by distance from the center of the pair's full record (the later one
-    in a pair of full records; strata, SWITCH_STRATA): (last full record's rate in the full pairs' mix, a thin
+    by distance from the center of the last full record (the earlier one
+    in a pair of full records, the full side of a thin pair; strata,
+    SWITCH_STRATA): (last full record's rate in the full pairs' mix, a thin
     record's own-Congress rate at each of SWITCH_COUNTS in that mix), or
     None. A last full record agrees with the next Congress's at q_s, the
     full pairs' rate. A thin record is observed only against the other
@@ -496,8 +509,11 @@ def switch_model(data: list[tuple]):
     k = len(SWITCH_STRATA)
     if not full or len(thin) < k + 1:
         return None
-    mix = np.array([sum(_stratum(r[4]) == s for r in full) for s in range(k)], float) / len(full)
-    q = np.array([np.mean([_same_side(r) for r in full if _stratum(r[4]) == s] or [0.5]) for s in range(k)])
+    # The last full record the rule reads: the earlier of a pair of full
+    # records, the full side of a thin pair (the earlier, for a member who
+    # left, the rule's case).
+    mix = np.array([sum(_stratum(r[3]) == s for r in full) for s in range(k)], float) / len(full)
+    q = np.array([np.mean([_same_side(r) for r in full if _stratum(r[3]) == s] or [0.5]) for s in range(k)])
     x = np.column_stack([np.array([[_stratum(r[4]) == s for s in range(k)] for r in thin], float),
                          np.log([r[2] for r in thin])])
     y = np.array([_same_side(r) for r in thin], float)
@@ -538,7 +554,9 @@ def switch_test(data: list[tuple], seed: int = 0) -> dict | None:
     on `data`, the share of sides it saves there, and the share saved out of
     bag: a switch chosen on members resampled, judged on the members that
     resample left out, with its 5th, 50th and 95th percentiles and how often
-    it saves any; and the thin pairs behind it, all and over 100 votes."""
+    it saves any (over the draws whose left-out members support a model,
+    draws_judged; None if none do); and the thin pairs behind it, all and
+    over 100 votes."""
     model = switch_model(data)
     if model is None:
         return None
@@ -560,10 +578,12 @@ def switch_test(data: list[tuple], seed: int = 0) -> dict | None:
         saved.append(misplaced(held, RELIABLE_VOTES) - misplaced(held, chosen))
     saved = np.array(saved)
     thin = [r for r in data if r[5] == "thin"]
+    judged = {"saved_out_of_bag": None, "share_saving": None} if not len(saved) else {
+        "saved_out_of_bag": [round(float(v), 4) for v in np.percentile(saved, (5, 50, 95))],
+        "share_saving": round(float((saved > 0).mean()), 3)}
     return {"switch_votes": switch, "thin_pairs": len(thin), "thin_pairs_over_100": sum(r[2] > 100 for r in thin),
             "saved": round(misplaced(model, RELIABLE_VOTES) - misplaced(model, switch), 4),
-            "saved_out_of_bag": [round(float(v), 4) for v in np.percentile(saved, (5, 50, 95))],
-            "share_saving": round(float((saved > 0).mean()), 3)}
+            "draws_judged": len(saved), **judged}
 
 
 def prior_test(data: list[tuple]) -> dict:
@@ -617,7 +637,7 @@ def prior_until_votes(test: dict) -> float:
     members left out in at least 95% of resamples (its 5th percentile above 0); then that
     switch."""
     shape = (test.get("switch_test") or {}).get("rule_shape")
-    if shape and shape["saved_out_of_bag"][0] > 0:
+    if shape and shape.get("saved_out_of_bag") and shape["saved_out_of_bag"][0] > 0:
         return float(shape["switch_votes"])
     return float(RELIABLE_VOTES)
 
@@ -676,7 +696,7 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
         "uncounted_weight": round(uncounted_weight(data), 3),
         # Its range with each of its pairs' members left out in turn: few
         # pairs, so one member can move it a lot.
-        "uncounted_weight_leave_one_out": [round(f(left_out), 3) for f in (min, max)],
+        "uncounted_weight_leave_one_out": [round(f(left_out), 3) for f in (min, max)] if left_out else None,
         "interval_90": bootstrap(data, structure),
         "heldout_error": heldout,
         "structure_test": comparison,
@@ -711,11 +731,12 @@ def main() -> None:
     ap.add_argument("--out", type=pathlib.Path, default=OUT)
     args = ap.parse_args()
     calibrated = calibrate(args.cache)
-    # With a cache, the exports are as old as the newest cached file.
-    used = range(FIRST_CONGRESS, calibrated["calibrated_through"] + 1)
+    # With a cache, the dates the exports used were fetched.
+    used = range(FIRST_CONGRESS - 1, calibrated["calibrated_through"] + 1)  # the 100th: who was seated before
     cached = [f.stat().st_mtime for c in used for ch in "SH" for kind in ("members", "votes")
               if (f := args.cache / f"{ch}{c}_{kind}.csv").exists()] if args.cache else []
-    retrieved = (datetime.date.fromtimestamp(max(cached)) if cached else datetime.date.today()).isoformat()
+    dates = sorted({datetime.date.fromtimestamp(t).isoformat() for t in cached}) or [datetime.date.today().isoformat()]
+    retrieved = dates[0] if len(dates) == 1 else f"{dates[0]} to {dates[-1]}"
     data = {
         "_source": (
             f"Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House, Congresses "

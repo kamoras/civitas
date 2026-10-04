@@ -280,7 +280,10 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             vote = _VOTES.get((p.position or "").strip().lower())
             if label not in ("R", "D") or vote is None:
                 continue
-            party = parties[i] if i is not None else p.party
+            # A member the run doesn't score: their stored caucus party where
+            # the roll call names them by bioguide (the House), else its own.
+            party = parties[i] if i is not None else (
+                party_of.get(p.member_id) if chamber == "house" and p.member_id else None) or p.party
             if party not in ("R", "D"):
                 # A party line is either party's: a member of neither (a
                 # roll call's "I" with no caucus resolved, an unusual code)

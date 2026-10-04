@@ -328,3 +328,31 @@ def test_a_section_a_congress_ahead_reads_the_roll_calls_congress_from_its_prior
     assert record["flankBreaks"] != []
     del section["members"]["R4"]
     assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
+
+
+def test_a_house_independents_stored_caucus_reads_over_the_roll_calls_party(db_session, monkeypatch):
+    """The House's roll calls give every member's party, an independent's as
+    "I"; the stored caucus party reads over it. R9 ("I" on the roll calls,
+    caucusing with the Republicans, sitting far right) breaks with R4, who
+    sits center-side: read as a Republican, R9 pulls the defectors' mean to
+    the flank, so R4's break is a flank break; read as "I", R9 is left out
+    and R4's break counts."""
+    from app.models import Representative
+    dims = {**DIM1, "R4": 0.3, "R9": 2.0}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": dims})
+    rc = RollCall(chamber="house", congress=119, session=2, number=50, date="2026-03-01", question="On Passage",
+                  bill_id="HR.50")
+    db_session.add(rc)
+    db_session.flush()
+    for m in dims:
+        party = "I" if m == "R9" else m[0]
+        vote = "Nay" if m in ("R4", "R9") else ("Yea" if m[0] == "R" else "Nay")
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=m, last_name=f"Last{m}", first_name=m,
+                                        party=party, state="TN", position=vote))
+    db_session.commit()
+    alone = party_line_records(db_session, "house", _members())[4]
+    db_session.add(Representative(id="H-R9", bioguide_id="R9", name="R9 LastR9", state="TN", district=9,
+                                  party="I", caucus_party="R"))
+    db_session.commit()
+    with_caucus = party_line_records(db_session, "house", _members())[4]
+    assert alone["breaks"] != [] and with_caucus["flankBreaks"] != []

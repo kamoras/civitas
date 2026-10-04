@@ -261,7 +261,7 @@ export default function ScoresChapter() {
             one that put the typical position at 100 did not. A position estimated from only a few
             roll calls is mostly noise, so it counts only as much as its votes support, measured on
             members whose short record in one Congress sits next to a full one in the Congress
-            before or after: half at about 50 votes, in full from 200. A member with no position yet
+            before or after: half at about 46 votes, in full from 200. A member with no position yet
             sits at 50. Early in a new Congress, until its positions are published and pass our
             checks, this part is left out and the score is the voting part alone.
           </P>

@@ -36,12 +36,31 @@ def test_only_a_no_count_position_with_a_career_is_calibrated_as_uncounted(tmp_p
     early = full + [_row("90", "100", "-0.5", "", career="-0.4"), _row("91", "100", "-0.6", "")]
     late = full + [_row("90", "100", "-0.5", "500", career="-0.4"), _row("91", "100", "-0.6", "500")]
     rows = {101: early, 102: late}
-    monkeypatch.setattr(script, "member_rows", lambda chamber, congress, cache=None: rows[congress])
+    monkeypatch.setattr(script, "member_rows", lambda chamber, congress, cache=None: rows.get(congress, []))
     monkeypatch.setattr(script, "_usable", lambda chamber, congress, cache: True)
     monkeypatch.setattr(script, "party_line_share", lambda chamber, congress, cache=None: 0.5)
     data, _ = script.pairs(None, range(101, 103))
     kinds = {r[1]: r[5] for r in data if r[0] == "S"}
     assert kinds["90"] == "uncounted" and "91" not in kinds
+
+
+
+def test_a_thin_record_counts_only_for_a_member_who_arrived_or_left(monkeypatch):
+    """A thin record is a run of consecutive votes for a member who arrived
+    (absent the Congress before) or left (absent the one after); one who
+    served on both sides (a campaign's absences) is left out."""
+    script = _script()
+    full = [_row(str(i), "100" if i % 2 else "200", f"{0.1 * (i % 5) - (0.4 if i % 2 else -0.4):.2f}", "500")
+            for i in range(40)]
+    rows = {101: full + [_row("80", "100", "-0.5", "500"), _row("81", "100", "-0.5", "500")],
+            102: full + [_row("80", "100", "-0.6", "50"), _row("81", "100", "-0.6", "50")],
+            103: full + [_row("81", "100", "-0.5", "500")]}
+    monkeypatch.setattr(script, "member_rows", lambda chamber, congress, cache=None: rows.get(congress, []))
+    monkeypatch.setattr(script, "_usable", lambda chamber, congress, cache: congress in (101, 102))
+    monkeypatch.setattr(script, "party_line_share", lambda chamber, congress, cache=None: 0.5)
+    data, _ = script.pairs(None, range(101, 104))
+    thin = {r[1] for r in data if r[0] == "S" and r[5] == "thin"}
+    assert thin == {"80"}  # 81 served on in the 103rd
 
 
 def test_fit_recovers_n0_with_a_drift_per_transition():
@@ -270,7 +289,7 @@ def _observed(script, data):
     full = [r for r in data if r[5] == "full"]
     thin = [r for r in data if r[5] == "thin"]
     k = len(script.SWITCH_STRATA)
-    mix = np.array([sum(script._stratum(r[4]) == s for r in full) for s in range(k)], float) / len(full)
+    mix = np.array([sum(script._stratum(r[3]) == s for r in full) for s in range(k)], float) / len(full)
     x = np.column_stack([np.array([[script._stratum(r[4]) == s for s in range(k)] for r in thin], float),
                          np.log([r[2] for r in thin])])
     y = np.array([script._same_side(r) for r in thin], float)
@@ -297,3 +316,21 @@ def test_a_switch_short_of_a_full_record_must_save_sides_out_of_bag(monkeypatch)
     weak = {"switch_votes": 150, "saved": 0.001, "saved_out_of_bag": [-0.01, 0.0, 0.001], "share_saving": 0.4}
     assert script.prior_until_votes({"switch_test": {"rule_shape": weak}}) == 200.0
     assert script.prior_until_votes({"switch_test": {"rule_shape": None}}) == 200.0
+
+
+def test_the_out_of_bag_test_judges_on_the_members_left_out(monkeypatch):
+    """Strong evidence for an early switch saves sides on left-out members
+    in most draws; with too few thin members to model any left-out set,
+    nothing is judged and no switch is adopted."""
+    script = _script()
+    monkeypatch.setattr(script, "BOOTSTRAP", 40)
+    strong = script.switch_test(_switch_pairs((6, 9, 10, 10), (8, 10, 10, 10)))
+    assert strong["draws_judged"] > 20 and strong["share_saving"] > 0.5
+    assert strong["saved_out_of_bag"][1] > 0
+    few = [r for r in _switch_pairs((6, 9, 10, 10), (8, 10, 10, 10)) if r[5] == "full"]
+    few += [("H", f"T{i}", float(10 * (i + 1)), 0.3, 0.3, "thin", 110, 0.5, True) for i in range(5)]
+    sparse = script.switch_test(few)
+    assert sparse is not None and sparse["draws_judged"] < 40
+    if sparse["draws_judged"] == 0:
+        assert sparse["saved_out_of_bag"] is None
+    assert script.prior_until_votes({"switch_test": {"rule_shape": {**sparse, "saved_out_of_bag": None}}}) == 200.0
