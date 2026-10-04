@@ -296,13 +296,15 @@ export default function ScoresChapter() {
         </Sub>
         <Sub title="What 0 and 100 mean">
           <P>
-            They are relative positions, not verdicts. A 100 means the member breaks with their
-            party about as often as members of their own party in seats that lean the same way. A 0
-            means they break far more often than that, or, much more rarely, far less. Because each
-            party&apos;s yardstick is measured from its own members, a party that happens to be more
-            unified isn&apos;t scored higher for it: across every Senate from 1989 on, the two
-            parties&apos; averages differed by 1.8 points on average, and which one was higher
-            changed from Congress to Congress.
+            They are relative positions, not verdicts. On the voting part, a 100 means the member
+            breaks with their party about as often as members of their own party in seats that lean
+            the same way, and a 0 means they break far more often than that, or, much more rarely,
+            far less. On the position part, sitting where the seat predicts is 50, with more only
+            for sitting nearer the seat&apos;s center, so a member who matches both scores about 85.
+            Because each party&apos;s yardstick is measured from its own members, a party that
+            happens to be more unified isn&apos;t scored higher for it: across every Senate from
+            1989 on, the two parties&apos; averages differed by 1.8 points on average, and which one
+            was higher changed from Congress to Congress.
           </P>
         </Sub>
         <More label="Where the numbers come from, with September 2026 examples (before v6.20)">
