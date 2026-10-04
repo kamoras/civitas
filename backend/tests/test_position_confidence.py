@@ -418,6 +418,10 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert f"once it rests on {switch} roll calls" in page
     assert f"about {half} votes counts half" in entry
     assert f"{full} votes or more counts in full" in entry
+    # The era the shipped curve is measured on, by its first year.
+    if data["structure"] == "era":
+        year = 1789 + 2 * (data["era_split"] - 1)
+        assert f"since {year}" in page and f"since {year}" in entry
 
 
 def test_the_switch_tests_take_the_pairs_their_names_say(monkeypatch):
@@ -567,19 +571,28 @@ def test_calibrate_ships_the_forward_tests_choice(monkeypatch):
 
 def test_the_forward_test_adopts_a_structure_only_past_the_noise(monkeypatch):
     """forward_test ships one curve unless chamber or era predicts the next
-    Congress better by more than its standard error; the trend is never
-    chosen."""
+    Congress better by more than its standard error, the better of the two
+    if both do; the trend is never chosen."""
     script = _script()
     base = {f"M{i}": 1.0 for i in range(6)}
 
-    def errors(gain_era, noise_era, gain_trend=-1.0):
-        return {"pooled": base, "chamber": dict(base),
-                "era": {m: 1.0 + gain_era + (noise_era if i % 2 else -noise_era) for i, m in enumerate(base)},
-                "trend": {m: 1.0 + gain_trend for m in base}}
-    monkeypatch.setattr(script, "forward_errors", lambda d: errors(-0.1, 0.0))
-    assert script.forward_test([])["chosen"] == "era"
-    monkeypatch.setattr(script, "forward_errors", lambda d: errors(-0.01, 0.2))
-    assert script.forward_test([])["chosen"] == "pooled"
+    def errs(gain, noise=0.0):
+        return {m: 1.0 + gain + (noise if i % 2 else -noise) for i, m in enumerate(base)}
+
+    def fake(era, chamber, trend=-1.0):
+        table = {"pooled": base, "chamber": chamber, "era": era, "trend": errs(trend), "window": errs(0.0)}
+
+        def forward_errors(d, split=110, names=("pooled", "chamber", "era", "trend"), window=None):
+            return {n: table[n] for n in names}, {n: {110: sum(table[n].values())} for n in names}
+        return forward_errors
+    for era, chamber, chosen in ((errs(-0.1), errs(0.0), "era"), (errs(-0.01, 0.2), errs(0.0), "pooled"),
+                                 (errs(0.0), errs(-0.1), "chamber"), (errs(-0.05), errs(-0.1), "chamber"),
+                                 (errs(-0.1), errs(-0.05), "era")):
+        monkeypatch.setattr(script, "forward_errors", fake(era, chamber))
+        out = script.forward_test([("H", "M0", 20.0, 0.1, 0.1, "thin", 105, 0.5, False)])
+        assert out["chosen"] == chosen
+        if chosen != "pooled":
+            assert len(out[chosen]["without_most_helped_refitted"]) == 3
 
 
 def test_the_trend_term_finds_n0_rising_with_time():
@@ -613,31 +626,38 @@ def test_an_adopting_split_reports_its_most_influential_member(monkeypatch):
         return {"above": -1.0, "standard_error": 0.1, "members": 3, "adopted": True, "half_weight_votes": 98.0}
     monkeypatch.setattr(script, "era_test", era_test)
     monkeypatch.setattr(script, "drifts", lambda rows: {})
-    fits = {"M1100": 300.0, "M1101": 5000.0, "M1102": 5000.0}
+    # On a log scale 300 is further from 5000 than 20000 is.
+    fits = {"M1100": 300.0, "M1101": 20000.0, "M1102": 5000.0}
     monkeypatch.setattr(script, "fit_n0", lambda rows, d=None: min(
         (fits[m] for m in fits if m not in {r[1] for r in rows}), default=5000.0))
     out = script.era_split_test(data, "pooled")["splits"]["110"]
-    assert out["n0"] == 5000.0 and out["n0_leaving_one_member_out"] == [300.0, 5000.0]
+    assert out["n0"] == 5000.0 and out["n0_leaving_one_member_out"] == [300.0, 20000.0]
     assert "M1100" not in reran[-1] and out["without_most_influential_member"]["adopted"]
-    fits["M1100"] = 5000.0
+    fits.update(M1100=5000.0, M1101=5000.0)
     assert script.era_split_test(data, "pooled")["splits"]["110"]["without_most_influential_member"] is None
 
 
 def test_forward_errors_fit_only_on_earlier_transitions(monkeypatch):
     """Each transition is predicted from fits on earlier transitions alone,
-    and only once at least MIN_TRAIN_TRANSITIONS of them have thin pairs."""
+    only once at least MIN_TRAIN_TRANSITIONS of them have thin pairs, with
+    the predicted transition's own drift in the pair's direction."""
     script = _script()
     data = []
     for c in (101, 103, 105, 107, 109):
-        data += [("H", f"F{c}{k}", 300.0, x, x, "full", c, 0.5, False) for k, x in enumerate((-0.3, 0.3))]
-        data += [("H", f"T{c}", 20.0, 0.2, 0.1, "thin", c, 0.5, False)]
+        data += [("H", f"F{c}{k}", 300.0, x, x * (0.8 if c == 107 else 1.0), "full", c, 0.5, False)
+                 for k, x in enumerate((-0.3, 0.3))]
+        data += [("H", f"T{c}", 20.0, 0.2, 0.1, "thin", c, 0.5, c == 107)]
     seen = []
     real = script.fit_chambers
 
-    def fit(rows, structure):
+    def fit(rows, structure, split=110):
         seen.append(max(r[6] for r in rows))
-        return real(rows, structure)
+        return real(rows, structure, split)
     monkeypatch.setattr(script, "fit_chambers", fit)
-    out = script.forward_errors(data)
-    assert set(out["pooled"]) == {"T107", "T109"}  # the first three transitions only train
+    out, by_t = script.forward_errors(data, names=("pooled", "era"))
+    assert set(out["pooled"]) == {"T107", "T109"} and set(by_t["pooled"]) == {107, 109}
     assert max(seen) == 107  # never a fit that saw the transition it predicts
+    # T107 is a later-thin pair: the reverse drift of the 107th's full pairs.
+    n0 = real([r for r in data if r[6] < 107], "pooled")["house"]
+    k = script.drifts([r for r in data if r[6] == 107])[("H", 107)][1]
+    assert abs(out["pooled"]["T107"] - (0.1 - float(script.relative_weight(20.0, n0)) * k * 0.2) ** 2) < 1e-12

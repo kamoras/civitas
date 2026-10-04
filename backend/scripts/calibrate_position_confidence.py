@@ -105,7 +105,7 @@ RELIABLE_VOTES = 200  # a full record; the pairs measure the weight below it
 N0_GRID = np.concatenate([np.arange(1.0, 400.0, 1.0), np.arange(400.0, 5001.0, 25.0)])
 BOOTSTRAP = 1000
 # The forward test predicts a transition only from at least this many
-# earlier transitions with thin pairs (a convention: fewer give no fit).
+# earlier transitions with thin pairs (a convention).
 MIN_TRAIN_TRANSITIONS = 3
 CENTER = 0.6  # the party-line test's log n0 = a + b * (share - CENTER)
 A_GRID = np.arange(-1.0, 8.6, 0.05)
@@ -456,16 +456,19 @@ def fit_n0(data: list[tuple], drift: dict | None = None) -> float:
 
 
 CHAMBERS = (("senate", "S"), ("house", "H"))
-# The era structure's split: the first Congress of the later era.
+# The era structure's split: the first Congress of the later era. A
+# convention (roughly the middle of 101-119 when it was set, fixed before
+# the comparisons that use it); it stays at 110 on reruns, never
+# re-centred, so the latest era only grows.
 ERA_SPLIT = 110
 # Candidate structures for n0: the group a pair's n0 is fitted within.
 # "pooled" and "chamber" can be applied to a sitting member's record and are
-# chosen between on every thin pair (choose_structure). "era" could be
+# compared on every thin pair (choose_structure, reported). "era" can be
 # applied only as its latest era's curve (every Congress scored from now on
-# falls in it), so it is judged on the latest era's pairs alone (era_test):
-# a gain in an era that is never applied is no reason to change the curve
-# that is. Direction and attendance can't be known for a sitting member's
-# record, so they are tested and reported only.
+# falls in it). The shipped structure is forward_test's choice among
+# pooled, chamber and era; era_test and era_split_test report the era
+# comparison left one member out. Direction and attendance can't be known
+# for a sitting member's record, so they are tested and reported only.
 STRUCTURES = {
     "pooled": lambda r: "all",
     "chamber": lambda r: r[0],
@@ -535,66 +538,118 @@ def _paired(a: dict[str, float], b: dict[str, float]) -> dict | None:
             "standard_error": round(float(np.sqrt(len(diff)) * diff.std(ddof=1)), 4)}
 
 
-def forward_errors(data: list[tuple]) -> dict[str, dict[str, float]]:
+def forward_errors(
+    data: list[tuple], split: int = ERA_SPLIT, names: tuple = ("pooled", "chamber", "era", "trend"),
+    window: int | None = None,
+) -> tuple[dict[str, dict[str, float]], dict[str, dict[int, float]]]:
     """structure -> each thin member's squared error predicting each
     transition's thin pairs from a fit (n0) on the earlier transitions
     only, rolling forward one transition at a time: how well a curve
     measured on the past predicts the next Congress, the use the weight is
-    put to. The drift of the predicted transition comes from its own full
-    pairs (drift is not part of the curve). Structures: pooled, chamber,
-    era (the latest era's curve, pooled until the era has thin pairs) and
-    trend (log n0 linear in decades since ERA_SPLIT)."""
-    names = dict((letter, name) for name, letter in CHAMBERS)
+    put to; and the same summed by transition. The drift of the predicted
+    transition comes from its own full pairs (drift is not part of the
+    curve, and every structure shares it). Structures (`names`): pooled,
+    chamber, era (the curve since `split`, pooled until that era has thin
+    pairs), trend (log n0 linear in decades since ERA_SPLIT, on the A and
+    B grids, whose ends it often reaches) and window (the last `window`
+    transitions with thin pairs)."""
+    letters = dict((letter, name) for name, letter in CHAMBERS)
     thin_transitions = sorted({r[6] for r in data if r[5] == "thin"})
-    out: dict[str, dict[str, float]] = {k: {} for k in ("pooled", "chamber", "era", "trend")}
+    out: dict[str, dict[str, float]] = {k: {} for k in names}
+    by_t: dict[str, dict[int, float]] = {k: {} for k in names}
     for t in thin_transitions:
         train = [r for r in data if r[6] < t]
-        if len({r[6] for r in train if r[5] == "thin"}) < MIN_TRAIN_TRANSITIONS:
+        earlier = sorted({r[6] for r in train if r[5] == "thin"})
+        if len(earlier) < MIN_TRAIN_TRANSITIONS:
             continue
         test = [r for r in data if r[6] == t]
         drift = drifts(test)
-        fits = {"pooled": fit_chambers(train, "pooled"), "chamber": fit_chambers(train, "chamber")}
-        late = any(STRUCTURES["era"](r) and r[5] == "thin" for r in train)
-        fits["era"] = fit_chambers(train, "era") if late else fits["pooled"]
-        b, a, _ = fit_party_line(train, "pooled", drifts(train), _decades)
-        a0 = next(iter(a.values()))
+        fits = {}
+        if "pooled" in names or "era" in names:
+            fits["pooled"] = fit_chambers(train, "pooled")
+        if "chamber" in names:
+            fits["chamber"] = fit_chambers(train, "chamber")
+        if "era" in names:
+            late = any(r[6] >= split and r[5] == "thin" for r in train)
+            fits["era"] = fit_chambers(train, "era", split) if late else fits["pooled"]
+        if "window" in names and window:
+            since = earlier[-window] if len(earlier) >= window else earlier[0]
+            fits["window"] = fit_chambers([r for r in train if r[6] >= since], "pooled")
+        if "trend" in names:
+            b, a, _ = fit_party_line(train, "pooled", drifts(train), _decades)
+            a0 = next(iter(a.values()))
         for r in test:
             if r[5] != "thin" or (r[0], r[6]) not in drift:
                 continue
             k = drift[(r[0], r[6])][1 if r[8] else 0]
-            n0s = {name: f[names[r[0]]] for name, f in fits.items()}
-            n0s["trend"] = min(float(np.exp(a0 + b * _decades(r))), 1e6)
+            n0s = {name: f[letters[r[0]]] for name, f in fits.items() if name in names}
+            if "trend" in names:
+                n0s["trend"] = min(float(np.exp(a0 + b * _decades(r))), 1e6)
             for name, n0 in n0s.items():
                 err = (r[4] - float(relative_weight(r[2], n0)) * k * r[3]) ** 2
                 out[name][r[1]] = out[name].get(r[1], 0.0) + err
-    return out
+                by_t[name][t] = by_t[name].get(t, 0.0) + err
+    return out, by_t
+
+
+# The forward window structure's width, reported only (a convention).
+FORWARD_WINDOW = 6
 
 
 def forward_test(data: list[tuple]) -> dict:
     """The structure the calibration ships: one curve unless a structure
     the score can apply (per chamber, or the latest era's) predicts the
     next Congress better, forward_errors' total, by more than the
-    standard error of its member-by-member difference from one curve (the
-    better of the two if both do). The trend is reported, not chosen: it
-    was added after the other tests. Each structure's total and paired
-    difference from one curve ("above": negative, better)."""
-    errors = forward_errors(data)
+    standard error of its member-by-member difference from one curve (a
+    convention; the better of the two if both do). The trend is reported,
+    not chosen: it was added after the other tests. Each structure's total
+    and paired difference from one curve ("above": negative, better).
+    With a choice other than one curve, how much it rests on: its gain by
+    transition; the comparison with the one, two and three members it
+    helps most left out of it (fits unchanged) and left out of the data
+    (refitted); the era comparison at every split; and a window of the
+    last FORWARD_WINDOW transitions, recency without a split."""
+    errors, by_t = forward_errors(data)
     report = {name: {"error": round(sum(e.values()), 4), **(_paired(e, errors["pooled"]) or {})}
               for name, e in errors.items() if name != "pooled"}
     report["pooled"] = {"error": round(sum(errors["pooled"].values()), 4)}
     passing = [n for n in ("chamber", "era") if report[n].get("above") is not None
                and report[n]["above"] < -report[n]["standard_error"]]
     chosen = min(passing, key=lambda n: report[n]["error"]) if passing else "pooled"
-    return {"chosen": chosen, "members": len(errors["pooled"]), **report}
+    if chosen != "pooled":
+        r = report[chosen]
+        r["gain_by_transition"] = {str(t): round(v - by_t["pooled"][t], 4) for t, v in sorted(by_t[chosen].items())}
+        gain = {m: errors[chosen][m] - errors["pooled"][m] for m in errors["pooled"]}
+        order = sorted(gain, key=gain.get)
+        r["without_most_helped_left_out_of_comparison"] = [
+            _paired({m: errors[chosen][m] for m in order[k:]}, {m: errors["pooled"][m] for m in order[k:]})
+            for k in (1, 2, 3)]
+        refit = []
+        for k in (1, 2, 3):
+            rest = [row for row in data if row[1] not in order[:k]]
+            e, _ = forward_errors(rest, names=("pooled", chosen))
+            refit.append(_paired(e[chosen], e["pooled"]))
+        r["without_most_helped_refitted"] = refit
+    thin = sorted({row[6] for row in data if row[5] == "thin"})
+    sweep = {}
+    for cut in thin[1:]:
+        e, _ = forward_errors(data, split=cut, names=("pooled", "era"))
+        t = _paired(e["era"], e["pooled"])
+        if t is not None:
+            sweep[str(cut)] = {**t, "adopted": t["above"] < -t["standard_error"]}
+    e, _ = forward_errors(data, names=("pooled", "window"), window=FORWARD_WINDOW)
+    return {"chosen": chosen, "members": len(errors["pooled"]), **report,
+            "era_at_every_split": sweep, "window": _paired(e["window"], e["pooled"])}
 
 
 def era_test(data: list[tuple], structure: str, split: int = ERA_SPLIT) -> dict | None:
     """The era structure as it would be applied: the latest era's curve
     (eras split at `split`) against `structure`, both judged on the latest
     era's thin pairs alone, held out member by member. "above" is the era
-    curve's error minus the other's (negative: better); the era curve is
-    adopted only if it is better by more than the standard error. None if
-    fewer than two members have thin pairs in the latest era."""
+    curve's error minus the other's (negative: better); "adopted" says
+    whether it would pass the one-standard-error bar on this comparison
+    (reported: the shipped structure is forward_test's). None if fewer
+    than two members have thin pairs in the latest era."""
     def late(r):
         return r[6] >= split
     STRUCTURES["_split"] = late
@@ -638,12 +693,12 @@ def era_split_test(data: list[tuple], structure: str) -> dict:
     return {"splits": out, "adopted_at": sum(t["adopted"] for t in out.values()), "of": len(out)}
 
 
-def fit_chambers(data: list[tuple], structure: str) -> dict[str, float]:
+def fit_chambers(data: list[tuple], structure: str, split: int = ERA_SPLIT) -> dict[str, float]:
     """n0 for each chamber under `structure` ("pooled": the same for both;
-    "era": the same for both, the latest era's, which every Congress scored
-    from now on falls in)."""
+    "era": the same for both, the latest era's (from `split`), which every
+    Congress scored from now on falls in)."""
     if structure == "era":
-        n0 = fit_n0([r for r in data if STRUCTURES["era"](r)], drifts(data))
+        n0 = fit_n0([r for r in data if r[6] >= split], drifts(data))
         return {name: n0 for name, _ in CHAMBERS}
     if structure == "pooled":
         n0 = fit_n0(data)
@@ -730,29 +785,30 @@ def _term_errors(data: list[tuple], structure: str, term, only=None) -> dict[str
     return errors
 
 
-def trend_test(data: list[tuple], structure: str) -> dict:
+def trend_test(data: list[tuple], against: str) -> dict:
     """A time trend in n0, log n0 = a + b * decades since ERA_SPLIT: the
     split-free form of the era question, added after the era tests (so
     reported, not adopted, by this calibration). Its b, the half point it
-    implies at the latest Congress with thin pairs, and, against
-    `structure`, its paired difference over every thin member ("all") and
+    implies at the latest Congress with thin pairs, and, against the
+    structure `against`, its paired difference over every thin member ("all") and
     over the latest era's ("latest", as era_test judges), the latter also
     without the member whose own difference favours the trend most."""
+    # One line for every pair (pooled): the split-free form.
     d = drifts(data)
-    b, a, _ = fit_party_line(data, structure, d, _decades)
+    b, a, _ = fit_party_line(data, "pooled", d, _decades)
     last = max(r[6] for r in data if r[5] == "thin")
     n0_last = float(np.exp(next(iter(a.values())) + b * (last - ERA_SPLIT) / 5)) if a else None
     late = STRUCTURES["era"]
-    trend_late, base_late = (_term_errors(data, structure, _decades, only=late),
-                             heldout_errors(data, structure, only=late))
+    trend_late, base_late = (_term_errors(data, "pooled", _decades, only=late),
+                             heldout_errors(data, against, only=late))
     most = min(trend_late, key=lambda m: trend_late[m] - base_late[m]) if trend_late else None
     rest = [r for r in data if r[1] != most]
     return {"b": round(b, 2), "latest_congress": last,
             "half_weight_votes_latest": round(half_point(n0_last), 1) if n0_last else None,
-            "all": _paired(_term_errors(data, structure, _decades), heldout_errors(data, structure)),
+            "all": _paired(_term_errors(data, "pooled", _decades), heldout_errors(data, against)),
             "latest": _paired(trend_late, base_late),
             "latest_without_most_influential_member": _paired(
-                _term_errors(rest, structure, _decades, only=late), heldout_errors(rest, structure, only=late))}
+                _term_errors(rest, "pooled", _decades, only=late), heldout_errors(rest, against, only=late))}
 
 
 def uncounted_weight(data: list[tuple]) -> float:
@@ -1042,6 +1098,7 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
         "half_weight_votes_by_chamber_interval_90": {
             name: b["half_weight_votes"] for name, b in bootstrap(data, "chamber").items()
             if name != "uncounted_weight"},
+        "era_split": ERA_SPLIT,
         "forward_test": forward,
         "era_test": eras,
         "switcher_test": switcher_test(cache, span),
@@ -1097,15 +1154,17 @@ def main() -> None:
             f"records (both sides {RELIABLE_VOTES} or more scaled votes) in the pair's direction, n0 "
             "the least-squares fit of the thin pairs on a grid to 5000, under the structure forward_test "
             "chooses (each transition predicted from fits on the earlier ones; one curve unless one per "
-            "chamber or the latest era's, split at the given Congress, predicts the next Congress better "
-            "by more than the paired standard error); reported beside it, one n0 for both chambers "
+            "chamber or the latest era's, split at era_split, predicts the next Congress better "
+            "by more than the paired standard error, a convention), with its gain by transition, the "
+            "comparison without the members it helps most (left out of it, and refitted), the era "
+            "comparison at every split and a recent window; reported beside it, one n0 for both chambers "
             "unless one per chamber has a heldout_error (the squared error of each thin member's "
             "pairs fitted without that member) smaller by more than the standard error of the "
             "difference (structure_test; direction and attendance, attended arrivals and departures "
             "against the rest, are tested, not usable); era_test judges the latest era's curve (eras "
             f"split at Congress {ERA_SPLIT}), the only one an era structure would apply, against that "
-            "choice on the latest era's thin pairs alone, adopting it (structure \"era\") only if "
-            "better by more than the standard error (with its half_weight_votes, and the other usable "
+            "choice on the latest era's thin pairs alone, reporting whether it would be adopted (the "
+            "shipped structure is forward_test's) (with its half_weight_votes, and the other usable "
             "structure judged the same way: chamber_on_latest while one curve is chosen), and "
             "era_split_test repeats it at every "
             "split (at an adopting split, with its n0 leaving one member out in turn, and the test "
@@ -1113,12 +1172,13 @@ def main() -> None:
             "trend_test is the split-free form, log n0 linear in decades since the split, added after "
             "the era tests and reported, not adopted; "
             "structure_test's reported gives direction, attendance and era (each era's curve on its "
-            "own members) against the chosen structure, paired; switcher_test compares, for a member "
+            "own members) against structure_test's own choice, paired; switcher_test compares, for a member "
             "who switched parties during a Congress, the latest record, the longer one and their "
             "vote-weighted mean against the next Congress's full record, paired differences over "
             "people (the pipeline reads the latest, a stated choice the evidence can't settle); "
-            "party_line_test's above and standard_error are its paired difference from the shipped "
-            "structure; "
+            "party_line_test is the term added to the shipped structure's grouping, its above and "
+            "standard_error the paired difference from that grouping left one member out (under era, "
+            "each era's own curve); "
             "chambers' thin_pairs count every thin pair; "
             "half_weight_votes is where "
             "weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / "

@@ -714,16 +714,41 @@ in a fixed order, 1,000 times.
   | a time trend (reported only) | 1.251 | 0.069 better (0.089) |
 
   The latest era's curve predicts the next Congress better by about two
-  standard errors and ships. It is not one member: leaving out the one,
-  two or three members it helps most, it is still better by 0.037,
-  0.031 and 0.026, each about 1.7 to 2.1 standard errors (a check run
-  in review, not in the script's output). The 110th as the split is a
-  convention: roughly the middle of 101–119, fixed before any of these
-  comparisons. The trend predicts about as well but far less reliably,
-  and was added after the other tests, so it is reported, not chosen.
-  This rule was adopted in review, after a forward check had been run
-  once: the earlier drafts chose by leaving one member out instead, and
-  those comparisons are reported below.
+  standard errors and ships, but the decision is weakly settled, for
+  four reasons, all in the script's output:
+  - **Where the gain is.** It comes from the transitions predicted once
+    the era has data (the 112th on); before that the two are the same
+    curve. Most of it is at the 112th and 114th (0.024 each), when the
+    one curve it beats was fitted almost wholly on pre-110 records. At
+    the last three transitions, whose training data look most like
+    today's, it is 0.009, about one standard error.
+  - **Members.** One member supplies 44% of it. Left out of the
+    comparison (fits unchanged), the one, two and three members it helps
+    most leave it better by 0.037, 0.031 and 0.026 (standard errors
+    0.017, 0.016, 0.016); left out of the data and refitted, by 0.180,
+    0.180 and 0.151 (0.077, 0.078, 0.072). The sign holds; the size
+    doesn't.
+  - **The split.** At every other split from the 103rd to the 117th the
+    era curve also predicts better, but the rule would adopt it at 11
+    of the 16, not at the 108th, 109th, 115th or 116th. The 110th is a
+    convention (roughly the middle of 101–119), fixed before the
+    forward comparisons, though era results at it had been reported
+    before; it is kept at the 110th on reruns, never re-centred.
+  - **Recency, not a break.** A window of the last six transitions
+    (`FORWARD_WINDOW`, a convention), with no split, does as well
+    (0.078 better, 0.036). The time trend predicts about as well, but
+    its forward fits sit at the ends of their search grids, and it was
+    added after the other tests, so it is reported, not chosen.
+
+  So the evidence supports recent thin records saying less than one
+  curve over every Congress credits; how much less is not settled, and
+  the shipped half point (46) and one curve's (36) each lie inside the
+  other's interval. The rule, and the one-standard-error bar it uses (a
+  convention, with two candidates and no adjustment for that), were
+  adopted in review, after a forward check had been run once and had
+  already shown the era curve winning: the third rule in this change,
+  after two that left one member out (below). A rerun with more recent
+  pairs decides again.
 - **Leave-one-member-out comparisons, reported.** Each thin member's
   pairs predicted from a fit (n0 and drift) made without that member, on
   all 95 thin pairs:
@@ -758,14 +783,16 @@ in a fixed order, 1,000 times.
   search grid allows (half point 98); that extreme rests on one member at
   the 113th to 115th (leaving one out, n0 falls to 279–475), but without
   them the slower curve is still adopted at the 113th and 114th (half
-  points 76 and 83) and the 117th's stands. A time trend (log n0 linear
-  in decades since the 110th, `trend_test`) beats the era structure by
-  0.129 (standard error 0.087) over every member and 0.096 (0.082) over
-  the latest era's (0.049, 0.072, without its most influential member),
-  but fits degenerately (thin records fully reliable
-  before 2007, the slowest curve the form allows by the 118th). All of
-  these point the same way as the forward test: recent thin records say
-  less than one curve over every Congress credits.
+  points 76 and 83) and no single member moves the 117th's (n0 stays
+  5,000 with each left out). A time trend (one line, log n0 linear in
+  decades since the 110th, `trend_test`) beats the shipped grouping by
+  0.098 (standard error 0.077) over every member and 0.082 (0.076) over
+  the latest era's (0.036, 0.064, without its most influential member),
+  with its half point by the 118th at the slowest curve the form allows
+  (about 100 votes). All of these point the same way as the forward
+  test. The early era's n0 sits at the grid's floor, fitted on only 4
+  thin pairs under 50 votes, so "thin records were reliable before 2007"
+  is not a finding: the contrast rests on a small early base.
 
 | | Estimate | 90% interval (members resampled, 1,000 times) |
 |---|---|---|
@@ -786,7 +813,7 @@ in a fixed order, 1,000 times.
   member's place within their party. Added to the era structure it
   predicts held-out members worse (1.322 against 1.279, 0.043 worse with
   a standard error of 0.024), and its slope isn't stable: +2.75 here,
-  +7.75 added to one curve, and negative in an
+  +7.75 added to one curve in an earlier run, and negative in an
   earlier run with the party switchers counted (on a narrower grid). An
   earlier draft of this change found a positive slope by forcing one drift
   on every Congress, which loaded the era differences in drift onto n0.
@@ -811,7 +838,7 @@ in a fixed order, 1,000 times.
   Every member's record early in a Congress is thin too, on a different
   agenda; whether those records behave like these is untested.
 
-**Eight approaches replaced.** Each appeared in a draft of this change and
+**Nine approaches replaced.** Each appeared in a draft of this change and
 was replaced after review; the fourth, fifth and sixth were not shown
 to help rather than shown not to, and a rerun with more pairs tests them
 again.
