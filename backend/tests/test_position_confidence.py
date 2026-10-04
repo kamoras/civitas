@@ -421,7 +421,10 @@ def test_the_switch_tests_take_the_pairs_their_names_say(monkeypatch):
     calls = iter(("rule_shape", "leavers", "all"))
     monkeypatch.setattr(script, "switch_test", lambda rows: seen.__setitem__(next(calls), {r[1] for r in rows}))
     monkeypatch.setattr(script, "prior_crossover", lambda rows: None)
-    row = lambda i, kind, later, run, moved: ("H", i, 50.0, 0.2, 0.3, kind, 110, 0.5, later, run, moved)
+
+    def row(i, kind, later, run, moved):
+        return ("H", i, 50.0, 0.2, 0.3, kind, 110, 0.5, later, run, moved)
+
     script.prior_test([
         row("full", "full", False, False, False),
         row("run", "thin", True, True, True),
