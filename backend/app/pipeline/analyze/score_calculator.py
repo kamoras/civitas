@@ -2121,6 +2121,13 @@ def position_confidence(votes: int | None, reliability: dict | None) -> float:
     return min(max(votes / (votes + n0) / scale, 0.0), 1.0)
 
 
+def _shown_percent(weight: float) -> int:
+    """A weight below 1 as a whole percentage, rounded down so it never
+    reads 100% while still pulled toward 50 (the 1e-9 keeps float error
+    from reading 0.57 as 56%)."""
+    return math.floor(weight * 100 + 1e-9)
+
+
 def position_congruence_score(extremity: float, saturation: float, weight: float = 1.0) -> float:
     """Constituent Alignment's position-congruence component: 50 at the
     position a same-party member of this seat is expected to hold, falling
@@ -2292,7 +2299,7 @@ def _constituent_alignment_core(
         if position_votes is None and weight < 1.0:
             congruence_detail += (
                 f"; Voteview reports no count of the roll calls behind this position, so it counts "
-                f"at {math.floor(weight * 100)}% strength, the measured weight of such positions, pulled toward 50"
+                f"at {_shown_percent(weight)}% strength, the measured weight of such positions, pulled toward 50"
             )
         elif position_votes == 0 and weight == 0.0:
             congruence_detail += (
@@ -2302,7 +2309,7 @@ def _constituent_alignment_core(
         elif weight < 1.0:
             half = (reliability or {}).get("half_weight_votes")
             congruence_detail += (
-                f"; rests on {position_votes} roll calls, so it counts at {math.floor(weight * 100)}% strength"
+                f"; rests on {position_votes} roll calls, so it counts at {_shown_percent(weight)}% strength"
                 + (f" (half strength at about {half:.0f} roll calls)" if half else "")
                 + ", pulled toward 50"
             )

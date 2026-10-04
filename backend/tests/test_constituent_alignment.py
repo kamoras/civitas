@@ -536,6 +536,11 @@ class TestPositionCongruence:
         self.patch({"X1": -0.55}, votes={"X1": 199}, reliability={"n0": 86, "reference_votes": 200})
         assert "counts at 99% strength" in self._congruence()["detail"]
 
+    def test_the_shown_percentage_survives_float_error(self):
+        """0.57 * 100 is 56.999... in floating point; it still reads 57%."""
+        from app.pipeline.analyze.score_calculator import _shown_percent
+        assert [_shown_percent(w) for w in (0.57, 0.29, 0.5599999999999999, 0.9985)] == [57, 29, 56, 99]
+
     def test_the_weight_applies_before_the_scale_saturates(self):
         """The weight is on the position: a position twice past saturation
         on 24 votes (half weight) is still at saturation, 0, not halfway."""

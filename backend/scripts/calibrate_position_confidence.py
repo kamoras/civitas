@@ -1112,7 +1112,11 @@ def thin_offset(data: list[tuple]) -> dict:
     """Whether a thin position is biased, not just noisy: the mean of
     thin - full / drift (the full position carried back by the pair's
     drift) over thin pairs, with its standard error, for all of them and
-    for those under 50 votes and from 50 up."""
+    for those under 50 votes and from 50 up; and the same over full pairs
+    (full_baseline), which isn't exactly 0 with no bias (the drift is a
+    slope through the origin), the reference the thin offset is read
+    against. It tests a constant shift only: a proportional one looks
+    like noise in these pairs, which the weight absorbs."""
     d = drifts(data)
     rows = [r for r in data if r[5] == "thin" and (r[0], r[6]) in d]
 
@@ -1122,8 +1126,13 @@ def thin_offset(data: list[tuple]) -> dict:
             return None
         return {"pairs": len(x), "mean": round(float(x.mean()), 4),
                 "standard_error": round(float(x.std(ddof=1) / np.sqrt(len(x))), 4)}
+    full = [r for r in data if r[5] == "full" and (r[0], r[6]) in d]
+    baseline = np.array([r[3] - r[4] / d[(r[0], r[6])][0] for r in full])
     return {"all": summary(rows), "under_50": summary([r for r in rows if r[2] < 50]),
-            "from_50": summary([r for r in rows if r[2] >= 50])}
+            "from_50": summary([r for r in rows if r[2] >= 50]),
+            "full_baseline": {"pairs": len(baseline), "mean": round(float(baseline.mean()), 4),
+                              "standard_error": round(float(baseline.std(ddof=1) / np.sqrt(len(baseline))), 4)}
+            if len(baseline) > 1 else None}
 
 
 def calibrate(cache: pathlib.Path | None = None) -> dict:
@@ -1299,8 +1308,9 @@ def main() -> None:
             "uncounted_weight is the slope, for both chambers, for positions published with no count "
             "(or 0) but a career DW-NOMINATE position, and uncounted_weight_leave_one_out its range "
             "with each of its members left out in turn; thin_offset is the mean of thin - full / drift "
-            "over thin pairs (all, under 50 votes, from 50 up) with its standard error, whether a thin "
-            "position is biased rather than noisy; thin_pairs_by_era counts each era's thin "
+            "over thin pairs (all, under 50 votes, from 50 up) with its standard error, and full_baseline "
+            "the same over full pairs (not exactly 0 without bias): a test for a constant shift, not a "
+            "proportional one; thin_pairs_by_era counts each era's thin "
             "pairs and those under 50 votes; drift_range is the lowest and highest chamber-transition "
             "drift in each direction (earlier_thin, later_thin); full_slope_by_votes is the full records' slope on the drift by their vote count; "
             "party_line_share_by_congress is each Congress's share of party-line roll calls; pairs "

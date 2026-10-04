@@ -501,3 +501,32 @@ def test_a_departed_senators_position_classifies_a_break(db_session, monkeypatch
     db_session.commit()
     (alone, *_) = party_line_records(db_session, "senate", roster)
     assert not alone["breaks"] and len(alone["flankBreaks"]) == 1
+
+
+def test_a_stored_namesake_who_never_voted_takes_no_ones_votes(db_session, monkeypatch):
+    """A stored senator of a sitting senator's state and surname who cast
+    no vote this Congress (a predecessor in the grace window) is not added:
+    one LIS id voted under the name, and the sitting senator already claims
+    it, so their record stands, read through a nickname on the roll call."""
+    from app.models import Senator
+    dims = {"D0": -0.4, "D1": -0.4, "R0": 0.5, "R1": 0.5}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points",
+                        lambda chamber: {"members": {f"bio-{m}": d for m, d in dims.items()}})
+    for m in dims:
+        db_session.add(Senator(id=f"S-{m}", bioguide_id=f"bio-{m}", name=f"{m} Last{m}", state="VT", party=m[0]))
+    db_session.add(Senator(id="S-OLD", bioguide_id="bio-OLD", name="Frank LastD0", state="VT", party="D",
+                           is_current=False))
+    rc = RollCall(chamber="senate", congress=119, session=2, number=42, date="2026-03-01", question="On Passage",
+                  bill_id="S.42")
+    db_session.add(rc)
+    db_session.flush()
+    for m in dims:
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=f"L-{m}", last_name=f"Last{m}",
+                                        first_name="D0nny" if m == "D0" else m, party=m[0], state="VT",
+                                        position="Yea" if m[0] == "R" else "Nay"))
+    db_session.commit()
+    roster = [{"bioguideId": f"bio-{m}", "name": f"{m} Last{m}", "lastNameForVoteMatch": f"Last{m}", "state": "VT",
+               "party": m[0], "votingRecord": {"effectiveParty": m[0]}} for m in dims]
+    assert party_line_records(db_session, "senate", roster)[0] is not None
+    assert party_line_record._departed_senators(db_session, roster, {rc.id: list(
+        db_session.query(RollCallPosition).filter_by(roll_call_id=rc.id))}) == []

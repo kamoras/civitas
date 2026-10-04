@@ -33,7 +33,7 @@ leader's reconsider switch are left out, as everywhere else.
 import json
 import logging
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -44,6 +44,7 @@ from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
     _determine_party_alignment,
     _normalize_for_match,
+    _same_first_name,
     resolve_senate_lis_ids,
     compute_party_split,
     is_housekeeping,
@@ -130,22 +131,34 @@ def _departed_senators(db: Session, members: list[dict], positions: dict[int, li
     Congress is off the sitting roster), each with the roll calls' own
     spelling of their last name: the one surname among their state's
     voters that is a whole word of their stored name. A name that matches
-    none, or more than one, is left out, as before."""
+    none, or more than one, is left out, as before; so is one whose
+    surname's votes are all claimed already (as many members keyed to it
+    as LIS ids voted under it: a predecessor of a sitting senator's
+    surname who never voted this Congress must not take their votes)."""
     have = {m.get("bioguideId") for m in members}
     voters: dict[str, set[str]] = defaultdict(set)
+    ids: dict[tuple, set[str]] = defaultdict(set)
     for ps in positions.values():
         for p in ps:
             if p.last_name and p.state:
                 voters[p.state.upper()].add(p.last_name)
+                ids[(_normalize_for_match(p.last_name), p.state.upper())].add(p.member_id)
+    claimed = Counter((_normalize_for_match(m.get("lastNameForVoteMatch") or ""), (m.get("state") or "").upper())
+                      for m in members)
     out = []
     for bioguide, name, state, party in db.query(Senator.bioguide_id, Senator.name, Senator.state, Senator.party):
         if not bioguide or bioguide in have:
             continue
         words = _words(name or "")
         last = {ln for ln in voters.get((state or "").upper(), ()) if _words(ln) in words}
-        if len(last) == 1:
+        if len(last) != 1:
+            continue
+        surname = last.pop()
+        k = (_normalize_for_match(surname), (state or "").upper())
+        if len(ids[k]) > claimed[k]:
+            claimed[k] += 1
             out.append({"bioguideId": bioguide, "name": name, "state": state, "party": party,
-                        "lastNameForVoteMatch": last.pop()})
+                        "lastNameForVoteMatch": surname})
     return out
 
 
@@ -210,8 +223,8 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         if len(found_at) > 1:
             # Two senators of one state can share a last name: the roll
             # call's first name tells them apart.
-            first = _normalize_for_match(p.first_name or "")
-            found_at = [i for i in found_at if _normalize_for_match((members[i].get("name") or "").split(" ")[0]) == first]
+            found_at = [i for i in found_at
+                        if _same_first_name((members[i].get("name") or "").split(" ")[0], p.first_name or "")]
         return found_at[0] if len(found_at) == 1 else None
 
     # The chamber's stored members' parties (an independent's caucus party):

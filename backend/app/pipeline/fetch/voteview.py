@@ -70,8 +70,8 @@ Office," APSR 96:1 — district-relative ideological extremity):
     coordinates are both exactly 0 is Voteview's placeholder for a member
     it could not scale, not an estimate: it is left out, and the score
     reads that member as having no position (50). The fits are taken over
-    every member, since a thin record's position is noisy but not biased
-    (position_confidence.json's thin_offset: no offset beyond its noise).
+    every member (a stated choice): no constant offset of a thin record's
+    position is detected (position_confidence.json's thin_offset).
     extremity_p90 is taken over full records only; early in a Congress,
     with too few of them, the chamber's last scale is carried
     ("scale_congress" names the Congress it was measured on), so the
@@ -369,8 +369,8 @@ def build_chamber_ideal_points(
     """One chamber's {members, votes, fit, extremity_p90, ...} section from
     parsed Voteview rows, plus build-stage failure strings (empty = clean).
     `reliability` (score_calculator._position_reliability) is stored for the
-    score's weight. It doesn't filter the fits (a thin position is noisy, not
-    biased: position_confidence.json's thin_offset). The saturation scale is the 90th percentile of the full records'
+    score's weight. It doesn't filter the fits (no constant offset of a thin
+    position is detected: position_confidence.json's thin_offset). The saturation scale is the 90th percentile of the full records'
     extremities (reliability's reference_votes or more, which count in
     full): a thin record's noise would widen it, and scaling it by the
     weights would cancel them whenever every record is equally thin. With

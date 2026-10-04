@@ -987,10 +987,12 @@ better (above).
       ingest keeps the previous section, as it does for any export that
       fails its gates, rather than guess, and raises an ops alert (kept
       data stops being current at the next Congress).
-- The seat fits are taken over every member, since a thin position is
-  noisy but not biased: carried back by the drift, a full position differs
-  from its thin one by 0.009 on average (standard error 0.019; 95 pairs,
-  `thin_offset`).
+- The seat fits are taken over every member (a stated choice): carried
+  back by the drift, a full position differs from its thin one by 0.009 on
+  average (standard error 0.019; 95 pairs, `thin_offset`; full pairs give
+  0.006 by the same measure, `full_baseline`), so no constant offset is
+  detected, though one up to about 0.05 toward the flank can't be ruled
+  out, and these pairs can't tell a proportional distortion from noise.
 - The saturation scale is the 90th percentile of full records'
   extremities. A thin record's noise would widen a scale taken over
   everyone, and a scale taken over weighted extremities would cancel the

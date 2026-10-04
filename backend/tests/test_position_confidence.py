@@ -766,7 +766,7 @@ def test_shipped_file_reports_what_the_docs_cite():
         assert quoted(one) in note and f"{abs(era['above']):.3f} ({era['standard_error']:.3f})" in note
         assert quoted(era) in note and overall in note
         assert f"From the {ordinal(start)}" in entry and quoted(era) in entry and overall in entry
-    # "Noisy but not biased": the mean offset is within two standard errors of 0.
+    # "No constant offset detected": the mean offset is within two standard errors of 0.
     off = data["thin_offset"]["all"]
     assert abs(off["mean"]) <= 2 * off["standard_error"]
     for lo, hi in data["drift_range"].values():
