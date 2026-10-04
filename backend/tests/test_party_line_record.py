@@ -667,3 +667,37 @@ def test_the_warning_names_only_the_members_a_run_scores(db_session, monkeypatch
     with caplog.at_level("WARNING"):
         party_line_records(db_session, "house", _members() + [rest])
     assert "Zed Nobody" not in caplog.text
+
+
+def test_a_sitting_rob_keeps_his_record_beside_a_departed_robert(db_session, monkeypatch):
+    """A first name that is a prefix of another ("Rob", "Robert") matches its
+    own LIS id exactly: the sitting Rob keeps his votes, and the departed
+    Robert is added on his own."""
+    positions = _namesakes(db_session, monkeypatch,
+                           [("Rob Lastg", "bio-ROB", True), ("Robert Lastg", "bio-ROBERT", False)],
+                           {"L-ROB": "Rob", "L-R": "Robert"})
+    roster = [_sitting("Rob Lastg", "bio-ROB")]
+    assert [m["bioguideId"] for m in party_line_record._departed_senators(db_session, roster, positions)] == [
+        "bio-ROBERT"]
+    # Matched to his roll-call positions (None would mean scored on stored votes).
+    (record,) = party_line_records(db_session, "senate", roster)
+    assert record is not None
+
+
+def test_departed_namesakes_each_keep_their_own_id(db_session, monkeypatch):
+    """Two departed namesakes, "Rob" and "Robert", each with their own LIS
+    id: both are added, and each is resolved to their own."""
+    from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
+    positions = _namesakes(db_session, monkeypatch,
+                           [("Ann Lastg", "bio-ANN", True), ("Rob Lastg", "bio-ROB", False),
+                            ("Robert Lastg", "bio-ROBERT", False)],
+                           {"L-ANN": "Ann", "L-ROB": "Rob", "L-R": "Robert"})
+    roster = [_sitting("Ann Lastg", "bio-ANN")]
+    departed = party_line_record._departed_senators(db_session, roster, positions)
+    assert sorted(m["bioguideId"] for m in departed) == ["bio-ROB", "bio-ROBERT"]
+    members = [{**m, "id": i} for i, m in enumerate(roster + departed)]
+    seen = [{"lisId": p.member_id, "firstName": p.first_name, "lastName": p.last_name, "state": p.state}
+            for ps in positions.values() for p in ps]
+    resolved = resolve_senate_lis_ids(members, seen)
+    assert {members[i]["name"]: lis for i, lis in resolved.items()} == {
+        "Ann Lastg": "L-ANN", "Rob Lastg": "L-ROB", "Robert Lastg": "L-R"}

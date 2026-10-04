@@ -44,7 +44,7 @@ from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
     _determine_party_alignment,
     _normalize_for_match,
-    _same_first_name,
+    first_name_matches,
     resolve_senate_lis_ids,
     compute_party_split,
     is_housekeeping,
@@ -149,7 +149,7 @@ def _departed_senators(db: Session, members: list[dict], positions: dict[int, li
         firsts[(_normalize_for_match(m.get("lastNameForVoteMatch") or ""), (m.get("state") or "").upper())].append(
             (m.get("name") or "").split(" ")[0])
     free = {k: {lis: first for lis, first in ids.items()
-                if not any(_same_first_name(own, first) for own in firsts.get(k, ()))}
+                if not any(lis in first_name_matches(own, ids) for own in firsts.get(k, ()))}
             for k, ids in people.items()}
     candidates = []
     for bioguide, name, state, party in db.query(Senator.bioguide_id, Senator.name, Senator.state, Senator.party):
@@ -169,9 +169,7 @@ def _departed_senators(db: Session, members: list[dict], positions: dict[int, li
     taken: dict[int, list[str]] = defaultdict(list)
     for k, ids in free.items():
         for lis, first in ids.items():
-            near = [i for i, (ck, own, _) in enumerate(candidates) if ck == k and _same_first_name(own, first)]
-            exact = [i for i in near if _normalize_for_match(candidates[i][1]) == _normalize_for_match(first)]
-            pick = exact or near
+            pick = first_name_matches(first, {i: own for i, (ck, own, _) in enumerate(candidates) if ck == k})
             if len(pick) == 1:
                 taken[pick[0]].append(lis)
     return [candidates[i][2] for i in sorted(taken) if len(taken[i]) == 1]
@@ -238,8 +236,8 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         if len(found_at) > 1:
             # Two senators of one state can share a last name: the roll
             # call's first name tells them apart.
-            found_at = [i for i in found_at
-                        if _same_first_name((members[i].get("name") or "").split(" ")[0], p.first_name or "")]
+            found_at = first_name_matches(p.first_name or "",
+                                          {i: (members[i].get("name") or "").split(" ")[0] for i in found_at})
         return found_at[0] if len(found_at) == 1 else None
 
     # The chamber's stored members' parties (an independent's caucus party):
