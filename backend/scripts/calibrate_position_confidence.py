@@ -54,7 +54,7 @@ A party-line term was tested and is reported, not used: with one drift for
 every Congress, n0 appeared to rise with the share of roll calls on which
 the parties' majorities split, but with drift measured per transition its
 slope is unstable (its sign has flipped between reruns) and it predicts
-held-out members worse than no term
+held-out members no better than no term
 (research note section 14). Nothing in the weight follows the sitting
 Congress (the era split, if adopted, is a fixed Congress), so a rerun
 only adds pairs. The pair's direction (which side of the pair is thin:
@@ -101,7 +101,7 @@ N0_GRID = np.concatenate([np.arange(1.0, 400.0, 1.0), np.arange(400.0, 5001.0, 2
 BOOTSTRAP = 1000
 CENTER = 0.6  # the party-line test's log n0 = a + b * (share - CENTER)
 A_GRID = np.arange(-1.0, 8.6, 0.05)
-B_GRID = np.arange(-6.0, 10.0, 0.25)
+B_GRID = np.arange(-25.0, 25.25, 0.25)
 YEA, NAY = (1, 2, 3), (4, 5, 6)
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "position_confidence.json"
 
@@ -157,6 +157,67 @@ def attendance(chamber: str, congress: int, cache: pathlib.Path | None = None) -
         a[0], a[1] = min(a[0], number), max(a[1], number)
         a[2] += 1 <= int(_float(r.get("cast_code")) or 0) <= 6
     return {i: 1 - voted / (last - first + 1) for i, (first, last, voted) in span.items()}
+
+
+def roll_spans(chamber: str, congress: int, cache: pathlib.Path | None = None) -> dict[str, tuple[int, int]]:
+    """icpsr -> (first, last) roll call with a row."""
+    span: dict[str, list[int]] = {}
+    for r in _csv(VOTES_URL.format(chamber=chamber, congress=congress), f"{chamber}{congress}_votes.csv", cache):
+        number = int(_float(r.get("rollnumber")) or 0)
+        a = span.setdefault(_id(r["icpsr"]), [number, number])
+        a[0], a[1] = min(a[0], number), max(a[1], number)
+    return {i: (a, b) for i, (a, b) in span.items()}
+
+
+def switcher_test(cache: pathlib.Path | None = None, span: range | None = None) -> dict:
+    """Which of a mid-Congress party switcher's records to read (the
+    pipeline's choice, voteview.build_chamber_ideal_points): for each member
+    of a state Voteview lists under two or more ICPSR ids in one Congress,
+    with a full record in the next, the squared gap between that full
+    position and each candidate: the latest record (the id whose first roll
+    call comes last), the longer one (more scaled votes), and the
+    vote-weighted mean. The mean over members, how many, and the paired
+    difference of the latest and the longer with its standard error."""
+    span = span or congresses()
+    states = _states()
+    gaps: dict[str, list[float]] = {"latest": [], "longer": [], "weighted": []}
+    for chamber in ("S", "H"):
+        for c in span:
+            try:
+                rows, after = member_rows(chamber, c, cache), member_rows(chamber, c + 1, cache)
+            except OSError:
+                continue
+            ids: dict[str, list[dict]] = {}
+            for r in rows:
+                bio = (r.get("bioguide_id") or "").strip()
+                if bio and (r.get("state_abbrev") or "").strip().upper() in states:
+                    ids.setdefault(bio, []).append(r)
+            ids = {b: rs for b, rs in ids.items() if len({_id(r["icpsr"]) for r in rs}) > 1}
+            if not ids:
+                continue
+            spans = roll_spans(chamber, c, cache)
+            for bio, rs in ids.items():
+                nxt = [r for r in after if (r.get("bioguide_id") or "").strip() == bio]
+                full = [r for r in nxt if (_float(r.get("nominate_number_of_votes")) or 0) >= RELIABLE_VOTES
+                        and _float(r.get("nokken_poole_dim1")) is not None and not is_placeholder(r)]
+                cands = [(r, x, _float(r.get("nominate_number_of_votes")) or 0.0) for r in rs
+                         if (x := _float(r.get("nokken_poole_dim1"))) is not None and not is_placeholder(r)]
+                if len(full) != 1 or len(cands) < 2:
+                    continue
+                target = _float(full[0]["nokken_poole_dim1"])
+                latest = max(cands, key=lambda c: spans.get(_id(c[0]["icpsr"]), (-1, -1))[0])[1]
+                longer = max(cands, key=lambda c: c[2])[1]
+                total = sum(n for _, _, n in cands)
+                weighted = sum(x * n for _, x, n in cands) / total if total else longer
+                for name, x in (("latest", latest), ("longer", longer), ("weighted", weighted)):
+                    gaps[name].append((x - target) ** 2)
+    diff = np.array(gaps["latest"]) - np.array(gaps["longer"])
+    return {"members": len(gaps["latest"]),
+            **{f"mean_squared_gap_{k}": round(float(np.mean(v)), 4) if v else None for k, v in gaps.items()},
+            # The member-by-member difference, latest minus longer, and its
+            # standard error.
+            "latest_minus_longer": round(float(diff.mean()), 4) if len(diff) else None,
+            "standard_error": round(float(diff.std(ddof=1) / np.sqrt(len(diff))), 4) if len(diff) > 1 else None}
 
 
 def _float(value) -> float | None:
@@ -468,7 +529,9 @@ def era_test(data: list[tuple], structure: str, split: int = ERA_SPLIT) -> dict 
     out = _paired(era, heldout_errors(data, structure, only=late))
     if out is None:
         return None
-    return {**out, "members": len(era), "adopted": out["above"] < -out["standard_error"]}
+    half = round(half_point(fit_n0([r for r in data if late(r)], drifts(data))), 1)
+    return {**out, "members": len(era), "adopted": out["above"] < -out["standard_error"],
+            "half_weight_votes": half}
 
 
 def era_split_test(data: list[tuple], structure: str) -> dict:
@@ -523,26 +586,31 @@ def fit_party_line(data: list[tuple], structure: str, drift: dict | None = None)
 
 def party_line_test(data: list[tuple], structure: str) -> dict:
     """The party-line alternative against one n0 per group: its b, both
-    fits' squared error over the thin pairs, and its held-out error
-    (heldout_error's, for the same structure)."""
+    fits' squared error over the thin pairs, its held-out error
+    (heldout_error's, for the same structure), and the member-by-member
+    difference from the structure's own held-out errors with its standard
+    error ("above": positive, worse)."""
     d = drifts(data)
     group = STRUCTURES[structure]
     b, _, loss_with = fit_party_line(data, structure, d)
     loss_without = sum(
         _loss(*_thin([r for r in data if group(r) == g], drift=d), fit_n0([r for r in data if group(r) == g], d))
         for g in {group(r) for r in data})
-    err = 0.0
+    errors: dict[str, float] = {}
     for m in sorted({r[1] for r in data if r[5] == "thin"}):
         train = [r for r in data if r[1] != m]
         dm = drifts(train)
         fb, fa, _ = fit_party_line(train, structure, dm)
+        err = 0.0
         for r in data:
             if r[1] == m and r[5] == "thin" and (r[0], r[6]) in dm and group(r) in fa:
                 n0 = float(np.exp(fa[group(r)] + fb * (r[7] - CENTER)))
                 k = dm[(r[0], r[6])][1 if r[8] else 0]
                 err += (r[4] - float(relative_weight(r[2], n0)) * k * r[3]) ** 2
+        errors[m] = err
     return {"b": round(b, 2), "loss_with": round(loss_with, 4), "loss_without": round(loss_without, 4),
-            "heldout_error": round(err, 4)}
+            "heldout_error": round(sum(errors.values()), 4),
+            **(_paired(errors, heldout_errors(data, structure)) or {})}
 
 
 def uncounted_weight(data: list[tuple]) -> float:
@@ -786,6 +854,10 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
     last = max(r[6] for r in data) + 1
     base, comparison = choose_structure(data)
     eras = era_test(data, base)
+    if eras:
+        # The other structure the score could apply, judged the same way.
+        eras["chamber_on_latest"] = _paired(heldout_errors(data, "chamber", only=STRUCTURES["era"]),
+                                            heldout_errors(data, "pooled", only=STRUCTURES["era"]))
     structure = "era" if eras and eras["adopted"] else base
     heldout = {name: round(heldout_error(data, name), 4) for name in STRUCTURES}
     n0 = fit_chambers(data, structure)
@@ -822,6 +894,7 @@ def calibrate(cache: pathlib.Path | None = None) -> dict:
             name: b["half_weight_votes"] for name, b in bootstrap(data, "chamber").items()
             if name != "uncounted_weight"},
         "era_test": eras,
+        "switcher_test": switcher_test(cache, span),
         "era_split_test": era_split_test(data, base),
         "half_weight_votes_by_era": {
             f"{e.start}-{e.stop - 1}": round(half_point(fit_n0([r for r in data if r[6] in e])), 1)
@@ -878,7 +951,12 @@ def main() -> None:
             "against the rest, are tested, not usable); era_test judges the latest era's curve (eras "
             f"split at Congress {ERA_SPLIT}), the only one an era structure would apply, against that "
             "choice on the latest era's thin pairs alone, adopting it (structure \"era\") only if "
-            "better by more than the standard error, and era_split_test repeats it at every split; "
+            "better by more than the standard error (with its half_weight_votes, and chamber_on_latest, "
+            "the per-chamber structure judged the same way), and era_split_test repeats it at every "
+            "split; switcher_test compares, for a member who switched parties during a Congress, the "
+            "latest record, the longer one and their vote-weighted mean against the next Congress's "
+            "full record (the pipeline reads the latest); party_line_test's above and standard_error "
+            "are its paired difference from the shipped structure; "
             "chambers' thin_pairs count every thin pair; "
             "half_weight_votes is where "
             "weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / "

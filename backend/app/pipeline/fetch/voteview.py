@@ -282,27 +282,55 @@ def _is_placeholder(row: dict) -> bool:
     return _number(row.get("nokken_poole_dim1")) == 0 and _number(row.get("nokken_poole_dim2")) == 0
 
 
-def _one_row_per_member(rows: list[dict], column: str) -> list[dict]:
-    """Each bioguide id's row with the most scaled votes among those with a
-    position in `column` (any row, if none has one; the first, on a tie),
-    in the export's order; rows with no bioguide id pass through."""
-    def rank(row):
-        placed = bool((row.get(column) or "").strip()) and not (
-            column == "nokken_poole_dim1" and _is_placeholder(row))
-        return placed, _vote_count(row) or 0
-    best: dict[str, dict] = {}
+def _icpsr(row: dict) -> str:
+    """An ICPSR id as one spelling: some exports write "14009.0"."""
+    x = _number(row.get("icpsr"))
+    return str(int(x)) if x is not None else str(row.get("icpsr") or "")
+
+
+def switched_members(rows: list[dict]) -> bool:
+    """Whether any member is listed under two ICPSR ids: a party switch
+    during the Congress."""
+    ids: dict[str, set[str]] = {}
     for row in rows:
+        if bio := (row.get("bioguide_id") or "").strip():
+            ids.setdefault(bio, set()).add(_icpsr(row))
+    return any(len(v) > 1 for v in ids.values())
+
+
+def _one_row_per_member(rows: list[dict], column: str, earlier_ids: set[str] | None = None) -> list[dict]:
+    """Each bioguide id's latest row with a position in `column` (any row,
+    if none has one), in the export's order; rows with no bioguide id pass
+    through. Latest: an id not in the last Congress's export (`earlier_ids`;
+    the id Voteview opened at the switch) over one that is, then the later
+    in the export's order."""
+    def rank(row, index):
+        # Placed as the build reads a position: a number, and not Voteview's
+        # placeholder.
+        placed = _number(row.get(column)) is not None and not (
+            column == "nokken_poole_dim1" and _is_placeholder(row))
+        return placed, earlier_ids is not None and _icpsr(row) not in earlier_ids, index
+    best: dict[str, tuple] = {}
+    for index, row in enumerate(rows):
         bio = (row.get("bioguide_id") or "").strip()
-        if bio and (bio not in best or rank(row) > rank(best[bio])):
-            best[bio] = row
+        if bio and (bio not in best or rank(row, index) > best[bio][0]):
+            best[bio] = (rank(row, index), row)
+    best = {bio: row for bio, (_, row) in best.items()}
     return [row for row in rows
             if not (bio := (row.get("bioguide_id") or "").strip()) or best[bio] is row]
+
+
+def latest_rows(rows: list[dict], earlier_ids: set[str] | None = None) -> list[dict]:
+    """The rows build_chamber_ideal_points reads: one per member, a party
+    switcher's latest (see _one_row_per_member). For scripts that read the
+    rows beside the built section."""
+    return _one_row_per_member(rows, _position_column(rows)[0], earlier_ids)
 
 
 def build_chamber_ideal_points(
     rows: list[dict], chamber: str,
     state_pvi: dict[str, int], district_pvi: dict[str, int],
-    *, reliability: dict, congress: int | None = None,
+    *, reliability: dict, congress: int | None = None, earlier_ids: set[str] | None = None,
 ) -> tuple[dict, list[str]]:
     """One chamber's {members, votes, fit, extremity_p90, ...} section from
     parsed Voteview rows, plus build-stage failure strings (empty = clean).
@@ -316,15 +344,16 @@ def build_chamber_ideal_points(
     and refresh_member_ideal_points carries the chamber's last scale.
 
     A member Voteview lists twice in one Congress (a party switch during it,
-    under a second ICPSR id) is read on the record with more scaled votes,
-    and only that one enters the fits: one seat, one position. Which of the
-    two to read is a convention (nothing measures it); the longer is the
-    more reliable estimate, and the weight then applies to its count. The
-    longer record may predate the switch: it is still read against the
-    seat expectation of the member's party as the score has it."""
+    under a second ICPSR id) is read on their latest record, the one since
+    the switch, and only it enters the fits: one seat, one position. That
+    predicts where a switcher sits in the next Congress better than the
+    longer record or a vote-weighted mean (calibrate_position_confidence.
+    switcher_test); the weight then applies to its own count. Which record
+    is the latest: the id that isn't in the last Congress's export
+    (`earlier_ids`), else the later row in the export's order."""
 
     column, measure = _position_column(rows)
-    rows = _one_row_per_member(rows, column)
+    rows = _one_row_per_member(rows, column, earlier_ids)
     members: dict[str, float] = {}
     votes: dict[str, int] = {}
     seats: set[str] = set()
@@ -494,9 +523,15 @@ async def refresh_member_ideal_points(
                 "Voteview %s unreachable — keeping previous member_ideal_points data", chamber,
             )
             return False
+        # A member who switched parties is read on their latest record,
+        # told apart by which id the last Congress's export already had.
+        earlier = None
+        if switched_members(rows):
+            last = await fetch_member_rows(chamber, congress - 1, client=client)
+            earlier = {_icpsr(r) for r in last} if last else None
         data, failures = build_chamber_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),
-            reliability=_position_reliability(chamber), congress=congress,
+            reliability=_position_reliability(chamber), congress=congress, earlier_ids=earlier,
         )
         previous = _member_ideal_points(chamber) or {}
         if failures == []:

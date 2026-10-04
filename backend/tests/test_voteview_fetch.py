@@ -220,7 +220,37 @@ class TestPersistence:
         assert score_calculator._member_ideal_points("senate") == {}
 
 
+async def _record(asked, congress, rows):
+    asked.append(congress)
+    return rows
+
+
 class TestRefresh:
+    async def test_a_switch_reads_the_id_the_last_congress_lacked(self, monkeypatch, tmp_path):
+        """With a member listed twice, the refresh fetches the last
+        Congress's export to tell the post-switch id apart; without one, it
+        fetches nothing more."""
+        _patch_path(monkeypatch, tmp_path)
+        state_pvi = score_calculator._state_pvi()
+        rows = [{**r, "icpsr": str(1000 + i)} for i, r in enumerate(_synthetic_rows(state_pvi))]
+        since = {**rows[0], "icpsr": "91000", "party_code": "328", "nominate_dim1": "0.9",
+                 "nominate_number_of_votes": "40"}
+        asked = []
+
+        async def fake_rows(chamber, congress, client=None):
+            asked.append(congress)
+            return [since] + rows if congress == 119 else rows
+
+        monkeypatch.setattr(voteview, "fetch_member_rows", fake_rows)
+        assert await voteview.refresh_member_ideal_points("senate", 119) is True
+        assert asked == [119, 118]
+        assert score_calculator._member_ideal_points("senate")["members"][rows[0]["bioguide_id"]] == 0.9
+        asked.clear()
+        monkeypatch.setattr(voteview, "fetch_member_rows",
+                            lambda *a, **k: _record(asked, a[1], rows))
+        assert await voteview.refresh_member_ideal_points("senate", 119) is True
+        assert asked == [119]
+
     async def test_successful_refresh_writes_section(self, monkeypatch, tmp_path):
         path = _patch_path(monkeypatch, tmp_path)
         state_pvi = score_calculator._state_pvi()
@@ -334,23 +364,45 @@ class TestRefresh:
         assert await voteview.refresh_member_ideal_points("senate", 119) is False
 
 
-def test_a_member_listed_twice_is_read_on_their_longer_record():
+def test_a_member_listed_twice_is_read_on_their_latest_record():
     """A party switch during a Congress puts a member in the export twice,
-    under two ICPSR ids. They are read on the record with more scaled votes,
-    and only it enters the fits (one seat, one position); a row with no
-    position never wins over one with."""
+    under two ICPSR ids. They are read on the record since the switch (the
+    id the last Congress's export didn't have, else the later row), and
+    only it enters the fits and the seated count (one seat, one position);
+    a row with no position, or Voteview's placeholder, never wins over one
+    with."""
     state_pvi = score_calculator._state_pvi()
-    rows = _synthetic_rows(state_pvi)
+    rows = [{**r, "icpsr": str(1000 + i)} for i, r in enumerate(_synthetic_rows(state_pvi))]
     bio = rows[0]["bioguide_id"]
-    short = {**rows[0], "icpsr": "99999", "party_code": "328", "nominate_dim1": "0.9",
+    other = "200" if rows[0]["party_code"] == "100" else "100"
+    since = {**rows[0], "icpsr": "91000", "party_code": other, "nominate_dim1": "0.9",
              "nominate_number_of_votes": "40"}
-    data, _ = voteview.build_chamber_ideal_points(rows + [short], "senate", state_pvi, {}, reliability=REL)
-    base, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
-    assert data["members"][bio] == base["members"][bio] and data["votes"][bio] == base["votes"][bio]
-    assert data["fit"] == base["fit"]
-    longer = {**short, "nominate_number_of_votes": "900"}
-    data, _ = voteview.build_chamber_ideal_points(rows + [longer], "senate", state_pvi, {}, reliability=REL)
-    assert data["members"][bio] == 0.9 and data["votes"][bio] == 900
-    unplaced = {**longer, "nominate_dim1": ""}
-    data, _ = voteview.build_chamber_ideal_points(rows + [unplaced], "senate", state_pvi, {}, reliability=REL)
-    assert data["members"][bio] == base["members"][bio]
+    assert voteview.switched_members(rows + [since]) and not voteview.switched_members(rows)
+
+    def build(rs, **kw):
+        return voteview.build_chamber_ideal_points(rs, "senate", state_pvi, {}, reliability=REL, **kw)[0]
+    base, alone = build(rows), build(rows[1:] + [since])
+    earlier = {r["icpsr"] for r in rows}
+    # The new id, though shorter and listed first, is the latest: it alone
+    # enters the other party's fit.
+    data = build([since] + rows, earlier_ids=earlier)
+    assert data["members"][bio] == 0.9 and data["votes"][bio] == 40
+    assert data["fit"] == alone["fit"] != base["fit"] and data["seated"] == base["seated"]
+    # Without the last Congress's ids, the later row in the export.
+    assert build([since] + rows)["members"][bio] == base["members"][bio]
+    assert build(rows + [since])["members"][bio] == 0.9
+    unplaced = {**since, "nominate_dim1": ""}
+    assert build(rows + [unplaced], earlier_ids=earlier)["members"][bio] == base["members"][bio]
+
+
+def test_a_placeholder_never_wins_over_a_position():
+    """On Nokken-Poole rows, a switcher's latest row that is Voteview's
+    0, 0 placeholder loses to their placed one."""
+    state_pvi = score_calculator._state_pvi()
+    rows = [{**r, "icpsr": str(1000 + i), "nokken_poole_dim1": r["nominate_dim1"], "nokken_poole_dim2": "0.1"}
+            for i, r in enumerate(_synthetic_rows(state_pvi))]
+    bio = rows[0]["bioguide_id"]
+    placeholder = {**rows[0], "icpsr": "91000", "nokken_poole_dim1": "0", "nokken_poole_dim2": "0"}
+    data, _ = voteview.build_chamber_ideal_points(
+        rows + [placeholder], "senate", state_pvi, {}, reliability=REL, earlier_ids={r["icpsr"] for r in rows})
+    assert data["members"][bio] == float(rows[0]["nokken_poole_dim1"])

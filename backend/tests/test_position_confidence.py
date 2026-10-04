@@ -495,3 +495,64 @@ def test_the_era_structure_fits_the_latest_era():
     late = [("H", f"L{k}", 20.0, x, x / 3, "thin", 115, 0.5, False) for k, x in enumerate((-0.3, 0.3))]
     n0 = script.fit_chambers(full + early + late, "era")
     assert n0["senate"] == n0["house"] == script.fit_n0(full + late, script.drifts(full + early + late))
+
+
+def test_the_switcher_test_compares_the_latest_and_the_longer_record(monkeypatch):
+    """A member listed under two ids in a Congress, with a full record in
+    the next: the latest record (the id whose first roll call comes last),
+    the longer one and the vote-weighted mean are each compared with that
+    full position."""
+    script = _script()
+    rows = {101: [{**_row("10", "200", "0.5", "300"), "bioguide_id": "X1"},
+                  {**_row("90", "328", "0.1", "100"), "bioguide_id": "X1"},
+                  {**_row("11", "100", "-0.4", "500"), "bioguide_id": "Y1"}],
+            102: [{**_row("90", "328", "0.12", "600"), "bioguide_id": "X1"},
+                  {**_row("11", "100", "-0.4", "500"), "bioguide_id": "Y1"}]}
+
+    def member_rows(chamber, congress, cache=None):
+        if chamber != "H" or congress not in rows:
+            raise OSError
+        return rows[congress]
+    monkeypatch.setattr(script, "member_rows", member_rows)
+    monkeypatch.setattr(script, "roll_spans", lambda ch, c, cache=None: {"10": (1, 50), "90": (51, 90)})
+    out = script.switcher_test(span=range(101, 103))
+    assert out["members"] == 1
+    assert abs(out["mean_squared_gap_latest"] - 0.02 ** 2) < 1e-4
+    assert abs(out["mean_squared_gap_longer"] - 0.38 ** 2) < 1e-4
+    assert abs(out["mean_squared_gap_weighted"] - 0.28 ** 2) < 1e-4
+
+
+def test_the_pipeline_reads_the_switcher_record_the_calibration_favours():
+    """voteview reads a switcher's latest record; the shipped measurement
+    must not say the longer one predicts better."""
+    test = json.loads(_DATA.read_text()).get("switcher_test")
+    if test and test["members"]:
+        assert test["mean_squared_gap_latest"] <= test["mean_squared_gap_longer"]
+
+
+def test_calibrate_ships_the_latest_eras_curve_only_when_era_test_adopts_it(monkeypatch):
+    """calibrate: the structure is the one-standard-error rule's choice
+    unless era_test adopts the latest era's curve, which then ships for both
+    chambers; era_split_test is judged against that choice."""
+    script = _script()
+    full = [("H", f"F{c}{k}", 300.0, x, x, "full", c, 0.5, False, False, False) for c in (101, 115)
+            for k, x in enumerate((-0.3, -0.1, 0.1, 0.3))]
+    thin = [("H", f"E{k}", 20.0, x, x, "thin", 101, 0.5, False, False, False) for k, x in enumerate((-0.3, 0.3))]
+    thin += [("H", f"L{k}", 20.0, x, x / 3, "thin", 115, 0.5, False, False, False) for k, x in enumerate((-0.3, 0.3))]
+    data = full + thin
+    monkeypatch.setattr(script, "pairs", lambda cache, span, weight=None, shares=None: (data, {"S": {}, "H": {}}))
+    monkeypatch.setattr(script, "choose_structure", lambda d: ("pooled", {}))
+    monkeypatch.setattr(script, "heldout_errors", lambda d, s, only=None: {"L0": 1.0, "L1": 1.0})
+    monkeypatch.setattr(script, "heldout_error", lambda d, s: 0.0)
+    split_base = []
+    monkeypatch.setattr(script, "era_split_test", lambda d, s: split_base.append(s) or {})
+    for name in ("bootstrap", "party_line_test", "prior_test", "switcher_test"):
+        monkeypatch.setattr(script, name, lambda *a, **k: {})
+    monkeypatch.setattr(script, "prior_until_votes", lambda t: 200.0)
+    monkeypatch.setattr(script, "fit_chambers", script.fit_chambers)
+    for adopted, shipped in ((True, "era"), (False, "pooled")):
+        monkeypatch.setattr(script, "era_test", lambda d, s, a=adopted: {"adopted": a})
+        out = script.calibrate()
+        assert out["structure"] == shipped and split_base[-1] == "pooled"
+        assert out["chambers"]["house"]["n0"] == script.fit_chambers(data, shipped)["house"]
+    assert script.fit_chambers(data, "era") != script.fit_chambers(data, "pooled")

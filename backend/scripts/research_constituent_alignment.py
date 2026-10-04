@@ -1003,20 +1003,37 @@ def _sitting_effect(p):
     count, before, after)."""
     from calibrate_position_confidence import RELIABLE_VOTES
 
-    from app.pipeline.fetch.voteview import build_chamber_ideal_points
+    from unittest import mock
+
+    from app.pipeline.fetch import voteview
+    from app.pipeline.fetch.voteview import build_chamber_ideal_points, latest_rows
     for chamber, letter in (("senate", "S"), ("house", "H")):
         rel = score_calculator._position_reliability(chamber)
-        rows = pd.read_csv(p[f"{letter}119_members.csv"], dtype=str).fillna("").to_dict("records")
-        rows = [r for r in rows if r["chamber"] != "President"]
-        # v6.26 had no placeholder test: mark them so v6.27's build keeps them.
+        raw = pd.read_csv(p[f"{letter}119_members.csv"], dtype=str).fillna("").to_dict("records")
+        raw = [r for r in raw if r["chamber"] != "President"]
+        # One row per member, as v6.27's build reads them (a party switcher's
+        # latest record, told apart by the 118th's ids).
+        earlier = ({voteview._icpsr(r) for r in pd.read_csv(p[f"{letter}118_members.csv"], dtype=str)
+                    .fillna("").to_dict("records")} if f"{letter}118_members.csv" in p else None)
+        rows = latest_rows(raw, earlier)
+        # v6.26 had no placeholder test (mark them so the build keeps them)
+        # and read every row, the last one listed winning.
         old_rows = [dict(r, nokken_poole_dim2="kept") if r["nokken_poole_dim1"] in ("0", "0.0")
-                    and r["nokken_poole_dim2"] in ("0", "0.0") else r for r in rows]
+                    and r["nokken_poole_dim2"] in ("0", "0.0") else r for r in raw]
         spvi, dpvi = score_calculator._state_pvi(), score_calculator._district_pvi()
-        old, _ = build_chamber_ideal_points(old_rows, chamber, spvi, dpvi, reliability={})
-        new, _ = build_chamber_ideal_points(rows, chamber, spvi, dpvi, reliability=rel)
+        with mock.patch.object(voteview, "_one_row_per_member", lambda rs, column, earlier_ids=None: rs):
+            old, _ = build_chamber_ideal_points(old_rows, chamber, spvi, dpvi, reliability={})
+        new, _ = build_chamber_ideal_points(rows, chamber, spvi, dpvi, reliability=rel, earlier_ids=earlier)
         e_old, e_new = _extremities(old, old_rows, chamber, spvi, dpvi), _extremities(new, rows, chamber, spvi, dpvi)
-        changes, thin = [], []
+        changes, thin, unmeasured = [], [], []
+        party_of = {r["bioguide_id"]: voteview.PARTY_CODES.get(int(float(r["party_code"] or 0))) for r in rows}
         for bio, e in e_old.items():
+            if bio in new["members"] and party_of.get(bio) is None:
+                # Since a switch, of no major party: the score reads them
+                # against the caucus the pipeline infers from their votes,
+                # which this comparison doesn't have.
+                unmeasured.append(bio)
+                continue
             before = score_calculator.position_congruence_score(e, old["extremity_p90"])
             n = new["votes"].get(bio)
             weight = score_calculator.position_confidence(n, rel)
@@ -1041,6 +1058,8 @@ def _sitting_effect(p):
               f"{np.mean(changes):.2f} on the component, {0.3 * np.mean(changes):.2f} on Constituent Alignment, "
               f"over {len(changes)} members; r2 R {new['fit']['R']['r2']}")
         print(f"   under {RELIABLE_VOTES} votes, no count or no position: " + "; ".join(thin))
+        if unmeasured:
+            print(f"   of no major party since a switch, not compared: {len(unmeasured)}")
 
 
 def _full_record_gradient(p):

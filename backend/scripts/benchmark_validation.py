@@ -181,8 +181,11 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
         position_confidence,
         position_congruence_score,
     )
-    from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points
+    from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points, latest_rows
 
+    # One row per member, as the build reads them (a party switcher's
+    # latest; without the last Congress's ids, the later row in the export).
+    member_rows = latest_rows(member_rows)
     data, failures = build_chamber_ideal_points(
         member_rows, chamber, _state_pvi(), _district_pvi(), reliability=_position_reliability(chamber),
     )

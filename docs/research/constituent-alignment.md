@@ -703,10 +703,12 @@ in a fixed order, 1,000 times.
   | once per era (101–109, 110–119), each era's curve on its own members | 1.279 |
   | once per direction (which side of the pair is thin) | 1.362 |
   | once per attendance (attended arrivals and departures, the rest) | 1.327 |
-  | once, plus a party-line term | 1.340 |
+  | once, plus a party-line term | 1.345 |
 
   A curve per chamber predicts worse (fitted apart, 25 votes for the
-  Senate and 55 for the House). Direction and attendance can't be known
+  Senate and 55 for the House), and judged only on the latest era's
+  members, as the era curve is below, worse again (0.049 above one
+  curve, standard error 0.041). Direction and attendance can't be known
   for a sitting member's record, so they are reported only. The direction
   split is which side of the pair is thin (the earlier, mostly members
   who arrived; the later, mostly members who left or were absent at the
@@ -725,11 +727,17 @@ in a fixed order, 1,000 times.
   comparison was made; repeated at every split with thin pairs on both
   sides (`era_split_test`), a recent era's curve beats one curve by more
   than a standard error at 4 of 16, the splits at the 113th, 114th, 115th
-  and 117th, by 1.0 to 1.5 standard errors on 16 to 49 members. That
-  hints that the most recent Congresses follow a slower curve; adopting
-  one now would mean choosing the split after seeing the data, so the
-  fixed split decides, and a rerun with more recent pairs tests it
-  again.
+  and 117th, by 1.0 to 1.5 standard errors on 16 to 49 members. That is
+  weak evidence of a slower recent curve, for three reasons. At every one
+  of those splits the recent curve is the slowest the form allows (n0 at
+  the search grid's upper limit, a half point of 98 votes, the linear
+  curve n / 200). It rests largely on one member, whose short
+  lame-duck record sits far from their next full one; without them the
+  recent curve's n0 falls from 5,000 to about 300. And the 16 splits are
+  nested and correlated, so 4 adoptions are not 4 pieces of evidence.
+  Adopting one now would also mean choosing the split after seeing the
+  data, so the fixed split decides, and a rerun with more recent pairs
+  tests it again.
 
 | | Estimate | 90% interval (members resampled, 1,000 times) |
 |---|---|---|
@@ -744,8 +752,9 @@ in a fixed order, 1,000 times.
 - **A party-line term was tested and is not used.** That would make n0 a
   line in the share of roll calls on which the parties' majorities split,
   since in a more party-line Congress each vote might say less about a
-  member's place within their party. It predicts held-out members worse
-  (1.340 against 1.336), and its slope isn't stable: +7.75 here, and
+  member's place within their party. It predicts held-out members no
+  better (1.345 against 1.336, 0.008 worse with a standard error of
+  0.033), and its slope isn't stable: +7.75 here, and
   negative in an earlier run with the party switchers counted (on a
   narrower grid). An earlier draft of this change found a positive slope
   by forcing one drift on every Congress, which loaded the era differences in drift
@@ -853,11 +862,15 @@ itself a sign of how little these data settle.
     clock, and a Congress still thin by the calendar is skipped) only
     adds the newest pairs.
   - A member Voteview lists twice in one Congress (a party switch during
-    it) is read on the record with more scaled votes, and only that one
-    enters the seat fits. Which to read is a convention: nothing
-    measures it, and the longer is the more reliable. The longer record
-    may predate the switch; it is still read against the seat
-    expectation of the member's current party.
+    it) is read on the record since the switch, their latest, and only
+    that one enters the seat fits. On the 9 such
+    members with a full record in the next Congress, it predicts that
+    record better (squared gap 0.039) than the longer record (0.083) or
+    the vote-weighted mean of the two (0.060); latest minus longer is
+    −0.044 with a standard error of 0.041 (`switcher_test`). The switch
+    moves a position more than a short record's noise does, and the
+    weight already discounts the noise. The latest record is the id the
+    last Congress's export didn't have (else the later row).
 - The seat fits are taken over every member, since a thin position is
   noisy but not biased.
 - The saturation scale is the 90th percentile of full records'
@@ -971,7 +984,7 @@ which read placeholders as positions and weighted nothing, with v6.27:
 | | Senate | House |
 |---|---|---|
 | Saturation | 0.258 → 0.268 | 0.224 → 0.221 |
-| Mean change in the component | 1.68 | 0.55 |
+| Mean change in the component | 1.68 | 0.56 |
 | Mean change in Constituent Alignment | 0.51 | 0.17 |
 
 - Full records move only through the scale and the refit seat lines. The
@@ -983,13 +996,15 @@ which read placeholders as positions and weighted nothing, with v6.27:
   - Two recently sworn-in representatives with no count and no career
     position move from 23.3 and 31.1 to 50.
   - Representatives with 77 and 72 votes move from 93.2 to 82.5 and from
-    75.3 to 68.5.
+    75.3 to 68.4.
   - A representative far beyond saturation (135 votes) stays at its end;
-    the others with 116–171 votes move about 1 to 3 points.
+    the others with 116–171 votes move by under 1 to 3 points.
   - Senators with 53 and 187 votes move by under 1.
-  - A representative who switched parties during the Congress is read on
-    their longer record (386 votes, a full one) rather than the later,
-    shorter one (182).
+  - A representative who left their party during the Congress is read on
+    their record since the switch (182 votes), as before; with no major
+    party there, the score reads it against the caucus the pipeline
+    infers from their votes, which this comparison doesn't have, so they
+    are left out of it.
   - Members scored from 1 to 39 votes or a placeholder, all since departed,
     move by up to 50 points.
 
