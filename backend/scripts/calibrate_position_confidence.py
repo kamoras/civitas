@@ -482,8 +482,8 @@ def _stratum(x: float) -> int:
 
 def switch_model(data: list[tuple]):
     """How well each record places a member on their side of the party,
-    by distance from the center of the record compared with (strata,
-    SWITCH_STRATA): (last full record's rate in the full pairs' mix, a thin
+    by distance from the center of the pair's full record (the later one
+    in a pair of full records; strata, SWITCH_STRATA): (last full record's rate in the full pairs' mix, a thin
     record's own-Congress rate at each of SWITCH_COUNTS in that mix), or
     None. A last full record agrees with the next Congress's at q_s, the
     full pairs' rate. A thin record is observed only against the other
@@ -503,7 +503,7 @@ def switch_model(data: list[tuple]):
     y = np.array([_same_side(r) for r in thin], float)
     beta = np.zeros(k + 1)
     for _ in range(100):  # Newton's method on the logistic likelihood, lightly ridged
-        p = 1 / (1 + np.exp(-x @ beta))
+        p = 1 / (1 + np.exp(-np.clip(x @ beta, -500, 500)))
         hessian = x.T @ (x * (p * (1 - p))[:, None]) + 1e-6 * np.eye(k + 1)
         step = np.linalg.solve(hessian, x.T @ (y - p) - 1e-6 * beta)
         beta += step
@@ -513,7 +513,7 @@ def switch_model(data: list[tuple]):
     if not present.any() or np.any(2 * q[present] - 1 <= 0):
         return None
     w = mix[present] / mix[present].sum()
-    a = 1 / (1 + np.exp(-(beta[:k][None, present] + beta[-1] * np.log(SWITCH_COUNTS)[:, None])))
+    a = 1 / (1 + np.exp(-np.clip(beta[:k][None, present] + beta[-1] * np.log(SWITCH_COUNTS)[:, None], -500, 500)))
     own = np.clip((a - (1 - q[present])) / (2 * q[present] - 1), 0.0, 1.0)
     return float(q[present] @ w), own @ w
 
@@ -536,8 +536,9 @@ def switch_test(data: list[tuple], seed: int = 0) -> dict | None:
     """Whether a switch short of a full record places members better than
     keeping the last full record until the new one is full: the best switch
     on `data`, the share of sides it saves there, and the share saved out of
-    sample (a switch chosen on members resampled, judged on all of them),
-    with its 5th, 50th and 95th percentiles and how often it saves any."""
+    bag: a switch chosen on members resampled, judged on the members that
+    resample left out, with its 5th, 50th and 95th percentiles and how often
+    it saves any; and the thin pairs behind it, all and over 100 votes."""
     model = switch_model(data)
     if model is None:
         return None
@@ -549,13 +550,19 @@ def switch_test(data: list[tuple], seed: int = 0) -> dict | None:
     ids = sorted(by_member)
     saved = []
     for _ in range(BOOTSTRAP):
-        drawn = switch_model([row for i in rng.choice(ids, len(ids)) for row in by_member[i]])
+        picked = rng.choice(ids, len(ids))
+        drawn = switch_model([row for i in picked for row in by_member[i]])
+        # Judged on the members the resample left out, never on those it chose from.
+        held = switch_model([row for i in sorted(set(ids) - set(picked)) for row in by_member[i]])
+        if held is None:
+            continue
         chosen = RELIABLE_VOTES if drawn is None else best_switch(drawn)
-        saved.append(misplaced(model, RELIABLE_VOTES) - misplaced(model, chosen))
+        saved.append(misplaced(held, RELIABLE_VOTES) - misplaced(held, chosen))
     saved = np.array(saved)
-    return {"switch_votes": switch,
+    thin = [r for r in data if r[5] == "thin"]
+    return {"switch_votes": switch, "thin_pairs": len(thin), "thin_pairs_over_100": sum(r[2] > 100 for r in thin),
             "saved": round(misplaced(model, RELIABLE_VOTES) - misplaced(model, switch), 4),
-            "saved_out_of_sample": [round(float(v), 4) for v in np.percentile(saved, (5, 50, 95))],
+            "saved_out_of_bag": [round(float(v), 4) for v in np.percentile(saved, (5, 50, 95))],
             "share_saving": round(float((saved > 0).mean()), 3)}
 
 
@@ -593,6 +600,9 @@ def prior_test(data: list[tuple]) -> dict:
     crossover = prior_crossover(data)
     out["crossover_if_independent"] = None if crossover is None else round(crossover, 1)
     usable = [r for r in data if r[5] != "uncounted"]
+    out["rule_shape_bands"] = {
+        f"thin {lo}-{hi}": summary(rows) for lo, hi in PRIOR_BANDS
+        if (rows := [r for r in usable if r[5] == "thin" and r[8] and lo < r[2] <= hi])}
     out["switch_test"] = {
         "rule_shape": switch_test([r for r in usable if r[5] == "full" or r[8]]),
         "all": switch_test(usable),
@@ -603,11 +613,11 @@ def prior_test(data: list[tuple]) -> dict:
 def prior_until_votes(test: dict) -> float:
     """The count below which the flank rule reads the last full record: a
     full record (no switch short of one) unless, on the pairs shaped like
-    the rule's case, a switch chosen from the data saves sides out of sample
-    in at least 95% of resamples (its 5th percentile above 0); then that
+    the rule's case, a switch chosen on resampled members saves sides on the
+    members left out in at least 95% of resamples (its 5th percentile above 0); then that
     switch."""
     shape = (test.get("switch_test") or {}).get("rule_shape")
-    if shape and shape["saved_out_of_sample"][0] > 0:
+    if shape and shape["saved_out_of_bag"][0] > 0:
         return float(shape["switch_votes"])
     return float(RELIABLE_VOTES)
 
@@ -702,7 +712,9 @@ def main() -> None:
     args = ap.parse_args()
     calibrated = calibrate(args.cache)
     # With a cache, the exports are as old as the newest cached file.
-    cached = [f.stat().st_mtime for f in args.cache.glob("*.csv")] if args.cache else []
+    used = range(FIRST_CONGRESS, calibrated["calibrated_through"] + 1)
+    cached = [f.stat().st_mtime for c in used for ch in "SH" for kind in ("members", "votes")
+              if (f := args.cache / f"{ch}{c}_{kind}.csv").exists()] if args.cache else []
     retrieved = (datetime.date.fromtimestamp(max(cached)) if cached else datetime.date.today()).isoformat()
     data = {
         "_source": (
@@ -731,8 +743,9 @@ def main() -> None:
             "the 5th-95th percentile over members resampled; prior_test compares, for the flank rule, "
             "a last full record and a thin record as evidence of a member's side of their party, "
             "centered as the rule centers, and prior_until_votes is the count below which the rule "
-            "reads the last full record (a full record unless a switch short of one saves sides out "
-            "of sample in 95% of resamples on pairs shaped like the rule's case); "
+            "reads the last full record (a full record unless a switch short of one, chosen on "
+            "resampled members, saves sides on the members left out in 95% of resamples, on pairs "
+            "shaped like the rule's case); "
             "structure_test is the one-standard-error rule's comparison"
         ),
         **calibrated,

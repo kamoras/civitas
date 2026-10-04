@@ -200,10 +200,12 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     # read from one against a party read from the other.
     ideal = _member_ideal_points(chamber) or {}
 
-    party_of: dict[str, str] = dict(stored)
+    party_of: dict[str, str] = {}
     if chamber == "house":
-        # The House's roll calls name every member's bioguide and party.
+        # The House's roll calls name every member's bioguide and party; a
+        # stored caucus party (an independent's) reads over them.
         party_of.update({p.member_id: p.party for ps in positions.values() for p in ps if p.member_id})
+    party_of.update(stored)
     party_of.update({m.get("bioguideId"): parties[i] for i, m in enumerate(members) if m.get("bioguideId")})
 
     def weighted(section) -> dict:
@@ -248,7 +250,7 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             # A last full record decides until the new record reaches
             # prior_until_votes (calibrate_position_confidence: a full record,
             # unless a switch short of one is shown to place members better
-            # out of sample). Only a full last record was measured, so a thin
+            # out of bag). Only a full last record was measured, so a thin
             # one doesn't replace this Congress's.
             n, last = counts.get(b), prior_counts.get(b)
             if (n is None or n < float(until)) and last is not None and float(last) >= float(full):

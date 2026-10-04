@@ -130,7 +130,7 @@ def test_shipped_file_documents_its_source_and_intervals():
     by_distance = list(data["prior_test"]["full_by_distance"].values())
     assert by_distance == sorted(by_distance)
     # The flank rule's switch: a full record unless a shorter one is shown
-    # to save sides out of sample on pairs shaped like the rule's case.
+    # to save sides out of bag on pairs shaped like the rule's case.
     assert data["prior_until_votes"] == _script().prior_until_votes(data["prior_test"]) <= 200
 
 
@@ -259,7 +259,8 @@ def test_the_switch_takes_the_drift_out_within_each_distance_stratum():
     assert script.misplaced(model, switch) <= script.misplaced(model, 200)
     # No switch beats a full record when agreement doesn't rise with the count.
     flat = _switch_pairs((3, 3, 3, 3), (6, 6, 6, 6))
-    assert script.best_switch(script.switch_model(flat)) == 200 or script.switch_model(flat) is None
+    flat_model = script.switch_model(flat)
+    assert flat_model is None or script.best_switch(flat_model) == 200
 
 
 def _observed(script, data):
@@ -282,15 +283,17 @@ def _observed(script, data):
     return a @ (mix[present] / mix[present].sum())
 
 
-def test_a_switch_short_of_a_full_record_must_save_sides_out_of_sample(monkeypatch):
+def test_a_switch_short_of_a_full_record_must_save_sides_out_of_bag(monkeypatch):
     """prior_until_votes is a full record unless the rule-shaped pairs'
-    switch saves sides out of sample in 95% of resamples."""
+    switch, chosen on resampled members, saves sides on the members left
+    out in 95% of resamples."""
     script = _script()
     monkeypatch.setattr(script, "BOOTSTRAP", 40)
     strong = script.switch_test(_switch_pairs((6, 9, 10, 10), (8, 10, 10, 10)))
     assert strong["switch_votes"] < 200 and strong["saved"] > 0
-    assert script.prior_until_votes({"switch_test": {"rule_shape": strong}}) == (
-        strong["switch_votes"] if strong["saved_out_of_sample"][0] > 0 else 200.0)
-    weak = {"switch_votes": 150, "saved": 0.001, "saved_out_of_sample": [-0.01, 0.0, 0.001], "share_saving": 0.4}
+    adopted = {**strong, "saved_out_of_bag": [0.01, 0.02, 0.03]}
+    assert script.prior_until_votes({"switch_test": {"rule_shape": adopted}}) == float(strong["switch_votes"])
+    assert strong["thin_pairs"] == 80 and strong["thin_pairs_over_100"] == 20
+    weak = {"switch_votes": 150, "saved": 0.001, "saved_out_of_bag": [-0.01, 0.0, 0.001], "share_saving": 0.4}
     assert script.prior_until_votes({"switch_test": {"rule_shape": weak}}) == 200.0
     assert script.prior_until_votes({"switch_test": {"rule_shape": None}}) == 200.0

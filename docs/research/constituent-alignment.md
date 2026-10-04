@@ -783,7 +783,7 @@ and keeps one curve.
 flank rule at 53 votes, on pairs centered on the median of each party's
 full records rather than as the rule centers, with noise and drift
 assumed independent everywhere. The sixth switched at 92, the best
-switch over all thin pairs, without testing it out of sample or on the
+switch over all thin pairs, without testing it out of bag or on the
 pairs shaped like the rule's case; there it doesn't hold up (below).
 
 **Shipped (v6.27).**
@@ -864,27 +864,48 @@ pairs shaped like the rule's case; there it doesn't hold up (below).
     center (under 0.05, 0.05–0.1, beyond), noise and drift independent
     within each, agreement a logistic in log votes with an intercept per
     stratum, implied rates clipped to [0, 1].
-  - Whether to switch before a full record is then tested out of sample
+  - Whether to switch before a full record is then tested out of bag
     (`switch_test`): a switch is chosen, as the one misplacing the fewest
     sides over counts 1–199, on members resampled 1,000 times, and judged
-    on all of them against keeping the last full record. A switch short
-    of a full record is used only if it saves sides in at least 95% of
-    resamples. The test is on the pairs shaped like the rule's case: a
-    full record, then the first votes of the next Congress (members who
-    left; the entrants' thin record is the end of a Congress):
+    on the members that resample left out against keeping the last full
+    record. The test is on the pairs shaped like the rule's case: a full
+    record, then the first votes of the next Congress (members who left;
+    an entrant's thin record is the end of a Congress). Their bands:
 
-    | Pairs | Best switch | Sides saved | Saved out of sample (5th / 50th / 95th) | Resamples saving |
-    |---|---|---|---|---|
-    | **shaped like the rule's case (shipped)** | 161 | 0.3% | −4.3% / 0 / 0.3% | 18% |
-    | all thin pairs | 92 | 3.1% | 0 / 2.6% / 3.1% | 82% |
+    | Votes | Pairs | Same side |
+    |---|---|---|
+    | 1–25 | 13 | 54% |
+    | 26–50 | 5 | 60% |
+    | 51–100 | 14 | 64% |
+    | 101–150 | 12 | 83% |
+    | 151–199 | 5 | 80% |
 
-    Neither clears the bar, so the rule keeps the last full record until
-    the new one is full. Pooled, a switch at 92 votes looks better, but
-    the entrants pull it down, and they are not the rule's case. Only 34 thin pairs have over 100 votes, fewer of them members who
-    left (the rule's case), so a
-    rerun with more pairs could still find a switch that clears it. This
-    first applies in the 120th Congress: a 119th section written before
-    v6.27 keeps no earlier positions.
+    | Pairs | Thin (over 100 votes) | Best switch | Sides saved | Saved out of bag (5th / 50th / 95th) | Resamples saving |
+    |---|---|---|---|---|---|
+    | **shaped like the rule's case (shipped)** | 49 (17) | 161 | 0.3% | −23% / 0 / 1.7% | 12% |
+    | all thin pairs | 99 (34) | 92 | 3.1% | −14% / 0 / 5.4% | 44% |
+
+  - Two conventions decide it, stated as such. Keeping the last full
+    record is the default, since it is the rule as designed and the one
+    count at which the new record needs no model to be trusted; and a
+    switch short of it is used only if it saves sides on the left-out
+    members in at least 95% of resamples, the same burden the
+    one-standard-error rule puts on a more complex curve. Neither row
+    clears it, so the rule keeps the last full record until the new one
+    is full. The stakes are small: the best switch saves 0.3% of sides on
+    the rule-shaped pairs, and on the 119th Congress the weighting changed
+    2 of 8,406 breaks. The data can't tell a switch near 161 from a full
+    record; they don't favor an early one. Over all thin pairs a switch
+    at 92 votes looked better in sample, but members who arrived
+    mid-Congress pull it down, and they are not the rule's case; the
+    test was narrowed to the rule's shape after that switch was first
+    proposed, for that reason.
+  - At very low counts the model's logistic in log votes extrapolates
+    below a coin flip (a 1-vote record's own-Congress agreement comes out
+    near 0.26, clipped), which makes early switches look worse than they
+    are; it moves the lower tail of the table, not the decision, which
+    turns on counts above 100. This first applies in the 120th Congress:
+    a 119th section written before v6.27 keeps no earlier positions.
   - On the 119th Congress's party-unity roll calls (majorities opposed,
     Voteview's votes) the weighting alone reclassifies none of 2,351
     Senate breaks and 2 of 6,055 House breaks.
@@ -954,8 +975,8 @@ which read placeholders as positions and weighted nothing, with v6.27:
   (entrants, leavers) predicts worse than one for both, and whether early
   records in a Congress behave like these is untested. The no-count
   weight rests on fewer still (25 pairs). The flank rule's switch test
-  rests on the members who left among the 34 thin pairs above 100 votes,
-  and whether returning members' early records behave like theirs is
+  rests on the 49 members who left, 17 of them with over 100 votes, and
+  whether returning members' early records behave like theirs is
   untested too.
   Rerunning the calibration adds each Congress's new pairs, and decides
   the structure and the switch again.

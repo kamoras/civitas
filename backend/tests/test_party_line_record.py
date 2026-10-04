@@ -321,3 +321,10 @@ def test_a_section_a_congress_ahead_reads_the_roll_calls_congress_from_its_prior
     db_session.commit()
     record = party_line_records(db_session, "house", _members())[4]
     assert record["breaks"] == [] and record["flankBreaks"] != []
+    # A member only the newer section has (sworn in since) is read from it.
+    section["prior"]["members"] = {m: d for m, d in DIM1.items() if m != "R4"}
+    section["members"]["R4"], section["votes"] = 0.9, {**{m: 500 for m in DIM1}, "R4": 40}
+    record = party_line_records(db_session, "house", _members())[4]
+    assert record["flankBreaks"] != []
+    del section["members"]["R4"]
+    assert party_line_records(db_session, "house", _members())[4]["breaks"] != []
