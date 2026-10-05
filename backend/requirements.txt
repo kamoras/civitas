@@ -102,7 +102,7 @@ torch @ https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp313-cp313-m
 torch @ https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl#sha256=160e1bc46aeded3111d2801f8ae10dc9a1b946843a7e126b4dbf5e19c5706e95 ; sys_platform == "linux" and platform_machine == "x86_64"
 torch==2.14.0 ; sys_platform != "linux"
 tqdm==4.70.1
-transformers==5.17.0
+transformers==5.18.0
 typer==0.27.2
 typing-inspection==0.4.4
 typing_extensions==4.16.0
