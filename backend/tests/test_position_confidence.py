@@ -798,9 +798,11 @@ def test_shipped_file_reports_what_the_docs_cite():
                      / forward["pooled"]["error"])
         for text in (note, entry):
             assert f"about {bar}%" in text and f"at most {most}% at any split" in text
-        # A margin under two standard errors is never called a win.
+        # The era curve's margin is under two standard errors: the old
+        # phrasings that called it a win are gone from both documents.
         if abs(forward["era"]["above"]) < 2 * forward["era"]["standard_error"]:
-            assert "each beat one curve" not in note and "beats one curve by 0.0" not in note
+            for text in (note, entry):
+                assert "each beat one curve" not in text and "beats one curve by 0.0" not in text
         # Every copy, not just one: a stale one would otherwise pass.
         assert note.count(f"at most {most}% at any split") == 2
         # The split the data would choose, and that member's leave-one-out.

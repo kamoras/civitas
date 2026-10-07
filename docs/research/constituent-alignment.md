@@ -792,17 +792,18 @@ in a fixed order, 1,000 times.
     (0.011 lower error, standard error 0.012, `window_against_era`): these
     tests can't tell recency from a break at the split. The time trend
     predicts about as well over every transition. Its forward fits sit at
-    the ends of their search grids through the 112th, where it predicts
-    worse than one curve; from the 113th, with every fit inside the grids,
-    it has lower error than one curve by 0.142 (standard error 0.065) and
-    than the era curve by 0.100 (standard error 0.053, under two standard
-    errors; `trend.inside_grids`, a range picked after seeing where the
-    fits sit, and one that drops the stretch where it did worse overall,
-    through the 112th). Over every predicted transition, the range the rule
-    judges, it has 0.069 lower error than one curve, within the noise
-    (standard error 0.089); it is reported, not a candidate (added after the
-    other tests, a stated choice). It suggests, without testing, a curve
-    that keeps slowing.
+    the ends of their search grids through the 112th, where it has higher
+    error than one curve, within the noise (0.073 higher, standard error
+    0.064, computed from the script's per-member forward errors); from the
+    113th, with every fit inside the grids, it has lower error than one
+    curve by 0.142 (standard error 0.065) and than the era curve by 0.100
+    (standard error 0.053, under two standard errors; `trend.inside_grids`,
+    a range picked after seeing where the fits sit, and one that drops the
+    stretch where its error was higher, through the 112th). Over every
+    predicted transition, the range the rule judges, it has 0.069 lower
+    error than one curve, within the noise (standard error 0.089); it is
+    reported, not a candidate (added after the other tests, a stated
+    choice). It suggests, without testing, a curve that keeps slowing.
 
   So the evidence suggests recent thin records say less than one curve
   credits, without settling how much less: the half point is 36 for one
