@@ -731,13 +731,14 @@ in a fixed order, 1,000 times.
   | **once for both chambers (shipped)** | **1.320** | |
   | once per chamber | 1.359 | 0.038 higher, within the noise (standard error 0.040) |
   | the latest era's, since the 110th | 1.254 | 0.066 lower, under two standard errors (0.034) |
-  | the last six transitions | 1.243 | 0.078 better (0.036) |
+  | the last six transitions | 1.243 | 0.078 lower (0.036) |
   | a time trend (reported only) | 1.251 | 0.069 lower, within the noise (0.089) |
 
   The window predicts best (`best`), and its error's standard error is
   0.229, so every structure is within it and one curve ships. Paired
-  member by member, the era curve and the window each beat one curve by
-  about two standard errors of the difference (computed from
+  member by member, the era curve and the window each have lower error
+  than one curve by about two standard errors of the difference (the era
+  curve's under two, the window's just over; computed from
   `forward_test`'s above and standard_error), so recent thin records may
   say less than one curve credits, but the textbook rule judges a
   structure by the noise in the best's own error, which is far larger: the
@@ -1279,13 +1280,14 @@ rule's means reclassifies 0 of 2,351 Senate and 0 of 6,055 House breaks
   thin record next to a full one, so the half point has a wide interval
   (21–77 votes). Whether recent Congresses follow a slower curve is open:
   paired member by member, the era curve and a window of recent
-  transitions each beat one curve by about two standard errors of the
-  difference (computed from `forward_test`'s above and standard_error),
-  but not by the noise in the best's own error, which the shipped rule
-  judges by (a bar of about a 17% cut in forward error on these data,
-  computed, against the 5% and 6% they show: the era curve cut it by at
-  most 7% at any split (computed from `era_at_every_split`)), and not when
-  the split or the width is chosen from the data as a forecast must
+  transitions each have lower error than one curve by about two standard
+  errors of the difference (the era curve's under two, the window's just
+  over; computed from `forward_test`'s above and standard_error), but not
+  by the noise in the best's own error, which the shipped rule judges by
+  (a bar of about a 17% cut in forward error on these data, computed,
+  against the 5% and 6% they show: the era curve cut it by at most 7% at
+  any split, computed from `era_at_every_split`), and not when the split
+  or the width is chosen from the data as a forecast must
   (`data_chosen_test`); left one member out, later splits lean that way,
   and the time trend, from the 113th where its fits are inside the search
   grids (a range picked after seeing the fits), has lower error than the
