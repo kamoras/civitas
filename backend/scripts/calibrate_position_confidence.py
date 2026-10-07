@@ -37,8 +37,8 @@ error of the best's, that standard error the best's own
 others had been run and seen: two leaving one member out (an earlier
 draft's choice over every member, then era_test), then two forward, both
 reported (paired_rule, best_beating_one_curve; research note section 14);
-data_chosen_test
-reports the split and the width chosen from the data instead. The
+data_chosen_test reports the split and the width chosen from the data
+instead. The
 leave-one-member-out comparisons (choose_structure's
 one-standard-error rule over all members; era_test on the latest era's;
 era_split_test at every split; trend_test) are reported beside it; a rerun
