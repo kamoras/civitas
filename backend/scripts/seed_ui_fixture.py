@@ -131,7 +131,7 @@ def seed(db) -> None:
         db.add(M.President(id=f"P{number}", name=name, party=party, number=number,
                            term_start=start, term_end=end,
                            score_public_mandate=rng.randint(30, 90), score_effectiveness=rng.randint(30, 90),
-                           score_agency_alignment=rng.randint(30, 90), score_historical_legacy=rng.randint(30, 90)))
+                           score_historical_legacy=rng.randint(30, 90)))
     for i, name in enumerate(("Jane Example", "John Sample", "Ruth Placeholder")):
         db.add(M.Justice(id=f"J{i}", name=name, last_name=name.split()[-1], is_active=True,
                          score_loyalty=rng.randint(30, 90), loyalty=rng.uniform(-0.1, 0.2), loyalty_se=0.04,

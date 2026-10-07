@@ -160,3 +160,53 @@ real dataset under this new scheme: 35% still lands Lincoln/Eisenhower
 in the top 10 and Coolidge/Harding/McKinley out of it, so the number
 itself didn't need to change — only how it's applied.
 ```
+
+### President v8 (2026-10-06): postwar GDP growth relative to peer economies
+
+```text
+Weights unchanged (25/25/50). Effectiveness's GDP component (60%), for
+terms starting 1947 or later:
+
+  relative = mean over credited years t of
+             (US growth per person_t - median peer growth_t
+              - rate x median peer log income gap with the US_(t-1))
+
+scored against the postwar population's mean and SD of `relative`
+(compute_president_reference, "gdp_growth_relative"). Credited years: the
+term's second to its last. Peers: 13 advanced economies. rate: Theil-Sen
+slope of (US - median peer growth) on the median gap, every year since
+1947, refitted each run (8.9 in October 2026). Before 1947 unchanged: total
+growth against prewar presidencies. docs/research/president-scores.md has
+the measurements.
+```
+
+### President v7 (2026-10-06): Historical Legacy 50%, Agency Alignment removed
+
+```text
+publicMandate 25%, effectiveness 25%, historicalLegacy 50%.
+
+Agency Alignment removed. Its finalization rate counted Federal Register
+rulemaking documents per term, and the documents API reports at most
+10,000 results: Clinton's, George W. Bush's and Obama's counts were capped
+for both document types and read exactly 50%. Counted in windows under the
+cap, every administration since 1994 finalized 59.6% to 61.8% of the
+rulemakings it began (Obama 59.6, Clinton 60.8, Biden 61.3, Trump 61.4,
+G. W. Bush 61.8, Trump second term 61.8 so far). Scored against those six
+administrations' spread, a two-point gap reads as nearly two standard
+deviations: the measure magnifies noise rather than separating
+administrations, so it is dropped rather than rescaled.
+
+Historical Legacy 35% -> 50%. Measured on the current scores (approval
+judged against the starting level and over a short term's own days;
+Agency Alignment gone), 45 rated presidents:
+  35%: Spearman 0.78 with C-SPAN alone, 0.83 with the other two dimensions
+  50%: Spearman 0.90 with C-SPAN alone, 0.69 with the other two
+At 35% historians carried no more weight than approval and the economy
+together. 50% is no longer the "contributes almost nothing" case it was
+when last tried (0.96): the other dimensions still move the ranking.
+
+Each president's page shows the weights their overall was actually
+computed with (president_effective_weights): with Historical Legacy and
+both others present, 50/25/25; with one other, two thirds and one third;
+a sitting president, unrated by historians, 50/50 on the other two.
+```

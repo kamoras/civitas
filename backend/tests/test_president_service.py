@@ -31,7 +31,7 @@ class TestGetPresident:
         result = get_president(db_session, "test-1")
         assert result.score.public_mandate is None
         assert result.score.effectiveness is None
-        assert result.score.agency_alignment is None
+        assert result.score.effective_weights == {}
         assert result.score.historical_legacy is None
         assert result.score.overall == 0.0
         assert result.score.dimensions_available == 0
@@ -97,7 +97,7 @@ class TestGetPresidentScoreBreakdown:
 
         breakdown = get_president_score_breakdown(db_session, "test-3")
         assert set(breakdown) == {
-            "publicMandate", "effectiveness", "agencyAlignment", "historicalLegacy",
+            "publicMandate", "effectiveness", "historicalLegacy",
         }
         assert breakdown["effectiveness"]["score"] is not None
         assert breakdown["publicMandate"]["score"] is None
@@ -107,7 +107,7 @@ class TestGetPresidentScoreBreakdown:
         db_session.add(_make_president(
             "trump-47", name="Donald J. Trump", number=47, term_start="2025-01-20",
             avg_approval=37.3, approval_trend=-5.6, recent_avg_approval=35.4,
-            rulemaking_finalized_pct=62.0, rulemaking_count=1400, jobs_created_millions=0.5,
+            jobs_created_millions=0.5,
         ))
         db_session.add(_make_president(
             "trump-45", name="Donald J. Trump", number=45, term_start="2017-01-20", term_end="2021-01-20",
@@ -119,7 +119,6 @@ class TestGetPresidentScoreBreakdown:
         mandate = b["publicMandate"]["facts"]
         assert (mandate["approval"], mandate["approvalTrend"], mandate["recentApproval"]) == (37.3, -5.6, 35.4)
         assert mandate["approvalMean"] is not None  # the all-president average it's scored against
-        assert b["agencyAlignment"]["facts"]["rulemakings"] == 1400
         assert b["effectiveness"]["facts"]["jobsMillions"] == 0.5
         # A sitting president's term is unrated; the same person's other
         # presidency's rating is named.

@@ -32,6 +32,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.28",
+    date: "2026-10-07",
+    title: "House procedural votes no longer count as party loyalty anywhere",
+    tldr: "Votes on House procedural motions, like ordering the previous question or a motion to recommit, were still marked as votes with or against the party on House scorecards, and the House's motion to commit still counted toward Constituent Alignment. Neither does now, as already in the Senate. Scores barely move; House scorecards show fewer votes with the party.",
+    changes: [
+      "A House member's recent votes were marked with or against the party from a label that, unlike the roll-call split used everywhere else, was still set on motions that run the chamber. On the House's latest 120 roll calls of 2026, 19 were such motions, marking 7,956 member-votes as with the party against 26. The shown recent-vote break rate rises from 2.20% to 2.79% for Republicans and from 2.78% to 3.51% for Democrats. Constituent Alignment reads the whole-Congress party-line record instead, which already left these out.",
+      "The House's motion to commit, the motion to recommit's twin for a bill no committee reported, is now left out like it. It still counted in the party-line record: the 119th House held 4, all party-line, and no member broke on any, so Constituent Alignment moves by a fraction of a point at most. The Senate's motion to commit amends the bill and still counts.",
+      "Every stored vote is now built by one shared function in both chambers, and the House rebuilds the party positions partisan depth compares bills with at the start of its own run, from both chambers' votes, instead of reusing whatever the Senate run left. A procedural motion is no longer read as a vote on its bill: a motion to recommit carries the bill's title, and a Yea on it counted toward the bill's party in partisan depth. Such motions also no longer appear among the featured key votes or the donor-industry vote matches. docs/methodology/member-score/v6.28.md has the details.",
+    ],
+  },
+  {
     // The half point (about 36 votes) and the full-strength count (200) quoted here come
     // from backend/app/data/position_confidence.json; test_position_confidence.py pins them.
     version: "v6.27",
@@ -48,6 +59,33 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
       "Also fixed: the House's data check counted members, and delegates and mid-term replacements had pushed it past its limit, so House positions had stopped refreshing. It now counts seats.",
       "Tested and kept: this part scores 50 for sitting where members of their party from similar seats sit, and above 50 for sitting nearer the seat's center. Scoring it like the vote part (100 at the typical position) was tested against House and Senate general-election results and predicted nothing, while the current shape did; neither shape predicted primary results. One scale for both parties was also kept (our choice: a scale per party predicted elections no better and no worse), though it leaves more of the party whose members spread more widely near 0 and 100.",
       "Effect on October 2026 data: the average member moves 0.5 points (Senate) and under 0.2 (House) on Constituent Alignment through the position part; on the vote part, the new weighting changes no break in either chamber (6,055 House, 2,351 Senate). Two recently sworn-in representatives' position part moves from 23.3 and 31.1 to 50 (it is 30% of Constituent Alignment). Members scored on 1 to 39 votes or Voteview's placeholder, all since departed, move by up to 50 points on that part. docs/methodology/member-score/v6.27.md has the measurements.",
+    ],
+  },
+  {
+    version: "President v8",
+    date: "2026-10-07",
+    title: "Postwar growth compared with 13 peer economies, allowing for their catching up",
+    tldr: "Oil shocks, financial crises and the pandemic hit every rich country at once, so a president's growth record mostly reflected the world economy. From 1947 on, Effectiveness now compares US growth per person with 13 peer economies over the same years. Europe and Japan grew fast in the 1950s and 1960s because they were catching up with US incomes, not because those presidents fell short, so that part is set aside.",
+    changes: [
+      "Why: since 1961, 68% of the variation in a presidency's growth per person is shared with the median of the 13 peers over the same years. Total growth also ran ahead for Democrats by 0.9 points a year; against the peers, 0.6.",
+      "The peers are Britain, France, Germany, the Netherlands, Belgium, Italy, Sweden, Denmark, Norway, Switzerland, Canada, Australia and Japan, from the Maddison Project (through 2022) and the World Bank after.",
+      "Catch-up: compared raw, relative growth rose with a term's start year (r = +0.73 over the 13 completed postwar terms), because the peers were poorer then. Each year's gap is adjusted by how far below US incomes the peers were, at a rate measured from every year since 1947 with a method that a single unusual year can't swing. The era trend falls to +0.41, the rest from terms since 2017, when the US outgrew Europe and Japan.",
+      "The years credited are the same as before: from the term's second year, since the first mostly reflects the predecessor. Inherited momentum was checked and doesn't carry over: growth in the two years before a term doesn't predict growth during it (r = -0.08, 43 terms).",
+      "Presidents before 1947 are unchanged: no peer series covers their terms. Job creation is unchanged.",
+      "Effect on October 2026 data, Effectiveness: Eisenhower 36 to 18, Kennedy 69 to 48, Nixon 45 to 26, Clinton 73 to 55; George H. W. Bush 21 to 31, George W. Bush 20 to 28, Trump's first term 20 to 45, Biden 53 to 83. docs/research/president-scores.md has the study.",
+    ],
+  },
+  {
+    version: "President v7",
+    date: "2026-10-07",
+    title:
+      "Historians count for half; Agency Alignment removed; a term cut short compared over its own length",
+    tldr: "The president score is now historians' assessment (50%), public approval (25%) and the economy (25%). Agency Alignment is gone: once a counting error was fixed, every administration since 1994 finalized nearly the same share of its rules. A presidency cut short, like Kennedy's, is now compared with how predecessors' approval moved over the same number of days, not over whole terms. Each score on a president's page shows the share it actually carries in their overall.",
+    changes: [
+      "Historical Legacy rises from 35% to 50%, and Public Mandate and Effectiveness take 25% each. On the current scores, at 35% the overall correlated about as much with the economy and approval (0.83) as with historians' ratings (0.78); at 50% historians lead (0.90) and the record still moves the ranking (0.69).",
+      "Agency Alignment (the share of rulemakings that reached a final rule) is removed. The Federal Register's search reports at most 10,000 results, so Clinton, George W. Bush and Obama all read exactly 50%. Counted in full, administrations since 1994 range from 59.6% to 61.8%, too little difference to score, and compared only with each other a two-point gap read as nearly two standard deviations.",
+      "A presidency shorter than a full four-year term is compared with predecessors over the same number of days, as the sitting president already was, and is left out of the whole-term comparison. Kennedy's approval fell 14 points from a start of 76%: against whole terms that looked far better than the expected 31-point fall, while presidents starting there fell about 16 points in their first 1,001 days. His approval trend score goes from 87 to 57.",
+      "Each score's percentage on a president's page is now the share it actually carries in that president's overall. A sitting president, unrated by historians, has approval and the economy at 50% each.",
     ],
   },
   {

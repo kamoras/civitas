@@ -101,7 +101,6 @@ SENATOR_DIMENSION_LABELS = {
 PRESIDENT_DIMENSION_LABELS = {
     "score_1": "publicMandate",
     "score_2": "effectiveness",
-    "score_4": "agencyAlignment",
     "score_5": "historicalLegacy",
 }
 

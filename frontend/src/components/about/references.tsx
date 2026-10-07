@@ -35,6 +35,24 @@ export const REFERENCES = {
       </>
     ),
   },
+  barro1992: {
+    short: "Barro & Sala-i-Martin 1992",
+    entry: (
+      <>
+        Barro, R. J. &amp; Sala-i-Martin, X. (1992). Convergence.{" "}
+        <J>Journal of Political Economy</J>, 100(2), 223–251.
+      </>
+    ),
+  },
+  baumol1986: {
+    short: "Baumol 1986",
+    entry: (
+      <>
+        Baumol, W. J. (1986). Productivity Growth, Convergence, and Welfare: What the Long-Run Data
+        Show. <J>American Economic Review</J>, 76(5), 1072–1085.
+      </>
+    ),
+  },
   baumgartner1993: {
     short: "Baumgartner & Jones 1993",
     entry: (
@@ -50,6 +68,24 @@ export const REFERENCES = {
       <>
         Bengio, Y., Ducharme, R., Vincent, P., &amp; Jauvin, C. (2003). A Neural Probabilistic
         Language Model. <J>Journal of Machine Learning Research</J>, 3, 1137–1155.
+      </>
+    ),
+  },
+  blinder2016: {
+    short: "Blinder & Watson 2016",
+    entry: (
+      <>
+        Blinder, A. S. &amp; Watson, M. W. (2016). Presidents and the U.S. Economy: An Econometric
+        Exploration. <J>American Economic Review</J>, 106(4), 1015–1045.
+      </>
+    ),
+  },
+  bolt2024: {
+    short: "Bolt & van Zanden 2024",
+    entry: (
+      <>
+        Bolt, J. &amp; van Zanden, J. L. (2024). Maddison-style estimates of the evolution of the
+        world economy: A new 2023 update. <J>Journal of Economic Surveys</J>.
       </>
     ),
   },
@@ -323,6 +359,15 @@ export const REFERENCES = {
       <>
         Romer, C. D. (1989). The Prewar Business Cycle Reconsidered: New Estimates of Gross National
         Product, 1869–1908. <J>Journal of Political Economy</J>, 97(1), 1–37.
+      </>
+    ),
+  },
+  sen1968: {
+    short: "Sen 1968",
+    entry: (
+      <>
+        Sen, P. K. (1968). Estimates of the Regression Coefficient Based on Kendall&apos;s Tau.{" "}
+        <J>Journal of the American Statistical Association</J>, 63(324), 1379–1389.
       </>
     ),
   },

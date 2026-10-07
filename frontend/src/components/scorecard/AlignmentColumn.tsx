@@ -237,7 +237,8 @@ export default function AlignmentColumn({
         <p className="text-xs leading-relaxed text-ink-min">
           A break: most of the member&apos;s party voted one way, most of the other party the other
           way, and the member sided with the other party. Housekeeping votes (quorum calls,
-          adjourning, motions to table or to recommit) don&apos;t count.
+          adjourning, motions to table or to recommit, the House&apos;s motion to commit) don&apos;t
+          count.
           {counted && " Each bill or nomination counts once, however many times it came to a vote."}
         </p>
       </Block>

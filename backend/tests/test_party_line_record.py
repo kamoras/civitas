@@ -53,6 +53,8 @@ def test_breaks_toward_the_other_party_count_once_per_measure(db_session, monkey
     _roll_call(db_session, "house", 12, "On Passage", "HR.2", {"R4": "Nay"})
     # Housekeeping: no break however R0 votes.
     _roll_call(db_session, "house", 13, "On Ordering the Previous Question", "HRES.5", {"R0": "Nay"})
+    # The House's motion to commit is the motion to recommit's twin (v6.28).
+    _roll_call(db_session, "house", 15, "On Motion to Commit", "S.2", {"R0": "Nay"})
     # An amendment to HR.1 is its own question.
     _roll_call(db_session, "house", 14, "On Agreeing to the Amendment", "HR.1", {})
     db_session.commit()

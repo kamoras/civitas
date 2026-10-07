@@ -204,9 +204,10 @@ export default function ScoresChapter() {
               Every roll call of the current Congress counts when the parties split on it: at least
               65% of one party voting yes and at most 35% of the other. Votes with no recorded roll
               call don&apos;t count, and neither does housekeeping (quorum calls, adjourning, the
-              House&apos;s previous question, motions to table or to recommit), which splits on
-              party lines as a matter of course. Each bill or nomination counts once, however many
-              times it came to a vote: cloture and then confirmation on one nominee is one decision.
+              House&apos;s previous question, motions to table or to recommit, and the House&apos;s
+              motion to commit), which splits on party lines as a matter of course. Each bill or
+              nomination counts once, however many times it came to a vote: cloture and then
+              confirmation on one nominee is one decision.
             </Step>
             {/* The 200 below is prior_until_votes in backend/app/data/position_confidence.json,
                 pinned by test_position_confidence.py. */}

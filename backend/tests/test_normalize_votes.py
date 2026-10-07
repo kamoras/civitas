@@ -11,6 +11,7 @@ from app.pipeline.transform.normalize_votes import (
     extract_senator_vote,
     is_reconsider_switch,
     majority_leader_spans,
+    member_vote_entry,
     normalize_recent_votes,
     normalize_votes,
     stamp_roll_call_outcome,
@@ -472,3 +473,119 @@ def test_partisan_depth_ignores_reconsider_switch_votes():
     assert _alignments_from_votes({"keyVotes": [vote, vote]})[0]["alignment"] == "D"
     switched = {**vote, "reconsiderSwitch": True}
     assert _alignments_from_votes({"keyVotes": [switched, switched]}) == []
+
+
+class TestMemberVoteEntry:
+    """Both chambers' recent votes go through member_vote_entry. The House
+    built them inline and counted loyalty from partyLeaning, so a
+    housekeeping question (no split, by design) and a roll call with no
+    usable split (content label kept) both counted as with or against the
+    party."""
+
+    def _bill(self, **kw):
+        bill = {
+            "billId": "rc-1", "billName": "On Ordering the Previous Question",
+            "policyAreas": [{"area": "TAXES", "party": "R", "confidence": 0.8}],
+            "partyLeaning": "R", "partySplit": None,
+        }
+        bill.update(kw)
+        return bill
+
+    def test_housekeeping_question_is_no_party_signal(self):
+        # stamp_roll_call_outcome leaves partySplit None for housekeeping,
+        # while refine_with_vote_data still labels partyLeaning from the split.
+        entry = member_vote_entry(self._bill(), "Nay", "R", None)
+        assert entry["votedWithParty"] is None
+        assert entry["partyLeaning"] == "R"
+
+    def test_content_label_never_decides_a_break(self):
+        entry = member_vote_entry(self._bill(partyLeaning="D"), "Yea", "R", None)
+        assert entry["votedWithParty"] is None
+
+    def test_split_decides_loyalty(self):
+        entry = member_vote_entry(self._bill(partySplit="D"), "Yea", "R", None)
+        assert entry["votedWithParty"] is False
+        entry = member_vote_entry(self._bill(partySplit="R"), "Aye", "R", None)
+        assert entry["vote"] == "Yea"
+        assert entry["votedWithParty"] is True
+
+    def test_carries_the_roll_call_record(self):
+        entry = member_vote_entry(
+            self._bill(date="", rollCallDate="2026-03-04", rollCall="h-119-2-55"),
+            "No", "D", None,
+        )
+        assert entry["date"] == "2026-03-04"
+        assert entry["rollCall"] == "h-119-2-55"
+        assert entry["vote"] == "Nay"
+
+
+def test_house_pipeline_builds_recent_votes_through_the_shared_entry():
+    """The inline House copy drifted once; keep it from coming back."""
+    import inspect
+    from app.pipeline import house_pipeline
+
+    src = inspect.getsource(house_pipeline)
+    assert "member_vote_entry(" in src
+    assert "_determine_party_alignment" not in src
+
+
+def _house_roll_call(question, chamber="House"):
+    """A roll call the parties split on, as parse_house_vote_xml shapes it."""
+    members = [{"party": "R", "voteCast": "Yea"}] * 6 + [{"party": "D", "voteCast": "Nay"}] * 6
+    return {"chamber": chamber, "congress": 119, "session": 2, "rollNumber": 213,
+            "question": question, "members": members}
+
+
+@pytest.mark.parametrize("question", [
+    "On Motion to Recommit", "On Ordering the Previous Question", "On Motion to Commit",
+])
+def test_house_housekeeping_roll_call_is_no_party_signal_end_to_end(question):
+    """The House vote flow as house_pipeline runs it: stamp, refine
+    partyLeaning from the split unless the roll call is housekeeping, then
+    the stored entry."""
+    from app.pipeline.analyze.party_platform import refine_with_vote_data
+    from app.pipeline.transform.normalize_votes import compute_party_vote_split
+
+    rc = _house_roll_call(question)
+    bill = {"billId": "house-119-2-213", "partyLeaning": "D", "policyArea": "TAXES",
+            "policyAreas": [{"area": "TAXES", "party": "D", "confidence": 0.7}]}
+    stamp_roll_call_outcome(bill, rc)
+    if not bill.get("housekeeping"):
+        bill["partyLeaning"] = refine_with_vote_data(bill["partyLeaning"], compute_party_vote_split(rc)["label"])
+    # The motion carries the bill's title, but it is not a vote on the bill:
+    # no party label, no policy areas for partisan depth or the centroids.
+    assert bill["housekeeping"] is True
+    assert bill["partyLeaning"] is None
+    assert bill["policyArea"] == "PROCEDURAL" and bill["policyAreas"] == []
+
+    entry = member_vote_entry(bill, "Nay", "R", None)
+    assert entry["votedWithParty"] is None
+    assert entry["reconsiderSwitch"] is False
+
+
+def test_partisan_depth_ignores_housekeeping_votes():
+    """A Yea on the minority's motion to recommit used to count toward the
+    bill's party in partisan depth."""
+    from app.pipeline.analyze.party_platform import _alignments_from_votes
+
+    def vote(question, cast):
+        bill = {"billId": question, "partyLeaning": "R", "policyArea": "TAXES",
+                "policyAreas": [{"area": "TAXES", "party": "R", "confidence": 1.0}]}
+        stamp_roll_call_outcome(bill, _house_roll_call(question))
+        return member_vote_entry(bill, cast, "D", None)
+
+    housekeeping = [vote("On Motion to Recommit", "Yea"), vote("On Motion to Commit", "Yea")]
+    assert _alignments_from_votes({"recentVotes": housekeeping}) == []
+
+
+def test_motion_to_commit_counts_in_the_senate():
+    """The Senate's motion to commit carries instructions that amend the
+    bill: a vote on substance, so the split still decides loyalty."""
+    from app.pipeline.transform.normalize_votes import is_housekeeping
+
+    assert not is_housekeeping("On the Motion to Commit", "Senate")
+    assert not is_housekeeping("On the Motion to Commit")
+    assert is_housekeeping("On Motion to Commit", "house")
+    bill = {}
+    stamp_roll_call_outcome(bill, _house_roll_call("On the Motion to Commit", chamber="Senate"))
+    assert bill["partySplit"] == "R"

@@ -81,21 +81,26 @@ from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
     extract_representative_vote,
     find_house_roll_call,
-    is_reconsider_switch,
     majority_leader_spans,
     normalize_votes,
-    reconsider_switch_applied,
+    member_vote_entry,
     stamp_roll_call_outcome,
     compute_party_split,
     compute_party_vote_split,
-    _determine_party_alignment,
     house_roll_call_id,
+    is_housekeeping,
 )
 from app.time_utils import utcnow
 from app.pipeline.senate_pipeline import invalidate_stale_analysis
 from app.pipeline.fetch.house_clerk import fetch_house_sworn_dates
 from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_policy_areas_multi
-from app.pipeline.analyze.party_platform import analyze_partisan_depth, classify_party_alignment_multi, refine_with_vote_data
+from app.pipeline.analyze.party_platform import (
+    analyze_partisan_depth,
+    classify_party_alignment_multi,
+    clear_platform_cache,
+    initialize_platform_embeddings,
+    refine_with_vote_data,
+)
 from app.pipeline.analyze.sponsorship_analysis import (
     compute_bipartisanship_scores,
     compute_ideology_scores,
@@ -202,6 +207,13 @@ async def run_house_pipeline() -> dict:
         logger.info("=== HOUSE PIPELINE START ===")
 
         invalidate_stale_analysis(db)
+
+        # Party positions from seeds plus the bills earlier runs labelled,
+        # as the Senate run does. Without this the House classified against
+        # whatever this process last cached: the Senate's centroids in the
+        # nightly chain, the seeds alone for a House trigger after a restart.
+        clear_platform_cache()
+        initialize_platform_embeddings(db)
 
         async with make_async_client() as client:
             # FEC committee master, loaded on first use (see the FEC step).
@@ -411,6 +423,8 @@ async def run_house_pipeline() -> dict:
                 if rc:
                     stamp_roll_call_outcome(bill, rc)
                     stamp_motion_type(bill, rc)
+                    if bill.get("housekeeping"):
+                        continue
                     vote_split = compute_party_vote_split(rc)
                     split = vote_split["label"] if vote_split else None
                     bill["partyLeaning"] = refine_with_vote_data(
@@ -423,6 +437,8 @@ async def run_house_pipeline() -> dict:
                 if rc:
                     stamp_roll_call_outcome(bill, rc)
                     stamp_motion_type(bill, rc)
+                    if bill.get("housekeeping"):
+                        continue
                     vote_split = compute_party_vote_split(rc)
                     split = vote_split["label"] if vote_split else None
                     bill["partyLeaning"] = refine_with_vote_data(
@@ -522,7 +538,7 @@ async def run_house_pipeline() -> dict:
                                     )
                                     party_leaning = alignment.get("overall", "bipartisan")
                                     rc = house_roll_calls.get(sp_key)
-                                    if rc:
+                                    if rc and not is_housekeeping(rc.get("question"), rc.get("chamber")):
                                         split = compute_party_split(rc)
                                         party_leaning = refine_with_vote_data(party_leaning, split)
                             sp_list.append({
@@ -741,48 +757,18 @@ async def run_house_pipeline() -> dict:
                     rep_party = rep.get("party", "I")
                     effective_party = voting_data.get("effectiveParty", rep_party)
                     for rv in recent_votes_list:
-                        vote_direction = rv["vote"].upper()
-                        normalized = "Not Voting"
-                        if vote_direction in ("YEA", "AYE", "YES"):
-                            normalized = "Yea"
-                        elif vote_direction in ("NAY", "NO"):
-                            normalized = "Nay"
-
-                        party_leaning = rv.get("partyLeaning")
-                        # Same rule as every other vote (normalize_votes); this
-                        # used to be an inline copy that could drift from it.
-                        reconsider_switch = is_reconsider_switch(rv, leader_spans)
-                        voted_with_party = _determine_party_alignment(
-                            effective_party, normalized, party_leaning,
-                            reconsider_switch=reconsider_switch,
+                        entry = member_vote_entry(
+                            rv, rv["vote"], effective_party, leader_spans,
                         )
-
-                        voting_data["recentVotes"].append({
-                            "billName": rv.get("billName", ""),
-                            "billId": rv.get("billId", ""),
-                            "date": rv.get("date", ""),
-                            "vote": normalized,
-                            "policyArea": rv.get("policyArea", "PROCEDURAL"),
-                            "policyAreas": rv.get("policyAreas", []),
-                            "partyAlignmentWeight": rv.get("partyAlignmentWeight", 0.0),
-                            "stance": rv.get("stance", "neutral"),
-                            "description": rv.get("description", ""),
-                            "partyLeaning": party_leaning,
-                            "votedWithParty": voted_with_party,
-                            "reconsiderSwitch": reconsider_switch_applied(
-                                effective_party, normalized, party_leaning,
-                                reconsider_switch,
-                            ),
-                            "voteCategory": "recent",
-                            "rcKey": rv.get("billId", ""),
-                            # The measure the roll call was on ("H R 1492"
-                            # -> "HR.1492"): billId here is synthetic, and
-                            # the LDA bill links match on the measure.
-                            "measureId": bill_id_from_number(
-                                (recent_rc_map.get(rv.get("billId", "")) or {}).get("documentName"),
-                            ),
-                            "motionType": rv.get("motionType"),
-                        })
+                        # House recent roll calls are keyed by billId.
+                        entry["rcKey"] = rv.get("billId", "")
+                        # The measure the roll call was on ("H R 1492"
+                        # -> "HR.1492"): billId here is synthetic, and
+                        # the LDA bill links match on the measure.
+                        entry["measureId"] = bill_id_from_number(
+                            (recent_rc_map.get(rv.get("billId", "")) or {}).get("documentName"),
+                        )
+                        voting_data["recentVotes"].append(entry)
 
                     rep["votingRecord"] = voting_data
 
