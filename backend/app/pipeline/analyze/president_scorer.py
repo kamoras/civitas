@@ -242,8 +242,10 @@ def dimensions_available(entity) -> int:
 # rulemakings, too little difference to score), Historical Legacy weighted
 # 50%, and a presidency cut short compared over its own number of days like
 # the sitting one (FULL_TERM_DAYS); v8 = a postwar term's GDP growth
-# scored relative to 13 peer economies over the same years (peer_relative).
-PRESIDENT_ALGORITHM_VERSION = "v8"
+# scored relative to 13 peer economies over the same years (peer_relative);
+# v9 = average approval by party, against the era's polarization
+# (approval_vs_era).
+PRESIDENT_ALGORITHM_VERSION = "v9"
 
 
 # Full credit/deficit approached asymptotically at this many population
@@ -265,6 +267,11 @@ _ZSCORE_SATURATION_STDEV = 1.5
 def _moved(points: float) -> str:
     """"rose 4.8 points" / "fell 12.0 points", for the detail sentences."""
     return f"{'rose' if points >= 0 else 'fell'} {abs(points):.1f} points"
+
+
+def _points(points: float) -> str:
+    """"1.0 points above" / "2.5 points below"."""
+    return f"{abs(points):.1f} points {'above' if points >= 0 else 'below'}"
 
 
 def _ahead(points: float) -> str:
@@ -477,10 +484,10 @@ def _mean_stdev(values: list[float], min_n: int = _MIN_PRESIDENT_REFERENCE_N) ->
 def compute_president_reference(presidents: list[dict]) -> dict:
     """Population mean/stdev for each z-scored presidential input, from
     stored per-president values: dicts with id, name, avg_approval,
-    approval_trend, election_margin, historical_legacy_score, and (for
-    Effectiveness) gdp_growth_avg, gdp_growth_relative, term_start_year,
-    jobs_created_millions,
-    term_years.
+    approval_trend, approval_groups and polarization (Public Mandate's
+    by-party comparison), election_margin, historical_legacy_score, and
+    (for Effectiveness) gdp_growth_avg, gdp_growth_relative,
+    term_start_year, jobs_created_millions, term_years.
 
     Approval, trend and margin are counted per presidency (split terms have
     their own polling and elections). The C-SPAN score is counted once per
@@ -526,6 +533,11 @@ def compute_president_reference(presidents: list[dict]) -> dict:
             (float(p["approval_start"]), float(p["approval_trend"]))
             for p in completed
             if p.get("approval_start") is not None and p.get("approval_trend") is not None
+        ]),
+        "partisan_approval": partisan_reference([
+            (float(p["polarization"]), p["approval_groups"])
+            for p in completed
+            if p.get("polarization") is not None and p.get("approval_groups")
         ]),
         "election_margin": _mean_stdev(values("election_margin")),
         "historical_legacy": _mean_stdev(list(legacy_by_person.values())),
@@ -604,8 +616,121 @@ def fit_trend_on_start(points: list[tuple[float, float]]) -> dict | None:
     }
 
 
+# Approval by party, against the era's polarization (president v9). Approval
+# among the other party fell from about 49% under Eisenhower to 5% under
+# Biden as the parties drifted apart in Congress, and approval among the
+# president's own party rose, so raw approval ranked presidents partly by
+# when they served: r = -0.40 with the House party distance across the 14
+# completed polling-era presidencies (UCSB/Gallup by-party approval,
+# Voteview DW-NOMINATE; Jacobson 2019; Donovan, Kellstedt, Key & Lebo 2020).
+# A single fit of overall approval on polarization can't be estimated
+# from 14 presidencies: its slope ran -17 to -36 leaving one out. Each
+# party group's own relationship can (the other party's r = -0.81, slope
+# -80 to -98 leaving one out), so each group's approval is compared with
+# what that group gave presidents under the same polarization, and the
+# three gaps are averaged. That moves no president by more than 2.5
+# points when any one presidency is left out of the fits, against a spread
+# of 8.5, and its own correlation with the era is +0.16.
+# docs/research/president-scores.md has the measurements.
+APPROVAL_GROUPS = ("own", "opp", "ind")
+
+
+def group_parties(party: str | None) -> dict[str, str] | None:
+    """{"own", "opp", "ind"} -> the by-party key ("D", "R", "I") for a
+    president of `party`, or None for a party with no opposite."""
+    if party not in ("D", "R"):
+        return None
+    return {"own": party, "opp": "R" if party == "D" else "D", "ind": "I"}
+
+
+def approval_by_group(
+    series: list[tuple[date, dict[str, float]]], party: str | None, days: int | None = None,
+) -> dict[str, float] | None:
+    """Average approval among the president's own party, the other party
+    and independents over the polls in the first `days` days (every poll
+    when None), from (poll date, {"D", "I", "R"}) pairs in date order."""
+    groups = group_parties(party)
+    if not series or groups is None:
+        return None
+    first = series[0][0]
+    polls = [by for day, by in series if days is None or (day - first).days <= days]
+    if not polls:
+        return None
+    return {g: statistics.mean(poll[key] for poll in polls) for g, key in groups.items()}
+
+
+def stored_approval_groups(president) -> dict[str, float] | None:
+    """A stored President's {"own", "opp", "ind"} approval, or None
+    without all three."""
+    values = (president.approval_own_party, president.approval_other_party, president.approval_independents)
+    return None if None in values else dict(zip(APPROVAL_GROUPS, values))
+
+
+def congress_of_year(year: int) -> int:
+    """The Congress sitting for most of a calendar year (the 1st began in
+    1789; each runs two years)."""
+    return (year - 1789) // 2 + 1
+
+
+def term_polarization(start_year: int, end_year: int, distance: dict[int, float]) -> float | None:
+    """The House party distance averaged over the Congresses a term spans
+    (its years, the last exclusive), or None if any is missing."""
+    congresses = {congress_of_year(y) for y in range(start_year, max(end_year, start_year + 1))}
+    if any(c not in distance for c in congresses):
+        return None
+    return statistics.mean(distance[c] for c in congresses)
+
+
+def _theil_sen(xs: list[float], ys: list[float]) -> tuple[float, float] | None:
+    """(intercept, slope): the median of pairwise slopes (Theil 1950; Sen
+    1968) and the median intercept under it. None when every x is equal."""
+    slopes = [
+        (ys[j] - ys[i]) / (xs[j] - xs[i])
+        for i in range(len(xs)) for j in range(i + 1, len(xs)) if xs[j] != xs[i]
+    ]
+    if not slopes:
+        return None
+    slope = statistics.median(slopes)
+    return statistics.median(y - slope * x for x, y in zip(xs, ys)), slope
+
+
+def era_expected(fits: dict, polarization: float) -> dict[str, float]:
+    """What each group's approval typically was under this polarization."""
+    return {g: fits[g]["intercept"] + fits[g]["slope"] * polarization for g in APPROVAL_GROUPS}
+
+
+def approval_vs_era(groups: dict[str, float], polarization: float, fits: dict) -> float:
+    """How far a president's approval ran above (+) or below (-) what the
+    era predicts, in points: the mean of the three groups' gaps."""
+    expected = era_expected(fits, polarization)
+    return statistics.mean(groups[g] - expected[g] for g in APPROVAL_GROUPS)
+
+
+def partisan_reference(points: list[tuple[float, dict[str, float]]]) -> dict | None:
+    """From (polarization, {"own", "opp", "ind"} approval) per presidency:
+    each group's Theil-Sen fit on polarization, and the mean and standard
+    deviation of the presidencies' approval_vs_era, which a president's own
+    is z-scored by. None below _MIN_PRESIDENT_REFERENCE_N presidencies."""
+    if len(points) < _MIN_PRESIDENT_REFERENCE_N:
+        return None
+    fits = {}
+    for g in APPROVAL_GROUPS:
+        fit = _theil_sen([pol for pol, _ in points], [groups[g] for _, groups in points])
+        if fit is None:
+            return None
+        fits[g] = {"intercept": round(fit[0], 4), "slope": round(fit[1], 4)}
+    gaps = [approval_vs_era(groups, pol, fits) for pol, groups in points]
+    return {
+        "fits": fits,
+        "mean": round(statistics.mean(gaps), 4),
+        "stdev": round(statistics.stdev(gaps), 4),
+        "n": len(points),
+    }
+
+
 def window_reference(
     current: list[tuple[date, float]], completed: list[list[tuple[date, float]]],
+    completed_by_party: list[tuple[list[tuple[date, dict[str, float]]], str, float]] | None = None,
 ) -> dict | None:
     """The comparison population for a presidency shorter than a full term
     (the sitting president, or one cut short by death or resignation):
@@ -624,10 +749,19 @@ def window_reference(
         if series and (series[-1][0] - series[0][0]).days >= days
     ]
     windows = [w for w in windows if w]
+    # Each predecessor's approval by party over the same days, against the
+    # polarization of their own term.
+    by_party = [
+        (pol, groups)
+        for series, party, pol in completed_by_party or []
+        if series and (series[-1][0] - series[0][0]).days >= days
+        and (groups := approval_by_group(series, party, days))
+    ]
     block = {
         "days": days,
         "avg_approval": _mean_stdev([w["avg"] for w in windows]),
         "approval_trend_fit": fit_trend_on_start([(w["start"], w["trend"]) for w in windows]),
+        "partisan_approval": partisan_reference(by_party),
     }
     return {k: v for k, v in block.items() if v is not None} if len(block) > 1 else None
 
@@ -647,6 +781,8 @@ def calc_public_mandate(
     approval_start: float | None = None,
     is_current: bool = False,
     president_id: str | None = None,
+    approval_groups: dict[str, float] | None = None,
+    polarization: float | None = None,
 ) -> int | None:
     """Calculate Public Mandate score from real data only — approval
     polling where it exists, election margin as the pre-polling-era
@@ -658,6 +794,7 @@ def calc_public_mandate(
     """
     return _public_mandate_core(
         avg_approval, approval_trend, election_margin, reference, approval_start, is_current, president_id,
+        approval_groups, polarization,
     )["score"]
 
 
@@ -678,7 +815,7 @@ def _approval_reference(reference: dict | None, is_current: bool, president_id: 
             return window
     return {
         key: (reference or {}).get(key) or persisted.get(key)
-        for key in ("avg_approval", "approval_trend", "approval_trend_fit")
+        for key in ("avg_approval", "approval_trend", "approval_trend_fit", "partisan_approval")
     }
 
 
@@ -690,6 +827,8 @@ def _public_mandate_core(
     approval_start: float | None = None,
     is_current: bool = False,
     president_id: str | None = None,
+    approval_groups: dict[str, float] | None = None,
+    polarization: float | None = None,
 ) -> dict:
     """Same math as calc_public_mandate, returning every intermediate
     value alongside the final score.
@@ -701,7 +840,11 @@ def _public_mandate_core(
         presidential_approval.py): average approval over the term (70%)
         + approval trend across the term (30%), both z-scored against
         real population stats (see constants above). This is the direct,
-        primary "public mandate" measure where it's available.
+        primary "public mandate" measure where it's available. Since
+        president v9 the average is approval by party against the era's
+        polarization (approval_vs_era, partisan_reference); a president
+        without the by-party figures, or a reference without the fits, is
+        compared on overall approval as before.
       - No approval polling (pre-Truman): falls back to election margin
         — the average margin of victory across the president's own
         election win(s), z-scored against its own real population stats
@@ -726,15 +869,34 @@ def _public_mandate_core(
         "electionMargin": election_margin, "marginMean": margin[0] if margin else None,
     }
 
-    if avg_approval is not None and approval:
+    partisan = population.get("partisan_approval")
+    by_era = bool(partisan and approval_groups and polarization is not None)
+    if avg_approval is not None and (approval or by_era):
         over = (
             f"past presidents over their first {window_days} days" if window_days is not None
             else "past presidents over their full terms"
         )
-        components.append(_population_zscore_component(
-            "Average approval", 0.70, avg_approval, approval[0], approval[1],
-            f"Averaged {avg_approval:.1f}% approval, against {approval[0]:.1f}% for {over}",
-        ))
+        if by_era:
+            expected = era_expected(partisan["fits"], polarization)
+            gap = approval_vs_era(approval_groups, polarization, partisan["fits"])
+            facts.update(
+                approvalGroups={g: round(v, 1) for g, v in approval_groups.items()},
+                approvalExpected={g: round(v, 1) for g, v in expected.items()},
+                approvalVsEra=round(gap, 1), approvalVsEraMean=round(partisan["mean"], 1),
+            )
+            components.append(_population_zscore_component(
+                "Average approval", 0.70, gap, partisan["mean"], partisan["stdev"],
+                f"Averaged {avg_approval:.1f}%: {approval_groups['own']:.0f}% in the president's party, "
+                f"{approval_groups['opp']:.0f}% in the other party and {approval_groups['ind']:.0f}% "
+                f"among independents. Under the same polarization, presidents typically got "
+                f"{expected['own']:.0f}%, {expected['opp']:.0f}% and {expected['ind']:.0f}%: "
+                f"{_points(gap)} the era, against {_points(partisan['mean'])} for {over}",
+            ))
+        else:
+            components.append(_population_zscore_component(
+                "Average approval", 0.70, avg_approval, approval[0], approval[1],
+                f"Averaged {avg_approval:.1f}% approval, against {approval[0]:.1f}% for {over}",
+            ))
         if approval_trend is not None and fit and approval_start is not None:
             expected = fit["intercept"] + fit["slope"] * approval_start
             facts["trendExpected"] = round(expected, 1)
@@ -841,7 +1003,8 @@ def recalculate_president_scores(
         live_data: Dict with keys jobs_created_millions, gdp_growth_avg,
             gdp_growth_per_person, gdp_growth_peer_median, gdp_growth_relative,
             term_start_year,
-            avg_approval, approval_trend, election_margin,
+            avg_approval, approval_trend, approval_groups ({"own", "opp",
+            "ind"}), polarization, election_margin,
             historical_legacy_score — any subset may be present; each
             calc_* function handles its own missing inputs.
 
@@ -860,6 +1023,8 @@ def recalculate_president_scores(
             approval_start=live_data.get("approval_start"),
             is_current=bool(live_data.get("is_current")),
             president_id=president_id,
+            approval_groups=live_data.get("approval_groups"),
+            polarization=live_data.get("polarization"),
         ),
         "score_effectiveness": calc_effectiveness(
             jobs_created_millions=live_data.get("jobs_created_millions"),

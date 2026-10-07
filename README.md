@@ -223,7 +223,7 @@ Fetches and scores Supreme Court justices, weekly on Sunday UTC (or whenever the
 ### Phase 6 — PRESIDENTS
 
 Scores sitting and historical presidents from a mix of live and archival sources:
-- **Live**: BLS employment rate, BEA/FRED GDP growth, UCSB American Presidency Project approval polling
+- **Live**: BLS employment rate, BEA/FRED GDP growth, UCSB American Presidency Project approval polling (with Gallup's by-party breakdown, compared within its era against Voteview's House polarization)
 - **Historical**: C-SPAN Presidential Historians Survey (historical legacy), UCSB election-margin data, MeasuringWorth real-GDP series (1790–present), Maddison Project GDP per person for the US and 13 peer economies (1946–2022, extended by the World Bank's live series): postwar growth is scored relative to those peers, with their catching up with US incomes set aside
 - All three score dimensions (Public Mandate, Effectiveness, Historical Legacy) are computed from source data with no LLM involvement. Dimensions a president has no real data source for are left N/A rather than filled with a placeholder.
 

@@ -90,6 +90,11 @@ function moved(points: number) {
   return `${points >= 0 ? "rose" : "fell"} ${one(Math.abs(points))} points`;
 }
 
+/** "1.0 points above" / "2.5 points below". */
+function aboveBelow(points: number) {
+  return `${one(Math.abs(points))} points ${points >= 0 ? "above" : "below"}`;
+}
+
 /** "1.9 points a year ahead" / "0.4 points a year behind". */
 function ahead(points: number) {
   return `${one(Math.abs(points))} points a year ${points >= 0 ? "ahead" : "behind"}`;
@@ -112,10 +117,35 @@ function MandateColumn({
   return (
     <ScoreColumn title="Public Mandate" shareId="public-mandate" weight={weight} score={score}>
       <Measures>
-        How the public rated the president in approval polls, against other presidents: the average
-        over the term, and how it moved from where it started.
+        How the public rated the president in approval polls: the average over the term, and how it
+        moved from where it started. Approval from the other party has collapsed as the parties
+        drifted apart in Congress, so each party&apos;s approval is compared with what presidents
+        got from it when Congress was as polarized.
       </Measures>
-      {f?.approval != null && f.approvalMean != null ? (
+      {f?.approval != null &&
+      f.approvalGroups != null &&
+      f.approvalExpected != null &&
+      f.approvalVsEra != null &&
+      f.approvalVsEraMean != null ? (
+        <>
+          <Lede>
+            {`Approval ${months != null ? "has averaged" : "averaged"} ${one(f.approval)}%${months != null ? " so far" : ""}: ${Math.round(f.approvalGroups.own)}% in the president's party, ${Math.round(f.approvalGroups.opp)}% in the other party and ${Math.round(f.approvalGroups.ind)}% among independents. Under the same polarization, presidents typically got ${Math.round(f.approvalExpected.own)}%, ${Math.round(f.approvalExpected.opp)}% and ${Math.round(f.approvalExpected.ind)}%${months != null ? ` over their first ${months} months` : ""}. That puts this term ${aboveBelow(f.approvalVsEra)} the era; the typical president comes out ${aboveBelow(f.approvalVsEraMean)}.`}
+            {f.approvalTrend != null && f.trendExpected != null && f.approvalStart != null
+              ? ` It ${moved(f.approvalTrend)} from ${one(f.approvalStart)}% at the start. Presidents who started there typically ${moved(f.trendExpected)}, so this is ${f.approvalTrend >= f.trendExpected ? "better" : "worse"} than usual.`
+              : ""}
+          </Lede>
+          <ComparisonScale
+            value={f.approvalVsEra}
+            norm={f.approvalVsEraMean}
+            min={-Math.max(20, Math.ceil(Math.abs(f.approvalVsEra)))}
+            max={Math.max(20, Math.ceil(Math.abs(f.approvalVsEra)))}
+            axis={["below the era", "above the era"]}
+            valueLabel={`This term ${signed(f.approvalVsEra)}`}
+            normLabel={`typical president ${signed(f.approvalVsEraMean)}`}
+            tone={tone(score)}
+          />
+        </>
+      ) : f?.approval != null && f.approvalMean != null ? (
         <>
           <Lede>
             {months != null

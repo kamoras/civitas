@@ -161,6 +161,23 @@ in the top 10 and Coolidge/Harding/McKinley out of it, so the number
 itself didn't need to change — only how it's applied.
 ```
 
+### President v9 (2026-10-07): average approval by party, against the era
+
+```text
+Weights unchanged. Public Mandate's average-approval component (70%):
+
+  gap = mean over g in {own party, other party, independents} of
+        (approval_g - (a_g + b_g x polarization))
+
+scored against the completed full-term presidencies' mean and SD of gap
+(partisan_reference). polarization: the House's Republican minus
+Democratic mean DW-NOMINATE dim-1, averaged over the term's Congresses
+(Voteview). a_g, b_g: Theil-Sen fit of each group's approval on
+polarization, refitted each run. A shorter presidency is compared with
+predecessors over the same number of days, as before. Without the
+by-party figures: overall approval, as before.
+```
+
 ### President v8 (2026-10-06): postwar GDP growth relative to peer economies
 
 ```text

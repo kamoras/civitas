@@ -76,20 +76,36 @@ export default function PresidentsAndJusticesChapter() {
         <Sub title="Public Mandate (25%)">
           <P>
             Approval over the term: 70% the average, 30% the trend from start to finish, each scored
-            against every completed presidency&apos;s actual polling history. The trend is compared
-            with what presidents who started at the same level went on to do, because approval is
-            bounded: across the 14 completed presidencies with polling, the higher the start, the
-            further it fell. A presidency shorter than a full four-year term (the sitting one, or
-            one cut short, like Kennedy&apos;s and Ford&apos;s) is compared with predecessors over
-            the same number of days from the start of their terms, since approval falls as a term
-            goes on: compared with whole terms, Kennedy&apos;s fall of 14 points from a start of 76%
-            looked twice as good as typical, when presidents starting there fell about as much in
-            their first 1,001 days. Data comes from the American Presidency Project at UC Santa
-            Barbara, which aggregates AP-NORC, CNN-SSRS, Marist, Pew and Verasight. Gallup, the
-            original source, stopped tracking presidential approval in February 2026. Presidents
-            before Truman, from before polling, are scored on their average margin of victory
-            instead. The four who have neither (Tyler, Fillmore, Arthur and Andrew Johnson, who
-            never won a presidential election and served before polling) read N/A.
+            against every completed presidency&apos;s actual polling history.
+          </P>
+          <P>
+            The average is compared within its era. As the parties drifted apart in Congress,
+            approval from the other party collapsed, from about 49% for Eisenhower to 5% for Biden,
+            while approval from the president&apos;s own party rose <Cite id="jacobson2019" />
+            <Cite id="donovan2020" />. Compared raw, that ranked presidents partly by when they
+            served. So approval in each group (the president&apos;s party, the other party,
+            independents) is compared with what presidents got from that group when Congress was as
+            polarized, measured by the distance between the parties&apos; voting records{" "}
+            <Cite id="mccarty2006" />, and the three differences are averaged. The relationship is
+            fitted every update with a method that no single presidency can swing{" "}
+            <Cite id="sen1968" />: leaving out any one moves a president&apos;s figure by at most
+            2.5 points, against a spread of about 8 between presidents.
+          </P>
+          <P>
+            The trend is compared with what presidents who started at the same level went on to do,
+            because approval is bounded: across the 14 completed presidencies with polling, the
+            higher the start, the further it fell. A presidency shorter than a full four-year term
+            (the sitting one, or one cut short, like Kennedy&apos;s and Ford&apos;s) is compared
+            with predecessors over the same number of days from the start of their terms, since
+            approval falls as a term goes on: compared with whole terms, Kennedy&apos;s fall of 14
+            points from a start of 76% looked twice as good as typical, when presidents starting
+            there fell about as much in their first 1,001 days. Data comes from the American
+            Presidency Project at UC Santa Barbara, which aggregates AP-NORC, CNN-SSRS, Marist, Pew
+            and Verasight. Gallup, the original source, stopped tracking presidential approval in
+            February 2026. Presidents before Truman, from before polling, are scored on their
+            average margin of victory instead. The four who have neither (Tyler, Fillmore, Arthur
+            and Andrew Johnson, who never won a presidential election and served before polling)
+            read N/A.
           </P>
         </Sub>
         <Sub title="Effectiveness (25%)">

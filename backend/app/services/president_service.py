@@ -142,6 +142,7 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
         _effectiveness_core,
         _historical_legacy_core,
         _public_mandate_core,
+        stored_approval_groups,
     )
     from app.pipeline.president_pipeline import _term_years
 
@@ -158,6 +159,8 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
             approval_start=p.approval_start,
             is_current=bool(p.is_current),
             president_id=p.id,
+            approval_groups=stored_approval_groups(p),
+            polarization=p.term_polarization,
         ),
         "effectiveness": _effectiveness_core(
             jobs_created_millions=p.jobs_created_millions,

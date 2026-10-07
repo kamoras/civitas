@@ -165,6 +165,15 @@ export const REFERENCES = {
       </>
     ),
   },
+  donovan2020: {
+    short: "Donovan et al. 2020",
+    entry: (
+      <>
+        Donovan, K., Kellstedt, P. M., Key, E. M. &amp; Lebo, M. J. (2020). Motivated Reasoning,
+        Public Opinion, and Presidential Approval. <J>Political Behavior</J>, 42(4), 1201–1221.
+      </>
+    ),
+  },
   efron1975: {
     short: "Efron & Morris 1975",
     entry: (
@@ -218,6 +227,15 @@ export const REFERENCES = {
       <>
         Harbridge-Yong, L., Volden, C., &amp; Wiseman, A. E. (2023). The Bipartisan Path to
         Effective Lawmaking. <J>Journal of Politics</J>, 85(3).
+      </>
+    ),
+  },
+  jacobson2019: {
+    short: "Jacobson 2019",
+    entry: (
+      <>
+        Jacobson, G. C. (2019). <J>Presidents and Parties in the Public Mind</J>. University of
+        Chicago Press.
       </>
     ),
   },
@@ -285,6 +303,15 @@ export const REFERENCES = {
         Manning, C. D., Raghavan, P., &amp; Schütze, H. (2008).{" "}
         <J>Introduction to Information Retrieval</J>. Cambridge University Press. Ch. 14: Vector
         Space Classification.
+      </>
+    ),
+  },
+  mccarty2006: {
+    short: "McCarty, Poole & Rosenthal 2006",
+    entry: (
+      <>
+        McCarty, N., Poole, K. T. &amp; Rosenthal, H. (2006).{" "}
+        <J>Polarized America: The Dance of Ideology and Unequal Riches</J>. MIT Press.
       </>
     ),
   },

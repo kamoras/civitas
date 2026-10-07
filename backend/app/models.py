@@ -729,6 +729,15 @@ class President(Base):
     score_historical_legacy: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     avg_approval: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Average approval among the president's own party, the other party and
+    # independents (Gallup, via the American Presidency Project), and the
+    # House party distance averaged over the term (Voteview): what Public
+    # Mandate compares within an era since president v9
+    # (president_scorer.approval_vs_era). NULL without the breakdown.
+    approval_own_party: Mapped[float | None] = mapped_column(Float, nullable=True)
+    approval_other_party: Mapped[float | None] = mapped_column(Float, nullable=True)
+    approval_independents: Mapped[float | None] = mapped_column(Float, nullable=True)
+    term_polarization: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Average election-margin percentage across a president's own election
     # win(s) — the pre-polling-era (pre-Truman) Public Mandate proxy, see
     # app.pipeline.fetch.presidential_elections. NULL for the five

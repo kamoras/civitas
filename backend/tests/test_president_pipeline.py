@@ -6,6 +6,7 @@ import pytest
 
 from app.models import President, ScoreSnapshot
 from app.pipeline.analyze.president_scorer import PRESIDENT_ALGORITHM_VERSION, calc_public_mandate
+from app.pipeline.fetch.presidential_approval import ApprovalPoll
 from app.pipeline.fetch.presidential_roster import RosterEntry
 from app.pipeline.president_pipeline import _record_president_snapshots, _sync_roster, run_president_pipeline
 
@@ -146,6 +147,7 @@ class TestRecordPresidentSnapshots:
 def _patch_fetchers(
     eo_data=None, gdp_by_year=None, jobs=None,
     approval_polls=None, election_margin_data=None, historical_legacy_data=None,
+    polarization=None,
 ):
     """Patches every live-data fetch president_pipeline.run_president_
     pipeline calls, so a test controls exactly what "this run" returned
@@ -158,6 +160,9 @@ def _patch_fetchers(
         patch("app.pipeline.president_pipeline.fetch_president_approval_history", new=AsyncMock(return_value=approval_polls or [])),
         patch("app.pipeline.president_pipeline.fetch_election_margins", new=AsyncMock(return_value=election_margin_data or {})),
         patch("app.pipeline.president_pipeline.fetch_cspan_historians_survey", new=AsyncMock(return_value=historical_legacy_data or {})),
+        # The World Bank unreachable: peer figures keep what is stored.
+        patch("app.pipeline.president_pipeline.fetch_world_bank_per_capita", new=AsyncMock(return_value=None)),
+        patch("app.pipeline.president_pipeline.fetch_house_party_distance", new=AsyncMock(return_value=polarization or {})),
     ]
 
 
@@ -201,6 +206,32 @@ class TestRunPresidentPipelineFetchFailureFallback:
         assert updated.election_margin is None
         assert updated.avg_approval == 55.0
         assert updated.score_public_mandate == calc_public_mandate(55.0, 3.0, None)
+
+    @pytest.mark.asyncio
+    async def test_approval_by_party_and_polarization_are_stored_and_kept(self, db_session):
+        db_session.add(President(
+            id="obama-44", name="Barack Obama", party="D", number=44,
+            term_start="2009-01-20", term_end="2017-01-20",
+        ))
+        db_session.commit()
+        polls = [
+            ApprovalPoll("01/26/2009", "02/01/2009", 65, 25, 10, "gallup", dem=90, ind=62, rep=40),
+            ApprovalPoll("01/09/2017", "01/15/2017", 57, 39, 4, "gallup", dem=92, ind=56, rep=14),
+        ]
+        distance = {111: 0.80, 112: 0.84, 113: 0.86, 114: 0.88}
+        for kwargs in ({"approval_polls": polls, "polarization": distance}, {}):
+            patches = _patch_fetchers(**kwargs)
+            for p in patches:
+                p.start()
+            try:
+                await run_president_pipeline(db_session)
+            finally:
+                for p in patches:
+                    p.stop()
+            # The second run reads nothing: the stored figures stay.
+            obama = db_session.query(President).filter(President.id == "obama-44").first()
+            assert (obama.approval_own_party, obama.approval_other_party, obama.approval_independents) == (91, 27, 59)
+            assert abs(obama.term_polarization - 0.845) < 1e-9
 
     @pytest.mark.asyncio
     async def test_a_stored_agency_alignment_is_cleared(self, db_session):

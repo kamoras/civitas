@@ -196,3 +196,58 @@ to 55, George W. Bush 20 to 28, Obama 44 to 49, Trump (first term) 20 to
 catch-up, not shocks that hit the US alone. Jobs (40% of Effectiveness)
 are still US payroll jobs per year, with no peer comparison.
 
+## President v9: approval by party, against the era's polarization
+
+**Question.** Average approval is tightly bunched (SD 9.1 points across
+the 14 completed polling-era presidencies), so a few points cost a lot of
+score. Is the spread signal?
+
+**Measurement precision is not the problem.** Splitting each president's
+polls into alternating halves, the halves' averages agree at r = 0.999
+(overall), 0.997 (own party), 0.998 (other party), 0.996 (independents).
+The differences are real; the question is what they measure.
+
+**Era is.** Approval by party (Gallup, via the American Presidency
+Project, every president from Truman) against the distance between the
+parties' mean DW-NOMINATE scores in the House over the term (Voteview;
+McCarty, Poole & Rosenthal 2006):
+
+| Measure | SD | r with polarization |
+|---|---|---|
+| Overall approval | 9.1 | -0.40 |
+| President's own party | 10.8 | +0.55 |
+| Other party | 14.3 | **-0.81** |
+| Independents | 10.2 | -0.46 |
+
+Other-party approval fell from 49% (Eisenhower) to 5.5% (Biden) while
+own-party approval rose; Jacobson (2019) and Donovan, Kellstedt, Key &
+Lebo (2020) document the same shift. Raw approval ranked presidents
+partly by when they served.
+
+**Two adjustments measured.**
+
+| Method | Slope range, leaving one presidency out | Largest move in any president's figure |
+|---|---|---|
+| Overall approval on polarization | -17 to -36 | 5.2 points |
+| Each group on polarization, gaps averaged | other party -80 to -98 | **2.5 points** (spread 8.5) |
+
+The single fit can't be estimated from 14 presidencies; the group fits can,
+because the other party's relationship is strong. Chosen: each group's
+approval minus what the group gave presidents under the same polarization
+(Theil-Sen fits, refitted every run), averaged over the three groups. Its
+own correlation with polarization is +0.16 and with raw approval +0.80.
+
+**Trend.** The approval trend, judged against the starting level (v6),
+shows no era relationship (r = -0.06 with polarization), so it is
+unchanged.
+
+**Effect (October 2026 data, DB copy).** Public Mandate: Truman 17 to 8,
+Kennedy 79 to 67, Johnson 67 to 47, Eisenhower 92 to 90, Carter 37 to 26,
+Reagan 61 to 65, George H. W. Bush 75 to 73, George W. Bush 46 to 55,
+Obama 46 to 54, Trump (first term) 21 to 40, Biden 24 to 38. Top 10
+overall: Reagan 7th to 5th, Johnson 5th to 9th, Kennedy 6th to 8th.
+
+**Also found.** Voteview names per-Congress files with three digits
+(H099); the fetcher's URL template wrote H99, a 404, for every Congress
+before the 100th. Only the sitting Congress had been read before.
+
