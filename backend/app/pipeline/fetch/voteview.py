@@ -131,7 +131,9 @@ import statistics
 
 import httpx
 
+from app import ops_alerts
 from app.http_client import make_async_client
+from app.ordinals import ordinal
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -644,8 +646,6 @@ async def refresh_member_ideal_points(
             # Kept data stops being current at the next Congress, when the
             # position part drops out: worth an operator's look, once a
             # Congress.
-            from app import ops_alerts
-            from app.ordinals import ordinal
             await asyncio.to_thread(
                 ops_alerts.send_ops_alert,
                 f"Voteview {chamber}: party switcher unresolved",
@@ -656,7 +656,6 @@ async def refresh_member_ideal_points(
                 dedupe_key=f"{condition}-{congress}", condition=condition,
             )
             return False
-        from app import ops_alerts
         await asyncio.to_thread(ops_alerts.resolve_ops_alert, condition)
         data, failures = build_chamber_ideal_points(
             rows, chamber, _state_pvi(), _district_pvi(),

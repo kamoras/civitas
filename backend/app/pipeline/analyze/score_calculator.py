@@ -161,12 +161,15 @@ summary is frontend/src/lib/scoreVersions.ts). This docstring and the code
 comments state the current rule only.
 """
 
+import json
 import logging
 import math
+import pathlib
 import statistics
 from datetime import date
 
 from app.atomic_write import update_json_file
+from app.config import settings
 from app.file_cache import Stamp, new_reload_lock
 from app.config_definitions import (
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
@@ -310,7 +313,6 @@ def _read_pvi_json(filename: str, *, report_unreadable: bool = False) -> dict:
     report_unreadable: a persistent copy that exists but can't be read right
     now raises file_cache.Uncached with the fallback, so a stamped cache
     retries instead of keeping the fallback until the file next changes."""
-    import pathlib
 
     from app.file_cache import Uncached, read_json_preferring
 
@@ -408,7 +410,6 @@ def _member_ideal_points(chamber: str) -> dict:
     left out until its Voteview export passes the gates. Missing data is never
     punitive — same convention as every other loader in this file.
     """
-    import pathlib
 
     from app.file_cache import Uncached, read_json, reload_if_moved
 
@@ -455,7 +456,6 @@ def _ideal_points_current(section: dict, congress: int | None = None) -> bool:
     is on disk, until the next run rescores it. A member with no
     party-line record (matched to no roll call) is judged against the
     sitting Congress."""
-    from app.config import settings
 
     have = section.get("congress")
     want = congress if congress is not None else settings.CURRENT_CONGRESS
@@ -475,7 +475,6 @@ def write_member_ideal_points(chamber: str, data: dict) -> None:
     abort an otherwise-successful pipeline run (the loader then serves
     the previous file, or skips the component).
     """
-    import pathlib
     global _member_ideal_points_cache
     path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
     try:
@@ -518,8 +517,6 @@ def _state_population() -> dict[str, float]:
     """
     global _state_population_cache
     if _state_population_cache is None:
-        import json
-        import pathlib
         path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "state_population.json"
         try:
             _state_population_cache = {
@@ -557,8 +554,6 @@ def _position_reliability(chamber: str) -> dict:
     """
     global _position_reliability_cache
     if _position_reliability_cache is None:
-        import json
-        import pathlib
         path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "position_confidence.json"
         try:
             raw = json.loads(path.read_text())
@@ -613,7 +608,6 @@ def _district_pvi() -> dict[str, int]:
     ~20% of the time, when the seat actually elected exactly that
     platform.
     """
-    import pathlib
 
     from app.file_cache import Uncached, reload_if_moved
     from app.pipeline.fetch.district_pvi import seat_lines
@@ -677,7 +671,6 @@ def get_pvi_meta() -> dict:
 
     Built once per version of the two files (file_cache.reload_if_moved);
     each call gets its own top-level dict, since callers replace entries."""
-    import pathlib
 
     from app.file_cache import reload_if_moved
 
@@ -942,8 +935,6 @@ def _small_donor_baseline_fit() -> dict[str, float]:
     """
     global _small_donor_baseline_fit_cache
     if _small_donor_baseline_fit_cache is None:
-        import json
-        import pathlib
         path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "small_donor_baseline.json"
         try:
             data = json.loads(path.read_text())

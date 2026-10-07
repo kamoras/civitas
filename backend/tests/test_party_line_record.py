@@ -305,16 +305,16 @@ def test_an_independent_stays_in_the_mean_of_the_party_they_caucus_with(db_sessi
 
 
 def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, monkeypatch):
-    """Darline Graham took Lindsey Graham's seat after his death; matched by
-    last name and state, every roll call he cast in the Congress was hers
-    (live, 2026-10-03). The roll calls' LIS ids tell them apart."""
+    """An appointee took a senator's seat; sharing the surname and state,
+    every roll call the predecessor cast in the Congress was credited to the
+    appointee (live, 2026-10-03). The roll calls' LIS ids tell them apart."""
     monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": {}})
-    for number, (first, lis) in enumerate((("Lindsey", "S293"), ("Lindsey", "S293"), ("Darline", "S441")), start=1):
+    for number, (first, lis) in enumerate((("Lowell", "S293"), ("Lowell", "S293"), ("Delia", "S441")), start=1):
         rc = RollCall(chamber="senate", congress=119, session=2, number=number, date=f"2026-03-0{number}",
                       question="On Passage", bill_id=f"S.{number}")
         db_session.add(rc)
         db_session.flush()
-        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=lis, last_name="Graham", first_name=first,
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=lis, last_name="Whitfield", first_name=first,
                                         party="R", state="SC", position="Yea"))
         for i in range(5):
             db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=f"D{i}", last_name=f"Dem{i}",
@@ -323,7 +323,7 @@ def test_a_successor_of_the_same_surname_gets_only_their_own_votes(db_session, m
                                             first_name="X", party="R", state="TX", position="Yea"))
     db_session.commit()
     (record,) = party_line_records(db_session, "senate", [{
-        "bioguideId": "G000600", "name": "Darline Graham", "lastNameForVoteMatch": "Graham", "state": "SC",
+        "bioguideId": "G000600", "name": "Delia Whitfield", "lastNameForVoteMatch": "Whitfield", "state": "SC",
         "party": "R", "votingRecord": {"effectiveParty": "R"},
     }])
     assert record["votes"] == 1, record

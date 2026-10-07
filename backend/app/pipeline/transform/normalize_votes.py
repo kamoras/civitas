@@ -698,11 +698,12 @@ def resolve_senate_lis_ids(members: list[dict], seen: list[dict]) -> dict[str, s
     roll calls give to more than one person, told apart by first name.
 
     Senate roll calls name a senator by last name and state, which is one
-    person until a seat passes to someone of the same surname. Darline
-    Graham was appointed to Lindsey Graham's seat after his death, and
-    every vote he cast in the Congress was credited to her (live,
-    2026-10-03: her first roll call on the site was 2025-12-01, cast by
-    LIS id S293, his). The roll call's own member id separates them.
+    person until a seat passes to someone of the same surname. When a
+    senator's seat went to an appointee of the same surname, every vote
+    the predecessor cast in the Congress was credited to the appointee
+    (live, 2026-10-03: the appointee's first roll call on the site predated
+    the appointment, cast under the predecessor's LIS id). The roll call's
+    own member id separates them.
 
     `members`: dicts with "id", "name", "lastNameForVoteMatch", "state".
     `seen`: roll-call members, dicts with "lisId", "firstName", "lastName",
