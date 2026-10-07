@@ -320,7 +320,12 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
           </Link>
         </>
       ),
-      detail: m.matchReason ? `Named in the coverage · ${m.matchReason}` : "Named in the coverage",
+      // The reason is the whole sentence ("named in coverage", "referenced
+      // in coverage"); prefixing it repeated the first and contradicted the
+      // second.
+      detail: m.matchReason
+        ? m.matchReason.charAt(0).toUpperCase() + m.matchReason.slice(1)
+        : "Named in the coverage",
       href: url ?? `/politicians/${m.id}`,
       internal: !url,
       label: url ? "Contact ↗" : "Scorecard →",
