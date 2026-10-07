@@ -34,9 +34,10 @@ seen; of one curve for both chambers, one per chamber, the latest era's
 transitions (a convention), the simplest whose error is within one standard
 error of the best's, that standard error the best's own
 (one_standard_error_rule). That rule was adopted in review after four
-others had been run and seen: two leaving one member out (choose_structure
-on held-out errors, era_test), then two forward, both reported (paired_rule,
-best_beating_one_curve; research note section 14); data_chosen_test
+others had been run and seen: two leaving one member out (an earlier
+draft's choice over every member, then era_test), then two forward, both
+reported (paired_rule, best_beating_one_curve; research note section 14);
+data_chosen_test
 reports the split and the width chosen from the data instead. The
 leave-one-member-out comparisons (choose_structure's
 one-standard-error rule over all members; era_test on the latest era's;

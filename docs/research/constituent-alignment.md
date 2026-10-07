@@ -730,9 +730,9 @@ in a fixed order, 1,000 times.
   |---|---|---|
   | **once for both chambers (shipped)** | **1.320** | |
   | once per chamber | 1.359 | 0.038 higher, within the noise (standard error 0.040) |
-  | the latest era's, since the 110th | 1.254 | 0.066 lower, under two standard errors (0.034) |
+  | the latest era's, since the 110th | 1.254 | 0.066 lower (standard error 0.034), under two standard errors |
   | the last six transitions | 1.243 | 0.078 lower (0.036) |
-  | a time trend (reported only) | 1.251 | 0.069 lower, within the noise (0.089) |
+  | a time trend (reported only) | 1.251 | 0.069 lower (standard error 0.089), within the noise |
 
   The window predicts best (`best`), and its error's standard error is
   0.229, so every structure is within it and one curve ships. Paired
