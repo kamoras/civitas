@@ -748,7 +748,7 @@ in a fixed order, 1,000 times.
   about 17% (0.229 of 1.320), where the era curve and the window cut it by
   5% and 6% (all computed from `forward_test`'s per-member errors and
   totals); the era curve cut it by at most 7% at any split (computed from
-  `era_at_every_split`) (it ships one curve at every split, below), so its
+  `era_at_every_split`; it ships one curve at every split, below), so its
   choice says that no structure has shown a large gain, not that none
   exists. The rest of the evidence doesn't settle it either:
   - **Where the gain is.** The era curve's comes from the transitions
@@ -896,12 +896,14 @@ in a fixed order, 1,000 times.
   votes). Measured only where the member also has a career DW-NOMINATE
   position, they count 0.21 from 25 pairs, but a few members carry it:
   leaving out one member at a time moves it between 0.13 and 0.26. A
-  no-count position with no career position at all belongs to a member
-  Voteview has just begun to place (in the 119th House export of
-  2026-10-03, two newly seated members with 22 and 29 roll calls on record
-  that Voteview had not yet counted, read from the export); it is not
-  measured by these pairs, and it counts nothing, so the part sits at 50
-  (a stated choice).
+  no-count position with no career position at all usually belongs to a
+  member Voteview has just begun to place (five of the six such records in
+  the 100th to 119th Congresses' exports; the sixth is a party switcher's
+  record after the switch, counted from the exports; in the 119th House
+  export of 2026-10-03, two newly seated members with 22 and 29 roll calls
+  on record that Voteview had not yet counted, read from the export); it
+  is not measured by these pairs, and it counts nothing, so the part sits
+  at 50 (a stated choice).
 - **Each pair is predicted in its own direction.** A member whose thin
   record is the earlier one (an entrant) is predicted with the
   transition's forward drift, the slope of the later full position on the

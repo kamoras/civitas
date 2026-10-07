@@ -789,6 +789,21 @@ def test_shipped_file_reports_what_the_docs_cite():
         assert f"through the {ordinal(start - 1)}" in note and f"from the {ordinal(start)}" in note
         assert quoted(one) in note and under_two(era) in note and overall in note
         assert f"From the {ordinal(start)}" in entry and under_two(era) in entry and overall in entry
+        # The bar as a share of one curve's error, and the most the era curve
+        # cut it by at any split (both computed in the docs from these keys).
+        forward = data["forward_test"]
+        bar = round(100 * forward["best_standard_error"] / forward["pooled"]["error"])
+        most = round(100 * max(-t["above"] for t in forward["era_at_every_split"].values())
+                     / forward["pooled"]["error"])
+        for text in (note, entry):
+            assert f"about {bar}%" in text and f"at most {most}% at any split" in text
+        # The split the data would choose, and that member's leave-one-out.
+        chosen = str(data["data_chosen_test"]["era"]["chosen_on_every_transition"])
+        split = data["era_split_test"]["splits"][chosen]
+        low = round(split["n0_leaving_one_member_out"][0])
+        half = split["without_most_influential_member"]["half_weight_votes"]
+        for text in (note, entry):
+            assert f"n0 falls to {low}, half point {half}" in text
     # "No constant offset detected": the mean offset is within two standard errors of 0.
     off = data["thin_offset"]["all"]
     assert abs(off["mean"]) <= 2 * off["standard_error"]
