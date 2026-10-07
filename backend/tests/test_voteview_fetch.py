@@ -131,7 +131,8 @@ class TestBuildAndGates:
 
     def test_the_scale_needs_scale_min_full_full_records(self):
         """The section measures its own scale from SCALE_MIN_FULL full
-        records; with one fewer it has none, and the last one is carried."""
+        records; with one fewer it has none (with_carried_scale then carries
+        the last one)."""
         state_pvi = score_calculator._state_pvi()
         for full, has_scale in ((voteview.SCALE_MIN_FULL, True), (voteview.SCALE_MIN_FULL - 1, False)):
             rows = _synthetic_rows(state_pvi)

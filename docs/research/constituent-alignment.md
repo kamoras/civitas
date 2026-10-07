@@ -735,21 +735,22 @@ in a fixed order, 1,000 times.
   | a time trend (reported only) | 1.251 | 0.069 lower, within the noise (0.089) |
 
   The window predicts best (`best`), and its error's standard error is
-  0.229, so every structure is within it and one curve ships. Paired member
-  by member, the era curve and the window each beat one curve by about two
-  standard errors of the difference (computed from `forward_test`'s above
-  and standard_error), so recent thin records may say less than one curve
-  credits, but the textbook rule judges a structure by the noise in the
-  best's own error, which is far larger: the structures' per-member errors
-  move together (the window's and one curve's correlate at 0.99,
-  `error_correlation`), so the best's own standard error is about six times
-  the paired one, and the rule leaves one curve only for a structure that
-  cuts the total forward error by about 17% (0.229 of 1.320), where the era
-  curve and the window cut it by 5% and 6% (all computed from
-  `forward_test`'s per-member errors and totals); no candidate came close at
-  any split (it ships one curve at every split, below), so its choice says
-  that no structure has shown a large gain, not that none exists. The rest
-  of the evidence doesn't settle it either:
+  0.229, so every structure is within it and one curve ships. Paired
+  member by member, the era curve and the window each beat one curve by
+  about two standard errors of the difference (computed from
+  `forward_test`'s above and standard_error), so recent thin records may
+  say less than one curve credits, but the textbook rule judges a
+  structure by the noise in the best's own error, which is far larger: the
+  structures' per-member errors move together (the window's and one
+  curve's correlate at 0.99, `error_correlation`), so the best's own
+  standard error is about six times the paired one, and the rule leaves
+  one curve only for a structure that cuts the total forward error by
+  about 17% (0.229 of 1.320), where the era curve and the window cut it by
+  5% and 6% (all computed from `forward_test`'s per-member errors and
+  totals); the era curve cut it by at most 7% at any split (computed from
+  `era_at_every_split`) (it ships one curve at every split, below), so its
+  choice says that no structure has shown a large gain, not that none
+  exists. The rest of the evidence doesn't settle it either:
   - **Where the gain is.** The era curve's comes from the transitions
     predicted from the 112th on; at the 111th the two curves predict alike
     (`gain_by_transition`: 0.0). Most of it is at the 112th and 114th (0.024
@@ -777,7 +778,8 @@ in a fixed order, 1,000 times.
     seven, whose curve's half point is 58 (`chosen_on_every_transition`,
     `fitted_on_the_last_transitions`); the latest-era curve from the 113th
     sits at the grid's end (`era_split_test`'s 113th: n0 5,000, half point
-    98; it rests on one member: left out, n0 falls to 279–475).
+    98; it rests on one member: left out, n0 falls to 308, half point
+    75.5).
   - **The split.** The era curve has lower forward error than one curve at
     every split from the 103rd to the 117th, by more than the paired
     standard error at 11 of these 15, not at the 108th, 109th, 115th or
@@ -1270,33 +1272,34 @@ rule's means reclassifies 0 of 2,351 Senate and 0 of 6,055 House breaks
   6.1% against 1.6% at 100, and more at 0 in 18 of the 19 Senates,
   counted from the script's share-at-0-by-Senate line) with more members
   near 0 and near 100.
-- **The thin-record weight rests on 95 thin pairs.** Few members have a thin
-  record next to a full one, so the half point has a wide interval (21–77
-  votes). Whether recent Congresses follow a slower curve is open: paired
-  member by member, the era curve and a window of recent transitions each
-  beat one curve by about two standard errors of the difference (computed
-  from `forward_test`'s above and standard_error), but not by the noise in
-  the best's own error, which the shipped rule judges by (a bar of about a
-  17% cut in forward error on these data, computed, against the 5% and 6%
-  they show: no candidate came close at any split), and not when the split
-  or the width is chosen from the data as a forecast must
-  (`data_chosen_test`); left one member out, later splits lean that way, and
-  the time trend, from the 113th where its fits are inside the search grids
-  (a range picked after seeing the fits), has lower error than the era curve
-  by 0.100 (standard error 0.053, under two standard errors). A rerun with
-  new pairs could move to a slower curve. The pairs are centered on the
-  party, not the seat's expectation, which, if seat lean explained a similar
-  share in the Congresses the pairs come from, makes the weight too
-  generous, most for Democrats (Limits, section 14). The thin records mix
-  arrivals, departures and long absences, as the score's do; whether
-  everyone's early records in a Congress behave like these is untested. The
-  no-count weight rests on fewer still (25 pairs), and the flank rule's
-  switch can't be measured at all: only 3 pairs have the rule's shape.
-  Reading a party switcher on their record since the switch rests on 8
-  people, and is nearer than the longer record by 0.050 (standard error
-  0.032, about one and a half; `switcher_test`). Rerunning the calibration
-  adds each Congress's new pairs, and decides the structure and the switch
-  again.
+- **The thin-record weight rests on 95 thin pairs.** Few members have a
+  thin record next to a full one, so the half point has a wide interval
+  (21–77 votes). Whether recent Congresses follow a slower curve is open:
+  paired member by member, the era curve and a window of recent
+  transitions each beat one curve by about two standard errors of the
+  difference (computed from `forward_test`'s above and standard_error),
+  but not by the noise in the best's own error, which the shipped rule
+  judges by (a bar of about a 17% cut in forward error on these data,
+  computed, against the 5% and 6% they show: the era curve cut it by at
+  most 7% at any split (computed from `era_at_every_split`)), and not when
+  the split or the width is chosen from the data as a forecast must
+  (`data_chosen_test`); left one member out, later splits lean that way,
+  and the time trend, from the 113th where its fits are inside the search
+  grids (a range picked after seeing the fits), has lower error than the
+  era curve by 0.100 (standard error 0.053, under two standard errors). A
+  rerun with new pairs could move to a slower curve. The pairs are
+  centered on the party, not the seat's expectation, which, if seat lean
+  explained a similar share in the Congresses the pairs come from, makes
+  the weight too generous, most for Democrats (Limits, section 14). The
+  thin records mix arrivals, departures and long absences, as the score's
+  do; whether everyone's early records in a Congress behave like these is
+  untested. The no-count weight rests on fewer still (25 pairs), and the
+  flank rule's switch can't be measured at all: only 3 pairs have the
+  rule's shape. Reading a party switcher on their record since the switch
+  rests on 8 people, and is nearer than the longer record by 0.050
+  (standard error 0.032, about one and a half; `switcher_test`). Rerunning
+  the calibration adds each Congress's new pairs, and decides the
+  structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight

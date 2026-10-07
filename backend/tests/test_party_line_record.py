@@ -810,18 +810,18 @@ def test_an_empty_first_name_matches_nobody():
     assert first_name_matches("Rob", {1: "", 2: "Rob"}) == [2]
 
 
-def test_a_position_with_no_surname_adds_no_departed_senator(db_session, monkeypatch):
-    """A Senate position with no last name names no surname, so no stored
-    departed senator is matched through it."""
+def test_a_blank_first_name_never_ties_a_voter_to_a_departed_senator(db_session, monkeypatch):
+    """A stored departed senator whose name has no first word, and a voter
+    under their surname with no first name: no first name on either side is
+    no evidence they are one person, so nobody is added."""
     from app.models import Senator
-    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": {"bio-ANN": 0.0}})
-    db_session.add(Senator(id="S-ANN", bioguide_id="bio-ANN", name="Ann Lastg", state="SC", party="R",
-                           is_current=False))
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": {"bio-X": 0.0}})
+    db_session.add(Senator(id="S-X", bioguide_id="bio-X", name=" Lastg", state="SC", party="R", is_current=False))
     rc = RollCall(chamber="senate", congress=119, session=2, number=46, date="2026-03-01", question="On Passage",
                   bill_id="S.46")
     db_session.add(rc)
     db_session.flush()
-    db_session.add(RollCallPosition(roll_call_id=rc.id, member_id="L-ANN", last_name="", first_name="Ann",
+    db_session.add(RollCallPosition(roll_call_id=rc.id, member_id="L-X", last_name="Lastg", first_name="",
                                     party="R", state="SC", position="Yea"))
     db_session.commit()
     positions = {rc.id: list(db_session.query(RollCallPosition).filter_by(roll_call_id=rc.id))}
