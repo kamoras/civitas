@@ -68,12 +68,12 @@ Office," APSR 96:1 — district-relative ideological extremity):
     into a weight in [0, 1], 1 for a full record). A row with no count (or
     0) but a career DW-NOMINATE position has no "votes" entry and gets the
     weight measured for such positions; one with neither (usually a member
-    just sworn in) is recorded as 0 votes and sits at 50. A row whose Nokken-Poole
-    coordinates are both exactly 0 is Voteview's placeholder for a member
-    it could not scale, not an estimate: it is left out, and the score
-    reads that member as having no position (50). The fits are taken over
-    every member (a stated choice): no constant offset of a thin record's
-    position is detected (position_confidence.json's thin_offset).
+    just sworn in) is recorded as 0 votes and sits at 50. A row whose
+    Nokken-Poole coordinates are both exactly 0 is Voteview's placeholder
+    for a member it could not scale, not an estimate: it is left out, and
+    the score reads that member as having no position (50). The fits are
+    taken over every member (a stated choice): no constant offset of a thin
+    record's position is detected (position_confidence.json's thin_offset).
     extremity_p90 is taken over full records only; early in a Congress,
     with too few of them, the chamber's last scale is carried
     ("scale_congress" names the Congress it was measured on), so the
@@ -425,9 +425,9 @@ def build_chamber_ideal_points(
         n_votes = _vote_count(row) or None
         if n_votes is None and _number(row.get("nominate_dim1")) is None:
             # No count and no career position (usually a member newly sworn
-            # in): nothing measured behind the position; it rests on no votes. (A member with a
-            # career position and no count is the uncounted case the
-            # calibration measures, left out of `votes`.)
+            # in): nothing measured behind the position; it rests on no
+            # votes. (A member with a career position and no count is the
+            # uncounted case the calibration measures, left out of `votes`.)
             n_votes = 0
         if n_votes is not None:
             votes[bio] = n_votes

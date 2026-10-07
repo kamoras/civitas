@@ -35,7 +35,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     // The half point (about 36 votes) and the full-strength count (200) quoted here come
     // from backend/app/data/position_confidence.json; test_position_confidence.py pins them.
     version: "v6.27",
-    date: "2026-10-04",
+    date: "2026-10-07",
     title:
       "Constituent Alignment: a voting position counts only as much as the votes behind it support",
     tldr: "Part of Constituent Alignment compares where a member sits on the left-right scale with where members of their party from similar seats sit. That position is estimated from the member's roll-call votes in the current Congress, and from only a few votes it is mostly noise. It now counts in proportion to how reliable it is: a position from about 36 votes counts half, and a record of 200 votes or more counts in full (where a full record starts is our convention). Most members barely move.",
