@@ -753,12 +753,12 @@ in a fixed order, 1,000 times.
   exists. The rest of the evidence doesn't settle it either:
   - **Where the gain is.** The era curve's comes from the transitions
     predicted from the 112th on; at the 111th the two curves predict alike
-    (`gain_by_transition`: 0.0). Most of it is at the 112th and 114th (0.024
-    each), when the one curve it beats was fitted on about two thirds and
-    half pre-110 records (65% and 48% of its thin pairs,
-    `training_before_split`). At the last three transitions, whose training
-    data look most like today's, it is 0.009 with a standard error of 0.009
-    (`last_three`; the window's, 0.014 with 0.012).
+    (`gain_by_transition`: 0.0). Most of it is at the 112th and 114th
+    (0.024 each), when the one curve it is compared with was fitted on
+    about two thirds and half pre-110 records (65% and 48% of its thin
+    pairs, `training_before_split`). At the last three transitions, whose
+    training data look most like today's, it is 0.009 with a standard
+    error of 0.009 (`last_three`; the window's, 0.014 with 0.012).
   - **Members.** One member supplies 44% of the era curve's gain
     (`most_helped_share`; 36% of the window's). Left out of the comparison
     (fits unchanged), the one, two and three members it helps most leave
@@ -769,10 +769,10 @@ in a fixed order, 1,000 times.
   - **The split and the width, chosen as a forecast must.** The 110th and
     the six are conventions. Chosen instead at each transition from the
     forward errors of the transitions before it (`data_chosen_test`,
-    widths of 2 to 10 transitions, a convention), each structure is only
-    slightly better than one curve over every predicted transition, well
-    within the noise: the era curve by 0.008 (standard error 0.050), the
-    window by 0.014 (0.037). Both lose 0.042 at the 110th, where the
+    widths of 2 to 10 transitions, a convention), each structure has only
+    slightly lower error than one curve over every predicted transition,
+    well within the noise: the era curve by 0.008 (standard error 0.050),
+    the window by 0.014 (0.037). Both lose 0.042 at the 110th, where the
     choices made on the few earlier transitions predict badly, and gain at
     most transitions from the 113th on (`gain_by_transition`). Over every
     transition the data would choose a split at the 113th and a width of
@@ -1011,13 +1011,12 @@ by predicting forward, the use the weight is put to (above).
 point 46), chosen forward by the best of the structures beating one curve
 by more than the paired standard error, and the tenth by the
 one-standard-error rule's paired form, after a window of the last six
-transitions was seen to predict slightly better. Under the first the
-window would ship; under the second the outcome turns on the split (the
-era curve at the 110th, the window at 9 of 15 splits). The textbook rule,
-judged by the noise in the best's own error, keeps one curve at every
-split, and with the split or the width chosen from the data as a
-forecast must, each is better than one curve only well within the noise
-(above).
+transitions was seen to predict about as well. Under the first the window
+would ship; under the second the outcome turns on the split (the era curve
+at the 110th, the window at 9 of 15 splits). The textbook rule, judged by
+the noise in the best's own error, keeps one curve at every split, and
+with the split or the width chosen from the data as a forecast must, each
+has lower error than one curve only within the noise (above).
 
 **Shipped (v6.27).**
 - The member's extremity is scaled by weight(n) before it is read against
@@ -1033,19 +1032,20 @@ forecast must, each is better than one curve only well within the noise
     (its Congress range follows the clock, and a Congress still thin by
     the calendar is skipped) adds the newest pairs and decides the
     structure again.
-  - A member Voteview lists twice in one Congress (a party switch during it)
-    is read on the record since the switch, and only that one enters the
-    seat fits. That is a choice, not a measurement: the score is about the
-    current term, and the record since the switch is the one of who the
-    member now is. The evidence is consistent with it but can't settle it
-    (`switcher_test`). Over the 9 such member-Congresses (8 people) with a
-    full record in the next Congress, the record since the switch is nearer
-    that record (squared gap 0.039) than the longer record (0.083) or the
-    vote-weighted mean of the two (0.060). Counting each person once, it is
-    nearer by 0.050 (standard error 0.032, about one and a half) than the
-    longer and by 0.030 (0.022) than the mean; in 4 of the 9 the record
-    since the switch is also the longer, and of the other 5 it is nearer
-    in 4. Consequences of the choice:
+  - A member Voteview lists twice in one Congress (a party switch during
+    it) is read on the record since the switch, and only that one enters
+    the seat fits. That is a choice, not a measurement: the score is about
+    the current term, and the record since the switch is the one of who
+    the member now is. The evidence is consistent with it but can't settle
+    it (`switcher_test`). Over the 9 such member-Congresses (8 people)
+    with a full record in the next Congress, the record since the switch
+    is nearer that record (squared gap 0.039) than the longer record
+    (0.083) or the vote-weighted mean of the two (0.060). Counting each
+    person once, it is nearer by 0.050 (standard error 0.032, about one
+    and a half) than the longer and by 0.030 (0.022, about one and a
+    third, under two standard errors) than the mean; in 4 of the 9 the
+    record since the switch is also the longer, and of the other 5 it is
+    nearer in 4. Consequences of the choice:
     - Just after a switch the record since is short, so it counts little
       and the part sits near 50; the longer record from before the
       switch isn't read.

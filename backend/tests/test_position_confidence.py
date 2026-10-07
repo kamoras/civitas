@@ -798,6 +798,8 @@ def test_shipped_file_reports_what_the_docs_cite():
                      / forward["pooled"]["error"])
         for text in (note, entry):
             assert f"about {bar}%" in text and f"at most {most}% at any split" in text
+        # Every copy, not just one: a stale one would otherwise pass.
+        assert note.count(f"at most {most}% at any split") == 2
         # The split the data would choose, and that member's leave-one-out.
         chosen = str(data["data_chosen_test"]["era"]["chosen_on_every_transition"])
         split = data["era_split_test"]["splits"][chosen]

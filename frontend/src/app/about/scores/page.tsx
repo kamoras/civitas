@@ -288,8 +288,8 @@ export default function ScoresChapter() {
             much as its votes support. We measured how much it should count using members who have a
             short record in one Congress and a full one in the Congress before or after, over every
             Congress since 1989. Measuring on recent Congresses only (since 2007, or the latest six
-            Congress-to-Congress changes) predicted later Congresses slightly better. But the
-            improvement was much smaller than the normal variation in how well any single
+            Congress-to-Congress changes) predicted later Congresses with slightly smaller errors.
+            But the improvement was much smaller than the normal variation in how well any single
             measurement predicts. Our rule, a standard one in statistics that we chose to use, keeps
             the simpler measurement unless another beats it by more than that. When the cutoff year
             or the number of recent Congresses also had to be chosen from earlier Congresses alone,
