@@ -785,8 +785,9 @@ in a fixed order, 1,000 times.
   - **The split.** The era curve has lower forward error than one curve at
     every split from the 103rd to the 117th, by more than the paired
     standard error at 11 of these 15, not at the 108th, 109th, 115th or
-    116th (at the 118th the two curves can't differ: no later transition has
-    thin pairs). The rule ships one curve at all 15 (`era_at_every_split`'s
+    116th (over two standard errors only at the 103rd and 112th, computed;
+    at the 118th the two curves can't differ: no later transition has thin
+    pairs). The rule ships one curve at all 15 (`era_at_every_split`'s
     ships).
   - **Recency or a break.** The window predicts as well as the era curve
     (0.011 lower error, standard error 0.012, `window_against_era`): these
@@ -850,8 +851,8 @@ in a fixed order, 1,000 times.
   learn from the very Congresses it is judged on, which the forward test
   doesn't; the forward test is the one that matches the use. Repeated at
   every split (`era_split_test`), a recent era's curve would be adopted
-  (beats one curve by more than a standard error) at 4 of 16 splits
-  (113th–115th, 117th), by 1.0 to 1.5 standard errors (computed from
+  (lower error than one curve by more than a standard error) at 4 of 16
+  splits (113th–115th, 117th), by 1.0 to 1.5 standard errors (computed from
   `era_split_test`'s above and standard_error), each at the slowest curve
   the search grid allows (half point 98); that extreme rests on one member
   at the 113th to 115th (leaving one out, n0 falls to 279–475), but without
