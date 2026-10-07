@@ -276,15 +276,39 @@ inline academic citations.
 
 Key mathematical properties:
 - **Linear shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
-  a senator with 1 campaign promise gets a score near 50, not 0 or 100).
-  Two exceptions: Constituent Alignment's vote part shrinks toward the
-  party's measured typical score (its scale tops out at the seat's norm, so
-  50 is below average), and Legislative Effectiveness's bill component
-  doesn't shrink by bill count (a member's bills are the whole record, not
-  a sample) — its leadership component is still pulled toward 50 for short
-  tenure.
-  The rate is the count confidence below — fixed, not estimated from the
-  population's variance, so do not call it Bayesian or empirical Bayes
+  a senator with 1 campaign promise gets a score near 50, not 0 or 100). Two
+  exceptions: Constituent Alignment's vote part shrinks toward the party's
+  measured typical score (its scale tops out at the seat's norm, so 50 is
+  below average); Legislative Effectiveness's bill component doesn't shrink
+  by bill count (a member's bills are the whole record, not a sample) — its
+  leadership component is still pulled toward 50 for short tenure. The rate
+  is the count confidence below — fixed, not estimated from the population's
+  variance, so do not call it Bayesian or empirical Bayes — except in
+  Constituent Alignment's position part (v6.27), which shrinks toward 50 at
+  a measured rate: it scales a roll-call position's distance from the seat's
+  expected position, when the position rests on n votes, by min(1, w(n) /
+  w(200)) (a full record at 200 votes, a convention), w(n) = n / (n + n0):
+  the measured slope of a member's full-record position on their thin one, a
+  full record counting 1. n0 is fitted on Voteview's own adjacent-Congress
+  records with drift per transition
+  (`scripts/calibrate_position_confidence.py`), one curve for both chambers
+  over every Congress since 1989. The structure is chosen by predicting
+  forward, each transition's n0 from the earlier ones only (its drift,
+  shared by every structure, from its own full pairs), as the weight is
+  used, by the one-standard-error rule (Hastie, Tibshirani & Friedman 2009;
+  a convention, adopted in review after four other rules had been tried, two
+  leaving one member out, then two forward): the simplest structure within
+  one standard error of the best's error. The latest era's curve, since the
+  110th Congress (a split by convention), beats one curve by 0.066 (standard
+  error of the paired difference 0.034; over the last three transitions
+  alone about one standard error, computed from `last_three`), and a window
+  of the last six transitions predicts about as well (0.011 lower error than
+  the era curve, standard error 0.012), but both are well within the best's
+  own standard error (0.229), a curve per chamber predicts no better, and
+  with the split or the window's width chosen from earlier Congresses alone
+  each has lower error than one curve only within the noise. A rerun decides
+  again. Nothing in it follows the sitting Congress. It is a reliability
+  weight, not a count threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Constituent Alignment scores account for Cook
@@ -581,7 +605,29 @@ congress" sidesteps that fragility entirely and is *stricter* than a literal
 6-year term (resets every 2 years, not 6) — it pushes harder on the "no
 resting on laurels" goal, not softer.
 
-**Funding is the one exception**: Funding Independence and Funding Diversity
+Besides funding (below), the flank-break rule (`party_line_record`, v6.27)
+is a narrower exception that never scores a past position. It reads the last
+Congress's positions only to tell which side of their party a defector sits
+on: for everyone until the new Congress's Voteview section passes its gates;
+after that, for a member whose new record has no count or fewer than
+`prior_until_votes` votes (`app/data/position_confidence.json`: 200, a full
+record) if their last record was full; and, whatever the last record, for a
+member the new section gives no usable position (a stated choice, not
+measured). Never, once the new section is in, for a member who switched
+parties during the new Congress (`switched` in the section) or whose party
+differs between the two sections (`parties`; sections written before this
+change record none, so that check starts with the next Congress's section):
+their last positions were cast in another party. A position recorded under
+the other major party is never read for the member, in any section, nor
+counted in that party's mean (a stated choice). The 200 and the bar for
+replacing it are conventions: the calibration would adopt a shorter switch
+only if it placed members on the right side better out of bag in 95% of
+resamples, and too few thin records have the rule's shape to measure one.
+Only the Congress just before is kept, and only by a section written since
+v6.27, so the prior is first read in the Congress after the one v6.27
+shipped in.
+
+**Funding is the main exception**: Funding Independence and Funding Diversity
 window to the member's **most recent completed election only**
 (`select_recent_elections` in `fetch/fec.py`, `n=1`: general election day
 has passed — a re-election campaign still in progress is the *next*

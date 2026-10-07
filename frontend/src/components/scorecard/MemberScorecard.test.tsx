@@ -309,10 +309,47 @@ describe("MemberScorecard", () => {
     );
     expect(screen.getByText("Votes against party (1)")).toBeInTheDocument();
     expect(screen.getByText("From the right flank, not counted (1)")).toBeInTheDocument();
+    // The fixture scores no position part: the flank note says it comes later.
+    expect(screen.getByText(/which isn't scored for this Congress yet/)).toBeInTheDocument();
     expect(screen.getByText(/Each bill or nomination counts once/)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "H.R. 8800" })).toHaveLength(2);
     // Served with the score: nothing to fetch.
     expect(fetchRepVotes).not.toHaveBeenCalled();
+  });
+
+  it("points the flank note at the position part when it is scored", async () => {
+    const scored = {
+      ...breakdown,
+      constituentAlignment: {
+        ...breakdown.constituentAlignment,
+        components: [
+          ...breakdown.constituentAlignment.components,
+          { label: "Position congruence", weight: 0.3, score: 40, detail: "" },
+        ],
+        facts: {
+          party: "R",
+          partyVotes: 292,
+          breaks: 0,
+          breakRate: 0,
+          expectedBreakRate: 0.004,
+          flankBreaks: 1,
+          breakVotes: [],
+          flankBreakVotes: [{ vote: "Yea", rollCall: recommit.rollCall! }],
+        },
+      },
+    };
+    render(
+      <MemberScorecard
+        member={member}
+        chamber="house"
+        breakdown={scored}
+        district={2}
+        stateName="Tennessee"
+        rank={{ rank: 412, of: 433 }}
+        committees={[]}
+      />
+    );
+    expect(screen.getByText(/measured by position congruence, scored below\./)).toBeInTheDocument();
   });
 
   it("shows constituents' approval by party in the alignment column, marked not scored", async () => {

@@ -1,0 +1,927 @@
+{
+ "_source": "Voteview (voteview.com, Lewis et al.) member and vote exports, Senate and House: pairs from Congresses 101-119 (later ones still thin by the calendar are left out), with the exports either side read for who was seated; exports retrieved 2026-10-03 to 2026-10-04; regenerate with backend/scripts/calibrate_position_confidence.py",
+ "_method": "Members of the 50 states with positions in adjacent Congresses (a member who switched parties during a Congress is left out), each read from the party's center toward its flank, keyed by the transition they span: full = drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / w(200)), w(n) = n / (n + n0); drift from each transition's pairs of full records (both sides 200 or more scaled votes) in the pair's direction, n0 the least-squares fit of the thin pairs on a grid to 5000 (a convention; reference_votes is the full-record count, the w(...) in the denominator); transitions with no full pairs and Congresses still thin by the calendar are left out. structure is the one forward_test chooses (each transition predicted from fits on the earlier ones; of one curve, one per chamber, the latest era's, split at era_split by convention, and a window of the last FORWARD_WINDOW (6, a convention) transitions, in that order of simplicity (a stated choice), the simplest whose error is within one standard error of the best's, that standard error the best's own (the one-standard-error rule of Hastie, Tibshirani & Friedman, adopted in review after two other rules: see paired_rule and best_beating_one_curve); forward_test reports chosen, best, best_standard_error, paired_against_best (each structure's member-by-member difference from the best), error_correlation (each structure's per-member errors' correlation with one curve's), paired_rule (the rule's paired form, the simplest whose paired difference from the best is within that difference's standard error), best_beating_one_curve (the best of those beating one curve by more than the paired standard error), members (the thin members predicted), each structure's error and paired difference from one curve (trend included, reported only); for each structure beating one curve by more than the paired standard error, its gain by transition, its comparison without the members it helps most (left out of it, and refitted), the share of the gain each supplies (most_helped_share) and last_three (against one curve on the last three predicted transitions); the era comparison at every split it can test (era_at_every_split, each with beats_one_curve: by more than the paired standard error; ships: what the rule would ship with that split; ships_paired_rule: what its paired form would), the window against the era curve (window_against_era), and the share of the thin pairs one curve was fitted on from before the split, by predicted transition (training_before_split); trend also has its gain by transition, whether each forward fit reached an end of a search grid (fit_at_grid_end), and inside_grids, from the first transition from which every fit is inside the grids, the trend against one curve and against the era curve. data_chosen_test, reported: the era curve and the window with the split, or the width (of 2 to 10 transitions, a convention), chosen at each predicted transition by the lowest forward error over the transitions predicted before it (ties to more transitions; the first takes era_split and FORWARD_WINDOW), each against one curve, the window against the era curve so chosen, the gain and the choice by transition, the choice over every transition (chosen_on_every_transition) and fitted_on_the_last_transitions, keyed by width (FORWARD_WINDOW and the width chosen on every transition), the window's curve fitted on that many last transitions as it would ship, each with n0, half_weight_votes and at_grid_end (n0 at an end of the grid). Leave-one-member-out comparisons, reported: heldout_error is the squared error of each thin member's pairs fitted without that member, by structure; structure_test is one curve against one per chamber by the same one-standard-error rule (each with heldout_error, above_best, its paired difference from the better, and that difference's standard_error; best_standard_error the better's own), with reported giving direction, attendance (attended arrivals and departures against the rest) and era (each era's curve on its own members) against its choice, paired; era_test judges the latest era's curve against that choice on the latest era's thin pairs alone (members; adopted, whether it beats that choice by more than the paired standard error), with its half_weight_votes and the other usable structure judged the same way (chamber_on_latest while the leave-one-out comparison, structure_test, keeps one curve); era_split_test repeats it at every split (splits; adopted_at the number of splits that adopt, of the number tested; at an adopting split, with its n0 leaving one member out in turn, and the test rerun without the member whose absence moves n0 most, none if no member moves it); trend_test is the split-free form, log n0 linear in decades since the split, added after the era tests and reported, not adopted (b its slope per decade, half_weight_votes_latest its half point at latest_congress, and all, latest and latest_without_most_influential_member its paired comparisons); party_line_test is the rejected term (log n0 linear in the Congress's party-line share) added to the shipped structure's grouping (structure_test's choice when the window ships: it has no grouping; trend_test likewise), its above and standard_error the paired difference from that grouping (under era, each era's own curve), b the term's slope, loss_with and loss_without the in-sample losses and heldout_error the held-out error with it. chambers' thin_pairs count every thin pair; half_weight_votes is where weight(n) = 0.5, never above reference_votes / 2 (as n0 grows the curve tends to n / reference_votes), and at most about 98 on the n0 grid (to 5000), so an interval reaching the grid's end is open above; half_weight_votes_pooled, _by_chamber and _by_era are the half points one curve, a curve per chamber and a curve per era would give; interval_90 is the 5th-95th percentile over members resampled with the structure held fixed (so it leaves out the choice of structure; half_weight_votes_pooled_interval_90, half_weight_votes_era_interval_90 and half_weight_votes_by_chamber_interval_90 are one curve's, the latest era's and one per chamber's, beside it); uncounted_weight is the slope, for both chambers, for positions published with no count (or 0) but a career DW-NOMINATE position, and uncounted_weight_leave_one_out its range with each of its members left out in turn; thin_offset is the mean of thin - full / drift over thin pairs (all, under 50 votes, from 50 up) with its standard error and upper_95, the mean plus 1.96 standard errors, and full_baseline the same over full pairs (not exactly 0 without bias): a test for a constant shift, not a proportional one; thin_pairs_by_era counts each era's thin pairs and those under 50 votes; drift_range is the lowest and highest chamber-transition drift in each direction (earlier_thin, later_thin); full_slope_by_votes is the full records' slope on the drift by their vote count; party_line_share_by_congress is each Congress's share of party-line roll calls; pairs counts the pairs used and calibrated_through the last Congress paired. switcher_test compares, for a member who switched parties during a Congress, the latest record, the longer one and their vote-weighted mean against the next Congress's full record, paired differences over people (the pipeline reads the latest, a stated choice the evidence can't settle): members and people counted, each record's mean squared gap, latest_minus_longer and latest_minus_weighted the paired means, latest_not_longer the member-Congresses whose latest record is not their longer one and latest_closer those of them it places nearer. prior_test compares, for the flank rule, a last full record and a thin record as evidence of a member's side of their party, centered as the rule centers, by band of the thin record's votes (each band, and full for full-full pairs, gives pairs, same_side: the share on the same side of their party in both records, and mean_squared_gap), with full_by_distance (how often a full record keeps its side, by distance from the party's center) and rule_shape_bands (the bands on pairs shaped like the rule's case); prior_until_votes is the count below which the rule reads the last full record (a full record unless a switch short of one, chosen on resampled members, saves sides on the members left out in 95% of resamples, on pairs shaped like the rule's case: a full record, then the thin record of a member who left during the next Congress, absent the Congress after, missing no more of the roll calls in their span than nine in ten of that Congress's full records, a convention); switch_test's rule_shape is that test (null when too few such pairs support its model), and it also reports every member who left (leavers) and every thin pair (all), each with switch_votes (the best switch: the fewest sides misplaced over counts 1 to 199, each equally likely, a convention), saved (the share of sides it saves in sample), saved_out_of_bag (its 5th, 50th and 95th percentiles on members left out), draws_judged, share_saving (how often it saves any) and the thin pairs behind it, all and over 100 votes; crossover_if_independent is the rejected unstratified crossing, reported only",
+ "calibrated_through": 119,
+ "structure": "pooled",
+ "chambers": {
+  "senate": {
+   "n0": 56.0,
+   "half_weight_votes": 35.9,
+   "thin_pairs": 23
+  },
+  "house": {
+   "n0": 56.0,
+   "half_weight_votes": 35.9,
+   "thin_pairs": 72
+  }
+ },
+ "reference_votes": 200,
+ "uncounted_weight": 0.214,
+ "uncounted_weight_leave_one_out": [
+  0.134,
+  0.258
+ ],
+ "interval_90": {
+  "senate": {
+   "n0": [
+    26.0,
+    326.45
+   ],
+   "half_weight_votes": [
+    20.635,
+    76.55
+   ]
+  },
+  "house": {
+   "n0": [
+    26.0,
+    326.45
+   ],
+   "half_weight_votes": [
+    20.635,
+    76.55
+   ]
+  },
+  "uncounted_weight": [
+   0.011,
+   0.39
+  ]
+ },
+ "heldout_error": {
+  "pooled": 1.3362,
+  "chamber": 1.3677,
+  "era": 1.279,
+  "direction": 1.3616,
+  "attendance": 1.3269
+ },
+ "structure_test": {
+  "pooled": {
+   "heldout_error": 1.3362,
+   "above_best": 0.0,
+   "standard_error": 0.0
+  },
+  "chamber": {
+   "heldout_error": 1.3677,
+   "above_best": 0.0316,
+   "standard_error": 0.0427
+  },
+  "best_standard_error": 0.2365,
+  "reported": {
+   "era": {
+    "above": -0.0571,
+    "standard_error": 0.0539
+   },
+   "direction": {
+    "above": 0.0254,
+    "standard_error": 0.0138
+   },
+   "attendance": {
+    "above": -0.0093,
+    "standard_error": 0.0373
+   }
+  }
+ },
+ "half_weight_votes_pooled": 35.9,
+ "half_weight_votes_pooled_interval_90": [
+  20.635,
+  76.55
+ ],
+ "half_weight_votes_era_interval_90": [
+  26.471,
+  98.039
+ ],
+ "half_weight_votes_by_chamber": {
+  "senate": 25.4,
+  "house": 54.5
+ },
+ "half_weight_votes_by_chamber_interval_90": {
+  "senate": [
+   0.99,
+   51.491
+  ],
+  "house": [
+   23.664,
+   98.039
+  ]
+ },
+ "era_split": 110,
+ "forward_test": {
+  "chosen": "pooled",
+  "best": "window",
+  "best_standard_error": 0.2289,
+  "paired_against_best": {
+   "pooled": {
+    "above": 0.0775,
+    "standard_error": 0.0361
+   },
+   "chamber": {
+    "above": 0.1158,
+    "standard_error": 0.0507
+   },
+   "era": {
+    "above": 0.0113,
+    "standard_error": 0.0119
+   }
+  },
+  "paired_rule": "era",
+  "error_correlation": {
+   "chamber": 0.985,
+   "era": 0.99,
+   "window": 0.988
+  },
+  "best_beating_one_curve": "window",
+  "members": 82,
+  "chamber": {
+   "error": 1.3587,
+   "above": 0.0383,
+   "standard_error": 0.0403
+  },
+  "era": {
+   "error": 1.2543,
+   "above": -0.0662,
+   "standard_error": 0.0335,
+   "gain_by_transition": {
+    "105": 0.0,
+    "106": 0.0,
+    "107": 0.0,
+    "108": 0.0,
+    "109": 0.0,
+    "110": 0.0,
+    "111": 0.0,
+    "112": -0.0242,
+    "113": -0.0007,
+    "114": -0.0243,
+    "115": -0.0084,
+    "116": 0.0016,
+    "117": -0.0041,
+    "118": -0.0061
+   },
+   "without_most_helped_left_out_of_comparison": [
+    {
+     "above": -0.0369,
+     "standard_error": 0.0172
+    },
+    {
+     "above": -0.0306,
+     "standard_error": 0.0162
+    },
+    {
+     "above": -0.0257,
+     "standard_error": 0.0155
+    }
+   ],
+   "without_most_helped_refitted": [
+    {
+     "above": -0.1798,
+     "standard_error": 0.0767
+    },
+    {
+     "above": -0.1803,
+     "standard_error": 0.0781
+    },
+    {
+     "above": -0.1505,
+     "standard_error": 0.0723
+    }
+   ],
+   "most_helped_share": [
+    0.442,
+    0.095,
+    0.074
+   ],
+   "last_three": {
+    "above": -0.0086,
+    "standard_error": 0.009
+   }
+  },
+  "window": {
+   "error": 1.2429,
+   "above": -0.0775,
+   "standard_error": 0.0361,
+   "gain_by_transition": {
+    "105": 0.0,
+    "106": 0.0,
+    "107": 0.0,
+    "108": 0.0,
+    "109": 0.0,
+    "110": 0.0109,
+    "111": 0.0,
+    "112": -0.0292,
+    "113": -0.0008,
+    "114": -0.0333,
+    "115": -0.0116,
+    "116": 0.0016,
+    "117": -0.0054,
+    "118": -0.0097
+   },
+   "without_most_helped_left_out_of_comparison": [
+    {
+     "above": -0.0495,
+     "standard_error": 0.0235
+    },
+    {
+     "above": -0.0403,
+     "standard_error": 0.0218
+    },
+    {
+     "above": -0.0329,
+     "standard_error": 0.0207
+    }
+   ],
+   "without_most_helped_refitted": [
+    {
+     "above": -0.2022,
+     "standard_error": 0.0842
+    },
+    {
+     "above": -0.2139,
+     "standard_error": 0.0901
+    },
+    {
+     "above": -0.2066,
+     "standard_error": 0.09
+    }
+   ],
+   "most_helped_share": [
+    0.361,
+    0.119,
+    0.095
+   ],
+   "last_three": {
+    "above": -0.0136,
+    "standard_error": 0.0117
+   }
+  },
+  "trend": {
+   "error": 1.2513,
+   "above": -0.0691,
+   "standard_error": 0.0893,
+   "gain_by_transition": {
+    "105": -0.0001,
+    "106": -0.0005,
+    "107": 0.0,
+    "108": 0.0002,
+    "109": -0.0264,
+    "110": 0.0416,
+    "111": 0.0003,
+    "112": 0.0582,
+    "113": -0.0004,
+    "114": -0.0722,
+    "115": -0.0385,
+    "116": 0.0246,
+    "117": -0.039,
+    "118": -0.0168
+   },
+   "fit_at_grid_end": {
+    "105": true,
+    "106": true,
+    "107": true,
+    "108": true,
+    "109": true,
+    "110": true,
+    "111": true,
+    "112": true,
+    "113": false,
+    "114": false,
+    "115": false,
+    "116": false,
+    "117": false,
+    "118": false
+   },
+   "inside_grids": {
+    "from": 113,
+    "against_one_curve": {
+     "above": -0.1424,
+     "standard_error": 0.0649
+    },
+    "against_era": {
+     "above": -0.1004,
+     "standard_error": 0.0533
+    }
+   }
+  },
+  "pooled": {
+   "error": 1.3204
+  },
+  "training_before_split": {
+   "105": 1.0,
+   "106": 1.0,
+   "107": 1.0,
+   "108": 1.0,
+   "109": 1.0,
+   "110": 1.0,
+   "111": 0.828,
+   "112": 0.649,
+   "113": 0.545,
+   "114": 0.48,
+   "115": 0.4,
+   "116": 0.353,
+   "117": 0.304,
+   "118": 0.282
+  },
+  "era_at_every_split": {
+   "103": {
+    "above": -0.0214,
+    "standard_error": 0.0069,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "window"
+   },
+   "104": {
+    "above": -0.0384,
+    "standard_error": 0.0333,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "window"
+   },
+   "105": {
+    "above": -0.0568,
+    "standard_error": 0.0302,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "window"
+   },
+   "106": {
+    "above": -0.0555,
+    "standard_error": 0.0317,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "window"
+   },
+   "107": {
+    "above": -0.0607,
+    "standard_error": 0.0552,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "era"
+   },
+   "108": {
+    "above": -0.0506,
+    "standard_error": 0.0546,
+    "beats_one_curve": false,
+    "ships": "pooled",
+    "ships_paired_rule": "era"
+   },
+   "109": {
+    "above": -0.0249,
+    "standard_error": 0.0479,
+    "beats_one_curve": false,
+    "ships": "pooled",
+    "ships_paired_rule": "window"
+   },
+   "110": {
+    "above": -0.0662,
+    "standard_error": 0.0335,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "era"
+   },
+   "111": {
+    "above": -0.0704,
+    "standard_error": 0.0362,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "era"
+   },
+   "112": {
+    "above": -0.0404,
+    "standard_error": 0.0166,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "window"
+   },
+   "113": {
+    "above": -0.0907,
+    "standard_error": 0.0503,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "era"
+   },
+   "114": {
+    "above": -0.0589,
+    "standard_error": 0.052,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "era"
+   },
+   "115": {
+    "above": -0.0119,
+    "standard_error": 0.0417,
+    "beats_one_curve": false,
+    "ships": "pooled",
+    "ships_paired_rule": "window"
+   },
+   "116": {
+    "above": -0.0131,
+    "standard_error": 0.0163,
+    "beats_one_curve": false,
+    "ships": "pooled",
+    "ships_paired_rule": "window"
+   },
+   "117": {
+    "above": -0.0168,
+    "standard_error": 0.0159,
+    "beats_one_curve": true,
+    "ships": "pooled",
+    "ships_paired_rule": "window"
+   }
+  },
+  "window_against_era": {
+   "above": -0.0113,
+   "standard_error": 0.0119
+  }
+ },
+ "data_chosen_test": {
+  "era": {
+   "against_one_curve": {
+    "above": -0.0081,
+    "standard_error": 0.0501
+   },
+   "gain_by_transition": {
+    "105": 0.0,
+    "106": 0.0,
+    "107": 0.0,
+    "108": 0.0,
+    "109": -0.0278,
+    "110": 0.0416,
+    "111": 0.0,
+    "112": 0.0,
+    "113": -0.0005,
+    "114": -0.0156,
+    "115": -0.0084,
+    "116": 0.0249,
+    "117": -0.0054,
+    "118": -0.0168
+   },
+   "chosen_by_transition": {
+    "105": 110,
+    "106": 103,
+    "107": 103,
+    "108": 103,
+    "109": 107,
+    "110": 107,
+    "111": 103,
+    "112": 103,
+    "113": 105,
+    "114": 105,
+    "115": 110,
+    "116": 113,
+    "117": 111,
+    "118": 113
+   },
+   "chosen_on_every_transition": 113
+  },
+  "window": {
+   "against_one_curve": {
+    "above": -0.014,
+    "standard_error": 0.0367
+   },
+   "gain_by_transition": {
+    "105": 0.0,
+    "106": 0.0,
+    "107": 0.0,
+    "108": 0.0,
+    "109": 0.0,
+    "110": 0.0416,
+    "111": 0.0,
+    "112": 0.0,
+    "113": -0.0006,
+    "114": -0.0333,
+    "115": -0.0125,
+    "116": 0.0023,
+    "117": -0.0041,
+    "118": -0.0074
+   },
+   "chosen_by_transition": {
+    "105": 6,
+    "106": 10,
+    "107": 10,
+    "108": 10,
+    "109": 10,
+    "110": 2,
+    "111": 10,
+    "112": 10,
+    "113": 7,
+    "114": 7,
+    "115": 7,
+    "116": 7,
+    "117": 7,
+    "118": 7
+   },
+   "chosen_on_every_transition": 7,
+   "against_era": {
+    "above": -0.0059,
+    "standard_error": 0.0383
+   },
+   "fitted_on_the_last_transitions": {
+    "6": {
+     "n0": 5000.0,
+     "half_weight_votes": 98.0,
+     "at_grid_end": true
+    },
+    "7": {
+     "n0": 136.0,
+     "half_weight_votes": 57.6,
+     "at_grid_end": false
+    }
+   }
+  }
+ },
+ "era_test": {
+  "above": 0.0025,
+  "standard_error": 0.0195,
+  "members": 67,
+  "adopted": false,
+  "half_weight_votes": 46.2,
+  "chamber_on_latest": {
+   "above": 0.0488,
+   "standard_error": 0.0405
+  }
+ },
+ "switcher_test": {
+  "members": 9,
+  "people": 8,
+  "mean_squared_gap_latest": 0.039,
+  "mean_squared_gap_longer": 0.0834,
+  "mean_squared_gap_weighted": 0.0604,
+  "latest_minus_longer": {
+   "mean": -0.0501,
+   "standard_error": 0.0323
+  },
+  "latest_minus_weighted": {
+   "mean": -0.03,
+   "standard_error": 0.0221
+  },
+  "latest_not_longer": 5,
+  "latest_closer": 4
+ },
+ "era_split_test": {
+  "splits": {
+   "103": {
+    "above": 0.002,
+    "standard_error": 0.0086,
+    "members": 85,
+    "adopted": false,
+    "half_weight_votes": 39.8
+   },
+   "104": {
+    "above": 0.0013,
+    "standard_error": 0.0092,
+    "members": 83,
+    "adopted": false,
+    "half_weight_votes": 40.1
+   },
+   "105": {
+    "above": 0.0041,
+    "standard_error": 0.0131,
+    "members": 82,
+    "adopted": false,
+    "half_weight_votes": 41.5
+   },
+   "106": {
+    "above": 0.0042,
+    "standard_error": 0.0151,
+    "members": 81,
+    "adopted": false,
+    "half_weight_votes": 42.5
+   },
+   "107": {
+    "above": 0.0013,
+    "standard_error": 0.0286,
+    "members": 77,
+    "adopted": false,
+    "half_weight_votes": 51.9
+   },
+   "108": {
+    "above": 0.0012,
+    "standard_error": 0.0285,
+    "members": 76,
+    "adopted": false,
+    "half_weight_votes": 51.7
+   },
+   "109": {
+    "above": 0.0018,
+    "standard_error": 0.026,
+    "members": 72,
+    "adopted": false,
+    "half_weight_votes": 50.2
+   },
+   "110": {
+    "above": 0.0025,
+    "standard_error": 0.0195,
+    "members": 67,
+    "adopted": false,
+    "half_weight_votes": 46.2
+   },
+   "111": {
+    "above": 0.0006,
+    "standard_error": 0.0236,
+    "members": 63,
+    "adopted": false,
+    "half_weight_votes": 49.0
+   },
+   "112": {
+    "above": 0.0082,
+    "standard_error": 0.0344,
+    "members": 56,
+    "adopted": false,
+    "half_weight_votes": 57.6
+   },
+   "113": {
+    "above": -0.0601,
+    "standard_error": 0.0486,
+    "members": 49,
+    "adopted": true,
+    "half_weight_votes": 98.0,
+    "n0": 5000.0,
+    "n0_leaving_one_member_out": [
+     308.0,
+     5000.0
+    ],
+    "without_most_influential_member": {
+     "above": -0.039,
+     "standard_error": 0.0358,
+     "adopted": true,
+     "half_weight_votes": 75.5
+    }
+   },
+   "114": {
+    "above": -0.0736,
+    "standard_error": 0.0478,
+    "members": 44,
+    "adopted": true,
+    "half_weight_votes": 98.0,
+    "n0": 5000.0,
+    "n0_leaving_one_member_out": [
+     475.0,
+     5000.0
+    ],
+    "without_most_influential_member": {
+     "above": -0.0453,
+     "standard_error": 0.0363,
+     "adopted": true,
+     "half_weight_votes": 82.6
+    }
+   },
+   "115": {
+    "above": -0.0438,
+    "standard_error": 0.0432,
+    "members": 34,
+    "adopted": true,
+    "half_weight_votes": 98.0,
+    "n0": 5000.0,
+    "n0_leaving_one_member_out": [
+     279.0,
+     5000.0
+    ],
+    "without_most_influential_member": {
+     "above": -0.0173,
+     "standard_error": 0.0295,
+     "adopted": false,
+     "half_weight_votes": 73.6
+    }
+   },
+   "116": {
+    "above": -0.0026,
+    "standard_error": 0.0332,
+    "members": 27,
+    "adopted": false,
+    "half_weight_votes": 98.0
+   },
+   "117": {
+    "above": -0.0527,
+    "standard_error": 0.0382,
+    "members": 16,
+    "adopted": true,
+    "half_weight_votes": 98.0,
+    "n0": 5000.0,
+    "n0_leaving_one_member_out": [
+     5000.0,
+     5000.0
+    ],
+    "without_most_influential_member": null
+   },
+   "118": {
+    "above": 0.1402,
+    "standard_error": 0.1453,
+    "members": 10,
+    "adopted": false,
+    "half_weight_votes": 98.0
+   }
+  },
+  "adopted_at": 4,
+  "of": 16
+ },
+ "half_weight_votes_by_era": {
+  "101-109": 1.0,
+  "110-119": 46.2
+ },
+ "thin_offset": {
+  "all": {
+   "pairs": 95,
+   "mean": 0.0089,
+   "standard_error": 0.0187,
+   "upper_95": 0.0456
+  },
+  "under_50": {
+   "pairs": 42,
+   "mean": -0.0024,
+   "standard_error": 0.0355,
+   "upper_95": 0.0673
+  },
+  "from_50": {
+   "pairs": 53,
+   "mean": 0.0178,
+   "standard_error": 0.0185,
+   "upper_95": 0.054
+  },
+  "full_baseline": {
+   "pairs": 8079,
+   "mean": 0.0063,
+   "standard_error": 0.0009
+  }
+ },
+ "thin_pairs_by_era": {
+  "101-109": {
+   "thin": 24,
+   "under_50_votes": 4
+  },
+  "110-119": {
+   "thin": 71,
+   "under_50_votes": 38
+  }
+ },
+ "drift_range": {
+  "earlier_thin": [
+   0.663,
+   1.009
+  ],
+  "later_thin": [
+   0.73,
+   0.98
+  ]
+ },
+ "full_slope_by_votes": {
+  "200-400": 1.01,
+  "400-600": 1.012,
+  "600-800": 0.994,
+  "800-1100": 1.004,
+  "1100-10000": 0.99
+ },
+ "party_line_test": {
+  "b": 7.75,
+  "loss_with": 1.2865,
+  "loss_without": 1.3066,
+  "heldout_error": 1.3446,
+  "above": 0.0084,
+  "standard_error": 0.0328
+ },
+ "trend_test": {
+  "b": 5.75,
+  "latest_congress": 118,
+  "half_weight_votes_latest": 99.6,
+  "all": {
+   "above": -0.1546,
+   "standard_error": 0.0935
+  },
+  "latest": {
+   "above": -0.0793,
+   "standard_error": 0.0741
+  },
+  "latest_without_most_influential_member": {
+   "above": -0.0368,
+   "standard_error": 0.0624
+  }
+ },
+ "prior_test": {
+  "full": {
+   "pairs": 8079,
+   "same_side": 0.863,
+   "mean_squared_gap": 0.0048
+  },
+  "thin 0-25": {
+   "pairs": 19,
+   "same_side": 0.684,
+   "mean_squared_gap": 0.0611
+  },
+  "thin 25-50": {
+   "pairs": 24,
+   "same_side": 0.5,
+   "mean_squared_gap": 0.0296
+  },
+  "thin 50-100": {
+   "pairs": 20,
+   "same_side": 0.7,
+   "mean_squared_gap": 0.0136
+  },
+  "thin 100-150": {
+   "pairs": 20,
+   "same_side": 0.85,
+   "mean_squared_gap": 0.0182
+  },
+  "thin 150-200": {
+   "pairs": 12,
+   "same_side": 0.917,
+   "mean_squared_gap": 0.0029
+  },
+  "full_by_distance": {
+   "0.0-0.02": 0.618,
+   "0.02-0.05": 0.719,
+   "0.05-0.1": 0.859,
+   "0.1-0.2": 0.963,
+   "0.2-10.0": 0.995
+  },
+  "crossover_if_independent": 132.9,
+  "rule_shape_bands": {
+   "thin 0-25": {
+    "pairs": 2,
+    "same_side": 1.0,
+    "mean_squared_gap": 0.0182
+   },
+   "thin 50-100": {
+    "pairs": 1,
+    "same_side": 0.0,
+    "mean_squared_gap": 0.0534
+   }
+  },
+  "switch_test": {
+   "rule_shape": null,
+   "leavers": {
+    "switch_votes": 200,
+    "thin_pairs": 33,
+    "thin_pairs_over_100": 9,
+    "saved": 0.0,
+    "draws_judged": 1000,
+    "saved_out_of_bag": [
+     -0.2202,
+     0.0,
+     0.0
+    ],
+    "share_saving": 0.033
+   },
+   "all": {
+    "switch_votes": 119,
+    "thin_pairs": 95,
+    "thin_pairs_over_100": 32,
+    "saved": 0.0156,
+    "draws_judged": 1000,
+    "saved_out_of_bag": [
+     -0.1768,
+     0.0,
+     0.0394
+    ],
+    "share_saving": 0.302
+   }
+  }
+ },
+ "prior_until_votes": 200.0,
+ "party_line_share_by_congress": {
+  "senate": {
+   "101": 0.458,
+   "102": 0.522,
+   "103": 0.609,
+   "104": 0.671,
+   "105": 0.538,
+   "106": 0.565,
+   "107": 0.518,
+   "108": 0.627,
+   "109": 0.606,
+   "110": 0.577,
+   "111": 0.756,
+   "112": 0.562,
+   "113": 0.685,
+   "114": 0.627,
+   "115": 0.611,
+   "116": 0.588,
+   "117": 0.809,
+   "118": 0.78,
+   "119": 0.92
+  },
+  "house": {
+   "101": 0.537,
+   "102": 0.602,
+   "103": 0.639,
+   "104": 0.675,
+   "105": 0.528,
+   "106": 0.452,
+   "107": 0.419,
+   "108": 0.496,
+   "109": 0.516,
+   "110": 0.588,
+   "111": 0.465,
+   "112": 0.747,
+   "113": 0.705,
+   "114": 0.744,
+   "115": 0.689,
+   "116": 0.685,
+   "117": 0.576,
+   "118": 0.705,
+   "119": 0.7
+  }
+ },
+ "pairs": {
+  "full": 8079,
+  "thin": 95,
+  "uncounted": 25
+ }
+}

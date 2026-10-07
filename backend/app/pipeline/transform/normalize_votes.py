@@ -684,23 +684,35 @@ def compute_party_split(roll_call_data: dict) -> str | None:
     return result["label"] if result else None
 
 
+def first_name_matches(first: str, names: dict) -> list:
+    """The keys of `names` whose first name is `first`: the exact matches
+    (accents and case aside) when there are any, else the looser ones
+    (_same_first_name: a nickname, a dropped accent). An exact match wins,
+    so "Rob" and "Robert" each keep their own."""
+    exact = [k for k, name in names.items() if _normalize_for_match(name or "") == _normalize_for_match(first or "")]
+    return exact or [k for k, name in names.items() if _same_first_name(first, name)]
+
+
 def resolve_senate_lis_ids(members: list[dict], seen: list[dict]) -> dict[str, str]:
     """{member id: LIS id} for each member whose last name and state the
     roll calls give to more than one person, told apart by first name.
 
     Senate roll calls name a senator by last name and state, which is one
-    person until a seat passes to someone of the same surname. Darline
-    Graham was appointed to Lindsey Graham's seat after his death, and
-    every vote he cast in the Congress was credited to her (live,
-    2026-10-03: her first roll call on the site was 2025-12-01, cast by
-    LIS id S293, his). The roll call's own member id separates them.
+    person until a seat passes to someone of the same surname. When a
+    senator's seat went to an appointee of the same surname, every vote
+    the predecessor cast in the Congress was credited to the appointee
+    (live, 2026-10-03: the appointee's first roll call on the site predated
+    the appointment, cast under the predecessor's LIS id). The roll call's
+    own member id separates them.
 
     `members`: dicts with "id", "name", "lastNameForVoteMatch", "state".
     `seen`: roll-call members, dicts with "lisId", "firstName", "lastName",
     "state". A member whose key matches one LIS id is left out (matching
     by name is exact there and needs no first-name agreement, which a
-    nickname would break). A member with several and no single first-name
-    match maps to "": no vote is credited rather than someone else's.
+    nickname would break). A member with several takes the one whose first
+    name matches theirs, an exact match over a looser one
+    (first_name_matches); with no single match it maps to "": no vote is
+    credited rather than someone else's.
     """
     people: dict[tuple[str, str], dict[str, str]] = defaultdict(dict)
     for m in seen:
@@ -715,7 +727,7 @@ def resolve_senate_lis_ids(members: list[dict], seen: list[dict]) -> dict[str, s
         if len(candidates) < 2:
             continue
         first = (member.get("name") or "").split(" ")[0]
-        matched = [lis for lis, name in candidates.items() if _same_first_name(first, name)]
+        matched = first_name_matches(first, candidates)
         out[member["id"]] = matched[0] if len(matched) == 1 else ""
     return out
 

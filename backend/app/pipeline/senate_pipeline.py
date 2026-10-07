@@ -164,6 +164,17 @@ RECENT_RC_SESSIONS = 2
 MIN_CONGRESS_FOR_BILL_TITLES = 116
 
 
+
+def party_line_members(scored: list[dict], roster: list[dict]) -> list[dict]:
+    """The members party_line_records reads: the senators this run scores,
+    first (their records come back in that order), then the rest of the
+    roster (a filtered run's unscored senators, or any whose prep failed),
+    without a voting record, whose positions the Senate's roll calls reach
+    only through the members passed."""
+    ids = {m.get("id") for m in scored}
+    return scored + [s for s in roster if s.get("id") not in ids]
+
+
 def _record_json(record: dict | None) -> str | None:
     return json.dumps(record) if record else None
 
@@ -1095,6 +1106,7 @@ async def run_senate_pipeline(
             logger.info("--- Phase 2: TRANSFORM (members) ---")
             progress.begin("normalize_members")
             senators = normalize_members(raw_members, member_details)
+            roster = list(senators)  # the whole chamber, for the party-line records
             logger.info("Normalized %d senators", len(senators))
             progress.complete("normalize_members", detail=f"{len(senators)} senators")
 
@@ -1996,9 +2008,13 @@ async def run_senate_pipeline(
 
         # Each senator's party-line record over the whole Congress (v6.20),
         # before the reference is measured on it.
-        for p, record in zip(senator_prepared, party_line_records(
-            db, "senate", [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared],
-        )):
+        # The rest of the chamber is passed too (a filtered run's unscored
+        # senators, or any whose prep failed): a break is read against the
+        # other defectors and the party, whose roll-call votes are tied to
+        # positions only through these members.
+        scored = [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared]
+        for p, record in zip(senator_prepared, party_line_records(db, "senate", party_line_members(scored, roster))
+                             if scored else []):
             p["votingRecord"]["partyLineRecord"] = record
 
         funding_reference = live_funding_reference(

@@ -92,7 +92,7 @@ export default async function LimitationsChapter() {
               mean building multilevel regression and poststratification over raw survey data
               in-house: a statistics pipeline, and a black box next to every other formula on these
               pages. We chose not to trade auditability for a partial fix. Issue-level opinion data
-              remains the named next step for the score itself. For the position half of the score,
+              remains the named next step for the score itself. For the position part of the score,
               voters&apos; own left-right self-placement by state was tested as the expectation and
               predicted senators&apos; positions no better than partisan lean.
             </P>

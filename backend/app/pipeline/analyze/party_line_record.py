@@ -10,12 +10,16 @@ member's position), under two rules the research note tests against
 election results (docs/research/constituent-alignment.md, sections 11-12):
 
 - A break counts only toward the other party. On that roll call, the party
-  members who broke sit, on average, nearer the other party (DW-NOMINATE
-  first dimension) than their party as a whole. Hardliners voting down their
-  own party's bill from the flank vote against it too, but that is not
-  independence toward the seat, and the member's flank position is already
-  scored, by position congruence. Such votes are kept as flankBreaks: shown,
-  not counted.
+  members who broke sit, on average, nearer the other party (first-dimension
+  position from the chamber's Voteview section, the current or the last
+  Congress's, each weighted by its reliability and read from its party's
+  mean since v6.27; until a member's new record reaches prior_until_votes,
+  their last Congress's full record, where they have one, decides their
+  side) than their party as a whole. Hardliners voting down their own
+  party's bill from the flank vote against it too, but that is not
+  independence toward the seat, and the member's flank position is measured
+  by position congruence (scored once the Congress's section passes its
+  gates). Such votes are kept as flankBreaks: shown, not counted.
 - Each measure counts once. A nominee's cloture and confirmation votes, or a
   bill's motion to proceed, cloture and passage, are one decision voted on
   several times; in the 119th Senate 37% of roll calls repeat a measure
@@ -34,12 +38,13 @@ from collections import defaultdict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import RollCall, RollCallPosition
-from app.pipeline.analyze.score_calculator import _member_ideal_points
+from app.models import Representative, RollCall, RollCallPosition, Senator
+from app.pipeline.analyze.score_calculator import _member_ideal_points, position_confidence
 from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
     _determine_party_alignment,
     _normalize_for_match,
+    first_name_matches,
     resolve_senate_lis_ids,
     compute_party_split,
     is_housekeeping,
@@ -90,16 +95,84 @@ def load_record(text: str | None) -> dict | None:
 def _toward_other_party(party: str, cast: list[tuple]) -> bool:
     """Whether the members of `party` who broke on this roll call sit nearer
     the other party than their party does (mean dim1: Democrats negative,
-    Republicans positive)."""
-    everyone = [d for _, p, _, _, d in cast if p == party and d is not None]
-    broke = [d for _, p, _, with_party, d in cast if p == party and not with_party and d is not None]
-    if not everyone or not broke:
-        # ponytail: no NOMINATE position for any defector (a member Voteview
-        # hasn't estimated yet) counts the break, as every break did before
-        # v6.20; only reachable in a Congress's first weeks.
+    Republicans positive). Each cast entry's position is (dim1, weight):
+    means are weighted by the position's reliability (v6.27,
+    score_calculator.position_confidence), so among several defectors one
+    resting on a few roll calls barely moves their mean. A lone defector's
+    side is its own position's sign against the party's, whatever its
+    weight, which is why party_line_records reads a member's last-Congress
+    full record until their new record reaches prior_until_votes (a full
+    record by default)."""
+    everyone = [d for _, p, _, _, d in cast if p == party and d is not None and d[1] > 0]
+    broke = [d for _, p, _, with_party, d in cast if p == party and not with_party and d is not None and d[1] > 0]
+    if not broke:
+        # ponytail: no usable position for any defector (a member Voteview
+        # hasn't estimated) counts the break, as every break did before
+        # v6.20; mostly a Congress's first weeks.
         return True
-    mean, broke_mean = sum(everyone) / len(everyone), sum(broke) / len(broke)
-    return broke_mean > mean if party == "D" else broke_mean < mean
+
+    def mean(points):
+        return sum(x * w for x, w in points) / sum(w for _, w in points)
+    # Positions are read from their party's mean in their section
+    # (party_line_records), so with no usable position for anyone who voted
+    # with the party the party's own center, 0, stands in.
+    reference = mean(everyone) if len(everyone) > len(broke) else 0.0
+    return mean(broke) > reference if party == "D" else mean(broke) < reference
+
+
+def _words(text: str) -> str:
+    """A name as space-padded words, accents stripped and uppercased, with
+    punctuation dropped, so one name can be found as whole words in another."""
+    return f" {' '.join(re.sub(r'[^\w ]', ' ', _normalize_for_match(text)).split())} "
+
+
+def _departed_senators(db: Session, members: list[dict], positions: dict[int, list]) -> list[dict]:
+    """Stored senators `members` leaves out (one who left during the
+    Congress is off the sitting roster), each with the roll calls' own
+    spelling of their last name: the one surname among their state's
+    voters that is a whole word of their stored name, and only when their
+    first name matches one LIS id that voted under it which no member
+    passed has the first name of (a predecessor who never voted, or a
+    successor who hasn't yet, takes no one's votes; each LIS id goes to one
+    senator, an exact first-name match over a looser one, whatever order
+    they are stored in). Anyone else is left out, as before."""
+    have = {m.get("bioguideId") for m in members}
+    voters: dict[str, set[str]] = defaultdict(set)
+    people: dict[tuple, dict[str, str]] = defaultdict(dict)
+    for ps in positions.values():
+        for p in ps:
+            if p.last_name and p.state:
+                voters[p.state.upper()].add(p.last_name)
+                people[(_normalize_for_match(p.last_name), p.state.upper())][p.member_id] = p.first_name or ""
+    firsts: dict[tuple, list[str]] = defaultdict(list)
+    for m in members:
+        firsts[(_normalize_for_match(m.get("lastNameForVoteMatch") or ""), (m.get("state") or "").upper())].append(
+            (m.get("name") or "").split(" ")[0])
+    free = {k: {lis: first for lis, first in ids.items()
+                if not any(lis in first_name_matches(own, ids) for own in firsts.get(k, ()))}
+            for k, ids in people.items()}
+    candidates = []
+    for bioguide, name, state, party in db.query(Senator.bioguide_id, Senator.name, Senator.state, Senator.party):
+        if not bioguide or bioguide in have:
+            continue
+        words = _words(name or "")
+        last = {ln for ln in voters.get((state or "").upper(), ()) if _words(ln) in words}
+        if len(last) != 1:
+            continue
+        surname = last.pop()
+        candidates.append(((_normalize_for_match(surname), (state or "").upper()), (name or "").split(" ")[0],
+                           {"bioguideId": bioguide, "name": name, "state": state, "party": party,
+                            "lastNameForVoteMatch": surname}))
+    # Each free LIS id to the one candidate whose first name matches it, an
+    # exact match over a looser one; an id two candidates match equally,
+    # or a candidate two ids match, is left out: no order decides it.
+    taken: dict[int, list[str]] = defaultdict(list)
+    for k, ids in free.items():
+        for lis, first in ids.items():
+            pick = first_name_matches(first, {i: own for i, (ck, own, _) in enumerate(candidates) if ck == k})
+            if len(pick) == 1:
+                taken[pick[0]].append(lis)
+    return [candidates[i][2] for i in sorted(taken) if len(taken[i]) == 1]
 
 
 def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[dict | None]:
@@ -126,16 +199,25 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         # name and state (extract_senator_vote matches the same way).
         return member_id if chamber == "house" else (_normalize_for_match(last_name or ""), (state or "").upper())
 
-    index: dict = defaultdict(list)
-    for i, m in enumerate(members):
-        index[key(m.get("bioguideId") or "", m.get("lastNameForVoteMatch") or "", m.get("state") or "")].append(i)
-
     positions: dict[int, list] = defaultdict(list)
     for p in db.query(
         RollCallPosition.roll_call_id, RollCallPosition.member_id, RollCallPosition.last_name,
         RollCallPosition.first_name, RollCallPosition.state, RollCallPosition.party, RollCallPosition.position,
     ).filter(RollCallPosition.roll_call_id.in_(list(rolls))):
         positions[p.roll_call_id].append(p)
+
+    # The Senate's roll calls tie a vote to a position only through these
+    # members, and the roster lists sitting senators only: a senator who
+    # left during the Congress is added (records not returned), so their
+    # votes are read with their position like everyone else's. The House's
+    # roll calls carry the bioguide id and need nothing added.
+    scored = len(members)
+    if chamber == "senate":
+        members = members + _departed_senators(db, members, positions)
+
+    index: dict = defaultdict(list)
+    for i, m in enumerate(members):
+        index[key(m.get("bioguideId") or "", m.get("lastNameForVoteMatch") or "", m.get("state") or "")].append(i)
 
     # A seat passed to someone of the same surname (resolve_senate_lis_ids):
     # only the member's own LIS id is theirs.
@@ -154,14 +236,122 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
         if len(found_at) > 1:
             # Two senators of one state can share a last name: the roll
             # call's first name tells them apart.
-            first = _normalize_for_match(p.first_name or "")
-            found_at = [i for i in found_at if _normalize_for_match((members[i].get("name") or "").split(" ")[0]) == first]
+            found_at = first_name_matches(p.first_name or "",
+                                          {i: (members[i].get("name") or "").split(" ")[0] for i in found_at})
         return found_at[0] if len(found_at) == 1 else None
 
-    parties = [(m.get("votingRecord") or {}).get("effectiveParty") or m.get("party") for m in members]
+    # The chamber's stored members' parties (an independent's caucus party):
+    # every member without a voting record (the rest of the chamber, and a
+    # departed senator added above) reads its party from here, and each
+    # section's party centers cover the whole chamber however few members
+    # this run scores.
+    model = Senator if chamber == "senate" else Representative
+    stored: dict[str, str] = {
+        b: caucus or p for b, p, caucus in db.query(model.bioguide_id, model.party, model.caucus_party) if b}
+    parties = [(m.get("votingRecord") or {}).get("effectiveParty") or stored.get(m.get("bioguideId") or "")
+               or m.get("party") for m in members]
     tenures = load_leadership_tenures()
     spans = [majority_leader_spans(m.get("leadershipTitle"), tenures.get(m.get("bioguideId"))) for m in members]
-    dim1 = (_member_ideal_points(chamber) or {}).get("members") or {}
+    # Any Congress's section: this rule needs only which side of their party
+    # the defectors sit, and positions carry from one Congress to the next,
+    # so early in a new Congress the last positions classify its breaks
+    # rather than every flank break counting (stale beats punitive). Once
+    # the new Congress's section is in, its positions rest on a few roll
+    # calls at first, so a member's last-Congress full record ("prior",
+    # voteview.previous_positions) decides their side until their new record
+    # reaches prior_until_votes (position_confidence.json: a full record,
+    # unless a shorter switch is shown to place members better; a section
+    # without the key falls back to a full record's count, or without that
+    # to the more reliable). Each section's positions are read from their
+    # own party's mean in that section, so a party-wide shift between the
+    # two Congresses can't move a member who is read from one against a
+    # party read from the other.
+    ideal = _member_ideal_points(chamber) or {}
+
+    party_of: dict[str, str] = {}
+    if chamber == "house":
+        # The House's roll calls name every member's bioguide and party; a
+        # stored caucus party (an independent's) reads over them.
+        party_of.update({p.member_id: p.party for ps in positions.values() for p in ps if p.member_id})
+    party_of.update(stored)
+    party_of.update({m.get("bioguideId"): parties[i] for i, m in enumerate(members) if m.get("bioguideId")})
+
+    def weighted(section) -> dict:
+        # bioguide -> (position from its party's mean, reliability weight)
+        if not isinstance(section, dict):
+            return {}
+        reliability = section.get("reliability") if isinstance(section.get("reliability"), dict) else None
+        counts = section.get("votes") or {}
+        points = {b: (float(x), position_confidence(counts.get(b), reliability))
+                  for b, x in (section.get("members") or {}).items()}
+        # A position the section records under the other major party (a
+        # switch since) is not that party's, nor evidence of the member's
+        # side of their new one: it stays out of the party's mean and is
+        # never read for the member, in any section (a stated choice).
+        cast = section.get("parties") or {}
+        other = {b for b in points if {cast.get(b), party_of.get(b)} == {"R", "D"}}
+        points = {b: xw for b, xw in points.items() if b not in other}
+
+        def party(b):
+            # A member no longer stored (deleted after the grace period) and
+            # absent from the roll calls reads the party the section records.
+            return party_of.get(b) or cast.get(b)
+        center = {}
+        for side in ("R", "D"):
+            mine = [(x, w) for b, (x, w) in points.items() if party(b) == side and w > 0]
+            if mine:
+                center[side] = sum(x * w for x, w in mine) / sum(w for _, w in mine)
+        return {b: (x - center.get(party(b), 0.0), w) for b, (x, w) in points.items()}
+    # The positions of the roll calls' Congress lead: the section's, or, when
+    # the section is already the next Congress's (refreshed after Jan 3,
+    # before its first roll call is stored), the prior it keeps; a section
+    # carried from the last Congress (its successor not yet in) is itself
+    # the last Congress's, and its own prior would be older still.
+    kept = ideal.get("prior") if isinstance(ideal.get("prior"), dict) else {}
+
+    def of(section) -> int | None:
+        return int(section["congress"]) if section.get("congress") is not None else None
+    if kept and of(ideal) != congress and of(kept) == congress:
+        main, prior = kept, {}
+    else:
+        main, prior = ideal, kept if of(ideal) == congress else {}
+    dim1 = weighted(main)
+    for b, xw in weighted(ideal if main is kept else {}).items():
+        dim1.setdefault(b, xw)
+    reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else {}
+    full = reliability.get("reference_votes")
+    until = reliability.get("prior_until_votes", full)
+    counts = main.get("votes") or {}
+    prior_counts = prior.get("votes") or {}
+    # A member who switched parties, during this Congress or between the
+    # two: their last record was cast in another party. A stated choice
+    # (nothing measured such a record as evidence of their side of the new
+    # one): it is never read for them, so with no usable position this
+    # Congress they have none, and their breaks are classified on the
+    # other defectors' positions (counting when no defector has one).
+    now, then = main.get("parties") or {}, prior.get("parties") or {}
+    switched = set(main.get("switched") or ()) | {b for b in then if b in now and then[b] != now[b]}
+    for b, (x, w) in weighted(prior).items():
+        if b in switched:
+            continue
+        if b not in dim1:
+            dim1[b] = (x, w)
+        elif full:
+            # A last full record decides until the new record reaches
+            # prior_until_votes (calibrate_position_confidence: a full record,
+            # unless a switch short of one is shown to place members better
+            # out of bag). Only a full last record was measured, so a thin
+            # one doesn't replace this Congress's.
+            n, last = counts.get(b), prior_counts.get(b)
+            if (n is None or n < float(until)) and last is not None and float(last) >= float(full):
+                dim1[b] = (x, w)
+            elif dim1[b][1] == 0 and w > 0:
+                # This Congress's position counts for nothing yet (no votes):
+                # read on the last one, however short (a stated choice; the
+                # alternative wasn't measured).
+                dim1[b] = (x, w)
+        elif w > dim1[b][1]:
+            dim1[b] = (x, w)
 
     found: set[int] = set()
     # member -> measure -> [(date, session, number, ref, vote, kind)], kind "with" /
@@ -169,6 +359,7 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     stages: list[dict] = [defaultdict(list) for _ in members]
     for rid, rc in rolls.items():
         ps = positions.get(rid, [])
+        # The roll call's own parties, as its stored partySplit reads them.
         label = None if is_housekeeping(rc.question) else compute_party_split(
             {"members": [{"party": p.party, "voteCast": p.position} for p in ps]},
         )
@@ -180,7 +371,10 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             vote = _VOTES.get((p.position or "").strip().lower())
             if label not in ("R", "D") or vote is None:
                 continue
-            party = parties[i] if i is not None else p.party
+            # A member the run doesn't score: their stored caucus party where
+            # the roll call names them by bioguide (the House), else its own.
+            party = parties[i] if i is not None else (
+                party_of.get(p.member_id) if chamber == "house" and p.member_id else None) or p.party
             if party not in ("R", "D"):
                 # A party line is either party's: a member of neither (a
                 # roll call's "I" with no caucus resolved, an unusual code)
@@ -203,7 +397,7 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
                 stages[i][unit].append((rc.date, rc.session, rc.number, ref, vote, kind))
 
     out: list[dict | None] = []
-    for i in range(len(members)):
+    for i in range(scored):
         if i not in found:
             out.append(None)
             continue
@@ -220,7 +414,10 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
             "breaks": [{"rollCall": v[3], "vote": v[4]} for v in sorted(breaks, reverse=True)],
             "flankBreaks": [{"rollCall": v[3], "vote": v[4]} for v in sorted(flank, reverse=True)],
         })
-    missing = [members[i].get("name") or members[i].get("bioguideId") for i in range(len(members)) if i not in found]
+    # Only the members this run scores (the rest of the chamber is passed
+    # without a voting record, for the means alone).
+    missing = [members[i].get("name") or members[i].get("bioguideId") for i in range(scored)
+               if i not in found and members[i].get("votingRecord") is not None]
     if missing:
         logger.warning(
             "%d %s members matched no stored roll-call position (scored on stored votes): %s",

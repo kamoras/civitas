@@ -297,3 +297,15 @@ def test_house_representatives_are_backfilled_too(db_session):
     assert (leadership, ideology, bip, attracted) == (
         {"R001": 0.3}, {"R001": -0.4}, {"R001": 0.6}, {"R001": 0.55},
     )
+
+
+def test_party_line_records_read_the_whole_chamber_scored_first():
+    """The senators a run scores come first, in order (their records are
+    zipped back onto them), then every other roster senator, once: a
+    filtered run's unscored ones and any whose prep failed."""
+    from app.pipeline.senate_pipeline import party_line_members
+    roster = [{"id": f"S{i}"} for i in range(4)]
+    scored = [{"id": "S2", "votingRecord": {}}, {"id": "S0", "votingRecord": {}}]
+    out = party_line_members(scored, roster)
+    assert out[:2] == scored and [m["id"] for m in out[2:]] == ["S1", "S3"]
+    assert party_line_members(roster, roster) == roster

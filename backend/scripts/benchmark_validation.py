@@ -168,29 +168,46 @@ def seat_relative_vote_shape(rows: list[dict]) -> dict[str, float]:
             out[r["bioguide"]] = seat_relative_vote_score(residual, scale, r["n_votes"], typical)
     return out
 
-def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, float]:
+def position_congruence(member_rows: list[dict], chamber: str, latest: dict[str, str] | None = None) -> dict[str, float]:
     """bioguide -> the position-congruence score of the member's Nokken-Poole
     (or DW-NOMINATE) position minus the per-party fit on seat lean, signed
     toward the party flank — the pipeline's own build_chamber_ideal_points
     and score_calculator.position_congruence_score at that fit's saturation."""
     from app.pipeline.analyze.score_calculator import (
         _district_pvi,
+        _position_reliability,
         _seat_pvi,
         _state_pvi,
+        position_confidence,
         position_congruence_score,
     )
-    from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points
+    from app.pipeline.fetch.voteview import PARTY_CODES, build_chamber_ideal_points, latest_rows
 
-    data, _ = build_chamber_ideal_points(member_rows, chamber, _state_pvi(), _district_pvi())
+    # One row per member, as the build reads them (a party switcher's
+    # latest, `latest` from switcher_latest).
+    member_rows = latest_rows(member_rows, latest)
+    data, failures = build_chamber_ideal_points(
+        member_rows, chamber, _state_pvi(), _district_pvi(), reliability=_position_reliability(chamber),
+        latest=latest,
+    )
     saturation = data.get("extremity_p90")
-    if not saturation:
+    if failures or not saturation:
+        # Not silently: the comparison below would otherwise run on the vote
+        # part alone while claiming to recompute the whole score.
+        print(f"  {chamber}: position part not built ({'; '.join(failures) or 'no saturation'}); "
+              "Constituent Alignment recomputed from the vote part alone")
         return {}
     out = {}
     for row in member_rows:
         bio = (row.get("bioguide_id") or "").strip()
-        party = PARTY_CODES.get(int(row.get("party_code") or 0))
+        party = PARTY_CODES.get(int(float(row.get("party_code") or 0)))
         fit = data["fit"].get(party or "")
-        if bio not in data["members"] or not fit:
+        if not fit or not bio:
+            continue
+        if bio not in data["members"]:
+            # As the score does (v6.27): a member with no position sits at 50.
+            if data["reliability"]:
+                out[bio] = 50.0
             continue
         district = None
         if chamber == "house":
@@ -200,7 +217,10 @@ def position_congruence(member_rows: list[dict], chamber: str) -> dict[str, floa
                 district = None
         expected = fit["a"] + fit["b"] * _seat_pvi(row.get("state_abbrev", ""), district)
         residual = data["members"][bio] - expected
-        out[bio] = position_congruence_score(-residual if party == "D" else residual, float(saturation))
+        out[bio] = position_congruence_score(
+            -residual if party == "D" else residual, float(saturation),
+            position_confidence(data["votes"].get(bio), data["reliability"]),
+        )
     return out
 
 
@@ -275,7 +295,21 @@ def run_chamber(chamber: str, congress: int, les: dict[str, float] | None, les_k
         if breaks.get(icpsr) and breaks[icpsr][1] >= CONSTITUENT_FULL_CONFIDENCE_VOTES
     ]
     vote_shape = seat_relative_vote_shape(rows)
-    congruence = position_congruence(member_rows, chamber)
+    # A party switcher's latest id: the one whose first roll call comes last.
+    from app.pipeline.fetch.voteview import switcher_latest
+    first: dict[str, int] = {}
+    for v in vote_rows:
+        if not (v.get("rollnumber") or "").strip():
+            continue  # no roll call: says nothing about when the id began
+        i, n = str(int(float(v["icpsr"]))), int(float(v["rollnumber"]))
+        first[i] = min(first.get(i, n), n)
+    latest, unresolved = switcher_latest(member_rows, set(), first)
+    if unresolved:
+        # The pipeline would keep its previous section rather than guess;
+        # here such a member is left without a position.
+        print(f"party switchers whose latest record can't be told apart, left without a position: {unresolved}")
+        member_rows = [r for r in member_rows if (r.get("bioguide_id") or "").strip() not in unresolved]
+    congruence = position_congruence(member_rows, chamber, latest)
     # The score's own combination: position at its weight where an ideal
     # point exists, the vote shape alone where one doesn't.
     recomputed = {
