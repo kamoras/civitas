@@ -140,6 +140,39 @@ class TestBuildAndGates:
         data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
         assert failures == [] and data["extremity_p90"] is None and data["fit"]
 
+    def test_a_record_of_exactly_reference_votes_is_full(self):
+        """A record of reference_votes (200) votes counts in full: it enters
+        the saturation scale's full records."""
+        state_pvi = score_calculator._state_pvi()
+        rows = _synthetic_rows(state_pvi)
+        for r in rows:
+            r["nominate_number_of_votes"] = "200"
+        data, failures = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+        assert failures == [] and data["extremity_p90"] is not None
+
+    def test_a_zero_first_dimension_with_a_second_is_an_estimate(self):
+        """The placeholder is 0 on both dimensions: a genuine estimate at
+        exactly 0 on the first, placed on the second, is kept."""
+        state_pvi = score_calculator._state_pvi()
+        rows = _synthetic_rows(state_pvi)
+        for r in rows:
+            r["nokken_poole_dim1"], r["nokken_poole_dim2"] = r["nominate_dim1"], "0.1"
+        rows[0].update(nokken_poole_dim1="0.0", nokken_poole_dim2="0.3")
+        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+        assert data["measure"] == "Nokken-Poole"
+        assert data["members"][rows[0]["bioguide_id"]] == 0.0
+
+    def test_a_nokken_poole_placeholder_does_not_drop_a_dw_nominate_position(self):
+        """When the chamber is read on DW-NOMINATE (Nokken-Poole published
+        for too few members), a row whose Nokken-Poole columns hold the 0, 0
+        placeholder still has its DW-NOMINATE position, and is kept."""
+        state_pvi = score_calculator._state_pvi()
+        rows = _synthetic_rows(state_pvi)
+        rows[0].update(nokken_poole_dim1="0.0", nokken_poole_dim2="0.0")
+        data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+        assert data["measure"] != "Nokken-Poole"
+        assert data["members"][rows[0]["bioguide_id"]] == round(float(rows[0]["nominate_dim1"]), 4)
+
     def test_float_coded_exports_parse(self):
         """The 115th-117th exports write party and district codes as floats
         ("200.0", "3.0"); they used to fail with no members in either party."""

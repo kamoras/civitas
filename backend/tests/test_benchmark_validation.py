@@ -87,6 +87,18 @@ def test_the_position_part_is_built_not_silently_skipped(senate, capsys):
     assert "position part not built" in capsys.readouterr().out
 
 
+def test_a_member_without_a_position_sits_at_50_only_with_a_reliability(senate, monkeypatch):
+    """As the score does (v6.27): a member Voteview hasn't placed sits at
+    the neutral 50 when the section carries a reliability; without one (the
+    pre-v6.27 behaviour) the member has no position part at all."""
+    members = bv.fetch_csv("/members/")
+    members[0].update(nokken_poole_dim1="", nominate_dim1="")
+    assert bv.position_congruence(members, "senate")["B0"] == 50.0
+    monkeypatch.setattr(score_calculator, "_position_reliability", lambda chamber: {})
+    out = bv.position_congruence(members, "senate")
+    assert "B0" not in out and len(out) == 99
+
+
 def test_les_is_checked_when_supplied(senate, tmp_path):
     les = tmp_path / "les.csv"
     les.write_text("ICPSR,LES\n" + "\n".join(f"{i},{1.0 + (i % 7) * 0.1}" for i in range(100)))

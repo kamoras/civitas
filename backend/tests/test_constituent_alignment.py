@@ -597,6 +597,15 @@ class TestPositionCongruence:
         core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id="X1")
         assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
 
+    def test_a_section_without_counts_says_nothing_of_strength(self):
+        """A position read from a pre-v6.27 section (no counts, no
+        reliability) counts in full, and its detail says nothing of a
+        strength or a pull toward 50."""
+        self.patch({"X1": -0.55})
+        detail = self._congruence()["detail"]
+        assert "strength" not in detail and "pulled toward 50" not in detail
+        assert "reports no count" not in detail
+
     def test_no_calibration_no_weighting(self):
         self.patch({"X1": -0.55}, votes={"X1": 5}, reliability={"n0": 0})
         assert self._congruence()["score"] == 0.0

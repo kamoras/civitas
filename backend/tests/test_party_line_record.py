@@ -753,3 +753,51 @@ def test_a_departed_senator_two_ids_match_is_left_out(db_session, monkeypatch):
     positions = _namesakes(db_session, monkeypatch, [("Rob Lastg", "bio-ROB", False)],
                            {"L-ROB": "Rob", "L-ROBBY": "Robby"})
     assert party_line_record._departed_senators(db_session, [], positions) == []
+
+
+def test_a_thin_members_far_position_barely_moves_their_partys_center(db_session, monkeypatch):
+    """A party's center is its members' positions weighted by reliability:
+    RT, far out (3.0) on 2 roll calls, counts at 2 / (2 + 24), so the
+    Republican center stays near the full records' (about 0.64) and R4, a
+    lone defector at 0.7, reads flank-side. Unweighted, RT would drag the
+    center to about 1.37 and turn R4's break toward the Democrats."""
+    section = {"members": {"R4": 0.7, "RF": 0.4, "RT": 3.0}, "votes": {"R4": 500, "RF": 500, "RT": 2},
+               "parties": {"R4": "R", "RF": "R", "RT": "R"}, "reliability": {"n0": 24}}
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: section)
+    _roll_call(db_session, "house", 46, "On Passage", "HR.46", {"R4": "Nay"})
+    db_session.commit()
+    record = party_line_records(db_session, "house", _members())[4]
+    assert record["breaks"] == [] and record["flankBreaks"] == [{"rollCall": "house-119-2-46", "vote": "Nay"}]
+
+
+def test_a_sitting_senator_is_never_added_as_departed(db_session, monkeypatch):
+    """A sitting Rob, on the roster, whose surname two LIS ids voted under
+    ("Rob" and "Robert", no Robert stored): Rob claims his own id, and the
+    free "Robert" id, which his first name loosely matches, doesn't add him
+    a second time as a departed senator."""
+    positions = _namesakes(db_session, monkeypatch, [("Rob Lastg", "bio-ROB", True)],
+                           {"L-ROB": "Rob", "L-R": "Robert"})
+    roster = [_sitting("Rob Lastg", "bio-ROB")]
+    assert party_line_record._departed_senators(db_session, roster, positions) == []
+
+
+def test_a_departed_senators_stored_name_matches_through_punctuation(db_session, monkeypatch):
+    """A stored name with punctuation ("Rob P. Lastg, Jr.") still holds the
+    voters' surname "Lastg" as a whole word: the departed senator is added."""
+    positions = _namesakes(db_session, monkeypatch, [("Rob P. Lastg, Jr.", "bio-ROB", False)], {"L-ROB": "Rob"})
+    departed = party_line_record._departed_senators(db_session, [], positions)
+    assert [(m["bioguideId"], m["lastNameForVoteMatch"]) for m in departed] == [("bio-ROB", "Lastg")]
+
+
+def test_two_sitting_namesakes_tell_a_nickname_apart_by_first_name(db_session, monkeypatch):
+    """Two sitting senators of one state share a surname and only one voted,
+    under a nickname ("Rob" for the stored "Robert"). One LIS id leaves
+    nothing for the LIS resolution to separate, so the roll call's first
+    name does: it loosely matches Robert alone, who is found, and Ann has
+    no record."""
+    _namesakes(db_session, monkeypatch, [("Ann Lastg", "bio-ANN", True), ("Robert Lastg", "bio-ROB", True)],
+               {"L-R": "Rob"})
+    roster = [_sitting("Ann Lastg", "bio-ANN"), _sitting("Robert Lastg", "bio-ROB")]
+    ann, robert = party_line_records(db_session, "senate", roster)
+    # Found (None would mean scored on stored votes).
+    assert ann is None and robert is not None
