@@ -127,3 +127,20 @@ stale figure different from the one scored. The model no longer reads or writes 
   serve only as the pre-first-run fallback, and the first run replaces them.
 - The postwar comparison rests on 9–14 presidencies. That is the whole
   population, and it is small.
+
+## President v7: rulemaking counts were capped; a term cut short
+
+**Agency Alignment removed.** The Federal Register's documents API reports
+`count` as at most 10,000 (final rules over 2009-2017 read 10,000; each year
+alone reads about 3,500 to 3,900, checked 2026-10-06). The two-term
+administrations' final and proposed rule counts were both capped, so each read
+exactly 50% finalized. Counted in full (windows halved until under the cap),
+administrations since 1994 finalized between 59.6% (Obama) and 61.8% (George W.
+Bush), too little difference to score.
+
+**A presidency cut short.** Kennedy (1,036 days) and Ford (895) were compared
+with whole terms, when approval falls as a term goes on. From a start of 76%,
+presidents fell about 30.5 points over a whole term but 16.1 over their first
+1,001 days; Kennedy fell 14. Compared over his own days, his approval trend
+scores 57 rather than 87. Both are left out of the whole-term population.
+

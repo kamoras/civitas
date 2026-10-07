@@ -1,12 +1,11 @@
-"""Presidential Effectiveness / Agency Alignment against measured
-populations (president v5; docs/research/president-scores.md)."""
+"""Presidential Effectiveness against measured populations (president v5;
+docs/research/president-scores.md). Agency Alignment was removed in v7."""
 
 import inspect
 
 from app.models import President
 from app.pipeline.analyze import president_scorer
 from app.pipeline.analyze.president_scorer import (
-    _agency_alignment_core,
     _effectiveness_core,
     compute_president_reference,
     jobs_per_attributed_year,
@@ -33,18 +32,17 @@ def test_jobs_use_the_attributed_window_and_the_measured_population():
     assert abs(core["components"][0]["score"] - 50.0) < 0.1
 
 
-def test_agency_alignment_scores_finalization_only():
-    core = _agency_alignment_core(60.0)
-    assert [c["label"] for c in core["components"]] == ["Finalization rate"]
-    assert core["score"] == 50
-    assert "rulemaking_count" not in inspect.signature(president_scorer.calc_agency_alignment).parameters
+def test_agency_alignment_is_gone():
+    """Administrations since 1994 finalize 59.6-61.8% of their rulemakings
+    (2026-10-06): too little difference to score."""
+    assert not hasattr(president_scorer, "calc_agency_alignment")
+    assert "agencyAlignment" not in president_scorer._PRESIDENT_SCORE_FIELD_MAP
 
 
 def test_reference_measures_each_new_stat_from_the_population():
     rows = [
         {"id": f"p{i}", "name": f"P{i}", "gdp_growth_avg": 2.0 + i % 3, "term_start_year": 1800 + 10 * i,
-         "jobs_created_millions": 4.0 + i % 2, "term_years": 4.0,
-         "rulemaking_finalized_pct": 50.0 + i if i < 6 else None}
+         "jobs_created_millions": 4.0 + i % 2, "term_years": 4.0}
         for i in range(24)
     ]
     ref = compute_president_reference(rows)
@@ -53,7 +51,7 @@ def test_reference_measures_each_new_stat_from_the_population():
     # out and the caller keeps the last persisted value.
     assert "gdp_growth_postwar" not in ref
     assert ref["jobs_per_year"]["n"] == 24
-    assert ref["rulemaking_finalized_pct"]["n"] == 6  # measured from five
+    assert "rulemaking_finalized_pct" not in ref
 
 
 def test_the_stale_adjusted_gdp_column_and_hand_curves_are_gone():

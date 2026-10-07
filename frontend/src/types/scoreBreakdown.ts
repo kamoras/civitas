@@ -63,13 +63,12 @@ export interface EffectivenessFacts {
   billsByStage: number[];
 }
 
-/** President: the four dimensions, each with `facts` (the figures below).
+/** President: the three dimensions, each with `facts` (the figures below).
  *  A dimension that doesn't apply to a president has no components and a
  *  null score. */
 export interface PresidentScoreBreakdown {
   publicMandate: ScoreBreakdownDimension;
   effectiveness: ScoreBreakdownDimension;
-  agencyAlignment: ScoreBreakdownDimension;
   historicalLegacy: ScoreBreakdownDimension;
 }
 
@@ -128,13 +127,6 @@ export interface PresidentEffectivenessFacts {
   gdpGrowth: number | null;
   gdpMean: number | null;
   gdpSince: boolean | null;
-}
-
-/** President: agencyAlignment.facts. */
-export interface AgencyAlignmentFacts {
-  finalizedPct: number | null;
-  finalizedMean: number | null;
-  rulemakings: number | null;
 }
 
 /** President: historicalLegacy.facts. C-SPAN 2021 survey points; otherTerms

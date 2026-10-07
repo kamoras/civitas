@@ -20,23 +20,17 @@ SCORE_WEIGHTS: dict[str, float] = {
     "legislativeEffectiveness": 0.34,
 }
 
-# Historical Legacy (C-SPAN Presidential Historians Survey) at 35%; the three
-# mechanical dimensions split the rest. compute_president_overall_score holds
-# Historical Legacy at exactly 35% whenever two or more mechanical dimensions
+# Historical Legacy (C-SPAN Presidential Historians Survey) at 50% (President
+# v7); the two mechanical dimensions split the rest. compute_president_overall_score
+# holds Historical Legacy at exactly 50% whenever both mechanical dimensions
 # are present. Independence, Follow-Through and Competence were removed for
-# having no defensible live signal. The measurements behind 35% and each
-# removal: docs/methodology/weights.md.
+# having no defensible live signal, and Agency Alignment (v7) for not telling
+# administrations apart. The measurements behind the weight and each removal:
+# docs/methodology/weights.md.
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
-    # The three mechanical dimensions split 0.65 three ways (0.65/3 =
-    # 0.21666...) — 0.2167 is that value rounded to 4 places, so the
-    # total is 1.0001, not exactly 1.0. Harmless: every consumer
-    # (compute_president_overall_score, _blend_live_components)
-    # renormalizes over whatever's actually present rather than assuming
-    # the nominal weights already sum to 1.
-    "publicMandate": 0.2167,
-    "effectiveness": 0.2167,
-    "agencyAlignment": 0.2167,
-    "historicalLegacy": 0.35,
+    "publicMandate": 0.25,
+    "effectiveness": 0.25,
+    "historicalLegacy": 0.5,
 }
 
 # Supreme Court score weights: the single source shared by the scorer

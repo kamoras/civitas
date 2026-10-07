@@ -12,10 +12,8 @@ cohorts. Both the seed fallback and the narrow cohorts are gone:
   - Public Mandate now covers every president who ever won a
     presidential election (presidential_approval.py for Truman-33
     onward, presidential_elections.py's historical margins before that).
-  - Jobs data (BLS, 1939 onward) and Agency Alignment (Federal Register
-    rulemaking, 1994 onward — the regulatory record-keeping mechanism it
-    measures didn't exist before Clinton's era in this platform's data)
-    remain genuinely limited to their real windows — not stale caps, real
+  - Jobs data (BLS, 1939 onward) remains genuinely limited to its real
+    window — not stale caps, real
     data-availability walls. A dimension or component missing for a given
     president is never defaulted; see president_scorer.py's
     _blend_live_components and compute_president_overall_score.
@@ -44,11 +42,12 @@ from app.pipeline.analyze.president_scorer import (
     compute_president_overall_score,
     compute_president_reference,
     recalculate_president_scores,
-    sitting_window_reference,
+    FULL_TERM_DAYS,
+    term_days,
+    window_reference,
 )
 from app.pipeline.fetch.cspan_historians_survey import fetch_cspan_historians_survey
 from app.pipeline.fetch.economic_data import fetch_jobs_for_president
-from app.pipeline.fetch.federal_register import fetch_all_rulemaking_stats
 from app.pipeline.fetch.historical_executive_orders import eo_entry, fetch_historical_eo_counts
 from app.pipeline.fetch.historical_gdp import compute_term_gdp_growth, fetch_historical_real_gdp
 from app.pipeline.fetch.presidential_approval import (
@@ -165,10 +164,6 @@ async def run_president_pipeline(db: Session) -> dict:
             logger.warning("No presidents in database and roster fetch found none — nothing to do")
             return {"updated": 0}
 
-        logger.info("Fetching agency rulemaking data from Federal Register...")
-        rulemaking_data = await fetch_all_rulemaking_stats(client)
-        logger.info("Rulemaking data fetched for %d presidents", len(rulemaking_data))
-
         logger.info("Fetching real GDP series 1790-present (MeasuringWorth)...")
         current_year = utcnow().year
         gdp_by_year = await fetch_historical_real_gdp(client, db, 1790, current_year)
@@ -256,12 +251,6 @@ async def run_president_pipeline(db: Session) -> dict:
             # real previously-computed score instead of just leaving it as
             # last night's value — "couldn't fetch this run" must mean "keep
             # what we had," never "score reads as inapplicable now."
-            if president.id in rulemaking_data:
-                president.rulemaking_count = rulemaking_data[president.id]["rulemaking_count"]
-                president.rulemaking_finalized_pct = rulemaking_data[president.id]["rulemaking_finalized_pct"]
-            if president.rulemaking_finalized_pct is not None:
-                live["rulemaking_finalized_pct"] = president.rulemaking_finalized_pct
-
             gdp_growth = compute_term_gdp_growth(gdp_by_year, term_start_year, term_end_year)
             if gdp_growth is not None:
                 president.gdp_growth_avg = gdp_growth
@@ -330,18 +319,26 @@ async def run_president_pipeline(db: Session) -> dict:
             "term_start_year": int(p.term_start[:4]) if p.term_start else None,
             "jobs_created_millions": p.jobs_created_millions,
             "term_years": scored_inputs.get(p.id, ({}, 0.0))[1],
-            "rulemaking_finalized_pct": p.rulemaking_finalized_pct,
+            "term_days": term_days(p.term_start, p.term_end),
         }
         for p in presidents
     ])
-    sitting = [p.id for p in presidents if p.is_current and approval_series.get(p.id)]
-    if sitting:
-        window = sitting_window_reference(
-            approval_series[sitting[0]],
-            [approval_series[p.id] for p in presidents if not p.is_current and approval_series.get(p.id)],
-        )
-        if window:
-            measured["sitting_window"] = window
+    # A presidency shorter than a full term (the sitting one, or one cut
+    # short) is compared with every other completed presidency over its own
+    # number of days.
+    completed_series = {
+        p.id: approval_series[p.id] for p in presidents
+        if not p.is_current and approval_series.get(p.id)
+    }
+    measured["term_windows"] = {
+        p.id: window
+        for p in presidents
+        if approval_series.get(p.id)
+        and (p.is_current or (term_days(p.term_start, p.term_end) or FULL_TERM_DAYS) < FULL_TERM_DAYS)
+        and (window := window_reference(
+            approval_series[p.id], [s for pid, s in completed_series.items() if pid != p.id],
+        ))
+    }
     previous = PRESIDENT_REFERENCE.load().get("presidents") or {}
     reference = PRESIDENT_REFERENCE.with_live("presidents", {**previous, **measured}).get("presidents")
     logger.info("President reference: %s", reference)
@@ -351,18 +348,19 @@ async def run_president_pipeline(db: Session) -> dict:
             new_scores = recalculate_president_scores(president.id, live, term_years, reference)
             president.score_public_mandate = new_scores["score_public_mandate"]
             president.score_effectiveness = new_scores["score_effectiveness"]
-            president.score_agency_alignment = new_scores["score_agency_alignment"]
+            # Agency Alignment was removed in president v7; the column is
+            # dropped in a later release (expand, then contract).
+            president.score_agency_alignment = None
             president.score_historical_legacy = new_scores["score_historical_legacy"]
             president.updated_at = utcnow()
             db.commit()
             updated += 1
 
             logger.info(
-                "  %s: mandate=%s effectiveness=%s agency=%s legacy=%s",
+                "  %s: mandate=%s effectiveness=%s legacy=%s",
                 president.id,
                 new_scores["score_public_mandate"],
                 new_scores["score_effectiveness"],
-                new_scores["score_agency_alignment"],
                 new_scores["score_historical_legacy"],
             )
         except Exception:
@@ -385,7 +383,6 @@ async def run_president_pipeline(db: Session) -> dict:
         "updated": updated,
         "failed": failed,
         "eo_data_count": len(eo_data),
-        "rulemaking_data_count": len(rulemaking_data),
         "gdp_years_count": len(gdp_by_year),
         "jobs_data_count": len(jobs_data),
         "approval_data_count": len(approval_avg_data),
@@ -443,7 +440,7 @@ def _record_president_snapshots(db: Session) -> None:
             existing.score_1 = p.score_public_mandate or 0.0
             existing.score_2 = p.score_effectiveness or 0.0
             existing.score_3 = 0.0
-            existing.score_4 = p.score_agency_alignment or 0.0
+            existing.score_4 = 0.0
             existing.score_5 = p.score_historical_legacy or 0.0
         else:
             db.add(ScoreSnapshot(
@@ -454,7 +451,7 @@ def _record_president_snapshots(db: Session) -> None:
                 score_1=p.score_public_mandate or 0.0,
                 score_2=p.score_effectiveness or 0.0,
                 score_3=0.0,
-                score_4=p.score_agency_alignment or 0.0,
+                score_4=0.0,
                 score_5=p.score_historical_legacy or 0.0,
                 algorithm_version=PRESIDENT_ALGORITHM_VERSION,
             ))

@@ -82,10 +82,12 @@ const president = {
   score: {
     publicMandate: 29,
     effectiveness: 33,
-    agencyAlignment: 91,
     historicalLegacy: null,
-    overall: 51,
-    dimensionsAvailable: 3,
+    overall: 31,
+    dimensionsAvailable: 2,
+    // A sitting president has no Historical Legacy: the two scored parts
+    // share the whole, and the card says so.
+    effectiveWeights: { publicMandate: 0.5, effectiveness: 0.5 },
   },
   avgApproval: 37.3,
   gdpGrowthAvg: null,
@@ -125,11 +127,6 @@ const breakdown: PresidentScoreBreakdown = {
       gdpSince: null,
     },
   },
-  agencyAlignment: {
-    score: 91,
-    components: [{ label: "Finalization rate", weight: 1, score: 90.7, detail: "…" }],
-    facts: { finalizedPct: 62, finalizedMean: 54, rulemakings: 1400 },
-  },
   historicalLegacy: {
     score: null as unknown as number,
     components: [],
@@ -155,11 +152,9 @@ describe("PresidentScorecard", () => {
         /Averaged 37\.3% approval so far; presidents averaged 50\.9% over their first 20 months\. Approval fell 5\.6 points from a start of 41\.0%; presidents who started there rose about 4\.8\./
       )
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /62% of the 1,400 rulemakings federal agencies began reached a final rule\. Administrations since 1994 average 54%\./
-      )
-    ).toBeInTheDocument();
+    // Each score shows its actual share of this president's overall, not
+    // the nominal weight (Historical Legacy is unscored for a sitting one).
+    expect(screen.getAllByText("50% of the score")).toHaveLength(2);
     expect(
       screen.getByText(/GDP growth is measured from the second full year of a term\./)
     ).toBeInTheDocument();
@@ -206,7 +201,7 @@ describe("PresidentScorecard", () => {
     await screen.findByText("40 Wall Street LLC");
     // The share buttons are part of what axe checks here: the summary, the
     // four score columns and the holdings.
-    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(6);
+    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(5);
     const result = await axe.run(document.body, {
       rules: { "color-contrast": { enabled: false } },
     });
@@ -216,7 +211,7 @@ describe("PresidentScorecard", () => {
   it("the leaderboard's summary states the scores and links to the full scorecard", () => {
     render(<PresidentSummary president={president} />);
     expect(screen.getByRole("heading", { level: 2, name: "Donald J. Trump" })).toBeInTheDocument();
-    expect(screen.getByText("51")).toBeInTheDocument();
+    expect(screen.getByText("31")).toBeInTheDocument();
     expect(screen.getByText("Not rated yet")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open the full scorecard/ })).toHaveAttribute(
       "href",

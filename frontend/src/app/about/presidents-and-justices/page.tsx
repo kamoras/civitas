@@ -35,21 +35,22 @@ export default function PresidentsAndJusticesChapter() {
     >
       <Summary>
         <Point>
-          Presidents get four scores: public approval, the economy, how far their agencies carried
-          through the rules they started, and historians&apos; assessment. Historians count for 35%.
+          Presidents get three scores: public approval, the economy, and historians&apos;
+          assessment. Historians count for half.
         </Point>
         <Point>
-          Where a president has no real data for a score (no digital rulemaking record before
-          Clinton, no historians&apos; rating yet for recent presidents), it reads N/A and is left
-          out of their overall score, rather than filled with a guess.
+          Where a president has no real data for a score (no historians&apos; rating yet for recent
+          presidents, no approval polling or election win for four of them), it reads N/A and is
+          left out of their overall score, rather than filled with a guess. Each score on their page
+          shows its actual share of their overall.
         </Point>
         <Point>
           Justices are scored on whether they side with the federal government more often while the
           president who appointed them is in office, shown with its margin of error.
         </Point>
         <Point>
-          Three presidential scores were removed because no real data could support them. We say
-          which, and why.
+          Four presidential scores were removed: three because no real data could support them, one
+          because administrations didn&apos;t differ on it. We say which, and why.
         </Point>
       </Summary>
 
@@ -72,23 +73,26 @@ export default function PresidentsAndJusticesChapter() {
           jobs a year against every presidency since 1939, and so on. The sitting president&apos;s
           page is not ranked until the term ends.
         </P>
-        <Sub title="Public Mandate (21.67%)">
+        <Sub title="Public Mandate (25%)">
           <P>
             Approval over the term: 70% the average, 30% the trend from start to finish, each scored
             against every completed presidency&apos;s actual polling history. The trend is compared
             with what presidents who started at the same level went on to do, because approval is
             bounded: across the 14 completed presidencies with polling, the higher the start, the
-            further it fell. The sitting president is compared with predecessors over the same
-            number of days from the start of their terms, since approval falls as a term goes on.
-            Data comes from the American Presidency Project at UC Santa Barbara, which aggregates
-            AP-NORC, CNN-SSRS, Marist, Pew and Verasight. Gallup, the original source, stopped
-            tracking presidential approval in February 2026. Presidents before Truman, from before
-            polling, are scored on their average margin of victory instead. The four who have
-            neither (Tyler, Fillmore, Arthur and Andrew Johnson, who never won a presidential
-            election and served before polling) read N/A.
+            further it fell. A presidency shorter than a full four-year term (the sitting one, or
+            one cut short, like Kennedy&apos;s and Ford&apos;s) is compared with predecessors over
+            the same number of days from the start of their terms, since approval falls as a term
+            goes on: compared with whole terms, Kennedy&apos;s fall of 14 points from a start of 76%
+            looked twice as good as typical, when presidents starting there fell about as much in
+            their first 1,001 days. Data comes from the American Presidency Project at UC Santa
+            Barbara, which aggregates AP-NORC, CNN-SSRS, Marist, Pew and Verasight. Gallup, the
+            original source, stopped tracking presidential approval in February 2026. Presidents
+            before Truman, from before polling, are scored on their average margin of victory
+            instead. The four who have neither (Tyler, Fillmore, Arthur and Andrew Johnson, who
+            never won a presidential election and served before polling) read N/A.
           </P>
         </Sub>
-        <Sub title="Effectiveness (21.67%)">
+        <Sub title="Effectiveness (25%)">
           <P>
             The economy over the term: GDP growth (60%) and job creation (40%). Growth is the
             average annual real-GDP growth over the term, leaving out the first year, which mostly
@@ -105,21 +109,7 @@ export default function PresidentsAndJusticesChapter() {
             repository at docs/research/president-scores.md.
           </P>
         </Sub>
-        <Sub title="Agency Alignment (21.67%)">
-          <P>
-            How far executive agencies carried through the rulemaking they started: the share of
-            Federal Register rulemaking documents in the term that were final rules rather than
-            proposals, compared with other administrations since 1994. It no longer rewards the
-            number of rules issued: that follows an administration&apos;s view of regulation, and
-            scoring more rules as better scored a policy preference.
-          </P>
-          <P>
-            Coverage starts with Clinton. That is a digitization wall, not a judgment: the Federal
-            Register&apos;s API returns nothing for earlier presidents, and older issues exist only
-            as scanned page images. Earlier presidents read N/A here.
-          </P>
-        </Sub>
-        <Sub title="Historical Legacy (35%)">
+        <Sub title="Historical Legacy (50%)">
           <P>
             What none of the others can capture (crisis leadership, moral authority, vision) from
             C-SPAN&apos;s Presidential Historians Survey: about 142 historians in the 2021 survey,
@@ -129,21 +119,22 @@ export default function PresidentsAndJusticesChapter() {
           <P>
             It is a real, documented external survey, not neutral ground truth. Studies of these
             surveys find historians tend to favor presidents who expanded federal power, and hold
-            off rating recent presidents. At 35%, this ranking inherits those tendencies at about
+            off rating recent presidents. At 50%, this ranking inherits those tendencies at about
             that strength.
           </P>
         </Sub>
         <Sub title="How the parts combine">
           <P>
-            Historical Legacy is held at exactly 35% whenever at least two of the other three have
-            data, and those share the rest. With only one of them available, Historical Legacy and
-            that one score share the weight in proportion to their usual weights (about 62% and
-            38%): one number isn&apos;t reliable enough to carry 65% of a score (Fillmore&apos;s
-            economy scores 100 on a Gold Rush boom he had little to do with). Each president&apos;s
-            page says how many scores their overall is built from.
+            Historical Legacy is held at exactly 50% whenever both of the other two have data, and
+            those share the rest. With only one of them available, Historical Legacy and that one
+            score share the weight in proportion to their usual weights (two thirds and one third):
+            one number isn&apos;t reliable enough to carry half a score (Fillmore&apos;s economy
+            scores 100 on a Gold Rush boom he had little to do with). A sitting president, unrated
+            by historians, is scored on the other two equally. Each score on a president&apos;s page
+            shows the share it actually carries in their overall.
           </P>
         </Sub>
-        <More label="Why 35%, and why three scores were removed">
+        <More label="Why 50%, and why four scores were removed">
           <P>
             Independence and Follow-Through were removed in 2026-07. Both were one-time hand-set
             numbers with no live formula and no realistic path to one: Independence&apos;s obvious
@@ -159,8 +150,14 @@ export default function PresidentsAndJusticesChapter() {
             barely correlate with historians&apos; judgment on their own (Spearman 0.17), put
             Coolidge, McKinley and Harding in the top ten while Lincoln and Eisenhower fell out. At
             50%, the overall ranking correlated 0.96 with C-SPAN&apos;s alone, so the other
-            dimensions added almost nothing. At 35% the top is recognizable and the rest still moves
-            (0.89).
+            dimensions added almost nothing. At 35% the top was recognizable and the rest still
+            moved (0.89). Re-measured in October 2026 on the current scores (approval judged against
+            where a term starts and over the time it lasted, Agency Alignment removed), the other
+            two dimensions now move the ranking more: at 35% the overall correlated 0.78 with
+            C-SPAN&apos;s alone and 0.83 with the other two, so historians carried no more weight
+            than the economy and approval together. At 50% it correlates 0.90 with C-SPAN&apos;s and
+            0.69 with the other two: the historians lead, and the record still moves the ranking.
+            The weight is now 50%.
           </P>
           <P>
             Competence (executive-order rate) was removed next: Coolidge and Harding issued orders
@@ -171,11 +168,17 @@ export default function PresidentsAndJusticesChapter() {
             remaining three.
           </P>
           <P>
-            Finally, Historical Legacy&apos;s 35% used to drift upward for presidents missing other
-            scores (to about 45% for everyone before Clinton and 62% for four unelected successors),
-            so 35% was the true weight for only 4 of 47 presidencies. It is now held fixed as
-            described above; re-checked, Lincoln and Eisenhower stay in the top ten and Coolidge,
-            Harding and McKinley stay out.
+            Historical Legacy&apos;s weight used to drift upward for presidents missing other scores
+            (from 35% to about 45% for everyone before Clinton and 62% for four unelected
+            successors). It is now held fixed as described above.
+          </P>
+          <P>
+            Agency Alignment (the share of the rulemakings agencies began that reached a final rule)
+            was removed in October 2026. Its counts had been capped by the Federal Register&apos;s
+            search, which reports at most 10,000 results, so Clinton, George W. Bush and Obama all
+            read exactly 50%. Counted in full, every administration since 1994 finalized between
+            59.6% and 61.8%: too little difference to score, and compared only with each other, a
+            two-point gap read as nearly two standard deviations.
           </P>
         </More>
       </Section>

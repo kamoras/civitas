@@ -458,9 +458,9 @@ function PresidentLeaderboard({
 
       <div className="mt-4 space-y-1 text-center">
         <p className="font-sans text-xs text-ink-lo">
-          Higher score = better presidential performance. Computed from: public mandate (21.67%) +
-          effectiveness (21.67%) + agency alignment (21.67%) + historical legacy (35%). Click any
-          row to view full profile.
+          Higher score = better presidential performance. Computed from: public mandate (25%) +
+          effectiveness (25%) + historical legacy (50%), shared among the scores a president has.
+          Click any row to view full profile.
         </p>
         <p className="font-sans text-xs text-ink-min">
           <span className="text-signal-amber border border-signal-amber/40 px-1 mr-1.5">HIST</span>=

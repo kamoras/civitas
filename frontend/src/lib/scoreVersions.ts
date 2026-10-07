@@ -90,6 +90,19 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     ],
   },
   {
+    version: "President v7",
+    date: "2026-10-06",
+    title:
+      "Historians count for half; Agency Alignment removed; a term cut short compared over its own length",
+    tldr: "The president score is now historians' assessment (50%), public approval (25%) and the economy (25%). Agency Alignment is gone: once a counting error was fixed, every administration since 1994 finalized nearly the same share of its rules. A presidency cut short, like Kennedy's, is now compared with how predecessors' approval moved over the same number of days, not over whole terms. Each score on a president's page shows the share it actually carries in their overall.",
+    changes: [
+      "Historical Legacy rises from 35% to 50%, and Public Mandate and Effectiveness take 25% each. On the current scores, at 35% the overall correlated about as much with the economy and approval (0.83) as with historians' ratings (0.78); at 50% historians lead (0.90) and the record still moves the ranking (0.69).",
+      "Agency Alignment (the share of rulemakings that reached a final rule) is removed. The Federal Register's search reports at most 10,000 results, so Clinton, George W. Bush and Obama all read exactly 50%. Counted in full, administrations since 1994 range from 59.6% to 61.8%, too little difference to score, and compared only with each other a two-point gap read as nearly two standard deviations.",
+      "A presidency shorter than a full four-year term is compared with predecessors over the same number of days, as the sitting president already was, and is left out of the whole-term comparison. Kennedy's approval fell 14 points from a start of 76%: against whole terms that looked far better than the expected 31-point fall, while presidents starting there fell about 16 points in their first 1,001 days. His approval trend score goes from 87 to 57.",
+      "Each score's percentage on a president's page is now the share it actually carries in that president's overall. A sitting president, unrated by historians, has approval and the economy at 50% each.",
+    ],
+  },
+  {
     version: "President v6",
     date: "2026-10-01",
     title:

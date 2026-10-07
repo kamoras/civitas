@@ -154,7 +154,7 @@ export default async function LimitationsChapter() {
       <Section id="presidents" title="Presidents">
         <Limitation title="Historians’ judgment carries its biases in">
           <P>
-            Historical Legacy (35%) comes from C-SPAN&apos;s historians survey. Historians as a
+            Historical Legacy (50%) comes from C-SPAN&apos;s historians survey. Historians as a
             field tend to favor presidents who expanded federal power, and hold off rating recent
             presidents, so this ranking inherits those tendencies at roughly that weight.
           </P>
@@ -163,8 +163,7 @@ export default async function LimitationsChapter() {
           <P>
             Since 1946, 60% of the variation in a president&apos;s term growth is shared with 13
             other advanced economies. Effectiveness mostly measures the economy a president presided
-            over. Agency Alignment has no machine-readable record before Clinton, so earlier
-            presidents are scored without it.
+            over.
           </P>
         </Limitation>
       </Section>

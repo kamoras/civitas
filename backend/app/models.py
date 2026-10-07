@@ -719,6 +719,8 @@ class President(Base):
     # completed yet — never as a stand-in for a real number.
     score_public_mandate: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_effectiveness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Agency Alignment, removed in president v7: no longer scored and
+    # cleared each run; dropped in a later release (migrations/README.md).
     score_agency_alignment: Mapped[float | None] = mapped_column(Float, nullable=True)
     # NULL for any currently-serving or just-departed president — C-SPAN's
     # Presidential Historians Survey only rates a completed term, and its
@@ -739,10 +741,9 @@ class President(Base):
     # PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py. Still
     # shown on a president's profile as a raw stat.
     eo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Persisted so the on-demand score-breakdown endpoint can recompute
-    # calc_agency_alignment's exact input without a live re-fetch from the
-    # Federal Register. rulemaking_count is informational since president
-    # v5 (volume is no longer scored — see _agency_alignment_core).
+    # Agency Alignment's inputs (Federal Register rulemaking counts), no
+    # longer fetched or read since president v7; dropped in a later release
+    # (migrations/README.md).
     rulemaking_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rulemaking_finalized_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Last-quartile-minus-first-quartile average approval across the term
