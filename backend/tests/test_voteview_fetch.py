@@ -571,7 +571,20 @@ def test_the_seat_gate_bounds_each_chamber_both_ways():
         return [f for f in voteview.ingestion_gates(chamber, data(seats)) if "seats with a member" in f]
     assert seat_failures("house", 435) == [] and seat_failures("house", 380) == []
     assert seat_failures("house", 436) and seat_failures("house", 379)
-    assert seat_failures("senate", 50) == [] and seat_failures("senate", 51) and seat_failures("senate", 44)
+    assert seat_failures("senate", 50) == [] and seat_failures("senate", 45) == []
+    assert seat_failures("senate", 51) and seat_failures("senate", 44)
+
+
+def test_the_seated_floor_holds_at_its_value_in_each_chamber():
+    """At least 90 senators and 380 representatives must be seated with a
+    position: those counts pass, one fewer fails."""
+    def seated_failures(chamber, seated):
+        seats = 50 if chamber == "senate" else 435
+        data = {"members": {}, "seats": seats, "seated": seated,
+                "fit": {"D": {"a": -0.4, "b": 0.01}, "R": {"a": 0.4, "b": 0.01}}, "extremity_p90": 0.2}
+        return [f for f in voteview.ingestion_gates(chamber, data) if "seated members" in f]
+    assert seated_failures("senate", 90) == [] and seated_failures("senate", 89)
+    assert seated_failures("house", 380) == [] and seated_failures("house", 379)
 
 
 def test_a_carried_scale_keeps_a_sections_own_and_names_where_it_was_measured():

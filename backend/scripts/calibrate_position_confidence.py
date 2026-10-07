@@ -33,9 +33,10 @@ seen; of one curve for both chambers, one per chamber, the latest era's
 (split at ERA_SPLIT, a convention) and a window of the last FORWARD_WINDOW
 transitions (a convention), the simplest whose error is within one standard
 error of the best's, that standard error the best's own
-(one_standard_error_rule). That rule was adopted in review after two others
-had been run and seen; both are reported (paired_rule,
-best_beating_one_curve, research note section 14); data_chosen_test
+(one_standard_error_rule). That rule was adopted in review after four
+others had been run and seen: two leaving one member out (choose_structure
+on held-out errors, era_test), then two forward, both reported (paired_rule,
+best_beating_one_curve; research note section 14); data_chosen_test
 reports the split and the width chosen from the data instead. The
 leave-one-member-out comparisons (choose_structure's
 one-standard-error rule over all members; era_test on the latest era's;
@@ -1395,8 +1396,8 @@ def method_text() -> str:
         f"({FORWARD_WINDOW}, a convention) transitions, in that order of simplicity (a stated "
         "choice), the simplest whose error is within one standard error of the best's, that "
         "standard error the best's own (the one-standard-error rule of Hastie, Tibshirani & "
-        "Friedman, adopted in review after two other rules: see paired_rule and "
-        "best_beating_one_curve); forward_test reports chosen, best, best_standard_error, "
+        "Friedman, adopted in review after four other rules: two leaving one member out, then "
+        "the two forward ones paired_rule and best_beating_one_curve); forward_test reports chosen, best, best_standard_error, "
         "paired_against_best (each structure's member-by-member difference from the best), "
         "error_correlation (each structure's per-member errors' correlation with one curve's), "
         "paired_rule (the rule's paired form, the simplest whose paired difference from the best "
