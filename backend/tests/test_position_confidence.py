@@ -778,12 +778,17 @@ def test_shipped_file_reports_what_the_docs_cite():
 
         def quoted(d):
             return f"{abs(d['above']):.3f} (standard error {d['standard_error']:.3f})"
+        def under_two(d):
+            # The docs call these under two standard errors; keep them so.
+            assert abs(d["above"]) < 2 * d["standard_error"]
+            return f"{abs(d['above']):.3f} (standard error {d['standard_error']:.3f}, under two standard errors)"
         era, one = inside["against_era"], inside["against_one_curve"]
-        overall = f"{abs(trend['above']):.3f} better than one curve (standard error {trend['standard_error']:.3f})"
+        assert abs(trend["above"]) < 2 * trend["standard_error"]  # "within the noise"
+        overall = (f"{abs(trend['above']):.3f} lower error than one curve, within the noise "
+                   f"(standard error {trend['standard_error']:.3f})")
         assert f"through the {ordinal(start - 1)}" in note and f"from the {ordinal(start)}" in note
-        assert quoted(one) in note and f"{abs(era['above']):.3f} ({era['standard_error']:.3f})" in note
-        assert quoted(era) in note and overall in note
-        assert f"From the {ordinal(start)}" in entry and quoted(era) in entry and overall in entry
+        assert quoted(one) in note and under_two(era) in note and overall in note
+        assert f"From the {ordinal(start)}" in entry and under_two(era) in entry and overall in entry
     # "No constant offset detected": the mean offset is within two standard errors of 0.
     off = data["thin_offset"]["all"]
     assert abs(off["mean"]) <= 2 * off["standard_error"]
