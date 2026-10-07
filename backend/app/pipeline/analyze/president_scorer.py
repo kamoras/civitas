@@ -262,6 +262,16 @@ PRESIDENT_ALGORITHM_VERSION = "v8"
 _ZSCORE_SATURATION_STDEV = 1.5
 
 
+def _moved(points: float) -> str:
+    """"rose 4.8 points" / "fell 12.0 points", for the detail sentences."""
+    return f"{'rose' if points >= 0 else 'fell'} {abs(points):.1f} points"
+
+
+def _ahead(points: float) -> str:
+    """"1.9 points a year ahead" / "0.4 points a year behind" of the peers."""
+    return f"{abs(points):.1f} points a year {'ahead' if points >= 0 else 'behind'}"
+
+
 def _population_zscore_component(
     label: str, weight: float, value: float, population_mean: float,
     population_stdev: float, detail: str,
@@ -400,19 +410,18 @@ def _effectiveness_core(
                      gdpRelative=relative, gdpRelativeMean=relative_stat[0], gdpSince=True)
         components.append(_population_zscore_component(
             "GDP growth vs. peer economies", 0.60, relative, relative_stat[0], relative_stat[1],
-            f"{gdp_per_person:.1f}% average annual growth per person (first year excluded) vs. "
-            f"{gdp_peer_median:.1f}% for 13 peer economies, a difference of "
-            f"{gdp_per_person - gdp_peer_median:+.1f} points, {catch_up:+.1f} of it the peers "
-            f"catching up with US incomes: {relative:+.1f} against {relative_stat[0]:+.1f} for "
-            f"presidencies since {_GDP_REGIME_SPLIT_YEAR}",
+            f"Grew {gdp_per_person:.1f}% a year per person leaving out the first year, against "
+            f"{gdp_peer_median:.1f}% in 13 other wealthy countries. Allowing for their catching up "
+            f"with US incomes: {_ahead(relative)}, against {_ahead(relative_stat[0])} for the typical president "
+            f"since {_GDP_REGIME_SPLIT_YEAR}",
         ))
     elif gdp_growth_avg is not None and gdp_stat:
         era = "before" if gdp_key == "gdp_growth_prewar" else "since"
         facts.update(gdpMean=gdp_stat[0], gdpSince=gdp_key == "gdp_growth_postwar")
         components.append(_population_zscore_component(
             "GDP growth", 0.60, gdp_growth_avg, gdp_stat[0], gdp_stat[1],
-            f"{gdp_growth_avg:.1f}% average annual real growth (first year excluded) vs. "
-            f"{gdp_stat[0]:.1f}% for presidencies {era} {_GDP_REGIME_SPLIT_YEAR}",
+            f"The economy grew {gdp_growth_avg:.1f}% a year leaving out the first year, against "
+            f"{gdp_stat[0]:.1f}% for presidents {era} {_GDP_REGIME_SPLIT_YEAR}",
         ))
 
     jobs_stat = _president_stat(reference, "jobs_per_year")
@@ -421,8 +430,8 @@ def _effectiveness_core(
         facts.update(jobsPerYear=round(rate, 3), jobsMean=jobs_stat[0])
         components.append(_population_zscore_component(
             "Jobs created", 0.40, rate, jobs_stat[0], jobs_stat[1],
-            f"{jobs_created_millions:.1f}M jobs = {rate:.2f}M per attributed year "
-            f"(term minus the year-1 lag) vs. {jobs_stat[0]:.2f}M for presidencies since 1939",
+            f"{jobs_created_millions:.1f} million jobs, {rate:.2f} million a year leaving out the "
+            f"first year, against {jobs_stat[0]:.2f} million for presidents since 1939",
         ))
 
     return {**_blend_live_components(components), "facts": facts}
@@ -719,37 +728,35 @@ def _public_mandate_core(
 
     if avg_approval is not None and approval:
         over = (
-            f"predecessors' first {window_days} days" if window_days is not None
-            else "completed presidencies"
+            f"past presidents over their first {window_days} days" if window_days is not None
+            else "past presidents over their full terms"
         )
         components.append(_population_zscore_component(
             "Average approval", 0.70, avg_approval, approval[0], approval[1],
-            f"{avg_approval:.1f}% average approval vs. {approval[0]:.1f}% across {over}",
+            f"Averaged {avg_approval:.1f}% approval, against {approval[0]:.1f}% for {over}",
         ))
         if approval_trend is not None and fit and approval_start is not None:
             expected = fit["intercept"] + fit["slope"] * approval_start
             facts["trendExpected"] = round(expected, 1)
             components.append(_population_zscore_component(
                 "Approval trend", 0.30, approval_trend, expected, fit["resid_sd"],
-                f"{approval_trend:+.1f}pt change from a start of {approval_start:.0f}% vs. "
-                f"{expected:+.1f}pt expected for presidents starting there, across {over}",
+                f"Approval {_moved(approval_trend)} from {approval_start:.0f}% at the start; "
+                f"presidents who started there typically {_moved(expected)}",
             ))
         elif approval_trend is not None and trend and window_days is None:
             # No fit yet (the persisted reference predates it): against the
             # population average, as before v6.
             components.append(_population_zscore_component(
                 "Approval trend", 0.30, approval_trend, trend[0], trend[1],
-                f"{approval_trend:+.1f}pt change from term-start to term-end vs. "
-                f"population average {trend[0]:+.1f}pt "
-                "(most presidents' approval declines over a term)",
+                f"Approval {_moved(approval_trend)} over the term; presidents typically "
+                f"{_moved(trend[0])}",
             ))
     elif avg_approval is None and election_margin is not None and margin:
         components.append(_population_zscore_component(
             "Election margin (pre-polling-era proxy)", 1.0, election_margin, margin[0], margin[1],
-            f"{election_margin:+.1f}pt average margin of victory across this president's "
-            f"election win(s) vs. population mean {margin[0]:+.1f}pt "
-            "(no approval-polling era data exists for this president, so this is the "
-            "historical proxy used instead)",
+            f"Won by an average of {election_margin:.1f} points, against {margin[0]:.1f} for "
+            "presidents generally (election results stand in for approval polls, which "
+            "began with Truman)",
         ))
 
     return {**_blend_live_components(components), "facts": facts}
@@ -809,8 +816,8 @@ def _historical_legacy_core(
     if historical_legacy_score is not None and legacy:
         components.append(_population_zscore_component(
             "Historians' assessment", 1.0, historical_legacy_score, legacy[0], legacy[1],
-            f"{historical_legacy_score} points in C-SPAN's 2021 Presidential Historians Survey "
-            f"vs. population mean {legacy[0]:.0f}",
+            f"{historical_legacy_score} points in C-SPAN's 2021 survey of historians, against "
+            f"{legacy[0]:.0f} for the average president",
         ))
     return {**_blend_live_components(components), "facts": facts}
 

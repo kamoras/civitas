@@ -154,14 +154,16 @@ describe("PresidentScorecard", () => {
     expect(screen.getByText("Ranked once the term ends")).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Averaged 37\.3% approval so far; presidents averaged 50\.9% over their first 20 months\. Approval fell 5\.6 points from a start of 41\.0%; presidents who started there rose about 4\.8\./
+        /Approval has averaged 37\.3% so far, below the 50\.9% past presidents averaged over their first 20 months\. It fell 5\.6 points from 41\.0% at the start\. Presidents who started there typically rose 4\.8 points, so this is worse than usual\./
       )
     ).toBeInTheDocument();
     // Each score shows its actual share of this president's overall, not
     // the nominal weight (Historical Legacy is unscored for a sitting one).
     expect(screen.getAllByText("50% of the score")).toHaveLength(2);
     expect(
-      screen.getByText(/GDP growth is measured from the second full year of a term\./)
+      screen.getByText(
+        /Growth is counted from the term's second full year, so there's no figure yet\./
+      )
     ).toBeInTheDocument();
     // The other presidency's historians' rating, linked.
     expect(screen.getByRole("link", { name: /312 points, scored 12/ })).toHaveAttribute(
@@ -196,7 +198,7 @@ describe("PresidentScorecard", () => {
     render(<PresidentScorecard president={president} breakdown={peers} rank={null} />);
     expect(
       screen.getByText(
-        /Real growth per person averaged 1\.4% a year, first year excluded, against 1\.1% for 13 peer economies over the same years\. Allowing -1\.6 points of that difference for the peers catching up with US incomes leaves \+1\.9; presidencies since 1947 average \+2\.2\./
+        /Growth: 1\.4% a year per person, against 1\.1% in 13 other wealthy countries over the same years, which shared the same oil shocks, recessions and pandemic\. Those countries were poorer and still catching up with US incomes, which alone would have had them growing 1\.6 points a year faster\. Allowing for that, the US came out 1\.9 points a year ahead; under the typical president since 1947 it came out 2\.2 points a year ahead\./
       )
     ).toBeInTheDocument();
     expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();

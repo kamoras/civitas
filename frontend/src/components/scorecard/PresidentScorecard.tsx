@@ -75,6 +75,26 @@ function Lede({ children }: { children: React.ReactNode }) {
   return <p className="text-base leading-relaxed text-ink">{children}</p>;
 }
 
+/** What a section measures, in a sentence, above this president's figures. */
+function Measures({ children }: { children: React.ReactNode }) {
+  return <p className="text-sm leading-relaxed text-ink-lo">{children}</p>;
+}
+
+/** "above" / "below": where a figure sits against the average it's scored on. */
+function side(value: number, mean: number) {
+  return value >= mean ? "above" : "below";
+}
+
+/** "rose 4.8 points" / "fell 12.0 points". */
+function moved(points: number) {
+  return `${points >= 0 ? "rose" : "fell"} ${one(Math.abs(points))} points`;
+}
+
+/** "1.9 points a year ahead" / "0.4 points a year behind". */
+function ahead(points: number) {
+  return `${one(Math.abs(points))} points a year ${points >= 0 ? "ahead" : "behind"}`;
+}
+
 function MandateColumn({
   dim,
   score,
@@ -89,19 +109,23 @@ function MandateColumn({
   // stretch of their terms; everyone else with completed terms.
   const months = f?.comparedOverDays != null ? Math.round(f.comparedOverDays / 30.44) : null;
   const over = months != null ? `over their first ${months} months` : "over their terms";
-  const rose = (n: number) => (n >= 0 ? "rose" : "fell");
   return (
     <ScoreColumn title="Public Mandate" shareId="public-mandate" weight={weight} score={score}>
+      <Measures>
+        How the public rated the president in approval polls, against other presidents: the average
+        over the term, and how it moved from where it started.
+      </Measures>
       {f?.approval != null && f.approvalMean != null ? (
         <>
           <Lede>
-            Averaged {one(f.approval)}% approval {months != null ? "so far" : "over the term"};
-            presidents averaged {one(f.approvalMean)}% {over}.
+            {months != null
+              ? `Approval has averaged ${one(f.approval)}% so far, ${side(f.approval, f.approvalMean)} the ${one(f.approvalMean)}% past presidents averaged ${over}.`
+              : `Approval averaged ${one(f.approval)}% over the term, ${side(f.approval, f.approvalMean)} the ${one(f.approvalMean)}% average for past presidents.`}
             {f.approvalTrend != null && f.trendExpected != null && f.approvalStart != null
-              ? ` Approval ${rose(f.approvalTrend)} ${one(Math.abs(f.approvalTrend))} points from a start of ${one(f.approvalStart)}%; presidents who started there ${rose(f.trendExpected)} about ${one(Math.abs(f.trendExpected))}.`
+              ? ` It ${moved(f.approvalTrend)} from ${one(f.approvalStart)}% at the start. Presidents who started there typically ${moved(f.trendExpected)}, so this is ${f.approvalTrend >= f.trendExpected ? "better" : "worse"} than usual.`
               : f.approvalTrend != null &&
                 f.trendMean != null &&
-                ` Approval ${rose(f.approvalTrend)} ${one(Math.abs(f.approvalTrend))} points over the term, against a typical ${f.trendMean >= 0 ? "rise" : "fall"} of ${one(Math.abs(f.trendMean))}.`}
+                ` It ${moved(f.approvalTrend)} over the term; presidents typically ${moved(f.trendMean)}.`}
           </Lede>
           <ComparisonScale
             value={f.approval}
@@ -120,8 +144,9 @@ function MandateColumn({
         </>
       ) : f?.electionMargin != null && f.marginMean != null ? (
         <Lede>
-          Before approval polling: won by an average margin of {one(f.electionMargin)} points;
-          presidents average {one(f.marginMean)}.
+          Served before approval polling, so election results stand in: won by an average of{" "}
+          {one(f.electionMargin)} points, {side(f.electionMargin, f.marginMean)} the{" "}
+          {one(f.marginMean)} average for presidents.
         </Lede>
       ) : (
         score == null && (
@@ -157,27 +182,38 @@ function EffectivenessColumn({
   const jobs = f?.jobsPerYear != null && f.jobsMean != null && f.jobsMillions != null;
   return (
     <ScoreColumn title="Effectiveness" shareId="effectiveness" weight={weight} score={score}>
+      <Measures>
+        The economy during the term: jobs added and economic growth, each against other presidents.
+        The first year is left out, since it mostly reflects the previous president&apos;s policies.
+      </Measures>
       {(f || score == null) && (
-        <Lede>
-          {jobs &&
-            `${signed(f!.jobsMillions!)} million jobs, ${f!.jobsPerYear!.toFixed(2)} million a year once the first year is set aside. Presidencies since 1939 average ${f!.jobsMean!.toFixed(2)} million. `}
-          {f?.gdpRelative != null &&
-          f.gdpPerPerson != null &&
-          f.gdpPeers != null &&
-          f.gdpCatchUp != null &&
-          f.gdpRelativeMean != null
-            ? `Real growth per person averaged ${one(f.gdpPerPerson)}% a year, first year excluded, against ${one(f.gdpPeers)}% for 13 peer economies over the same years. Allowing ${signed(f.gdpCatchUp)} points of that difference for the peers catching up with US incomes leaves ${signed(f.gdpRelative)}; presidencies since 1947 average ${signed(f.gdpRelativeMean)}.`
-            : f?.gdpGrowth != null && f.gdpMean != null
-              ? `Real growth averaged ${one(f.gdpGrowth)}% a year, first year excluded; presidencies ${f.gdpSince ? "since" : "before"} 1947 average ${one(f.gdpMean)}%.`
-              : isCurrent
-                ? "GDP growth is measured from the second full year of a term."
-                : "No GDP figure for this term."}
-          {!jobs &&
-            f?.gdpGrowth == null &&
-            f?.gdpRelative == null &&
-            !isCurrent &&
-            " Payroll jobs are counted from 1939."}
-        </Lede>
+        <>
+          {jobs && (
+            <Lede>
+              Jobs: {signed(f!.jobsMillions!)} million, or {f!.jobsPerYear!.toFixed(2)} million a
+              year, {side(f!.jobsPerYear!, f!.jobsMean!)} the {f!.jobsMean!.toFixed(2)} million a
+              year presidents since 1939 average.
+            </Lede>
+          )}
+          <Lede>
+            {f?.gdpRelative != null &&
+            f.gdpPerPerson != null &&
+            f.gdpPeers != null &&
+            f.gdpCatchUp != null &&
+            f.gdpRelativeMean != null
+              ? `Growth: ${one(f.gdpPerPerson)}% a year per person, against ${one(f.gdpPeers)}% in 13 other wealthy countries over the same years, which shared the same oil shocks, recessions and pandemic. ${f.gdpCatchUp < 0 ? `Those countries were poorer and still catching up with US incomes, which alone would have had them growing ${one(-f.gdpCatchUp)} points a year faster.` : `Those countries were richer than the US, which alone would have had the US growing ${one(f.gdpCatchUp)} points a year faster.`} Allowing for that, the US came out ${ahead(f.gdpRelative)}; under the typical president since 1947 it came out ${ahead(f.gdpRelativeMean)}.`
+              : f?.gdpGrowth != null && f.gdpMean != null
+                ? `Growth: the economy grew ${one(f.gdpGrowth)}% a year, ${side(f.gdpGrowth, f.gdpMean)} the ${one(f.gdpMean)}% average for presidents ${f.gdpSince ? "since" : "before"} 1947.${f.gdpSince ? "" : " No comparable figures for other countries cover these years."}`
+                : isCurrent
+                  ? "Growth is counted from the term's second full year, so there's no figure yet."
+                  : "No growth figure for this term."}
+            {!jobs &&
+              f?.gdpGrowth == null &&
+              f?.gdpRelative == null &&
+              !isCurrent &&
+              " Payroll jobs are counted from 1939."}
+          </Lede>
+        </>
       )}
       {jobs && (
         <ComparisonScale
@@ -216,10 +252,15 @@ function LegacyColumn({
       weight={weight}
       score={score}
     >
+      <Measures>
+        How historians rank the presidency: C-SPAN&apos;s 2021 survey of about 140 historians,
+        rating ten areas of leadership such as crisis leadership, economic management and moral
+        authority.
+      </Measures>
       {f?.points != null && f.pointsMean != null ? (
         <Lede>
-          {f.points} points in C-SPAN&apos;s 2021 survey of historians; presidents average{" "}
-          {Math.round(f.pointsMean)}.
+          {f.points} points, {side(f.points, f.pointsMean)} the {Math.round(f.pointsMean)} average
+          for presidents.
         </Lede>
       ) : (
         score == null && (
