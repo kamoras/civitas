@@ -217,22 +217,25 @@ export default function ScoresChapter() {
               is listed on the profile but not counted here, because how far toward the flank a
               member sits is measured by where their record sits (below), which is scored once this
               Congress&apos;s positions pass our checks
-              <Cite id="kirkland2017" />. Which side of their party a member sits on is read from
-              their voting position. Before this Congress&apos;s positions are published and pass
-              our checks, everyone is read on the last Congress&apos;s position. After that, a
-              member&apos;s own position this Congress decides once it rests on 200 roll calls (our
-              convention); until then a full record from the last Congress decides, and without one
-              this Congress&apos;s position so far does. A member with no position yet this Congress
-              is read on the last Congress&apos;s, however short (our choice; nothing measured it).
-              Once this Congress&apos;s positions are in, the last Congress&apos;s position is never
-              used for a member who has switched parties, during this Congress or between the two,
-              since it was cast in their old party, and a position recorded under the other major
-              party is never read for the member. The last Congress&apos;s position is used only for
-              this, never scored. Using the last Congress&apos;s record once this Congress&apos;s
-              positions are in (a full record, or any record for a member with no position yet)
-              begins with the 120th Congress, from January 2027: the 118th Congress&apos;s positions
-              weren&apos;t kept before this change. Every break on a profile shows that roll
-              call&apos;s party tallies.
+              <Cite id="kirkland2017" />. Every break on a profile shows that roll call&apos;s party
+              tallies.
+              <span className="mt-2 block">
+                Which side of their party a member sits on is read from their voting position.
+                Before this Congress&apos;s positions are published and pass our checks, everyone is
+                read on the last Congress&apos;s position. After that, a member&apos;s own position
+                this Congress decides once it rests on 200 roll calls (our convention); until then a
+                full record from the last Congress decides, and without one this Congress&apos;s
+                position so far does. A member with no position yet this Congress is read on the
+                last Congress&apos;s, however short (our choice; nothing measured it). Once this
+                Congress&apos;s positions are in, the last Congress&apos;s position is never used
+                for a member who has switched parties, during this Congress or between the two,
+                since it was cast in their old party, and a position recorded under the other major
+                party is never read for the member. The last Congress&apos;s position is used only
+                for this, never scored. Using the last Congress&apos;s record once this
+                Congress&apos;s positions are in (a full record, or any record for a member with no
+                position yet) begins with the 120th Congress, from January 2027: the 118th
+                Congress&apos;s positions weren&apos;t kept before this change.
+              </span>
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
@@ -278,23 +281,27 @@ export default function ScoresChapter() {
             neutral; toward the seat&apos;s center scores above, by the same amount either way. So a
             member who sits about where their seat predicts scores about 50 on this part, by design:
             tested against House and Senate general elections, this shape predicted how incumbents
-            did, and one that put the typical position at 100 did not. A position estimated from
-            only a few roll calls is mostly noise, so it counts only as much as its votes support.
-            We measured how much it should count using members who have a short record in one
-            Congress and a full one in the Congress before or after, over every Congress since 1989.
-            Measuring on recent Congresses only (since 2007, or the latest six Congress-to-Congress
-            changes) predicted later Congresses slightly better. But the improvement was much
-            smaller than the normal variation in how well any single measurement predicts. Our rule,
-            a standard one in statistics that we chose to use, keeps the simpler measurement unless
-            another beats it by more than that. When the cutoff year or the number of recent
-            Congresses also had to be chosen from earlier Congresses alone, the improvement shrank
-            further. So the one measurement over every year stays. With these data only a large
-            improvement could have cleared that bar. The rule for deciding was settled after earlier
-            versions of this comparison had been seen. A position from about 36 votes counts half,
-            and one from 200 or more counts in full (where a full record starts is our convention).
-            A member with no position yet sits at 50 (our choice; nothing measured it). Until a new
-            Congress&apos;s positions are published and pass our checks, this part is left out and
-            the score is the voting part alone.
+            did, and one that put the typical position at 100 did not.
+          </P>
+          <P>
+            A position estimated from only a few roll calls is mostly noise, so it counts only as
+            much as its votes support. We measured how much it should count using members who have a
+            short record in one Congress and a full one in the Congress before or after, over every
+            Congress since 1989. Measuring on recent Congresses only (since 2007, or the latest six
+            Congress-to-Congress changes) predicted later Congresses slightly better. But the
+            improvement was much smaller than the normal variation in how well any single
+            measurement predicts. Our rule, a standard one in statistics that we chose to use, keeps
+            the simpler measurement unless another beats it by more than that. When the cutoff year
+            or the number of recent Congresses also had to be chosen from earlier Congresses alone,
+            the improvement shrank further. So the one measurement over every year stays. With these
+            data only a large improvement could have cleared that bar. The rule for deciding was
+            settled after earlier versions of this comparison had been seen.
+          </P>
+          <P>
+            A position from about 36 votes counts half, and one from 200 or more counts in full
+            (where a full record starts is our convention). A member with no position yet sits at 50
+            (our choice; nothing measured it). Until a new Congress&apos;s positions are published
+            and pass our checks, this part is left out and the score is the voting part alone.
           </P>
           <P>
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run

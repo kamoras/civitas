@@ -730,7 +730,16 @@ def forward_test(data: list[tuple]) -> dict:
         late, _ = forward_errors(data, names=("pooled", "era", "trend"), predict_from=inside[0])
         trend["inside_grids"] = {"from": inside[0], "against_one_curve": _paired(late["trend"], late["pooled"]),
                                  "against_era": _paired(late["trend"], late["era"])}
+    # How closely each structure's per-member errors follow one curve's: why
+    # the paired standard errors are so much smaller than the best's own.
+    correlation = {}
+    for n in FORWARD_CANDIDATES:
+        a = np.array([errors[n][m] for m in errors["pooled"]])
+        b = np.array(list(errors["pooled"].values()))
+        if n != "pooled" and len(b) > 1 and a.std() > 0 and b.std() > 0:
+            correlation[n] = round(float(np.corrcoef(a, b)[0, 1]), 3)
     return {"chosen": chosen, **rule, "paired_rule": _paired_rule(errors, FORWARD_CANDIDATES),
+            "error_correlation": correlation,
             "best_beating_one_curve": earlier_rule, "members": len(errors["pooled"]), **report,
             "training_before_split": before,
             "era_at_every_split": sweep, "window_against_era": _paired(errors["window"], errors["era"])}
@@ -1389,6 +1398,7 @@ def method_text() -> str:
         "Friedman, adopted in review after two other rules: see paired_rule and "
         "best_beating_one_curve); forward_test reports chosen, best, best_standard_error, "
         "paired_against_best (each structure's member-by-member difference from the best), "
+        "error_correlation (each structure's per-member errors' correlation with one curve's), "
         "paired_rule (the rule's paired form, the simplest whose paired difference from the best "
         "is within that difference's standard error), best_beating_one_curve (the best of those "
         "beating one curve by more than the paired standard error), members (the thin members "

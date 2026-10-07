@@ -295,7 +295,7 @@ Key mathematical properties:
   over every Congress since 1989. The structure is chosen by predicting
   forward, each transition's n0 from the earlier ones only (its drift,
   shared by every structure, from its own full pairs), as the weight is
-  used, by the one-standard-error rule (Hastie, Tibshirani & Friedman; a
+  used, by the one-standard-error rule (Hastie, Tibshirani & Friedman 2009; a
   convention, adopted in review after two other rules had been tried): the
   simplest structure within one standard error of the best's error. The
   latest era's curve, since the 110th Congress (a split by convention),

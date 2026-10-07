@@ -735,21 +735,22 @@ in a fixed order, 1,000 times.
   | a time trend (reported only) | 1.251 | 0.069 better (0.089) |
 
   The window predicts best (`best`), and its error's standard error is
-  0.229, so every structure is within it and one curve ships. Paired member
-  by member, the era curve and the window each beat one curve by about two
-  standard errors of the difference (computed from `forward_test`'s above
-  and standard_error), so recent thin records may say less than one curve
-  credits, but the textbook rule judges a structure by the noise in the
-  best's own error, which is far larger: the structures' per-member errors
-  move together (the window's and one curve's correlate at 0.99), so the
-  best's own standard error is about six times the paired one, and the
-  rule leaves one curve only for a structure that cuts the total forward
-  error by about 17% (0.229 of 1.320), where the era curve and the window
-  cut it by 5% and 6% (all computed from `forward_test`'s per-member
-  errors and totals). On these data it could not have chosen anything but
-  one curve (it ships one curve at every split, below), so its choice says
-  that no structure has shown a large gain, not that none exists. The rest
-  of the evidence doesn't settle it either:
+  0.229, so every structure is within it and one curve ships. Paired
+  member by member, the era curve and the window each beat one curve by
+  about two standard errors of the difference (computed from
+  `forward_test`'s above and standard_error), so recent thin records may
+  say less than one curve credits, but the textbook rule judges a
+  structure by the noise in the best's own error, which is far larger: the
+  structures' per-member errors move together (the window's and one
+  curve's correlate at 0.99, `error_correlation`), so the best's own
+  standard error is about six times the paired one, and the rule leaves
+  one curve only for a structure that cuts the total forward error by
+  about 17% (0.229 of 1.320), where the era curve and the window cut it by
+  5% and 6% (all computed from `forward_test`'s per-member errors and
+  totals). On these data it could not have chosen anything but one curve
+  (it ships one curve at every split, below), so its choice says that no
+  structure has shown a large gain, not that none exists. The rest of the
+  evidence doesn't settle it either:
   - **Where the gain is.** The era curve's comes from the transitions
     predicted from the 112th on; at the 111th the two curves predict alike
     (`gain_by_transition`: 0.0). Most of it is at the 112th and 114th (0.024

@@ -1292,8 +1292,9 @@ def position_scale_test(p, m):
     print(f"  flank rule, last full record against a thin one (same side of the party as the full record "
           f"across a Congress, centered as the rule centers): {shipped['prior_test']}; reads the last full "
           f"record below {shipped['prior_until_votes']} votes; structure test {shipped['structure_test']}")
-    for key in ("forward_test", "era_test", "era_split_test", "trend_test", "switcher_test", "thin_pairs_by_era",
-                "half_weight_votes_pooled_interval_90", "thin_offset"):
+    for key in ("forward_test", "data_chosen_test", "era_test", "era_split_test", "trend_test", "switcher_test",
+                "thin_pairs_by_era", "half_weight_votes_pooled_interval_90", "half_weight_votes_era_interval_90",
+                "thin_offset"):
         print(f"  {key}: {shipped[key]}")
     for c, by in shipped["party_line_share_by_congress"].items():
         print(f"  {c} party-line share by Congress: " + ", ".join(f"{k}:{v:.2f}" for k, v in by.items()))
