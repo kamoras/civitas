@@ -12,10 +12,11 @@ Every number here is printed by
 [`backend/scripts/research_constituent_alignment.py`](../../backend/scripts/research_constituent_alignment.py),
 which downloads the public data at pinned commits and runs every test,
 except the earlier drafts' figures in section 14, which are marked as
-such. Voteview's exports, which all of section 14 rests on, aren't
-versioned and can shift between downloads; section 14's were retrieved
-2026-10-03 to 2026-10-04 (the dates `position_confidence.json`'s
-`_source` gives).
+such, and figures marked computed, derived from the printed output or from
+the calibration script's per-member errors. Voteview's exports, which all
+of section 14 rests on, aren't versioned and can shift between downloads;
+section 14's were retrieved 2026-10-03 to 2026-10-04 (the dates
+`position_confidence.json`'s `_source` gives).
 
 ## The question and the test
 
@@ -584,13 +585,14 @@ the senator, not the seat. Partisan lean stays the expectation.
 
 ### 14. Position congruence's score: shape, scale and thin records (v6.27, tested 2026-10)
 
-**The question.** Position congruence reads low beside everything around it:
-across the 119th Congress its mean is about 50 in both chambers, and 10.7%
-of Senate Republicans sit at 0 on it (unweighted, with seat lean from the
-presidential vote as in this section). Section 1 tested the position as a
-continuous measure. The score is a transform of it (clipped at a saturation
-point, 50 at the seat's expectation), and three things about that transform
-had never been put in front of election results:
+**The question.** Position congruence reads low beside everything around
+it: across the 119th Congress its mean is about 50 in both chambers
+(v6.27's weights, Cook PVI seat lean), and 10.7% of Senate Republicans sit
+at 0 on it (unweighted, with seat lean from the presidential vote as in
+this section). Section 1 tested the position as a continuous measure. The
+score is a transform of it (clipped at a saturation point, 50 at the
+seat's expectation), and three things about that transform had never been
+put in front of election results:
 
 - **Shape.** The vote part is 100 at the seat's expectation and falls both
   ways (v6.16). Position congruence is 50 at the expectation and rises
@@ -715,12 +717,14 @@ in a fixed order, 1,000 times.
   the score can apply are, in order of simplicity (a stated choice: a
   boundary that moves every Congress counts as more complex than a fixed
   one), one curve for both chambers, one per chamber, the latest era's
-  (split at the 110th, a convention: roughly the middle of 101–119) and a
-  window of the last six transitions with thin pairs (`FORWARD_WINDOW`, a
-  convention). The one-standard-error rule decides (Hastie, Tibshirani &
-  Friedman 2009, section 7.10; a convention): the simplest structure whose
-  error is within one standard error of the best's, that standard error
-  the best's own (`best_standard_error`). Over 82 members:
+  (split at the 110th, a convention: roughly the middle of 101–119, fixed
+  before the forward comparisons, though era results at it from earlier
+  leave-one-out tests had been reported) and a window of the last six
+  transitions with thin pairs (`FORWARD_WINDOW`, a convention). The
+  one-standard-error rule decides (Hastie, Tibshirani & Friedman 2009,
+  section 7.10; a convention): the simplest structure whose error is
+  within one standard error of the best's, that standard error the best's
+  own (`best_standard_error`). Over 82 members:
 
   | n0 fitted on the earlier transitions | Forward squared error | Against one curve, paired |
   |---|---|---|
@@ -802,10 +806,10 @@ in a fixed order, 1,000 times.
   the n0 grid; then the rule's paired form, the simplest whose
   member-by-member difference from the best is within that difference's
   standard error (`paired_rule`), which ships the era curve at the 110th
-  (within the bar by 0.001, computed) but the window at 9 of the 15 splits
-  (`ships_paired_rule`). The textbook form is the cited one and keeps one
-  curve whatever the split; it makes no adjustment for the number of
-  candidates. A rerun with more recent pairs decides again.
+  (within the bar by under 0.001, computed) but the window at 9 of the 15
+  splits (`ships_paired_rule`). The textbook form is the cited one and
+  keeps one curve whatever the split; it makes no adjustment for the
+  number of candidates. A rerun with more recent pairs decides again.
 - **Leave-one-member-out comparisons, reported.** Each thin member's
   pairs predicted from a fit (n0 and drift) made without that member, on
   all 95 thin pairs:
@@ -1053,9 +1057,9 @@ forecast must, each is better than one curve only well within the noise
   back by the drift, a full position differs from its thin one by 0.009 on
   average (standard error 0.019; 95 pairs, `thin_offset`; full pairs give
   0.006 by the same measure, `full_baseline`), so no constant offset is
-  detected, though one up to 0.046 toward the flank (the 95% upper bound,
-  `upper_95`) can't be ruled out, and these pairs can't tell a
-  proportional distortion from noise.
+  detected, though one up to 0.046 toward the flank (the upper end of its
+  95% interval, `upper_95`) can't be ruled out, and these pairs can't tell
+  a proportional distortion from noise.
 - The saturation scale is the 90th percentile of full records'
   extremities. A thin record's noise would widen a scale taken over
   everyone, and a scale taken over weighted extremities would cancel the
@@ -1240,10 +1244,10 @@ rule's means reclassifies 0 of 2,351 Senate and 0 of 6,055 House breaks
   Senate primary returns were tested (the Pettigrew, Owen & Wanless data are
   House only). Senators are scored on the same shape by extension.
 - **The Senate loyal side does not replicate.** With every Senate election
-  from 1990 to 2024 (N=461, section 8), the crossing side holds (2.34 up to
-  saturation, t=1.9) but the loyal side does not (−0.59, t=−0.5), and the
-  whole association is weak after 2008. That is one reason v6.15 flattened
-  the loyal side (section 9).
+  from 1990 to 2024 (N=461, section 8), the crossing side points the same
+  way (2.34 up to saturation, t=1.9, not significant at 5%) but the loyal
+  side does not (−0.59, t=−0.5), and the whole association is weak after
+  2008. That is one reason v6.15 flattened the loyal side (section 9).
 - **Position congruence's scale is not settled.** One scale for both parties
   and one per party predict elections equally well, and the test of which
   unit voters respond to is inconclusive in both chambers (section 14). The
@@ -1285,8 +1289,8 @@ rule's means reclassifies 0 of 2,351 Senate and 0 of 6,055 House breaks
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight
   from.
-- **Vote share is a proxy.** Electoral response shows that constituents
-  notice and judge these things. It does not measure issue-by-issue
+- **Vote share is a proxy.** Electoral associations suggest that
+  constituents notice these things. It does not measure issue-by-issue
   congruence. The seat target is still one-dimensional presidential lean,
   and members also answer to their reelection constituency (Fenno 1978;
   Clinton 2006).
