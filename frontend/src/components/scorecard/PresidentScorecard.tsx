@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { President } from "@/types/president";
 import type {
-  AgencyAlignmentFacts,
   HistoricalLegacyFacts,
   PresidentEffectivenessFacts,
   PresidentScoreBreakdown,
@@ -162,12 +161,22 @@ function EffectivenessColumn({
         <Lede>
           {jobs &&
             `${signed(f!.jobsMillions!)} million jobs, ${f!.jobsPerYear!.toFixed(2)} million a year once the first year is set aside. Presidencies since 1939 average ${f!.jobsMean!.toFixed(2)} million. `}
-          {f?.gdpGrowth != null && f.gdpMean != null
-            ? `Real growth averaged ${one(f.gdpGrowth)}% a year, first year excluded; presidencies ${f.gdpSince ? "since" : "before"} 1947 average ${one(f.gdpMean)}%.`
-            : isCurrent
-              ? "GDP growth is measured from the second full year of a term."
-              : "No GDP figure for this term."}
-          {!jobs && f?.gdpGrowth == null && !isCurrent && " Payroll jobs are counted from 1939."}
+          {f?.gdpRelative != null &&
+          f.gdpPerPerson != null &&
+          f.gdpPeers != null &&
+          f.gdpCatchUp != null &&
+          f.gdpRelativeMean != null
+            ? `Real growth per person averaged ${one(f.gdpPerPerson)}% a year, first year excluded, against ${one(f.gdpPeers)}% for 13 peer economies over the same years. Allowing ${signed(f.gdpCatchUp)} points of that difference for the peers catching up with US incomes leaves ${signed(f.gdpRelative)}; presidencies since 1947 average ${signed(f.gdpRelativeMean)}.`
+            : f?.gdpGrowth != null && f.gdpMean != null
+              ? `Real growth averaged ${one(f.gdpGrowth)}% a year, first year excluded; presidencies ${f.gdpSince ? "since" : "before"} 1947 average ${one(f.gdpMean)}%.`
+              : isCurrent
+                ? "GDP growth is measured from the second full year of a term."
+                : "No GDP figure for this term."}
+          {!jobs &&
+            f?.gdpGrowth == null &&
+            f?.gdpRelative == null &&
+            !isCurrent &&
+            " Payroll jobs are counted from 1939."}
         </Lede>
       )}
       {jobs && (
@@ -184,50 +193,6 @@ function EffectivenessColumn({
           normLabel={`presidencies since 1939: ${f!.jobsMean!.toFixed(2)}M`}
           tone={tone(score)}
         />
-      )}
-      {dim && <ComponentBars components={dim.components} />}
-    </ScoreColumn>
-  );
-}
-
-function AgencyColumn({
-  dim,
-  score,
-  weight,
-}: {
-  dim?: ScoreBreakdownDimension;
-  score: number | null;
-  weight?: number;
-}) {
-  const f = dim?.facts as AgencyAlignmentFacts | undefined;
-  return (
-    <ScoreColumn title="Agency Alignment" shareId="agency-alignment" weight={weight} score={score}>
-      {f?.finalizedPct != null ? (
-        <>
-          <Lede>
-            {Math.round(f.finalizedPct)}% of the
-            {f.rulemakings != null ? ` ${f.rulemakings.toLocaleString()}` : ""} rulemakings federal
-            agencies began reached a final rule.
-            {f.finalizedMean != null &&
-              ` Administrations since 1994 average ${Math.round(f.finalizedMean)}%.`}
-          </Lede>
-          {f.finalizedMean != null && (
-            <ComparisonScale
-              value={f.finalizedPct}
-              norm={f.finalizedMean}
-              min={0}
-              max={100}
-              axis={["0%", "100%"]}
-              valueLabel={`This term ${Math.round(f.finalizedPct)}%`}
-              normLabel={`since 1994: ${Math.round(f.finalizedMean)}%`}
-              tone={tone(score)}
-            />
-          )}
-        </>
-      ) : (
-        score == null && (
-          <Lede>The Federal Register&apos;s rulemaking records begin in 1994, so not scored.</Lede>
-        )
       )}
       {dim && <ComponentBars components={dim.components} />}
     </ScoreColumn>
@@ -299,7 +264,10 @@ export default function PresidentScorecard({
   rank?: { rank: number; of: number } | null;
   titleAs?: "h1" | "h2";
 }) {
-  const weights = useConfig()?.presidentScoreWeights;
+  // Each score's actual share of this president's overall, from the
+  // backend; the nominal weights only for a payload that predates it.
+  const nominal = useConfig()?.presidentScoreWeights;
+  const weights = president.score.effectiveWeights ?? nominal;
   const [trades, setTrades] = useState<{ total: number } | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -425,10 +393,11 @@ export default function PresidentScorecard({
                   </div>
                 </div>
               )}
-              {s.dimensionsAvailable > 0 && s.dimensionsAvailable < 4 && (
+              {s.dimensionsAvailable > 0 && s.dimensionsAvailable < 3 && (
                 <p className="text-sm leading-relaxed text-ink-lo">
-                  Built from {s.dimensionsAvailable} of 4 scores; a score with no data shares its
-                  weight among the others rather than counting as zero.
+                  Built from {s.dimensionsAvailable} of 3 scores; a score with no data shares its
+                  weight among the others rather than counting as zero, and each score shows its
+                  actual share.
                 </p>
               )}
               <ScoreTrendSection entityId={president.id} entityType="president" />
@@ -439,7 +408,7 @@ export default function PresidentScorecard({
             </div>
           </header>
 
-          <div className="grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid items-stretch gap-5 md:grid-cols-3">
             <MandateColumn
               dim={breakdown?.publicMandate}
               score={s.publicMandate}
@@ -450,11 +419,6 @@ export default function PresidentScorecard({
               score={s.effectiveness}
               weight={weights?.effectiveness}
               isCurrent={president.isCurrent}
-            />
-            <AgencyColumn
-              dim={breakdown?.agencyAlignment}
-              score={s.agencyAlignment}
-              weight={weights?.agencyAlignment}
             />
             <LegacyColumn
               dim={breakdown?.historicalLegacy}

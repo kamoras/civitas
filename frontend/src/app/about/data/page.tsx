@@ -109,11 +109,12 @@ export default function DataChapter() {
               The presidential roster, approval polling from Truman on, and earlier election margins
               (UC Santa Barbara).
             </Fact>
-            <Fact label="Federal Register">
-              Rulemaking documents (Clinton on), executive orders, memoranda and proclamations.
-            </Fact>
+            <Fact label="Federal Register">Executive orders, memoranda and proclamations.</Fact>
             <Fact label="BLS · BEA · MeasuringWorth">
               Payroll jobs from 1939, and real GDP back to 1790.
+            </Fact>
+            <Fact label="Maddison Project · World Bank">
+              GDP per person for the US and 13 peer economies from 1946, to compare postwar growth.
             </Fact>
             <Fact label="C-SPAN Historians Survey">The 2021 survey, for Historical Legacy.</Fact>
           </Facts>

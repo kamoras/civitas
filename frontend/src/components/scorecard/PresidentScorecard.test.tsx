@@ -82,10 +82,12 @@ const president = {
   score: {
     publicMandate: 29,
     effectiveness: 33,
-    agencyAlignment: 91,
     historicalLegacy: null,
-    overall: 51,
-    dimensionsAvailable: 3,
+    overall: 31,
+    dimensionsAvailable: 2,
+    // A sitting president has no Historical Legacy: the two scored parts
+    // share the whole, and the card says so.
+    effectiveWeights: { publicMandate: 0.5, effectiveness: 0.5 },
   },
   avgApproval: 37.3,
   gdpGrowthAvg: null,
@@ -123,12 +125,12 @@ const breakdown: PresidentScoreBreakdown = {
       gdpGrowth: null,
       gdpMean: null,
       gdpSince: null,
+      gdpPerPerson: null,
+      gdpPeers: null,
+      gdpCatchUp: null,
+      gdpRelative: null,
+      gdpRelativeMean: null,
     },
-  },
-  agencyAlignment: {
-    score: 91,
-    components: [{ label: "Finalization rate", weight: 1, score: 90.7, detail: "…" }],
-    facts: { finalizedPct: 62, finalizedMean: 54, rulemakings: 1400 },
   },
   historicalLegacy: {
     score: null as unknown as number,
@@ -155,11 +157,9 @@ describe("PresidentScorecard", () => {
         /Averaged 37\.3% approval so far; presidents averaged 50\.9% over their first 20 months\. Approval fell 5\.6 points from a start of 41\.0%; presidents who started there rose about 4\.8\./
       )
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /62% of the 1,400 rulemakings federal agencies began reached a final rule\. Administrations since 1994 average 54%\./
-      )
-    ).toBeInTheDocument();
+    // Each score shows its actual share of this president's overall, not
+    // the nominal weight (Historical Legacy is unscored for a sitting one).
+    expect(screen.getAllByText("50% of the score")).toHaveLength(2);
     expect(
       screen.getByText(/GDP growth is measured from the second full year of a term\./)
     ).toBeInTheDocument();
@@ -173,6 +173,33 @@ describe("PresidentScorecard", () => {
     expect(await screen.findByRole("heading", { name: "Holdings" })).toBeInTheDocument();
     expect(screen.getByText("40 Wall Street LLC")).toBeInTheDocument();
     expect(screen.getByText("285 signed")).toBeInTheDocument();
+  });
+
+  it("states postwar growth against the peer economies, catch-up allowed for", async () => {
+    const peers = {
+      ...breakdown,
+      effectiveness: {
+        ...breakdown.effectiveness,
+        facts: {
+          ...breakdown.effectiveness.facts,
+          gdpGrowth: 2.3,
+          gdpMean: 2.8,
+          gdpSince: true,
+          gdpPerPerson: 1.4,
+          gdpPeers: 1.12,
+          gdpCatchUp: -1.58,
+          gdpRelative: 1.86,
+          gdpRelativeMean: 2.23,
+        },
+      },
+    };
+    render(<PresidentScorecard president={president} breakdown={peers} rank={null} />);
+    expect(
+      screen.getByText(
+        /Real growth per person averaged 1\.4% a year, first year excluded, against 1\.1% for 13 peer economies over the same years\. Allowing -1\.6 points of that difference for the peers catching up with US incomes leaves \+1\.9; presidencies since 1947 average \+2\.2\./
+      )
+    ).toBeInTheDocument();
+    expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
   });
 
   it("never calls a scored dimension unrated when the breakdown is missing", async () => {
@@ -206,7 +233,7 @@ describe("PresidentScorecard", () => {
     await screen.findByText("40 Wall Street LLC");
     // The share buttons are part of what axe checks here: the summary, the
     // four score columns and the holdings.
-    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(6);
+    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(5);
     const result = await axe.run(document.body, {
       rules: { "color-contrast": { enabled: false } },
     });
@@ -216,7 +243,7 @@ describe("PresidentScorecard", () => {
   it("the leaderboard's summary states the scores and links to the full scorecard", () => {
     render(<PresidentSummary president={president} />);
     expect(screen.getByRole("heading", { level: 2, name: "Donald J. Trump" })).toBeInTheDocument();
-    expect(screen.getByText("51")).toBeInTheDocument();
+    expect(screen.getByText("31")).toBeInTheDocument();
     expect(screen.getByText("Not rated yet")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open the full scorecard/ })).toHaveAttribute(
       "href",

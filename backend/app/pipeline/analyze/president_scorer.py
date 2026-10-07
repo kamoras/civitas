@@ -46,6 +46,7 @@ import math
 import statistics
 from datetime import date
 
+from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 from app.pipeline.analyze.population_reference import PRESIDENT_REFERENCE
 from app.pipeline.analyze.score_bounds import clamp
 
@@ -56,8 +57,7 @@ def _blend_live_components(components: list[dict]) -> dict:
     """Combine weighted live-data components into a score — live data
     only, never a hand-set fallback.
 
-    Shared by _effectiveness_core / _agency_alignment_core /
-    _public_mandate_core, which each gather their own `components`
+    Shared by _effectiveness_core / _public_mandate_core, which each gather their own `components`
     list of whatever sub-signals actually have live data this run.
 
     2026-07: this used to blend missing weight with a hand-set "editorial
@@ -77,7 +77,7 @@ def _blend_live_components(components: list[dict]) -> dict:
     applies. A president dimension with zero components isn't temporarily
     unmeasured, it's a case this file's fetchers have identified as
     genuinely inapplicable (e.g. Public Mandate for a president who never
-    won an election, Agency Alignment before Federal Register existed) —
+    won an election) —
     scoring it neutral would still be presenting a number for something
     that isn't measurable even in principle. Callers (president_pipeline.
     py) skip writing a None score, leaving the DB column NULL; compute_
@@ -107,7 +107,6 @@ def _blend_live_components(components: list[dict]) -> dict:
 _PRESIDENT_SCORE_FIELD_MAP = {
     "publicMandate": "score_public_mandate",
     "effectiveness": "score_effectiveness",
-    "agencyAlignment": "score_agency_alignment",
     "historicalLegacy": "score_historical_legacy",
 }
 
@@ -117,19 +116,50 @@ _HISTORICAL_LEGACY_KEY = "historicalLegacy"
 # The fixed-Legacy-weight tier (see compute_president_overall_score) only
 # applies with at least this many mechanical dimensions present. Below
 # this, a single mechanical data point isn't reliable enough to anchor
-# 65% of a score on its own — verified concretely on Fillmore: his only
+# the other half of a score on its own — verified concretely on Fillmore: his only
 # present mechanical dimension, Effectiveness, is 100/100 purely from a
 # ~9.6%/year GDP boom (Gold Rush-era antebellum expansion, not clearly
 # attributable to his own governance), while C-SPAN's historians rate him
-# 19/100 — one of the worst-regarded presidents. A flat "Legacy always
-# 35%" rule would let that single GDP number override his actual
+# 19/100 — one of the worst-regarded presidents. A fixed Legacy weight
+# would let that single GDP number override his actual
 # reputation entirely (Fillmore jumped to #8 in testing). Below this
 # threshold, falls back to flat renormalization across whatever combo of
 # Legacy + mechanical IS present (the pre-2026-07 behavior) — for
 # Fillmore/Tyler/Arthur/Andrew Johnson specifically, that means Legacy
-# effectively carries ~62%, diluting the single noisy mechanical signal
+# carries two thirds (50 of 75 points of weight since President v7), diluting the single noisy mechanical signal
 # rather than being swamped by it.
 _MIN_MECHANICAL_DIMENSIONS_FOR_FIXED_LEGACY_WEIGHT = 2
+
+
+def president_effective_weights(entity) -> dict[str, float]:
+    """Each scored dimension's actual share of this president's overall
+    score, {dimension key: weight} summing to 1, for the dimensions that
+    have a value (an absent one has no entry). The scorecard shows these,
+    so the percentages beside a president's scores are the ones their
+    overall was computed with, not the nominal PRESIDENT_SCORE_WEIGHTS.
+
+    Two-tier renormalization (2026-07): when at least
+    _MIN_MECHANICAL_DIMENSIONS_FOR_FIXED_LEGACY_WEIGHT mechanical
+    dimensions are present alongside Legacy, Legacy keeps its configured
+    weight exactly and the mechanical dimensions share the rest in
+    proportion to their configured weights. Otherwise (Legacy absent, as
+    for a sitting president, or too few mechanical dimensions beside it)
+    every present dimension is renormalized flat. See
+    compute_president_overall_score."""
+    legacy_weight = PRESIDENT_SCORE_WEIGHTS[_HISTORICAL_LEGACY_KEY]
+    present = {
+        key: weight for key, weight in PRESIDENT_SCORE_WEIGHTS.items()
+        if getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[key]) is not None
+    }
+    mechanical = {k: w for k, w in present.items() if k != _HISTORICAL_LEGACY_KEY}
+    if _HISTORICAL_LEGACY_KEY in present and len(mechanical) >= _MIN_MECHANICAL_DIMENSIONS_FOR_FIXED_LEGACY_WEIGHT:
+        mechanical_sum = sum(mechanical.values())
+        return {
+            _HISTORICAL_LEGACY_KEY: legacy_weight,
+            **{k: (1 - legacy_weight) * w / mechanical_sum for k, w in mechanical.items()},
+        }
+    total = sum(present.values())
+    return {k: w / total for k, w in present.items()} if total > 0 else {}
 
 
 def compute_president_overall_score(entity) -> float:
@@ -144,26 +174,24 @@ def compute_president_overall_score(entity) -> float:
     2026-07: every dimension's score field is now nullable (see models.py
     President's comment) — a dimension is None when it's genuinely
     inapplicable for that specific president (e.g. Public Mandate for a
-    president who never won an election; Agency Alignment for anyone
-    before this platform's real government sources have machine-readable
-    rulemaking data), never a hand-set fallback.
+    president who never won an election; Effectiveness's jobs component
+    before 1939), never a hand-set fallback.
 
     Two-tier renormalization (2026-07, replacing a flat single-tier
     renormalize-over-everything-present scheme): when at least
     _MIN_MECHANICAL_DIMENSIONS_FOR_FIXED_LEGACY_WEIGHT mechanical
     dimensions are present alongside Legacy, Legacy is held at its
-    configured weight (35%) exactly — the mechanical dimensions
-    renormalize only among THEMSELVES for the remaining 65%. The old flat
+    configured weight (50% since President v7) exactly — the mechanical
+    dimensions renormalize only among THEMSELVES for the rest. The old flat
     scheme let Legacy's EFFECTIVE weight balloon well past its documented
-    35% for any president missing a mechanical dimension — verified
-    against the real 47-president dataset: ~44.7% for the ~36 presidents
-    missing only Agency Alignment (everyone before Clinton). 35% was
-    never actually the operative number for most presidents under the old
-    scheme; this fixes that silently-drifting weight rather than just
+    weight for any president missing a mechanical dimension (verified
+    against the real 47-president dataset when Legacy was 35%: ~44.7% for
+    the ~36 presidents then missing only the since-removed Agency
+    Alignment); this fixes that silently-drifting weight rather than just
     disclosing it. Below the mechanical-dimension floor (see that
     constant's own comment — Fillmore's case), falls back to the old flat
     renormalization instead, since a single mechanical number isn't a
-    reliable enough anchor for a fixed 65% share. When Legacy itself is
+    reliable enough anchor for a fixed share. When Legacy itself is
     absent (any currently-serving or just-departed president), this has
     no effect either way: the mechanical dimensions renormalize to 100%
     of whatever's present, same as always. A president with zero
@@ -171,40 +199,17 @@ def compute_president_overall_score(entity) -> float:
     fetchers wired into president_pipeline.py, but defensive) returns 0.0
     rather than raising.
     """
-    from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
-
-    legacy_weight = PRESIDENT_SCORE_WEIGHTS[_HISTORICAL_LEGACY_KEY]
-    legacy_score = getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[_HISTORICAL_LEGACY_KEY])
-
-    mechanical_present = [
-        (weight, getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[key]))
-        for key, weight in PRESIDENT_SCORE_WEIGHTS.items()
-        if key != _HISTORICAL_LEGACY_KEY
-        and getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[key]) is not None
-    ]
-
-    if legacy_score is not None and len(mechanical_present) >= _MIN_MECHANICAL_DIMENSIONS_FOR_FIXED_LEGACY_WEIGHT:
-        mechanical_weight_sum = sum(w for w, _ in mechanical_present)
-        mechanical_component = sum(w * score for w, score in mechanical_present) / mechanical_weight_sum
-        return round(legacy_weight * legacy_score + (1 - legacy_weight) * mechanical_component, 2)
-
-    # Flat renormalization fallback: Legacy absent, or fewer than
-    # _MIN_MECHANICAL_DIMENSIONS_FOR_FIXED_LEGACY_WEIGHT mechanical
-    # dimensions present alongside it.
-    present = list(mechanical_present)
-    if legacy_score is not None:
-        present.append((legacy_weight, legacy_score))
-    total_weight = sum(w for w, _ in present)
-    if total_weight <= 0:
-        return 0.0
-    return round(sum(w * score for w, score in present) / total_weight, 2)
+    weights = president_effective_weights(entity)
+    return round(sum(
+        w * getattr(entity, _PRESIDENT_SCORE_FIELD_MAP[k]) for k, w in weights.items()
+    ), 2)
 
 
 def dimensions_available(entity) -> int:
-    """How many of the 4 possible dimensions actually have a score for
-    this president (0-4) — surfaced to the reader so a composite built
+    """How many of the 3 possible dimensions actually have a score for
+    this president (0-3) — surfaced to the reader so a composite built
     from partial data isn't presented with the same implied confidence as
-    one built from all 4. A short-tenure or currently-serving president
+    one built from all 3. A short-tenure or currently-serving president
     (missing Effectiveness's GDP data, or Historical Legacy's not-yet-run
     C-SPAN survey) has a real, disclosed reason for a lower count, never
     padded to look complete.
@@ -232,8 +237,13 @@ def dimensions_available(entity) -> int:
 # presidential_elections._fit_scales); v6 = the approval trend is judged
 # against what presidents starting at the same level went on to do
 # (fit_trend_on_start), and the sitting president's approval against
-# predecessors over the same elapsed time (sitting_window_reference).
-PRESIDENT_ALGORITHM_VERSION = "v6"
+# predecessors over the same elapsed time (window_reference); v7 = Agency
+# Alignment removed (administrations since 1994 finalize 59.6-61.8% of their
+# rulemakings, too little difference to score), Historical Legacy weighted
+# 50%, and a presidency cut short compared over its own number of days like
+# the sitting one (FULL_TERM_DAYS); v8 = a postwar term's GDP growth
+# scored relative to 13 peer economies over the same years (peer_relative).
+PRESIDENT_ALGORITHM_VERSION = "v8"
 
 
 # Full credit/deficit approached asymptotically at this many population
@@ -296,6 +306,9 @@ def calc_effectiveness(
     term_years: float,
     term_start_year: int | None = None,
     reference: dict | None = None,
+    gdp_per_person: float | None = None,
+    gdp_peer_median: float | None = None,
+    gdp_relative: float | None = None,
 ) -> int | None:
     """Calculate effectiveness score from economic data only.
 
@@ -304,7 +317,20 @@ def calc_effectiveness(
     """
     return _effectiveness_core(
         jobs_created_millions, gdp_growth_avg, term_years, term_start_year, reference,
+        gdp_per_person, gdp_peer_median, gdp_relative,
     )["score"]
+
+
+def peer_relative(term_start_year: int | None, gdp_relative: float | None) -> float | None:
+    """A postwar term's growth relative to the peer economies (catch-up set
+    aside, fetch/peer_gdp.py); None before 1947 or when not measured."""
+    return gdp_relative if peer_comparable(term_start_year) else None
+
+
+def peer_comparable(term_start_year: int | None) -> bool:
+    """Whether a term's growth is scored against peer economies: postwar
+    terms, the ones the peer series covers (fetch/peer_gdp.py)."""
+    return _gdp_reference_key(term_start_year) == "gdp_growth_postwar"
 
 
 def _effectiveness_core(
@@ -313,17 +339,31 @@ def _effectiveness_core(
     term_years: float,
     term_start_year: int | None = None,
     reference: dict | None = None,
+    gdp_per_person: float | None = None,
+    gdp_peer_median: float | None = None,
+    gdp_relative: float | None = None,
 ) -> dict:
     """Same math as calc_effectiveness, returning every intermediate value
     alongside the final score.
 
     Components, each scored against the presidential population measured
     every run (compute_president_reference), like Public Mandate:
-      - GDP growth (60%): average annual real growth over the term, first
-        year excluded (an annual stand-in for Blinder & Watson 2016's
-        attribution lag; see historical_gdp) and peak-relative after a contraction
-        (historical_gdp.compute_term_gdp_growth). Compared with presidents
-        in the same data regime, split at 1947 (see _GDP_REGIME_SPLIT_YEAR).
+      - GDP growth (60%). Since 1947: average annual real growth per
+        person over the years after the term's first (an annual stand-in
+        for Blinder & Watson 2016's attribution lag), minus the median of
+        13 peer economies over the same years, with the part of that gap
+        the peers' catch-up growth predicts set aside (fetch/peer_gdp.py),
+        compared with other postwar presidencies' figure. Most of a term's
+        growth is shared with those economies (68% of the variance since
+        1961, docs/research/president-scores.md), so raw growth measured
+        the world economy a president presided over; the difference is
+        what was particular to the US (president v8). Before 1947 no peer
+        series covers the terms, so it is average annual real growth,
+        first year excluded and peak-relative after a contraction
+        (historical_gdp.compute_term_gdp_growth), compared with other
+        prewar presidencies (see _GDP_REGIME_SPLIT_YEAR). A postwar term
+        whose peer figures haven't been fetched yet is scored the prewar
+        way against postwar presidencies until they are.
       - Jobs created (40%): payroll jobs per attributed year, BLS 1939
         onward only. Absolute jobs rather than percent growth: across
         presidencies since 1945 the absolute rate shows no trend with era
@@ -334,24 +374,39 @@ def _effectiveness_core(
     Replaced in president v5: hand-set curves (GDP 25 + g/5 x 55 around a
     "post-WWII 3.2%"; jobs 30 + rate/3M x 50) — AGENTS.md §3a.
 
-    What this does not do, disclosed: most of a modern president's term
-    growth is shared with other advanced economies over the same years (60%
-    of the variance since 1946 — docs/research/president-scores.md), so
-    this dimension largely measures economic conditions a president
-    presided over, not caused. Growth relative to peer economies would
-    remove that shared component, but needs a peer-GDP source the pipeline
-    does not fetch yet.
+    What growth relative to peers still includes: anything that moved the
+    US alone without a president causing it (a domestic financial crisis
+    building before the term, a population shift). It removes the shocks
+    the peers shared, not every shock.
     """
     components: list[dict] = []
     # The scorecard's sentence and scales, as numbers (None where not
     # measured): the president's values and the averages they're scored
     # against.
     facts: dict = {"jobsMillions": jobs_created_millions, "jobsPerYear": None, "jobsMean": None,
-                   "gdpGrowth": gdp_growth_avg, "gdpMean": None, "gdpSince": None}
+                   "gdpGrowth": gdp_growth_avg, "gdpMean": None, "gdpSince": None,
+                   "gdpPerPerson": None, "gdpPeers": None, "gdpCatchUp": None,
+                   "gdpRelative": None, "gdpRelativeMean": None}
 
     gdp_key = _gdp_reference_key(term_start_year)
     gdp_stat = _president_stat(reference, gdp_key)
-    if gdp_growth_avg is not None and gdp_stat:
+    relative = peer_relative(term_start_year, gdp_relative)
+    relative_stat = _president_stat(reference, "gdp_growth_relative")
+    if relative is not None and relative_stat and gdp_per_person is not None and gdp_peer_median is not None:
+        # The points of US-minus-peers growth the peers' catch-up accounted
+        # for, set aside in `relative`.
+        catch_up = round(gdp_per_person - gdp_peer_median - relative, 4)
+        facts.update(gdpPerPerson=gdp_per_person, gdpPeers=gdp_peer_median, gdpCatchUp=catch_up,
+                     gdpRelative=relative, gdpRelativeMean=relative_stat[0], gdpSince=True)
+        components.append(_population_zscore_component(
+            "GDP growth vs. peer economies", 0.60, relative, relative_stat[0], relative_stat[1],
+            f"{gdp_per_person:.1f}% average annual growth per person (first year excluded) vs. "
+            f"{gdp_peer_median:.1f}% for 13 peer economies, a difference of "
+            f"{gdp_per_person - gdp_peer_median:+.1f} points, {catch_up:+.1f} of it the peers "
+            f"catching up with US incomes: {relative:+.1f} against {relative_stat[0]:+.1f} for "
+            f"presidencies since {_GDP_REGIME_SPLIT_YEAR}",
+        ))
+    elif gdp_growth_avg is not None and gdp_stat:
         era = "before" if gdp_key == "gdp_growth_prewar" else "since"
         facts.update(gdpMean=gdp_stat[0], gdpSince=gdp_key == "gdp_growth_postwar")
         components.append(_population_zscore_component(
@@ -370,51 +425,6 @@ def _effectiveness_core(
             f"(term minus the year-1 lag) vs. {jobs_stat[0]:.2f}M for presidencies since 1939",
         ))
 
-    return {**_blend_live_components(components), "facts": facts}
-
-
-def calc_agency_alignment(
-    rulemaking_finalized_pct: float | None, reference: dict | None = None,
-) -> int | None:
-    """Calculate agency alignment score from Federal Register rulemaking data.
-
-    See _agency_alignment_core for the full component breakdown — this is a
-    thin wrapper kept for existing callers/tests that expect a bare int.
-    """
-    return _agency_alignment_core(rulemaking_finalized_pct, reference)["score"]
-
-
-def _agency_alignment_core(
-    rulemaking_finalized_pct: float | None, reference: dict | None = None,
-) -> dict:
-    """Same math as calc_agency_alignment, returning every intermediate
-    value alongside the final score.
-
-    Finalization rate: final rules as a share of rulemaking documents
-    (proposed + final) — how far agencies carry what they start — scored
-    against the administrations measured every run.
-
-    Removed in president v5: the rulemaking ACTIVITY rate (rules per year,
-    scored higher the more rules). Rule volume tracks an administration's
-    regulatory philosophy, not its effectiveness: the Federal Register's
-    final-rule count hit its record low in 2019 (2,964) and its page count a
-    record high in 2024 (CEI "Ten Thousand Commandments" 2025; GWU
-    Regulatory Studies Center RegStats). Scoring volume as better scored a
-    policy preference.
-
-    Coverage: federalregister.gov's structured data starts in 1994, so this
-    dimension exists from Clinton onward and is excluded (not defaulted)
-    for earlier presidents via compute_president_overall_score.
-    """
-    components: list[dict] = []
-    stat = _president_stat(reference, "rulemaking_finalized_pct")
-    facts = {"finalizedPct": rulemaking_finalized_pct, "finalizedMean": stat[0] if stat else None}
-    if rulemaking_finalized_pct is not None and stat:
-        components.append(_population_zscore_component(
-            "Finalization rate", 1.0, rulemaking_finalized_pct, stat[0], stat[1],
-            f"{rulemaking_finalized_pct:.0f}% of rulemakings reached a final rule vs. "
-            f"{stat[0]:.0f}% across administrations since 1994",
-        ))
     return {**_blend_live_components(components), "facts": facts}
 
 
@@ -441,11 +451,8 @@ def _agency_alignment_core(
 # Mandate is excluded for them (see compute_president_overall_score).
 
 # Fewest presidents with a value before its population mean/stdev is
-# trusted; below it the last persisted value is kept for that stat. The
-# finalization rate's whole population is the administrations since 1994
-# (six in 2026), so it is measured from five.
+# trusted; below it the last persisted value is kept for that stat.
 _MIN_PRESIDENT_REFERENCE_N = 10
-_MIN_REFERENCE_N_OVERRIDES = {"rulemaking_finalized_pct": 5}
 
 
 def _mean_stdev(values: list[float], min_n: int = _MIN_PRESIDENT_REFERENCE_N) -> dict | None:
@@ -462,8 +469,9 @@ def compute_president_reference(presidents: list[dict]) -> dict:
     """Population mean/stdev for each z-scored presidential input, from
     stored per-president values: dicts with id, name, avg_approval,
     approval_trend, election_margin, historical_legacy_score, and (for
-    Effectiveness / Agency Alignment) gdp_growth_avg, term_start_year,
-    jobs_created_millions, term_years, rulemaking_finalized_pct.
+    Effectiveness) gdp_growth_avg, gdp_growth_relative, term_start_year,
+    jobs_created_millions,
+    term_years.
 
     Approval, trend and margin are counted per presidency (split terms have
     their own polling and elections). The C-SPAN score is counted once per
@@ -478,19 +486,26 @@ def compute_president_reference(presidents: list[dict]) -> dict:
     def values(field: str) -> list[float]:
         return [float(p[field]) for p in presidents if p.get(field) is not None]
 
-    gdp = {"gdp_growth_prewar": [], "gdp_growth_postwar": []}
+    gdp = {"gdp_growth_prewar": [], "gdp_growth_postwar": [], "gdp_growth_relative": []}
     jobs: list[float] = []
     for p in presidents:
+        relative = peer_relative(p.get("term_start_year"), p.get("gdp_growth_relative"))
+        if relative is not None:
+            gdp["gdp_growth_relative"].append(relative)
         if p.get("gdp_growth_avg") is not None:
             gdp[_gdp_reference_key(p.get("term_start_year"))].append(float(p["gdp_growth_avg"]))
         if p.get("jobs_created_millions") is not None and (p.get("term_years") or 0) > 0:
             jobs.append(jobs_per_attributed_year(float(p["jobs_created_millions"]), float(p["term_years"])))
 
-    # A sitting president's approval covers part of a term; the full-term
-    # population is completed presidencies only (the sitting president is
-    # compared with predecessors over the same elapsed time instead,
-    # sitting_window_reference).
-    completed = [p for p in presidents if not p.get("is_current")]
+    # The whole-term population is completed presidencies of at least a full
+    # term. A sitting president's approval covers part of a term, and a
+    # presidency cut short (Kennedy's 1,036 days, Ford's 895) had no time for
+    # the decline later in a term; each is compared with predecessors over
+    # its own number of days instead (window_reference).
+    completed = [
+        p for p in presidents
+        if not p.get("is_current") and (p.get("term_days") or FULL_TERM_DAYS) >= FULL_TERM_DAYS
+    ]
 
     def completed_values(field: str) -> list[float]:
         return [float(p[field]) for p in completed if p.get(field) is not None]
@@ -507,11 +522,24 @@ def compute_president_reference(presidents: list[dict]) -> dict:
         "historical_legacy": _mean_stdev(list(legacy_by_person.values())),
         **{key: _mean_stdev(vals) for key, vals in gdp.items()},
         "jobs_per_year": _mean_stdev(jobs),
-        "rulemaking_finalized_pct": _mean_stdev(
-            values("rulemaking_finalized_pct"), _MIN_REFERENCE_N_OVERRIDES["rulemaking_finalized_pct"],
-        ),
     }
     return {k: v for k, v in stats.items() if v is not None}
+
+
+# A full presidential term (U.S. Const. art. II, sec. 1): four years from
+# noon on January 20, 1,461 days. A presidency shorter than one (a death or
+# resignation, or a successor's remainder) is compared with predecessors over
+# its own number of days, as the sitting president is, rather than with whole
+# terms, and is left out of the whole-term population.
+FULL_TERM_DAYS = 1461
+
+
+def term_days(term_start: str | None, term_end: str | None) -> int | None:
+    """Days from the term's first day to the day after its last (the next
+    term's first), or None for a term that hasn't ended."""
+    if not term_start or not term_end:
+        return None
+    return (date.fromisoformat(term_end) - date.fromisoformat(term_start)).days
 
 
 def approval_window(series: list[tuple[date, float]], days: int | None = None) -> dict | None:
@@ -567,16 +595,17 @@ def fit_trend_on_start(points: list[tuple[float, float]]) -> dict | None:
     }
 
 
-def sitting_window_reference(
+def window_reference(
     current: list[tuple[date, float]], completed: list[list[tuple[date, float]]],
 ) -> dict | None:
-    """The sitting president's comparison population: every completed
-    presidency over the same number of days from its first poll as the
-    sitting president has had. A term's approval falls as it goes on (the
-    completed presidencies averaged 57.5% over their first 598 days and
-    51.9% over their full terms), so comparing part of one term with
-    whole terms flatters whoever is in office. A presidency shorter than
-    the window is left out rather than compared over less time."""
+    """The comparison population for a presidency shorter than a full term
+    (the sitting president, or one cut short by death or resignation):
+    every other completed presidency over the same number of days from its
+    first poll. A term's approval falls as it goes on (the completed
+    presidencies averaged 57.5% over their first 598 days and 51.9% over
+    their full terms), so comparing part of a term with whole terms
+    flatters whoever served the shorter time. A presidency shorter than the
+    window is left out rather than compared over less time."""
     if len(current) < 2:
         return None
     days = (current[-1][0] - current[0][0]).days
@@ -608,6 +637,7 @@ def calc_public_mandate(
     reference: dict | None = None,
     approval_start: float | None = None,
     is_current: bool = False,
+    president_id: str | None = None,
 ) -> int | None:
     """Calculate Public Mandate score from real data only — approval
     polling where it exists, election margin as the pre-polling-era
@@ -615,20 +645,24 @@ def calc_public_mandate(
     president (see _public_mandate_core).
 
     See _public_mandate_core for the full component breakdown — this is a
-    thin wrapper kept for the same reuse contract as calc_effectiveness/
-    calc_agency_alignment.
+    thin wrapper kept for the same reuse contract as calc_effectiveness.
     """
     return _public_mandate_core(
-        avg_approval, approval_trend, election_margin, reference, approval_start, is_current,
+        avg_approval, approval_trend, election_margin, reference, approval_start, is_current, president_id,
     )["score"]
 
 
-def _approval_reference(reference: dict | None, is_current: bool) -> dict:
-    """The approval population a president is compared with: for the
-    sitting president, predecessors over the same elapsed time
-    (sitting_window_reference); otherwise completed presidencies' full
-    terms. Each key falls back to the persisted/bundled reference."""
+def _approval_reference(reference: dict | None, is_current: bool, president_id: str | None = None) -> dict:
+    """The approval population a president is compared with: for a
+    presidency shorter than a full term (the sitting one, or one cut short),
+    predecessors over the same elapsed time (window_reference, measured per
+    presidency into "term_windows"); otherwise completed full-term
+    presidencies. Each key falls back to the persisted/bundled reference
+    ("sitting_window" is the pre-v7 sitting president's block)."""
     persisted = PRESIDENT_REFERENCE.load().get("presidents") or {}
+    windows = (reference or {}).get("term_windows") or persisted.get("term_windows") or {}
+    if president_id and windows.get(president_id):
+        return windows[president_id]
     if is_current:
         window = (reference or {}).get("sitting_window") or persisted.get("sitting_window")
         if window:
@@ -646,6 +680,7 @@ def _public_mandate_core(
     reference: dict | None = None,
     approval_start: float | None = None,
     is_current: bool = False,
+    president_id: str | None = None,
 ) -> dict:
     """Same math as calc_public_mandate, returning every intermediate
     value alongside the final score.
@@ -667,7 +702,7 @@ def _public_mandate_core(
         apply to them, full stop, not "we don't know so it's neutral."
     """
     components: list[dict] = []
-    population = _approval_reference(reference, is_current)
+    population = _approval_reference(reference, is_current, president_id)
     approval_stat = population.get("avg_approval")
     approval = (approval_stat["mean"], approval_stat["stdev"]) if approval_stat else None
     trend_stat = population.get("approval_trend")
@@ -733,7 +768,7 @@ def calc_historical_legacy(
 
     See _historical_legacy_core for the full component breakdown — this
     is a thin wrapper kept for the same reuse contract as
-    calc_effectiveness/calc_agency_alignment/calc_public_mandate.
+    calc_effectiveness/calc_public_mandate.
     """
     return _historical_legacy_core(historical_legacy_score, reference)["score"]
 
@@ -744,10 +779,10 @@ def _historical_legacy_core(
     """Same math as calc_historical_legacy, returning every intermediate
     value alongside the final score.
 
-    Covers what none of this platform's other three president dimensions
+    Covers what neither of this platform's other two president dimensions
     can: crisis leadership, moral authority, vision, and similar
-    historical-consequence judgments that don't reduce to GDP growth,
-    approval polling, or rulemaking (added 2026-07 after review
+    historical-consequence judgments that don't reduce to GDP growth or
+    approval polling (added 2026-07 after review
     found presidents like Lincoln landing in the
     bottom half of the overall ranking — every individual number was
     defensible on its own terms, but nothing in the formula could credit
@@ -797,14 +832,15 @@ def recalculate_president_scores(
     Args:
         president_id: e.g. "obama-44"
         live_data: Dict with keys jobs_created_millions, gdp_growth_avg,
-            term_start_year, rulemaking_finalized_pct,
+            gdp_growth_per_person, gdp_growth_peer_median, gdp_growth_relative,
+            term_start_year,
             avg_approval, approval_trend, election_margin,
             historical_legacy_score — any subset may be present; each
             calc_* function handles its own missing inputs.
 
     Returns:
         Dict with keys score_public_mandate, score_effectiveness,
-        score_agency_alignment, score_historical_legacy — any value may
+        score_historical_legacy — any value may
         be None (that dimension doesn't apply to this president), never
         a hand-set fallback.
     """
@@ -816,6 +852,7 @@ def recalculate_president_scores(
             reference=reference,
             approval_start=live_data.get("approval_start"),
             is_current=bool(live_data.get("is_current")),
+            president_id=president_id,
         ),
         "score_effectiveness": calc_effectiveness(
             jobs_created_millions=live_data.get("jobs_created_millions"),
@@ -823,10 +860,9 @@ def recalculate_president_scores(
             term_years=term_years,
             term_start_year=live_data.get("term_start_year"),
             reference=reference,
-        ),
-        "score_agency_alignment": calc_agency_alignment(
-            rulemaking_finalized_pct=live_data.get("rulemaking_finalized_pct"),
-            reference=reference,
+            gdp_per_person=live_data.get("gdp_growth_per_person"),
+            gdp_peer_median=live_data.get("gdp_growth_peer_median"),
+            gdp_relative=live_data.get("gdp_growth_relative"),
         ),
         "score_historical_legacy": calc_historical_legacy(
             historical_legacy_score=live_data.get("historical_legacy_score"),

@@ -731,24 +731,27 @@ class StateCountSchema(CamelModel):
 class PresidentialScoreSchema(CamelModel):
     # Nullable (2026-07): None means this dimension is genuinely
     # inapplicable for this president (e.g. Public Mandate for one who
-    # never won a presidential election, Agency Alignment before Federal
-    # Register existed) — never a hand-set fallback. See models.py
+    # never won a presidential election) — never a hand-set fallback. See models.py
     # President's comment and president_scorer.py's
     # compute_president_overall_score for the renormalization this drives.
     public_mandate: float | None
     effectiveness: float | None
-    agency_alignment: float | None
     # C-SPAN Presidential Historians Survey, z-scored (2026-07) — None for
     # any currently-serving or just-departed president (survey only rates
     # a completed term; the 2025 cycle was postponed entirely).
     historical_legacy: float | None
     # Backend-computed overall (president_scorer.compute_president_overall_score).
     overall: float = 0.0
-    # How many of the 4 possible dimensions actually have a score (0-4) —
+    # How many of the 3 possible dimensions actually have a score (0-3) —
     # see president_scorer.dimensions_available. A composite built from
     # fewer signals shouldn't be read with the same confidence as one
-    # built from all 4; this lets the UI disclose that plainly.
+    # built from all 3; this lets the UI disclose that plainly.
     dimensions_available: int = 0
+    # Each scored dimension's actual share of `overall`
+    # (president_scorer.president_effective_weights): what the scorecard
+    # shows beside each score, so a president missing a dimension sees the
+    # weights their score was really computed with.
+    effective_weights: dict[str, float] = {}
 
 
 class PresidentSchema(CamelModel):

@@ -9,27 +9,28 @@ components means score=None, never a fabricated or neutral number.
 from datetime import date, timedelta
 from types import SimpleNamespace
 
-import app.config_definitions as config_definitions
+from app.pipeline.analyze import president_scorer
 from app.pipeline.analyze.president_scorer import (
     _public_mandate_core,
     approval_window,
-    calc_agency_alignment,
     calc_effectiveness,
     calc_historical_legacy,
     calc_public_mandate,
     compute_president_overall_score,
     compute_president_reference,
+    FULL_TERM_DAYS,
+    president_effective_weights,
     fit_trend_on_start,
     recalculate_president_scores,
-    sitting_window_reference,
+    term_days,
+    window_reference,
 )
 
 
-def _entity(mandate=None, effectiveness=None, agency=None, legacy=None):
+def _entity(mandate=None, effectiveness=None, legacy=None):
     return SimpleNamespace(
         score_public_mandate=mandate,
         score_effectiveness=effectiveness,
-        score_agency_alignment=agency,
         score_historical_legacy=legacy,
     )
 
@@ -52,12 +53,6 @@ class TestCalcEffectiveness:
             jobs_created_millions=None, gdp_growth_avg=4.5, term_years=4.0,
         )
         assert gdp_only is not None
-
-
-class TestCalcAgencyAlignment:
-    def test_no_data_returns_none(self):
-        score = calc_agency_alignment(rulemaking_finalized_pct=None)
-        assert score is None
 
 
 class TestCalcHistoricalLegacy:
@@ -113,8 +108,7 @@ class TestRecalculatePresidentScores:
             term_years=4.0,
         )
         assert set(result) == {
-            "score_public_mandate", "score_effectiveness",
-            "score_agency_alignment", "score_historical_legacy",
+            "score_public_mandate", "score_effectiveness", "score_historical_legacy",
         }
         assert result["score_effectiveness"] is not None
         assert result["score_public_mandate"] is None
@@ -136,48 +130,56 @@ class TestComputePresidentOverallScoreTiering:
     single mechanical number (e.g. Fillmore's GDP-boom-driven
     Effectiveness=100) can't swamp a real Historical Legacy score."""
 
-    WEIGHTS = {
-        "publicMandate": 0.2167, "effectiveness": 0.2167,
-        "agencyAlignment": 0.2167, "historicalLegacy": 0.35,
-    }
+    WEIGHTS = {"publicMandate": 0.25, "effectiveness": 0.25, "historicalLegacy": 0.5}
 
     def _set_weights(self, monkeypatch):
-        monkeypatch.setattr(config_definitions, "PRESIDENT_SCORE_WEIGHTS", self.WEIGHTS)
+        monkeypatch.setattr(president_scorer, "PRESIDENT_SCORE_WEIGHTS", self.WEIGHTS)
 
-    def test_legacy_held_at_configured_weight_with_two_mechanical_present(self, monkeypatch):
+    def test_legacy_held_at_configured_weight_with_both_mechanical_present(self, monkeypatch):
         self._set_weights(monkeypatch)
         e = _entity(mandate=80.0, effectiveness=60.0, legacy=20.0)
         overall = compute_president_overall_score(e)
-        expected = 0.35 * 20.0 + 0.65 * ((80.0 + 60.0) / 2)
-        assert overall == round(expected, 2)
-
-    def test_legacy_held_at_configured_weight_with_three_mechanical_present(self, monkeypatch):
-        self._set_weights(monkeypatch)
-        e = _entity(mandate=80.0, effectiveness=60.0, agency=40.0, legacy=20.0)
-        overall = compute_president_overall_score(e)
-        expected = 0.35 * 20.0 + 0.65 * ((80.0 + 60.0 + 40.0) / 3)
+        expected = 0.5 * 20.0 + 0.5 * ((80.0 + 60.0) / 2)
         assert overall == round(expected, 2)
 
     def test_single_mechanical_dimension_falls_back_to_flat_renormalization(self, monkeypatch):
         """The Fillmore case: only Effectiveness present alongside Legacy.
-        A flat 35%/65% split would let a single GDP number override a
-        near-bottom historian rating entirely — verify it doesn't."""
+        A fixed half-and-half split would let a single GDP number override
+        a near-bottom historian rating — verify it doesn't."""
         self._set_weights(monkeypatch)
         e = _entity(effectiveness=100.0, legacy=19.0)
         overall = compute_president_overall_score(e)
 
-        total = 0.2167 + 0.35
-        flat_expected = round((0.2167 * 100.0 + 0.35 * 19.0) / total, 2)
-        fixed_tier_would_be = round(0.35 * 19.0 + 0.65 * 100.0, 2)
+        flat_expected = round((0.25 * 100.0 + 0.5 * 19.0) / 0.75, 2)
+        fixed_tier_would_be = round(0.5 * 19.0 + 0.5 * 100.0, 2)
 
         assert overall == flat_expected
         assert overall != fixed_tier_would_be
-        assert overall < 70.0  # nowhere near effectiveness's raw 100
+        assert overall < 50.0  # nowhere near effectiveness's raw 100
 
     def test_legacy_absent_renormalizes_mechanical_only_unaffected(self, monkeypatch):
         self._set_weights(monkeypatch)
         e = _entity(mandate=60.0, effectiveness=40.0)
         assert compute_president_overall_score(e) == 50.0
+
+    def test_the_weights_shown_are_the_ones_the_score_used(self, monkeypatch):
+        """The scorecard shows president_effective_weights beside each score:
+        they sum to 1, cover exactly the scored dimensions, and weigh the
+        scores into the overall."""
+        self._set_weights(monkeypatch)
+        for e in (
+            _entity(mandate=80.0, effectiveness=60.0, legacy=20.0),
+            _entity(effectiveness=100.0, legacy=19.0),
+            _entity(mandate=60.0, effectiveness=40.0),
+        ):
+            weights = president_effective_weights(e)
+            assert abs(sum(weights.values()) - 1) < 1e-9
+            fields = {k: getattr(e, president_scorer._PRESIDENT_SCORE_FIELD_MAP[k]) for k in weights}
+            assert all(v is not None for v in fields.values())
+            assert compute_president_overall_score(e) == round(sum(weights[k] * fields[k] for k in weights), 2)
+        assert president_effective_weights(_entity(effectiveness=100.0, legacy=19.0)) == {
+            "effectiveness": 1 / 3, "historicalLegacy": 2 / 3,
+        }
 
     def test_nothing_present_returns_zero(self):
         assert compute_president_overall_score(_entity()) == 0.0
@@ -236,7 +238,7 @@ def test_the_sitting_president_is_compared_over_the_same_elapsed_time():
     completed = [_series(first, [70 + i, 70 + i, 70 + i, 70 + i, 50, 50, 50, 50, 50, 50]) for i in range(12)]
     completed.append(_series(first, [55, 55]))
     current = _series(date(2025, 1, 20), [45, 45, 45, 45])  # 90 days in
-    window = sitting_window_reference(current, completed)
+    window = window_reference(current, completed)
     assert window["days"] == 90
     # Over their first 90 days predecessors averaged 70-81, not their
     # full-term ~58, and the short presidency is left out.
@@ -267,3 +269,37 @@ def test_the_sitting_president_uses_the_elapsed_window_reference():
     assert sitting["facts"]["approvalMean"] == 57.5
     past = _public_mandate_core(45.0, -5.0, None, reference, approval_start=45.0)
     assert past["facts"]["approvalMean"] == 40.0
+
+
+def test_a_presidency_cut_short_stays_out_of_the_full_term_population():
+    """A presidency shorter than a full term had no time for the decline
+    later in a term; it is compared over its own days instead."""
+    pres = [
+        {"id": f"p{i}", "avg_approval": 50.0 + i, "approval_trend": -10.0 - i, "approval_start": 60.0 + i,
+         "term_days": FULL_TERM_DAYS}
+        for i in range(12)
+    ]
+    pres.append({"id": "short", "avg_approval": 70.0, "approval_trend": 2.0, "approval_start": 75.0, "term_days": 1036})
+    ref = compute_president_reference(pres)
+    assert ref["avg_approval"]["n"] == 12
+    assert ref["approval_trend_fit"]["n"] == 12
+
+
+def test_a_presidency_cut_short_uses_its_own_window():
+    window = {
+        "days": 1000,
+        "avg_approval": {"mean": 62.0, "stdev": 8.0, "n": 12},
+        "approval_trend_fit": fit_trend_on_start(_HISTORY),
+    }
+    reference = {"avg_approval": {"mean": 50.0, "stdev": 8.0, "n": 12}, "term_windows": {"short-35": window}}
+    short = _public_mandate_core(70.0, -2.0, None, reference, approval_start=75.0, president_id="short-35")
+    assert short["facts"]["comparedOverDays"] == 1000
+    assert short["facts"]["approvalMean"] == 62.0
+    other = _public_mandate_core(70.0, -2.0, None, reference, approval_start=75.0, president_id="full-36")
+    assert other["facts"]["approvalMean"] == 50.0
+
+
+def test_term_days_counts_a_full_term_as_1461():
+    assert term_days("2017-01-20", "2021-01-20") == FULL_TERM_DAYS
+    assert term_days("1961-01-20", "1963-11-22") == 1036
+    assert term_days("2025-01-20", None) is None

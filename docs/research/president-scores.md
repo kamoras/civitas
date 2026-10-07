@@ -46,12 +46,7 @@ between administrations mostly reflects oil shocks, productivity and global
 conditions rather than policy. Scoring growth *relative to peer economies*
 would remove the shared component.
 
-**Not built yet, and why.** The pipeline has no live source for other
-countries' GDP. The candidates are the Maddison Project, the World Bank API
-and the OECD API. None could be reached from the environment this work was
-done in, so the pipeline would have been built against a format nobody had
-checked. The limitation is stated on the About page and in the Effectiveness
-docstring instead.
+**Built in president v8**, below.
 
 ## Jobs: absolute, against a measured average
 
@@ -127,3 +122,77 @@ stale figure different from the one scored. The model no longer reads or writes 
   serve only as the pre-first-run fallback, and the first run replaces them.
 - The postwar comparison rests on 9–14 presidencies. That is the whole
   population, and it is small.
+
+## President v7: rulemaking counts were capped; a term cut short
+
+**Agency Alignment removed.** The Federal Register's documents API reports
+`count` as at most 10,000 (final rules over 2009-2017 read 10,000; each year
+alone reads about 3,500 to 3,900, checked 2026-10-06). The two-term
+administrations' final and proposed rule counts were both capped, so each read
+exactly 50% finalized. Counted in full (windows halved until under the cap),
+administrations since 1994 finalized between 59.6% (Obama) and 61.8% (George W.
+Bush), too little difference to score.
+
+**A presidency cut short.** Kennedy (1,036 days) and Ford (895) were compared
+with whole terms, when approval falls as a term goes on. From a start of 76%,
+presidents fell about 30.5 points over a whole term but 16.1 over their first
+1,001 days; Kennedy fell 14. Compared over his own days, his approval trend
+scores 57 rather than 87. Both are left out of the whole-term population.
+
+## President v8: growth relative to peer economies, catch-up set aside
+
+**Sources.** Maddison Project Database 2023 (Bolt & van Zanden 2024; GDP
+per person, 2011 international dollars at purchasing-power parity) for the
+US and the 13 peers, 1946-2022, bundled as
+`backend/app/data/peer_gdp_per_capita.json` by
+`backend/scripts/fetch_peer_gdp.py`; the World Bank's NY.GDP.PCAP.KD
+(constant 2015 US$) carries those levels past 2022. Where both exist the
+two series' annual growth rates agree (r = 0.90, 868 country-years
+1961-2022, mean difference 0.16 points).
+
+**How much is shared.** Over the years Effectiveness credits (the term's
+second year to its last), the peers' median growth per person explains 68%
+of the variance in a postwar term's US growth per person (World Bank,
+1961 on). Counting the first year too: 49%. A window shifted a year either
+way: 54%. The credited window is the one that lines up best.
+
+**Inherited momentum.** Growth in the two years before a term does not
+predict growth during it (r = -0.08 over 43 terms, MeasuringWorth), so
+nothing beyond the year-1 exclusion is carried for the predecessor.
+
+**Catch-up.** Compared raw, US-minus-peers growth rises with a term's
+start year: r = +0.73 over the 13 completed postwar terms (data through
+2025). In the 1950s and 1960s the peers were far below US incomes (median
+log gap -0.47 in 1950, -0.29 in 1990, -0.22 in 2022) and growing fast by
+catching up (Baumol 1986; Barro & Sala-i-Martin 1992). Three ways of
+setting that aside were measured:
+
+| Method | Fitted rate | Era trend r | Problem |
+|---|---|---|---|
+| None (raw) | - | +0.73 | penalizes the 1950s-60s |
+| Each peer-year's growth on its own gap, pooled | -3.3 to -5.3 by sample | +0.34 | rate unstable; over-credits every recent term |
+| Each term's peers regressed on their gaps | per term | -0.42 | follows noise: shared variance with US growth falls from 0.49 to 0.02 |
+| Each year's US-minus-peer-median on the peers' median gap, least squares | 5.6 to 10.2 by first year 1947-1955 | -0.06 to +0.26 | one reconstruction year swings it |
+| Same, Theil-Sen (median of pairwise slopes; Sen 1968) | 7.1 to 9.9 | -0.03 to +0.17 | chosen |
+
+(Era trends in the table are Maddison data through 2022, where Biden's term
+has one year.) The pipeline fits the Theil-Sen rate every run over every
+year since 1947 (8.9 in October 2026). With data through 2025 the adjusted
+figure's era trend is +0.41, all of it from the terms since 2017, when US
+growth per person ran 0.9 to 1.1 points a year ahead of the peers'; that is
+an outcome, not something the adjustment introduced.
+
+**Party.** Democratic minus Republican: total growth +0.92 points a year,
+growth per person +0.98, relative to peers raw +0.56, adjusted +0.56
+(13 completed postwar terms, data through 2025).
+
+**Effect on Effectiveness (October 2026 data, DB copy).** Eisenhower 36 to
+18, Kennedy 69 to 48, Johnson 87 to 76, Nixon 45 to 26, Ford 62 to 59,
+Carter 50 to 58, Reagan 69 to 70, George H. W. Bush 21 to 31, Clinton 73
+to 55, George W. Bush 20 to 28, Obama 44 to 49, Trump (first term) 20 to
+45, Biden 53 to 83. Prewar presidents are unchanged.
+
+**Limits.** The adjustment removes shocks the peers shared and their
+catch-up, not shocks that hit the US alone. Jobs (40% of Effectiveness)
+are still US payroll jobs per year, with no peer comparison.
+

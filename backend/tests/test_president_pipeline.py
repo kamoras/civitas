@@ -94,7 +94,7 @@ class TestRecordPresidentSnapshots:
     def test_maps_dimensions_to_score_slots_correctly(self, db_session):
         db_session.add(_make_president(
             score_public_mandate=60.0, score_effectiveness=55.0,
-            score_agency_alignment=65.0,
+            score_agency_alignment=65.0,  # left by a pre-v7 run: not snapshotted
         ))
         db_session.commit()
 
@@ -106,7 +106,7 @@ class TestRecordPresidentSnapshots:
         assert snap.score_1 == 60.0  # publicMandate
         assert snap.score_2 == 55.0  # effectiveness
         assert snap.score_3 == 0.0  # competence, retired 2026-07 — always 0.0 now
-        assert snap.score_4 == 65.0  # agencyAlignment
+        assert snap.score_4 == 0.0  # agencyAlignment, removed in president v7 — always 0.0 now
         # Pin the exact version, not just non-null: trend charts key formula-
         # change markers off this string, so a wrong stamp (e.g. the senator
         # ALGORITHM_VERSION copy-pasted in) must fail here.
@@ -144,7 +144,7 @@ class TestRecordPresidentSnapshots:
 
 
 def _patch_fetchers(
-    eo_data=None, rulemaking_data=None, gdp_by_year=None, jobs=None,
+    eo_data=None, gdp_by_year=None, jobs=None,
     approval_polls=None, election_margin_data=None, historical_legacy_data=None,
 ):
     """Patches every live-data fetch president_pipeline.run_president_
@@ -153,7 +153,6 @@ def _patch_fetchers(
     return [
         patch("app.pipeline.president_pipeline.fetch_historical_eo_counts", new=AsyncMock(return_value=eo_data or {})),
         patch("app.pipeline.president_pipeline.fetch_presidential_roster", new=AsyncMock(return_value=[])),
-        patch("app.pipeline.president_pipeline.fetch_all_rulemaking_stats", new=AsyncMock(return_value=rulemaking_data or {})),
         patch("app.pipeline.president_pipeline.fetch_historical_real_gdp", new=AsyncMock(return_value=gdp_by_year or {})),
         patch("app.pipeline.president_pipeline.fetch_jobs_for_president", new=AsyncMock(return_value=jobs)),
         patch("app.pipeline.president_pipeline.fetch_president_approval_history", new=AsyncMock(return_value=approval_polls or [])),
@@ -204,15 +203,16 @@ class TestRunPresidentPipelineFetchFailureFallback:
         assert updated.score_public_mandate == calc_public_mandate(55.0, 3.0, None)
 
     @pytest.mark.asyncio
-    async def test_rulemaking_fetch_failure_keeps_stored_agency_alignment(self, db_session):
+    async def test_a_stored_agency_alignment_is_cleared(self, db_session):
+        """Agency Alignment was removed in president v7; a score a previous
+        run stored is cleared rather than left to look current."""
         db_session.add(President(
             id="test-agency", name="Test President", party="D", number=90,
-            term_start="2001-01-20", term_end="2005-01-20",
-            rulemaking_count=1200, rulemaking_finalized_pct=75.0,
+            term_start="2001-01-20", term_end="2005-01-20", score_agency_alignment=70.0,
         ))
         db_session.commit()
 
-        patches = _patch_fetchers(rulemaking_data={})  # this run's Federal Register fetch: total failure
+        patches = _patch_fetchers()
         for p in patches:
             p.start()
         try:
@@ -222,5 +222,4 @@ class TestRunPresidentPipelineFetchFailureFallback:
                 p.stop()
 
         updated = db_session.query(President).filter(President.id == "test-agency").first()
-        assert updated.rulemaking_count == 1200
-        assert updated.score_agency_alignment is not None
+        assert updated.score_agency_alignment is None

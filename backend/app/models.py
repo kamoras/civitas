@@ -719,6 +719,8 @@ class President(Base):
     # completed yet — never as a stand-in for a real number.
     score_public_mandate: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_effectiveness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Agency Alignment, removed in president v7: no longer scored and
+    # cleared each run; dropped in a later release (migrations/README.md).
     score_agency_alignment: Mapped[float | None] = mapped_column(Float, nullable=True)
     # NULL for any currently-serving or just-departed president — C-SPAN's
     # Presidential Historians Survey only rates a completed term, and its
@@ -733,16 +735,25 @@ class President(Base):
     # presidents who never won a presidential election in their own right.
     election_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
     gdp_growth_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Average annual real GDP growth per person over the years Effectiveness
+    # credits, the 13 peer economies' median over the same years, and US
+    # minus peers with the peers' catch-up growth set aside
+    # (app.pipeline.fetch.peer_gdp.peer_relative_growth) — what a postwar
+    # term's GDP component scores since president v8. NULL before 1947 (no
+    # peer series covers those terms) and until the first run that fetches
+    # them.
+    gdp_growth_per_person: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gdp_growth_peer_median: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gdp_growth_relative: Mapped[float | None] = mapped_column(Float, nullable=True)
     jobs_created_millions: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Informational only (2026-07): no longer a scoring input — Competence
     # (the dimension EO count used to feed) was removed entirely, see
     # PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py. Still
     # shown on a president's profile as a raw stat.
     eo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Persisted so the on-demand score-breakdown endpoint can recompute
-    # calc_agency_alignment's exact input without a live re-fetch from the
-    # Federal Register. rulemaking_count is informational since president
-    # v5 (volume is no longer scored — see _agency_alignment_core).
+    # Agency Alignment's inputs (Federal Register rulemaking counts), no
+    # longer fetched or read since president v7; dropped in a later release
+    # (migrations/README.md).
     rulemaking_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rulemaking_finalized_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Last-quartile-minus-first-quartile average approval across the term
