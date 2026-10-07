@@ -807,6 +807,7 @@ def test_an_empty_first_name_matches_nobody():
     """A blank first name on both sides is no evidence of the same person."""
     from app.pipeline.transform.normalize_votes import first_name_matches
     assert first_name_matches("", {1: "", 2: "Rob"}) == []
+    assert first_name_matches("  ", {1: "  ", 2: "Rob"}) == []
     assert first_name_matches("Rob", {1: "", 2: "Rob"}) == [2]
 
 
