@@ -1305,10 +1305,11 @@ rule's means reclassifies 0 of 2,351 Senate and 0 of 6,055 House breaks
   flank rule's switch can't be measured at all: only 3 pairs have the
   rule's shape. Reading a party switcher on their record since the switch
   rests on 8 people, and the record since the switch is nearer the next
-  full record than the longer one by 0.050 in mean squared gap (standard
-  error 0.032, about one and a half standard errors, computed from
-  `switcher_test`). Rerunning the calibration adds each Congress's new
-  pairs, and decides the structure and the switch again.
+  full record than the longer one by 0.050 in mean squared gap, counting
+  each person once (standard error 0.032, about one and a half standard
+  errors, computed from `switcher_test`). Rerunning the calibration adds
+  each Congress's new pairs, and decides the structure and the switch
+  again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight
