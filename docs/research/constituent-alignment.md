@@ -730,7 +730,7 @@ in a fixed order, 1,000 times.
   |---|---|---|
   | **once for both chambers (shipped)** | **1.320** | |
   | once per chamber | 1.359 | 0.038 higher, within the noise (standard error 0.040) |
-  | the latest era's, since the 110th | 1.254 | 0.066 better (0.034) |
+  | the latest era's, since the 110th | 1.254 | 0.066 lower, under two standard errors (0.034) |
   | the last six transitions | 1.243 | 0.078 better (0.036) |
   | a time trend (reported only) | 1.251 | 0.069 lower, within the noise (0.089) |
 
@@ -761,10 +761,11 @@ in a fixed order, 1,000 times.
     (`last_three`; the window's, 0.014 with 0.012).
   - **Members.** One member supplies 44% of the era curve's gain
     (`most_helped_share`; 36% of the window's). Left out of the comparison
-    (fits unchanged), the one, two and three members it helps most leave its
-    error lower by 0.037, 0.031 and 0.026 (standard errors 0.017, 0.016,
-    0.016); left out of the data and refitted, by 0.180, 0.180 and 0.151
-    (0.077, 0.078, 0.072). The sign holds; the size doesn't.
+    (fits unchanged), the one, two and three members it helps most leave
+    its error lower by 0.037, 0.031 and 0.026 (standard errors 0.017,
+    0.016, 0.016; the last two under two standard errors); left out of the
+    data and refitted, by 0.180, 0.180 and 0.151 (0.077, 0.078, 0.072).
+    The sign holds; the size doesn't.
   - **The split and the width, chosen as a forecast must.** The 110th and
     the six are conventions. Chosen instead at each transition from the
     forward errors of the transitions before it (`data_chosen_test`,

@@ -432,8 +432,9 @@ def test_the_frontend_quotes_the_shipped_figures():
     forward = data["forward_test"]
     era = forward["era"]
     last = era["last_three"]
-    assert f"beats one curve by {abs(era['above']):.3f} (standard error of the paired difference " \
-           f"{era['standard_error']:.3f};" in agents
+    assert abs(era["above"]) < 2 * era["standard_error"]  # "under two standard errors"
+    assert f"has lower error than one curve by {abs(era['above']):.3f} (standard error of the paired " \
+           f"difference {era['standard_error']:.3f}, under two standard errors;" in agents
     assert f"the best's own standard error ({forward['best_standard_error']:.3f})" in agents
     assert round(abs(era["above"]) / era["standard_error"]) == 2
     assert round(abs(last["above"]) / last["standard_error"]) == 1
