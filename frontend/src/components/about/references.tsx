@@ -25,6 +25,16 @@ export const REFERENCES = {
       </>
     ),
   },
+  ansolabehere2022: {
+    short: "Ansolabehere & Kuriwaki 2022",
+    entry: (
+      <>
+        Ansolabehere, S. &amp; Kuriwaki, S. (2022). Congressional Representation: Accountability
+        from the Constituent&apos;s Perspective. <J>American Journal of Political Science</J>,
+        66(1), 123–139.
+      </>
+    ),
+  },
   bafumi2010: {
     short: "Bafumi & Herron 2010",
     entry: (

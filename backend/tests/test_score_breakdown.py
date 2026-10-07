@@ -82,7 +82,9 @@ class TestSenatorCoreConsistency:
         args = (voting_record, [], self.FUNDING, "CA", "D")
         breakdown = _constituent_alignment_core(*args)
         assert breakdown["score"] == _calc_constituent_alignment(*args)
-        assert len(breakdown["components"]) == 1
+        # A senator with no survey rating also lists the approval part, not
+        # measured (v6.29); only the vote part is scored.
+        assert [c["label"] for c in breakdown["components"] if c["weight"]] == ["Seat-relative vote alignment"]
 
     def test_funding_diversity_core_matches_calc(self):
         funding = {

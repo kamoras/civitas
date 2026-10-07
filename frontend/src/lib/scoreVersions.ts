@@ -32,6 +32,19 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.29",
+    date: "2026-10-07",
+    title: "Senators: how the other party's voters and independents in the state rate them",
+    tldr: "A senator's Constituent Alignment now also reflects how the state's voters from the other party and independents rate them in the Cooperative Election Study, compared with a typical senator of the same party. It moves the score up or down as much as the position part can. House members are not scored on it: a district has too few respondents for one member's figure to be reliable.",
+    changes: [
+      "Why these two groups: constituents' approval follows how their member actually votes, most among the other party and independents, while the member's own party rates mostly by party (Ansolabehere & Kuriwaki 2022). Each group's figure is compared with the typical senator of the same party and corrected for the state's lean.",
+      "Tested before use. The same senator's figure in the 2022 and 2024 surveys, from different respondents, correlates 0.55 to 0.59. Measured before each election, it predicted how far senators ran ahead of their party's presidential vote in 2022 and 2024 beyond the vote and position parts: +0.77 points per standard deviation (95% CI +0.22 to +1.52, 45 senators), against +1.27 for position, too close to tell apart, so it gets the same weight. It overlaps the existing score little (r = 0.12).",
+      "The House: the same member's 2022 and 2024 figures correlate 0.09 to 0.24, so most of an individual House reading is sampling noise; it stays on the scorecard as context, unscored.",
+      "It is added around the typical senator rather than given a share of the score: a share would have pulled every rated senator toward 50 and scored them about 8 points below an unrated senator or a House member. A senator first seated after the survey is treated as typical.",
+      "Effect on October 2026 data: among the 82 rated senators Constituent Alignment moves 5.4 points on average (between -15 and +15), with no change on average; the 18 unrated senators and every House member are unchanged. docs/methodology/member-score/v6.29.md has the measurements.",
+    ],
+  },
+  {
     version: "v6.28",
     date: "2026-10-07",
     title: "House procedural votes no longer count as party loyalty anywhere",

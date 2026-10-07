@@ -196,7 +196,9 @@ export default function ScoresChapter() {
           Checks whether a member votes the way their seat elected them to, by comparing them with
           members of their own party in seats that lean the same way. Breaking with the party about
           as often as those members do scores highest. It is 70% how often they break and 30% where
-          their overall voting record sits.
+          their overall voting record sits. For a senator, how the state&apos;s voters from the
+          other party and independents rate them then moves the score up or down as much as the
+          position part can.
         </P>
         <Sub title="How often they break with their party">
           <Steps>
@@ -308,6 +310,29 @@ export default function ScoresChapter() {
             Both parts come from roll calls (a crossing rate and a position), so every pipeline run
             checks that they still measure different things by how closely they move together across
             each chamber. <SignalOverlapReading pair="constituent" />
+          </P>
+        </Sub>
+        <Sub title="What their constituents say (senators)">
+          <P>
+            Each respondent in the Cooperative Election Study, a national survey of about 60,000
+            people, rates their own senators. A senator&apos;s rating among the state&apos;s voters
+            of the other party and among independents is compared with what a typical senator of the
+            same party gets from those groups, allowing for how the state leans. Those two groups
+            are used because their approval follows how a member actually votes, while the
+            member&apos;s own party mostly rates by party <Cite id="ansolabehere2022" />.
+          </P>
+          <P>
+            We checked it before using it. The same senator&apos;s figure in the 2022 and 2024
+            surveys, from different respondents, agrees closely (a correlation of 0.55 to 0.59).
+            Senators the other side rated well ran further ahead of their party at the ballot box,
+            beyond what the other two parts explain, and about as strongly as the position part
+            does, so it moves the score as much as that part can: up for a senator the other side
+            rates better than typical, down for one it rates worse, and not at all for a typical
+            one. It is scored for senators only: a House district has a few dozen respondents, and
+            the same member&apos;s figure from one survey to the next barely agrees (0.09 to 0.24),
+            so most of it is noise. A senator first seated after the survey has no rating and is
+            treated as typical, so nothing is added or taken away. The survey runs every two years;
+            the current one was taken in October and November 2024.
           </P>
         </Sub>
         <Sub title="What 0 and 100 mean">

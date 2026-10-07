@@ -49,6 +49,8 @@ def _member_dict(row, votes: list[dict], chamber: str) -> dict:
         "party": row.party or "I",
         "district": row.district if chamber == "house" else None,
         "bioguideId": row.bioguide_id,
+        "name": row.name or "",
+        "yearsInOffice": row.years_in_office or 0,
         "votingRecord": {
             "keyVotes": votes,
             "recentVotes": [],
@@ -127,6 +129,7 @@ def rescore_stale_constituent_alignment(
                 core = _constituent_alignment_core(
                     m["votingRecord"], [], {}, m["state"], m["party"],
                     district=m["district"], bioguide_id=m["bioguideId"], reference=reference,
+                    name=m["name"], years_in_office=m["yearsInOffice"],
                 )
                 row.score_constituent_alignment = core["score"]
                 try:
