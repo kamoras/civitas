@@ -500,32 +500,42 @@ export default function ScoresChapter() {
           </P>
           <P>
             Partisan depth (how strongly a member leans within each policy area) comes mainly from
-            their votes. The ideology score only steadies it for members with few votes, fading to
-            no weight at 15. The label (deep, moderate or centrist) is the member&apos;s third
-            within their own party, or &ldquo;cross-cutting&rdquo; when more than 30% of their
-            positions sit with the other party, so a fixed cut-off can&apos;t make one party look
-            more extreme just because the two parties sit on different ranges. The one-line
-            description on a profile (say, &ldquo;Progressive Democrat leader&rdquo;) combines
-            ideology, party and a leadership tier.
+            their votes: a Yea counts toward the party whose positions the bill matches in that
+            area, a Nay toward the other party (see{" "}
+            <A href="#party-labels">how a bill gets a party label</A>
+            ). The lean bar runs from every counted vote going the Democrats&apos; way to every one
+            going the Republicans&apos; way. The ideology score only steadies it for members with
+            few votes, fading to no weight at 15. The label (deeply or moderately partisan, or
+            centrist) is the member&apos;s third within their own party, so a fixed cut-off
+            can&apos;t make one party look more extreme just because the two parties sit on
+            different ranges. It reads &ldquo;cross-cutting&rdquo; instead when the areas where they
+            side with the other party make up more than 30% of their areas, each area counted by how
+            strongly it leans. The one-line description on a profile (say, &ldquo;Progressive
+            Democrat leader&rdquo;) combines ideology, party and a leadership tier.
           </P>
         </Sub>
       </Section>
 
       <Section id="party-labels" title="How a bill gets a party label">
         <P>
-          A bill&apos;s partisan lean comes from how the parties actually voted on it whenever there
-          was a roll call. &ldquo;Did this member break with their party&rdquo; is defined by the
-          parties&apos; real split, so a bill that reads partisan but passed with both parties&apos;
-          majorities is not a party-line vote.
+          Whether a member broke with their party on a vote is defined only by how the parties
+          actually voted on that roll call, so a bill that reads partisan but passed with both
+          parties&apos; majorities is not a party-line vote, and no break is counted without a roll
+          call. The party badge on a member&apos;s sponsored bill is how the parties voted on the
+          roll call Civitas tracks for it (R, D or bipartisan) when it is one of the key bills
+          Civitas follows, unless that roll call was housekeeping (a motion to table or recommit,
+          say); otherwise it comes from the bill&apos;s content.
         </P>
         <P>
-          Only where no roll call exists does the bill&apos;s content decide: for the policy-area
-          breakdown of partisan depth, never for a break. The bill is compared with each
-          party&apos;s platform positions in that policy area
+          The bill&apos;s content decides partisan depth (the lean bar and its policy-area
+          breakdown), and never a break. For it, each bill a member voted on is compared with each
+          party&apos;s positions in that policy area
           <Cite id="manning2008" />, with its direction (does it strengthen or roll back?)
           separating cases where both parties have positions on the same topic
-          <Cite id="laver2000" />. Bills sponsored by one party&apos;s members refine those
-          positions over time
+          <Cite id="laver2000" />. Each party&apos;s position in an area starts from its platform
+          and is refined over time by the bills earlier runs labelled for that party (by the roll
+          call&apos;s split where there was one, by content otherwise, never from a housekeeping
+          motion)
           <Cite id="yarowsky1995" />.
         </P>
         <More label="Why votes win over content">
@@ -536,8 +546,8 @@ export default function ScoresChapter() {
             <Cite id="snyder2000" />, which is why content analysis was once the primary signal. A
             2026-06 audit found that choice marked members as voting &ldquo;against their
             party&rdquo; on bills nearly everyone supported, pinning every House member&apos;s score
-            near 87–89. The question this label answers is whether a member broke with their party,
-            and only the roll call can say that.
+            near 87–89. Party loyalty asks whether a member broke with their party, and only the
+            roll call can say that.
           </P>
         </More>
       </Section>

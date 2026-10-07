@@ -512,8 +512,8 @@ their party" is defined by the parties' real split: a bill whose content
 reads partisan but passed with both party majorities must not count as a
 party-line vote. (Content used to win over a bipartisan split; a 2026-06
 audit found that pinned every House member's score near 87–89.) Content
-alignment still drives bills with no roll call and the per-area partisan
-depth breakdown.
+alignment still drives bills with no roll call and partisan depth (the lean and
+its per-area breakdown), housekeeping motions aside.
 
 One procedural exception, read from the chamber's own result field and
 never from vote counts: a **majority leader's** Nay on a motion the chamber

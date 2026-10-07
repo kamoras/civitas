@@ -15,6 +15,19 @@ const DEPTH_STYLES = {
   "cross-cutting": { text: "text-signal-cyan", label: "CROSS-CUTTING" },
 };
 
+// The spectrum bar's ends. A member's vote lean is the mean over policy areas
+// of (R-aligned - D-aligned) / counted Yea and Nay votes, each vote's side
+// taken from how its bill compares with each party's positions in that area (party_platform.py
+// _alignments_from_votes), so it lies within +/-1: an end would mean every
+// counted vote went the way of one party's positions in every area. That is
+// the measure's own bound, not a calibration. (A member with few votes is
+// blended toward a cosponsorship prior, an extrapolated line that could in
+// principle pass +/-1; the bar draws that at the end.) The bar used to divide
+// by 0.15, the saturation point of the embedding margins campaign promises
+// were once scored on, which pinned most members at an end once leans moved
+// to the vote scale (leans observed in 2026-07 ran from -0.30 to +0.43).
+const LEAN_EXTENT = 1;
+
 function PolicyLabel({ area }: { area: string }) {
   const label = usePolicyLabel(area);
   return <>{label}</>;
@@ -28,7 +41,7 @@ function PartisanDepthPanel({
   senatorParty: string;
 }) {
   const depthStyle = DEPTH_STYLES[depth.depth];
-  const leanPct = Math.min((Math.abs(depth.overallLean) / 0.15) * 100, 100);
+  const leanPct = Math.min((Math.abs(depth.overallLean) / LEAN_EXTENT) * 100, 100);
   const leanDirection = depth.overallLean > 0 ? "R" : depth.overallLean < 0 ? "D" : "center";
 
   const matchesParty = depth.overallParty === senatorParty;
@@ -39,7 +52,7 @@ function PartisanDepthPanel({
       <div className="flex items-baseline justify-between mb-3">
         <h4 className="text-sm font-mono text-signal-cyan">
           {">"}{" "}
-          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's platform positions. Based on what they voted for, not what they say.">
+          <MetricTooltip text="Measures how partisan this member's actual votes are. Analyzes roll-call votes on bills and compares them against each party's positions. Based on what they voted for, not what they say. The bar's ends are the limits of the measure: the left end would mean every counted vote went the way of the Democrats' positions in every policy area, the right end the Republicans'. The label above the bar (deeply or moderately partisan, or centrist) ranks this member within their own party, so a short bar can still be among the most partisan in it. Cross-cutting means the areas where they side with the other party make up more than 30% of their areas, each area counted by how strongly it leans.">
             PARTISAN DEPTH ANALYSIS
           </MetricTooltip>
         </h4>
@@ -66,14 +79,12 @@ function PartisanDepthPanel({
               width: `${leanPct / 2}%`,
             }}
           />
-          {/* Clamped to the track like the fill: a lean past the scale
-              (measured leans reach +0.43) put the marker beyond the bar,
-              where the panel's overflow:hidden cut it off. The 2px inset
-              keeps the 4px marker inside the track at either end. */}
+          {/* The 2px inset keeps the 4px marker inside the track at either
+              end; the clamp also guards a lean outside +/-1. */}
           <div
             className="absolute top-0 bottom-0 w-1 bg-phos"
             style={{
-              left: `clamp(2px, ${50 + (depth.overallLean / 0.15) * 50}%, calc(100% - 2px))`,
+              left: `clamp(2px, ${50 + (depth.overallLean / LEAN_EXTENT) * 50}%, calc(100% - 2px))`,
               transform: "translateX(-50%)",
             }}
           />
@@ -89,7 +100,7 @@ function PartisanDepthPanel({
             {depth.overallParty === "centrist" ? "CTR" : depth.overallParty}
           </div>
           <div className="[&>span]:justify-center text-xs text-ink-min">
-            <MetricTooltip text="Overall ideological direction derived from roll-call votes. R = votes lean Republican, D = votes lean Democrat, CTR = centrist.">
+            <MetricTooltip text="Overall ideological direction derived from roll-call votes. R = votes lean Republican, D = votes lean Democrat, CTR = at the center (within 0.02).">
               LEAN
             </MetricTooltip>
           </div>
@@ -109,7 +120,7 @@ function PartisanDepthPanel({
             {depth.crossPartyCount}
           </div>
           <div className="[&>span]:justify-center text-xs text-ink-min">
-            <MetricTooltip text="Number of policy areas where this member's votes align with the opposite party's platform. Higher = more ideologically independent.">
+            <MetricTooltip text="Number of policy areas where this member's votes align with the opposite party's positions. Higher = more ideologically independent.">
               CROSS
             </MetricTooltip>
           </div>
@@ -137,6 +148,10 @@ function PartisanDepthPanel({
                 with {senatorParty === "R" ? "Republican" : "Democratic"} positions.
               </span>
             )
+          ) : depth.overallParty === "centrist" ? (
+            // |lean| < 0.02 (party_platform._label): neither party's way,
+            // which the else branch below used to call Democratic.
+            <span>Voting record sits at the center overall.</span>
           ) : (
             <span>
               Despite being {senatorParty === "R" ? "Republican" : "Democrat"}, voting record leans{" "}
