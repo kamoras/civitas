@@ -808,13 +808,13 @@ in a fixed order, 1,000 times.
   So the evidence suggests recent thin records say less than one curve
   credits, without settling how much less: the half point is 36 for one
   curve (21–77, `interval_90`), 46 for the era curve, 58 for the width the
-  data would choose, and 98, the grid's end, both for the split it would
-  choose (the 113th, `era_split_test`) and for the last six transitions.
-  The rule was adopted in review, after earlier rules had been run and
-  seen: two that left one member out (below); then the best of the
-  structures beating one curve by more than the paired standard error
-  (`best_beating_one_curve`), which would ship the window, at the end of
-  the n0 grid; then the rule's paired form, the simplest whose
+  data would choose, and 98, the grid's end, both for the split the data
+  would choose (the 113th, `era_split_test`) and for the last six
+  transitions. The rule was adopted in review, after earlier rules had
+  been run and seen: two that left one member out (below); then the best
+  of the structures beating one curve by more than the paired standard
+  error (`best_beating_one_curve`), which would ship the window, at the
+  end of the n0 grid; then the rule's paired form, the simplest whose
   member-by-member difference from the best is within that difference's
   standard error (`paired_rule`), which ships the era curve at the 110th
   (within the bar by under 0.001, computed) but the window at 9 of the 15
@@ -1304,10 +1304,10 @@ rule's means reclassifies 0 of 2,351 Senate and 0 of 6,055 House breaks
   flank rule's switch can't be measured at all: only 3 pairs have the
   rule's shape. Reading a party switcher on their record since the switch
   rests on 8 people, and the record since the switch is nearer the next
-  full record than the longer one by 0.050 (standard error 0.032, about
-  one and a half standard errors, computed from `switcher_test`).
-  Rerunning the calibration adds each Congress's new pairs, and decides
-  the structure and the switch again.
+  full record than the longer one by 0.050 in mean squared gap (standard
+  error 0.032, about one and a half standard errors, computed from
+  `switcher_test`). Rerunning the calibration adds each Congress's new
+  pairs, and decides the structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight

@@ -811,12 +811,11 @@ def test_an_empty_first_name_matches_nobody():
     assert first_name_matches("Rob", {1: "", 2: "Rob"}) == [2]
 
 
-def test_a_blank_first_name_never_ties_a_voter_to_a_departed_senator(db_session, monkeypatch):
+def test_a_blank_first_name_never_ties_a_voter_to_a_departed_senator(db_session):
     """A stored departed senator whose name has no first word, and a voter
     under their surname with no first name: no first name on either side is
     no evidence they are one person, so nobody is added."""
     from app.models import Senator
-    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": {"bio-X": 0.0}})
     db_session.add(Senator(id="S-X", bioguide_id="bio-X", name=" Lastg", state="SC", party="R", is_current=False))
     rc = RollCall(chamber="senate", congress=119, session=2, number=46, date="2026-03-01", question="On Passage",
                   bill_id="S.46")

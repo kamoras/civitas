@@ -439,8 +439,8 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert round(abs(era["above"]) / era["standard_error"]) == 2
     assert round(abs(last["above"]) / last["standard_error"]) == 1
     assert "over the last three transitions alone about one standard error" in agents
-    assert "by about two standard errors of the paired difference, about one over the last three " \
-           "transitions alone" in readme
+    assert "by about two standard errors of the paired difference (the era curve's under two, the " \
+           "window's just over), about one over the last three transitions alone" in readme
     # ... and the flank rule's switch and where a full record starts.
     assert f"(`app/data/position_confidence.json`: {switch}, a full record)" in agents
     assert f"(`prior_until_votes`, {switch} votes, a convention)" in readme
