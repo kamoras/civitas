@@ -624,16 +624,17 @@ point, t, and the R² the score adds:
 | drew a primary challenger, per 10 points (N=3,869) | 0.004 (1.2), 0.0006 | 0.005 (1.3), 0.0008 | −0.003 (−1.1), 0.0005 | −0.004 (−1.4), 0.0008 |
 
 - **Shape: kept.** The linear shape predicts the general election in both
-  chambers. The peaked shape predicts nothing there. The Senate replicates
-  section 3's symmetry (flank-ward −0.86, t=−1.4; center-ward −1.23,
-  t=−1.8; equal slopes p=0.73), so sitting nearer the seat's center earns
-  credit rather than costing it. Primary voters lean weakly the other way
-  (peaked t=1.4), not significantly, so unlike the vote part (section
-  10) there is no own-party signal strong enough to pull the shape over. A
-  median member scoring about 50 here is the scale working as tested: 50
-  means "where a same-party member of this seat sits". One caution: peaked
-  versus linear is close to folded versus signed extremity, and each side's
-  slope alone is not significant.
+  chambers. The peaked shape predicts nothing there. The Senate is
+  consistent with section 3's symmetry (flank-ward −0.86, t=−1.4;
+  center-ward −1.23, t=−1.8; equal slopes p=0.73; neither slope
+  significant alone), so sitting nearer the seat's center goes with more
+  vote share, not less (an association). Primary voters lean weakly the
+  other way (peaked t=1.4), not significantly, so unlike the vote part
+  (section 10) there is no own-party signal strong enough to pull the
+  shape over. A median member scoring about 50 here is the scale working
+  as tested: 50 means "where a same-party member of this seat sits". One
+  caution: peaked versus linear is close to folded versus signed
+  extremity, and each side's slope alone is not significant.
 - **Scale: kept, as not settled.** Pooled and per-party scales predict
   equally well. The direct test asks whether voters respond to a NOMINATE
   unit of extremity (pooled) or to a unit of the member's own party's spread
