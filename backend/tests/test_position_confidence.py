@@ -432,14 +432,18 @@ def test_the_frontend_quotes_the_shipped_figures():
     forward = data["forward_test"]
     era = forward["era"]
     last = era["last_three"]
-    assert f"beats one curve by {abs(era['above']):.3f} (standard error of the paired difference " \
-           f"{era['standard_error']:.3f};" in agents
+    assert abs(era["above"]) < 2 * era["standard_error"]  # "under two standard errors"
+    assert f"has lower error than one curve by {abs(era['above']):.3f} (standard error of the paired " \
+           f"difference {era['standard_error']:.3f}, under two standard errors;" in agents
     assert f"the best's own standard error ({forward['best_standard_error']:.3f})" in agents
     assert round(abs(era["above"]) / era["standard_error"]) == 2
     assert round(abs(last["above"]) / last["standard_error"]) == 1
     assert "over the last three transitions alone about one standard error" in agents
-    assert "by about two standard errors of the paired difference, about one over the last three " \
-           "transitions alone" in readme
+    assert "by about two standard errors of the paired difference (just under two), about one over the " \
+           "last three transitions alone" in readme
+    window = forward["window"]
+    assert 2 <= abs(window["above"]) / window["standard_error"] < 2.5  # "the window's just over"
+    assert "a window of the last six transitions about as much (just over two)" in readme
     # ... and the flank rule's switch and where a full record starts.
     assert f"(`app/data/position_confidence.json`: {switch}, a full record)" in agents
     assert f"(`prior_until_votes`, {switch} votes, a convention)" in readme
@@ -765,8 +769,9 @@ def test_shipped_file_reports_what_the_docs_cite():
     # The docs say the rule wouldn't choose the trend over every transition.
     assert trend["above"] >= -trend["standard_error"]
     # The research note and v6.27 quote the trend from the first transition
-    # its forward fits are all inside the grids, and say it predicts worse
-    # than one curve before that.
+    # its forward fits are all inside the grids; the note says its error is
+    # higher than one curve's before that (the summed gain is positive; the
+    # standard error it quotes is computed from per-member errors, not stored).
     inside = trend["inside_grids"]
     start = inside["from"]
     assert sum(v for t, v in trend["gain_by_transition"].items() if int(t) < start) > 0
@@ -778,12 +783,39 @@ def test_shipped_file_reports_what_the_docs_cite():
 
         def quoted(d):
             return f"{abs(d['above']):.3f} (standard error {d['standard_error']:.3f})"
+        def under_two(d):
+            # The docs call these under two standard errors; keep them so.
+            assert abs(d["above"]) < 2 * d["standard_error"]
+            return f"{abs(d['above']):.3f} (standard error {d['standard_error']:.3f}, under two standard errors)"
         era, one = inside["against_era"], inside["against_one_curve"]
-        overall = f"{abs(trend['above']):.3f} better than one curve (standard error {trend['standard_error']:.3f})"
+        assert abs(trend["above"]) < 2 * trend["standard_error"]  # "within the noise"
+        overall = (f"{abs(trend['above']):.3f} lower error than one curve, within the noise "
+                   f"(standard error {trend['standard_error']:.3f})")
         assert f"through the {ordinal(start - 1)}" in note and f"from the {ordinal(start)}" in note
-        assert quoted(one) in note and f"{abs(era['above']):.3f} ({era['standard_error']:.3f})" in note
-        assert quoted(era) in note and overall in note
-        assert f"From the {ordinal(start)}" in entry and quoted(era) in entry and overall in entry
+        assert quoted(one) in note and under_two(era) in note and overall in note
+        assert f"From the {ordinal(start)}" in entry and under_two(era) in entry and overall in entry
+        # The bar as a share of one curve's error, and the most the era curve
+        # cut it by at any split (both computed in the docs from these keys).
+        forward = data["forward_test"]
+        bar = round(100 * forward["best_standard_error"] / forward["pooled"]["error"])
+        most = round(100 * max(-t["above"] for t in forward["era_at_every_split"].values())
+                     / forward["pooled"]["error"])
+        for text in (note, entry):
+            assert f"about {bar}%" in text and f"at most {most}% at any split" in text
+        # The era curve's margin is under two standard errors: the old
+        # phrasings that called it a win are gone from both documents.
+        if abs(forward["era"]["above"]) < 2 * forward["era"]["standard_error"]:
+            for text in (note, entry):
+                assert "each beat one curve" not in text and "beats one curve by 0.0" not in text
+        # Every copy, not just one: a stale one would otherwise pass.
+        assert note.count(f"at most {most}% at any split") == 2
+        # The split the data would choose, and that member's leave-one-out.
+        chosen = str(data["data_chosen_test"]["era"]["chosen_on_every_transition"])
+        split = data["era_split_test"]["splits"][chosen]
+        low = round(split["n0_leaving_one_member_out"][0])
+        half = split["without_most_influential_member"]["half_weight_votes"]
+        for text in (note, entry):
+            assert f"n0 falls to {low}, half point {half}" in text
     # "No constant offset detected": the mean offset is within two standard errors of 0.
     off = data["thin_offset"]["all"]
     assert abs(off["mean"]) <= 2 * off["standard_error"]
