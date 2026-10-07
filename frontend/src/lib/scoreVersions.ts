@@ -62,6 +62,19 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     ],
   },
   {
+    version: "President v9",
+    date: "2026-10-07",
+    title: "Approval compared within its era: by party, against how polarized Congress was",
+    tldr: "Approval from the other party has collapsed as the parties drifted apart, from about 49% for Eisenhower to 5% for Biden, so comparing raw approval across eras ranked presidents partly by when they served. Each party group's approval is now compared with what presidents got from that group when Congress was as polarized.",
+    changes: [
+      "Why: raw average approval correlated -0.40 with the distance between the parties in Congress across the 14 completed polling-era presidencies, and approval from the other party -0.81. Differences between presidents are measured precisely (two halves of each president's polls agree at 0.996 or better), so the problem was what they measured, not noise.",
+      "How: approval in the president's own party, the other party and among independents (Gallup's breakdown, via the American Presidency Project) is each compared with what presidents got from that group under the same House polarization (Voteview), and the three differences are averaged. Each group's relationship with polarization is fitted every update by the median of pairwise slopes. A single fit of overall approval was tried and rejected: its slope ran from -17 to -36 depending on which one presidency was left out; by group, no president's figure moves more than 2.5 points.",
+      "The approval trend is unchanged: compared with presidents who started at the same level, it already shows no relationship with the era (-0.06).",
+      "Also fixed: the Voteview file names for Congresses before the 100th are zero-padded (H099), so those years were unreadable; nothing read them until now.",
+      "Effect on October 2026 data, Public Mandate: Truman 17 to 8, Kennedy 79 to 67, Johnson 67 to 47, Carter 37 to 26, Reagan 61 to 65, George W. Bush 46 to 55, Obama 46 to 54, Trump's first term 21 to 40, Biden 24 to 38. docs/research/president-scores.md has the study.",
+    ],
+  },
+  {
     version: "President v8",
     date: "2026-10-07",
     title: "Postwar growth compared with 13 peer economies, allowing for their catching up",

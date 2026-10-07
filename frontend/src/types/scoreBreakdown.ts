@@ -115,6 +115,16 @@ export interface PublicMandateFacts {
   marginMean: number | null;
   /** Average approval over the last 90 days (not scored). */
   recentApproval: number | null;
+  /** Approval in the president's own party, the other party and among
+   *  independents, and what presidents typically got from each under the
+   *  same polarization in Congress (president v9). */
+  approvalGroups?: { own: number; opp: number; ind: number } | null;
+  approvalExpected?: { own: number; opp: number; ind: number } | null;
+  /** Points above (+) or below (-) the era's expectation, averaged over the
+   *  three groups: what average approval is scored on; and the typical
+   *  president's figure. */
+  approvalVsEra?: number | null;
+  approvalVsEraMean?: number | null;
 }
 
 /** President: effectiveness.facts. Jobs per attributed year (the first year

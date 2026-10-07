@@ -130,17 +130,20 @@ import logging
 import statistics
 
 import httpx
+from sqlalchemy.orm import Session
 
 from app import ops_alerts
 from app.http_client import make_async_client
 from app.ordinals import ordinal
+from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-MEMBERS_URL = "https://voteview.com/static/data/out/members/{letter}{congress}_members.csv"
-VOTES_URL = "https://voteview.com/static/data/out/votes/{letter}{congress}_votes.csv"
+# Voteview names files by a three-digit Congress: H099, not H99 (a 404).
+MEMBERS_URL = "https://voteview.com/static/data/out/members/{letter}{congress:03d}_members.csv"
+VOTES_URL = "https://voteview.com/static/data/out/votes/{letter}{congress:03d}_votes.csv"
 
 SOURCE_DESC = (
     "Voteview (Lewis et al., voteview.com) per-congress member-ideology "
@@ -688,3 +691,52 @@ async def refresh_member_ideal_points(
             chamber, exc_info=True,
         )
         return False
+
+
+# Party polarization per Congress: the distance between the parties' mean
+# first-dimension DW-NOMINATE scores in the House, Voteview's own measure
+# (McCarty, Poole & Rosenthal 2006, "Polarized America"). Read by the
+# president pipeline to compare approval within an era (president v9).
+_DISTANCE_TIER = "voteview-house-party-distance"
+_PAST_CONGRESS_TTL_HOURS = 24 * 365  # a finished Congress's scores don't move
+_SITTING_CONGRESS_TTL_HOURS = 24
+
+
+def party_distance(rows: list[dict]) -> float | None:
+    """Republican mean minus Democratic mean nominate_dim1 over one
+    chamber's members, or None without both parties. Party codes are read
+    as numbers: recent exports write them "100.0"."""
+    by_party: dict[str, list[float]] = {"D": [], "R": []}
+    for row in rows:
+        party = PARTY_CODES.get(int(_number(row.get("party_code")) or 0))
+        dim1 = _number(row.get("nominate_dim1"))
+        if party and dim1 is not None:
+            by_party[party].append(dim1)
+    if not by_party["D"] or not by_party["R"]:
+        return None
+    return statistics.mean(by_party["R"]) - statistics.mean(by_party["D"])
+
+
+async def fetch_house_party_distance(
+    db: Session, congresses: list[int], sitting: int,
+) -> dict[int, float]:
+    """{congress: House party distance} for each congress that could be
+    read (cached; a finished Congress for a year, the sitting one for a
+    day). A congress that can't be fetched is left out, never guessed."""
+    out: dict[int, float] = {}
+    async with make_async_client(follow_redirects=True) as client:
+        for congress in congresses:
+            ttl = _SITTING_CONGRESS_TTL_HOURS if congress >= sitting else _PAST_CONGRESS_TTL_HOURS
+            cached = api_cache_get(db, _DISTANCE_TIER, str(congress), max_age_hours=ttl)
+            if cached is not None:
+                out[congress] = cached["distance"]
+                continue
+            rows = await fetch_member_rows("house", congress, client)
+            distance = party_distance(rows) if rows else None
+            if distance is None:
+                logger.warning("Voteview House party distance unavailable for the %s Congress", ordinal(congress))
+                continue
+            api_cache_set(db, _DISTANCE_TIER, str(congress), {"distance": distance}, normal_ttl_hours=ttl)
+            out[congress] = distance
+    return out
+

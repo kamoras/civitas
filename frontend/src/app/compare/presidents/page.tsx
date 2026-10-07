@@ -97,6 +97,13 @@ const FACT_ROWS: Row[] = [
     },
   },
   {
+    label: "Approval against its era, points (vs the typical president)",
+    value: ({ breakdown: b }) => {
+      const f = b?.publicMandate.facts as PublicMandateFacts | undefined;
+      return versus(f?.approvalVsEra, f?.approvalVsEraMean, (n) => `${n > 0 ? "+" : ""}${one(n)}`);
+    },
+  },
+  {
     label: "Jobs a year (vs presidencies since 1939)",
     value: ({ breakdown: b }) => {
       const f = b?.effectiveness.facts as PresidentEffectivenessFacts | undefined;

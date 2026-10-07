@@ -40,11 +40,15 @@ from app.models import President, ScoreSnapshot
 from app.pipeline.analyze.president_scorer import (
     PRESIDENT_ALGORITHM_VERSION,
     compute_president_overall_score,
+    approval_by_group,
     compute_president_reference,
+    congress_of_year,
     peer_comparable,
     recalculate_president_scores,
+    stored_approval_groups,
     FULL_TERM_DAYS,
     term_days,
+    term_polarization,
     window_reference,
 )
 from app.pipeline.fetch.cspan_historians_survey import fetch_cspan_historians_survey
@@ -61,10 +65,12 @@ from app.pipeline.fetch.peer_gdp import (
 from app.pipeline.fetch.presidential_approval import (
     approval_slugs,
     dated_approvals,
+    dated_by_party,
     fetch_president_approval_history,
     recent_polls,
 )
 from app.pipeline.fetch.presidential_elections import fetch_election_margins
+from app.pipeline.fetch.voteview import fetch_house_party_distance
 from app.pipeline.fetch.presidential_roster import fetch_presidential_roster
 from app.time_utils import utcnow
 
@@ -200,6 +206,9 @@ async def run_president_pipeline(db: Session) -> dict:
         logger.info("Fetching approval-poll history from UCSB American Presidency Project...")
         approval_avg_data: dict[str, float] = {}
         approval_trend_data: dict[str, float] = {}
+        # (poll date, {"D", "I", "R"} approve %) per presidency: Public
+        # Mandate's by-party comparison within an era (president v9).
+        party_series: dict[str, list] = {}
         approval_start_data: dict[str, float] = {}
         # (poll date, approve %) in date order, per presidency: the sitting
         # president's elapsed-time comparison reads predecessors' polls.
@@ -221,12 +230,20 @@ async def run_president_pipeline(db: Session) -> dict:
                 approval_start_data[pid] = sum(values[:q]) / q
                 approval_trend_data[pid] = (sum(values[-q:]) / q) - approval_start_data[pid]
             approval_series[pid] = dated_approvals(polls)
+            party_series[pid] = dated_by_party(polls)
 
             recent = recent_polls(polls)
             recent_values = [poll.approving for poll in recent if poll.approving is not None]
             if recent_values:
                 recent_avg_approval_data[pid] = sum(recent_values) / len(recent_values)
         logger.info("Approval data fetched for %d presidents", len(approval_avg_data))
+
+        # Polarization over every polling-era Congress (Truman's first, the
+        # 79th, to the sitting one), for the by-party comparison.
+        logger.info("Fetching House party polarization per Congress (Voteview)...")
+        sitting = congress_of_year(current_year)
+        polarization_by_congress = await fetch_house_party_distance(db, list(range(79, sitting + 1)), sitting)
+        logger.info("Polarization read for %d Congresses", len(polarization_by_congress))
 
         logger.info("Fetching historical election-margin data (UCSB)...")
         election_margin_data = await fetch_election_margins(db)
@@ -307,11 +324,26 @@ async def run_president_pipeline(db: Session) -> dict:
                 # night (#218 review B2).
                 president.election_margin = election_margin_data[president.id]
 
+            # Approval by party and the term's polarization; each kept as
+            # stored when this run couldn't read it.
+            groups = approval_by_group(party_series.get(president.id) or [], president.party)
+            if groups:
+                president.approval_own_party = groups["own"]
+                president.approval_other_party = groups["opp"]
+                president.approval_independents = groups["ind"]
+            polarization = term_polarization(
+                term_start_year, term_end_year if president.term_end else current_year + 1, polarization_by_congress,
+            )
+            if polarization is not None:
+                president.term_polarization = polarization
+
             if president.avg_approval is not None:
                 live["avg_approval"] = president.avg_approval
                 live["approval_trend"] = president.approval_trend
                 live["approval_start"] = president.approval_start
                 live["is_current"] = president.is_current
+                live["approval_groups"] = stored_approval_groups(president)
+                live["polarization"] = president.term_polarization
             elif president.election_margin is not None:
                 live["election_margin"] = president.election_margin
 
@@ -344,6 +376,8 @@ async def run_president_pipeline(db: Session) -> dict:
             "id": p.id, "name": p.name, "avg_approval": p.avg_approval,
             "approval_trend": p.approval_trend,
             "approval_start": p.approval_start,
+            "approval_groups": stored_approval_groups(p),
+            "polarization": p.term_polarization,
             "is_current": p.is_current,
             "election_margin": election_margin_data.get(p.id),
             "historical_legacy_score": p.historical_legacy_score,
@@ -372,6 +406,12 @@ async def run_president_pipeline(db: Session) -> dict:
         and (p.is_current or (term_days(p.term_start, p.term_end) or FULL_TERM_DAYS) < FULL_TERM_DAYS)
         and (window := window_reference(
             approval_series[p.id], [s for pid, s in completed_series.items() if pid != p.id],
+            [
+                (party_series[q.id], q.party, q.term_polarization)
+                for q in presidents
+                if q.id != p.id and not q.is_current and party_series.get(q.id)
+                and q.term_polarization is not None
+            ],
         ))
     }
     previous = PRESIDENT_REFERENCE.load().get("presidents") or {}

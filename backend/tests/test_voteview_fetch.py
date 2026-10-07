@@ -621,3 +621,9 @@ def test_an_at_large_seat_counts_once_however_voteview_codes_it():
     assert voteview._seat_district({"state_abbrev": "WY", "district_code": "1"}, district_pvi) == 0
     assert voteview._seat_district({"state_abbrev": "WY", "district_code": "0"}, district_pvi) == 0
     assert voteview._seat_district({"state_abbrev": "TX", "district_code": "3"}, district_pvi) == 3
+
+
+def test_file_names_pad_the_congress_to_three_digits():
+    assert voteview.MEMBERS_URL.format(letter="H", congress=99).endswith("/H099_members.csv")
+    assert voteview.MEMBERS_URL.format(letter="S", congress=119).endswith("/S119_members.csv")
+    assert voteview.VOTES_URL.format(letter="H", congress=80).endswith("/H080_votes.csv")

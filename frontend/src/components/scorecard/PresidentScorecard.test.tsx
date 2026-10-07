@@ -204,6 +204,29 @@ describe("PresidentScorecard", () => {
     expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
   });
 
+  it("states approval by party against the era's polarization", async () => {
+    const era = {
+      ...breakdown,
+      publicMandate: {
+        ...breakdown.publicMandate,
+        facts: {
+          ...breakdown.publicMandate.facts,
+          approvalGroups: { own: 87.2, opp: 3.9, ind: 30.4 },
+          approvalExpected: { own: 86.6, opp: 6.1, ind: 36.0 },
+          approvalVsEra: -2.7,
+          approvalVsEraMean: 0.1,
+        },
+      },
+    };
+    render(<PresidentScorecard president={president} breakdown={era} rank={null} />);
+    expect(
+      screen.getByText(
+        /Approval has averaged 37\.3% so far: 87% in the president's party, 4% in the other party and 30% among independents\. Under the same polarization, presidents typically got 87%, 6% and 36% over their first 20 months\. That puts this term 2\.7 points below the era; the typical president comes out 0\.1 points above\./
+      )
+    ).toBeInTheDocument();
+    expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
+  });
+
   it("never calls a scored dimension unrated when the breakdown is missing", async () => {
     // A breakdown that failed to load, or one cached from before the API
     // served facts, must not put "not rated" beside a score (2026-09-28:

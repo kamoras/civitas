@@ -37,7 +37,11 @@ const presidents = [
 ];
 
 const obamaBreakdown = {
-  publicMandate: { score: 50, components: [], facts: { approval: 47.97, approvalMean: 50.887 } },
+  publicMandate: {
+    score: 50,
+    components: [],
+    facts: { approval: 47.97, approvalMean: 50.887, approvalVsEra: 1.04, approvalVsEraMean: 0.02 },
+  },
   effectiveness: {
     score: 44,
     components: [],
@@ -92,6 +96,10 @@ describe("ComparePresidentsPage", () => {
     expect(row("Presidential Score")).toEqual(["51", "48"]);
     expect(row("Historical Legacy")).toEqual(["Not scored", "72"]);
     expect(row("Average approval (vs all presidents)")).toEqual(["—", "48.0% vs 50.9%"]);
+    expect(row("Approval against its era, points (vs the typical president)")).toEqual([
+      "—",
+      "+1.0 vs +0.0",
+    ]);
     expect(row("Jobs a year (vs presidencies since 1939)")).toEqual(["—", "2.26M vs 1.44M"]);
     expect(
       row("Growth per person vs 13 peer economies, points (vs presidencies since 1947)")
