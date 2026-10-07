@@ -100,6 +100,7 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
         "bipartisanshipScore": entity.bipartisanship_score,
         "attractedBipartisanshipScore": getattr(entity, "attracted_bipartisanship_score", None),
         "leadershipScore": entity.leadership_score,
+        "name": entity.name,
         "yearsInOffice": entity.years_in_office,
         # Representatives only (Senator has no column): see Representative.sworn_date.
         "swornDate": getattr(entity, "sworn_date", None),

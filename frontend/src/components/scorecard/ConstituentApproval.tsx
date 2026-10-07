@@ -5,12 +5,13 @@ import { BlockLabel } from "./ScoreColumn";
 const GROUP_LABELS = { D: "Democrats", R: "Republicans", I: "Independents & others" } as const;
 
 const TOOLTIP =
-  "From the Cooperative Election Study, a national survey that asks each respondent whether they approve of the job their own House member and senators are doing. Split by the respondent's own party, as a share of those who gave an opinion. Not part of any score. Where a group is small, the figure is pulled toward what a typical member of the same party gets from that group, by an amount measured from how much members really differ; a figure that comes mostly from that typical level rather than this member's own respondents is marked \"mostly based on similar members\".";
+  "From the Cooperative Election Study, a national survey that asks each respondent whether they approve of the job their own House member and senators are doing. Split by the respondent's own party, as a share of those who gave an opinion. For a senator, the other party's and independents' figures are part of Constituent Alignment (the \"Constituent approval\" part below). A House member's are shown but not scored: a district has a few dozen respondents, too few for one member's figure to be more than noise. Where a group is small, the figure is pulled toward what a typical member of the same party gets from that group, by an amount measured from how much members really differ; a figure that comes mostly from that typical level rather than this member's own respondents is marked \"mostly based on similar members\".";
 
 /** Survey approval of the member among their own constituents, by the
  * constituent's party (backend services/constituent_survey.py). A block in
- * the Constituent Alignment column, beside the break rate it gives context
- * to; it is not one of the score's parts. */
+ * the Constituent Alignment column. For senators the other party's and
+ * independents' figures are scored there (v6.29, "Constituent approval");
+ * for House members it is context only. */
 export default function ConstituentApproval({
   approval,
 }: {

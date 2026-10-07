@@ -178,6 +178,7 @@ from app.config_definitions import (
     SATURATION_QUANTILE,
 )
 from app.models import PromiseAlignment
+from app.pipeline.analyze.constituent_approval import senate_approval
 from app.pipeline.analyze.population_reference import (
     CONSTITUENT_REFERENCE,
     FUNDING_REFERENCE,
@@ -194,7 +195,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.28"
+ALGORITHM_VERSION = "v6.29"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -742,6 +743,8 @@ def calculate_scores(senator: dict) -> dict:
             district=senator.get("district"),
             bioguide_id=senator.get("bioguideId"),
             reference=senator.get("constituentReference"),
+            name=senator.get("name") or "",
+            years_in_office=senator.get("yearsInOffice") or 0,
         ),
         "fundingDiversity": _calc_funding_diversity(funding),
         "legislativeEffectiveness": _calc_legislative_effectiveness(
@@ -784,6 +787,8 @@ def explain_scores(senator: dict) -> dict:
         district=senator.get("district"),
         bioguide_id=senator.get("bioguideId"),
         reference=senator.get("constituentReference"),
+        name=senator.get("name") or "",
+        years_in_office=senator.get("yearsInOffice") or 0,
     )
     # The vote-part status is served with the stored confidence grades
     # (calculate_confidence), not in the breakdown payload.
@@ -886,6 +891,7 @@ def _constituent_vote_part_status(senator: dict) -> str:
         state=senator.get("state", ""), party=senator.get("party", "I"),
         district=senator.get("district"), bioguide_id=senator.get("bioguideId"),
         reference=senator.get("constituentReference"),
+        name=senator.get("name") or "", years_in_office=senator.get("yearsInOffice") or 0,
     )["vote_part_status"]
 
 
@@ -2086,6 +2092,27 @@ def seat_break_residual(
 # the ratio exists to fit this from.
 POSITION_CONGRUENCE_WEIGHT = 0.30
 
+# A senator's approval among the state's other-party voters and independents
+# (constituent_approval.py, v6.29) moves the score as much as position
+# congruence does: its weight is POSITION_CONGRUENCE_WEIGHT, applied to its
+# distance from the typical senator (a score of 50), and added to the 70:30
+# vote and position parts. Equal to position because the two were measured
+# equally: each part's independent association with how far senators ran
+# ahead of their party (2022 and 2024, each measured before its election)
+# was +1.27 and +0.77 points per standard deviation, confidence intervals
+# +0.24 to +2.00 and +0.22 to +1.52, too close to tell apart. Added around
+# the typical senator rather than given a share of the score, because a
+# share would pull every rated senator toward 50 (the composite's typical
+# value is 85), scoring a rated senator about 8 points below an unrated one
+# or a House member for being rated at all; an unrated senator is read as
+# typical, as a member with no position yet sits at 50
+# (docs/methodology/member-score/v6.29.md).
+APPROVAL_WEIGHT = POSITION_CONGRUENCE_WEIGHT
+# Standard deviations of the approval index at which its score approaches
+# 0 or 100 (tanh), the same saturation the president scorer and Legislative
+# Effectiveness use for a population z-score.
+APPROVAL_SATURATION_SD = 1.5
+
 
 def position_confidence(votes: int | None, reliability: dict | None) -> float:
     """Reliability weight of a congress-specific position (v6.27), from the
@@ -2149,6 +2176,8 @@ def _calc_constituent_alignment(
     district: int | None = None,
     bioguide_id: str | None = None,
     reference: dict | None = None,
+    name: str = "",
+    years_in_office: int = 0,
 ) -> int:
     """
     Constituent Alignment Score (0-100, higher = better). Keyed
@@ -2237,7 +2266,7 @@ def _calc_constituent_alignment(
     """
     return _constituent_alignment_core(
         voting_record, lobbying_matches, funding, state, party,
-        district, bioguide_id, reference,
+        district, bioguide_id, reference, name, years_in_office,
     )["score"]
 
 
@@ -2250,6 +2279,8 @@ def _constituent_alignment_core(
     district: int | None = None,
     bioguide_id: str | None = None,
     reference: dict | None = None,
+    name: str = "",
+    years_in_office: int = 0,
 ) -> dict:
     """Same math as _calc_constituent_alignment, returning every intermediate
     value alongside the final score. Single implementation, same reuse
@@ -2394,9 +2425,22 @@ def _constituent_alignment_core(
                 f"until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
             )
 
+    # Senators: approval among the state's other-party voters and
+    # independents (v6.29). The House is not scored on it (constituent_approval).
+    approval = (
+        senate_approval(state, name, eval_party, years_in_office, _state_pvi())
+        if chamber == "senate" else None
+    )
+    approval_score = (
+        50.0 + 50.0 * math.tanh(approval["z"] / APPROVAL_SATURATION_SD) if approval else None
+    )
     congruence_weight = POSITION_CONGRUENCE_WEIGHT if congruence_score is not None else 0.0
     party_weight = 1.0 - congruence_weight
-    score = clamp(party_score * party_weight + (congruence_score or 0.0) * congruence_weight)
+    # Points the approval part adds or takes away around the typical senator.
+    approval_points = APPROVAL_WEIGHT * (approval_score - 50.0) if approval_score is not None else 0.0
+    score = clamp(
+        party_score * party_weight + (congruence_score or 0.0) * congruence_weight + approval_points
+    )
 
     components = [
         {
@@ -2409,9 +2453,47 @@ def _constituent_alignment_core(
     if congruence_weight > 0:
         components.append({
             "label": "Position congruence",
-            "weight": congruence_weight,
+            "weight": round(congruence_weight, 2),
             "score": round(congruence_score, 1),
             "detail": congruence_detail,
+        })
+    approval_facts = None
+    if approval is not None:
+        names = {"D": "Democrats", "R": "Republicans", "I": "independents"}
+        approval_facts = {
+            "groups": [
+                {"group": g, "approve": round(a, 3), "typical": round(t, 3)} for g, a, t in approval["groups"]
+            ],
+            "z": round(approval["z"], 2),
+            "survey": approval["survey"],
+        }
+        components.append({
+            "label": "Constituent approval",
+            "weight": APPROVAL_WEIGHT,
+            "score": round(approval_score, 1),
+            "detail": (
+                "; ".join(
+                    f"{a:.0%} of the state's {names[g]} approve, against {t:.0%} for a typical "
+                    f"{eval_party} senator"
+                    for g, a, t in approval["groups"]
+                )
+                + f" ({approval['survey']}); {approval['z']:+.2f} standard deviations from the "
+                f"typical senator once the state's lean is allowed for, which "
+                f"{'adds' if approval_points >= 0 else 'takes'} {abs(approval_points):.1f} points "
+                f"{'to' if approval_points >= 0 else 'from'} the score (as much as position congruence "
+                "can move it; a typical senator's approval adds nothing)"
+            ),
+        })
+    elif chamber == "senate":
+        components.append({
+            "label": "Constituent approval",
+            "weight": 0.0,
+            "score": None,
+            "detail": (
+                "the Cooperative Election Study has no rating for this senator (first seated "
+                "after it was fielded), so this part is not measured and adds nothing either way, "
+                "as for a typical senator"
+            ),
         })
     record = voting_record.get("partyLineRecord")
     return {
@@ -2430,6 +2512,9 @@ def _constituent_alignment_core(
             # Votes against the party from its flank (party_line_record):
             # shown beside the breaks, not counted. None without a record.
             "flankBreaks": len(record.get("flankBreaks") or []) if record else None,
+            # Senators: the state's other-party and independent approval
+            # the approval component read, against the typical senator.
+            "approval": approval_facts,
         },
     }
 

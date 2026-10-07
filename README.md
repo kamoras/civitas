@@ -994,7 +994,7 @@ Each senator and House representative carries five sub-scores (0-100, higher = b
 | Metric | Weight | What It Measures | Key Reference |
 |--------|--------|------------------|---------------|
 | **Funding Independence** | 33% | PAC dependency + small-donor share + top-donor concentration + industry concentration | Stratmann 2005; Parmigiani 2025 |
-| **Constituent Alignment** | 33% | Break rate vs. same-party members in same-lean seats + roll-call position congruence (Nokken-Poole vs. seat-conditional norm) | Carson et al. 2010; Canes-Wrone, Brady & Cogan 2002; Nokken & Poole 2004 |
+| **Constituent Alignment** | 33% | Break rate vs. same-party members in same-lean seats + roll-call position congruence (Nokken-Poole vs. seat-conditional norm); senators also: approval among the state's other-party voters and independents (CES), around the typical senator | Carson et al. 2010; Canes-Wrone, Brady & Cogan 2002; Nokken & Poole 2004; Ansolabehere & Kuriwaki 2022 |
 | **Legislative Effectiveness** | 34% | Stage-normalized Volden & Wiseman LES (majority-status-benchmarked) + cosponsorship leadership (PageRank) + bipartisan coalition attraction | Volden & Wiseman 2014; Harbridge-Yong, Volden & Wiseman 2023 |
 | Promise Persistence | unweighted (v6.0) | Published as `null`: campaign-promise tracking was removed in 2026-07, so its formula (commitments kept vs. broken + vote participation) has no promises to read, and the stored value is a near-constant | Naurin 2011; Martin 2011 |
 | Funding Diversity | unweighted (v6.5, folded into FI) | Source breadth + industry diversity (inverse HHI) | Rhoades 1993; Parmigiani 2025 |

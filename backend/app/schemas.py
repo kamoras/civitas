@@ -467,7 +467,8 @@ class ConstituentApprovalPartySchema(CamelModel):
 
 class ConstituentApprovalSchema(CamelModel):
     """How the member's own constituents rated them in the CES, by the
-    respondent's party (services/constituent_survey.py). Informational."""
+    respondent's party (services/constituent_survey.py). Scored for senators
+    (Constituent Alignment's approval part, v6.29); context for House members."""
     survey: str
     fielded: str
     surveyed_as: str

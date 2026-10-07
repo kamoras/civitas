@@ -518,7 +518,7 @@ class TestPositionCongruence:
     def test_missing_data_skips_the_component(self):
         self.patch({})
         core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id="X1")
-        assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
+        assert [c["label"] for c in core["components"] if c["weight"]] == ["Seat-relative vote alignment"]
         assert core["components"][0]["weight"] == 1.0
 
     def test_a_position_is_weighted_by_its_reliability(self):
@@ -595,7 +595,7 @@ class TestPositionCongruence:
         assert self._congruence()["score"] == 0.0
         self.patch({})
         core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id="X1")
-        assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
+        assert [c["label"] for c in core["components"] if c["weight"]] == ["Seat-relative vote alignment"]
 
     def test_a_section_without_counts_says_nothing_of_strength(self):
         """A position read from a pre-v6.27 section (no counts, no
@@ -616,7 +616,7 @@ class TestPositionCongruence:
         rec = {**record(10), "partyLineRecord": {"congress": 120, "votes": 0, "breaks": []}}
         self.patch({"X1": -0.55}, votes={"X1": 500}, congress=119)
         core = _constituent_alignment_core(rec, [], {}, state="SW", party="D", bioguide_id="X1")
-        assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
+        assert [c["label"] for c in core["components"] if c["weight"]] == ["Seat-relative vote alignment"]
         self.patch({"X1": -0.55}, votes={"X1": 500}, congress=120)
         core = _constituent_alignment_core(rec, [], {}, state="SW", party="D", bioguide_id="X1")
         assert {c["label"]: c for c in core["components"]}["Position congruence"]["score"] < 5
@@ -627,7 +627,7 @@ class TestPositionCongruence:
         monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
         self.patch({"X1": -0.55}, votes={"X1": 500}, congress=119)
         core = _constituent_alignment_core(record(10), [], {}, state="SW", party="D", bioguide_id="X1")
-        assert [c["label"] for c in core["components"]] == ["Seat-relative vote alignment"]
+        assert [c["label"] for c in core["components"] if c["weight"]] == ["Seat-relative vote alignment"]
         self.patch({"X1": -0.55}, votes={"X1": 500}, congress=120)
         assert self._congruence()["score"] < 5
 
