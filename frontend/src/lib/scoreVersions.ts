@@ -32,6 +32,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.28",
+    date: "2026-10-06",
+    title: "House procedural votes no longer count as party loyalty anywhere",
+    tldr: "Votes on House procedural motions, like ordering the previous question or a motion to recommit, were still marked as votes with or against the party on House scorecards, and the House's motion to commit still counted toward Constituent Alignment. Neither does now, as already in the Senate. Scores barely move; House scorecards show fewer votes with the party.",
+    changes: [
+      "A House member's recent votes were marked with or against the party from a label that, unlike the roll-call split used everywhere else, was still set on motions that run the chamber. On the House's latest 120 roll calls of 2026, 19 were such motions, marking 7,956 member-votes as with the party against 26. The shown recent-vote break rate rises from 2.20% to 2.79% for Republicans and from 2.78% to 3.51% for Democrats. Constituent Alignment reads the whole-Congress party-line record instead, which already left these out.",
+      "The House's motion to commit, the motion to recommit's twin for a bill no committee reported, is now left out like it. It still counted in the party-line record: the 119th House held 4, all party-line, and no member broke on any, so Constituent Alignment moves by a fraction of a point at most. The Senate's motion to commit amends the bill and still counts.",
+      "Every stored vote is now built by one shared function in both chambers, and the House rebuilds the party positions partisan depth compares bills with at the start of its own run, from both chambers' votes, instead of reusing whatever the Senate run left. A procedural motion is no longer read as a vote on its bill: a motion to recommit carries the bill's title, and a Yea on it counted toward the bill's party in partisan depth. Such motions also no longer appear among the featured key votes or the donor-industry vote matches. docs/methodology/member-score/v6.28.md has the details.",
+    ],
+  },
+  {
     // The half point (about 36 votes) and the full-strength count (200) quoted here come
     // from backend/app/data/position_confidence.json; test_position_confidence.py pins them.
     version: "v6.27",

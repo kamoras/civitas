@@ -23,8 +23,9 @@ election results (docs/research/constituent-alignment.md, sections 11-12):
 - Each measure counts once. A nominee's cloture and confirmation votes, or a
   bill's motion to proceed, cloture and passage, are one decision voted on
   several times; in the 119th Senate 37% of roll calls repeat a measure
-  already voted on, nearly all of them cloture votes. An amendment, a motion
-  to commit or to waive, is its own question.
+  already voted on, nearly all of them cloture votes. An amendment, or the
+  Senate's motion to commit or to waive, is its own question (the House's
+  motion to commit is housekeeping).
 
 Housekeeping questions (normalize_votes.is_housekeeping) and the majority
 leader's reconsider switch are left out, as everywhere else.
@@ -55,8 +56,8 @@ from app.pipeline.transform.normalize_votes import (
 logger = logging.getLogger(__name__)
 
 # Questions that are a stage of the measure itself. Anything else (an
-# amendment, a motion to commit, to waive, a point of order) is its own
-# question, even when it names the bill.
+# amendment, the Senate's motion to commit, a motion to waive, a point of
+# order) is its own question, even when it names the bill.
 _MEASURE_STAGE_RE = re.compile(
     r"cloture|nomination|motion to proceed|passage|pass\b|joint resolution|concurrent resolution"
     r"|the resolution|conference report|ratification|veto|concur",
@@ -360,7 +361,7 @@ def party_line_records(db: Session, chamber: str, members: list[dict]) -> list[d
     for rid, rc in rolls.items():
         ps = positions.get(rid, [])
         # The roll call's own parties, as its stored partySplit reads them.
-        label = None if is_housekeeping(rc.question) else compute_party_split(
+        label = None if is_housekeeping(rc.question, chamber) else compute_party_split(
             {"members": [{"party": p.party, "voteCast": p.position} for p in ps]},
         )
         cast = []
