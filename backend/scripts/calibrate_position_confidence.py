@@ -475,7 +475,8 @@ ERA_SPLIT = 110
 # compared on every thin pair (choose_structure, reported). "era" can be
 # applied only as its latest era's curve (every Congress scored from now on
 # falls in it). The shipped structure is forward_test's choice among
-# pooled, chamber and era; era_test and era_split_test report the era
+# pooled, chamber, era and the window (FORWARD_CANDIDATES); era_test and
+# era_split_test report the era
 # comparison left one member out. Direction and attendance can't be known
 # for a sitting member's record, so they are tested and reported only.
 STRUCTURES = {
