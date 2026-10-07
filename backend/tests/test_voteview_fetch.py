@@ -129,6 +129,17 @@ class TestBuildAndGates:
         assert unweighted["extremity_p90"] > 3 * base["extremity_p90"]
         assert thin["extremity_p90"] < 1.5 * base["extremity_p90"]
 
+    def test_the_scale_needs_scale_min_full_full_records(self):
+        """The section measures its own scale from SCALE_MIN_FULL full
+        records; with one fewer it has none, and the last one is carried."""
+        state_pvi = score_calculator._state_pvi()
+        for full, has_scale in ((voteview.SCALE_MIN_FULL, True), (voteview.SCALE_MIN_FULL - 1, False)):
+            rows = _synthetic_rows(state_pvi)
+            for i, r in enumerate(rows):
+                r["nominate_number_of_votes"] = "500" if i < full else "5"
+            data, _ = voteview.build_chamber_ideal_points(rows, "senate", state_pvi, {}, reliability=REL)
+            assert (data["extremity_p90"] is not None) is has_scale
+
     def test_an_export_where_every_record_is_thin_has_no_scale_of_its_own(self):
         """Early in a Congress: the build leaves the scale to be carried, so
         the weights pull positions toward 50 instead of a scale shrunk with

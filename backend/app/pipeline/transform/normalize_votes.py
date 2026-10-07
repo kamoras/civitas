@@ -688,7 +688,10 @@ def first_name_matches(first: str, names: dict) -> list:
     """The keys of `names` whose first name is `first`: the exact matches
     (accents and case aside) when there are any, else the looser ones
     (_same_first_name: a nickname, a dropped accent). An exact match wins,
-    so "Rob" and "Robert" each keep their own."""
+    so "Rob" and "Robert" each keep their own. An empty first name matches
+    nothing."""
+    if not _normalize_for_match(first or "").strip("."):
+        return []
     exact = [k for k, name in names.items() if _normalize_for_match(name or "") == _normalize_for_match(first or "")]
     return exact or [k for k, name in names.items() if _same_first_name(first, name)]
 

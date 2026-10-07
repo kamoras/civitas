@@ -801,3 +801,28 @@ def test_two_sitting_namesakes_tell_a_nickname_apart_by_first_name(db_session, m
     ann, robert = party_line_records(db_session, "senate", roster)
     # Found (None would mean scored on stored votes).
     assert ann is None and robert is not None
+
+
+def test_an_empty_first_name_matches_nobody():
+    """A blank first name on both sides is no evidence of the same person."""
+    from app.pipeline.transform.normalize_votes import first_name_matches
+    assert first_name_matches("", {1: "", 2: "Rob"}) == []
+    assert first_name_matches("Rob", {1: "", 2: "Rob"}) == [2]
+
+
+def test_a_position_with_no_surname_adds_no_departed_senator(db_session, monkeypatch):
+    """A Senate position with no last name names no surname, so no stored
+    departed senator is matched through it."""
+    from app.models import Senator
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": {"bio-ANN": 0.0}})
+    db_session.add(Senator(id="S-ANN", bioguide_id="bio-ANN", name="Ann Lastg", state="SC", party="R",
+                           is_current=False))
+    rc = RollCall(chamber="senate", congress=119, session=2, number=46, date="2026-03-01", question="On Passage",
+                  bill_id="S.46")
+    db_session.add(rc)
+    db_session.flush()
+    db_session.add(RollCallPosition(roll_call_id=rc.id, member_id="L-ANN", last_name="", first_name="Ann",
+                                    party="R", state="SC", position="Yea"))
+    db_session.commit()
+    positions = {rc.id: list(db_session.query(RollCallPosition).filter_by(roll_call_id=rc.id))}
+    assert party_line_record._departed_senators(db_session, [], positions) == []
