@@ -33,7 +33,7 @@ export interface ScoreVersion {
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
     version: "v6.28",
-    date: "2026-10-06",
+    date: "2026-10-07",
     title: "House procedural votes no longer count as party loyalty anywhere",
     tldr: "Votes on House procedural motions, like ordering the previous question or a motion to recommit, were still marked as votes with or against the party on House scorecards, and the House's motion to commit still counted toward Constituent Alignment. Neither does now, as already in the Senate. Scores barely move; House scorecards show fewer votes with the party.",
     changes: [
