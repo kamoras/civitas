@@ -521,10 +521,10 @@ export default function ScoresChapter() {
           Whether a member broke with their party on a vote is defined only by how the parties
           actually voted on that roll call, so a bill that reads partisan but passed with both
           parties&apos; majorities is not a party-line vote, and no break is counted without a roll
-          call. The party badge on a member&apos;s sponsored bill is how the parties voted on that
-          bill&apos;s own roll call (R, D or bipartisan) when it is one of the key bills Civitas
-          follows and that roll call was on the bill itself, not a procedural motion; otherwise it
-          comes from the bill&apos;s content.
+          call. The party badge on a member&apos;s sponsored bill is how the parties voted on the
+          roll call Civitas tracks for it (R, D or bipartisan) when it is one of the key bills
+          Civitas follows, unless that roll call was housekeeping (a motion to table or recommit,
+          say); otherwise it comes from the bill&apos;s content.
         </P>
         <P>
           The bill&apos;s content decides partisan depth (the lean bar and its policy-area
@@ -534,7 +534,7 @@ export default function ScoresChapter() {
           separating cases where both parties have positions on the same topic
           <Cite id="laver2000" />. Each party&apos;s position in an area starts from its platform
           and is refined over time by the bills earlier runs labelled for that party (by the roll
-          call&apos;s split where there was one, by content otherwise, never from a procedural
+          call&apos;s split where there was one, by content otherwise, never from a housekeeping
           motion)
           <Cite id="yarowsky1995" />.
         </P>

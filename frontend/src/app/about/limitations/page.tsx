@@ -142,10 +142,11 @@ export default async function LimitationsChapter() {
         <Limitation title="Some bills are labelled by content">
           <P>
             Partisan depth (the lean bar and its policy-area breakdown) labels each bill a member
-            voted on, procedural motions aside, by comparing it with each party&apos;s positions in
-            that area, and a sponsored bill with no tracked roll call, or only a procedural one,
-            gets its party badge the same way. Bipartisan or cross-cutting bills can be misread. It
-            never decides whether a member broke with their party.
+            voted on, housekeeping motions aside, by comparing it with each party&apos;s positions
+            in that area, and a sponsored bill with no tracked roll call, or only a housekeeping one
+            (a motion to table or recommit, say), gets its party badge the same way. Bipartisan or
+            cross-cutting bills can be misread. It never decides whether a member broke with their
+            party.
           </P>
         </Limitation>
       </Section>
