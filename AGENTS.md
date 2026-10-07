@@ -295,19 +295,20 @@ Key mathematical properties:
   over every Congress since 1989. The structure is chosen by predicting
   forward, each transition's n0 from the earlier ones only (its drift,
   shared by every structure, from its own full pairs), as the weight is
-  used, by the one-standard-error rule (Hastie, Tibshirani & Friedman 2009; a
-  convention, adopted in review after two other rules had been tried): the
-  simplest structure within one standard error of the best's error. The
-  latest era's curve, since the 110th Congress (a split by convention),
-  beats one curve by 0.066 (standard error of the paired difference 0.034;
-  over the last three transitions alone about one standard error, computed
-  from `last_three`), and a window of the last six transitions does slightly
-  better still, but both are well within the best's own standard error
-  (0.229), a curve per chamber predicts no better, and with the split or the
-  window's width chosen from earlier Congresses alone each is better than
-  one curve only well within the noise. A rerun decides again. Nothing in it
-  follows the sitting Congress. It is a reliability weight, not a count
-  threshold.
+  used, by the one-standard-error rule (Hastie, Tibshirani & Friedman 2009;
+  a convention, adopted in review after four other rules had been tried, two
+  leaving one member out, then two forward): the simplest structure within
+  one standard error of the best's error. The latest era's curve, since the
+  110th Congress (a split by convention), beats one curve by 0.066 (standard
+  error of the paired difference 0.034; over the last three transitions
+  alone about one standard error, computed from `last_three`), and a window
+  of the last six transitions predicts about as well (0.011 lower error than
+  the era curve, standard error 0.012), but both are well within the best's
+  own standard error (0.229), a curve per chamber predicts no better, and
+  with the split or the window's width chosen from earlier Congresses alone
+  each has lower error than one curve only within the noise. A rerun decides
+  again. Nothing in it follows the sitting Congress. It is a reliability
+  weight, not a count threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Constituent Alignment scores account for Cook

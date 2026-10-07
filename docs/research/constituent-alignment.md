@@ -677,12 +677,12 @@ party's flank, every pair keyed by the transition it spans:
   `drift_range`), so each chamber and transition gets its own, set by that
   transition's pairs of full records (both sides at least 200 scaled
   votes).
-- **Full records count in full.** Full records show no gradient in their
-  count: their slope relative to the drift is 0.99 to 1.01 from 200 to
-  over 1,100 votes (`full_slope_by_votes`). So a full record counts 1, and
-  n0 is the least-squares fit of the thin pairs alone. Where a full record
-  starts, 200 votes, is a convention: the data show no gradient from there
-  up, but nothing chose it over a lower count.
+- **Full records count in full.** No gradient is visible in full records'
+  count: their slope relative to the drift is 0.99 to 1.01 from 200 to over
+  1,100 votes (`full_slope_by_votes`, no standard error computed). So a full
+  record counts 1, and n0 is the least-squares fit of the thin pairs alone.
+  Where a full record starts, 200 votes, is a convention: no gradient is
+  visible from there up, but nothing chose it over a lower count.
 - **What is left out:**
   - Members from outside the 50 states: the House's delegates have thin
     records because they vote only in the Committee of the Whole, not
@@ -729,7 +729,7 @@ in a fixed order, 1,000 times.
   | n0 fitted on the earlier transitions | Forward squared error | Against one curve, paired |
   |---|---|---|
   | **once for both chambers (shipped)** | **1.320** | |
-  | once per chamber | 1.359 | 0.038 worse (standard error 0.040) |
+  | once per chamber | 1.359 | 0.038 higher, within the noise (standard error 0.040) |
   | the latest era's, since the 110th | 1.254 | 0.066 better (0.034) |
   | the last six transitions | 1.243 | 0.078 better (0.036) |
   | a time trend (reported only) | 1.251 | 0.069 better (0.089) |
@@ -825,40 +825,41 @@ in a fixed order, 1,000 times.
   | once for both chambers, plus a party-line term | 1.345 |
 
   A curve per chamber predicts no better (fitted apart, 25 votes for the
-  Senate and 55 for the House). Direction and attendance can't be known
-  for a sitting member's record; against one curve, direction is worse
-  (0.025 above it, standard error 0.014) and attendance within the noise
-  (0.009 below, 0.037). The direction split is which side of the pair is
-  thin (the earlier, mostly members who arrived; the later, mostly members
-  who left or were absent at the end of a Congress), and the attendance
-  split is mostly the arrivals against the departures. Left out one member
-  at a time, the era structure's gain over one curve is all in the earlier
-  era (whose n0 runs to the search grid's lower limit, 1): judged on the
-  latest era's members alone (`era_test`), the latest era's curve does no
-  better than one curve, 0.0025 worse with a standard error of 0.0195 over
-  67 members. That comparison lets one curve learn from the very
-  Congresses it is judged on, which the forward test doesn't; the forward
-  test is the one that matches the use. Repeated at every split
-  (`era_split_test`), a recent era's curve would be adopted (beats one
-  curve by more than a standard error) at 4 of 16 splits (113th–115th,
-  117th), by 1.0 to 1.5 standard errors (computed from `era_split_test`'s
-  above and standard_error), each at the slowest curve the search grid
-  allows (half point 98); that extreme rests on one member at the 113th to
-  115th (leaving one out, n0 falls to 279–475), but without them the
-  slower curve is still adopted at the 113th and 114th (half points 75.5
-  and 82.6) and no single member moves the 117th's (n0 stays 5,000 with
-  each left out). A time trend (one line, log n0 linear in decades since
-  the 110th, `trend_test`) beats one curve by 0.1546 (standard error
-  0.0935) over every member and 0.0793 (0.0741) over the latest era's
-  (0.0368, 0.0624, without its most influential member), with its half
-  point by the 118th at the slowest curve the form allows (about 100
-  votes). Left one member out, the latest era does better at the 113th to
-  117th splits (the 116th barely) and in the trend, as in the forward
-  test; at the 103rd to 112th it does slightly worse, and at the 118th
-  worse by 0.14 (standard error 0.15, 10 members). The early era's n0 sits
-  at the grid's floor, fitted on only 4 thin pairs under 50 votes (of its
-  24, `thin_pairs_by_era`), so "thin records were reliable before 2007" is
-  not a finding: the contrast rests on a small early base.
+  Senate and 55 for the House). Direction and attendance can't be known for
+  a sitting member's record; against one curve, direction is worse (0.025
+  above it, standard error 0.014) and attendance within the noise (0.009
+  below, 0.037). The direction split is which side of the pair is thin (the
+  earlier, mostly members who arrived; the later, mostly members who left or
+  were absent at the end of a Congress), and the attendance split is mostly
+  the arrivals against the departures. Left out one member at a time, the
+  era structure's gain over one curve is all in the earlier era (whose n0
+  runs to the search grid's lower limit, 1): judged on the latest era's
+  members alone (`era_test`), the latest era's curve does no better than one
+  curve: 0.0025 higher error, within the noise (standard error 0.0195), over
+  67 members. That comparison lets one curve learn from the very Congresses
+  it is judged on, which the forward test doesn't; the forward test is the
+  one that matches the use. Repeated at every split (`era_split_test`), a
+  recent era's curve would be adopted (beats one curve by more than a
+  standard error) at 4 of 16 splits (113th–115th, 117th), by 1.0 to 1.5
+  standard errors (computed from `era_split_test`'s above and
+  standard_error), each at the slowest curve the search grid allows (half
+  point 98); that extreme rests on one member at the 113th to 115th (leaving
+  one out, n0 falls to 279–475), but without them the slower curve is still
+  adopted at the 113th and 114th (half points 75.5 and 82.6) and no single
+  member moves the 117th's (n0 stays 5,000 with each left out). A time trend
+  (one line, log n0 linear in decades since the 110th, `trend_test`) has
+  lower error than one curve, within the noise (under two standard errors):
+  0.1546 lower (standard error 0.0935) over every member and 0.0793 (0.0741)
+  over the latest era's (0.0368, 0.0624, without its most influential
+  member), with its half point by the 118th at the slowest curve the form
+  allows (about 100 votes). Left one member out, the latest era has lower
+  error at the 113th to 117th splits (the 116th barely) and in the trend, as
+  in the forward test; at the 103rd to 112th its error is slightly higher,
+  and at the 118th higher by 0.14, within the noise (standard error 0.15, 10
+  members). The early era's n0 sits at the grid's floor, fitted on only 4
+  thin pairs under 50 votes (of its 24, `thin_pairs_by_era`), so "thin
+  records were reliable before 2007" is not a finding: the contrast rests on
+  a small early base.
 
 | | Estimate | 90% interval (members resampled, 1,000 times, the structure held fixed) |
 |---|---|---|
@@ -876,12 +877,12 @@ in a fixed order, 1,000 times.
 - **A party-line term was tested and is not used.** That would make n0 a
   line in the share of roll calls on which the parties' majorities split,
   since in a more party-line Congress each vote might say less about a
-  member's place within their party. Added to one curve it predicts
-  held-out members no better (1.345 against 1.336, 0.008 worse with a
-  standard error of 0.033), and its slope isn't stable: +7.75 here, +2.75
-  added to the era structure in an earlier draft, and negative in a run
-  with the party switchers counted (on a narrower grid). An earlier draft
-  of this change found a positive slope by forcing one drift on every
+  member's place within their party. Added to one curve it predicts held-out
+  members no better (1.345 against 1.336, 0.008 higher error, within the
+  noise, standard error 0.033), and its slope isn't stable: +7.75 here,
+  +2.75 added to the era structure in an earlier draft, and negative in a
+  run with the party switchers counted (on a narrower grid). An earlier
+  draft of this change found a positive slope by forcing one drift on every
   Congress, which loaded the era differences in drift onto n0.
 - **Positions with no count carry some information.** They are members
   Voteview has barely scaled (newly sworn in, or with very few scalable
@@ -920,13 +921,15 @@ in a fixed order, 1,000 times.
   member's record early in a Congress is thin too, on a different agenda;
   whether those records behave like these is untested.
 
-**Ten approaches replaced.** Each appeared in a draft of this change and
-was replaced after review; the fourth, fifth and sixth were not shown to
-help rather than shown not to, and a rerun with more pairs tests them
-again. Every figure below except the career-gap proxy's and those quoted
-from the current output (the best switch of 119 votes at 30%,
-`switch_test.all`; the era curve's half point of 46) comes from that
-draft's own run and is not reproduced by the current scripts.
+**Ten approaches replaced.** Each appeared in a draft of this change and was
+replaced after review; the fourth, fifth and sixth were not shown to help
+rather than shown not to, and a rerun with more pairs tests them again.
+Every figure below except the career-gap proxy's and those quoted from the
+current output (the best switch of 119 votes at 30%, `switch_test.all`; the
+era curve's half point of 46; one curve's half point of 36,
+`half_weight_votes_pooled`; the paired form's window at 9 of 15 splits,
+`ships_paired_rule`) comes from that draft's own run and is not reproduced
+by the current scripts.
 
 *The career-gap proxy.* The first draft fit gap² = drift + k / votes, where
 the gap is between a member's Nokken-Poole position and their career
