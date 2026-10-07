@@ -864,9 +864,9 @@ in a fixed order, 1,000 times.
   way, so it is no better determined; it is only bounded. The curve can't
   put it above 100 votes (as n0 grows, w(n) / w(200) falls to n / 200,
   which is 0.5 at 100); the era curve's interval (26–98,
-  `half_weight_votes_era_interval_90`) runs to where the n0 search stops.
-  The no-count weight is measured over every era (too few no-count pairs
-  to split).
+  `half_weight_votes_era_interval_90`) runs to where the n0 search stops
+  (the grid's upper end, n0 5,000, a convention). The no-count weight is
+  measured over every era (too few no-count pairs to split).
 - **A party-line term was tested and is not used.** That would make n0 a
   line in the share of roll calls on which the parties' majorities split,
   since in a more party-line Congress each vote might say less about a

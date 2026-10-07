@@ -1377,7 +1377,7 @@ def method_text() -> str:
         "drift[chamber, transition] * weight(n) * thin, weight(n) = min(1, w(n) / "
         f"w({RELIABLE_VOTES})), w(n) = n / (n + n0); drift from each transition's pairs of full "
         f"records (both sides {RELIABLE_VOTES} or more scaled votes) in the pair's direction, n0 "
-        f"the least-squares fit of the thin pairs on a grid to {N0_GRID[-1]:.0f} (reference_votes is the "
+        f"the least-squares fit of the thin pairs on a grid to {N0_GRID[-1]:.0f} (a convention; reference_votes is the "
         "full-record count, the w(...) in the denominator); transitions with no full pairs "
         "and Congresses still thin by the calendar are left out. "
         "structure is the one forward_test chooses (each transition predicted from fits on the "
