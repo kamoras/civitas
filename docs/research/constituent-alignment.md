@@ -900,13 +900,14 @@ in a fixed order, 1,000 times.
   position, they count 0.21 from 25 pairs, but a few members carry it:
   leaving out one member at a time moves it between 0.13 and 0.26. A
   no-count position with no career position at all usually belongs to a
-  member with few roll calls in that Congress (five of the six such
-  records in the 100th to 119th Congresses' exports, with 14 to 29 roll
-  calls each; the sixth is a party switcher's record after the switch,
-  counted from the exports; in the 119th House export of 2026-10-03, two
-  newly seated members with 22 and 29 roll calls on record that Voteview
-  had not yet counted, read from the export); it is not measured by these
-  pairs, and it counts nothing, so the part sits at 50 (a stated choice).
+  member with few roll calls in that Congress (all six such records in the
+  100th to 119th Congresses' exports, with 10 to 29 roll calls each: five
+  newly seated or appointed members, the sixth a party switcher's record
+  after the switch, counted from the exports; in the 119th House export of
+  2026-10-03, two newly seated members with 22 and 29 roll calls on record
+  that Voteview had not yet counted, read from the export); it is not
+  measured by these pairs, and it counts nothing, so the part sits at 50
+  (a stated choice).
 - **Each pair is predicted in its own direction.** A member whose thin
   record is the earlier one (an entrant) is predicted with the
   transition's forward drift, the slope of the later full position on the
