@@ -766,8 +766,9 @@ def test_shipped_file_reports_what_the_docs_cite():
     # The docs say the rule wouldn't choose the trend over every transition.
     assert trend["above"] >= -trend["standard_error"]
     # The research note and v6.27 quote the trend from the first transition
-    # its forward fits are all inside the grids, and say it predicts worse
-    # than one curve before that.
+    # its forward fits are all inside the grids; the note says its error is
+    # higher than one curve's before that (the summed gain is positive; the
+    # standard error it quotes is computed from per-member errors, not stored).
     inside = trend["inside_grids"]
     start = inside["from"]
     assert sum(v for t, v in trend["gain_by_transition"].items() if int(t) < start) > 0

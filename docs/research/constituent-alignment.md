@@ -749,9 +749,9 @@ in a fixed order, 1,000 times.
   about 17% (0.229 of 1.320), where the era curve and the window cut it by
   5% and 6% (all computed from `forward_test`'s per-member errors and
   totals); the era curve cut it by at most 7% at any split (computed from
-  `era_at_every_split`; it ships one curve at every split, below), so its
-  choice says that no structure has shown a large gain, not that none
-  exists. The rest of the evidence doesn't settle it either:
+  `era_at_every_split`; the rule ships one curve at every split, below),
+  so the rule's choice says that no structure has shown a large gain, not
+  that none exists. The rest of the evidence doesn't settle it either:
   - **Where the gain is.** The era curve's comes from the transitions
     predicted from the 112th on; at the 111th the two curves predict alike
     (`gain_by_transition`: 0.0). Most of it is at the 112th and 114th
@@ -1044,10 +1044,11 @@ has lower error than one curve only within the noise (above).
     is nearer that record (squared gap 0.039) than the longer record
     (0.083) or the vote-weighted mean of the two (0.060). Counting each
     person once, it is nearer by 0.050 (standard error 0.032, about one
-    and a half) than the longer and by 0.030 (0.022, about one and a
-    third, under two standard errors) than the mean; in 4 of the 9 the
-    record since the switch is also the longer, and of the other 5 it is
-    nearer in 4. Consequences of the choice:
+    and a half standard errors) than the longer and by 0.030 (0.022, about
+    one and a third standard errors, under two; both computed from
+    `switcher_test`) than the mean; in 4 of the 9 the record since the
+    switch is also the longer, and of the other 5 it is nearer in 4.
+    Consequences of the choice:
     - Just after a switch the record since is short, so it counts little
       and the part sits near 50; the longer record from before the
       switch isn't read.
@@ -1302,10 +1303,11 @@ rule's means reclassifies 0 of 2,351 Senate and 0 of 6,055 House breaks
   untested. The no-count weight rests on fewer still (25 pairs), and the
   flank rule's switch can't be measured at all: only 3 pairs have the
   rule's shape. Reading a party switcher on their record since the switch
-  rests on 8 people, and is nearer than the longer record by 0.050
-  (standard error 0.032, about one and a half; `switcher_test`). Rerunning
-  the calibration adds each Congress's new pairs, and decides the
-  structure and the switch again.
+  rests on 8 people, and the record since the switch is nearer the next
+  full record than the longer one by 0.050 (standard error 0.032, about
+  one and a half standard errors, computed from `switcher_test`).
+  Rerunning the calibration adds each Congress's new pairs, and decides
+  the structure and the switch again.
 - **The 70/30 weighting is not fitted.** In 2004 the vote component had the
   larger independent association, which supports it keeping the majority
   weight. No multi-election estimate of the ratio exists to fit the weight
