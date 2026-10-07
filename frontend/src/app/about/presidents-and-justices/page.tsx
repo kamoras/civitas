@@ -110,11 +110,32 @@ export default function PresidentsAndJusticesChapter() {
         </Sub>
         <Sub title="Effectiveness (25%)">
           <P>
-            The economy over the term: GDP growth (60%) and job creation (40%), leaving out the
-            first year, which mostly reflects the outgoing administration
-            <Cite id="blinder2016" />. Job figures exist from 1939, so earlier presidents are scored
-            on growth alone. Both are compared with other presidents&apos; actual figures rather
-            than fixed cut-offs.
+            The economy over the term, leaving out the first year, which mostly reflects the
+            outgoing administration <Cite id="blinder2016" />. From 1947 on it has four equal parts:
+            growth, jobs created, the change in unemployment, and inflation. Before 1947 only growth
+            (60%) and, from 1939, jobs (40%) can be measured. Every part is compared with other
+            presidents&apos; actual figures rather than fixed cut-offs.
+          </P>
+          <P>
+            Unemployment and inflation are judged against where a term started. A president who
+            takes office near the top of a recession usually sees unemployment fall a long way, and
+            one who inherits high inflation usually keeps some of it: across the 13 postwar
+            presidencies the change in unemployment correlates -0.84 with its starting rate, and
+            average inflation +0.74 with the rate inherited. So each is compared with what
+            presidents who started at the same rate went on to see. The four parts are weighed
+            equally because they barely overlap (correlations of 0.05 to 0.17), and there is no
+            outside yardstick to set other weights by without counting the historians twice{" "}
+            <Cite id="dawes1979" />. Weighed this way, the economy score agrees with the
+            historians&apos; own rating of economic management (+0.48); growth alone did not
+            (+0.02).
+          </P>
+          <P>
+            Measures tested and left out: how often Congress voted the president&apos;s way (mostly
+            a matter of which party held Congress, and a president&apos;s House and Senate records
+            barely agree once that is set aside), counts of major laws enacted (they follow Congress
+            and the era, not the president), and the change in the federal deficit (it mostly
+            follows the business cycle, and would mark down borrowing in a recession that most
+            economists recommend). The study is in docs/research/president-scores.md.
           </P>
           <P>
             Most of a president&apos;s growth is shared with the rest of the rich world: oil shocks,

@@ -143,6 +143,7 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
         _historical_legacy_core,
         _public_mandate_core,
         stored_approval_groups,
+        stored_macro,
     )
     from app.pipeline.president_pipeline import _term_years
 
@@ -170,6 +171,8 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
             gdp_per_person=p.gdp_growth_per_person,
             gdp_peer_median=p.gdp_growth_peer_median,
             gdp_relative=p.gdp_growth_relative,
+            macro=stored_macro(p),
+            president_id=p.id,
         ),
         "historicalLegacy": _historical_legacy_core(
             historical_legacy_score=p.historical_legacy_score,

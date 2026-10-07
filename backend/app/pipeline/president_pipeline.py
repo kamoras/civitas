@@ -43,9 +43,12 @@ from app.pipeline.analyze.president_scorer import (
     approval_by_group,
     compute_president_reference,
     congress_of_year,
+    macro_reference,
+    macro_window,
     peer_comparable,
     recalculate_president_scores,
     stored_approval_groups,
+    stored_macro,
     FULL_TERM_DAYS,
     term_days,
     term_polarization,
@@ -69,6 +72,7 @@ from app.pipeline.fetch.presidential_approval import (
     fetch_president_approval_history,
     recent_polls,
 )
+from app.pipeline.fetch.macro_series import CONSUMER_PRICES, UNEMPLOYMENT, fetch_annual_series, inflation_by_year
 from app.pipeline.fetch.presidential_elections import fetch_election_margins
 from app.pipeline.fetch.voteview import fetch_house_party_distance
 from app.pipeline.fetch.presidential_roster import fetch_presidential_roster
@@ -182,6 +186,11 @@ async def run_president_pipeline(db: Session) -> dict:
         current_year = utcnow().year
         gdp_by_year = await fetch_historical_real_gdp(client, db, 1790, current_year)
         logger.info("GDP data fetched for %d years", len(gdp_by_year))
+
+        logger.info("Fetching unemployment and consumer prices (FRED/BLS)...")
+        unemployment_by_year = await fetch_annual_series(client, db, UNEMPLOYMENT)
+        cpi_by_year = await fetch_annual_series(client, db, CONSUMER_PRICES)
+        inflation_series = inflation_by_year(cpi_by_year) if cpi_by_year else None
 
         logger.info("Fetching real GDP per person, US and peer economies (World Bank)...")
         peer_bundled = bundled_per_capita()
@@ -306,6 +315,19 @@ async def run_president_pipeline(db: Session) -> dict:
             live["gdp_growth_peer_median"] = president.gdp_growth_peer_median
             live["gdp_growth_relative"] = president.gdp_growth_relative
 
+            # Unemployment and inflation over the credited years, for a term
+            # from 1947 on; kept as stored when this run couldn't read them.
+            if unemployment_by_year and inflation_series and peer_comparable(term_start_year):
+                last = term_end_year if president.term_end else min(max(unemployment_by_year), max(inflation_series))
+                window = macro_window(unemployment_by_year, inflation_series, term_start_year, last)
+                if window:
+                    president.unemployment_start = window["unemp_start"]
+                    president.unemployment_change = window["unemp_change"]
+                    president.inflation_start = window["infl_start"]
+                    president.inflation_average = window["infl_avg"]
+                    president.economy_years = window["years"]
+            live["macro"] = stored_macro(president)
+
             if president.id in jobs_data:
                 president.jobs_created_millions = jobs_data[president.id]
             if president.jobs_created_millions is not None:
@@ -377,6 +399,7 @@ async def run_president_pipeline(db: Session) -> dict:
             "approval_trend": p.approval_trend,
             "approval_start": p.approval_start,
             "approval_groups": stored_approval_groups(p),
+            "macro": stored_macro(p),
             "polarization": p.term_polarization,
             "is_current": p.is_current,
             "election_margin": election_margin_data.get(p.id),
@@ -414,6 +437,28 @@ async def run_president_pipeline(db: Session) -> dict:
             ],
         ))
     }
+    # A presidency shorter than a full term is judged on unemployment and
+    # inflation against other postwar presidencies over the same number of
+    # credited years.
+    if unemployment_by_year and inflation_series:
+        others = [
+            q for q in presidents
+            if not q.is_current and q.term_end and peer_comparable(int(q.term_start[:4]))
+        ]
+        measured["macro_windows"] = {
+            p.id: block
+            for p in presidents
+            if (macro := stored_macro(p))
+            and (p.is_current or (term_days(p.term_start, p.term_end) or FULL_TERM_DAYS) < FULL_TERM_DAYS)
+            and (block := macro_reference([
+                macro_window(
+                    unemployment_by_year, inflation_series, int(q.term_start[:4]), int(q.term_end[:4]),
+                    years=macro["years"],
+                )
+                for q in others
+                if q.id != p.id and int(q.term_end[:4]) - int(q.term_start[:4]) >= macro["years"]
+            ]))
+        }
     previous = PRESIDENT_REFERENCE.load().get("presidents") or {}
     reference = PRESIDENT_REFERENCE.with_live("presidents", {**previous, **measured}).get("presidents")
     logger.info("President reference: %s", reference)

@@ -251,3 +251,72 @@ overall: Reagan 7th to 5th, Johnson 5th to 9th, Kennedy 6th to 8th.
 (H099); the fetcher's URL template wrote H99, a 404, for every Congress
 before the 100th. Only the sitting Congress had been read before.
 
+## President v10: beyond growth
+
+**Question.** Effectiveness measured growth and jobs. What else measures a
+president's record, and which candidates hold up? Each was tested on the
+same criteria as before: agreement with historians' matching category
+(C-SPAN 2021, per category), trend with era, consistency within a
+president, overlap with what is already scored, and how much of it the
+environment explains.
+
+**Legislative success** (share of roll calls where Congress voted the
+president's way, Voteview's coding of CQ's presidential positions, 11,987
+roll calls 1945-2026; Bond & Fleisher 1990; Bond 2024). Majority control
+and seat share explain 54% of it across 79 Congress-chamber cells. Set that
+aside and a president's House and Senate figures agree at r = +0.13, its
+agreement with historians' "Relations with Congress" is +0.22, and it
+trends with era (-0.72). Rejected: mostly the Congress a president faced.
+
+**Major laws** (Mayhew's important-enactment lists, 1947-2024). Per
+Congress: 5 to 22. A president's consecutive Congresses agree at +0.42,
+barely above any two consecutive Congresses (+0.33); first and second terms
+at +0.19; with historians' overall rating -0.40. Rejected: it follows
+Congress and the era (Nixon, with Democratic Congresses, tops it).
+
+**Fiscal balance** (change in the federal surplus as a share of GDP, FRED
+FYFSGDA188S). Agrees with historians' economic management at +0.67, but
+correlates -0.58 with its own starting level and +0.47 with the change in
+unemployment: it mostly follows the business cycle, and as a score would
+mark down borrowing in a recession, which most economists recommend. The
+cyclically adjusted series starts in 1965. Rejected.
+
+**Unemployment and inflation** (FRED UNRATE from 1948, CPIAUCSL from 1947;
+credited years as for GDP; peers from the Jorda-Schularick-Taylor
+Macrohistory Database R6 and the World Bank):
+
+| Measure | vs historians' Economic Management | Era trend | vs GDP part |
+|---|---|---|---|
+| Inflation, US | +0.67 | +0.16 | -0.01 |
+| Inflation vs peers | +0.15 | **-0.75** | -0.03 |
+| Inflation vs what its start predicts | +0.46 | +0.10 | +0.15 |
+| Unemployment change, US | +0.45 | +0.18 | +0.49 |
+| Unemployment change vs peers | +0.11 | +0.18 | +0.58 |
+| Unemployment change vs what its start predicts | +0.51 | -0.14 | +0.15 |
+| GDP vs peers (v8) | -0.15 | +0.23 | - |
+
+Peer comparison fails for both: no consistent peer unemployment before the
+1980s (harmonized series start 1983-1991 for most peers), and relative
+inflation trends with era, as poorer economies catching up run higher
+inflation (Balassa-Samuelson). Where a term starts explains most of where
+it goes (unemployment change r = -0.84 with its starting rate; average
+inflation +0.74 with the inherited rate), so each is judged against what
+presidents starting at the same rate saw: slopes -1.27 and +0.50, stable
+leaving out any one presidency (-1.19 to -1.38; 0.43 to 0.68). Jobs and
+unemployment overlap little (+0.17).
+
+**Weights.** Four nearly independent parts (pairwise 0.05 to 0.17) and no
+outside criterion to fit weights to without counting the historians twice:
+equal weights (Dawes 1979). Effectiveness then agrees with historians'
+economic management at +0.48 (+0.02 before) with no era trend (-0.06).
+
+**Effect (October 2026 data, DB copy).** Effectiveness: Eisenhower 18 to
+38, Kennedy 48 to 57, Johnson 76 to 71, Nixon 26 to 39, Ford 59 to 53,
+Carter 58 to 34, Reagan 70 to 70, George H. W. Bush 31 to 37, Clinton 55 to
+62, George W. Bush 28 to 32, Obama 49 to 54, Trump (first term) 45 to 50,
+Biden 83 to 73. Pre-1947 presidents unchanged.
+
+**Data note.** BLS published no unemployment or CPI figure for October
+2025 (the shutdown). A year counts once its December figure is out,
+averaged over its published months.
+

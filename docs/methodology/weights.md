@@ -161,6 +161,21 @@ in the top 10 and Coolidge/Harding/McKinley out of it, so the number
 itself didn't need to change — only how it's applied.
 ```
 
+### President v10 (2026-10-07): unemployment and inflation in Effectiveness
+
+```text
+Weights unchanged. Effectiveness, for terms from 1947 on:
+  25% GDP growth vs peers, 25% jobs per year,
+  25% unemployment: (expected change - change), expected = a + b x rate
+      the year the term began, change from that year to the last credited,
+  25% inflation: (expected - average over the credited years), expected =
+      a + b x inflation the year the term began,
+each z-scored (residual SD of its fit over completed full-term postwar
+presidencies, refitted each run; a shorter presidency against others' same
+number of credited years). Before 1947: GDP 60%, jobs 40%, as before.
+Equal weights: nearly independent parts, no outside criterion (Dawes 1979).
+```
+
 ### President v9 (2026-10-07): average approval by party, against the era
 
 ```text

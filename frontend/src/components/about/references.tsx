@@ -175,6 +175,15 @@ export const REFERENCES = {
       </>
     ),
   },
+  dawes1979: {
+    short: "Dawes 1979",
+    entry: (
+      <>
+        Dawes, R. M. (1979). The Robust Beauty of Improper Linear Models in Decision Making.{" "}
+        <J>American Psychologist</J>, 34(7), 571–582.
+      </>
+    ),
+  },
   donovan2020: {
     short: "Donovan et al. 2020",
     entry: (

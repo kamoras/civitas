@@ -163,6 +163,8 @@ def _patch_fetchers(
         # The World Bank unreachable: peer figures keep what is stored.
         patch("app.pipeline.president_pipeline.fetch_world_bank_per_capita", new=AsyncMock(return_value=None)),
         patch("app.pipeline.president_pipeline.fetch_house_party_distance", new=AsyncMock(return_value=polarization or {})),
+        # FRED unreachable: unemployment and inflation keep what is stored.
+        patch("app.pipeline.president_pipeline.fetch_annual_series", new=AsyncMock(return_value=None)),
     ]
 
 
