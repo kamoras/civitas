@@ -161,6 +161,25 @@ in the top 10 and Coolidge/Harding/McKinley out of it, so the number
 itself didn't need to change — only how it's applied.
 ```
 
+### President v8 (2026-10-06): postwar GDP growth relative to peer economies
+
+```text
+Weights unchanged (25/25/50). Effectiveness's GDP component (60%), for
+terms starting 1947 or later:
+
+  relative = mean over credited years t of
+             (US growth per person_t - median peer growth_t
+              - rate x median peer log income gap with the US_(t-1))
+
+scored against the postwar population's mean and SD of `relative`
+(compute_president_reference, "gdp_growth_relative"). Credited years: the
+term's second to its last. Peers: 13 advanced economies. rate: Theil-Sen
+slope of (US - median peer growth) on the median gap, every year since
+1947, refitted each run (8.9 in October 2026). Before 1947 unchanged: total
+growth against prewar presidencies. docs/research/president-scores.md has
+the measurements.
+```
+
 ### President v7 (2026-10-06): Historical Legacy 50%, Agency Alignment removed
 
 ```text

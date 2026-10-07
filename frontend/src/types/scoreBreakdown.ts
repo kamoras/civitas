@@ -118,8 +118,11 @@ export interface PublicMandateFacts {
 }
 
 /** President: effectiveness.facts. Jobs per attributed year (the first year
- *  set aside) against presidencies since 1939; GDP growth against those in
- *  the same data regime (gdpSince: since 1947, else before). */
+ *  set aside) against presidencies since 1939. GDP: since 1947, growth per
+ *  person against 13 peer economies' median over the same years, catch-up
+ *  set aside (gdpRelative, scored against gdpRelativeMean); before, total growth
+ *  against other prewar presidencies (gdpGrowth vs gdpMean). gdpSince:
+ *  since 1947, else before. */
 export interface PresidentEffectivenessFacts {
   jobsMillions: number | null;
   jobsPerYear: number | null;
@@ -127,6 +130,12 @@ export interface PresidentEffectivenessFacts {
   gdpGrowth: number | null;
   gdpMean: number | null;
   gdpSince: boolean | null;
+  gdpPerPerson: number | null;
+  gdpPeers: number | null;
+  /** Points of gdpPerPerson - gdpPeers the peers' catch-up accounts for. */
+  gdpCatchUp: number | null;
+  gdpRelative: number | null;
+  gdpRelativeMean: number | null;
 }
 
 /** President: historicalLegacy.facts. C-SPAN 2021 survey points; otherTerms

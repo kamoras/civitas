@@ -164,6 +164,9 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
             gdp_growth_avg=p.gdp_growth_avg,
             term_years=term_years,
             term_start_year=int(p.term_start[:4]) if p.term_start else None,
+            gdp_per_person=p.gdp_growth_per_person,
+            gdp_peer_median=p.gdp_growth_peer_median,
+            gdp_relative=p.gdp_growth_relative,
         ),
         "historicalLegacy": _historical_legacy_core(
             historical_legacy_score=p.historical_legacy_score,

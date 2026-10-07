@@ -241,8 +241,9 @@ def dimensions_available(entity) -> int:
 # Alignment removed (administrations since 1994 finalize 59.6-61.8% of their
 # rulemakings, too little difference to score), Historical Legacy weighted
 # 50%, and a presidency cut short compared over its own number of days like
-# the sitting one (FULL_TERM_DAYS).
-PRESIDENT_ALGORITHM_VERSION = "v7"
+# the sitting one (FULL_TERM_DAYS); v8 = a postwar term's GDP growth
+# scored relative to 13 peer economies over the same years (peer_relative).
+PRESIDENT_ALGORITHM_VERSION = "v8"
 
 
 # Full credit/deficit approached asymptotically at this many population
@@ -305,6 +306,9 @@ def calc_effectiveness(
     term_years: float,
     term_start_year: int | None = None,
     reference: dict | None = None,
+    gdp_per_person: float | None = None,
+    gdp_peer_median: float | None = None,
+    gdp_relative: float | None = None,
 ) -> int | None:
     """Calculate effectiveness score from economic data only.
 
@@ -313,7 +317,20 @@ def calc_effectiveness(
     """
     return _effectiveness_core(
         jobs_created_millions, gdp_growth_avg, term_years, term_start_year, reference,
+        gdp_per_person, gdp_peer_median, gdp_relative,
     )["score"]
+
+
+def peer_relative(term_start_year: int | None, gdp_relative: float | None) -> float | None:
+    """A postwar term's growth relative to the peer economies (catch-up set
+    aside, fetch/peer_gdp.py); None before 1947 or when not measured."""
+    return gdp_relative if peer_comparable(term_start_year) else None
+
+
+def peer_comparable(term_start_year: int | None) -> bool:
+    """Whether a term's growth is scored against peer economies: postwar
+    terms, the ones the peer series covers (fetch/peer_gdp.py)."""
+    return _gdp_reference_key(term_start_year) == "gdp_growth_postwar"
 
 
 def _effectiveness_core(
@@ -322,17 +339,31 @@ def _effectiveness_core(
     term_years: float,
     term_start_year: int | None = None,
     reference: dict | None = None,
+    gdp_per_person: float | None = None,
+    gdp_peer_median: float | None = None,
+    gdp_relative: float | None = None,
 ) -> dict:
     """Same math as calc_effectiveness, returning every intermediate value
     alongside the final score.
 
     Components, each scored against the presidential population measured
     every run (compute_president_reference), like Public Mandate:
-      - GDP growth (60%): average annual real growth over the term, first
-        year excluded (an annual stand-in for Blinder & Watson 2016's
-        attribution lag; see historical_gdp) and peak-relative after a contraction
-        (historical_gdp.compute_term_gdp_growth). Compared with presidents
-        in the same data regime, split at 1947 (see _GDP_REGIME_SPLIT_YEAR).
+      - GDP growth (60%). Since 1947: average annual real growth per
+        person over the years after the term's first (an annual stand-in
+        for Blinder & Watson 2016's attribution lag), minus the median of
+        13 peer economies over the same years, with the part of that gap
+        the peers' catch-up growth predicts set aside (fetch/peer_gdp.py),
+        compared with other postwar presidencies' figure. Most of a term's
+        growth is shared with those economies (68% of the variance since
+        1961, docs/research/president-scores.md), so raw growth measured
+        the world economy a president presided over; the difference is
+        what was particular to the US (president v8). Before 1947 no peer
+        series covers the terms, so it is average annual real growth,
+        first year excluded and peak-relative after a contraction
+        (historical_gdp.compute_term_gdp_growth), compared with other
+        prewar presidencies (see _GDP_REGIME_SPLIT_YEAR). A postwar term
+        whose peer figures haven't been fetched yet is scored the prewar
+        way against postwar presidencies until they are.
       - Jobs created (40%): payroll jobs per attributed year, BLS 1939
         onward only. Absolute jobs rather than percent growth: across
         presidencies since 1945 the absolute rate shows no trend with era
@@ -343,24 +374,39 @@ def _effectiveness_core(
     Replaced in president v5: hand-set curves (GDP 25 + g/5 x 55 around a
     "post-WWII 3.2%"; jobs 30 + rate/3M x 50) — AGENTS.md §3a.
 
-    What this does not do, disclosed: most of a modern president's term
-    growth is shared with other advanced economies over the same years (60%
-    of the variance since 1946 — docs/research/president-scores.md), so
-    this dimension largely measures economic conditions a president
-    presided over, not caused. Growth relative to peer economies would
-    remove that shared component, but needs a peer-GDP source the pipeline
-    does not fetch yet.
+    What growth relative to peers still includes: anything that moved the
+    US alone without a president causing it (a domestic financial crisis
+    building before the term, a population shift). It removes the shocks
+    the peers shared, not every shock.
     """
     components: list[dict] = []
     # The scorecard's sentence and scales, as numbers (None where not
     # measured): the president's values and the averages they're scored
     # against.
     facts: dict = {"jobsMillions": jobs_created_millions, "jobsPerYear": None, "jobsMean": None,
-                   "gdpGrowth": gdp_growth_avg, "gdpMean": None, "gdpSince": None}
+                   "gdpGrowth": gdp_growth_avg, "gdpMean": None, "gdpSince": None,
+                   "gdpPerPerson": None, "gdpPeers": None, "gdpCatchUp": None,
+                   "gdpRelative": None, "gdpRelativeMean": None}
 
     gdp_key = _gdp_reference_key(term_start_year)
     gdp_stat = _president_stat(reference, gdp_key)
-    if gdp_growth_avg is not None and gdp_stat:
+    relative = peer_relative(term_start_year, gdp_relative)
+    relative_stat = _president_stat(reference, "gdp_growth_relative")
+    if relative is not None and relative_stat and gdp_per_person is not None and gdp_peer_median is not None:
+        # The points of US-minus-peers growth the peers' catch-up accounted
+        # for, set aside in `relative`.
+        catch_up = round(gdp_per_person - gdp_peer_median - relative, 4)
+        facts.update(gdpPerPerson=gdp_per_person, gdpPeers=gdp_peer_median, gdpCatchUp=catch_up,
+                     gdpRelative=relative, gdpRelativeMean=relative_stat[0], gdpSince=True)
+        components.append(_population_zscore_component(
+            "GDP growth vs. peer economies", 0.60, relative, relative_stat[0], relative_stat[1],
+            f"{gdp_per_person:.1f}% average annual growth per person (first year excluded) vs. "
+            f"{gdp_peer_median:.1f}% for 13 peer economies, a difference of "
+            f"{gdp_per_person - gdp_peer_median:+.1f} points, {catch_up:+.1f} of it the peers "
+            f"catching up with US incomes: {relative:+.1f} against {relative_stat[0]:+.1f} for "
+            f"presidencies since {_GDP_REGIME_SPLIT_YEAR}",
+        ))
+    elif gdp_growth_avg is not None and gdp_stat:
         era = "before" if gdp_key == "gdp_growth_prewar" else "since"
         facts.update(gdpMean=gdp_stat[0], gdpSince=gdp_key == "gdp_growth_postwar")
         components.append(_population_zscore_component(
@@ -423,7 +469,8 @@ def compute_president_reference(presidents: list[dict]) -> dict:
     """Population mean/stdev for each z-scored presidential input, from
     stored per-president values: dicts with id, name, avg_approval,
     approval_trend, election_margin, historical_legacy_score, and (for
-    Effectiveness) gdp_growth_avg, term_start_year, jobs_created_millions,
+    Effectiveness) gdp_growth_avg, gdp_growth_relative, term_start_year,
+    jobs_created_millions,
     term_years.
 
     Approval, trend and margin are counted per presidency (split terms have
@@ -439,9 +486,12 @@ def compute_president_reference(presidents: list[dict]) -> dict:
     def values(field: str) -> list[float]:
         return [float(p[field]) for p in presidents if p.get(field) is not None]
 
-    gdp = {"gdp_growth_prewar": [], "gdp_growth_postwar": []}
+    gdp = {"gdp_growth_prewar": [], "gdp_growth_postwar": [], "gdp_growth_relative": []}
     jobs: list[float] = []
     for p in presidents:
+        relative = peer_relative(p.get("term_start_year"), p.get("gdp_growth_relative"))
+        if relative is not None:
+            gdp["gdp_growth_relative"].append(relative)
         if p.get("gdp_growth_avg") is not None:
             gdp[_gdp_reference_key(p.get("term_start_year"))].append(float(p["gdp_growth_avg"]))
         if p.get("jobs_created_millions") is not None and (p.get("term_years") or 0) > 0:
@@ -782,6 +832,7 @@ def recalculate_president_scores(
     Args:
         president_id: e.g. "obama-44"
         live_data: Dict with keys jobs_created_millions, gdp_growth_avg,
+            gdp_growth_per_person, gdp_growth_peer_median, gdp_growth_relative,
             term_start_year,
             avg_approval, approval_trend, election_margin,
             historical_legacy_score — any subset may be present; each
@@ -809,6 +860,9 @@ def recalculate_president_scores(
             term_years=term_years,
             term_start_year=live_data.get("term_start_year"),
             reference=reference,
+            gdp_per_person=live_data.get("gdp_growth_per_person"),
+            gdp_peer_median=live_data.get("gdp_growth_peer_median"),
+            gdp_relative=live_data.get("gdp_growth_relative"),
         ),
         "score_historical_legacy": calc_historical_legacy(
             historical_legacy_score=live_data.get("historical_legacy_score"),

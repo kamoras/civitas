@@ -41,6 +41,7 @@ from app.pipeline.analyze.president_scorer import (
     PRESIDENT_ALGORITHM_VERSION,
     compute_president_overall_score,
     compute_president_reference,
+    peer_comparable,
     recalculate_president_scores,
     FULL_TERM_DAYS,
     term_days,
@@ -50,6 +51,13 @@ from app.pipeline.fetch.cspan_historians_survey import fetch_cspan_historians_su
 from app.pipeline.fetch.economic_data import fetch_jobs_for_president
 from app.pipeline.fetch.historical_executive_orders import eo_entry, fetch_historical_eo_counts
 from app.pipeline.fetch.historical_gdp import compute_term_gdp_growth, fetch_historical_real_gdp
+from app.pipeline.fetch.peer_gdp import (
+    bundled_last_year,
+    bundled_per_capita,
+    convergence_rate,
+    fetch_world_bank_per_capita,
+    peer_relative_growth,
+)
 from app.pipeline.fetch.presidential_approval import (
     approval_slugs,
     dated_approvals,
@@ -169,6 +177,16 @@ async def run_president_pipeline(db: Session) -> dict:
         gdp_by_year = await fetch_historical_real_gdp(client, db, 1790, current_year)
         logger.info("GDP data fetched for %d years", len(gdp_by_year))
 
+        logger.info("Fetching real GDP per person, US and peer economies (World Bank)...")
+        peer_bundled = bundled_per_capita()
+        world_bank_gdp = await fetch_world_bank_per_capita(
+            client, db, bundled_last_year(peer_bundled), current_year,
+        )
+        convergence = (
+            convergence_rate(world_bank_gdp, peer_bundled, current_year) if world_bank_gdp is not None else None
+        )
+        logger.info("Peer catch-up growth: %s points per log income gap", convergence)
+
         logger.info("Fetching BLS employment data (1939 onward)...")
         jobs_data: dict[str, float] = {}
         for p in presidents:
@@ -257,6 +275,20 @@ async def run_president_pipeline(db: Session) -> dict:
             if president.gdp_growth_avg is not None:
                 live["gdp_growth_avg"] = president.gdp_growth_avg
 
+            # Kept as stored when the World Bank couldn't be fetched this run.
+            peer = (
+                peer_relative_growth(term_start_year, term_end_year, world_bank_gdp, peer_bundled, convergence)
+                if convergence is not None and peer_comparable(term_start_year)
+                else None
+            )
+            if peer is not None:
+                president.gdp_growth_per_person = peer["us"]
+                president.gdp_growth_peer_median = peer["peers"]
+                president.gdp_growth_relative = peer["relative"]
+            live["gdp_growth_per_person"] = president.gdp_growth_per_person
+            live["gdp_growth_peer_median"] = president.gdp_growth_peer_median
+            live["gdp_growth_relative"] = president.gdp_growth_relative
+
             if president.id in jobs_data:
                 president.jobs_created_millions = jobs_data[president.id]
             if president.jobs_created_millions is not None:
@@ -316,6 +348,9 @@ async def run_president_pipeline(db: Session) -> dict:
             "election_margin": election_margin_data.get(p.id),
             "historical_legacy_score": p.historical_legacy_score,
             "gdp_growth_avg": p.gdp_growth_avg,
+            "gdp_growth_per_person": p.gdp_growth_per_person,
+            "gdp_growth_peer_median": p.gdp_growth_peer_median,
+            "gdp_growth_relative": p.gdp_growth_relative,
             "term_start_year": int(p.term_start[:4]) if p.term_start else None,
             "jobs_created_millions": p.jobs_created_millions,
             "term_years": scored_inputs.get(p.id, ({}, 0.0))[1],

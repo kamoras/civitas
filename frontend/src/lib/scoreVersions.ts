@@ -62,6 +62,33 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     ],
   },
   {
+    version: "President v8",
+    date: "2026-10-07",
+    title: "Postwar growth compared with 13 peer economies, allowing for their catching up",
+    tldr: "Oil shocks, financial crises and the pandemic hit every rich country at once, so a president's growth record mostly reflected the world economy. From 1947 on, Effectiveness now compares US growth per person with 13 peer economies over the same years. Europe and Japan grew fast in the 1950s and 1960s because they were catching up with US incomes, not because those presidents fell short, so that part is set aside.",
+    changes: [
+      "Why: since 1961, 68% of the variation in a presidency's growth per person is shared with the median of the 13 peers over the same years. Total growth also ran ahead for Democrats by 0.9 points a year; against the peers, 0.6.",
+      "The peers are Britain, France, Germany, the Netherlands, Belgium, Italy, Sweden, Denmark, Norway, Switzerland, Canada, Australia and Japan, from the Maddison Project (through 2022) and the World Bank after.",
+      "Catch-up: compared raw, relative growth rose with a term's start year (r = +0.73 over the 13 completed postwar terms), because the peers were poorer then. Each year's gap is adjusted by how far below US incomes the peers were, at a rate measured from every year since 1947 with a method that a single unusual year can't swing. The era trend falls to +0.41, the rest from terms since 2017, when the US outgrew Europe and Japan.",
+      "The years credited are the same as before: from the term's second year, since the first mostly reflects the predecessor. Inherited momentum was checked and doesn't carry over: growth in the two years before a term doesn't predict growth during it (r = -0.08, 43 terms).",
+      "Presidents before 1947 are unchanged: no peer series covers their terms. Job creation is unchanged.",
+      "Effect on October 2026 data, Effectiveness: Eisenhower 36 to 18, Kennedy 69 to 48, Nixon 45 to 26, Clinton 73 to 55; George H. W. Bush 21 to 31, George W. Bush 20 to 28, Trump's first term 20 to 45, Biden 53 to 83. docs/research/president-scores.md has the study.",
+    ],
+  },
+  {
+    version: "President v7",
+    date: "2026-10-07",
+    title:
+      "Historians count for half; Agency Alignment removed; a term cut short compared over its own length",
+    tldr: "The president score is now historians' assessment (50%), public approval (25%) and the economy (25%). Agency Alignment is gone: once a counting error was fixed, every administration since 1994 finalized nearly the same share of its rules. A presidency cut short, like Kennedy's, is now compared with how predecessors' approval moved over the same number of days, not over whole terms. Each score on a president's page shows the share it actually carries in their overall.",
+    changes: [
+      "Historical Legacy rises from 35% to 50%, and Public Mandate and Effectiveness take 25% each. On the current scores, at 35% the overall correlated about as much with the economy and approval (0.83) as with historians' ratings (0.78); at 50% historians lead (0.90) and the record still moves the ranking (0.69).",
+      "Agency Alignment (the share of rulemakings that reached a final rule) is removed. The Federal Register's search reports at most 10,000 results, so Clinton, George W. Bush and Obama all read exactly 50%. Counted in full, administrations since 1994 range from 59.6% to 61.8%, too little difference to score, and compared only with each other a two-point gap read as nearly two standard deviations.",
+      "A presidency shorter than a full four-year term is compared with predecessors over the same number of days, as the sitting president already was, and is left out of the whole-term comparison. Kennedy's approval fell 14 points from a start of 76%: against whole terms that looked far better than the expected 31-point fall, while presidents starting there fell about 16 points in their first 1,001 days. His approval trend score goes from 87 to 57.",
+      "Each score's percentage on a president's page is now the share it actually carries in that president's overall. A sitting president, unrated by historians, has approval and the economy at 50% each.",
+    ],
+  },
+  {
     version: "v6.26",
     date: "2026-10-02",
     title: "Funding Independence: every committee and occupation counted, and fairer comparisons",
@@ -87,19 +114,6 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
       "The cause was measured, not assumed: in samples of bills from both the 117th Congress (Democratic majority) and the 119th (Republican majority), Republican-sponsored bills drew a larger share of cosponsors from the other party under both majorities. So it is party, not majority status, and comparing by majority status would not have fixed it.",
       "Now: the median member of each party scores 50 on this component. The give-and-receive bipartisanship figure shown on profiles is unchanged.",
       "Effect on October 2026 data: the median Senate Democrat moves from 49.0 to 52.7 on Legislative Effectiveness and the median Republican from 53.0 to 51.5; in the House, 50.0 to 51.8 and 55.0 to 51.6. The average member moves about 2 points, at most 6. docs/methodology/member-score/v6.25.md has the measurements.",
-    ],
-  },
-  {
-    version: "President v7",
-    date: "2026-10-06",
-    title:
-      "Historians count for half; Agency Alignment removed; a term cut short compared over its own length",
-    tldr: "The president score is now historians' assessment (50%), public approval (25%) and the economy (25%). Agency Alignment is gone: once a counting error was fixed, every administration since 1994 finalized nearly the same share of its rules. A presidency cut short, like Kennedy's, is now compared with how predecessors' approval moved over the same number of days, not over whole terms. Each score on a president's page shows the share it actually carries in their overall.",
-    changes: [
-      "Historical Legacy rises from 35% to 50%, and Public Mandate and Effectiveness take 25% each. On the current scores, at 35% the overall correlated about as much with the economy and approval (0.83) as with historians' ratings (0.78); at 50% historians lead (0.90) and the record still moves the ranking (0.69).",
-      "Agency Alignment (the share of rulemakings that reached a final rule) is removed. The Federal Register's search reports at most 10,000 results, so Clinton, George W. Bush and Obama all read exactly 50%. Counted in full, administrations since 1994 range from 59.6% to 61.8%, too little difference to score, and compared only with each other a two-point gap read as nearly two standard deviations.",
-      "A presidency shorter than a full four-year term is compared with predecessors over the same number of days, as the sitting president already was, and is left out of the whole-term comparison. Kennedy's approval fell 14 points from a start of 76%: against whole terms that looked far better than the expected 31-point fall, while presidents starting there fell about 16 points in their first 1,001 days. His approval trend score goes from 87 to 57.",
-      "Each score's percentage on a president's page is now the share it actually carries in that president's overall. A sitting president, unrated by historians, has approval and the economy at 50% each.",
     ],
   },
   {

@@ -94,19 +94,36 @@ export default function PresidentsAndJusticesChapter() {
         </Sub>
         <Sub title="Effectiveness (25%)">
           <P>
-            The economy over the term: GDP growth (60%) and job creation (40%). Growth is the
-            average annual real-GDP growth over the term, leaving out the first year, which mostly
-            reflects the outgoing administration. Job figures exist from 1939, so earlier presidents
-            are scored on growth alone. Both are compared with other presidents&apos; actual figures
-            rather than fixed cut-offs, and growth is compared within its era, before and after
-            1947, because older estimates exaggerate booms and busts
-            <Cite id="romer1989" />.
+            The economy over the term: GDP growth (60%) and job creation (40%), leaving out the
+            first year, which mostly reflects the outgoing administration
+            <Cite id="blinder2016" />. Job figures exist from 1939, so earlier presidents are scored
+            on growth alone. Both are compared with other presidents&apos; actual figures rather
+            than fixed cut-offs.
           </P>
           <P>
-            Worth knowing: since 1946, 60% of the variation in a president&apos;s term growth is
-            shared with 13 other advanced economies over the same years. This mostly measures the
-            economy a president presided over, not one they created. The study is in the project
-            repository at docs/research/president-scores.md.
+            Most of a president&apos;s growth is shared with the rest of the rich world: oil shocks,
+            financial crises and the pandemic hit every advanced economy in the same years. So from
+            1947 on, growth per person is compared with the median of 13 peer economies (Britain,
+            France, Germany, the Netherlands, Belgium, Italy, Sweden, Denmark, Norway, Switzerland,
+            Canada, Australia and Japan) over the same years
+            <Cite id="bolt2024" />. Measured against them, the gap between the parties&apos; growth
+            records shrinks from about 0.9 to 0.6 points a year.
+          </P>
+          <P>
+            One adjustment keeps that comparison fair across eras. A poorer economy grows faster by
+            catching up with a richer one <Cite id="baumol1986" />
+            <Cite id="barro1992" />, and in the 1950s and 1960s Europe and Japan were far poorer
+            than the US. Their fast growth then was not something the US missed out on, but raw it
+            made every president of that era look worse. Each year, the part of the gap that the
+            peers&apos; distance below US incomes predicts is set aside, using a rate measured from
+            every year since 1947 <Cite id="sen1968" />. What remains still favors the most recent
+            terms somewhat, because the US genuinely outgrew Europe and Japan after 2017.
+          </P>
+          <P>
+            Before 1947 no peer series covers the terms, so growth there is total real growth,
+            compared with other presidents before 1947, because older estimates exaggerate booms and
+            busts <Cite id="romer1989" />. The study is in the project repository at
+            docs/research/president-scores.md.
           </P>
         </Sub>
         <Sub title="Historical Legacy (50%)">

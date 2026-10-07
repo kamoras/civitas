@@ -125,6 +125,11 @@ const breakdown: PresidentScoreBreakdown = {
       gdpGrowth: null,
       gdpMean: null,
       gdpSince: null,
+      gdpPerPerson: null,
+      gdpPeers: null,
+      gdpCatchUp: null,
+      gdpRelative: null,
+      gdpRelativeMean: null,
     },
   },
   historicalLegacy: {
@@ -168,6 +173,33 @@ describe("PresidentScorecard", () => {
     expect(await screen.findByRole("heading", { name: "Holdings" })).toBeInTheDocument();
     expect(screen.getByText("40 Wall Street LLC")).toBeInTheDocument();
     expect(screen.getByText("285 signed")).toBeInTheDocument();
+  });
+
+  it("states postwar growth against the peer economies, catch-up allowed for", async () => {
+    const peers = {
+      ...breakdown,
+      effectiveness: {
+        ...breakdown.effectiveness,
+        facts: {
+          ...breakdown.effectiveness.facts,
+          gdpGrowth: 2.3,
+          gdpMean: 2.8,
+          gdpSince: true,
+          gdpPerPerson: 1.4,
+          gdpPeers: 1.12,
+          gdpCatchUp: -1.58,
+          gdpRelative: 1.86,
+          gdpRelativeMean: 2.23,
+        },
+      },
+    };
+    render(<PresidentScorecard president={president} breakdown={peers} rank={null} />);
+    expect(
+      screen.getByText(
+        /Real growth per person averaged 1\.4% a year, first year excluded, against 1\.1% for 13 peer economies over the same years\. Allowing -1\.6 points of that difference for the peers catching up with US incomes leaves \+1\.9; presidencies since 1947 average \+2\.2\./
+      )
+    ).toBeInTheDocument();
+    expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
   });
 
   it("never calls a scored dimension unrated when the breakdown is missing", async () => {

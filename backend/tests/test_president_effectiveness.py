@@ -9,6 +9,7 @@ from app.pipeline.analyze.president_scorer import (
     _effectiveness_core,
     compute_president_reference,
     jobs_per_attributed_year,
+    peer_relative,
 )
 
 
@@ -23,6 +24,31 @@ def test_gdp_is_compared_within_its_data_regime():
     assert gdp_score(5.0, 1890) < gdp_score(5.0, 1990)
     assert gdp_score(3.317, 1890) == 50.0
     assert gdp_score(2.8371, 1990) == 50.0
+
+
+def test_postwar_gdp_is_scored_relative_to_peer_economies():
+    # 3.0% per person against peers' 2.0%: one point above, one standard
+    # deviation over the pinned mean of 0 (conftest).
+    # 0.5 of the 1.5-point difference was the peers' catch-up, set aside.
+    core = _effectiveness_core(None, 9.9, 4.0, 1990, gdp_per_person=3.5, gdp_peer_median=2.0, gdp_relative=1.0)
+    gdp = core["components"][0]
+    assert gdp["label"] == "GDP growth vs. peer economies"
+    assert gdp["score"] > 50.0
+    assert core["facts"]["gdpRelative"] == 1.0 and core["facts"]["gdpRelativeMean"] == 0.0
+    assert core["facts"]["gdpCatchUp"] == 0.5
+    # The relative figure is what is scored: not the raw difference, and not
+    # total growth.
+    same = _effectiveness_core(None, 0.1, 4.0, 1990, gdp_per_person=1.0, gdp_peer_median=1.0, gdp_relative=1.0)
+    assert core["score"] == same["score"]
+
+
+def test_peer_figures_do_not_apply_before_1947_or_when_missing():
+    assert peer_relative(1890, 1.0) is None
+    assert peer_relative(1990, None) is None
+    assert gdp_score(3.317, 1890) == _effectiveness_core(
+        None, 3.317, 4.0, 1890, gdp_per_person=9.0, gdp_peer_median=0.0, gdp_relative=9.0)["components"][0]["score"]
+    # Postwar without peer figures yet: total growth against postwar terms.
+    assert _effectiveness_core(None, 2.8371, 4.0, 1990)["components"][0]["label"] == "GDP growth"
 
 
 def test_jobs_use_the_attributed_window_and_the_measured_population():
@@ -51,6 +77,17 @@ def test_reference_measures_each_new_stat_from_the_population():
     # out and the caller keeps the last persisted value.
     assert "gdp_growth_postwar" not in ref
     assert ref["jobs_per_year"]["n"] == 24
+    assert "gdp_growth_relative" not in ref  # no peer figures given
+
+
+def test_reference_measures_relative_growth_over_postwar_terms_only():
+    rows = [
+        {"id": f"p{i}", "term_start_year": 1890 + 8 * i, "gdp_growth_relative": float(i % 2)}
+        for i in range(20)
+    ]
+    ref = compute_president_reference(rows)
+    # Terms start 1890, 1898, ... 2042: the 12 from 1954 on are postwar.
+    assert ref["gdp_growth_relative"]["n"] == 12
     assert "rulemaking_finalized_pct" not in ref
 
 

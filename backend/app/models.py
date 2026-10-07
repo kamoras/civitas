@@ -735,6 +735,16 @@ class President(Base):
     # presidents who never won a presidential election in their own right.
     election_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
     gdp_growth_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Average annual real GDP growth per person over the years Effectiveness
+    # credits, the 13 peer economies' median over the same years, and US
+    # minus peers with the peers' catch-up growth set aside
+    # (app.pipeline.fetch.peer_gdp.peer_relative_growth) — what a postwar
+    # term's GDP component scores since president v8. NULL before 1947 (no
+    # peer series covers those terms) and until the first run that fetches
+    # them.
+    gdp_growth_per_person: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gdp_growth_peer_median: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gdp_growth_relative: Mapped[float | None] = mapped_column(Float, nullable=True)
     jobs_created_millions: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Informational only (2026-07): no longer a scoring input — Competence
     # (the dimension EO count used to feed) was removed entirely, see

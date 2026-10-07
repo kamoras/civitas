@@ -161,9 +161,12 @@ export default async function LimitationsChapter() {
         </Limitation>
         <Limitation title="The economy isn’t only the president’s doing">
           <P>
-            Since 1946, 60% of the variation in a president&apos;s term growth is shared with 13
-            other advanced economies. Effectiveness mostly measures the economy a president presided
-            over.
+            Effectiveness compares postwar growth with 13 peer economies, which takes out shocks the
+            whole rich world shared, and sets aside the peers&apos; catching up with US incomes. It
+            can&apos;t take out what hit the US alone without a president causing it. Job creation
+            (40% of Effectiveness) isn&apos;t compared with peers: it counts US payroll jobs in
+            millions, which has no counterpart abroad. Presidents before 1947 are compared on total
+            growth.
           </P>
         </Limitation>
       </Section>

@@ -297,6 +297,8 @@ TEST_PRESIDENT_REFERENCE = {
         "gdp_growth_prewar": {"mean": 3.317, "stdev": 2.8748, "n": 25},
         "gdp_growth_postwar": {"mean": 2.8371, "stdev": 1.1273, "n": 9},
         "jobs_per_year": {"mean": 1.2351, "stdev": 0.978, "n": 12},
+        # president v8: round numbers so test arithmetic is readable.
+        "gdp_growth_relative": {"mean": 0.0, "stdev": 1.0, "n": 12},
     },
 }
 

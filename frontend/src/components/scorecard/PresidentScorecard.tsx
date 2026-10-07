@@ -161,12 +161,22 @@ function EffectivenessColumn({
         <Lede>
           {jobs &&
             `${signed(f!.jobsMillions!)} million jobs, ${f!.jobsPerYear!.toFixed(2)} million a year once the first year is set aside. Presidencies since 1939 average ${f!.jobsMean!.toFixed(2)} million. `}
-          {f?.gdpGrowth != null && f.gdpMean != null
-            ? `Real growth averaged ${one(f.gdpGrowth)}% a year, first year excluded; presidencies ${f.gdpSince ? "since" : "before"} 1947 average ${one(f.gdpMean)}%.`
-            : isCurrent
-              ? "GDP growth is measured from the second full year of a term."
-              : "No GDP figure for this term."}
-          {!jobs && f?.gdpGrowth == null && !isCurrent && " Payroll jobs are counted from 1939."}
+          {f?.gdpRelative != null &&
+          f.gdpPerPerson != null &&
+          f.gdpPeers != null &&
+          f.gdpCatchUp != null &&
+          f.gdpRelativeMean != null
+            ? `Real growth per person averaged ${one(f.gdpPerPerson)}% a year, first year excluded, against ${one(f.gdpPeers)}% for 13 peer economies over the same years. Allowing ${signed(f.gdpCatchUp)} points of that difference for the peers catching up with US incomes leaves ${signed(f.gdpRelative)}; presidencies since 1947 average ${signed(f.gdpRelativeMean)}.`
+            : f?.gdpGrowth != null && f.gdpMean != null
+              ? `Real growth averaged ${one(f.gdpGrowth)}% a year, first year excluded; presidencies ${f.gdpSince ? "since" : "before"} 1947 average ${one(f.gdpMean)}%.`
+              : isCurrent
+                ? "GDP growth is measured from the second full year of a term."
+                : "No GDP figure for this term."}
+          {!jobs &&
+            f?.gdpGrowth == null &&
+            f?.gdpRelative == null &&
+            !isCurrent &&
+            " Payroll jobs are counted from 1939."}
         </Lede>
       )}
       {jobs && (

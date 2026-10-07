@@ -73,7 +73,7 @@ sum changed.
 ```mermaid
 flowchart LR
     PM["Public Mandate — 25%<br/>70% average approval + 30% trend<br/>UCSB polling, Truman onward<br/>a term under four years: vs predecessors' same days<br/>pre-Truman: election margin"]
-    EFF["Effectiveness — 25%<br/>60% GDP growth + 40% job creation<br/>BEA/FRED modern, MeasuringWorth pre-1929<br/>payrolls exist only from 1939"]
+    EFF["Effectiveness — 25%<br/>60% GDP growth + 40% job creation<br/>from 1947: growth per person vs 13 peer economies,<br/>their catch-up set aside (Maddison + World Bank)<br/>before: MeasuringWorth total growth<br/>payrolls exist only from 1939"]
     HL["Historical Legacy — 50%<br/>C-SPAN Presidential Historians Survey<br/>2021 cycle, ~142 historians"]
 
     PM --> OVR["<b>Presidential score</b>"]
