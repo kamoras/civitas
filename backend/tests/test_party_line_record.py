@@ -721,6 +721,25 @@ def test_a_departed_senator_whose_surname_only_contains_the_voters_is_not_added(
     assert party_line_record._departed_senators(db_session, [], positions) == []
 
 
+def test_a_departed_senator_two_voting_surnames_fit_is_not_added(db_session, monkeypatch):
+    """A stored departed "Ann Lastg Morrow" whose name holds two surnames
+    among the state's voters is left out: no order picks one."""
+    from app.models import Senator
+    monkeypatch.setattr(party_line_record, "_member_ideal_points", lambda chamber: {"members": {"bio-AM": 0.0}})
+    db_session.add(Senator(id="S-AM", bioguide_id="bio-AM", name="Ann Lastg Morrow", state="SC", party="R",
+                           is_current=False))
+    rc = RollCall(chamber="senate", congress=119, session=2, number=45, date="2026-03-01", question="On Passage",
+                  bill_id="S.45")
+    db_session.add(rc)
+    db_session.flush()
+    for lis, last in (("L-AL", "Lastg"), ("L-AM", "Morrow")):
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=lis, last_name=last, first_name="Ann",
+                                        party="R", state="SC", position="Yea"))
+    db_session.commit()
+    positions = {rc.id: list(db_session.query(RollCallPosition).filter_by(roll_call_id=rc.id))}
+    assert party_line_record._departed_senators(db_session, [], positions) == []
+
+
 def test_an_id_two_departed_namesakes_match_equally_goes_to_neither(db_session, monkeypatch):
     """No order decides an LIS id two departed candidates match alike."""
     positions = _namesakes(db_session, monkeypatch,
