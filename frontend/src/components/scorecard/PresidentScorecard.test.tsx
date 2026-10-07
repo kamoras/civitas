@@ -227,6 +227,37 @@ describe("PresidentScorecard", () => {
     expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
   });
 
+  it("states unemployment and inflation against where the term started", async () => {
+    const economy = {
+      ...breakdown,
+      effectiveness: {
+        ...breakdown.effectiveness,
+        facts: {
+          ...breakdown.effectiveness.facts,
+          unemploymentStart: 9.3,
+          unemploymentChange: -4.9,
+          unemploymentExpected: -4.5,
+          inflationStart: 4.7,
+          inflationAverage: 5.0,
+          inflationExpected: 4.4,
+          economyYears: 4,
+        },
+      },
+    };
+    render(<PresidentScorecard president={president} breakdown={economy} rank={null} />);
+    expect(
+      screen.getByText(
+        /Unemployment: fell 4\.9 points from 9\.3% over the credited years; for presidents starting at that rate it typically fell 4\.5 points, so this is better than usual\./
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Inflation: prices rose 5\.0% a year, from 4\.7% the year the term began; presidents starting there averaged 4\.4%, so this is worse than usual\./
+      )
+    ).toBeInTheDocument();
+    expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
+  });
+
   it("never calls a scored dimension unrated when the breakdown is missing", async () => {
     // A breakdown that failed to load, or one cached from before the API
     // served facts, must not put "not rated" beside a score (2026-09-28:

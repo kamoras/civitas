@@ -213,8 +213,10 @@ function EffectivenessColumn({
   return (
     <ScoreColumn title="Effectiveness" shareId="effectiveness" weight={weight} score={score}>
       <Measures>
-        The economy during the term: jobs added and economic growth, each against other presidents.
-        The first year is left out, since it mostly reflects the previous president&apos;s policies.
+        The economy during the term: growth, jobs, unemployment and inflation (since 1947; growth
+        and jobs before that), each against other presidents. The first year is left out, since it
+        mostly reflects the previous president&apos;s policies, and unemployment and inflation are
+        judged against what presidents starting from the same rates went on to see.
       </Measures>
       {(f || score == null) && (
         <>
@@ -243,6 +245,20 @@ function EffectivenessColumn({
               !isCurrent &&
               " Payroll jobs are counted from 1939."}
           </Lede>
+          {f?.unemploymentChange != null &&
+            f.unemploymentStart != null &&
+            f.unemploymentExpected != null && (
+              <Lede>
+                {`Unemployment: ${moved(f.unemploymentChange)} from ${one(f.unemploymentStart)}% over the credited years; for presidents starting at that rate it typically ${moved(f.unemploymentExpected)}, so this is ${f.unemploymentChange <= f.unemploymentExpected ? "better" : "worse"} than usual.`}
+              </Lede>
+            )}
+          {f?.inflationAverage != null &&
+            f.inflationStart != null &&
+            f.inflationExpected != null && (
+              <Lede>
+                {`Inflation: prices rose ${one(f.inflationAverage)}% a year, from ${one(f.inflationStart)}% the year the term began; presidents starting there averaged ${one(f.inflationExpected)}%, so this is ${f.inflationAverage <= f.inflationExpected ? "better" : "worse"} than usual.`}
+              </Lede>
+            )}
         </>
       )}
       {jobs && (

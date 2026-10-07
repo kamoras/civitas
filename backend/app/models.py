@@ -754,6 +754,17 @@ class President(Base):
     gdp_growth_per_person: Mapped[float | None] = mapped_column(Float, nullable=True)
     gdp_growth_peer_median: Mapped[float | None] = mapped_column(Float, nullable=True)
     gdp_growth_relative: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The unemployment rate the year the term began and its change to the
+    # last credited year, consumer-price inflation that year and its average
+    # over the credited years, and how many credited years they cover
+    # (president_scorer.macro_window; FRED/BLS). Since president v10 a term
+    # from 1947 on is judged on each against what its starting rate
+    # predicts. NULL before 1947 and until measured.
+    unemployment_start: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unemployment_change: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inflation_start: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inflation_average: Mapped[float | None] = mapped_column(Float, nullable=True)
+    economy_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
     jobs_created_millions: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Informational only (2026-07): no longer a scoring input — Competence
     # (the dimension EO count used to feed) was removed entirely, see

@@ -12,7 +12,7 @@ flowchart TB
         GOVINFO["GovInfo<br/>bill text · Congressional Record<br/>1.0 RPS"]
         SENGOV["Senate.gov · House Clerk<br/>roll-call vote XML<br/>no API"]
         OYEZ["Oyez / supremecourt.gov · SCDB · FJC · Martin-Quinn<br/>SCOTUS votes · opinions · appointments"]
-        ECON["BLS · BEA / FRED · MeasuringWorth · World Bank<br/>employment · GDP · peer-economy GDP"]
+        ECON["BLS · BEA / FRED · MeasuringWorth · World Bank<br/>employment · GDP · unemployment · prices · peer-economy GDP"]
         FEDREG["Federal Register<br/>orders · rulemaking"]
         UCSB["UCSB American Presidency Project<br/>roster · approval · margins"]
         PTR["House Clerk · Senate eFD · OGE · SEC<br/>STOCK Act disclosures"]

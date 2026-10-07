@@ -244,8 +244,10 @@ def dimensions_available(entity) -> int:
 # the sitting one (FULL_TERM_DAYS); v8 = a postwar term's GDP growth
 # scored relative to 13 peer economies over the same years (peer_relative);
 # v9 = average approval by party, against the era's polarization
-# (approval_vs_era).
-PRESIDENT_ALGORITHM_VERSION = "v9"
+# (approval_vs_era); v10 = since 1947 the economy is also judged on
+# unemployment and inflation, each against what its starting rate predicts,
+# four parts weighed equally (POSTWAR_ECONOMY_WEIGHTS).
+PRESIDENT_ALGORITHM_VERSION = "v10"
 
 
 # Full credit/deficit approached asymptotically at this many population
@@ -326,6 +328,8 @@ def calc_effectiveness(
     gdp_per_person: float | None = None,
     gdp_peer_median: float | None = None,
     gdp_relative: float | None = None,
+    macro: dict | None = None,
+    president_id: str | None = None,
 ) -> int | None:
     """Calculate effectiveness score from economic data only.
 
@@ -334,7 +338,7 @@ def calc_effectiveness(
     """
     return _effectiveness_core(
         jobs_created_millions, gdp_growth_avg, term_years, term_start_year, reference,
-        gdp_per_person, gdp_peer_median, gdp_relative,
+        gdp_per_person, gdp_peer_median, gdp_relative, macro, president_id,
     )["score"]
 
 
@@ -359,13 +363,20 @@ def _effectiveness_core(
     gdp_per_person: float | None = None,
     gdp_peer_median: float | None = None,
     gdp_relative: float | None = None,
+    macro: dict | None = None,
+    president_id: str | None = None,
 ) -> dict:
     """Same math as calc_effectiveness, returning every intermediate value
     alongside the final score.
 
     Components, each scored against the presidential population measured
     every run (compute_president_reference), like Public Mandate:
-      - GDP growth (60%). Since 1947: average annual real growth per
+    Since president v10, a term starting in 1947 or later is weighed on four
+    parts, 25% each: GDP growth, jobs, unemployment and inflation (see
+    POSTWAR_ECONOMY_WEIGHTS); an earlier term on GDP growth (60%) and jobs
+    (40%, from 1939), the only series that reach it.
+
+      - GDP growth. Since 1947: average annual real growth per
         person over the years after the term's first (an annual stand-in
         for Blinder & Watson 2016's attribution lag), minus the median of
         13 peer economies over the same years, with the part of that gap
@@ -381,12 +392,19 @@ def _effectiveness_core(
         prewar presidencies (see _GDP_REGIME_SPLIT_YEAR). A postwar term
         whose peer figures haven't been fetched yet is scored the prewar
         way against postwar presidencies until they are.
-      - Jobs created (40%): payroll jobs per attributed year, BLS 1939
+      - Jobs created: payroll jobs per attributed year, BLS 1939
         onward only. Absolute jobs rather than percent growth: across
         presidencies since 1945 the absolute rate shows no trend with era
         (Spearman 0.01) while the percent rate falls with the labor force's
         own slowing growth (-0.52), so percent would penalize recent
         presidents for demographics.
+      - Unemployment (since 1947): the change in the unemployment rate
+        from the year the term began to its last credited year, against
+        the change presidents who started at the same rate went on to see
+        (macro_reference).
+      - Inflation (since 1947): average annual consumer-price inflation
+        over the credited years, against what presidents who started at
+        the same rate averaged.
 
     Replaced in president v5: hand-set curves (GDP 25 + g/5 x 55 around a
     "post-WWII 3.2%"; jobs 30 + rate/3M x 50) — AGENTS.md §3a.
@@ -405,6 +423,8 @@ def _effectiveness_core(
                    "gdpPerPerson": None, "gdpPeers": None, "gdpCatchUp": None,
                    "gdpRelative": None, "gdpRelativeMean": None}
 
+    postwar = peer_comparable(term_start_year)
+    weights = POSTWAR_ECONOMY_WEIGHTS if postwar else PREWAR_ECONOMY_WEIGHTS
     gdp_key = _gdp_reference_key(term_start_year)
     gdp_stat = _president_stat(reference, gdp_key)
     relative = peer_relative(term_start_year, gdp_relative)
@@ -416,7 +436,7 @@ def _effectiveness_core(
         facts.update(gdpPerPerson=gdp_per_person, gdpPeers=gdp_peer_median, gdpCatchUp=catch_up,
                      gdpRelative=relative, gdpRelativeMean=relative_stat[0], gdpSince=True)
         components.append(_population_zscore_component(
-            "GDP growth vs. peer economies", 0.60, relative, relative_stat[0], relative_stat[1],
+            "GDP growth vs. peer economies", weights["gdp"], relative, relative_stat[0], relative_stat[1],
             f"Grew {gdp_per_person:.1f}% a year per person leaving out the first year, against "
             f"{gdp_peer_median:.1f}% in 13 other wealthy countries. Allowing for their catching up "
             f"with US incomes: {_ahead(relative)}, against {_ahead(relative_stat[0])} for the typical president "
@@ -426,7 +446,7 @@ def _effectiveness_core(
         era = "before" if gdp_key == "gdp_growth_prewar" else "since"
         facts.update(gdpMean=gdp_stat[0], gdpSince=gdp_key == "gdp_growth_postwar")
         components.append(_population_zscore_component(
-            "GDP growth", 0.60, gdp_growth_avg, gdp_stat[0], gdp_stat[1],
+            "GDP growth", weights["gdp"], gdp_growth_avg, gdp_stat[0], gdp_stat[1],
             f"The economy grew {gdp_growth_avg:.1f}% a year leaving out the first year, against "
             f"{gdp_stat[0]:.1f}% for presidents {era} {_GDP_REGIME_SPLIT_YEAR}",
         ))
@@ -436,12 +456,113 @@ def _effectiveness_core(
         rate = jobs_per_attributed_year(jobs_created_millions, term_years)
         facts.update(jobsPerYear=round(rate, 3), jobsMean=jobs_stat[0])
         components.append(_population_zscore_component(
-            "Jobs created", 0.40, rate, jobs_stat[0], jobs_stat[1],
+            "Jobs created", weights["jobs"], rate, jobs_stat[0], jobs_stat[1],
             f"{jobs_created_millions:.1f} million jobs, {rate:.2f} million a year leaving out the "
             f"first year, against {jobs_stat[0]:.2f} million for presidents since 1939",
         ))
 
+    population = _macro_reference(reference, president_id) if postwar and macro else {}
+    unemployment_fit, inflation_fit = population.get("unemployment_fit"), population.get("inflation_fit")
+    if macro and unemployment_fit:
+        expected = unemployment_fit["intercept"] + unemployment_fit["slope"] * macro["unemp_start"]
+        facts.update(unemploymentStart=round(macro["unemp_start"], 2), unemploymentChange=round(macro["unemp_change"], 2),
+                     unemploymentExpected=round(expected, 2), economyYears=macro["years"])
+        components.append(_population_zscore_component(
+            "Unemployment", weights["unemployment"], expected - macro["unemp_change"], 0.0,
+            unemployment_fit["resid_sd"],
+            f"Unemployment {_moved(macro['unemp_change'])} from {macro['unemp_start']:.1f}% "
+            f"over {macro['years']} credited years; for presidents who started at that rate it "
+            f"typically {_moved(expected)}",
+        ))
+    if macro and inflation_fit:
+        expected = inflation_fit["intercept"] + inflation_fit["slope"] * macro["infl_start"]
+        facts.update(inflationStart=round(macro["infl_start"], 2), inflationAverage=round(macro["infl_avg"], 2),
+                     inflationExpected=round(expected, 2), economyYears=macro["years"])
+        components.append(_population_zscore_component(
+            "Inflation", weights["inflation"], expected - macro["infl_avg"], 0.0, inflation_fit["resid_sd"],
+            f"Prices rose {macro['infl_avg']:.1f}% a year over the credited years, from "
+            f"{macro['infl_start']:.1f}% the year the term began; presidents who started at that "
+            f"rate averaged {expected:.1f}%",
+        ))
+
     return {**_blend_live_components(components), "facts": facts}
+
+
+# The economy's parts and their weights (president v10). Since 1947, four
+# nearly independent parts weighed equally: across the 13 postwar
+# presidencies their pairwise correlations run 0.05 to 0.17, so each adds
+# what the others don't, and there is no outside criterion to fit unequal
+# weights to (historians' ratings already make up half the overall score,
+# and fitting the economy to them would count them twice). Equal weights
+# are the robust choice when no criterion exists (Dawes 1979, "The robust
+# beauty of improper linear models", American Psychologist 34(7)). Weighed
+# so, Effectiveness agrees with historians' rating of economic management
+# (C-SPAN 2021) at r = +0.50, where GDP growth alone did at -0.15, and
+# shows no trend with era (r = -0.06; docs/research/president-scores.md).
+# Before 1947 the unemployment and consumer-price series don't reach the
+# terms, and growth and jobs keep their v5 weights.
+POSTWAR_ECONOMY_WEIGHTS = {"gdp": 0.25, "jobs": 0.25, "unemployment": 0.25, "inflation": 0.25}
+PREWAR_ECONOMY_WEIGHTS = {"gdp": 0.60, "jobs": 0.40}
+
+
+def macro_window(
+    unemployment: dict[int, float], inflation: dict[int, float], start_year: int, last_year: int,
+    years: int | None = None,
+) -> dict | None:
+    """{"unemp_start", "unemp_change", "infl_start", "infl_avg", "years"}:
+    the unemployment rate the year a term began and its change to the last
+    credited year, and inflation the year it began and its average over the
+    credited years (the years after the first, as for GDP; Blinder & Watson
+    2016's attribution lag). `years` takes only the first that many credited
+    years, for comparing a shorter presidency with others over the same
+    time. None with no credited year or a missing figure."""
+    k = (last_year - start_year) if years is None else years
+    if k < 1:
+        return None
+    end = start_year + k
+    credited = range(start_year + 1, end + 1)
+    if start_year not in unemployment or end not in unemployment or any(
+        y not in inflation for y in (start_year, *credited)
+    ):
+        return None
+    return {
+        "unemp_start": unemployment[start_year],
+        "unemp_change": unemployment[end] - unemployment[start_year],
+        "infl_start": inflation[start_year],
+        "infl_avg": statistics.mean(inflation[y] for y in credited),
+        "years": k,
+    }
+
+
+def macro_reference(windows: list[dict]) -> dict | None:
+    """Each measure's fit on its starting rate over presidencies' windows.
+    Where a term starts explains most of where it goes: across the 13
+    postwar presidencies the change in unemployment correlates -0.84 with
+    its starting rate (a term that starts near a peak falls furthest) and
+    average inflation +0.74 with the rate inherited (FRED/BLS, 2026-10-07).
+    Judging each against what its start predicts is the same regression
+    adjustment the approval trend uses (fit_trend_on_start); the slopes are
+    stable leaving any one presidency out (unemployment -1.19 to -1.38,
+    inflation 0.43 to 0.68)."""
+    windows = [w for w in windows if w]
+    block = {
+        "unemployment_fit": fit_trend_on_start([(w["unemp_start"], w["unemp_change"]) for w in windows]),
+        "inflation_fit": fit_trend_on_start([(w["infl_start"], w["infl_avg"]) for w in windows]),
+    }
+    block = {k: v for k, v in block.items() if v is not None}
+    return block or None
+
+
+def _macro_reference(reference: dict | None, president_id: str | None) -> dict:
+    """The fits a president's unemployment and inflation are judged by: over
+    the same number of credited years for a presidency shorter than a full
+    term (the sitting one, or one cut short), else over completed full-term
+    presidencies; this run's reference first, then the persisted one."""
+    persisted = PRESIDENT_REFERENCE.load().get("presidents") or {}
+    windows = (reference or {}).get("macro_windows") or persisted.get("macro_windows") or {}
+    if president_id and windows.get(president_id):
+        return windows[president_id]
+    return (reference or {}).get("macro") or persisted.get("macro") or {}
 
 
 # Population statistics for the term-average-approval, approval-trend, and
@@ -487,7 +608,8 @@ def compute_president_reference(presidents: list[dict]) -> dict:
     approval_trend, approval_groups and polarization (Public Mandate's
     by-party comparison), election_margin, historical_legacy_score, and
     (for Effectiveness) gdp_growth_avg, gdp_growth_relative,
-    term_start_year, jobs_created_millions, term_years.
+    term_start_year, jobs_created_millions, term_years and macro
+    (macro_window over the term's credited years).
 
     Approval, trend and margin are counted per presidency (split terms have
     their own polling and elections). The C-SPAN score is counted once per
@@ -533,6 +655,9 @@ def compute_president_reference(presidents: list[dict]) -> dict:
             (float(p["approval_start"]), float(p["approval_trend"]))
             for p in completed
             if p.get("approval_start") is not None and p.get("approval_trend") is not None
+        ]),
+        "macro": macro_reference([
+            p["macro"] for p in completed if p.get("macro") and peer_comparable(p.get("term_start_year"))
         ]),
         "partisan_approval": partisan_reference([
             (float(p["polarization"]), p["approval_groups"])
@@ -657,6 +782,15 @@ def approval_by_group(
     if not polls:
         return None
     return {g: statistics.mean(poll[key] for poll in polls) for g, key in groups.items()}
+
+
+def stored_macro(president) -> dict | None:
+    """A stored President's macro_window, or None without all of it."""
+    values = (president.unemployment_start, president.unemployment_change, president.inflation_start,
+              president.inflation_average, president.economy_years)
+    if None in values:
+        return None
+    return dict(zip(("unemp_start", "unemp_change", "infl_start", "infl_avg", "years"), values))
 
 
 def stored_approval_groups(president) -> dict[str, float] | None:
@@ -1035,6 +1169,8 @@ def recalculate_president_scores(
             gdp_per_person=live_data.get("gdp_growth_per_person"),
             gdp_peer_median=live_data.get("gdp_growth_peer_median"),
             gdp_relative=live_data.get("gdp_growth_relative"),
+            macro=live_data.get("macro"),
+            president_id=president_id,
         ),
         "score_historical_legacy": calc_historical_legacy(
             historical_legacy_score=live_data.get("historical_legacy_score"),

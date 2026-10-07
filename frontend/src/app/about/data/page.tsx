@@ -113,6 +113,9 @@ export default function DataChapter() {
             <Fact label="BLS · BEA · MeasuringWorth">
               Payroll jobs from 1939, and real GDP back to 1790.
             </Fact>
+            <Fact label="FRED (St. Louis Fed)">
+              The BLS unemployment rate (from 1948) and consumer price index (from 1947).
+            </Fact>
             <Fact label="Maddison Project · World Bank">
               GDP per person for the US and 13 peer economies from 1946, to compare postwar growth.
             </Fact>

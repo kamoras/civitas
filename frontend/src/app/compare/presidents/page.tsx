@@ -125,6 +125,24 @@ const FACT_ROWS: Row[] = [
     },
   },
   {
+    label: "Change in unemployment, points (vs presidents starting at the same rate)",
+    value: ({ breakdown: b }) => {
+      const f = b?.effectiveness.facts as PresidentEffectivenessFacts | undefined;
+      return versus(
+        f?.unemploymentChange,
+        f?.unemploymentExpected,
+        (n) => `${n > 0 ? "+" : ""}${one(n)}`
+      );
+    },
+  },
+  {
+    label: "Inflation a year (vs presidents starting at the same rate)",
+    value: ({ breakdown: b }) => {
+      const f = b?.effectiveness.facts as PresidentEffectivenessFacts | undefined;
+      return versus(f?.inflationAverage, f?.inflationExpected, (n) => `${one(n)}%`);
+    },
+  },
+  {
     label: "Historians' points (vs all presidents)",
     value: ({ breakdown: b }) => {
       const f = b?.historicalLegacy.facts as HistoricalLegacyFacts | undefined;

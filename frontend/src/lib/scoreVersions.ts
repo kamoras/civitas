@@ -75,6 +75,20 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     ],
   },
   {
+    version: "President v10",
+    date: "2026-10-07",
+    title: "The economy is more than growth: unemployment and inflation added",
+    tldr: "From 1947 on, Effectiveness weighs four parts equally: growth, jobs, the change in unemployment and inflation. Unemployment and inflation are judged against where the term started, since a president who takes office in a recession or inherits high inflation usually sees unemployment fall, or keeps some of the inflation, whatever they do. Legislative success in Congress, counts of major laws and the change in the deficit were tested and left out.",
+    changes: [
+      "Why: growth alone showed no agreement with historians' rating of economic management (+0.02 across 12 postwar presidents), and the unemployment and inflation records it left out are what they recall: across the 13 postwar presidencies, inflation agrees with that rating at +0.67 and the change in unemployment at +0.45, neither with a trend over the decades.",
+      "Each is compared with what presidents starting from the same rate saw: the change in unemployment correlates -0.84 with where it started, and average inflation +0.74 with the rate inherited. The fitted relationships hold steady leaving out any one presidency.",
+      "The four parts barely overlap (correlations of 0.05 to 0.17), so they are weighed equally; fitting weights to the historians would count them twice, as they already make up half the score. Effectiveness now agrees with their economic-management rating at +0.48.",
+      "Tested and left out: the share of roll calls where Congress sided with the president (which party controls Congress explains 54% of it, and once that is set aside a president's House and Senate records agree at just 0.13); counts of major laws (Mayhew's lists; they follow Congress and the era, -0.40 with historians' ratings); the change in the federal deficit (it mostly follows the business cycle and would mark down counter-cyclical borrowing); and unemployment and inflation compared with peer economies (no consistent peer unemployment before the 1980s; relative inflation trended with era, -0.75).",
+      "A month the BLS never published (October 2025, during the shutdown) is left out of that year's average rather than letting the year go unmeasured.",
+      "Effect on October 2026 data, Effectiveness: Eisenhower 18 to 38, Kennedy 48 to 57, Nixon 26 to 39, Carter 58 to 34, Clinton 55 to 62, Obama 49 to 54, Trump's first term 45 to 50, Biden 83 to 73. Presidents before 1947 are unchanged. docs/research/president-scores.md has the study.",
+    ],
+  },
+  {
     version: "President v9",
     date: "2026-10-07",
     title: "Approval compared within its era: by party, against how polarized Congress was",

@@ -146,6 +146,18 @@ export interface PresidentEffectivenessFacts {
   gdpCatchUp: number | null;
   gdpRelative: number | null;
   gdpRelativeMean: number | null;
+  /** Since 1947 (president v10): the unemployment rate the year the term
+   *  began, its change over the credited years, and the change presidents
+   *  starting at that rate saw; inflation the year the term began, its
+   *  average over the credited years, and what presidents starting there
+   *  averaged. */
+  unemploymentStart?: number | null;
+  unemploymentChange?: number | null;
+  unemploymentExpected?: number | null;
+  inflationStart?: number | null;
+  inflationAverage?: number | null;
+  inflationExpected?: number | null;
+  economyYears?: number | null;
 }
 
 /** President: historicalLegacy.facts. C-SPAN 2021 survey points; otherTerms
