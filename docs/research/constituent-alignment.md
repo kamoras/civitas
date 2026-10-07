@@ -888,9 +888,12 @@ in a fixed order, 1,000 times.
   votes). Measured only where the member also has a career DW-NOMINATE
   position, they count 0.21 from 25 pairs, but a few members carry it:
   leaving out one member at a time moves it between 0.13 and 0.26. A
-  no-count position with no career position at all (a member just sworn in,
-  with nothing yet to anchor it) is not measured by these pairs, and it
-  counts nothing, so the part sits at 50 (a stated choice).
+  no-count position with no career position at all (often a member just
+  sworn in, with nothing yet to anchor it, though not always: the 119th
+  House export of 2026-10-03 has two members with a position but neither a
+  count nor a career position, read from the export) is not measured by
+  these pairs, and it counts nothing, so the part sits at 50 (a stated
+  choice).
 - **Each pair is predicted in its own direction.** A member whose thin
   record is the earlier one (an entrant) is predicted with the
   transition's forward drift, the slope of the later full position on the
