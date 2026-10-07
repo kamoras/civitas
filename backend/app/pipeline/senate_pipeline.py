@@ -90,6 +90,7 @@ from app.pipeline.transform.normalize_votes import (
     dedupe_votes,
     extract_senator_vote,
     find_senate_roll_call,
+    is_housekeeping,
     majority_leader_spans,
     normalize_recent_votes,
     resolve_senate_lis_ids,
@@ -106,7 +107,11 @@ from app.pipeline.analyze.bill_analyzer import (
     recent_roll_call_key,
 )
 from app.pipeline.analyze.bill_learning import clear_reference_cache, stamp_motion_type
-from app.pipeline.analyze.party_platform import clear_platform_cache, initialize_platform_embeddings
+from app.pipeline.analyze.party_platform import (
+    clear_platform_cache,
+    initialize_platform_embeddings,
+    refine_with_vote_data,
+)
 from app.pipeline.vector_store import (
     check_model_version,
     embed_bills,
@@ -1581,36 +1586,20 @@ async def run_senate_pipeline(
             classified_bills = []
             progress.complete("classify_bills", detail="failed")
 
-        # Refine content-based party alignment with vote data as a secondary signal.
-        # Content analysis (what the bill does) is the primary signal.
-        # Vote tallies validate or adjust — they don't blindly override, because
-        # senators trade votes, face whip pressure, and make tactical compromises.
-        from app.pipeline.analyze.party_platform import (
-            refine_with_vote_data,
-            record_sponsor_alignment,
-        )
+        # The roll call's own party split wins over the bill's content label
+        # wherever a split exists (refine_with_vote_data; AGENTS.md §4).
         for bill in classified_bills:
             roll_call_data = roll_call_data_map.get(bill["billId"])
             if roll_call_data:
                 stamp_roll_call_outcome(bill, roll_call_data)
                 stamp_motion_type(bill, roll_call_data)
+                if bill.get("housekeeping"):
+                    continue
                 split = compute_party_vote_split(roll_call_data)
                 vote_split = split["label"] if split else None
                 bill["partyLeaning"] = refine_with_vote_data(
                     bill.get("partyLeaning", "bipartisan"), vote_split,
                 )
-
-        # Use bill sponsor party as ground truth for the learning store.
-        # Bills sponsored by R senators are examples of R-aligned legislation.
-        for bill_ref in bills_data:
-            sponsor_party = bill_ref.get("sponsorParty")
-            if sponsor_party in ("R", "D"):
-                bill_id = bill_ref["billId"]
-                bill_text = f"{bill_ref['billName']} {(bill_ref.get('summary') or '')[:200]}"
-                try:
-                    record_sponsor_alignment(db, bill_id, bill_text, sponsor_party)
-                except Exception:
-                    logger.debug("Sponsor alignment failed for %s", bill_id, exc_info=True)
 
         # 3a.2 Classify recent roll call votes (embedding-based, zero LLM)
         classified_recent: list[dict] = []
@@ -1639,7 +1628,7 @@ async def run_senate_pipeline(
                 stamp_motion_type(rc, roll_call_data)
                 split = compute_party_vote_split(roll_call_data)
                 computed_split = split["label"] if split else None
-                if computed_split:
+                if computed_split and not rc.get("housekeeping"):
                     rc["partyLeaning"] = refine_with_vote_data(
                         rc.get("partyLeaning", "bipartisan"), computed_split,
                     )
@@ -2195,7 +2184,9 @@ async def run_senate_pipeline(
                             # producing a different label for the same
                             # bill in different parts of the scorecard).
                             roll_call_data = roll_call_data_map.get(bill_id)
-                            if roll_call_data:
+                            if roll_call_data and not is_housekeeping(
+                                roll_call_data.get("question"), roll_call_data.get("chamber"),
+                            ):
                                 vote_split = compute_party_split(roll_call_data)
                                 sp["partyLeaning"] = refine_with_vote_data(
                                     sp["partyLeaning"], vote_split,

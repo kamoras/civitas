@@ -109,12 +109,23 @@ _HOUSEKEEPING_QUESTION_RE = re.compile(
     r"quorum|call of the house|adjourn|journal|previous question|motion to table|to table the|recommit",
     re.IGNORECASE,
 )
+# The House's motion to commit (v6.28) is the motion to recommit's twin for
+# a bill no committee reported (House Rule XIX): the same minority motion,
+# and it splits on party lines the same way. The Senate's motion to commit
+# carries instructions that amend the bill, so it is a vote on substance
+# and stays counted there.
+_HOUSE_HOUSEKEEPING_QUESTION_RE = re.compile(r"motion to commit", re.IGNORECASE)
 
 
-def is_housekeeping(question: str | None) -> bool:
+def is_housekeeping(question: str | None, chamber: str | None = None) -> bool:
     """A roll call on running the chamber rather than on a bill, nominee or
-    rule (see _HOUSEKEEPING_QUESTION_RE)."""
-    return bool(question) and bool(_HOUSEKEEPING_QUESTION_RE.search(question))
+    rule (see _HOUSEKEEPING_QUESTION_RE). `chamber` ("house" or "senate",
+    either case) adds the House-only questions."""
+    if not question:
+        return False
+    if _HOUSEKEEPING_QUESTION_RE.search(question):
+        return True
+    return (chamber or "").lower() == "house" and bool(_HOUSE_HOUSEKEEPING_QUESTION_RE.search(question))
 
 
 def stamp_roll_call_outcome(bill: dict, roll_call: dict) -> None:
@@ -126,11 +137,25 @@ def stamp_roll_call_outcome(bill: dict, roll_call: dict) -> None:
     through partySplit: with no roll call there is no split, and a vote
     is never marked with or against the party from what the bill says.
     A housekeeping question (is_housekeeping) has no split for loyalty
-    either."""
+    either, and is marked procedural (`housekeeping`, policy area
+    PROCEDURAL, no per-area labels or party label): a motion to recommit
+    carries its bill's title, so classified as the bill it read as a vote
+    on it, and a Yea on the minority's motion counted toward the bill's
+    party in partisan depth and taught the party-position centroids the
+    bill under the other party's label (v6.28). Callers skip the split
+    refinement for it (refine_with_vote_data)."""
     bill["motionRejected"] = roll_call.get("rejected")
     bill["rollCallDate"] = vote_date_iso(roll_call.get("voteDate"))
     bill["rollCall"] = roll_call_ref(roll_call)
-    bill["partySplit"] = None if is_housekeeping(roll_call.get("question")) else compute_party_split(roll_call)
+    if is_housekeeping(roll_call.get("question"), roll_call.get("chamber")):
+        bill["housekeeping"] = True
+        bill["partySplit"] = None
+        bill["partyLeaning"] = None
+        bill["policyArea"] = "PROCEDURAL"
+        bill["policyAreas"] = []
+        bill["partyAlignmentWeight"] = 0.0
+    else:
+        bill["partySplit"] = compute_party_split(roll_call)
 
 
 def is_reconsider_switch(
@@ -473,54 +498,12 @@ def normalize_votes(
 
         total_tracked += 1
 
-        vote_direction = vote.upper()
-        is_yea = vote_direction in ("YEA", "AYE", "YES")
-        is_nay = vote_direction in ("NAY", "NO")
-
-        normalized_vote = "Not Voting"
-        if is_yea:
-            normalized_vote = "Yea"
-        elif is_nay:
-            normalized_vote = "Nay"
-
-        policy_area = bill.get("policyArea", "PROCEDURAL")
-
-        # Party alignment (uses effective_party for Independents), from how
-        # the parties actually voted on this roll call — never the bill's
-        # content lean (stamp_roll_call_outcome).
-        party_leaning = bill.get("partyLeaning")
-        party_split = bill.get("partySplit")
-        reconsider_switch = is_reconsider_switch(bill, leader_spans)
-        party_aligned = _determine_party_alignment(
-            effective_party, normalized_vote, party_split,
-            reconsider_switch=reconsider_switch,
-        )
-        if party_aligned is True:
+        entry = member_vote_entry(bill, vote, effective_party, leader_spans)
+        if entry["votedWithParty"] is True:
             voted_with_party += 1
-        elif party_aligned is False:
+        elif entry["votedWithParty"] is False:
             voted_against_party += 1
-
-        key_votes.append({
-            "billName": bill.get("billName", ""),
-            "billId": bill.get("billId", ""),
-            "date": bill.get("date") or bill.get("rollCallDate") or "",
-            "vote": normalized_vote,
-            "policyArea": policy_area,
-            "policyAreas": bill.get("policyAreas", []),
-            "partyAlignmentWeight": bill.get("partyAlignmentWeight", 0.0),
-            "stance": bill.get("stance", "neutral"),
-            "description": bill.get("description", ""),
-            "partyLeaning": party_leaning,
-            "votedWithParty": party_aligned,
-            "reconsiderSwitch": reconsider_switch_applied(
-                effective_party, normalized_vote, party_split, reconsider_switch,
-            ),
-            "voteCategory": "recent",
-            "rcKey": bill.get("rcKey"),
-            # What the roll call decided (bill_learning.stamp_motion_type).
-            "motionType": bill.get("motionType"),
-            "rollCall": bill.get("rollCall"),
-        })
+        key_votes.append(entry)
 
     party_total = voted_with_party + voted_against_party
     party_loyalty_pct = (
@@ -537,6 +520,58 @@ def normalize_votes(
         "effectiveParty": effective_party,
         "recentVotes": [],
         "keyVotes": key_votes,
+    }
+
+
+def member_vote_entry(
+    bill: dict,
+    member_vote: str,
+    party: str,
+    leader_spans: list[tuple[str | None, str | None]] | None,
+) -> dict:
+    """One member's vote on a classified roll call, in the stored shape:
+    key votes and recent votes, both chambers. The House used to build its
+    recent votes inline and drifted, counting loyalty from partyLeaning (the
+    split even on housekeeping questions, and the bill's content label
+    wherever the roll call gave no split) instead of partySplit
+    (stamp_roll_call_outcome).
+
+    `party` is the member's party for alignment (an Independent's caucus).
+    """
+    direction = member_vote.upper()
+    vote = "Not Voting"
+    if direction in ("YEA", "AYE", "YES"):
+        vote = "Yea"
+    elif direction in ("NAY", "NO"):
+        vote = "Nay"
+
+    party_split = bill.get("partySplit")
+    reconsider_switch = is_reconsider_switch(bill, leader_spans)
+    return {
+        "billName": bill.get("billName", ""),
+        "billId": bill.get("billId", ""),
+        "date": bill.get("date") or bill.get("rollCallDate") or "",
+        "vote": vote,
+        "policyArea": bill.get("policyArea", "PROCEDURAL"),
+        "policyAreas": bill.get("policyAreas", []),
+        "partyAlignmentWeight": bill.get("partyAlignmentWeight", 0.0),
+        "stance": bill.get("stance", "neutral"),
+        "description": bill.get("description", ""),
+        "partyLeaning": bill.get("partyLeaning"),
+        # From how the parties actually voted on this roll call, never the
+        # bill's content (stamp_roll_call_outcome).
+        "votedWithParty": _determine_party_alignment(
+            party, vote, party_split, reconsider_switch=reconsider_switch,
+        ),
+        "reconsiderSwitch": reconsider_switch_applied(
+            party, vote, party_split, reconsider_switch,
+        ),
+        "voteCategory": "recent",
+        "rcKey": bill.get("rcKey"),
+        # What the roll call decided (passage, cloture, amendment ...;
+        # classify_recent_votes): lets a display say which vote it shows.
+        "motionType": bill.get("motionType"),
+        "rollCall": bill.get("rollCall"),
     }
 
 
@@ -582,46 +617,7 @@ def normalize_recent_votes(
         if not senator_vote:
             continue
 
-        # Normalize
-        vote_direction = senator_vote.upper()
-        is_yea = vote_direction in ("YEA", "AYE", "YES")
-        is_nay = vote_direction in ("NAY", "NO")
-        normalized_vote = "Not Voting"
-        if is_yea:
-            normalized_vote = "Yea"
-        elif is_nay:
-            normalized_vote = "Nay"
-
-        party_leaning = bill.get("partyLeaning")
-        party_split = bill.get("partySplit")
-        reconsider_switch = is_reconsider_switch(bill, leader_spans)
-        party_aligned = _determine_party_alignment(
-            party_for_alignment, normalized_vote, party_split,
-            reconsider_switch=reconsider_switch,
-        )
-
-        votes.append({
-            "billName": bill.get("billName", ""),
-            "billId": bill_id,
-            "date": bill.get("date") or bill.get("rollCallDate") or "",
-            "vote": normalized_vote,
-            "policyArea": bill.get("policyArea", "PROCEDURAL"),
-            "policyAreas": bill.get("policyAreas", []),
-            "partyAlignmentWeight": bill.get("partyAlignmentWeight", 0.0),
-            "stance": bill.get("stance", "neutral"),
-            "description": bill.get("description", ""),
-            "partyLeaning": party_leaning,
-            "votedWithParty": party_aligned,
-            "reconsiderSwitch": reconsider_switch_applied(
-                party_for_alignment, normalized_vote, party_split, reconsider_switch,
-            ),
-            "voteCategory": "recent",
-            "rcKey": bill.get("rcKey"),
-            # What the roll call decided (passage, cloture, amendment ...;
-            # classify_recent_votes): lets a display say which vote it shows.
-            "motionType": bill.get("motionType"),
-            "rollCall": bill.get("rollCall"),
-        })
+        votes.append(member_vote_entry(bill, senator_vote, party_for_alignment, leader_spans))
 
     return votes
 
