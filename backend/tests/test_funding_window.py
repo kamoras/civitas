@@ -5,8 +5,8 @@ right population reference (v6.13).
   campaign still in progress counted as "the most recent election", so
   through most of an election year every House member and a third of the
   Senate were scored on a half-finished cycle.
-- Period: itemized detail covers the election's full period — six years for
-  the Senate, two for the House — matching FEC's election-full totals.
+- Period: itemized detail covers the cycles FEC's totals for the election
+  cover — up to six years for the Senate, two for the House.
 - Denominator: contributions (+ candidate self-loans), not receipts, which
   include joint-fundraising-committee transfers and loans and so understate
   PAC dependency for the members who rely on JFCs most.
