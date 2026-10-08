@@ -14,7 +14,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.pipeline.cache import api_cache_set
-from app.pipeline.fetch.fec import fetch_candidate_financials, select_recent_elections
+from app.pipeline.fetch.fec import (
+    FecUnavailable,
+    fetch_candidate_committees,
+    fetch_candidate_financials,
+    select_recent_elections,
+)
 from app.pipeline.transform.normalize_finance import summarize_election_totals
 
 
@@ -61,4 +66,21 @@ async def test_a_four_row_sample_cached_under_the_old_key_is_not_read(db_session
         fetch.side_effect = _fec
         rows = await fetch_candidate_financials(None, db_session, "S2KY00012")
     fetch.assert_called_once()
+    assert len(rows) == len(SENATOR_ROWS)
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_fec_raises_and_caches_nothing(db_session, freeze_utcnow):
+    """A failed fetch is not a candidate who raised nothing: it raises, so
+    the member is skipped and keeps the stored funding, and the next run
+    asks again instead of reading a cached []."""
+    freeze_utcnow(datetime(2026, 10, 3, 12, 0))
+    with patch("app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock, return_value=None):
+        with pytest.raises(FecUnavailable):
+            await fetch_candidate_financials(None, db_session, "S2KY00012")
+        with pytest.raises(FecUnavailable):
+            await fetch_candidate_committees(None, db_session, "S2KY00012")
+    with patch("app.pipeline.fetch.fec._fetch_with_retry", new_callable=AsyncMock) as fetch:
+        fetch.side_effect = _fec
+        rows = await fetch_candidate_financials(None, db_session, "S2KY00012")
     assert len(rows) == len(SENATOR_ROWS)

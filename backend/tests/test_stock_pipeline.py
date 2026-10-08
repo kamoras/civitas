@@ -529,6 +529,39 @@ class TestRereadTrades:
         assert seen == [None]
 
 
+    async def test_a_backlog_in_one_source_leaves_the_next_its_share(self, db_session):
+        """Every source gets an equal part of what is left: a Senate backlog
+        whose filings each take 40% of the night stops after one, and the
+        president's filings, last in the order, are still read."""
+        from app.models import President, PresidentTrade
+
+        for fid in "abc":
+            self._stored(db_session, fid, f"https://efdsearch.senate.gov/search/view/ptr/{fid}/")
+        db_session.add(President(id="p-1", name="Test President", party="R", number=99,
+                                 term_start="2025-01-20", is_current=True))
+        db_session.add(PresidentTrade(
+            president_id="p-1", asset_name="Bitcoin", owner="self", transaction_type="purchase",
+            transaction_date="2025-11-01", disclosure_date="2025-12-30",
+            source_url="https://example.test/p.pdf", filing_id="p", parser_version=1,
+        ))
+        db_session.commit()
+        budget = stock_pipeline.PTR_REREAD_BUDGET.total_seconds()
+        clock = [0.0]
+
+        async def slow_fetch(_client, _db, filing):
+            clock[0] += 0.4 * budget
+            return [self._row(filing["report_url"].rstrip("/")[-1], filing["report_url"])]
+
+        president_read = AsyncMock(return_value=[self._row("p", "https://example.test/p.pdf")])
+        with patch.object(stock_pipeline.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(stock_pipeline, "_read_president_filing", president_read):
+            count, mock_fetch = await self._reread(db_session, slow_fetch)
+
+        assert mock_fetch.call_count == 1
+        president_read.assert_awaited_once()
+        assert count == 2
+
+
 class TestRereadHouseFiling:
     """A stored House filing is read again with its filing date from the
     Clerk's yearly index: a scan read before PTR PARSER_VERSION 5 stored each

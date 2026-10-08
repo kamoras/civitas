@@ -138,7 +138,6 @@ def normalize_finance(
     financials: list[dict],
     individual_receipts: list[dict],
     pac_receipts: list[dict],
-    aggregated_contributors: list[dict],
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
     committee_meta_map: dict[str, dict] | None = None,
@@ -151,7 +150,6 @@ def normalize_finance(
         financials: FEC financial totals (by cycle).
         individual_receipts: Individual contribution receipts (Schedule A, is_individual=true).
         pac_receipts: PAC/committee contribution receipts (Schedule A, is_individual=false).
-        aggregated_contributors: Top contributors by total.
         ai_classifications: Optional AI classifications for donors (type + industry).
         committee_meta_map: Optional contributor_id -> the FEC committee
             master's {"type", "designation", "connectedOrg"} (see
@@ -201,7 +199,6 @@ def normalize_finance(
         top_donors = build_top_donors(
             pac_receipts,
             individual_receipts,
-            aggregated_contributors,
             candidate_name,
             ai_classifications=ai_classifications,
             db_session=db_session,
@@ -213,7 +210,6 @@ def normalize_finance(
         industry_breakdown = _build_industry_breakdown(
             pac_receipts=pac_receipts,
             individual_receipts=individual_receipts,
-            aggregated_contributors=aggregated_contributors,
             small_individual_total=small_individual,
             large_individual_total=large_individual,
             contribution_base=contribution_base,
@@ -269,7 +265,6 @@ def committee_donor_type(meta: dict | None) -> str:
 def build_top_donors(
     pac_receipts: list[dict],
     individual_receipts: list[dict],
-    aggregated_contributors: list[dict],
     candidate_name: str,
     ai_classifications: dict[str, dict] | None = None,
     db_session=None,
@@ -471,23 +466,6 @@ def build_top_donors(
             existing["type"] = donor_type
         donor_map[employer] = existing
 
-    # 3. Aggregated contributors as fallback
-    for c in aggregated_contributors:
-        name = c.get("contributor_name") or "Unknown"
-        if not name or name == "Unknown":
-            continue
-
-        normalized_name = name.upper().strip()
-        if normalized_name not in donor_map:
-            donor_type, industry, skip = _get_classification(name, normalized_name)
-            if skip:
-                continue
-            donor_map[normalized_name] = {
-                "name": name,
-                "total": c.get("total", 0) or 0,
-                "type": donor_type,
-                "industry": industry,
-            }
 
     # The candidate's own money (self-loans recorded as "Lastname,
     # Firstname") is frequently mistyped Org/Employees by the semantic
@@ -536,7 +514,6 @@ def _clean_donor_name(name: str) -> str:
 def _build_industry_breakdown(
     pac_receipts: list[dict],
     individual_receipts: list[dict],
-    aggregated_contributors: list[dict],
     small_individual_total: float,
     large_individual_total: float,
     contribution_base: float,
@@ -683,25 +660,6 @@ def _build_industry_breakdown(
             "industry": "LARGE_INDIVIDUAL", "name": "LARGE_INDIVIDUAL",
             "total": unclassified_large,
         }
-
-    # The top contributors by name fill in only for the sampled path: with
-    # the complete detail every dollar is already counted above.
-    for c in aggregated_contributors if pacs is None and occupations is None else []:
-        name = c.get("contributor_name") or "Unknown"
-        if not name or name == "Unknown":
-            continue
-        normalized_name = name.upper().strip()
-        if normalized_name in counted_donors:
-            continue
-        if _should_skip_for_breakdown(normalized_name):
-            continue
-
-        amount = c.get("total", 0) or 0
-        industry = _get_industry(name, normalized_name)
-
-        existing = industry_totals.get(industry, {"industry": industry, "name": industry, "total": 0})
-        existing["total"] += amount
-        industry_totals[industry] = existing
 
     # Add an UNCLASSIFIED bucket for money not captured by any classification
     raw_total = sum(ind["total"] for ind in industry_totals.values())

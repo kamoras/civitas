@@ -344,16 +344,20 @@ def parse_next_meetings(text: str) -> dict[str, dict]:
 def granule_role(title: str) -> tuple[str, str] | None:
     """What a DAILYDIGEST granule holds, from its GovInfo title:
     ("senate"|"house", "floor"|"committees"), ("both", "next"), or None
-    (tomorrow's committee schedule and end matter are not read)."""
+    (tomorrow's committee schedule and end matter are not read). A day's
+    first granule carries the Highlights with its chamber's floor section
+    ("Daily Digest/Highlights + Senate"), so the title's last segment is
+    read part by part."""
     t = title.lower()
     if "next meeting" in t:
         return ("both", "next")
-    if t.endswith("/senate"):
+    parts = {p.strip() for p in t.rsplit("/", 1)[-1].split("+")}
+    if "senate" in parts:
         return ("senate", "floor")
-    if t.endswith("/house of representatives"):
+    if "house of representatives" in parts:
         return ("house", "floor")
-    if t.endswith("/senate committee meetings"):
+    if "senate committee meetings" in parts:
         return ("senate", "committees")
-    if t.endswith("/house committee meetings"):
+    if "house committee meetings" in parts:
         return ("house", "committees")
     return None

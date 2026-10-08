@@ -181,7 +181,7 @@ class TestContributionsDenominator:
 
     def test_normalized_funding_reports_both_and_shares_over_contributions(self):
         with _at(2026, 9, 24):
-            f = normalize_finance(None, [self.ROW], [], [], [])
+            f = normalize_finance(None, [self.ROW], [], [])
         assert f["totalRaised"] == 50_000_000
         assert f["totalContributions"] == 20_000_000
         assert f["smallDonorPercentage"] == 10  # 2M of 20M, not 4% of receipts

@@ -19,6 +19,7 @@ import json
 import logging
 import time
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -56,8 +57,8 @@ from app.pipeline.fetch.congress import (
     fetch_significant_bills,
 )
 from app.pipeline.fetch.fec import (
+    FecUnavailable,
     compute_recent_election_cycles,
-    fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
     committee_id_of,
@@ -69,7 +70,6 @@ from app.pipeline.fetch.fec import (
     fetch_pac_receipts,
     find_candidate,
     resolve_committee_meta,
-    reset_run_state as reset_fec_run_state,
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
@@ -706,6 +706,52 @@ def invalidate_stale_analysis(db: Session) -> None:
         _write_model_version()
 
 
+async def _fetch_senator_fec(
+    client: httpx.AsyncClient, db: Session, senator: dict,
+    committee_contributions, committee_master,
+) -> dict | None:
+    """One senator's FEC data for normalize_finance: None when no FEC
+    candidate matches, {"unavailable": True} when the FEC could not be read
+    — not "raised nothing": the senator is skipped at prepare and keeps the
+    stored record."""
+    try:
+        candidate = await find_candidate(
+            client, db, senator["name"], senator["state"],
+            bioguide_id=senator.get("bioguideId"),
+        )
+        if not candidate or not candidate.get("candidate_id"):
+            logger.warning("No FEC match for %s (%s)", senator["name"], senator["state"])
+            return None
+        candidate_id = candidate["candidate_id"]
+        financials = await fetch_candidate_financials(client, db, candidate_id)
+        committees = await fetch_candidate_committees(client, db, candidate_id)
+        committee_id = committees[0].get("committee_id") if committees else None
+
+        # Match the receipt-detail and outside-spending windows to the
+        # receipt-totals window (normalize_finance sums only the most recent
+        # election, one deduped totals row).
+        recent_cycles = compute_recent_election_cycles(financials, "S")
+        receipts: list = []
+        pac_receipts: list = []
+        if committee_id:
+            receipts = await fetch_committee_receipts(client, db, committee_id, cycles=recent_cycles)
+            pac_receipts = await fetch_pac_receipts(client, db, committee_id, cycles=recent_cycles)
+        detail = await fetch_contribution_detail(
+            client, db, candidate_id, [committee_id] if committee_id else [],
+            recent_cycles, committee_contributions, committee_master,
+        )
+    except FecUnavailable as e:
+        logger.warning("FEC unreachable for %s: %s", senator["name"], e)
+        return {"unavailable": True}
+    return {
+        "candidate": candidate,
+        "financials": financials,
+        "receipts": receipts,
+        "pacReceipts": pac_receipts,
+        "detail": detail,
+    }
+
+
 def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
     """Flatten every senator's FEC receipts into donor entries for
     classify_donors_hybrid.
@@ -742,14 +788,6 @@ def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
                     "name": employer,
                     "amount": r.get("contribution_receipt_amount", 0) or 0,
                     "fec_receipt": r,
-                })
-        for c in fec.get("aggregated") or []:
-            name = c.get("contributor_name") or "Unknown"
-            if name and name != "Unknown":
-                entries.append({
-                    "name": name,
-                    "amount": c.get("total", 0) or 0,
-                    "candidate_name": cand_name,
                 })
         # The complete detail's donors, under the names normalize_finance
         # looks them up by. A giving committee's type is already known from
@@ -1036,7 +1074,6 @@ async def run_senate_pipeline(
     try:
         reset_stats()
         reset_client()
-        reset_fec_run_state()
 
         # Clear in-memory caches from prior runs to bound memory usage.
         clear_alignment_cache()
@@ -1272,6 +1309,13 @@ async def run_senate_pipeline(
                     session_number=session_num,
                     count=RECENT_RC_COUNT_PER_SESSION,
                 )
+                if session_rcs is None:
+                    # Senate.gov could not be read: fail before any senator
+                    # is saved with an empty recent-vote record.
+                    raise RuntimeError(
+                        f"Senate roll calls for congress {congress_num} session "
+                        f"{session_num} could not be read from senate.gov"
+                    )
                 added = 0
                 for rc in session_rcs:
                     # Dedupe by the unique roll-call identity, NOT by
@@ -1455,69 +1499,22 @@ async def run_senate_pipeline(
                 client, db, committee_master_cycles(),
             )
             for fec_idx, senator in enumerate(senators):
-                candidate = await find_candidate(
-                    client, db, senator["name"], senator["state"],
-                    bioguide_id=senator.get("bioguideId"),
+                fec = await _fetch_senator_fec(
+                    client, db, senator, committee_contributions, committee_master,
                 )
-                if not candidate or not candidate.get("candidate_id"):
-                    logger.warning(
-                        "No FEC match for %s (%s)",
-                        senator["name"],
-                        senator["state"],
-                    )
-                    continue
-
-                candidate_id = candidate["candidate_id"]
-                financials = await fetch_candidate_financials(
-                    client, db, candidate_id
-                )
-                committees = await fetch_candidate_committees(
-                    client, db, candidate_id
-                )
-                committee_id = (
-                    committees[0].get("committee_id")
-                    if committees
-                    else None
-                )
-
-                # Match the receipt-detail and outside-spending windows to
-                # the receipt-totals window (normalize_finance sums only the
-                # most recent election, one deduped totals row).
-                recent_cycles = compute_recent_election_cycles(financials, "S")
-
-                receipts: list = []
-                pac_receipts_data: list = []
-                aggregated: list = []
-                if committee_id:
-                    receipts = await fetch_committee_receipts(
-                        client, db, committee_id, cycles=recent_cycles
-                    )
-                    pac_receipts_data = await fetch_pac_receipts(
-                        client, db, committee_id, cycles=recent_cycles
-                    )
-                    aggregated = await fetch_aggregated_contributors(
-                        client, db, committee_id, cycles=recent_cycles
-                    )
-                detail = await fetch_contribution_detail(
-                    client, db, candidate_id, [committee_id] if committee_id else [],
-                    recent_cycles, committee_contributions, committee_master,
-                )
-
-                fec_data[senator["id"]] = {
-                    "candidate": candidate,
-                    "financials": financials,
-                    "receipts": receipts,
-                    "pacReceipts": pac_receipts_data,
-                    "aggregated": aggregated,
-                    "detail": detail,
-                }
+                if fec is not None:
+                    fec_data[senator["id"]] = fec
                 progress.update("fetch_fec", done=fec_idx + 1)
+            unreachable = sum(1 for f in fec_data.values() if f.get("unavailable"))
+            matched = len(fec_data) - unreachable
             logger.info(
-                "FEC data fetched for %d/%d senators",
-                len(fec_data),
-                len(senators),
+                "FEC data fetched for %d/%d senators (%d unreachable)",
+                matched, len(senators), unreachable,
             )
-            progress.complete("fetch_fec", detail=f"{len(fec_data)}/{len(senators)} matched")
+            progress.complete(
+                "fetch_fec",
+                detail=f"{matched}/{len(senators)} matched, {unreachable} unreachable",
+            )
 
             # 1e-2. Resolve contributing committees' FEC registrations (type,
             # designation, connected organization) once per unique committee
@@ -1692,13 +1689,14 @@ async def run_senate_pipeline(
         for prep_idx, senator in enumerate(senators):
             try:
                 fec = fec_data.get(senator["id"])
+                if fec and fec.get("unavailable"):
+                    raise FecUnavailable(f"no FEC data read for {senator['name']}")
                 if fec:
                     funding = normalize_finance(
                         fec["candidate"],
                         fec.get("financials") or [],
                         fec.get("receipts") or [],
                         fec.get("pacReceipts") or [],
-                        fec.get("aggregated") or [],
                         ai_classifications=ai_classifications,
                         db_session=db,
                         committee_meta_map=committee_meta_map,

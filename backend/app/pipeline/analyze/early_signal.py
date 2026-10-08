@@ -221,14 +221,14 @@ def _fetch_recent_votes(db: Session) -> list[dict]:
                     count=_ROLL_CALL_POLL_COUNT_PER_SESSION,
                     max_age_hours=_ROLL_CALL_POLL_MAX_AGE_HOURS,
                 )
-                votes.extend(session_votes)
+                votes.extend(session_votes or [])
             house_votes = await fetch_recent_house_roll_calls(
                 client, db,
                 year=utcnow().year,
                 count=_ROLL_CALL_POLL_COUNT_PER_SESSION,
                 max_age_hours=_ROLL_CALL_POLL_MAX_AGE_HOURS,
             )
-            votes.extend(house_votes)
+            votes.extend(house_votes or [])
             return votes
 
     loop = asyncio.new_event_loop()

@@ -87,20 +87,6 @@ class TestBuildDonorEntries:
         fec_data = {"sen-1": {"receipts": [{"contributor_employer": ""}]}}
         assert _build_donor_entries(senators, fec_data) == []
 
-    def test_aggregated_entries_have_no_fec_receipt(self):
-        """Aggregated (by_contributor) rows don't carry a raw receipt — this
-        is unchanged pre-existing behavior, not part of the employer-receipt
-        fix."""
-        senators = [{"id": "sen-1"}]
-        fec_data = {
-            "sen-1": {
-                "aggregated": [{"contributor_name": "Some Donor", "total": 2500}],
-            }
-        }
-        entries = _build_donor_entries(senators, fec_data)
-        assert len(entries) == 1
-        assert "fec_receipt" not in entries[0]
-
 
 class TestBuildCurrentTermSponsoredForCosponsor:
     """No per-senator cap — a prior 10-bill cap meant a prolific sponsor's

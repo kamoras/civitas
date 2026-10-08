@@ -1,7 +1,6 @@
 """Tests for FEC receipt-detail cycle windowing.
 
-fetch_committee_receipts/fetch_pac_receipts/fetch_aggregated_contributors
-previously had no time window at all — top-donor and industry-breakdown
+fetch_committee_receipts/fetch_pac_receipts previously had no time window at all — top-donor and industry-breakdown
 detail was drawn from a committee's entire career while the receipt
 totals it's compared against are windowed to the 2 most recent elections
 (select_recent_elections). 2026-07 audit finding; see fetch/fec.py.

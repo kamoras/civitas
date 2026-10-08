@@ -82,7 +82,7 @@ def test_outside_spending_is_no_longer_fetched_or_stored():
 
     assert not hasattr(fec, "fetch_outside_spending")
     assert not hasattr(Senator, "outside_spending_for") and not hasattr(Representative, "outside_spending_for")
-    f = normalize_finance(None, [{"candidate_election_year": 2024, "receipts": 100, "contributions": 100}], [], [], [])
+    f = normalize_finance(None, [{"candidate_election_year": 2024, "receipts": 100, "contributions": 100}], [], [])
     assert "outsideSpendingFor" not in f
 
 
