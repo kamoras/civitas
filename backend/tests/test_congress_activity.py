@@ -32,6 +32,8 @@ class TestDigestSenate:
         passed = _events(a, "passed")
         assert [e["bill_id"] for e in passed] == [
             "S.3257", "S.3258", "HR.2388", "SRES.902", "SRES.903", "SRES.904", "SRES.905",
+            # "House Messages": the Senate concurring in the House's amendments.
+            "S.283", "S.240",
         ]
         assert passed[0]["name"] == "John A. Hauser Mental Health in Aviation Act"
         # The substitute amendment line is S. 3257's detail, not an event.
@@ -48,11 +50,11 @@ class TestDigestSenate:
         assert [e["bill_id"] for e in _events(a, "reported")] == [None, "S.1055", "S.3219", "S.3313"]
         assert len(_events(a, "passed")) == 14
 
-    def test_confirmations_keep_one_entry_per_page_reference(self):
+    def test_confirmations_one_entry_per_item(self):
         a = dd.parse_chamber_action(_digest("CREC-2026-09-23-pt1-PgD929"))
         confirmed = [e["text"] for e in _events(a, "confirmed")]
         assert confirmed[0].startswith("By 50 yeas to 47 nays (Vote No. EX. 241), Angela Veronica Colmenero")
-        assert confirmed[1] == "3 Coast Guard nominations in the rank of admiral. A routine list in the Coast Guard."
+        assert confirmed[1:] == ["3 Coast Guard nominations in the rank of admiral.", "A routine list in the Coast Guard."]
 
     def test_an_adjournment_in_memory_of_a_senator_still_reads_its_time(self):
         a = dd.parse_chamber_action(_digest("CREC-2026-09-23-pt1-PgD929"))
@@ -76,7 +78,10 @@ class TestDigestHouse:
         assert passed[1]["name"].startswith("Recommending that the House of Representatives find Leon D. Black")
         # ... and every measure passed under suspension of the rules.
         assert "HR.9497" in ids and "HR.8193" in ids and "S.766" in ids
-        assert len(passed) == 23
+        # H.J. Res. 213 (a four-line heading after the rule's paragraph) and
+        # H.R. 9340 passed too.
+        assert "HJRES.213" in ids and "HR.9340" in ids
+        assert len(passed) == 25
         assert (a["bills_introduced"], a["resolutions_introduced"]) == (72, 17)
         assert (a["convened_at"], a["adjourned_at"]) == ("9 a.m.", "9:59 p.m.")
 
@@ -508,3 +513,169 @@ def test_the_house_xml_gives_no_first_name_and_none_is_invented():
     vote = (FIX / "roll_calls" / "house_2026_roll309.xml").read_text()
     members = parse_house_vote_xml(vote, 2026, 309)["members"]
     assert members and all(m["firstName"] == "" and m["lastName"] for m in members)
+
+
+# ── Passages the Digest parser used to miss or misread ────────────
+# Each fixture is the real Daily Digest granule for the day named.
+
+def _ids(action: dict, kind: str) -> list:
+    return [e["bill_id"] for e in _events(action, kind)]
+
+
+class TestDigestPassages:
+    def test_a_house_paragraph_indented_after_a_page_reference(self):
+        # 2025-07-02: H.R. 1's concurrence sat indented under "Committee
+        # Resignation:" and was dropped; the rule adopted for it, too.
+        a = dd.parse_chamber_action(_digest("CREC-2025-07-02-pt1-PgD686-3"))
+        passed = _events(a, "passed")
+        assert [e["bill_id"] for e in passed] == ["HR.1", "HRES.566"]
+        assert passed[0]["name"] == "One Big Beautiful Bill Act"
+        assert passed[0]["text"].startswith("The House agreed to the motion to concur in the Senate amendment to H.R. 1")
+
+    def test_the_senate_list_goes_on_after_amendment_subheadings(self):
+        # 2025-11-10: "Adopted:", "Rejected:", "Withdrawn:" under H.R. 5371,
+        # then five more resolutions agreed to.
+        a = dd.parse_chamber_action(_digest("CREC-2025-11-10-pt1-PgD1129"))
+        assert _ids(a, "passed") == ["HR.5371", "SRES.497", "SRES.494", "SRES.495", "SRES.496", "SRES.498"]
+        # The amendments and the cloture vote are H.R. 5371's detail.
+        assert "Amendment No. 3943" in _events(a, "passed")[0]["text"]
+
+    def test_a_suspension_measure_on_the_heading_line(self):
+        # 2025-11-18: "... pass the following measure: Epstein Files
+        # Transparency Act: H.R. 4405, ..."
+        a = dd.parse_chamber_action(_digest("CREC-2025-11-18-pt1-PgD1148-2"))
+        epstein = next(e for e in _events(a, "passed") if e["bill_id"] == "HR.4405")
+        assert epstein["name"] == "Epstein Files Transparency Act"
+        assert _ids(a, "failed") == ["HRES.888"]
+
+    def test_a_suspension_that_failed_is_not_a_passage(self):
+        # 2026-09-02: "agreed to failed to suspend" (sic), 212-206 on a 2/3 vote.
+        a = dd.parse_chamber_action(_digest("CREC-2026-09-02-pt1-PgD859-3"))
+        assert _ids(a, "failed") == ["HJRES.1"]
+        assert "HJRES.1" not in _ids(a, "passed")
+
+    def test_proceedings_resumed_on_a_suspension_that_failed(self):
+        # 2026-06-11: the measure is the item under the heading.
+        a = dd.parse_chamber_action(_digest("CREC-2026-06-11-pt1-PgD618-2"))
+        assert _ids(a, "failed") == ["HR.9238"]
+
+    def test_tabling_a_resolution_does_not_pass_it(self):
+        # 2026-09-15: "The House agreed to the Fry motion to table the
+        # resolution (H. Res. 1486)".
+        a = dd.parse_chamber_action(_digest("CREC-2026-09-15-pt1-PgD894-2"))
+        assert "HRES.1486" not in _ids(a, "passed") + _ids(a, "failed")
+        assert "HRES.1530" in _ids(a, "passed")  # the day's rule, adopted 214-211
+
+    def test_a_rule_repeated_under_each_measure_is_one_event(self):
+        a = dd.parse_chamber_action(_digest("CREC-2025-12-17-pt1-PgD1288"))
+        assert _ids(a, "passed").count("HRES.953") == 1
+        assert _ids(a, "failed") == ["HCONRES.61", "HCONRES.64"]
+
+    def test_a_name_run_on_from_the_paragraph_before(self):
+        a = dd.parse_chamber_action(_digest("CREC-2025-03-06-pt1-PgD232"))
+        censure = next(e for e in _events(a, "passed") if e["bill_id"] == "HRES.189")
+        assert censure["name"] == "Censuring Representative Al Green of Texas"
+
+    def test_an_item_name_broken_after_a_semicolon(self):
+        # 2026-01-15: "Commerce, Justice, Science; Energy and Water
+        # Development; and" / "Interior and Environment Appropriations Act:"
+        a = dd.parse_chamber_action(_digest("CREC-2026-01-15-pt1-PgD84"))
+        assert _ids(a, "passed") == ["HR.6938", "SRES.585", "SRES.584", "SRES.519"]
+        assert _events(a, "passed")[0]["name"].startswith("Commerce, Justice, Science; Energy and Water Development; and")
+
+    def test_a_senate_day_that_ends_in_recess_has_its_times(self):
+        a = dd.parse_chamber_action(_digest("CREC-2026-01-15-pt1-PgD84"))
+        assert (a["convened_at"], a["adjourned_at"]) == ("10 a.m.", "4:59 p.m.")
+
+    def test_introduced_counts_behind_a_one_space_indent(self):
+        a = dd.parse_chamber_action(_digest("CREC-2026-02-25-pt1-PgD219"))
+        assert (a["bills_introduced"], a["resolutions_introduced"]) == (51, 9)
+
+    def test_introduced_counts_after_a_list_of_pages(self):
+        # "Routine Proceedings, pages S95-S119, S121-S122"
+        a = dd.parse_chamber_action(_digest("CREC-2026-01-08-pt1-PgD46"))
+        assert (a["bills_introduced"], a["resolutions_introduced"]) == (15, 6)
+
+    def test_house_messages_concurrence_and_confirmations(self):
+        a = dd.parse_chamber_action(_digest("CREC-2025-12-17-pt1-PgD1286"))
+        assert "S.1071" in _ids(a, "passed")
+        confirmed = [e["text"] for e in _events(a, "confirmed")]
+        # The cloture vote under each nomination is its detail, not a nomination.
+        assert len(confirmed) == 7
+        assert "Senate agreed to the motion to close further debate" in confirmed[0]
+        assert confirmed[2:] == [
+            "2 Air Force nominations in the rank of general.", "3 Army nominations in the rank of general.",
+            "1 Marine Corps nomination in the rank of general.", "1 Navy nomination in the rank of admiral.",
+            "Routine lists in the Air Force, Army, Marine Corps, Navy, and Space Force.",
+        ]
+
+
+class TestDigestListingAndGaps:
+    def test_the_listing_is_read_past_its_first_page(self, db_session, monkeypatch):
+        # 2025-02-20: 1,117 granules, the Digest's on the second page.
+        first = json.dumps({
+            "count": 2,
+            "nextPage": "https://api.govinfo.gov/packages/CREC-2026-09-24/granules?offsetMark=AoM2&pageSize=1000",
+            "granules": [{"granuleId": "CREC-2026-09-24-pt1-PgS4959", "granuleClass": "SENATE", "title": "PRAYER"}],
+        }).encode()
+        responses = _digest_responses()
+        rest = responses.pop("api.govinfo.gov/packages/CREC-2026-09-24/granules")
+        others = _fake_get(responses)
+
+        async def fake(client, url, *, label, request_url=None):
+            if "granules" in url:
+                return first if "offsetMark=*" in url else rest
+            return await others(client, url, label=label)
+
+        monkeypatch.setattr(ca, "_get", fake)
+        assert _run(ca.sync_digest(None, db_session, date(2026, 9, 24))) == "ok"
+        assert db_session.query(CongressDay).filter_by(date="2026-09-24", is_final=True).count() == 2
+
+    def _senate_only(self, monkeypatch, extra=()):
+        listing = json.dumps({"granules": [
+            {"granuleId": "CREC-2026-09-21-pt1-PgD921", "granuleClass": "DAILYDIGEST", "title": "Daily Digest/Senate"},
+            *extra,
+        ]}).encode()
+        monkeypatch.setattr(ca, "_get", _fake_get({
+            "api.govinfo.gov/packages/CREC-2026-09-21/granules": listing,
+            "PgD921.htm": (FIX / "daily_digest" / "CREC-2026-09-21-pt1-PgD921.htm").read_bytes(),
+        }))
+
+    def test_a_chamber_whose_pages_are_printed_met(self, db_session, monkeypatch):
+        # 2025-02-07: the House's Digest section missing from the granules,
+        # 92 House pages in the issue.
+        self._senate_only(monkeypatch, [{"granuleId": "CREC-2026-09-21-pt1-PgH1", "granuleClass": "HOUSE", "title": "PRAYER"}])
+        assert _run(ca.sync_digest(None, db_session, date(2026, 9, 21))) == "ok"
+        house = db_session.query(CongressDay).filter_by(chamber="house", date="2026-09-21").one()
+        assert (house.in_session, house.is_final) == (True, True)
+
+    def test_a_chamber_that_held_a_roll_call_met(self, db_session, monkeypatch):
+        db_session.add(RollCall(chamber="house", congress=119, session=2, number=1, date="2026-09-21",
+                                question="On Passage", title="", result="Passed", yeas=1, nays=0, present=0,
+                                not_voting=0, source_url=""))
+        db_session.commit()
+        self._senate_only(monkeypatch)
+        _run(ca.sync_digest(None, db_session, date(2026, 9, 21)))
+        house = db_session.query(CongressDay).filter_by(chamber="house", date="2026-09-21").one()
+        assert house.in_session is True
+
+    def test_stored_days_are_read_again_under_a_new_parse_version(self, db_session, monkeypatch):
+        for d in ("2025-01-06", "2025-01-07"):
+            for chamber in ("senate", "house"):
+                db_session.add(CongressDay(chamber=chamber, date=d, in_session=True, is_final=True, source="digest"))
+        db_session.commit()
+        asked = []
+
+        async def fake_digest(client, db, day):
+            asked.append(day)
+            return "ok"
+
+        monkeypatch.setattr(ca, "sync_digest", fake_digest)
+        _run(ca.reparse_digests(None, db_session, date(2025, 1, 31)))
+        assert asked == [date(2025, 1, 6), date(2025, 1, 7)]
+        asked.clear()
+        _run(ca.reparse_digests(None, db_session, date(2025, 1, 31)))
+        assert asked == []  # done for this version
+        monkeypatch.setattr(ca, "DIGEST_PARSE_VERSION", ca.DIGEST_PARSE_VERSION + 1)
+        _run(ca.reparse_digests(None, db_session, date(2025, 1, 6)))
+        assert asked == [date(2025, 1, 6)]  # no further than the back-fill has settled
