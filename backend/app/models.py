@@ -696,7 +696,7 @@ class President(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)  # e.g. "obama-44"
     name: Mapped[str] = mapped_column(String, nullable=False)
-    party: Mapped[str] = mapped_column(String, nullable=False)  # D, R, W(hig), F(ederalist), DR
+    party: Mapped[str] = mapped_column(String, nullable=False)  # D, R, W(hig), F(ederalist), DR, U (no party)
     number: Mapped[int] = mapped_column(Integer, nullable=False)  # 44th, 45th, etc.
     term_start: Mapped[str] = mapped_column(String, nullable=False)  # "2009-01-20"
     term_end: Mapped[str | None] = mapped_column(String, nullable=True)
