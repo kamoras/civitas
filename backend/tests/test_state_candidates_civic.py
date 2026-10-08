@@ -306,9 +306,11 @@ class TestConfiguredAddressesAreParseable:
                 / "app" / "data" / "state_candidate_sources.json")
         states = json.loads(path.read_text())["states"]
         for code, state in states.items():
-            # Google Civic is a state's main source, its general_list or
-            # its fallback -- the address is read the same way in each.
-            for entry in (state, state.get("general_list") or {}, state.get("fallback") or {}):
+            # Google Civic is a state's main source, its general_list, its
+            # fallback or its general_list's fallback -- the address is read
+            # the same way in each.
+            general = state.get("general_list") or {}
+            for entry in (state, general, state.get("fallback") or {}, general.get("fallback") or {}):
                 if entry.get("strategy") != "google_civic":
                     continue
                 if entry.get("address"):
