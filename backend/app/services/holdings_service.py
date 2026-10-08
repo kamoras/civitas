@@ -11,8 +11,8 @@ Only the requested page of holdings is loaded as rows — ordered and limited
 in SQL. The breakdown (categories and totals) is the same for every page and
 filter of a report, so it is computed once per stored report and kept in a
 small in-process cache keyed by the report's id and ingest time: a new
-report, or a re-read one, gets a fresh entry. One backend worker (AGENTS.md)
-means one cache.
+report, or a re-read one, gets a fresh entry. Each API worker keeps its own
+copy, which is fine for data every client sees alike (AGENTS.md).
 """
 
 import threading
@@ -60,34 +60,34 @@ def _to_schema(h: FinancialHolding) -> HoldingSchema:
     )
 
 
-def _categories(rows: list[tuple[str, float | None, float | None]]) -> list[HoldingCategorySchema]:
-    """The breakdown, from (category, low, high) for every holding.
+def _categories(rows: list[tuple[str, float | None, float | None, str]]) -> list[HoldingCategorySchema]:
+    """The breakdown, from (category, low, high, value_text) for every holding.
 
     Every category the report has holdings in is listed, so each holding
     stays reachable through the legend filter; one with nothing valued above
     zero (weight 0) simply draws no slice."""
-    total_weight = sum(_midpoint(low, high) for _, low, high in rows)
-    by_category: dict[str, list[tuple[float | None, float | None]]] = {}
-    for category, low, high in rows:
-        by_category.setdefault(_category_key(category), []).append((low, high))
+    total_weight = sum(_midpoint(low, high) for _, low, high, _ in rows)
+    by_category: dict[str, list[tuple[float | None, float | None, str]]] = {}
+    for category, low, high, text in rows:
+        by_category.setdefault(_category_key(category), []).append((low, high, text))
 
     categories: list[HoldingCategorySchema] = []
     for key, meta in HOLDING_CATEGORIES.items():
         brackets = by_category.get(key)
         if not brackets:
             continue
-        valued = [(low, high) for low, high in brackets if low is not None and high is not None]
-        weight = sum(_midpoint(low, high) for low, high in valued)
+        valued = [(low, high, text) for low, high, text in brackets if low is not None and high is not None]
+        weight = sum(_midpoint(low, high) for low, high, _ in valued)
         categories.append(HoldingCategorySchema(
             category=key,
             label=meta["label"],
             color=meta["color"],
             count=len(brackets),
             unvalued_count=len(brackets) - len(valued),
-            zero_value_count=sum(1 for low, high in valued if high == 0),
-            value_low=sum(low for low, _ in valued),
-            value_high=sum(high for _, high in valued),
-            open_ended=any(is_open_ended(low, high) for low, high in valued),
+            zero_value_count=sum(1 for _, high, _ in valued if high == 0),
+            value_low=sum(low for low, _, _ in valued),
+            value_high=sum(high for _, high, _ in valued),
+            open_ended=any(is_open_ended(low, high, text) for low, high, text in valued),
             weight=weight,
             share=weight / total_weight if total_weight else 0.0,
         ))
@@ -123,17 +123,20 @@ def _breakdown(db: Session, disclosure: FinancialDisclosure) -> _Breakdown:
             _breakdown_cache.move_to_end(key)
             return cached
     rows = (
-        db.query(FinancialHolding.category, FinancialHolding.value_low, FinancialHolding.value_high)
+        db.query(
+            FinancialHolding.category, FinancialHolding.value_low, FinancialHolding.value_high,
+            FinancialHolding.value_text,
+        )
         .filter(FinancialHolding.disclosure_id == disclosure.id)
         .all()
     )
-    valued = [(low, high) for _, low, high in rows if low is not None and high is not None]
+    valued = [(low, high, text) for _, low, high, text in rows if low is not None and high is not None]
     result = _Breakdown(
         holdings_count=len(rows),
         unvalued_count=len(rows) - len(valued),
-        total_low=sum(low for low, _ in valued),
-        total_high=sum(high for _, high in valued),
-        total_open_ended=any(is_open_ended(low, high) for low, high in valued),
+        total_low=sum(low for low, _, _ in valued),
+        total_high=sum(high for _, high, _ in valued),
+        total_open_ended=any(is_open_ended(low, high, text) for low, high, text in valued),
         categories=tuple(_categories(rows)),
     )
     with _breakdown_lock:

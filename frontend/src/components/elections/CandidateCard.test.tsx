@@ -43,6 +43,34 @@ describe("CandidateCard", () => {
   });
 });
 
+describe("what the figures are as of", () => {
+  it("dates the figures by the FEC report's end, not by when they were checked", () => {
+    render(
+      <CandidateCard
+        candidate={candidate({
+          lastFinancialsSync: "2026-10-08T12:00:00Z",
+          financialsThrough: "2026-06-30",
+        })}
+      />
+    );
+    expect(
+      screen.getByText("FEC REPORTS THROUGH 2026-06-30 · CHECKED 2026-10-08")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/AS OF/)).not.toBeInTheDocument();
+  });
+
+  it("says when the FEC holds no report for this election", () => {
+    render(
+      <CandidateCard
+        candidate={candidate({ contributions: null, cashOnHand: null, financialsThrough: null })}
+      />
+    );
+    expect(
+      screen.getByText("NO FEC REPORT FOR THIS ELECTION · CHECKED 2026-08-25")
+    ).toBeInTheDocument();
+  });
+});
+
 describe("unconfirmed badge", () => {
   it("marks a candidate the state's primary file never listed", () => {
     render(<CandidateCard candidate={candidate({ confirmed: false })} showUnconfirmed />);

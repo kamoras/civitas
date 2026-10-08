@@ -237,3 +237,17 @@ def test_employer_money_is_employees_whatever_the_name_classifier_says():
                              detail=_detail(employers=[{"employer": "STANFORD UNIVERSITY", "total": 90_000}]))
     (row,) = [d for d in f["topDonors"] if d["name"].upper() == "STANFORD UNIVERSITY"]
     assert (row["type"], row["industry"]) == ("Org/Employees", "EDUCATION")
+
+
+def test_the_candidates_own_money_is_its_own_row_and_not_outside_money():
+    loaned = [{**FINANCIALS[0], "contributions": 10_000_000, "loans_made_by_candidate": 4_000_000,
+               "candidate_contribution": 50_000}]
+    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, loaned, [], [], ai_classifications=AI, detail=_detail())
+    by = {row["industry"]: row["total"] for row in f["industryBreakdown"]}
+    assert by["CANDIDATE_FUNDS"] == 4_050_000
+    # The base is contributions ($10M, the candidate's own $50K among
+    # them) plus the candidate's $4M of loans; outside money is $9.95M.
+    funding = {"totalContributions": f["totalContributions"], "industryBreakdown": f["industryBreakdown"],
+               "topDonors": [{"total": 100_000, "type": "PAC"}] * 10}
+    share, _, pool = _top_donor_concentration(funding)
+    assert pool == 9_950_000 and share == pytest.approx(1_000_000 / 9_950_000)

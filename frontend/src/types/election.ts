@@ -47,6 +47,12 @@ export interface CandidateSummary {
    * FEC financials sync for this candidate — null means the figures above
    * have never been synced, i.e. "no data yet", not "raised $0". */
   lastFinancialsSync: string | null;
+  /** "YYYY-MM-DD": the last day the FEC figures cover — what they are as
+   * of, which the sync date is not (a quarterly filer checked today may
+   * have reported through June). Null when the FEC holds no report for
+   * this election, and on figures synced before the field existed.
+   * Optional because a backend deployed before it omits it. */
+  financialsThrough?: string | null;
 }
 
 export interface RaceSummary {
@@ -137,8 +143,9 @@ export interface RaceWithCandidates {
   /** WHICH answer this race's candidate list is, decided by the backend
    * (never re-derived here): "confirmed" = the state has named its whole
    * November ballot, minor parties included; "nominees" = the state
-   * confirmed nominees from PRIMARY results, which cannot see a
-   * Libertarian, Green or independent who never ran in a primary, so the
+   * confirmed nominees from PRIMARY results, which cannot see a nominee
+   * who never ran in a primary (a party convention's choice, or a
+   * Libertarian, Green or independent candidate), so the
    * list is real but incomplete; "primary" = no nominee yet, but the
    * state lists these as on its primary ballot; "filers" = nobody has
    * confirmed anything, so this is every active FEC filer, some of whom

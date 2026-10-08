@@ -503,6 +503,28 @@ def test_an_article_already_published_about_is_never_published_again(db_session,
         "https://apnews.com/a2")
 
 
+def test_a_sentence_already_published_is_not_published_again(db_session, monkeypatch):
+    """Two articles from one newsroom sharing a description yield the same
+    copied sentence; the second is not an update and is not published."""
+    from app import broadcast
+
+    _stub_relevance(monkeypatch)
+    race = _race(db_session)
+    _candidate(db_session)
+    db_session.commit()
+    said = "Brennan and Rowe are dueling in the district."
+    old = broadcast.publish(db_session, kind="race", subject=f"race:{race.id}", title="t", text=said,
+                            url="u", state="GA", source_url="https://apnews.com/a1")
+    old.published_at = utcnow() - timedelta(days=7)  # past the race's cooldown
+    db_session.commit()
+
+    _item(db_session, url="https://apnews.com/a2")  # another article, same description
+    db_session.commit()
+    with patch.object(election_bluesky, "_generate_post_text", return_value=said):
+        assert election_bluesky.post_race_coverage_updates(db_session) == 0
+    assert db_session.query(BroadcastPost).count() == 1
+
+
 class TestGeneratePostText:
     """The composed sentence is published whole or not at all."""
 

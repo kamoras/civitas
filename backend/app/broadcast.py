@@ -292,6 +292,12 @@ def source_was_published(db: Session, source_url: str) -> bool:
     return db.query(BroadcastPost.id).filter(BroadcastPost.source_url == source_url).first() is not None
 
 
+def text_was_published(db: Session, text: str) -> bool:
+    """Whether these exact words were ever published (as `publish` stores
+    them, hashtags stripped)."""
+    return db.query(BroadcastPost.id).filter(BroadcastPost.text == strip_hashtags(text)).first() is not None
+
+
 def subjects_published_since(db: Session, kind: str, since: datetime) -> list[str]:
     """The subject of every `kind` post published since `since` (naive UTC),
     one per post, so its length is a count of posts."""

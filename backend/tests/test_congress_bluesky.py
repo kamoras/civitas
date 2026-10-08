@@ -4,6 +4,7 @@ from datetime import date
 
 import pytest
 
+from app import broadcast
 from app.models import BroadcastPost, CongressDay
 from app.pipeline.analyze import congress_bluesky as cb
 from app.pipeline.cache import api_cache_set
@@ -41,11 +42,49 @@ def _day(db, iso, chamber, in_session=True, final=True):
     db.add(CongressDay(chamber=chamber, date=iso, in_session=in_session, is_final=final, source="digest"))
 
 
+_WEEK_SENTENCE = "The Senate met 3 days and took 12 record votes. The House did not meet."
+
+
+def _card(description):
+    return {"title": "Congress", "description": description, "image": "", "image_alt": ""}
+
+
 @pytest.fixture
-def posting(db_session, monkeypatch):
-    """Returns a function listing the urls published so far, in order."""
+def posting(db_session, monkeypatch, link_cards):
+    """Returns a function listing the urls published so far, in order. Every
+    Congress page already shows its report (page_shows)."""
     monkeypatch.setattr(cb, "day_report", lambda db, day: {**_report(["S.1"]), "date": day.isoformat()})
+    monkeypatch.setattr(broadcast, "fetch_og_card", lambda url: _card(
+        _WEEK_SENTENCE if "/week/" in url else _report([])["sentence"]))
     return lambda: [r.url for r in db_session.query(BroadcastPost).order_by(BroadcastPost.id)]
+
+
+def test_a_day_waits_until_its_page_shows_the_final_record(db_session, posting, monkeypatch):
+    # The page still rendered from before the Digest (2026-10-01's card read
+    # "No record of the Senate for this day yet" beside a post saying it met).
+    _day(db_session, "2026-09-24", "senate")
+    _day(db_session, "2026-09-24", "house")
+    db_session.commit()
+    stale = "No record of the Senate for this day yet. The House met for 3 minutes and took no record votes."
+    monkeypatch.setattr(broadcast, "fetch_og_card", lambda url: _card(stale))
+    assert cb.post_daily_congress(db_session, date(2026, 9, 26)) is None
+    monkeypatch.setattr(broadcast, "fetch_og_card", lambda url: None)  # unreadable: waits too
+    assert cb.post_daily_congress(db_session, date(2026, 9, 26)) is None
+    assert posting() == []
+    # The page catches up: a description cut at 160 characters still matches.
+    sentence = _report([])["sentence"]
+    monkeypatch.setattr(broadcast, "fetch_og_card", lambda url: _card(sentence[:80].rstrip() + "…"))
+    assert cb.post_daily_congress(db_session, date(2026, 9, 26)) == date(2026, 9, 24)
+
+
+@pytest.mark.parametrize("shown,ok", [
+    ("The Senate met and took no record votes.", False),
+    ("", False),
+    ("The Senate passed 3 bills, agreed to 4 resolutions and took 3 record votes. The House met for 3 minutes and took no record votes.", True),
+])
+def test_page_shows(monkeypatch, shown, ok):
+    monkeypatch.setattr(broadcast, "fetch_og_card", lambda url: _card(shown))
+    assert cb.page_shows("https://civitas-research.org/congress/2026-09-24", _report([])["sentence"]) is ok
 
 
 def test_posts_the_newest_final_session_day_once(db_session, posting):

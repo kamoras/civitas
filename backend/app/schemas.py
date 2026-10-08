@@ -1,7 +1,10 @@
+import re
 from datetime import datetime
 from typing import Annotated, Literal, get_args
 
 from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
+
+from app.config_definitions import BILL_STAGES
 
 
 def to_camel(string: str) -> str:
@@ -21,7 +24,7 @@ class CamelModel(BaseModel):
 
 class DonorSchema(CamelModel):
     name: str
-    total: float
+    total: float = Field(description="Given in the election period, in dollars")
     # "SKIP" = donor_classifier_ai.py's low-confidence sentinel (see
     # normalize_finance.py) — a real, first-class classification outcome
     # filtered out of certain aggregates elsewhere (policy_alignment.py,
@@ -38,10 +41,11 @@ class DonorSchema(CamelModel):
 
 
 class IndustryDonationSchema(CamelModel):
-    industry: str
-    name: str
-    total: float
-    percentage: float
+    industry: str = Field(description="Industry code. LARGE_INDIVIDUAL is itemized individual gifts whose "
+                                      "industry couldn't be told; UNCLASSIFIED, money no classification reached")
+    name: str = Field(description="The code as words")
+    total: float = Field(description="In dollars")
+    percentage: float = Field(description="Share of the breakdown's total, 0-100, rounded to a whole number")
 
 
 class RepresentationScoreSchema(CamelModel):
@@ -61,13 +65,16 @@ class RepresentationScoreSchema(CamelModel):
     # lib/representation.ts's removed weightedScore).
     overall: float = Field(0.0, description="The weighted overall score, 0-100 (weights: the API index's scoreWeights)")
     confidence: dict[str, str] | None = Field(
-        None, description='How much data backs each sub-score: "high", "medium" or "low"')
+        None, description='How much data backs each sub-score, by its name: "high", "medium" or "low". Also '
+                          'constituentAlignmentVotePart, how that score\'s vote part was scored: "full"; '
+                          '"shrunk:<share kept>" or "shrunk-neutral:<share kept>" (few votes, pulled toward the '
+                          'party\'s typical score or toward 50); "typical:few-votes"; or "neutral:<reason>" (scored 50)')
 
 
 class PolicyAreaDetail(CamelModel):
     area: str
-    confidence: float
-    party: str = "bipartisan"
+    confidence: float = Field(description="How closely the bill reads as this area, 0-1 (cosine similarity)")
+    party: str = Field("bipartisan", description='"D", "R" or "bipartisan": which party\'s platform the area leans to')
 
 
 class KeyVoteSchema(CamelModel):
@@ -95,23 +102,26 @@ class FundingSchema(CamelModel):
     # Denominator for PAC / small-donor shares (contributions + candidate
     # self-loans; see normalize_finance.summarize_election_totals). None on
     # records scored before it existed — clients fall back to total_raised.
-    total_contributions: float | None = None
+    total_contributions: float | None = Field(
+        None, description="Contributions (and candidate loans), in dollars: what the shares are taken over; "
+                          "null on a record scored before it was kept")
     # Read from the pipeline's "totalFromPACs" key; written as "totalFromPacs",
     # the spelling every other response (the leaderboards) uses.
     total_from_pacs: float = Field(
         validation_alias=AliasChoices("totalFromPACs", "totalFromPacs"), serialization_alias="totalFromPacs",
+        description="From PACs, in dollars",
     )
     pac_share_pct: float = Field(0.0, description="PAC money as a percentage of contributions, 0-100")
     small_donor_percentage: float | None = Field(
         description="Share of contributions that were unitemized individual gifts (donors giving $200 or less), "
                     "0-100; null when the campaign itemizes every gift, so the filings can't say")
-    top_donors: list[DonorSchema]
+    top_donors: list[DonorSchema] = Field(description="Largest donors first")
     industry_breakdown: list[IndustryDonationSchema] = Field(description="Contributions by industry")
 
 
 class VotingRecordSchema(CamelModel):
     """Roll-call votes in the current Congress."""
-    total_votes: int
+    total_votes: int = Field(description="Roll-call votes on the member's record")
     voted_with_party_count: int = Field(0, description="Votes cast with the member's party majority")
     voted_against_party_count: int = Field(0, description="Votes cast against the member's party majority")
     party_loyalty_pct: float = Field(0.0, description="With-party share of party-line votes, 0-100")
@@ -137,12 +147,23 @@ class PaginatedVotesSchema(CamelModel):
     counts: VoteCountsSchema
 
 
-def is_open_ended(low: float | None, high: float | None) -> bool:
+# A holding's value stated as one exact figure ("$1,251.00") rather than a
+# bracket — the House form lets a filer give the exact value instead
+# (2025 reports: 15 holdings across 2 reports). Stored as low == high, the
+# same encoding as the open-ended bracket, and told apart from it by the
+# printed text, which every holding keeps (value_text).
+EXACT_VALUE_RE = re.compile(r"^\$\s*\d[\d,]*(?:\.\d+)?$")
+
+
+def is_open_ended(low: float | None, high: float | None, text: str | None = None) -> bool:
     """The disclosure forms' open-ended top bracket ("Over $50,000,000"),
     which states a floor and no ceiling. Stored as high == low — no real
     bracket on these forms has equal bounds (ptr_common.parse_amount_range).
     The one definition of that rule: trades, holdings, and every sum over
-    holdings use it."""
+    holdings use it. A holding passes its value_text, so an exact stated
+    value (EXACT_VALUE_RE), the one other low == high, isn't read as a floor."""
+    if text is not None and EXACT_VALUE_RE.match(text.strip()):
+        return False
     return low is not None and low > 0 and high == low
 
 
@@ -226,10 +247,11 @@ class PaginatedStockTradesSchema(CamelModel):
 
 class HoldingSchema(CamelModel):
     """One asset from a member's latest annual financial disclosure. The
-    value is the disclosed bracket, never an exact figure: value_low/high
-    are None when the filing states no bracket ("Undetermined"), 0/0 when
-    the asset was held at no value at year end, and equal when the filing
-    used an open-ended top bracket — see value_open_ended."""
+    value is the disclosed bracket: value_low/high are None when the filing
+    states no bracket ("Undetermined"), 0/0 when the asset was held at no
+    value at year end, and equal when the filing used an open-ended top
+    bracket (value_open_ended) or, on the House form, stated the exact value
+    instead of a bracket (value_open_ended false — see EXACT_VALUE_RE)."""
     asset_name: str
     account: str | None = None
     ticker: str | None = None
@@ -245,7 +267,7 @@ class HoldingSchema(CamelModel):
 
     @model_validator(mode="after")
     def _compute_open_ended(self) -> "HoldingSchema":
-        self.value_open_ended = is_open_ended(self.value_low, self.value_high)
+        self.value_open_ended = is_open_ended(self.value_low, self.value_high, self.value_text)
         return self
 
 
@@ -371,15 +393,17 @@ class LobbyingMatchSchema(CamelModel):
 class PolicyAlignmentSchema(CamelModel):
     area: str
     alignment: Literal["R", "D", "bipartisan"]
-    strength: float
+    strength: float = Field(description="How strongly, 0-1")
 
 
 class PartisanDepthSchema(CamelModel):
-    overall_lean: float
+    overall_lean: float = Field(description="Negative leans Democratic, positive Republican")
     overall_party: Literal["R", "D", "centrist"]
-    depth: Literal["deep", "moderate", "centrist", "cross-cutting"]
-    cross_party_count: int
-    total_positions: int
+    depth: Literal["deep", "moderate", "centrist", "cross-cutting"] = Field(
+        description="The member's tercile of lean within their own party; cross-cutting when many areas "
+                    "lean to the other party")
+    cross_party_count: int = Field(description="Policy areas leaning to the other party")
+    total_positions: int = Field(description="Policy areas with a lean")
     policy_breakdown: list[PolicyAlignmentSchema] = []
 
 
@@ -405,7 +429,7 @@ class SponsoredBillSchema(CamelModel):
     congress: int = 0
     bill_type: str = ""
     is_law: bool = False
-    stage: str = ""
+    stage: str = Field("", description=f"Furthest stage reached: {', '.join(BILL_STAGES)}")
     # Content read as commemorative (analyze/commemorative.py): Legislative
     # Effectiveness weights it 1x, not 5x, like Volden & Wiseman.
     commemorative: bool = False
@@ -466,10 +490,12 @@ class ConstituentApprovalPartySchema(CamelModel):
     # Share approving, shrunk toward the typical member; None when the
     # survey can't tell members apart for this group (see
     # scripts/fetch_ces_approval.py).
-    approve: float | None = None
+    approve: float | None = Field(
+        None, description="Share approving, 0-1 (not 0-100), shrunk toward the typical member; null when the "
+                          "survey can't tell members apart for this group")
     # How much of `approve` is the member's own respondents (0-1).
-    own_weight: float | None = None
-    respondents: int
+    own_weight: float | None = Field(None, description="How much of approve is the member's own respondents, 0-1")
+    respondents: int = Field(description="The member's own constituents of this party who answered")
 
 
 class ConstituentApprovalSchema(CamelModel):
@@ -477,9 +503,15 @@ class ConstituentApprovalSchema(CamelModel):
     respondent's party (services/constituent_survey.py). Scored for senators
     (Constituent Alignment's approval part, v6.29); context for House members."""
     survey: str
-    fielded: str
-    surveyed_as: str
-    by_party: list[ConstituentApprovalPartySchema]
+    fielded: str = Field(description="When the survey was in the field, YYYY-MM/YYYY-MM")
+    surveyed_as: str = Field(description="The name the survey asked about")
+    by_party: list[ConstituentApprovalPartySchema] = Field(description="By the respondent's party")
+
+
+_IDEOLOGY = ("From cosponsorship alone (SVD, no party labels as input), 0 most left to 1 most right; "
+             "null with too little data")
+_LEADERSHIP = ("Cosponsorship centrality (PageRank), log-rescaled to 0-1; most members sit low; "
+               "null with too little data")
 
 
 class _PersonDetailBase(CamelModel):
@@ -494,7 +526,7 @@ class _PersonDetailBase(CamelModel):
     name: str
     state: str
     party: Literal["D", "R", "I"]
-    years_in_office: int
+    years_in_office: int = Field(description="Whole years in this chamber")
     initials: str
     leadership_title: str | None = Field(None, description="A party leadership post, if the member holds one")
     committees: list[CommitteeSchema] = []
@@ -503,15 +535,20 @@ class _PersonDetailBase(CamelModel):
     voting_record: VotingRecordSchema
     lobbying_matches: list[LobbyingMatchSchema] = Field(
         description="Donors who also lobby, with the bills they lobbied on that the member voted on")
-    campaign_promises: list[CampaignPromiseSchema] = []
+    campaign_promises: list[CampaignPromiseSchema] = Field(
+        [], description="Always empty: campaign-promise tracking was removed in 2026-07 (see "
+                        "representationScore.promisePersistence). Kept so existing clients still find the field")
     partisan_depth: PartisanDepthSchema | None = Field(
         None, description="How strongly the member's votes lean to one party, by policy area")
     sponsored_bills: list[SponsoredBillSchema] = Field([], description="Bills the member sponsored this Congress")
-    leadership_score: float | None = None
-    bipartisanship_score: float | None = None
-    ideology_score: float | None = None
-    sponsorship_description: str = ""
-    constituent_approval: ConstituentApprovalSchema | None = None
+    leadership_score: float | None = Field(None, description=_LEADERSHIP)
+    bipartisanship_score: float | None = Field(
+        None, description="Cross-party cosponsorship, given and received (after the Lugar Center's Bipartisan "
+                          "Index), 0-1: 0.5 is the chamber median, 1 twice it or more; null with too little data")
+    ideology_score: float | None = Field(None, description=_IDEOLOGY)
+    sponsorship_description: str = Field("", description="Ideology and leadership in words")
+    constituent_approval: ConstituentApprovalSchema | None = Field(
+        None, description="How the member's constituents rated them in the Cooperative Election Study, by party")
     website_url: str = ""
     contact_form_url: str = ""
     office_phone: str = ""
@@ -536,9 +573,12 @@ class PaginatedRepresentativesSchema(CamelModel):
 
 
 class ScoreTrendSchema(CamelModel):
-    direction: Literal["up", "down", "stable", "new", "reset"] = "new"
-    change: float = 0.0
-    previous_score: float | None = None
+    """The overall score against the member's score about a week earlier."""
+    direction: Literal["up", "down", "stable", "new", "reset"] = Field(
+        "new", description='"new": no earlier score; "reset": earlier scores only under another scoring '
+                           "version or Congress, so not comparable")
+    change: float = Field(0.0, description="Points since the earlier score; 0 when new or reset")
+    previous_score: float | None = Field(None, description="The earlier overall score; null when new or reset")
 
 
 class LeaderboardEntrySchema(CamelModel):
@@ -546,32 +586,37 @@ class LeaderboardEntrySchema(CamelModel):
     name: str
     state: str
     party: Literal["D", "R", "I"]
-    years_in_office: int
+    years_in_office: int = Field(description="Whole years in this chamber")
     initials: str
     representation_score: RepresentationScoreSchema
-    total_raised: float
-    total_contributions: float | None = None
-    total_from_pacs: float
+    total_raised: float = Field(description="All receipts of the most recent completed election campaign, in dollars")
+    total_contributions: float | None = Field(
+        None, description="Its contributions (and candidate loans), in dollars: what the shares are taken over")
+    total_from_pacs: float = Field(description="From PACs, in dollars")
     pac_share_pct: float = Field(0.0, description="PAC money as a percentage of contributions, 0-100")
-    small_donor_percentage: float | None = None
-    top_industry: str | None = None
+    small_donor_percentage: float | None = Field(
+        None, description="Share of contributions in unitemized gifts of $200 or less, 0-100; null when unknown")
+    top_industry: str | None = Field(
+        None, description="The largest industry in the profile's funding.industryBreakdown, as words; small "
+                          "donors, unattributed individuals, party and candidate committees and unclassified "
+                          "money are not industries and never this; null when there is none")
     trend: ScoreTrendSchema = Field(default_factory=ScoreTrendSchema)
     # SVD-based, cosponsorship-derived (Tauberer 2012) — 0 = most-left,
     # 1 = most-right, computed without party labels as input. None when
     # too little cosponsorship data exists to compute it (see
     # sponsorship_analysis.compute_ideology_scores).
-    ideology_score: float | None = None
+    ideology_score: float | None = Field(None, description=_IDEOLOGY)
     # Backend-computed via sponsorship_analysis.describe_senator_position —
     # frontend must never re-derive this from ideology_score itself, since
     # the party-relative bucketing (D/R use a 30/70 split, independents
     # 35/65) isn't reproducible from the number alone.
-    ideology_label: str | None = None
+    ideology_label: str | None = Field(None, description="ideologyScore in words, relative to the member's own party")
     # PageRank cosponsorship centrality (sponsorship_analysis.
     # compute_leadership_scores), log-rescaled to [0, 1] to counter its
     # power-law distribution — most members cluster low, a few attract
     # disproportionate cosponsor weight. None when too little
     # cosponsorship data exists to compute it.
-    leadership_score: float | None = None
+    leadership_score: float | None = Field(None, description=_LEADERSHIP)
 
 
 # --- Public API v1 (api/public.py) ---
@@ -595,20 +640,20 @@ _RANK = Field(description="Place in the whole chamber by overall score, whatever
 class PublicApiIndexSchema(_PublicModel):
     name: str
     version: str
-    rate_limit: str
+    rate_limit: str = Field(description="The rate limit, in words")
     score_weights: dict[str, float] = Field(description="How the sub-scores weigh into representationScore.overall")
-    endpoints: dict[str, str]
-    docs: str
-    openapi: str
+    endpoints: dict[str, str] = Field(description='"METHOD path" -> what it returns')
+    docs: str = Field(description="The documentation page")
+    openapi: str = Field(description="This API's OpenAPI 3 description")
     mcp: str = Field(description="MCP server (streamable HTTP) exposing these endpoints as tools")
-    source: str
+    source: str = Field(description="Civitas's source code")
 
 
 class PublicStateSchema(_PublicModel):
     code: str = Field(description="Two-letter state code")
     name: str
-    senator_count: int
-    representative_count: int
+    senator_count: int = Field(description="Serving senators")
+    representative_count: int = Field(description="Serving representatives (delegates aren't scored)")
 
 
 class PublicSenatorRowSchema(LeaderboardEntrySchema):
@@ -636,9 +681,9 @@ class PublicRepresentativeProfileSchema(RepresentativeSchema):
 
 class _PublicPage(_PublicModel):
     total: int = Field(description="Matching members across every page")
-    page: int
+    page: int = Field(description="This page; a page past the last is answered as the last")
     per_page: int
-    total_pages: int
+    total_pages: int = Field(description="At least 1, even when nothing matches")
 
 
 class PublicSenatorPageSchema(_PublicPage):
@@ -651,7 +696,7 @@ class PublicRepresentativePageSchema(_PublicPage):
 
 class PublicScoreSnapshotSchema(_PublicModel):
     date: str = Field(description="When the scores were computed, YYYY-MM-DD")
-    overall: float
+    overall: float = Field(description="0-100, like the sub-scores here; see representationScore for each")
     funding_independence: float
     promise_persistence: float | None = Field(None, description="Always null: see representationScore")
     constituent_alignment: float
@@ -665,31 +710,32 @@ class PublicHistorySchema(_PublicModel):
 
 
 class PublicSearchResultSchema(_PublicModel):
-    id: int
+    id: int = Field(description="The document's id on Civitas (siteUrl)")
     title: str
-    date: str
-    doc_type: str
+    date: str = Field(description="YYYY-MM-DD")
+    doc_type: str = Field(description="One of the doc_type filter's values")
     source: str
     politician_name: str = Field(description="The member who delivered or signed it; empty when none")
-    politician_id: str
-    chamber: str
-    agency_name: str
+    politician_id: str = Field(description="Their Civitas id; empty when none")
+    chamber: str = Field(description="Senate, House, Executive, Judicial or Regulatory (the chamber filter's "
+                                     "values, capitalized)")
+    agency_name: str = Field(description="The issuing agency, for a Federal Register document; empty otherwise")
     url: str = Field(description="The document at its official source")
     site_url: str = _SITE_URL
     summary: str
     comment_url: str = Field(description="Where to comment, for a rule whose comment period is open")
-    comments_close_on: str
+    comments_close_on: str = Field(description="When that comment period closes, YYYY-MM-DD; empty when none")
     cited_by_count: int = Field(description="How many indexed documents cite this one")
     matched_by: list[Literal["semantic", "keyword"]] = Field(description="Which search found it: by meaning, by exact words, or both")
     distance: float | None = Field(description="Distance in meaning from the query; null when only the exact words matched")
-    snippet: str
+    snippet: str = Field(description="Text around the matched words, plain")
     duplicate_count: int = Field(description="Near-identical copies folded into this result")
 
 
 class PublicSearchResponseSchema(_PublicModel):
     query: str
     results: list[PublicSearchResultSchema] = Field(description="Best match first")
-    count: int
+    count: int = Field(description="Results returned (at most the request's limit), not a total")
     partial: bool = Field(description="True when only the exact-words search could answer, so the ranking is incomplete")
     index_building: bool = Field(description="True while the search index is being built; results are empty until it is")
 

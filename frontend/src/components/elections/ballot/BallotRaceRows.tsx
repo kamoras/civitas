@@ -1,23 +1,13 @@
-import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
+import type { RaceWithCandidates } from "@/types/election";
 import {
   candidateName,
   incumbencyLabel,
   isActiveCandidate,
   isRedrawnSeat,
+  raisedLabel,
   tierCandidates,
 } from "@/lib/elections";
-import { formatCurrency } from "@/lib/formatting";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
-
-/** What the money column says for one candidate. Never a fabricated $0:
- * someone the state lists who never filed with the FEC, and someone the
- * FEC has not synced yet, each say so in words. */
-function raisedLabel(c: BallotCandidate): string {
-  if (c.fecFiled === false) return "no FEC filing";
-  if (c.lastFinancialsSync == null) return "awaiting FEC sync";
-  if (!c.hasRaisedFunds || c.contributions == null) return "no funds reported";
-  return `${formatCurrency(c.contributions)} raised`;
-}
 
 /** A federal race's candidates as ballot rows: name, party in words and
  * colour, money raised, and a bar scaled to this race's top fundraiser
@@ -79,6 +69,7 @@ export default function BallotRaceRows({
               </span>
               <span className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
                 {raisedLabel(c)}
+                {c.contributions ? " raised" : ""}
               </span>
             </div>
             <div className="mt-1.5 h-1 bg-white/[0.07]" aria-hidden="true">
