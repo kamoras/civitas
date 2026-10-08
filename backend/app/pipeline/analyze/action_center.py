@@ -2958,7 +2958,22 @@ def _merge_monitors(keep: NationalMonitor, absorb: NationalMonitor,
     keep.policy_areas = json.dumps(sorted(keep_areas | absorb_areas))
 
     logger.info("Merged monitor '%s' into '%s'", absorb.title, keep.title)
+    db.flush()
+    db.query(MonitorUpdate).filter(MonitorUpdate.monitor_id == absorb.id).delete(synchronize_session=False)
     db.delete(absorb)
+
+
+def _sweep_orphan_updates(db: Session) -> int:
+    """Delete updates of a monitor that no longer exists. SQLite doesn't
+    enforce the foreign key, and a deleted monitor's updates were left
+    behind (52 rows from six monitors, 2026-10-08). Run every refresh."""
+    live = [m.id for m in db.query(NationalMonitor).all()]
+    swept = db.query(MonitorUpdate).filter(
+        ~MonitorUpdate.monitor_id.in_(live),
+    ).delete(synchronize_session=False)
+    if swept:
+        logger.info("Removed %d updates of monitors that no longer exist", swept)
+    return swept
 
 
 def _merge_similar_monitors(monitors: list[NationalMonitor], db: Session) -> bool:
@@ -3123,6 +3138,8 @@ def _update_national_monitors(today: str, db: Session) -> None:
         [i.title for i in today_issues],
         normalize_embeddings=True,
     )
+
+    _sweep_orphan_updates(db)
 
     # Step 1: Merge any existing monitors that are too similar to each other.
     _set_refresh_state(stage_detail="1/4 dedup")
@@ -3360,6 +3377,9 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
             if update_count < _MONITOR_MIN_UPDATES_FOR_ARCHIVE:
                 logger.info("Deleting insignificant monitor: '%s' (%d updates)", 
                             m.title, update_count)
+                # By query, not the relationship's cascade: rows added by
+                # monitor_id after the collection loaded aren't in it.
+                db.query(MonitorUpdate).filter(MonitorUpdate.monitor_id == m.id).delete(synchronize_session=False)
                 db.delete(m)
             else:
                 m.status = MonitorStatus.CLOSED
