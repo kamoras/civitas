@@ -3732,3 +3732,18 @@ def test_contact_your_senators_only_for_a_federal_policy_story():
 
     assert contact(policy_areas=["ENERGY"])
     assert not contact(policy_areas=[])  # a foreign election, a fundraising total
+
+
+def test_updates_of_a_deleted_monitor_are_swept(db_session):
+    from app.pipeline.analyze.action_center import _sweep_orphan_updates
+
+    live = NationalMonitor(slug="live", title="Live", description="d", category="defense", status="active")
+    db_session.add(live)
+    db_session.commit()
+    db_session.add_all([
+        MonitorUpdate(monitor_id=live.id, date="2026-10-01", summary="s", source_url="u1", source_name="AP"),
+        MonitorUpdate(monitor_id=live.id + 99, date="2026-10-01", summary="s", source_url="u2", source_name="AP"),
+    ])
+    db_session.commit()
+    assert _sweep_orphan_updates(db_session) == 1
+    assert [u.source_url for u in db_session.query(MonitorUpdate)] == ["u1"]

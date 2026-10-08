@@ -10,6 +10,7 @@ from app.api.response_helpers import (
     score_history_json,
 )
 from app.database import get_db
+from app.member_ids import resolve_member_id
 from app.services.holdings_service import HOLDING_CATEGORY_PATTERN, get_rep_holdings
 from app.services.representative_service import (
     get_rep_leaderboard,
@@ -46,14 +47,14 @@ def list_rep_leaderboard(
 @router.get("/representatives/{rep_id}/history")
 def get_rep_history(rep_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     """Return historical score snapshots for a representative."""
-    return score_history_json(db, "representative", rep_id)
+    return score_history_json(db, "representative", resolve_member_id(db, resolve_member_id(db, rep_id)))
 
 
 @router.get("/representatives/{rep_id}/score-breakdown")
 def get_rep_score_breakdown_route(rep_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     """Return the full component-level derivation behind each of a
     representative's scored dimensions — the "show the math" panel's data source."""
-    breakdown = get_representative_score_breakdown(db, rep_id)
+    breakdown = get_representative_score_breakdown(db, resolve_member_id(db, rep_id))
     if breakdown is None:
         raise HTTPException(status_code=404, detail="Representative not found")
     return _cached_json(breakdown, max_age=CACHE_TTL_DETAIL_S)
@@ -68,7 +69,7 @@ def get_votes(
     filter: str = Query("all", pattern="^(all|yea|nay|against-party)$"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    result = get_rep_votes(db, rep_id, category, page, per_page, filter)
+    result = get_rep_votes(db, resolve_member_id(db, rep_id), category, page, per_page, filter)
     if result is None:
         raise HTTPException(status_code=404, detail="Representative not found")
     return _cached_json(result, max_age=CACHE_TTL_DETAIL_S)
@@ -82,7 +83,7 @@ def get_rep_stock_trades_route(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Return paginated STOCK Act trade disclosures for a representative."""
-    result = get_rep_stock_trades(db, rep_id, page, per_page)
+    result = get_rep_stock_trades(db, resolve_member_id(db, rep_id), page, per_page)
     if result is None:
         raise HTTPException(status_code=404, detail="Representative not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
@@ -99,7 +100,7 @@ def get_rep_holdings_route(
     """Return the asset holdings from the latest annual financial disclosure:
     a by-category breakdown plus a page of holdings, largest first
     (optionally one category's)."""
-    result = get_rep_holdings(db, rep_id, page, per_page, category)
+    result = get_rep_holdings(db, resolve_member_id(db, rep_id), page, per_page, category)
     if result is None:
         raise HTTPException(status_code=404, detail="Representative not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
@@ -107,7 +108,7 @@ def get_rep_holdings_route(
 
 @router.get("/representatives/{rep_id}")
 def get_representative(rep_id: str, db: Session = Depends(get_db)) -> JSONResponse:
-    result = get_representative_by_id(db, rep_id)
+    result = get_representative_by_id(db, resolve_member_id(db, rep_id))
     if result is None:
         raise HTTPException(status_code=404, detail="Representative not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)

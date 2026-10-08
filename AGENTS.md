@@ -581,6 +581,35 @@ name from the Congress.gov "LastName, FirstName" format during member
 normalization and stores it as `lastNameForVoteMatch`.  Unicode accents are
 stripped (NFD decomposition) so "Núñez" matches "Nunez" in the XML.
 
+### 4b. Member ids are slugs, renamed in place
+
+A member's id (the `senators` / `representatives` primary key and the URL
+`/politicians/<id>`) is `first-last` from Congress.gov's "Last, First Middle"
+name, ASCII-folded (`app/member_ids.member_slug`) — the name the member
+goes by where the source marks it: the quoted nickname when the name string
+has one (`Doe, Henry C. "Hank"` → `hank-doe`), else the first given name
+(initials and Jr./Sr./II–IV passed over); and the whole surname before the
+comma, or the member detail's `lastName` when that is a longer multi-word
+form ending with it. The detail's `firstName` is not used: it holds a
+familiar form for some members without the name string marking it, and
+would rename members whose ids are already right. One URL
+namespace covers both chambers: the same bioguide id keeps one id in both
+tables, and a second person with the same slug gets the state code
+appended (then the bioguide id); whoever holds an id keeps it.
+
+Ids are re-derived every run, so `assign_member_ids` runs on each chamber's
+roster before anything writes a member by id: it matches stored members by
+**bioguide id**, never by id, and renames a changed one in place — the row,
+every foreign-key child (found from the metadata, since SQLite has no ON
+UPDATE CASCADE), and the references no foreign key covers (the same ones
+`member_lifecycle._purge_member_traces` clears) — recording the old id in
+`member_id_aliases`. Never let an id change read as a member leaving: that
+retires the row and purges its history after `RETIREMENT_GRACE_DAYS`. A new
+table or JSON field that stores a member id must be added to
+`member_ids._move` and to the purge. The API resolves an old id
+(`resolve_member_id`) and serves the member under the current id; the
+profile page answers it with a permanent redirect (308).
+
 ### 5. Config as single source of truth
 
 All dynamic enums, category codes, industry definitions, score weights, and
@@ -712,7 +741,11 @@ Corollaries that follow from the same rule, all enforced in code:
   state's own would; a state page that was read and refused never falls
   back to one, since that would publish past the refusal; and the card
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
-  past the wall itself is not an option: it is the state saying no.
+  past the wall itself is not an option: it is the state saying no. That
+  is enforced in the HTTP layer for every source: the client forgets the
+  cookies a challenge response sets (`http_client.is_bot_challenge`), and
+  `fetch_with_retry` never retries a challenge. Until 2026-10 a retry sent
+  the challenge's cookie back and got through one state's wall unnoticed.
 - Scope is stated as content, not as a footnote: the API enumerates what a
   statewide page omits (`omits`) and the page renders it above the measures.
 - **`omits` is a live description, not a fixed disclaimer.** Each entry is
@@ -1151,6 +1184,7 @@ See `.env.example` for all options. Key variables:
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
+| `BLS_API_KEY` | No | Bureau of Labor Statistics v2 registration key: lifts the jobs API from 25 to 500 requests a day; works without it |
 | `CURRENT_CONGRESS` | **Never in production** | Leave unset — computed from the clock. Setting it pins the scored windows *and* House members' district lines to that Congress past the next Jan 3; only for re-running an archived database |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see
@@ -1196,6 +1230,7 @@ the pending list).
 |------|-------|
 | Pipeline orchestration | `backend/app/scheduler.py` (entrypoint), `backend/app/pipeline/senate_pipeline.py` / `house_pipeline.py` |
 | Departed-member detection + removal | `backend/app/pipeline/member_lifecycle.py` |
+| Member ids (slug, cross-chamber uniqueness, rename in place, old-id aliases) | `backend/app/member_ids.py` |
 | Stock trade disclosures | `backend/app/pipeline/stock_pipeline.py` |
 | Annual-report holdings (scorecard pie) | `backend/app/pipeline/holdings_pipeline.py`, `fetch/house_fd.py`, `fetch/senate_fd.py`, `fetch/fd_common.py`, `services/holdings_service.py`, `frontend/src/components/checker/Holdings.tsx` |
 | Scoring formulas | `backend/app/pipeline/analyze/score_calculator.py` |

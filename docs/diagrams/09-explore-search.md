@@ -10,8 +10,8 @@ rebuilt from it at the end of every ingest run.
 flowchart TB
     subgraph INDEX["Indexing — during pipeline runs"]
         direction TB
-        S1["Senate floor speeches<br/>GovInfo CREC packages<br/>every granule page (nextPage)"]
-        S2["House floor speeches<br/>GovInfo CREC packages"]
+        S1["Senate floor speeches<br/>GovInfo CREC: MODS → sections with a speaking member<br/>split by the Record's designations and headings"]
+        S2["House floor speeches<br/>same reader<br/>floor business (quorum calls, yielding time) dropped"]
         S3["Presidential actions<br/>executive orders, proclamations, memoranda"]
         S4["Supreme Court opinions<br/>Oyez + supremecourt.gov"]
         S5["Federal Register rulemaking<br/>proposed + final rules"]
@@ -24,7 +24,7 @@ flowchart TB
 
         DOC["ExploreDocument row<br/>doc_type · source · title · summary · body<br/>date · politician_name/id · chamber<br/>agency_name · comment_url · comments_close_on<br/>identifiers"]
 
-        DOC --> EMB["Embed title + summary + body[:800]<br/><b>one embedding per document — no chunking</b>"]
+        DOC --> EMB["Embed title + summary + body<br/><b>in windows of the encoder's context length</b>"]
         DOC --> FTS["Tokenise title · summary · body<br/><b>external content — text not duplicated</b>"]
         DOC --> CITE["Parse canonical citations<br/>EO no. · volume FR page · RIN · FR doc no."]
 
@@ -149,8 +149,8 @@ Separately, no single member or agency may take more than three of the leading
 results before the rest are demoted below other sources — they are moved, not
 dropped, so a member-scoped search still returns everything it found.
 Deduplication keys on a normalised content fingerprint rather than the title:
-every one of a member's floor speeches shares the same generated title, so a
-title-based rule would return exactly one of them.
+many floor speeches share a title (every reply in a debate is "Remarks on"
+its heading), so a title-based rule would return one of them.
 
 **"Newest" means newest matching.** The date sort orders the whole filtered
 candidate pool, not the relevance page. The candidate pool is deliberately

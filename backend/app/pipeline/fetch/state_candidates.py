@@ -1742,9 +1742,23 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # runs FIRST so a nominee the list has replaced is never confirmed
         # from primary results only to be unconfirmed moments later.
         general = source.get("general_list")
+        ballot_source = general
         general_records = None
         if general:
             general_records = await _fetch(client, cycle, state, general, "Certified general list")
+            spare_list = general.get("fallback")
+            if general_records is None and spare_list and STRATEGIES.get(spare_list.get("strategy")):
+                # The list's own second choice, named in its entry: when
+                # Arkansas's candidate search cannot be read, Google Civic
+                # still answers for the races it has addresses for. Its
+                # records are the spare's (ballot_source), while the state
+                # offices still follow the list itself: a list that has
+                # answered with them stays their source on a night it is
+                # down (_state_office_source), whatever the spare says.
+                logger.info("Falling back to %s for %s's general list", spare_list["strategy"], state)
+                general_records = await _fetch(client, cycle, state, spare_list, "Certified general list fallback")
+                if general_records is not None:
+                    ballot_source = spare_list
             if general_records is not None and not general_records:
                 # A list not published yet (its page does not name this
                 # year's election, or it is not due until after the
@@ -1880,7 +1894,7 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 applied = {k: applied[k] + more[k] for k in applied}
             _record_ballot_basis(
                 db, cycle, state,
-                {**general, "general_ballot_complete": bool(races_here) and races_here <= covered},
+                {**ballot_source, "general_ballot_complete": bool(races_here) and races_here <= covered},
                 races=covered & races_here,
             )
         else:

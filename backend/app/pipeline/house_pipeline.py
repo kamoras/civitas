@@ -31,6 +31,7 @@ from app.pipeline.analyze.score_calculator import (
     calculate_scores,
     compute_overall_score,
 )
+from app.member_ids import assign_member_ids
 from app.pipeline.member_lifecycle import (
     CHAMBER_HOUSE,
     purge_departed_members,
@@ -264,6 +265,10 @@ async def run_house_pipeline() -> dict:
             progress.begin("normalize")
             reps = normalize_house_members(raw_members, member_details)
             logger.info("Normalized %d representatives", len(reps))
+            # Settle ids against the stored members by bioguide id, renaming
+            # any whose id changed, before anything below writes by id.
+            assign_member_ids(db, CHAMBER_HOUSE, reps)
+            db.commit()
             progress.complete("normalize", detail=f"{len(reps)} representatives")
 
             # Reconcile the roster: anyone in the database but not in
