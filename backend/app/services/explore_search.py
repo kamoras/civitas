@@ -52,6 +52,7 @@ from sqlalchemy import text
 
 from app.config_definitions import EXPLORE_RRF_K
 from app.models import ExploreDocument
+from app.pipeline.analyze.document_authority import is_identifier_query
 from app.pipeline.explore_ranking import (
     candidate_pool,
     fingerprint_shape,
@@ -303,14 +304,24 @@ def hybrid_search(
     # pool and hoping enough regulatory documents survive the filter.
     effective_chamber = chamber or ("Regulatory" if commentable else None)
 
-    try:
-        semantic = search_explore_documents(
-            query=query, n_results=pool, doc_type=doc_type,
-            chamber=effective_chamber, politician_id=politician_id,
-        )
-    except Exception:
-        logger.exception("Semantic channel failed for %r", query)
-        semantic = None
+    # A query that is only publisher identifiers ("89 FR 52508") is a lookup
+    # the encoder has no meaning for: on known-item probes the semantic
+    # channel found 2-3% of such targets in its top 20. Yet RRF rewards
+    # appearing in both lists, so a document that both channels ranked
+    # middling outscored the keyword channel's exact hit at rank 1 — fused
+    # R@1 on those probes was 0.25 against keyword's 0.65 (2026-10). The
+    # channel abstains (an empty list, not None: it is not unavailable).
+    if is_identifier_query(query):
+        semantic = []
+    else:
+        try:
+            semantic = search_explore_documents(
+                query=query, n_results=pool, doc_type=doc_type,
+                chamber=effective_chamber, politician_id=politician_id,
+            )
+        except Exception:
+            logger.exception("Semantic channel failed for %r", query)
+            semantic = None
 
     keyword = search_lexical(
         db, query, limit=pool, doc_type=doc_type, chamber=effective_chamber,

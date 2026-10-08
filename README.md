@@ -1142,6 +1142,14 @@ inverted-index retrieval is best at those and weakest where the embedding is
 strong (paraphrase, synonymy, topical queries). Running both and fusing them
 is why this is a hybrid engine rather than a bigger embedding model.
 
+A query that is *only* publisher identifiers (`89 FR 52508`, `RIN 1615-AD22`,
+an executive order or proclamation number, a regulations.gov docket id — the
+formats `document_authority` already parses for the citation graph) goes to
+the keyword channel alone. The encoder's ranking for it is noise, and fused,
+a document both channels ranked middling outscored the keyword channel's
+exact hit: measured on 124 identifier probes, fused R@1 was 0.25 against
+keyword's 0.65 (2026-10).
+
 **Why rank fusion rather than score blending.** Cosine distance and BM25 live
 on unrelated scales; min-max normalising each makes the blend depend on
 whatever the best and worst scores happened to be for that one query.

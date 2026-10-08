@@ -109,6 +109,19 @@ class TestFusion:
         outcome = hybrid_search(indexed_db, "wildfire", limit=10)
         assert [r["id"] for r in outcome["results"]] == [both.id, semantic_only.id]
 
+    def test_an_identifier_query_is_left_to_the_keyword_channel(
+        self, indexed_db, stub_semantic
+    ):
+        # The semantic ranking of "89 FR 52508" is noise, and fused it put a
+        # document both channels ranked middling above the exact hit.
+        exact = _add(indexed_db, title="Air plan approval", body="Published at 89 FR 52508.")
+        noise = _add(indexed_db, title="Rangeland grazing permits", body="Livestock.")
+        stub_semantic([noise.id])
+        outcome = hybrid_search(indexed_db, "89 FR 52508", limit=10)
+        assert [r["id"] for r in outcome["results"]] == [exact.id]
+        assert outcome["results"][0]["matchedBy"] == ["keyword"]
+        assert outcome["semanticUnavailable"] is False
+
     def test_a_vector_hit_with_no_surviving_row_is_dropped(
         self, indexed_db, stub_semantic
     ):

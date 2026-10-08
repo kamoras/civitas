@@ -92,6 +92,28 @@ _FR_DOC_RE = re.compile(r"\bFR\s+Doc\.?\s*(\d{4}-\d{4,6})\b", re.IGNORECASE)
 _RIN_RE = re.compile(r"\bRIN\s+(\d{4}[-–][A-Z]{2}\d{2})\b")
 
 
+# Regulations.gov docket and document ids ("EPA-HQ-OAR-2021-0317", a
+# document in it "...-0317-0001"): the agency's own format. Recognised only
+# as a whole query (is_identifier_query), never counted as a citation edge.
+_DOCKET_RE = re.compile(r"\b[A-Z]{2,}(?:-[A-Z0-9]+)*-\d{4}-\d{4,}\b")
+
+_IDENTIFIER_RES = (
+    _EO_RE, _EO_ABBR_RE, _EO_TITLE_RE, _PROC_RE, _FR_CITE_RE, _FR_DOC_RE, _RIN_RE, _DOCKET_RE,
+)
+_WORD_RE = re.compile(r"\w")
+
+
+def is_identifier_query(query: str) -> bool:
+    """Whether a search query is nothing but publisher-assigned identifiers
+    ("89 FR 52508", "RIN 1615-AD22", a docket id) — a lookup, with no
+    meaning for an embedding to find. Explore search's semantic channel
+    abstains on these (services/explore_search.hybrid_search)."""
+    rest = query or ""
+    for pattern in _IDENTIFIER_RES:
+        rest = pattern.sub(" ", rest)
+    return rest != (query or "") and not _WORD_RE.search(rest)
+
+
 def _normalize_rin(raw: str) -> str:
     return raw.replace("–", "-").upper()
 

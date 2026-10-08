@@ -17,6 +17,7 @@ from app.pipeline.analyze.document_authority import (
     compute_document_authority,
     declared_identifiers,
     extract_citations,
+    is_identifier_query,
     pagerank,
     update_document_authority,
 )
@@ -50,6 +51,27 @@ class TestExtractCitations:
         assert extract_citations("Executive Order 09999") == extract_citations(
             "Executive Order 9999"
         )
+
+
+class TestIsIdentifierQuery:
+    @pytest.mark.parametrize("query, expected", [
+        ("89 FR 52508", True),
+        ("RIN 1615-AD22", True),
+        ("Executive Order 14110", True),
+        ("E.O. 13563, E.O. 12866", True),
+        ("EPA-HQ-OAR-2021-0317", True),
+        ("OSHA-2006-0040-0097", True),
+        # Words beside the identifier are something an encoder can read.
+        ("executive order 14110 artificial intelligence", False),
+        ("drinking water contaminants", False),
+        ("we waited 89 fr 12345 seconds", False),
+        ("", False),
+    ])
+    def test_classifies(self, query, expected):
+        assert is_identifier_query(query) is expected
+
+    def test_a_docket_id_is_not_a_citation_edge(self):
+        assert extract_citations("EPA-HQ-OAR-2021-0317") == set()
 
 
 class TestDeclaredIdentifiers:

@@ -194,6 +194,17 @@ something vaguely on-topic throughout. The number of chunk slots requested
 for a given number of documents comes from the index's own measured mean
 chunks per document, written at embed time.
 
+**An identifier lookup skips the encoder.** Rank fusion rewards agreement:
+a document both channels place 30th and 8th outscores one only keyword
+placed 1st. That is right when both channels carry evidence and wrong when
+one carries none, which is the case for a query that is nothing but
+publisher identifiers ("89 FR 52508", "RIN 1615-AD22", a docket id) — the
+semantic channel found 2–3% of such targets in its top 20, and fused R@1 on
+them was 0.25 against keyword's 0.65. `is_identifier_query` (built on the
+identifier formats `document_authority` already parses for the citation
+graph) sends those to the keyword channel alone; a query with any words
+beside the identifier still goes to both.
+
 **Half the engine can be down and search still works — and says so.** The
 vector index records which model built it, and a mismatch at startup drops the
 vec tables and kicks off a background reindex that takes minutes on the Pi.
