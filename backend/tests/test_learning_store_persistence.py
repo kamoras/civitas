@@ -120,10 +120,11 @@ class TestNormalizedSource:
                 for py in (app_dir / "pipeline").rglob("*.py"):
                     assert name not in _referenced_names(py.read_text()), (py, name)
 
-    def test_lobbying_records_is_read_only_by_the_lda_fetch(self):
-        """Exempt because it only decides which filing-named bills are shown
-        beside donor-vote connections: if a hashed analysis module imported
-        it, a retune could change a result the hash no longer notices."""
+    def test_lobbying_records_is_read_only_by_unhashed_modules(self):
+        """Exempt because it only decides which bills a text names (beside
+        donor-vote connections, and on Action Center issues): if a hashed
+        analysis module imported it, a retune could change a result the
+        hash no longer notices."""
         import pathlib
 
         from app.pipeline import senate_pipeline
@@ -147,7 +148,8 @@ class TestNormalizedSource:
             for py in (app_dir / "pipeline").rglob("*.py")
             if imports_it(ast.parse(py.read_text()))
         }
-        assert importers == {"pipeline/fetch/lda.py"}
+        assert importers == {"pipeline/fetch/lda.py", "pipeline/analyze/action_center.py"}
+        assert "pipeline/analyze/action_center.py" in senate_pipeline._ACTION_CENTER_PATHS
 
     def test_the_explore_summary_prompt_is_read_by_no_pipeline_code(self):
         """Exempt because only the Explore summary service reads it: a
