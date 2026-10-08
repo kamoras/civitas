@@ -135,3 +135,45 @@ def test_a_question_whose_summary_cant_be_read_fails_the_guide():
     stripped = SimpleNamespace(extract_words=lambda **kw: words)
     with pytest.raises(ValueError):
         ma.parse_information_for_voters([stripped])
+
+
+# ── 2026 guide: a NO column whose gutter shows on fewer than two rows ──
+# fixtures_ma_ifv_2026_*: extract_words() of the real 2026 guide's pages
+# (.../information-for-voters/archive/IFV_2026%20English.pdf, fetched
+# 2026-10-08). find_column_boundary needs the gutter on two rows; Q9's NO
+# statement is one printed line and Q1's second NO line sits off the YES
+# column's baselines, so both read (None, None) until the reader anchored
+# the NO column on the guide's own "A NO VOTE".
+
+
+def test_a_one_line_no_statement_is_still_read():
+    (q9,) = ma.parse_information_for_voters([
+        _fake_page("2026_q9_page22"), _fake_page("2026_q9_page23"),
+    ])
+    assert q9["number"] == "9"
+    assert q9["origin"] == "Referendum on an Existing Law"
+    assert q9["yes_means"] == (
+        "would keep in place the law, which increases the regulation of "
+        "firearms, including ghost guns, machine guns, and assault-style weapons."
+    )
+    assert q9["no_means"] == "would repeal this law."
+
+
+def test_a_no_column_off_the_yes_baselines_is_still_read():
+    (q1,) = ma.parse_information_for_voters([_fake_page("2026_q1_page6")])
+    assert q1["title"] == "Expanding the Public Records Law"
+    assert q1["yes_means"] == (
+        "would make most records held by the Legislature and the Office of "
+        "the Governor public records under the Massachusetts Public Records Law."
+    )
+    assert q1["no_means"] == "would make no change to the Massachusetts Public Records Law."
+
+
+def test_no_anchor_without_the_guides_own_phrase():
+    words = [
+        {"text": "A", "top": 0, "x0": 113, "x1": 118},
+        {"text": "YES", "top": 0, "x0": 120, "x1": 140},
+        {"text": "VOTE", "top": 0, "x0": 142, "x1": 165},
+        {"text": "other", "top": 0, "x0": 300, "x1": 330},
+    ]
+    assert ma._yes_no(words) == (None, None)
