@@ -98,6 +98,16 @@ def _term_years(start: str, end: str | None) -> float:
     return max((e - s).days / 365.25, 0.1)
 
 
+# Party labels the roster's source gets wrong, each corrected from a cited
+# primary source. "U" is no party. The American Presidency Project's tables
+# tag George Washington "(F)", Federalist; he never joined a party and is the
+# only president who represented none (George Washington's Mount Vernon,
+# "Political Parties", mountvernon.org/george-washington/the-first-president/
+# political-parties). Voteview codes him "Pro-Administration" for the 1st to
+# 3rd Congresses, a faction label, then Federalist.
+PARTY_CORRECTIONS = {"washington-1": "U"}
+
+
 def _sync_roster(db: Session, roster, eo_data: dict) -> int:
     """Create/update each President row's identity fields (name, party,
     term dates, number, is_current) from the live UCSB roster fetch —
@@ -129,7 +139,7 @@ def _sync_roster(db: Session, roster, eo_data: dict) -> int:
     for entry in roster:
         try:
             p = db.query(President).filter(President.id == entry.id).first()
-            party = eo_entry(eo_data, entry.id, entry.name).get("party")
+            party = PARTY_CORRECTIONS.get(entry.id) or eo_entry(eo_data, entry.id, entry.name).get("party")
             is_current = entry.term_end is None
             if p is None:
                 if not party:

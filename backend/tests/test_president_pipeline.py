@@ -24,7 +24,7 @@ def _make_president(**overrides) -> President:
 
 def _entry(**overrides) -> RosterEntry:
     defaults = dict(
-        id="washington-1", name="George Washington",
+        id="test-1", name="Test First",
         term_start="1789-04-30", term_end="1797-03-04", number=1,
     )
     defaults.update(overrides)
@@ -40,26 +40,26 @@ class TestSyncRoster:
     bad match can't sink the rest."""
 
     def test_syncs_new_president_with_matching_party(self, db_session):
-        synced = _sync_roster(db_session, [_entry()], {"washington-1": {"party": "I"}})
+        synced = _sync_roster(db_session, [_entry()], {"test-1": {"party": "I"}})
         assert synced == 1
-        p = db_session.query(President).filter(President.id == "washington-1").one()
+        p = db_session.query(President).filter(President.id == "test-1").one()
         assert p.party == "I"
         assert p.number == 1
 
     def test_missing_party_skips_only_that_new_entry(self, db_session):
         roster = [
-            _entry(id="washington-1", name="George Washington", number=1),
-            _entry(id="trump-47", name="Donald J. Trump", term_start="2025-01-20", term_end=None, number=47),
+            _entry(id="test-1", name="Test First", number=1),
+            _entry(id="test-2", name="Test Second", term_start="2025-01-20", term_end=None, number=2),
         ]
-        # trump-47 has no EO match this run (simulates a name-match miss
-        # or a partial EO-fetch failure) — washington-1 must still sync.
-        eo_data = {"washington-1": {"party": "I"}}
+        # test-2 has no EO match this run (simulates a name-match miss
+        # or a partial EO-fetch failure) — test-1 must still sync.
+        eo_data = {"test-1": {"party": "I"}}
 
         synced = _sync_roster(db_session, roster, eo_data)
 
         assert synced == 1
-        assert db_session.query(President).filter(President.id == "washington-1").count() == 1
-        assert db_session.query(President).filter(President.id == "trump-47").count() == 0
+        assert db_session.query(President).filter(President.id == "test-1").count() == 1
+        assert db_session.query(President).filter(President.id == "test-2").count() == 0
 
     def test_all_entries_missing_party_syncs_none_without_crashing(self, db_session):
         roster = [_entry(id="a", name="A", number=1), _entry(id="b", name="B", number=2)]
@@ -68,14 +68,23 @@ class TestSyncRoster:
         assert db_session.query(President).count() == 0
 
     def test_existing_row_with_missing_party_this_run_keeps_its_stored_party(self, db_session):
-        db_session.add(_make_president(id="washington-1", party="F", number=1))
+        db_session.add(_make_president(id="test-1", party="F", number=1))
         db_session.commit()
 
         synced = _sync_roster(db_session, [_entry()], {})
 
         assert synced == 1
-        p = db_session.query(President).filter(President.id == "washington-1").one()
+        p = db_session.query(President).filter(President.id == "test-1").one()
         assert p.party == "F"
+
+    def test_a_cited_correction_overrides_the_source(self, db_session):
+        """The American Presidency Project tags George Washington Federalist;
+        he joined no party (PARTY_CORRECTIONS)."""
+        synced = _sync_roster(
+            db_session, [_entry(id="washington-1", name="George Washington")], {"washington-1": {"party": "F"}},
+        )
+        assert synced == 1
+        assert db_session.query(President).filter(President.id == "washington-1").one().party == "U"
 
 
 class TestRecordPresidentSnapshots:
