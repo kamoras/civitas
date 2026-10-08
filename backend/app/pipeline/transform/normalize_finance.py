@@ -137,6 +137,9 @@ def summarize_election_totals(recent_cycles: list[dict]) -> dict:
         "total_from_committees": total("other_political_committee_contributions")
         + total("political_party_committee_contributions"),
         "small_individual": total("individual_unitemized_contributions"),
+        # The candidate's own money in the base: loans made by the candidate
+        # and the candidate's own contributions.
+        "candidate_funds": total("loans_made_by_candidate") + total("candidate_contribution"),
         "large_individual": total("individual_itemized_contributions"),
     }
 
@@ -235,6 +238,7 @@ def normalize_finance(
             committee_meta_map=committee_meta_map,
             detail=detail,
             committee_total=totals["total_from_committees"],
+            candidate_funds=totals["candidate_funds"],
         )
 
     computed_pac_total = sum(
@@ -547,6 +551,7 @@ def _build_industry_breakdown(
     committee_meta_map: dict[str, dict] | None = None,
     detail: dict | None = None,
     committee_total: float | None = None,
+    candidate_funds: float = 0.0,
 ) -> list[dict]:
     """Build a funding breakdown showing all sources by industry.
 
@@ -706,6 +711,15 @@ def _build_industry_breakdown(
             "total": unclassified_large,
         }
 
+    # The candidate's own money is its own row, not "other sources": one
+    # campaign's $5.45M of loans from its candidate read as 85% unclassified
+    # (2026-10-08). Never an industry (NON_INDUSTRY_CODES), and the
+    # top-donor measure takes it out of outside money.
+    if candidate_funds > 0:
+        industry_totals["CANDIDATE_FUNDS"] = {
+            "industry": "CANDIDATE_FUNDS", "name": "CANDIDATE_FUNDS", "total": candidate_funds,
+        }
+
     # Add an UNCLASSIFIED bucket for money not captured by any classification
     raw_total = sum(ind["total"] for ind in industry_totals.values())
     unclassified = contribution_base - raw_total
@@ -730,4 +744,7 @@ def _build_industry_breakdown(
             })
 
     breakdown.sort(key=lambda x: x["total"], reverse=True)
-    return breakdown[:20]
+    # The candidate's row is kept however small: scoring reads it.
+    kept = breakdown[:20]
+    own = [b for b in breakdown[20:] if b["industry"] == "CANDIDATE_FUNDS"]
+    return kept + own

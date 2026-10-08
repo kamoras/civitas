@@ -32,6 +32,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.32",
+    date: "2026-10-08",
+    title: "The candidate's own money and vetoed bills",
+    tldr: "Top-donor concentration is meant to leave out the candidate's own money, but a candidate's loans to the campaign were counted as if a donor had given them, so a mostly self-funded campaign's donors looked unconcentrated. And a vetoed bill was counted as a law, because Congress.gov gives a veto and a signature the same action code.",
+    changes: [
+      'Candidate\'s own money: 95 sitting members have loans or contributions from the candidate in their election window, 29 of them more than 10% of the base. It is now taken out of the outside money top-donor concentration is measured over, and shown as its own category in the funding breakdown instead of "Other sources". It stays in the base of the PAC and small-donor shares. docs/methodology/member-score/v6.32.md has the measurements.',
+      "Vetoed bills: two bills vetoed in December 2025, whose overrides failed, counted toward their sponsors' Legislative Effectiveness and appeared under \"Became law\". The President action's text now decides signed or vetoed.",
+    ],
+  },
+  {
     version: "v6.31",
     date: "2026-10-08",
     title: "Funding and cosponsorship inputs corrected",
