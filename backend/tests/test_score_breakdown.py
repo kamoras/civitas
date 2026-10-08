@@ -12,6 +12,9 @@ Two things are verified per entity type:
    SQLite db_session fixture.
 """
 
+import json
+
+from app.api.senators import get_config
 from app.models import (
     Donor,
     IndustryDonation,
@@ -175,6 +178,32 @@ class TestScorecardFacts:
         ]
         facts = _legislative_effectiveness_core(bills, leadership_score=0.5, party="D", years_in_office=6)["facts"]
         assert facts["billsByStage"] == [1, 1, 1, 1, 2]
+        assert facts["bills"] == 6 and facts["resolutions"] == 0
+
+    def test_effectiveness_facts_count_bills_as_its_sentence_does(self):
+        """A simple resolution the chamber agreed to (electing a member to a
+        committee) is not a bill that passed: the column's stage counts are
+        the bills the component's own sentence counts, and resolutions are
+        a separate figure."""
+        bills = [
+            {"billType": "hr", "congress": 119, "stage": "REFERRED"},
+            {"billType": "hr", "congress": 119, "stage": "PASSED_CHAMBER"},
+            {"billType": "hres", "congress": 119, "stage": "PASSED_CHAMBER",
+             "latestAction": "Motion to reconsider laid on the table Agreed to without objection."},
+            {"billType": "hconres", "congress": 119, "stage": "REFERRED"},
+        ]
+        core = _legislative_effectiveness_core(bills, leadership_score=0.5, party="D", years_in_office=6)
+        facts = core["facts"]
+        assert facts["billsByStage"] == [1, 0, 0, 1, 0]
+        assert facts["bills"] == 2 and facts["resolutions"] == 2
+        detail = core["components"][0]["detail"]
+        assert "2 bills: 1 introduced only, 1 advanced further" in detail
+
+
+    def test_config_names_the_bill_types_counted_as_bills(self):
+        """The column lists its furthest-along bills from the same types
+        its stage counts read (served, not typed into the frontend)."""
+        assert json.loads(get_config().body)["substantiveBillTypes"] == ["HJRES", "HR", "S", "SJRES"]
 
 
 class TestPresidentCoreConsistency:

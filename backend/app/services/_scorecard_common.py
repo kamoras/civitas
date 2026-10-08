@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.pipeline.analyze.party_line_record import load_record
-from app.pipeline.analyze.score_calculator import explain_scores, funding_share_base
+from app.pipeline.analyze.score_calculator import explain_scores, funding_share_base, party_line_tally
 from app.pipeline.transform.normalize_votes import stored_vote
 from app.services.bill_record import roll_call_summaries
 
@@ -32,6 +32,25 @@ def _vote_dict(v: Any) -> dict:
     return stored_vote(v.id, v.bill_id, v.voted_with_party)
 
 
+def _stored_voting_record(entity: Any) -> dict:
+    """The member's votes as score_calculator reads them: the stored key and
+    recent votes and the whole-Congress party-line record."""
+    return {
+        "keyVotes": [_vote_dict(v) for v in entity.key_votes if v.vote_category == "key"],
+        "recentVotes": [_vote_dict(v) for v in entity.key_votes if v.vote_category == "recent"],
+        "partyLineRecord": load_record(entity.party_line_record),
+    }
+
+
+def party_line_counts(entity: Any) -> tuple[int, int, float]:
+    """(votes with the party, breaks, with-party share 0-100) on party-line
+    votes, as Constituent Alignment counts them (score_calculator.
+    party_line_tally): the profile's voting record states the same figures
+    as the column scored from them."""
+    breaks, n = party_line_tally(_stored_voting_record(entity))
+    return n - breaks, breaks, (round((n - breaks) / n * 100, 1) if n else 0.0)
+
+
 def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) -> dict:
     """Assemble the ``score_calculator.explain_scores`` input dict from a loaded
     ``Senator`` or ``Representative`` ORM object.
@@ -45,9 +64,7 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
     voting_record = {
         # Only differs from party for an Independent (the party they caucus with).
         "effectiveParty": getattr(entity, "caucus_party", None),
-        "keyVotes": [_vote_dict(v) for v in entity.key_votes if v.vote_category == "key"],
-        "recentVotes": [_vote_dict(v) for v in entity.key_votes if v.vote_category == "recent"],
-        "partyLineRecord": load_record(entity.party_line_record),
+        **_stored_voting_record(entity),
     }
 
     funding = {

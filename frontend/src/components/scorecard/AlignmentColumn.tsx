@@ -18,6 +18,9 @@ const OTHER_PARTY: Record<string, string> = { R: "Democrats", D: "Republicans" }
 const BREAKS_SHOWN = 6;
 const FLANK_SHOWN = 3;
 
+const TOOLTIP =
+  "Whether the member votes the way their seat elected them to. 70% is how often they break with their party on this Congress's party-line votes, against how often members of their own party in seats that lean the same way do: matching that rate scores 100, and breaking more often, or (at half the cost) less often, lowers it. 30% is where their overall voting record sits (Voteview's position for this Congress) against what a same-party member of a similar seat holds, left out until this Congress's positions pass our checks. For a senator, approval among the state's other-party voters and independents then moves the score up or down by as much as the position part can.";
+
 /** A break as the list shows it: the breakdown's (BreakVote) or, before the
  *  member's whole-Congress record is measured, a stored vote. */
 type ListedBreak = Omit<BreakVote, "rollCall"> & {
@@ -201,6 +204,7 @@ export default function AlignmentColumn({
     <ScoreColumn
       title="Constituent Alignment"
       shareId="constituent-alignment"
+      tooltip={TOOLTIP}
       weight={weight}
       score={score}
       more={{ label: "Every recorded vote", onClick: onMore }}
@@ -264,7 +268,10 @@ export default function AlignmentColumn({
         </Block>
       )}
 
-      <ConstituentApproval approval={approval} />
+      <ConstituentApproval
+        approval={approval}
+        scored={facts?.approval?.groups.map((g) => g.group) ?? []}
+      />
 
       {dimension && <ComponentBars components={dimension.components} />}
     </ScoreColumn>

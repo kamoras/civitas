@@ -9,6 +9,8 @@ were added over time.
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.services.score_trends import change_on_current_method
+
 # Cache-Control max-age tiers shared across the read-only API routers —
 # previously each router repeated its own bare-number max_age= literal
 # (120, 300, 600, 3600...) with no indication of why that particular
@@ -131,6 +133,9 @@ def score_history_json(
         .all()
     )
     return cached_json({
+        # The change the history's headline states: on the current method
+        # (and, for a member, within the current Congress) only.
+        "change": change_on_current_method(snapshots, by_congress=entity_type != "president"),
         "snapshots": [
             {
                 "date": s.date,
