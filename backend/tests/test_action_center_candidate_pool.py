@@ -65,9 +65,9 @@ def refresh(monkeypatch):
     monkeypatch.setattr(ac, "_rank_clusters", lambda cl, tr, db: (cl, [1.0 - i / 10 for i in range(len(cl))]))
     pool = {}
 
-    def dedupe(ranked, scores, n):
+    def dedupe(ranked, scores, n, published):
         pool["n"] = n
-        return ranked[:n]
+        return iter(list(enumerate(ranked))[:n])
 
     monkeypatch.setattr(ac, "_deduplicate_top_clusters", dedupe)
     rng = np.random.default_rng(7)
