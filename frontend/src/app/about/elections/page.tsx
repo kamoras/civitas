@@ -414,11 +414,16 @@ export default async function ElectionsChapter() {
         </Sub>
         <P>
           Every measure is read directly from the state itself (its Secretary of State, elections
-          board or legislature) through its certified list, voter guide or ballot notice. We use no
-          third-party source for measures. A state we don&apos;t read automatically yet, or which
-          publishes no official list, says it isn&apos;t covered and which of the two it is; a guide
-          not yet published reads the same way, never as &ldquo;none&rdquo;. The state&apos;s
-          official source is linked from every measure. See{" "}
+          board or legislature) through its certified list, voter guide or ballot notice. Where a
+          state&apos;s whole site refuses automated requests (Arizona, Georgia and Nevada put theirs
+          behind bot checks), we don&apos;t try to get past it: the state&apos;s own document is
+          read from another public office&apos;s copy of it (a county election office, or for
+          Arizona the state&apos;s Citizens Clean Elections Commission), with every check the
+          state&apos;s own copy would get, and each measure names that office. We use no third-party
+          source for measures. A state we don&apos;t read automatically yet, or which publishes no
+          official list, says it isn&apos;t covered and which of the two it is; a guide not yet
+          published reads the same way, never as &ldquo;none&rdquo;. The state&apos;s official
+          source is linked from every measure. See{" "}
           <A href="/about/limitations#ballot-coverage">known limitations</A> for where coverage is
           still incomplete.
         </P>

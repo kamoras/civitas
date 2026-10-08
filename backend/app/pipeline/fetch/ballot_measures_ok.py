@@ -15,15 +15,30 @@ Commission") and SQ 847 (SJR 39, "Real Property Valuation") — matching
 the Election Board's own "Two state questions have qualified for the
 November 3, 2026 election."
 
-What is NOT read: the ballot title itself. It exists only inside each
-question's linked PDF, and those are scans — SQ 845's has no text layer
-at all, SQ 847's has an OCR layer with character errors ("ta1rable",
-"e1rceed"). OCR'd text is not verbatim text, so official_summary,
-official_title and the yes/no framing stay None, and each measure links
-its filed PDF as the source. What IS stored is verbatim from the
-register: the SQ number, and the Secretary of State's own subject line
-as the title (not presented as the official ballot title —
-official_title is None for exactly that reason).
+The ballot title is read only from a born-digital copy. The register's
+linked PDFs are scans (Adobe Paper Capture OCR, with character errors —
+"ta1rable", "e1rceed") that also carry every superseded version of the
+title: the resolution's, the Attorney General's preliminary and final
+rewrites, and for SQ 845 an August correction of the final one. OCR'd
+text is not verbatim text and is never stored. The State Election Board
+posts the final title, as filed, for some questions as an accessible
+(text) PDF at BALLOT_TITLE_URL — verified 2026-10-08: SQ 845's ("SQ 845,
+LR 379 Final Ballot Title / Corrected (CLEAN)", filed August 13, 2026)
+answers 200 with a text layer; SQ 847 has only a scanned
+...-final-ballot-title.pdf there and no accessible copy (404). Where the
+accessible copy exists, its text between the heading and "Shall the
+proposal be approved?" is the official_title, quoted, and it is the
+measure's source; its heading must name this SQ and the referral number
+the register files it under, and the "For the proposal – YES / Against
+the proposal – NO" lines must follow, or the state is refused (None). A
+404 leaves that question as the register gives it: the SQ number, the
+Secretary of State's subject line as the title (not the official ballot
+title — official_title stays None), and its filed PDF as the source.
+The ballot's own yes/no framing is the bare "For/Against the proposal",
+which says nothing about what a vote does, so yes_means/no_means stay
+None. No drafter is named (title_authority None): the accessible copy
+does not say who wrote the title, and the scanned filing that does (for
+SQ 845, the Attorney General's rewrite) is OCR.
 
 The register is read page after page (its own WebForms pager) until a
 page whose every dated question is for an election more than
@@ -49,7 +64,8 @@ from lxml import html as lxml_html
 
 from app.election_calendar import next_election_day
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
-from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished, join_lines
+from app.pipeline.fetch.ballot_measures_state_common import pdf_text
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -139,6 +155,10 @@ def parse_register(
             logger.warning("OK register row for %s didn't match the verified shape — refusing", target)
             return None
         kind = (clean_text(cells[col["Type"]].text_content()) or "").lower()
+        filed_as = {
+            clean_text(cells[headers.index(h)].text_content())
+            for h in ("Petition Num", "Leg Num", "Ref Num") if h in headers
+        } - {None}
         results.append((
             {
                 "number": number,
@@ -151,10 +171,72 @@ def parse_register(
                 "no_means": None,
                 "title_authority": None,
                 "fiscal_authority": None,
+                "filed_as": sorted(n for n in filed_as if n.isdigit()),
             },
             urljoin(URL, link[0].get("href")),
         ))
     return results
+
+
+# The State Election Board's accessible copy of a question's final ballot
+# title (see the module docstring). The folder is the election year.
+BALLOT_TITLE_URL = (
+    "https://oklahoma.gov/content/dam/ok/en/elections/state-questions/"
+    "sq{year}/sq{number}-final-ballot-title-accessible.pdf"
+)
+_HEADING_RE = re.compile(r"^SQ (\d+), [A-Z]{2} (\d+) Final Ballot Title$")
+# The one sub-heading verified between the heading and the text: the
+# Board's clean (not redline) copy of a corrected title.
+_SUBHEADINGS = {"Corrected (CLEAN)"}
+_QUESTION_LINES = ["Shall the proposal be approved?", "For the proposal – YES", "Against the proposal – NO"]
+
+
+def parse_ballot_title(text: str, number: str, filed_as: list[str]) -> str | None:
+    """The ballot title's text, verbatim, from the Board's accessible copy
+    — or None when the document isn't that question's final ballot title
+    in the verified shape."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    m = _HEADING_RE.match(lines[0]) if lines else None
+    if m is None or m.group(1) != number or m.group(2) not in filed_as:
+        logger.warning("OK ballot title for SQ %s: heading %r is not this question's", number, lines[:1])
+        return None
+    body = lines[1:]
+    while body and body[0] in _SUBHEADINGS:
+        body = body[1:]
+    if _QUESTION_LINES[0] not in body:
+        logger.warning("OK ballot title for SQ %s: no %r line", number, _QUESTION_LINES[0])
+        return None
+    end = body.index(_QUESTION_LINES[0])
+    if body[end:end + 3] != _QUESTION_LINES or not body[:end]:
+        logger.warning("OK ballot title for SQ %s: not in the verified shape", number)
+        return None
+    return join_lines(body[:end])
+
+
+async def _with_ballot_title(
+    client: httpx.AsyncClient, year: int, parsed: dict, url: str,
+) -> tuple[dict, str] | None:
+    """`parsed` with its ballot title quoted from the Board's accessible
+    copy, when there is one; unchanged on a 404; None on any other
+    failure, or a copy that isn't this question's title."""
+    title_url = BALLOT_TITLE_URL.format(year=year, number=parsed["number"])
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", title_url, log_label=f"OK SQ {parsed['number']} ballot title",
+        headers=BROWSER_HEADERS, expected_statuses=(404,),
+    )
+    if resp is None:
+        return None
+    if resp.status_code == 404:
+        return parsed, url
+    try:
+        text = pdf_text(resp.content)
+    except Exception:
+        logger.exception("OK SQ %s ballot title PDF was not readable", parsed["number"])
+        return None
+    ballot_title = parse_ballot_title(text, parsed["number"], parsed["filed_as"])
+    if ballot_title is None:
+        return None
+    return {**parsed, "official_title": ballot_title}, title_url
 
 
 _GRID_TARGET = "ctl00$DefaultContent$Questiongrid1$GridView1"
@@ -267,6 +349,13 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     else:
         logger.warning("OK register: %d pages read without reaching an earlier election", MAX_PAGES)
         return None
+    titled = []
+    for parsed, url in results:
+        pair = await _with_ballot_title(client, year, parsed, url)
+        if pair is None:
+            return None
+        titled.append(pair)
+    results = titled
     listed = {p["number"] for p, _ in results}
     others = list({o["number"]: o for o in others if o["number"] not in listed}.values())
     if not results:

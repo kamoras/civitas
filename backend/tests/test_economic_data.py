@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.config import settings
 from app.pipeline.fetch.economic_data import calculate_jobs_created, fetch_employment_data
 
 
@@ -92,3 +93,16 @@ class TestFetchEmploymentDataYearCap:
 
         sent_payload = mock_client.post.call_args.kwargs["json"]
         assert sent_payload["endyear"] == sent
+
+
+@pytest.mark.asyncio
+async def test_the_bls_key_is_sent_only_when_set(monkeypatch):
+    resp = MagicMock(json=MagicMock(return_value={"status": "REQUEST_SUCCEEDED", "Results": {"series": [{"data": []}]}}))
+    client = AsyncMock()
+    client.post = AsyncMock(return_value=resp)
+    monkeypatch.setattr(settings, "BLS_API_KEY", "")
+    await fetch_employment_data(client, 2020, 2021)
+    assert "registrationkey" not in client.post.await_args.kwargs["json"]
+    monkeypatch.setattr(settings, "BLS_API_KEY", "k")
+    await fetch_employment_data(client, 2020, 2021)
+    assert client.post.await_args.kwargs["json"]["registrationkey"] == "k"
