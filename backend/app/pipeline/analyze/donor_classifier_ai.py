@@ -738,7 +738,12 @@ def _classify_donors_hybrid_sync(
                 "skip": False,
             }
             if db_session is not None and source_type != "learned":
-                _store_donor_learning(db_session, name_upper, donor_type, industry, source_type or "embedding")
+                # The type's tier is not the industry's: an FEC entity type
+                # says nothing about industry, which came from the embedding.
+                _store_donor_learning(
+                    db_session, name_upper, donor_type, industry, source_type or "embedding",
+                    industry_source="embedding",
+                )
         elif donor_type:
             results[name_upper] = {
                 "type": donor_type,
@@ -760,7 +765,7 @@ def _classify_donors_hybrid_sync(
                 _store_donor_learning(
                     db_session, name_upper, donor_type,
                     None if industry == "OTHER" else industry,
-                    source_type,
+                    source_type, industry_source="embedding",
                 )
         else:
             needs_nn.append(donor)
@@ -881,8 +886,13 @@ def _store_donor_learning(
     industry: str | None,
     source: str,
     match_metadata: dict | None = None,
+    industry_source: str | None = None,
 ) -> None:
     """Store type and/or industry classifications using SQL upsert.
+
+    `industry_source` is the tier the industry came from when it isn't
+    `source` (the type's): an industry stored under "fec" read as FEC
+    metadata at confidence 1.0, though the FEC gives no industry.
 
     `industry=None` writes donor_type only, leaving industry untouched —
     used when industry isn't actually known yet (see the 2026-08 audit
@@ -918,13 +928,16 @@ def _store_donor_learning(
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
     from app.pipeline.vector_store import get_model_version
 
-    confidence = _CONFIDENCE_MAP.get(source, 0.5)
-    model_ver = get_model_version() if source in ("embedding", "nn", "semantic") else None
     meta_json = json.dumps(match_metadata) if match_metadata else None
 
-    for entity_type, value in [("donor_type", donor_type), ("industry", industry)]:
+    for entity_type, value, tier in [
+        ("donor_type", donor_type, source),
+        ("industry", industry, industry_source or source),
+    ]:
         if value is None:
             continue
+        confidence = _CONFIDENCE_MAP.get(tier, 0.5)
+        model_ver = get_model_version() if tier in ("embedding", "nn", "semantic") else None
         key = (name_upper, entity_type)
 
         prev_confidence = _seen_this_run.get(key, -1.0)
@@ -936,7 +949,7 @@ def _store_donor_learning(
             entity_type=entity_type,
             value=value,
             confidence=confidence,
-            source=source,
+            source=tier,
             model_version=model_ver,
             match_metadata=meta_json,
             learned_at=utcnow(),
@@ -945,7 +958,7 @@ def _store_donor_learning(
             set_={
                 "value": value,
                 "confidence": confidence,
-                "source": source,
+                "source": tier,
                 "model_version": model_ver,
                 "match_metadata": meta_json,
                 "learned_at": utcnow(),
