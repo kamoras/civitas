@@ -1148,8 +1148,25 @@ is why this is a hybrid engine rather than a bigger embedding model.
 on unrelated scales; min-max normalising each makes the blend depend on
 whatever the best and worst scores happened to be for that one query.
 Reciprocal rank fusion (Cormack, Clarke & Büttcher 2009) discards the scores
-and fuses the rankings: `score(d) = Σ w_r / (K + rank_r(d))`, K = 60. A ranker
-that didn't return a document contributes nothing for it.
+and fuses the rankings: `score(d) = Σ w_r / (K + rank_r(d))`. A ranker that
+didn't return a document contributes nothing for it. K is not the published
+60 but the retrievers' measured resolution δ (the median rank disagreement
+between the two channels, 10 on the 2026-10-08 corpus;
+`explore_ranking.rrf_k`): at K = 60 a document both channels ranked around
+30th outscored one channel's first hit, and the known-item harness had the
+fused ranking missing 17% of known items against the keyword channel's 4-5%. With K = δ
+fusion's MRR rose from 0.49 to 0.57 and 0.51 to 0.58 on two samples, and
+improved on every query style.
+
+**Only an identical text is a duplicate.** Results collapse byte-identical
+rows to their best-ranked copy. They used to collapse by a prefix fingerprint
+of the title and opening text, which on the 2026-10-08 corpus (9,458
+documents) hid 249 distinct documents — recurring Federal Register notices
+such as each month's antidumping review notice or each OFAC sanctions action,
+which repeat their title and boilerplate — while catching 5 real copies. The
+fingerprint plus the body's length now only groups candidates, and a
+candidate is a copy only when its whole normalised text matches
+(`explore_search._collapse_duplicates`).
 
 **Citation authority is the PageRank analogue.** Federal documents cite each
 other constantly and by canonical identifier — executive order numbers,
