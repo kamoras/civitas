@@ -10,7 +10,7 @@ from app.api import public
 from app.api.public_mcp import PATH, McpEndpoint
 from app.api.router import api_router
 from app.database import get_db
-from app.models import ApiRequestCount, Senator
+from app.models import ApiRequestCount, MemberIdAlias, Senator
 from tests.visits_helpers import _drain_queue_and_write
 
 HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
@@ -79,6 +79,36 @@ async def test_a_tool_call_answers_what_the_http_route_does(db_session):
 
         page = await mcp("tools/call", {"name": "list_senators", "arguments": {"state": "GA"}})
         assert [e["id"] for e in page["structuredContent"]["entries"]] == ["jon-brennan"]
+
+
+async def test_a_null_optional_argument_is_not_given(db_session):
+    """Each optional parameter's input schema allows null; sent on, it went
+    out as an empty query value and was refused with a 422."""
+    async with mcp_client(db_session) as mcp:
+        page = await mcp("tools/call", {"name": "list_senators",
+                                        "arguments": {"party": None, "state": None, "page": None}})
+        assert not page.get("isError"), page
+        assert [e["id"] for e in page["structuredContent"]["entries"]] == ["jon-brennan"]
+        missing = await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": None}})
+        assert missing["isError"] and "senator_id" in missing["content"][0]["text"]
+
+
+async def test_a_renamed_id_answers_under_the_current_one(db_session):
+    db_session.add(MemberIdAlias(old_id="brennan-old", new_id="jon-brennan"))
+    db_session.commit()
+    async with mcp_client(db_session) as mcp:
+        result = await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "brennan-old"}})
+        assert not result.get("isError")
+        assert result["structuredContent"]["id"] == "jon-brennan"
+        history = await mcp("tools/call", {"name": "get_senator_history", "arguments": {"senator_id": "brennan-old"}})
+        assert history["structuredContent"]["id"] == "jon-brennan"
+
+
+async def test_an_id_with_a_slash_is_no_such_member(db_session):
+    """Was 405 Method Not Allowed: a catch-all OPTIONS route matched the path."""
+    async with mcp_client(db_session) as mcp:
+        result = await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "../x"}})
+        assert result["isError"] and "404" in result["content"][0]["text"]
 
 
 async def test_errors_come_back_as_readable_tool_results(db_session):

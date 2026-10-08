@@ -175,6 +175,34 @@ export default async function ElectionsChapter() {
           nominee off the page), and we don&apos;t work around bot challenges or logins on state
           election sites.
         </P>
+        <More label="Three lists corrected, October 2026">
+          <P>
+            An audit on 8 October 2026 found three pages built from primary results that missed
+            people a primary can&apos;t show. Idaho&apos;s Senate race still listed a Democratic
+            nominee who had withdrawn, and left out two independents on the ballot by petition.
+            Montana&apos;s Senate race, marked a complete ballot, left out an independent whose
+            petition the state certified: it was read from the primary&apos;s candidate list, which
+            never moves a petition candidate to &ldquo;nominated&rdquo;. Arkansas&apos;s statewide
+            races showed only the Democrat for Governor and none of the other offices, because their
+            nominees were unopposed in the primary.
+          </P>
+          <P>
+            Each is now read from the state&apos;s own list for the general election: Montana&apos;s
+            general-election candidate list, Idaho&apos;s final candidates list and Arkansas&apos;s
+            candidate search, which the state trims to the November field after the primary.
+            Arkansas&apos;s search has no status column, so a withdrawal shows only once the state
+            removes the name. Where one of these lists can&apos;t be read, the page goes back to
+            saying its names come from primary results and may be incomplete.
+          </P>
+          <P>
+            The same audit found every House race in Nevada and New York still listing everyone who
+            filed with the FEC. Both states&apos; election sites answer with a bot challenge. Clark
+            County, Nevada publishes its own list of November contests, which now settles three of
+            the state&apos;s four House races. New York City&apos;s Board of Elections posts a
+            contest list too, but it is marked tentative, predates the state&apos;s certification
+            and covers only the city&apos;s districts, so it isn&apos;t presented as the ballot.
+          </P>
+        </More>
         <More label="How the candidate lists were checked, September 2026">
           <P>
             On 26 September 2026, 39 states had certified candidates and eleven were still showing
@@ -198,19 +226,21 @@ export default async function ElectionsChapter() {
             primary: in Maine, the winner of the Democratic Senate primary withdrew in July and the
             party nominated a replacement; in South Carolina a special primary replaced the June
             Senate winner. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland, Iowa,
-            Nebraska, New Mexico, Wyoming, Hawaii, Delaware, Kentucky, Alaska, Montana, Illinois and
-            North Dakota are read from their certified lists (Tennessee&apos;s federal races alone
-            list 36 independents), and Wisconsin from its official primary canvass.
+            Nebraska, New Mexico, Wyoming, Hawaii, Delaware, Kentucky, Alaska, Montana, Illinois,
+            North Dakota, Idaho and Arkansas are read from their certified lists (Tennessee&apos;s
+            federal races alone list 36 independents), and Wisconsin from its official primary
+            canvass.
           </P>
           <P>
-            Utah and Alabama publish certified lists only as scanned images. For races those states,
-            Arkansas and Connecticut leave unseen (districts whose primary was uncontested),
-            Google&apos;s election index fills in once it publishes the general election, and only
-            for those races. Michigan, Ohio and Oklahoma are read from lists the states publish
-            themselves (Oklahoma&apos;s results API requires a login, so its State Election
-            Board&apos;s published list of November ballots is read instead). Nevada and New York
-            answer every request with a bot challenge, so Google&apos;s election index is their only
-            source until that changes.
+            Utah and Alabama publish certified lists only as scanned images. For races those states
+            and Connecticut leave unseen (districts whose primary was uncontested), Google&apos;s
+            election index fills in once it publishes the general election, and only for those
+            races. Michigan, Ohio and Oklahoma are read from lists the states publish themselves
+            (Oklahoma&apos;s results API requires a login, so its State Election Board&apos;s
+            published list of November ballots is read instead). Nevada and New York answer every
+            request with a bot challenge. Three of Nevada&apos;s four House races are read from
+            Clark County&apos;s own list of November contests; for the rest, and for New York,
+            Google&apos;s election index is the only source until that changes.
           </P>
           <P>
             Where a state&apos;s results are reached through a link on its own site, each linked
@@ -384,11 +414,16 @@ export default async function ElectionsChapter() {
         </Sub>
         <P>
           Every measure is read directly from the state itself (its Secretary of State, elections
-          board or legislature) through its certified list, voter guide or ballot notice. We use no
-          third-party source for measures. A state we don&apos;t read automatically yet, or which
-          publishes no official list, says it isn&apos;t covered and which of the two it is; a guide
-          not yet published reads the same way, never as &ldquo;none&rdquo;. The state&apos;s
-          official source is linked from every measure. See{" "}
+          board or legislature) through its certified list, voter guide or ballot notice. Where a
+          state&apos;s whole site refuses automated requests (Arizona, Georgia and Nevada put theirs
+          behind bot checks), we don&apos;t try to get past it: the state&apos;s own document is
+          read from another public office&apos;s copy of it (a county election office, or for
+          Arizona the state&apos;s Citizens Clean Elections Commission), with every check the
+          state&apos;s own copy would get, and each measure names that office. We use no third-party
+          source for measures. A state we don&apos;t read automatically yet, or which publishes no
+          official list, says it isn&apos;t covered and which of the two it is; a guide not yet
+          published reads the same way, never as &ldquo;none&rdquo;. The state&apos;s official
+          source is linked from every measure. See{" "}
           <A href="/about/limitations#ballot-coverage">known limitations</A> for where coverage is
           still incomplete.
         </P>

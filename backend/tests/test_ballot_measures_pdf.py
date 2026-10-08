@@ -725,3 +725,54 @@ def test_every_registered_county_copy_has_a_reader_that_can_read_it():
             assert office.get("name") and office.get("url", "").startswith("https://"), state
             assert source["strategy"] in pdf.REPUBLISHED_STRATEGIES, state
 
+
+class _FakePdf:
+    pages = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+@pytest.mark.asyncio
+async def test_a_moved_document_is_found_at_the_next_listed_address(monkeypatch, db_session):
+    """Massachusetts filed its 2026 guide at a new address while the old
+    pattern 404'd, which read as "not published yet". A list of addresses
+    is tried in order; only a 404 moves on."""
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    parsed = {"number": "1", "title": "T", "origin": None, "official_summary": "S",
+              "fiscal_impact": None, "yes_means": None, "no_means": None}
+    monkeypatch.setattr(pdf.pdfplumber, "open", lambda stream: _FakePdf())
+    monkeypatch.setitem(pdf.STRATEGIES, "fake_strategy", lambda pages: [dict(parsed)])
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source(
+        url_pattern=["https://example.com/new/{year}.pdf", "https://example.com/old/{year}.pdf"],
+        absent_until_published=True,
+    ))
+
+    def client_for(statuses):
+        seen = []
+
+        async def get(url, timeout=None):
+            seen.append(url)
+            return pdf.httpx.Response(statuses[url], request=pdf.httpx.Request("GET", url), content=b"%PDF")
+
+        return SimpleNamespace(get=get), seen
+
+    client, seen = client_for({"https://example.com/new/2026.pdf": 404, "https://example.com/old/2026.pdf": 200})
+    (measure,) = await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2026, "2026-11-03")
+    assert measure["source_url"] == "https://example.com/old/2026.pdf"
+    assert seen == ["https://example.com/new/2026.pdf", "https://example.com/old/2026.pdf"]
+
+    # Any other failure at the first address is a failure, never a reason to read the next.
+    client, seen = client_for({"https://example.com/new/2027.pdf": 503, "https://example.com/old/2027.pdf": 200})
+    assert await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2027, "2027-11-02") is None
+    assert seen == ["https://example.com/new/2027.pdf"]
+
+    # 404 at every address: not published yet.
+    client, _ = client_for({"https://example.com/new/2028.pdf": 404, "https://example.com/old/2028.pdf": 404})
+    with pytest.raises(NotYetPublished):
+        await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2028, "2028-11-07")
+

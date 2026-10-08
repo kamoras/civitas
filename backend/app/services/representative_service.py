@@ -17,7 +17,7 @@ from app.models import (
     RepStockTrade,
     Representative,
 )
-from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.pipeline.analyze.score_calculator import NON_INDUSTRY_CODES, compute_overall_score
 from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
@@ -277,9 +277,11 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
 
 
 def get_rep_states_with_counts(db: Session) -> list[dict]:
-    """Return a list of states that have representatives, with counts."""
+    """States with serving representatives, and how many each has (a
+    departed member's row is not counted: see get_states_with_counts)."""
     rows = (
         db.query(Representative.state, func.count(Representative.id).label("cnt"))
+        .filter(Representative.is_current == True)  # noqa: E712
         .group_by(Representative.state)
         .order_by(Representative.state)
         .all()
@@ -355,6 +357,10 @@ def get_rep_leaderboard(
     top_industry_map: dict[str, str] = {}
     ind_rows = (
         db.query(RepIndustryDonation.representative_id, RepIndustryDonation.name)
+        # An industry, not small donors, unattributed individuals or
+        # unclassified money: the leaderboard and public API read this as
+        # the member's top industry.
+        .filter(RepIndustryDonation.industry.notin_(NON_INDUSTRY_CODES))
         .order_by(RepIndustryDonation.representative_id, RepIndustryDonation.total.desc())
         .all()
     )
