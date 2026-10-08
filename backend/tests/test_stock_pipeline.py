@@ -386,7 +386,7 @@ class TestRereadTrades:
     stored URLs; a filing that doesn't read keeps its rows and waits a week."""
 
     def _stored(self, db_session, filing_id, url, version=1, owner="self", confidence="text"):
-            if db_session.get(Senator, "S1") is None:
+        if db_session.get(Senator, "S1") is None:
             db_session.add(Senator(id="S1", name="Jane Doe", state="TX", party="R"))
         db_session.add(StockTrade(
             senator_id="S1", asset_name="Apple Inc.", owner=owner, transaction_type="purchase",
