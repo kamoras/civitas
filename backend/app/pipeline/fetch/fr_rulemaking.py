@@ -38,6 +38,11 @@ FR_TYPE_LABELS = {
 
 FIELDS = [
     "document_number",
+    # Set on a correction ("C1-...") or republication ("R1-...") of another
+    # document: the same title again, so it is skipped (22 such copies were
+    # in Explore on 2026-10-08, one of them a second copy of an executive
+    # order).
+    "correction_of",
     "title",
     "abstract",
     "type",
@@ -154,7 +159,7 @@ async def fetch_fr_rulemaking(
 
             for doc in docs:
                 doc_num = doc.get("document_number", "")
-                if not doc_num or doc_num in seen_ids:
+                if not doc_num or doc_num in seen_ids or doc.get("correction_of"):
                     continue
                 seen_ids.add(doc_num)
                 pending.append(doc)

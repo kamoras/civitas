@@ -18,7 +18,9 @@ invented:
   NCSBE/NC    "US SENATE (DEM)"
 """
 
+import json
 import logging
+import pathlib
 import re
 from collections.abc import Callable
 from datetime import date, timedelta
@@ -520,6 +522,30 @@ def fec_party(code: str | None) -> str | None:
     """An FEC party code as the party PARTY_CODE_MAP names — so a
     Minnesota DFL nominee reads as the Democrat the state's list says."""
     return FEC_PARTY_ALIASES.get(code or "", code) if code else code
+
+
+_FEC_PARTY_CODES_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "fec_party_codes.json"
+_fec_party_codes: dict[str, str] | None = None
+
+
+def fec_party_label(code: str | None) -> str | None:
+    """What an FEC party code names, from the FEC's own table
+    (app/data/fec_party_codes.json, scripts/fetch_fec_party_codes.py): "TX"
+    is the Taxpayers party. None for a code the table doesn't define —
+    one a filer typed ("08", "GOP"), shown as filed."""
+    global _fec_party_codes
+    if _fec_party_codes is None:
+        _fec_party_codes = json.loads(_FEC_PARTY_CODES_PATH.read_text())["codes"]
+    return _fec_party_codes.get(code or "")
+
+
+def ballot_party(record: dict) -> str | None:
+    """The party a state's list prints for a candidate: its FEC code when
+    the vocabulary names it, else the printed label (Vermont's "Freedom
+    and Unity"), None when the list prints none."""
+    code = PARTY_CODE_MAP.get(record.get("party") or "")
+    label = " ".join(str(record.get("party_label") or "").split()).upper()
+    return code or label[:80] or None
 
 # Where the pipeline records that it checked a state's statewide-executive
 # contests, and the API reads that back. Shared here rather than in
@@ -1232,6 +1258,8 @@ def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] 
 # Nebraska writes the same thing out as "By Petition". DTS is New Mexico's
 # "Declined to Select". "Unenrolled" is Maine's word for a voter in no
 # party (its 2026 General Candidate List prints it beside "Independent").
+# NPP is Nevada's "No Political Party" (Clark County's candidate list
+# legend: "indicated for partisan offices only").
 # Minor parties with an FEC code of their own, recognised ONLY on a
 # certified general-election list (normalize_party's ballot_list). On
 # primary results the same word is refused, deliberately: Vermont's
@@ -1245,9 +1273,9 @@ _BALLOT_LIST_PARTY_PATTERNS = [
     (re.compile(r"\b(?:progressive|prog)\b", re.IGNORECASE), "P"),
 ]
 
-_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS"})
+_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS", "NPP"})
 _INDEPENDENT_RE = re.compile(
-    r"\b(independent|unaffiliated|unenrolled|undeclared|no\s+party(\s+affiliation)?"
+    r"\b(independent|unaffiliated|unenrolled|undeclared|no\s+(?:political\s+)?party(\s+affiliation)?"
     r"|non[\s-]?partisan|by\s+petition)\b",
     re.IGNORECASE,
 )

@@ -264,10 +264,14 @@ export default function PresidentsAndJusticesChapter() {
         </List>
         <P>
           A justice the database doesn&apos;t cover yet is not scored. Each justice&apos;s
-          Martin-Quinn position (where they sit, liberal to conservative) and voting record from the
-          Oyez Project are shown beside the score and not scored: where a justice sits says nothing
-          about favoring the president who appointed them. When Oyez lists a justice twice in one
-          decision, the vote counts once if the entries agree and is left out if they don&apos;t.
+          Martin-Quinn position (where they sit, liberal to conservative) and voting record over the
+          last four terms are shown beside the score and not scored: where a justice sits says
+          nothing about favoring the president who appointed them. The voting record is read from
+          the Supreme Court Database for every term its newest release covers, all orally argued
+          cases, and from the Oyez Project only for a term after that, since Oyez enters votes case
+          by case and had entered 13 of one term&apos;s 59 decided cases more than a year on. When
+          Oyez lists a justice twice in one decision, the vote counts once if the entries agree and
+          is left out if they don&apos;t.
         </P>
         <P>
           Two refinements were tested and not adopted. Splitting &ldquo;other presidents&rdquo; into

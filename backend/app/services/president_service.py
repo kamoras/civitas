@@ -316,6 +316,7 @@ def get_president_trades(
                 source_url=t.source_url,
                 parse_confidence=t.parse_confidence,
                 report_kind=t.report_kind,
+                before_term_start=bool(t.transaction_date and t.transaction_date < president.term_start),
             )
             for t in trades_db
         ],

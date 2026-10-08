@@ -427,6 +427,31 @@ class TestIncumbentRecordLink:
         assert cand["incumbentRecord"]["id"] == "R-MCBRIDE"
         assert isinstance(cand["incumbentRecord"]["score"], float)
 
+    def test_a_member_the_fec_codes_a_challenger_is_linked_by_the_crosswalk(self, db_session):
+        """After a special election the FEC codes the sitting member's own
+        row a challenger (12 members on 2026-10-08); the crosswalk's id is
+        theirs, so they are the incumbent with their record."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H6GA06001", "2026-HOUSE-GA-6", "MCBRIDE, LUCY",
+                   incumbent_challenge="C", member_bioguide="M000001")
+        _representative(db_session, "R-MCBRIDE", "Lucy McBride", "GA", 6, bioguide_id="M000001")
+        db_session.commit()
+
+        cand = _body(elections.state_ballot("GA", db_session))["houseRaces"][0]["candidates"][0]
+        assert cand["incumbentRecord"]["id"] == "R-MCBRIDE"
+        assert cand["incumbentChallenge"] == "I"
+
+    def test_a_member_running_for_another_seat_is_linked_but_not_called_its_incumbent(self, db_session):
+        _race(db_session, "2026-HOUSE-GA-7", "GA", office="H", district=7)
+        _candidate(db_session, "H6GA07001", "2026-HOUSE-GA-7", "MCBRIDE, LUCY",
+                   incumbent_challenge="C", member_bioguide="M000001")
+        _representative(db_session, "R-MCBRIDE", "Lucy McBride", "GA", 6, bioguide_id="M000001")
+        db_session.commit()
+
+        cand = _body(elections.state_ballot("GA", db_session))["houseRaces"][0]["candidates"][0]
+        assert (cand["incumbentRecord"]["id"], cand["incumbentRecord"]["district"]) == ("R-MCBRIDE", 6)
+        assert cand["incumbentChallenge"] == "C"
+
     def test_house_incumbent_whose_own_surname_carries_a_generational_suffix_still_links(self, db_session):
         """Real Missouri data: FEC's "ONDREY JR, ROBERT FRANK" attaches
         the suffix to the surname segment itself. Before _incumbent_link

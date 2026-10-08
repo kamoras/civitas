@@ -8,6 +8,7 @@ from app.pipeline.transform.normalize_votes import (
     _infer_caucus_from_votes,
     _infer_caucus_party,
     compute_party_split,
+    compute_party_vote_split,
     extract_senator_vote,
     is_reconsider_switch,
     majority_leader_spans,
@@ -544,7 +545,6 @@ def test_house_housekeeping_roll_call_is_no_party_signal_end_to_end(question):
     partyLeaning from the split unless the roll call is housekeeping, then
     the stored entry."""
     from app.pipeline.analyze.party_platform import refine_with_vote_data
-    from app.pipeline.transform.normalize_votes import compute_party_vote_split
 
     rc = _house_roll_call(question)
     bill = {"billId": "house-119-2-213", "partyLeaning": "D", "policyArea": "TAXES",
@@ -589,3 +589,16 @@ def test_motion_to_commit_counts_in_the_senate():
     bill = {}
     stamp_roll_call_outcome(bill, _house_roll_call("On the Motion to Commit", chamber="Senate"))
     assert bill["partySplit"] == "R"
+
+
+def test_present_is_its_own_answer_and_no_party_signal():
+    for cast in ("Present", "Present, Giving Live Pair"):
+        assert member_vote_entry({"partyLeaning": "R"}, cast, "R", None)["vote"] == "Present"
+    assert _determine_party_alignment("R", "Present", "R") is None
+
+
+def test_party_split_counts_only_members_who_took_a_side():
+    members = ([{"party": "R", "voteCast": "Aye"}] * 143 + [{"party": "R", "voteCast": "No"}] * 73
+               + [{"party": "R", "voteCast": "Not Voting"}] * 5 + [{"party": "D", "voteCast": "No"}] * 212)
+    split = compute_party_vote_split({"members": members})
+    assert split["label"] == "R" and split["r_yea_pct"] == 143 / 216

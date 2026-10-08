@@ -5,8 +5,8 @@ right population reference (v6.13).
   campaign still in progress counted as "the most recent election", so
   through most of an election year every House member and a third of the
   Senate were scored on a half-finished cycle.
-- Period: itemized detail covers the election's full period — six years for
-  the Senate, two for the House — matching FEC's election-full totals.
+- Period: itemized detail covers the cycles FEC's totals for the election
+  cover — up to six years for the Senate, two for the House.
 - Denominator: contributions (+ candidate self-loans), not receipts, which
   include joint-fundraising-committee transfers and loans and so understate
   PAC dependency for the members who rely on JFCs most.
@@ -63,14 +63,13 @@ class TestACompletedElectionMustBeTheOneThatSeatedThem:
     carry an OLD LOSING RUN on their FEC record, and unbounded it wins
     over the campaign they actually hold the seat from.
 
-    Found against live FEC data for 25 current House members: Clay Fulton
-    (GA-14, seated by a 2026 special, years_in_office=0) has rows for
-    2026 ($1.8M, in progress) and 2020 ($0.4M). Unbounded, he is scored
-    on the 2020 race — a campaign that won him nothing, at a fifth of the
-    money.
+    Found against live FEC data for 25 current House members: one member
+    seated by a 2026 special (years_in_office=0) has rows for 2026 ($1.8M,
+    in progress) and 2020 ($0.4M). Unbounded, the member is scored on the
+    2020 race — a campaign that won nothing, at a fifth of the money.
     """
 
-    FULTON = [
+    SPECIAL_ELECTEE = [
         {"candidate_election_year": 2026, "receipts": 1_800_000},
         {"candidate_election_year": 2020, "receipts": 400_000},
     ]
@@ -84,14 +83,14 @@ class TestACompletedElectionMustBeTheOneThatSeatedThem:
 
     def test_an_old_losing_run_does_not_outrank_the_current_campaign(self):
         with _at(2026, 9, 24):
-            got = select_recent_elections(self.FULTON, office="H")
+            got = select_recent_elections(self.SPECIAL_ELECTEE, office="H")
             assert got[0]["candidate_election_year"] == 2026
 
     def test_without_office_the_bound_does_not_apply(self):
         """A caller that cannot say which chamber must not silently lose
         data — it keeps the unbounded behaviour."""
         with _at(2026, 9, 24):
-            got = select_recent_elections(self.FULTON)
+            got = select_recent_elections(self.SPECIAL_ELECTEE)
             assert got[0]["candidate_election_year"] == 2020
 
     def test_a_senator_elected_six_years_ago_is_still_in_bounds(self):
@@ -102,10 +101,10 @@ class TestACompletedElectionMustBeTheOneThatSeatedThem:
 
     def test_donor_detail_window_is_bounded_the_same_way(self):
         # compute_recent_election_cycles picks the cycles whose itemized
-        # donors are fetched; unbounded, Fulton's detail would come from
+        # donors are fetched; unbounded, that member's detail would come from
         # the 2020 race while his totals come from 2026.
         with _at(2026, 9, 24):
-            assert compute_recent_election_cycles(self.FULTON, "H") == [2026]
+            assert compute_recent_election_cycles(self.SPECIAL_ELECTEE, "H") == [2026]
 
     def test_the_ordinary_house_member_is_unaffected(self):
         rows = [
@@ -150,6 +149,19 @@ class TestElectionPeriodCycles:
         with _at(2026, 9, 24):
             assert compute_recent_election_cycles(ROWS, "S") == [2024, 2022, 2020]
             assert compute_recent_election_cycles(ROWS, "H") == [2024]
+
+
+    def test_window_is_the_cycles_the_totals_cover(self):
+        # Seated by a special election in 2018, re-elected 2020: the 2020
+        # election's totals cover 2019-20 only, so its detail must not
+        # read the special's 2016-18 committee money.
+        rows = [
+            {"candidate_election_year": 2020, "election_full": True, "cycle": None, "receipts": 3},
+            {"candidate_election_year": 2020, "election_full": False, "cycle": 2020, "receipts": 3},
+            {"candidate_election_year": 2018, "election_full": False, "cycle": 2018, "receipts": 5},
+        ]
+        with _at(2022, 9, 24):
+            assert compute_recent_election_cycles(rows, "S") == [2020]
 
 
 class TestContributionsDenominator:

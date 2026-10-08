@@ -87,6 +87,13 @@ function TradeRow({ trade }: { trade: StockTrade }) {
             </span>
           </MetricTooltip>
         )}
+        {trade.beforeTermStart && (
+          <MetricTooltip text="Dated before this term began. The annual report covers the whole calendar year, so the first one also lists the weeks before the inauguration.">
+            <span className="block text-xs px-1 py-0.5 border text-ink-lo border-white/15">
+              BEFORE TAKING OFFICE
+            </span>
+          </MetricTooltip>
+        )}
       </div>
       <div className="flex items-center gap-2 flex-wrap text-xs text-ink-min">
         <span>{OWNER_LABEL[trade.owner]}</span>

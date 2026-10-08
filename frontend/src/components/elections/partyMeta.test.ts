@@ -16,5 +16,8 @@ describe("getPartyMeta", () => {
 
   it("shows the bare code when nothing names it", () => {
     expect(getPartyMeta({ party: "IAP" }).label).toBe("IAP");
+    // What the FEC's own table says a code names, when the page has no
+    // label of its own: Michigan's U.S. Taxpayers nominees file as "TX".
+    expect(getPartyMeta({ party: "TX", partyLabel: "Taxpayers" }).label).toBe("TAXPAYERS");
   });
 });

@@ -131,6 +131,14 @@ class TestFetchFrRulemaking:
         assert len(results) == 1
 
     @pytest.mark.asyncio
+    async def test_a_correction_of_another_document_is_skipped(self):
+        correction = {**SAMPLE_RULE, "document_number": "C1-2026-03594",
+                      "correction_of": "https://www.federalregister.gov/api/v1/documents/2026-03594"}
+        client = _mock_client({"RULE": [SAMPLE_RULE, correction], "PRORULE": [], "NOTICE": []})
+        results = await fetch_fr_rulemaking(client, pages=1)
+        assert [r["external_id"] for r in results] == ["fr-reg-2026-03594"]
+
+    @pytest.mark.asyncio
     async def test_multiple_types(self):
         client = _mock_client({
             "RULE": [SAMPLE_RULE],
