@@ -21,25 +21,6 @@ BLS_BASE = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
 
 NONFARM_SERIES = "CES0000000001"
 
-TERM_YEARS: dict[str, tuple[int, int]] = {
-    "clinton-42": (1993, 2001),
-    "gwbush-43": (2001, 2009),
-    "obama-44":   (2009, 2017),
-    "trump-45":   (2017, 2021),
-    "biden-46":   (2021, 2025),
-    "trump-47":   (2025, 2029),
-    # Extended set for economics-only recalculation (the postwar
-    # presidencies Blinder & Watson 2016 study)
-    "eisenhower-34": (1953, 1961),
-    "jfk-35":        (1961, 1963),
-    "lbj-36":        (1963, 1969),
-    "nixon-37":      (1969, 1974),
-    "ford-38":       (1974, 1977),
-    "carter-39":     (1977, 1981),
-    "reagan-40":     (1981, 1989),
-    "ghwbush-41":    (1989, 1993),
-}
-
 
 async def fetch_employment_data(
     client: httpx.AsyncClient,
@@ -150,14 +131,16 @@ def calculate_jobs_created(
 
 async def fetch_jobs_for_president(
     client: httpx.AsyncClient,
-    president_id: str,
+    term_start: str,
+    term_end: str | None,
 ) -> float | None:
-    """Fetch and calculate jobs created for a single president."""
-    term = TERM_YEARS.get(president_id)
-    if not term:
-        return None
-
-    start_year, end_year = term
+    """Jobs created over one presidency, from the roster's own term dates
+    (a term in progress runs four years). A hand-typed table of term years
+    stood here, starting with Eisenhower: Truman, whose term BLS's payroll
+    series (1939 on) covers, had no figure, and a president sworn in after
+    the table was typed would have had none."""
+    start_year = int(term_start[:4])
+    end_year = int(term_end[:4]) if term_end else start_year + 4
     data = await fetch_employment_data(client, start_year, end_year)
     if not data:
         return None

@@ -219,3 +219,17 @@ class TestOnTheFloor:
     def test_a_floor_action_that_does_not_name_consideration_is_not_a_guess(self):
         actions = [{"type": "Floor", "text": "Message on Senate action sent to the House."}]
         assert classify_bill_stage_from_actions(actions) == BillStage.INTRODUCED
+
+
+def test_a_resolution_goes_no_further_than_its_kind_can():
+    # Newest first: agreed to in the Senate, then a later Senate action
+    # that, after passage, reads as the other chamber.
+    actions = [
+        {"actionCode": None, "type": "IntroReferral", "text": "Referred to the Committee on Rules."},
+        {"actionCode": "17000", "type": "Floor", "text": "Submitted in the Senate, considered, and agreed to."},
+    ]
+    assert classify_bill_stage_from_actions(actions) == BillStage.IN_OTHER_CHAMBER
+    assert classify_bill_stage_from_actions(actions, bill_type="SRES") == BillStage.PASSED_CHAMBER
+    presented = [{"actionCode": "E20000", "type": "President", "text": "Presented to President."}]
+    assert classify_bill_stage_from_actions(presented, bill_type="hconres") == BillStage.IN_OTHER_CHAMBER
+    assert classify_bill_stage_from_actions(presented, bill_type="hr") == BillStage.TO_PRESIDENT

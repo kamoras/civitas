@@ -44,6 +44,8 @@ from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished, SourceBlocked
 from app.pipeline.fetch.ballot_measures_al import fetch_measures as al_fetch_measures
 from app.pipeline.fetch.ballot_measures_ar import fetch_measures as ar_fetch_measures
+from app.pipeline.fetch.ballot_measures_az import fetch_measures as az_fetch_measures
+from app.pipeline.fetch.ballot_measures_az import fetch_republished as az_fetch_republished
 from app.pipeline.fetch.ballot_measures_ca import fetch_measures as ca_fetch_measures
 from app.pipeline.fetch.ballot_measures_co import parse_document as parse_co_document
 from app.pipeline.fetch.ballot_measures_fl import fetch_measures as fl_fetch_measures
@@ -261,18 +263,22 @@ MULTI_DOCUMENT_STRATEGIES = {
     "ms_sample_ballot": ms_fetch_measures,
     "nh_general_election_questions": nh_fetch_measures,
     "nv_ballot_questions_booklet": nv_fetch_measures,
+    "az_publicity_pamphlet": az_fetch_measures,
     "oh_official_sample_ballot": oh_fetch_measures,
     "ut_general_election_certification": ut_fetch_measures,
 }
 
-# Readers that can read the state's own document from a county election
-# office's republication of it, when the state's site can't be read at all
-# (SourceBlocked) — `republished_by` in the registry names the offices.
+# Readers that can read the state's own document from another public
+# office's republication of it — a county election office (GA, NV) or, for
+# Arizona, the state's Citizens Clean Elections Commission — when the
+# state's site can't be read at all (SourceBlocked); `republished_by` in
+# the registry names the offices.
 # Each takes (client, year, the county's page) and returns verified
 # (parsed, url) pairs or None.
 REPUBLISHED_STRATEGIES = {
     "ga_amendments_booklet": ga_fetch_republished,
     "nv_ballot_questions_booklet": nv_fetch_republished,
+    "az_publicity_pamphlet": az_fetch_republished,
 }
 
 # These are documents a state republishes wholesale on the rare occasion
@@ -505,25 +511,46 @@ async def fetch_state_measures_pdf(
                 )
             logger.warning("Could not discover current ballot measure PDF for %s %d", state, year)
             return None
+        candidates = [url]
     else:
-        url = source["url_pattern"].format(year=year)
-    try:
-        response = await client.get(url, timeout=60.0)
-        response.raise_for_status()
-        pdf_bytes = response.content
-    except httpx.HTTPStatusError as exc:
-        if absent_until_published and exc.response.status_code == 404:
+        # A list names every address the state has filed this document
+        # under, newest first: Massachusetts moved its guide in 2026 from
+        # .../research-and-statistics/IFV_{year}.pdf to an
+        # .../information-for-voters/archive/ folder, and the landing page
+        # that links it is behind a bot wall, so it can't be discovered.
+        # Only a 404 moves on to the next address; any other failure is one.
+        patterns = source["url_pattern"]
+        if isinstance(patterns, str):
+            patterns = [patterns]
+        candidates = [p.format(year=year) for p in patterns]
+    pdf_bytes = url = None
+    for url in candidates:
+        try:
+            response = await client.get(url, timeout=60.0)
+            response.raise_for_status()
+            pdf_bytes = response.content
+            break
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                continue
+            logger.warning(
+                "Ballot measure PDF fetch failed for %s %d: HTTP %d",
+                state, year, exc.response.status_code,
+            )
+            return None
+        except Exception:
+            logger.exception("Ballot measure PDF fetch failed for %s %d", state, year)
+            return None
+    if pdf_bytes is None:
+        if absent_until_published:
             raise NotYetPublished(
-                f"{source['source_name']}: {url} not posted yet (404)",
+                f"{source['source_name']}: {' / '.join(candidates)} not posted yet (404)",
                 deadline_applies=not source.get("absence_can_mean_none", False),
-            ) from None
+            )
         logger.warning(
-            "Ballot measure PDF fetch failed for %s %d: HTTP %d",
-            state, year, exc.response.status_code,
+            "Ballot measure PDF fetch failed for %s %d: HTTP 404 at %s",
+            state, year, " / ".join(candidates),
         )
-        return None
-    except Exception:
-        logger.exception("Ballot measure PDF fetch failed for %s %d", state, year)
         return None
 
     try:

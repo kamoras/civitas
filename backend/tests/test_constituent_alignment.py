@@ -217,10 +217,10 @@ class TestSeatRelativeVotes:
         rec = {**record(10), "effectiveParty": "D"}
         assert score(rec, party="I") == score(record(10), party="D")
 
-    def test_no_caucus_no_expectation_neutral(self):
+    def test_no_caucus_no_party_line_neutral(self):
         core = _constituent_alignment_core(record(10), [], {}, state="SW", party="I")
         assert core["score"] == 50
-        assert "no measured expectation" in core["components"][0]["detail"]
+        assert "caucuses with neither party" in core["components"][0]["detail"]
 
     def test_each_party_labeled_roll_call_counts_once_unweighted(self):
         # v6.15: partyAlignmentWeight is the bill's content lean, not how
@@ -726,7 +726,8 @@ class TestVotePartStatus:
         ref = _typical_ref()
         assert self.status(record(1, total=2), constituentReference=ref) == "typical:few-votes"
         assert self.status(record(1, total=2)) == "neutral:few-votes"
-        assert self.status(record(1, total=2), party="I") == "neutral:few-votes"
+        # A member caucusing with neither party: no party line, not few votes.
+        assert self.status(record(1, total=2), party="I") == "neutral:no-party"
 
     def test_an_unmeasured_prior_is_never_called_typical(self):
         # The bundled prior has no population: its thin records are neutral
@@ -738,8 +739,11 @@ class TestVotePartStatus:
         assert core["score"] == 25 and "pulled toward a neutral 50" in core["components"][0]["detail"]
         assert self.status(record(1, total=10), constituentReference=prior) == "shrunk-neutral:0.50"
 
-    def test_no_expectation(self):
-        assert self.status(record(1, total=10), party="I") == "neutral:no-expectation"
+    def test_no_party(self):
+        # The House's one independent read "few votes" beside 676 recorded
+        # votes (2026-10-08): there is no party line to break from.
+        assert self.status(record(1, total=10), party="I") == "neutral:no-party"
+        assert self.status({"keyVotes": [], "recentVotes": []}, party="I") == "neutral:no-party"
 
     def test_shrunk_share(self):
         ref = _typical_ref()

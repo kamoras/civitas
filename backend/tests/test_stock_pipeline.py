@@ -588,3 +588,48 @@ class TestRereadHouseFiling:
             await stock_pipeline._reread_house_filing(None, None, "20012345", url)
 
         assert fetch.await_args.args[2]["filing_date"] is None
+
+
+def test_a_trade_two_reports_list_counts_once_at_its_first_disclosure(db_session):
+    from app.models import Senator, StockTrade
+
+    db_session.add(Senator(id="S1", name="Sen One", state="CA", party="D"))
+    trade = dict(senator_id="S1", ticker="CVX", asset_name="Chevron", owner="self", transaction_type="purchase",
+                 transaction_date="2026-07-02", days_to_disclose=0, amount_low=1001.0, amount_high=15000.0,
+                 industry="OIL_GAS", source_url="https://example.com")
+    db_session.add_all([
+        StockTrade(**trade, filing_id="later", disclosure_date="2026-08-20"),
+        StockTrade(**trade, filing_id="first", disclosure_date="2026-08-17"),
+        # Two same-day lots in one report stay two.
+        StockTrade(**{**trade, "asset_name": "Ecolab"}, filing_id="first", disclosure_date="2026-08-17"),
+        StockTrade(**{**trade, "asset_name": "Ecolab"}, filing_id="first", disclosure_date="2026-08-17"),
+    ])
+    db_session.commit()
+    assert stock_pipeline.collapse_refiled_trades(db_session, StockTrade, "senator_id") == 1
+    assert sorted((t.asset_name, t.filing_id) for t in db_session.query(StockTrade)) == [
+        ("Chevron", "first"), ("Ecolab", "first"), ("Ecolab", "first")]
+    assert stock_pipeline.collapse_refiled_trades(db_session, StockTrade, "senator_id") == 0
+
+
+@pytest.mark.asyncio
+async def test_the_president_s_annual_report_rows_are_never_reread(db_session):
+    """They are president_fd's: the 278-T parser the re-read runs would
+    replace them with whatever it made of a 278e (21,285 rows at stake)."""
+    from app.models import President, PresidentTrade
+
+    db_session.add(President(id="p-1", name="Test President", party="R", number=99,
+                             term_start="2025-01-20", is_current=True))
+    common = dict(president_id="p-1", owner="self", transaction_type="purchase",
+                  transaction_date="2025-11-01", disclosure_date="2026-05-15", parser_version=1)
+    db_session.add_all([
+        PresidentTrade(asset_name="Annual holding", source_url="https://example.test/annual.pdf",
+                       filing_id="annual", report_kind="annual", **common),
+        PresidentTrade(asset_name="Periodic trade", source_url="https://example.test/p.pdf",
+                       filing_id="p", report_kind="periodic", **common),
+    ])
+    db_session.commit()
+    read = AsyncMock(return_value=[])
+    with patch.object(stock_pipeline, "_read_president_filing", read), \
+         patch.object(stock_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"):
+        await stock_pipeline._reread_trades(db_session, None)
+    assert [c.args[1]["doc_id"] for c in read.await_args_list] == ["p"]

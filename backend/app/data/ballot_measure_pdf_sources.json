@@ -4,10 +4,6 @@
   "_as_of": "2026-08-07",
   "_unread_as_of": "Each entry's `reason` is served to voters (measureCoverage.unreadReason) and must be true wherever and whenever Civitas runs — no dates, years or 'this election': either a fact about what the state publishes, or that Civitas does not read the state's list automatically yet. Never a claim about network access, which differs between servers. `dev_note` is for developers only (what was found, from where, when) and is never sent by the API.",
   "unread": {
-    "AZ": {
-      "reason": "Civitas does not read Arizona's official measure list automatically yet.",
-      "dev_note": "2026-09-28 dev container: azsos.gov answered with a Cloudflare challenge."
-    },
     "DC": {
       "reason": "Civitas does not read the District of Columbia's official measure list automatically yet.",
       "dev_note": "2026-09-28: DCBOE had posted only the proposed wording of Initiative 86, not certified ballot wording for the 2026-11-03 election. Revisit once it posts; a reader can then be registered."
@@ -50,10 +46,13 @@
       "expected_by_basis": "Cal. Elections Code §9094: the state voter information guide is mailed no later than 21 days before the election; its web edition is up well before that."
     },
     "MA": {
-      "url_pattern": "https://www.sec.state.ma.us/divisions/elections/download/research-and-statistics/IFV_{year}.pdf",
+      "url_pattern": [
+        "https://www.sec.state.ma.us/divisions/elections/download/information-for-voters/archive/IFV_{year}%20English.pdf",
+        "https://www.sec.state.ma.us/divisions/elections/download/research-and-statistics/IFV_{year}.pdf"
+      ],
       "source_name": "Massachusetts Secretary of the Commonwealth",
       "strategy": "ma_information_for_voters",
-      "description": "Official 'Information For Voters' guide. URL pattern verified stable across two real elections (2024 general, 5 real questions; 2022 general, 3 real questions) — same two-election bar CA's pattern was held to. All 8 real questions across both years parse with correct official_summary/fiscal_impact/yes_means/no_means. A 404 for the year's guide reads as not yet published (absent_until_published): IFV_2026.pdf still answered 404 on 2026-09-28.",
+      "description": "Official 'Information For Voters' guide. URL pattern verified stable across two real elections (2024 general, 5 real questions; 2022 general, 3 real questions) — same two-election bar CA's pattern was held to. All 8 real questions across both years parse with correct official_summary/fiscal_impact/yes_means/no_means. In 2026 the Secretary filed the guide at a new address, .../download/information-for-voters/archive/IFV_2026%20English.pdf (200, 88 pages, 9 questions, checked 2026-10-08), while .../research-and-statistics/IFV_2026.pdf answers 404 and IFV_2024.pdf is still served at the old one; the Information for Voters landing page that links it answers every plain request with an Incapsula challenge, so the address can't be discovered and both are tried in order (only a 404 moves on). A 404 at every address reads as not yet published (absent_until_published), which the expected-by cutoff turns into a failure.",
       "absent_until_published": true
     },
     "CO": {
@@ -205,7 +204,7 @@
     "OK": {
       "source_name": "Oklahoma Secretary of State",
       "strategy": "ok_state_questions",
-      "description": "The Secretary of State's State Questions register (sos.ok.gov/gov/questions.aspx), rows dated 'ELECTION DATE: November 3, 2026'. Verified live 2026-09-28: SQ 845 (Judicial Nominating Commission) and SQ 847 (Real Property Valuation), matching the State Election Board's 'Two state questions have qualified'. The ballot titles exist only in scanned PDFs (845 no text layer, 847 OCR with errors), so only the register's own SQ number and subject line are stored and each links its filed PDF — no OCR'd text is presented as ballot language."
+      "description": "The Secretary of State's State Questions register (sos.ok.gov/gov/questions.aspx), rows dated 'ELECTION DATE: November 3, 2026'. Verified live 2026-09-28: SQ 845 (Judicial Nominating Commission) and SQ 847 (Real Property Valuation), matching the State Election Board's 'Two state questions have qualified'. The Secretary's filed PDFs are scans (OCR with errors, and every superseded version of the title), so no OCR'd text is presented as ballot language. The final ballot title is quoted only from the State Election Board's accessible (text) copy, oklahoma.gov/content/dam/ok/en/elections/state-questions/sq{year}/sq{N}-final-ballot-title-accessible.pdf: SQ 845's answered 200 on 2026-10-08 (the August 13 corrected title); SQ 847 has none (404), so it keeps the register's SQ number and subject line and links its filed PDF. See ballot_measures_ok.py."
     },
     "SD": {
       "source_name": "South Dakota Secretary of State",
@@ -299,6 +298,17 @@
         {
           "name": "Eureka County Clerk-Recorder",
           "url": "https://www.eurekacountynv.gov/departments/clerk-recorder/elections/"
+        }
+      ]
+    },
+    "AZ": {
+      "source_name": "Arizona Secretary of State",
+      "strategy": "az_publicity_pamphlet",
+      "description": "The Secretary's general-election Publicity Pamphlet, read from each proposition's 'Ballot Format' page: the designation, the DESCRIPTIVE TITLE (prepared by the Secretary, approved by the Attorney General, A.R.S. 19-125(D)) and the 'A “yes”/“no” vote shall have the effect of ...' statements; the table of contents' 'Ballot Format for Proposition N' entries must equal the pages read. Verified against the real 2026 pamphlet: Propositions 141, 142, 144, 316, 317, 318, 319 and 320. azsos.gov answers every request with a Cloudflare challenge (403, cf-mitigated: challenge, with or without a browser User-Agent, robots.txt included; checked 2026-10-08), so the reader raises SourceBlocked and reads the Secretary's pamphlet from its republication by the Arizona Citizens Clean Elections Commission ('republished_by'), whose Voter Education Guide page links it as 'SOS Publicity Pamphlet'. Not a county office: the county election sites checked (Maricopa, Yavapai, Coconino, Pinal, Yuma, Navajo, Santa Cruz, Apache, Graham) answered 403 too, and Pima County posts its own compilation of the ballot language rather than the Secretary's document. The copy must carry the pamphlet's verified cover and pass every other check, and the card says it was republished. See ballot_measures_az.py.",
+      "republished_by": [
+        {
+          "name": "Arizona Citizens Clean Elections Commission",
+          "url": "https://www.azcleanelections.gov/voter-education-guide"
         }
       ]
     },

@@ -40,6 +40,12 @@ describe("LobbyingMatches", () => {
     expect(screen.getByText(/2025 filing for PFIZER INC\. by ALTRIUS GROUP, LLC/)).toBeTruthy();
   });
 
+  it("gives the industry's total to the industry, not to its largest donor", () => {
+    render(<LobbyingMatches matches={[match([])]} />);
+    expect(screen.getByText(/^INDUSTRY CONTRIBUTIONS: \$5/)).toBeTruthy();
+    expect(screen.getByText("LARGEST DONOR IN THIS INDUSTRY: Pfizer Inc PAC")).toBeTruthy();
+  });
+
   it("shows no motion label for a passage vote and a label for anything else", () => {
     render(
       <LobbyingMatches
