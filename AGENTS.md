@@ -741,7 +741,11 @@ Corollaries that follow from the same rule, all enforced in code:
   state's own would; a state page that was read and refused never falls
   back to one, since that would publish past the refusal; and the card
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
-  past the wall itself is not an option: it is the state saying no.
+  past the wall itself is not an option: it is the state saying no. That
+  is enforced in the HTTP layer for every source: the client forgets the
+  cookies a challenge response sets (`http_client.is_bot_challenge`), and
+  `fetch_with_retry` never retries a challenge. Until 2026-10 a retry sent
+  the challenge's cookie back and got through one state's wall unnoticed.
 - Scope is stated as content, not as a footnote: the API enumerates what a
   statewide page omits (`omits`) and the page renders it above the measures.
 - **`omits` is a live description, not a fixed disclaimer.** Each entry is
@@ -1085,7 +1089,10 @@ up. Asset categories (`HOLDING_CATEGORIES` in `config_definitions.py`) come
 only from the asset type the *filer* declared (the House's two-letter codes,
 the Senate's type/subtype), mapped in `fd_common.py` — a form-vocabulary
 translation, never a guess from the asset's name. Values stay brackets
-(`low == high` is the same open-ended sentinel); the pie is drawn by bracket
+(`low == high` is the same open-ended sentinel — except an exact value a House
+filer states instead of a bracket, "$1,251.00", which is stored the same way
+and told apart by its printed text: `schemas.EXACT_VALUE_RE`, passed to
+`is_open_ended`); the pie is drawn by bracket
 midpoints and says so, and no net-worth figure is produced. Reports that can't
 be read are stored `parsed=False` with a reason (`scanned` paper filing,
 `unrecognized` layout) and linked, not OCR'd. A Senate paper filing states
@@ -1093,7 +1100,14 @@ no year anywhere eFD shows it (its page is page images), so no year is
 claimed or inferred for it: it ranks below every dated report, and an undated
 filing (paper, or a title with no year) filed on or after the shown report's
 date is named beside it ("also filed, on or after this report's filing date")
-rather than guessed to be newer. Each fetch module's
+rather than guessed to be newer. A House member's new-filer report (index type
+"H", read from this year's index too) is read for a member with nothing newer;
+it states no date its values describe, so it is labelled by filing date and any
+annual report outranks it. Filers are matched in `filer_matching.py`: the
+last-name field up to its first comma ("Doe, Jr."), and a House filer listed
+under a district no member of that surname holds — the Clerk keeps a member's
+pre-redistricting district — is matched across the state only when the first
+names agree (a shared token, or a measured similarity ratio). Each fetch module's
 `PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
 parser's output changes, and already-ingested reports are re-read (a re-read
 that can't read the report at all keeps the earlier holdings; one that reads
@@ -1180,6 +1194,7 @@ See `.env.example` for all options. Key variables:
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
+| `BLS_API_KEY` | No | Bureau of Labor Statistics v2 registration key: lifts the jobs API from 25 to 500 requests a day; works without it |
 | `CURRENT_CONGRESS` | **Never in production** | Leave unset — computed from the clock. Setting it pins the scored windows *and* House members' district lines to that Congress past the next Jan 3; only for re-running an archived database |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see

@@ -112,7 +112,10 @@ _ACTION_CODE_STAGE: dict[str, BillStage] = {
     "28000": BillStage.TO_PRESIDENT,    # Presented to President (LOC-recorded)
     # Enacted
     "36000": BillStage.ENACTED,         # Became Public Law / Signed by President
-    "E30000": BillStage.ENACTED,        # Signed by President
+    # E30000 is not here: Congress.gov gives "Vetoed by President." the same
+    # code as "Signed by President.", so the President action's own text
+    # decides (_stage_from_type_and_text). Two vetoed bills whose overrides
+    # failed were stored as law until v6.32.
     "E40000": BillStage.ENACTED,        # Became Public Law
 }
 

@@ -79,6 +79,10 @@ INDUSTRIES: dict[str, dict] = {
     "SMALL_DONORS":    {"name": "Small Donors (unitemized)", "color": "#00ff41"},
     "LARGE_INDIVIDUAL":{"name": "Large Individual Donors",  "color": "#39ff14"},
     "UNCLASSIFIED":    {"name": "Other Sources",            "color": "#666666"},
+    # The candidate's own money: loans to and contributions from the
+    # candidate (FEC totals). In the shares' denominator by design, never an
+    # industry, never outside money (v6.32).
+    "CANDIDATE_FUNDS": {"name": "Candidate's Own Money",    "color": "#8a7f6e"},
 }
 
 PLATFORM_CATEGORIES: dict[str, str] = {

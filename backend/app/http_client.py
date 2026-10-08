@@ -120,6 +120,29 @@ async def bounded(awaitable, timeout: Any, *, label: str = "request"):
         raise
 
 
+# A bot wall's challenge: the site refusing an automated client. Cloudflare
+# says so in a header (`cf-mitigated: challenge`); Imperva/Incapsula marks
+# every response it serves (`x-iinfo`), so there only a refusal counts, or
+# a page that is its challenge script. AGENTS.md §7: getting past a wall is
+# not an option, it is the site saying no.
+_CHALLENGE_BODY_MARKERS = (b"_Incapsula_Resource", b"Just a moment...", b"/cdn-cgi/challenge-platform/")
+
+
+def is_bot_challenge(response: httpx.Response) -> bool:
+    """Whether `response` is a bot wall's challenge rather than the page."""
+    headers = response.headers
+    if headers.get("cf-mitigated", "").lower() == "challenge":
+        return True
+    refused = response.status_code in (401, 403, 429, 503)
+    if refused and "x-iinfo" in headers:
+        return True
+    try:
+        head = response.content[:4096]
+    except httpx.ResponseNotRead:  # a stream nobody has read: headers only
+        return False
+    return (refused or "x-iinfo" in headers) and any(m in head for m in _CHALLENGE_BODY_MARKERS)
+
+
 class BackstoppedAsyncClient(httpx.AsyncClient):
     """`httpx.AsyncClient` whose every request has a wall-clock ceiling.
 
@@ -136,11 +159,25 @@ class BackstoppedAsyncClient(httpx.AsyncClient):
         # error_utils' docstring on why the after-the-fact form doesn't
         # satisfy py/clear-text-logging-sensitive-data), and the path alone
         # is all anyone needs to identify which fetch hung.
-        return await bounded(
+        response = await bounded(
             super().send(request, **kwargs),
             request.extensions.get("timeout"),
             label=f"{request.method} {url.scheme}://{url.host}{url.path}",
         )
+        if is_bot_challenge(response):
+            # Never carry a challenge's cookies to the next request: sent
+            # back, they let the client through the wall the site put up
+            # (Arizona's Secretary of State, measured 2026-10-08: a second
+            # request on the same client answered 200).
+            self._forget_cookies(url.host)
+        return response
+
+    def _forget_cookies(self, host: str) -> None:
+        jar = self.cookies.jar
+        for cookie in list(jar):
+            domain = cookie.domain.lstrip(".")
+            if host == domain or host.endswith("." + domain):
+                jar.clear(cookie.domain, cookie.path, cookie.name)
 
 
 def make_async_client(**kwargs: Any) -> BackstoppedAsyncClient:
