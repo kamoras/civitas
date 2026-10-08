@@ -17,9 +17,10 @@ from app.http_client import make_async_client
 from app.models import President
 from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
 from app.pipeline.analyze.justice_loyalty import Loyalty, Vote, label, loyalty_by_justice, president_on
-from app.pipeline.fetch.justice_records import fetch_fjc, fetch_martin_quinn, fetch_scdb
+from app.pipeline.fetch.justice_records import RECENT_TERMS, fetch_fjc, fetch_martin_quinn, fetch_scdb
 from app.pipeline.fetch.justice_votes import fetch_case_votes, fetch_current_justices
 from app.services.justice_service import group_votes_by_case_and_justice, upsert_justice
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -84,10 +85,28 @@ async def _measure_loyalty(client: httpx.AsyncClient, db: Session) -> tuple[dict
     loyalty, mean, spread = loyalty_by_justice(rows)
     logger.info("Justice loyalty: %d justices, mean %+.3f, between-justice sd %.3f (%s)",
                 len(loyalty), mean, spread, scdb["release"])
-    return {"loyalty": loyalty, "term": scdb["term"], "current": scdb["current"],
+    return {"loyalty": loyalty, "term": scdb["term"], "current": scdb["current"], "cases": scdb.get("cases") or [],
             # None when the Martin-Quinn file couldn't be read: the stored
             # positions stay (an outage read as {} erased every justice's).
             "ideal": await fetch_martin_quinn(client, db)}, None
+
+
+def scdb_vote_records(cases: list[list], justices: list[dict], terms: set[int]) -> list[dict]:
+    """The Database's votes in `terms` for the sitting justices, in the
+    record shape fetch_case_votes gives from Oyez (scdb_case_votes)."""
+    names = sorted({c[5] for c in cases})
+    ids = {name: j["id"] for j in justices if (name := _database_name(j, names))}
+    out = []
+    for case_id, docket, name, term, decided, justice, side, opinion, maj, mnr in cases:
+        if term not in terms or justice not in ids:
+            continue
+        out.append({
+            "case_id": f"scotus-{term}-{docket or case_id}", "case_name": name, "case_term": str(term),
+            "decided_date": decided, "justice_id": ids[justice], "vote": side, "opinion_type": opinion,
+            "is_unanimous": mnr == 0 and maj > 0, "is_close": mnr > 0 and maj - mnr <= 1,
+            "majority_votes": maj, "minority_votes": mnr,
+        })
+    return out
 
 
 def _database_name(justice: dict, current: list[str]) -> str | None:
@@ -177,8 +196,19 @@ async def run_justice_pipeline(db: Session) -> dict:
             logger.warning("No justices found, aborting pipeline")
             return {"justices": 0, "votes": 0, "loyalty_unmeasured": "Oyez listed no sitting justices"}
 
-        all_votes = await fetch_case_votes(client)
         measured, unmeasured_why = await _measure_loyalty(client, db)
+        # The record's terms: the Supreme Court Database for every term its
+        # release covers, Oyez only after it. Oyez had entered the votes of
+        # 13 of the 2024 term's 59 decided cases by 2026-10-08, so its
+        # counts, shares and agreement rates read a fraction of that term;
+        # the Database has all 60 orally argued cases.
+        year = utcnow().year
+        window = {year - i for i in range(RECENT_TERMS)}
+        from_scdb = window & {c[3] for c in (measured or {}).get("cases") or []}
+        all_votes = scdb_vote_records(measured["cases"], justices, from_scdb) if from_scdb else []
+        rest = sorted(window - from_scdb, reverse=True)
+        if rest:
+            all_votes += await fetch_case_votes(client, [str(t) for t in rest])
 
     case_votes, justice_votes = group_votes_by_case_and_justice(all_votes)
 

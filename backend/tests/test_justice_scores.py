@@ -223,3 +223,34 @@ def test_an_unreadable_martin_quinn_file_keeps_the_stored_positions():
     assert "ideal_points" not in _loyalty_fields(None, 2024, None, ideal_read=False)
     assert _loyalty_fields(None, 2024, [[2024, 1.0]])["ideal_points"] == "[[2024, 1.0]]"
     assert _loyalty_fields(None, 2024, None)["ideal_points"] is None  # read, and not in it
+
+
+def test_scdb_case_votes_read_side_and_opinion():
+    from app.pipeline.fetch.justice_records import scdb_case_votes
+    case = dict(caseId="2024-001", docket="23-621", caseName="A v. B", term="2024", dateDecision="6/20/2025",
+                decisionType="1", majOpinWriter="111", majVotes="6", minVotes="3", vote="1", opinion="1")
+    rows = [
+        {**case, "justice": "111", "justiceName": "JGRoberts", "majority": "2", "opinion": "2"},
+        {**case, "justice": "108", "justiceName": "CThomas", "majority": "2", "vote": "3", "opinion": "2"},
+        {**case, "justice": "114", "justiceName": "SSotomayor", "majority": "1", "vote": "2", "opinion": "2"},
+        {**case, "justice": "115", "justiceName": "EKagan", "majority": "1", "vote": "2"},
+        {**case, "justice": "116", "justiceName": "NMGorsuch", "majority": ""},  # did not take part
+        {**case, "justiceName": "OldTerm", "term": "2019", "majority": "2"},
+        {**case, "justiceName": "PerCuriamUnargued", "decisionType": "2", "majority": "2"},
+    ]
+    got = {r[5]: (r[6], r[7]) for r in scdb_case_votes(rows, 2022)}
+    assert got == {
+        "JGRoberts": ("majority", "majority"), "CThomas": ("majority", "concurrence"),
+        "SSotomayor": ("minority", "dissent"), "EKagan": ("minority", "none"),
+    }
+
+
+def test_the_record_reads_the_database_for_the_terms_it_covers():
+    from app.pipeline.justice_pipeline import scdb_vote_records
+    cases = [["2024-001", "23-621", "A v. B", 2024, "2025-06-20", "CThomas", "majority", "none", 6, 3],
+             ["2024-001", "23-621", "A v. B", 2024, "2025-06-20", "RRetired", "minority", "none", 6, 3],
+             ["2021-001", "20-1", "C v. D", 2021, "2022-06-20", "CThomas", "majority", "none", 9, 0]]
+    justices = [{"id": "clarence_thomas", "name": "Clarence Thomas", "last_name": "Thomas"}]
+    [vote] = scdb_vote_records(cases, justices, {2024})
+    assert vote["case_id"] == "scotus-2024-23-621" and vote["justice_id"] == "clarence_thomas"
+    assert vote["is_close"] is False and vote["is_unanimous"] is False
