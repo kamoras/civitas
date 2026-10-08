@@ -891,11 +891,10 @@ async def run_house_pipeline() -> dict:
                     # policy_alignment.py's module docstring.
                     rep["campaignPromises"] = []
 
-                    # Detect donor-industry-vs-vote connections (embeddings
-                    # only, zero LLM — see cross_reference.detect_lobbying_matches).
-                    # Without this, Constituent Alignment's donor-independence
-                    # component would default to a flat, fundraising-size-
-                    # based score regardless of actual donor-vote behavior.
+                    # Donor-industry-vs-vote connections for the scorecard
+                    # (embeddings only, zero LLM — see
+                    # cross_reference.detect_lobbying_matches). Display only:
+                    # no score reads them.
                     lobbying_matches = detect_lobbying_matches(
                         rep["funding"].get("topDonors", []),
                         all_votes,
