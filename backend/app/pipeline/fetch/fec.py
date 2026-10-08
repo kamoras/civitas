@@ -1213,10 +1213,23 @@ def structured_industry(meta: dict | None) -> str | None:
     Measured 2026-10-08 on the donors stored then: 21% of the rows from
     labor organizations' PACs carried another industry (one union's PAC,
     203 rows, as GUNS), and on corporate PACs whose sponsor the SEC lists,
-    the name classifier agreed with the SEC's code on 59.5% of rows."""
+    the name classifier agreed with the SEC's code on 59.5% of rows.
+
+    A PAC the FEC records with no sponsoring organization at all (a
+    nonconnected committee: no organization type, no connected
+    organization) is POLITICAL too. Measured 2026-10-08 on a random 80 of
+    the 142 such PACs among stored donors, judged by hand: 55 were
+    ideological or issue committees, which the name classifier filed under
+    an industry two times in three (one as real estate on 125 rows, an
+    environmental-justice PAC as firearms); the rest were partnership
+    (law and accounting firm) and physician-group PACs, which lose their
+    industry and drop out of the industry mix rather than land in a wrong
+    one. 69% correct against the classifier's 35% on the same names
+    (McNemar p < 0.001). A source that doesn't record the organization
+    type (no "orgType" key) says nothing either way."""
     if not meta:
         return None
-    if is_political_committee(meta):
+    if is_political_committee(meta) or _is_nonconnected_pac(meta):
         return "POLITICAL"
     if meta.get("orgType") == "L":
         return "LABOR_UNIONS"
@@ -1246,6 +1259,17 @@ def is_joint_fundraiser(meta: dict | None) -> bool:
     listed as a donor it was the candidate's own fundraising counted again
     (2026-10-08: "... Victory" committees among senators' top donors)."""
     return bool(meta) and meta.get("designation") == "J"
+
+
+# PAC committee types: N (not qualified) and Q (qualified).
+_PAC_TYPES = frozenset({"N", "Q"})
+
+
+def _is_nonconnected_pac(meta: dict) -> bool:
+    return (
+        meta.get("type") in _PAC_TYPES and "orgType" in meta
+        and not meta.get("orgType") and not meta.get("connectedOrg")
+    )
 
 
 def is_political_committee(meta: dict | None) -> bool:

@@ -254,9 +254,12 @@ export default async function LimitationsChapter() {
             Embedding-based classification is fast and consistent, but it knows only what the text
             says. Shell companies and deliberately obscure names can land in the wrong industry. For
             PACs it is the last resort: a union&apos;s PAC, and a company&apos;s PAC the SEC lists,
-            take their industry from those records. Trade associations and private companies have no
-            such record, and their names are still read; measured against the records, the name
-            reading agreed with them on about six PACs in ten.
+            take their industry from those records, and a PAC with no sponsoring organization counts
+            as political money. That last rule is right for about seven in ten of them; the rest are
+            law and accounting partnerships&apos; and physician groups&apos; PACs, whose money then
+            counts toward no industry. Trade associations and private companies have no such record,
+            and their names are still read; measured against the records, the name reading agreed
+            with them on about six PACs in ten.
           </P>
         </Limitation>
       </Section>

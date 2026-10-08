@@ -154,10 +154,12 @@ export default function ScoresChapter() {
             from a party, candidate, joint-fundraising or leadership committee is political money,
             not an industry&apos;s: the FEC&apos;s own registration of each committee decides that,
             not its name. The same records decide where they can: a PAC a labor organization
-            sponsors is labor money, and a company&apos;s PAC takes the SEC&apos;s industry code for
-            that company when the SEC lists it; only the rest is read from the name. A state&apos;s
-            home industry counts as concentration like any other, because local economic weight
-            plausibly gives an industry more leverage over a member, not less.
+            sponsors is labor money, a PAC registered with no sponsoring organization at all is
+            political money (most are ideological or issue committees), and a company&apos;s PAC
+            takes the SEC&apos;s industry code for that company when the SEC lists it; only the rest
+            is read from the name. A state&apos;s home industry counts as concentration like any
+            other, because local economic weight plausibly gives an industry more leverage over a
+            member, not less.
           </Step>
         </Steps>
         <P>

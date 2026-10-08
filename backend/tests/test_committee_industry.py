@@ -25,6 +25,9 @@ def test_the_committee_master_keeps_the_organization_type():
     ({"type": "Q", "designation": "B", "orgType": "L"}, "LABOR_UNIONS"),
     ({"type": "Q", "designation": "B", "orgType": "C", "sponsorIndustry": "OIL_GAS"}, "OIL_GAS"),
     ({"type": "Q", "designation": "B", "orgType": "T"}, None),  # a trade association: the classifier's
+    ({"type": "Q", "designation": "U", "orgType": None, "connectedOrg": None}, "POLITICAL"),  # nonconnected
+    ({"type": "Q", "designation": "U", "orgType": None, "connectedOrg": "A SPONSOR"}, None),
+    ({"type": "Q", "designation": None, "connectedOrg": None}, None),  # source without the org type
     (None, None),
 ])
 def test_structured_industry(meta, industry):
