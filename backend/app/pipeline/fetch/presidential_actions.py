@@ -106,6 +106,9 @@ async def fetch_recent_presidential_actions(
                 "order": "newest",
                 "fields[]": [
                     "document_number",
+                    # A republication or correction of another document
+                    # (fr_rulemaking.FIELDS): skipped.
+                    "correction_of",
                     "title",
                     "abstract",
                     "body_html_url",
@@ -143,7 +146,7 @@ async def fetch_recent_presidential_actions(
 
             for doc in docs:
                 doc_num = doc.get("document_number", "")
-                if not doc_num or doc_num in seen_ids:
+                if not doc_num or doc_num in seen_ids or doc.get("correction_of"):
                     continue
                 seen_ids.add(doc_num)
                 pending_docs.append(doc)
