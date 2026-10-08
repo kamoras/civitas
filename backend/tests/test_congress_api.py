@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import RollCall
+from app.models import CongressEvent, RollCall
 from app.pipeline import congress_activity as ca
 from app.services import congress_service as cs
 from tests.congress_activity_helpers import _digest_responses, _fake_get
@@ -42,13 +42,15 @@ class TestDay:
         r = cs.day_report(week_of_sept_21, date(2026, 9, 24))
         senate, house = r["chambers"]["senate"], r["chambers"]["house"]
         assert senate["status"] == "final"
-        assert senate["counts"]["billsPassed"] == 3
+        assert senate["counts"]["billsPassed"] == 5
         assert senate["counts"]["resolutionsPassed"] == 4
+        cleared = {e["billId"]: e["nextStep"] for e in senate["passed"]}
+        assert (cleared["S.283"], cleared["S.3257"], cleared["HR.2388"]) == ("both", "house", "both")
         assert senate["counts"]["recordVotes"] == 3
         assert [e["billLabel"] for e in senate["failed"]] == ["H. Con. Res. 89"]
         assert house["minutesInSession"] == 3
         assert r["sentence"] == (
-            "The Senate passed 3 bills, agreed to 4 resolutions and took 3 record votes. "
+            "The Senate passed 5 bills, agreed to 4 resolutions and took 3 record votes. "
             "The House met for 3 minutes and took no record votes."
         )
         assert r["previousDay"] == "2026-09-23"
@@ -75,8 +77,10 @@ class TestPeriods:
         senate = r["totals"]["senate"]
         assert senate["daysInSession"] == 2  # the 23rd by its vote, the 24th by its Digest
         assert senate["recordVotes"] == 4
-        # H.R. 2388 started in the House, so the Senate passing it means both.
-        assert [e["billId"] for e in r["passedBothChambers"]] == ["HR.2388"]
+        # H.R. 2388 started in the House, so the Senate passing it means both;
+        # S. 283 and S. 240 cleared when the Senate concurred in the House's
+        # amendment (Congress.gov: "Presented to President.", 2026-10-05).
+        assert [e["billId"] for e in r["passedBothChambers"]] == ["HR.2388", "S.283", "S.240"]
         assert [e["billId"] for e in r["passedOneChamber"]] == ["S.3257", "S.3258"]
         assert [v["number"] for v in r["closestVotes"]][:2] == [244, 241]
         assert r["previous"] is None  # the week before the first day on record
@@ -99,8 +103,26 @@ def test_passed_both_chambers(bill, chamber, both):
     assert cs.passed_both_chambers(bill, chamber) is both
 
 
+@pytest.mark.parametrize("bill,chamber,text,both", [
+    # The Record's wordings of concurring in the other chamber's amendment.
+    ("HR.5371", "house", "The House concurred in the Senate amendment to H.R. 5371, making continuing appropriations", True),
+    ("HR.1", "house", "The House agreed to the motion to concur in the Senate amendment to H.R. 1, to provide", True),
+    ("HR.6500", "house", "Concurred in the Senate amendments to H.R. 6500, to extend duty-free treatment", True),
+    ("S.1071", "senate", "Senate concurred in the amendment of the House of Representatives to S. 1071", True),
+    # Concurring with a further amendment sends it back.
+    ("HR.5", "house", "The House concurred in the Senate amendment to H.R. 5 with an amendment.", False),
+    ("S.3257", "senate", "Senate passed S. 3257, to require the Administrator", False),
+])
+def test_a_concurrence_clears_both_chambers(bill, chamber, text, both):
+    assert cs.passed_both_chambers(bill, chamber, text) is both
+
+
 @pytest.mark.parametrize("text,n", [
-    ("3 Coast Guard nominations in the rank of admiral. A routine list in the Coast Guard.", 3),
+    ("3 Coast Guard nominations in the rank of admiral.", 3),
+    ("1 Marine Corps nomination in the rank of general.", 1),
+    # A routine list's size isn't given: counted apart, as a list.
+    ("Routine lists in the Air Force, Army, Marine Corps, Navy, and Space Force.", 0),
+    ("A routine list in the Coast Guard.", 0),
     ("By 50 yeas to 47 nays (Vote No. EX. 241), Angela Veronica Colmenero, of Texas, to be ...", 1),
     ("Forty-two Air Force nominations in the rank of general.", 42),
 ])
@@ -118,7 +140,8 @@ class TestRoutes:
     def test_day(self, client):
         r = client.get("/api/congress/day/2026-09-24")
         assert r.status_code == 200
-        assert r.json()["chambers"]["senate"]["counts"]["billsPassed"] == 3
+        # S. 3257, S. 3258, H.R. 2388 passed; S. 283 and S. 240 cleared by concurrence.
+        assert r.json()["chambers"]["senate"]["counts"]["billsPassed"] == 5
 
     def test_bad_date(self, client):
         assert client.get("/api/congress/day/2026-02-30").status_code == 422
@@ -130,7 +153,7 @@ class TestRoutes:
         assert client.get("/api/congress/month/2026-09").json()["end"] == "2026-09-30"
 
     def test_bill_days(self, week_of_sept_21):
-        days = cs.bill_days(week_of_sept_21, "S.4668")
+        days = cs.bill_days(week_of_sept_21, "S.4668", 119)
         assert [d["date"] for d in days] == ["2026-09-24"]
         assert {e["kind"] for e in days[0]["entries"]} == {"vote"}
 
@@ -258,3 +281,23 @@ def test_became_law_from_the_law_list_and_the_bills_just_signed(db_session):
     assert week[0]["text"] == "Became Public Law No: 119-68."
     # HR.1043 is not listed again in February under its later action.
     assert cs._became_law(db_session, date(2026, 2, 9), date(2026, 2, 15)) == []
+
+
+def test_bill_days_are_of_the_bills_congress(week_of_sept_21):
+    # S. 4668 of the next Congress is another bill.
+    db = week_of_sept_21
+    db.add(RollCall(chamber="senate", congress=120, session=1, number=5, date="2027-02-02",
+                    question="On Passage", result="Passed", yeas=60, nays=40, bill_id="S.4668"))
+    db.add(CongressEvent(chamber="senate", date="2027-02-02", kind="passed", seq=0, name="", text="Senate passed S. 4668",
+                         bill_id="S.4668", source="digest"))
+    db.commit()
+    assert [d["date"] for d in cs.bill_days(db, "S.4668", 119)] == ["2026-09-24"]
+    assert [d["date"] for d in cs.bill_days(db, "S.4668", 120)] == ["2027-02-02"]
+
+
+def test_routine_lists_are_named_not_counted():
+    counts = {"billsPassed": 0, "resolutionsPassed": 0, "recordVotes": 0, "confirmed": 7, "confirmedLists": 1}
+    day = {"status": "final", "counts": counts, "minutesInSession": None, "adjournmentText": ""}
+    assert cs._chamber_sentence("senate", day) == "The Senate confirmed 7 nominations and routine lists."
+    counts.update(confirmed=0)
+    assert cs._chamber_sentence("senate", day) == "The Senate confirmed routine lists of nominations."

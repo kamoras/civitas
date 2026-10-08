@@ -12,7 +12,7 @@ from app.pipeline.analyze.promise_quality import (
     _FILLER_RE,
     clean_promises,
 )
-from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.pipeline.analyze.score_calculator import NON_INDUSTRY_CODES, compute_overall_score
 from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
@@ -371,9 +371,13 @@ def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
 
 
 def get_states_with_counts(db: Session) -> list[StateCountSchema]:
-    """Return a list of states that have senators, with counts."""
+    """States with serving senators, and how many each has. A departed
+    senator's row stays through the retirement grace period
+    (member_lifecycle), so counting every row gave a state with a newly
+    seated successor three senators."""
     rows = (
         db.query(Senator.state, func.count(Senator.id).label("cnt"))
+        .filter(Senator.is_current == True)  # noqa: E712
         .group_by(Senator.state)
         .order_by(Senator.state)
         .all()
@@ -421,6 +425,10 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
     top_industry_map: dict[str, str] = {}
     ind_rows = (
         db.query(IndustryDonation.senator_id, IndustryDonation.name)
+        # An industry, not small donors, unattributed individuals or
+        # unclassified money: the leaderboard and public API read this as
+        # the member's top industry.
+        .filter(IndustryDonation.industry.notin_(NON_INDUSTRY_CODES))
         .order_by(IndustryDonation.senator_id, IndustryDonation.total.desc())
         .all()
     )

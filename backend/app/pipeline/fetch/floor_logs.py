@@ -162,8 +162,8 @@ def house_roll_call_url(year: int, number: int) -> str:
     return f"https://clerk.house.gov/evs/{year}/roll{number:03d}.xml"
 
 
-_YEA = {"yea", "aye", "guilty"}
-_NAY = {"nay", "no", "not guilty"}
+YEA_POSITIONS = {"yea", "aye", "guilty"}
+NAY_POSITIONS = {"nay", "no", "not guilty"}
 
 
 def tally(members: list[dict]) -> dict:
@@ -173,9 +173,9 @@ def tally(members: list[dict]) -> dict:
     out = {"yeas": 0, "nays": 0, "present": 0, "not_voting": 0}
     for m in members:
         cast = (m.get("voteCast") or "").strip().lower()
-        if cast in _YEA:
+        if cast in YEA_POSITIONS:
             out["yeas"] += 1
-        elif cast in _NAY:
+        elif cast in NAY_POSITIONS:
             out["nays"] += 1
         elif cast == "present":
             out["present"] += 1
