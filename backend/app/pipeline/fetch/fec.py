@@ -518,12 +518,24 @@ def compute_recent_election_cycles(financials: list[dict], office: str) -> list[
     so the detail window is bounded exactly like the totals
     (normalize_finance) — otherwise an old losing run would supply the
     donor detail for a member whose totals come from the current campaign.
+
+    The cycles are the ones the FEC's own totals for that election cover
+    (its per-cycle rows), and the full period only when no such row is
+    held: a senator first elected in a special election has a regular
+    election whose totals start after it, and the six-year period read the
+    special's committee money into the regular election's detail (one
+    breakdown summed to 1.5 times the campaign's contributions).
     """
     cycles: list[int] = []
     for c in select_recent_elections(financials, office=office):
         election_year = financials_election_year(c)
-        if election_year:
-            cycles.extend(election_period_cycles(int(election_year), office))
+        if not election_year:
+            continue
+        covered = sorted({
+            int(r["cycle"]) for r in financials
+            if r.get("cycle") and financials_election_year(r) == election_year
+        }, reverse=True)
+        cycles.extend(covered or election_period_cycles(int(election_year), office))
     return cycles
 
 
@@ -1201,10 +1213,23 @@ def structured_industry(meta: dict | None) -> str | None:
     Measured 2026-10-08 on the donors stored then: 21% of the rows from
     labor organizations' PACs carried another industry (one union's PAC,
     203 rows, as GUNS), and on corporate PACs whose sponsor the SEC lists,
-    the name classifier agreed with the SEC's code on 59.5% of rows."""
+    the name classifier agreed with the SEC's code on 59.5% of rows.
+
+    A PAC the FEC records with no sponsoring organization at all (a
+    nonconnected committee: no organization type, no connected
+    organization) is POLITICAL too. Measured 2026-10-08 on a random 80 of
+    the 142 such PACs among stored donors, judged by hand: 55 were
+    ideological or issue committees, which the name classifier filed under
+    an industry two times in three (one as real estate on 125 rows, an
+    environmental-justice PAC as firearms); the rest were partnership
+    (law and accounting firm) and physician-group PACs, which lose their
+    industry and drop out of the industry mix rather than land in a wrong
+    one. 69% correct against the classifier's 35% on the same names
+    (McNemar p < 0.001). A source that doesn't record the organization
+    type (no "orgType" key) says nothing either way."""
     if not meta:
         return None
-    if is_political_committee(meta):
+    if is_political_committee(meta) or _is_nonconnected_pac(meta):
         return "POLITICAL"
     if meta.get("orgType") == "L":
         return "LABOR_UNIONS"
@@ -1224,6 +1249,27 @@ def committee_id_of(receipt: dict) -> str | None:
     if receipt.get("entity_type") in COMMITTEE_ENTITY_TYPES and receipt.get("contributor_id"):
         return receipt["contributor_id"]
     return None
+
+
+def is_joint_fundraiser(meta: dict | None) -> bool:
+    """Whether the FEC registers this committee as a joint fundraising
+    representative (designation "J"). What it sends a participant is the
+    participant's share of individual donors' gifts, which the candidate
+    reports as a transfer and the FEC's totals leave out of contributions:
+    listed as a donor it was the candidate's own fundraising counted again
+    (2026-10-08: "... Victory" committees among senators' top donors)."""
+    return bool(meta) and meta.get("designation") == "J"
+
+
+# PAC committee types: N (not qualified) and Q (qualified).
+_PAC_TYPES = frozenset({"N", "Q"})
+
+
+def _is_nonconnected_pac(meta: dict) -> bool:
+    return (
+        meta.get("type") in _PAC_TYPES and "orgType" in meta
+        and not meta.get("orgType") and not meta.get("connectedOrg")
+    )
 
 
 def is_political_committee(meta: dict | None) -> bool:

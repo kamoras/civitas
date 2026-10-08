@@ -1,12 +1,11 @@
-"""Where four Action Center similarity thresholds come from.
+"""Where the Action Center's article-clustering threshold comes from.
 
 The same shape as explore_ranking.py: a value in use is the stored
 calibration if one exists, else the bundled file, and the bundled file
-says where its numbers came from. What is new here is where calibration
-gets its evidence. None of these four had a logged distribution, so the
-refresh now records one, and every point carries a label that is NOT the
-similarity being calibrated — a threshold fitted to its own decisions
-would only ever confirm itself:
+says where its numbers came from. Calibration reads a logged distribution
+whose every point carries a label that is NOT the similarity being
+calibrated — a threshold fitted to its own decisions would only ever
+confirm itself:
 
   cluster_title    two articles' day-centered title similarity, labelled
                    by whether their named entities and numbers overlap
@@ -14,20 +13,15 @@ would only ever confirm itself:
                    similarity alone cannot separate same-event from
                    same-theme (see _cluster_articles), which is why the
                    label has to come from somewhere else.
-  near_identical   a new issue against an existing one, labelled by the
-                   same signature test. The threshold is where title
-                   similarity is conclusive on its own, so it is fitted
-                   for precision: the lowest value above which no pair
-                   was a different story.
-  monitor_issue    issue vs monitor, labelled by the LLM gate that
-                   already judges the borderline band.
-  monitor_merge    monitor vs monitor, labelled the same way by the
-                   merge gate.
 
-A gate only ever sees pairs above its own threshold, so on its own it
-could never show that the threshold is too high. Each run therefore also
-asks it about the single closest pair BELOW (probe_below), one extra call
-per stage per run, which is what lets the fitted value move down.
+near_identical (where title similarity alone decides that a new issue is
+an existing one) is bundled and not fitted: its label was that same
+signature test, which on 2026-10-08 called 65 issue pairs the same story
+when 16 were (titles read by hand), so a fit would find only where the test
+agrees with itself. The monitor thresholds were fitted against the LLM
+gates' own verdicts, which approved 81 of 88 issue matches, off-topic ones
+included; they are measured constants in action_center.py now
+(_MONITOR_ISSUE_SIM, _MONITOR_MERGE_TITLE_SIM).
 
 Counters live in action-metrics as f"thr_{name}_{yes|no}_{percent}" —
 the same per-run rows, the same 60-day retention.
@@ -49,8 +43,7 @@ from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-NAMES = ("cluster_title", "near_identical", "monitor_issue", "monitor_merge")
-_PRECISION_FITTED = frozenset({"near_identical"})
+NAMES = ("cluster_title",)
 
 _BUNDLED = pathlib.Path(__file__).resolve().parents[2] / "data" / "action_thresholds.json"
 _CACHE_TIER = "action"
@@ -105,22 +98,14 @@ def record(name: str, sim: float, same: bool) -> None:
     action_metrics.increment(f"thr_{name}_{'yes' if same else 'no'}_{percent}")
 
 
-def fit(yes: dict[int, int], no: dict[int, int], precision: bool) -> float | None:
+def fit(yes: dict[int, int], no: dict[int, int]) -> float | None:
     """A threshold from labelled counts per similarity percent, or None
-    when either class has fewer than MIN_PER_CLASS pairs.
-
-    precision: the lowest value with no different-story pair at or above
-    it (and enough same-story pairs there to trust). Otherwise the value
-    that misclassifies fewest pairs — same-story below it plus
-    different-story at or above it — the median of the tied values.
+    when either class has fewer than MIN_PER_CLASS pairs: the value that
+    misclassifies fewest pairs — same-story below it plus different-story
+    at or above it — the median of the tied values.
     """
     if sum(yes.values()) < MIN_PER_CLASS or sum(no.values()) < MIN_PER_CLASS:
         return None
-    if precision:
-        highest_no = max(no)
-        if sum(n for p, n in yes.items() if p > highest_no) < MIN_PER_CLASS:
-            return None
-        return (highest_no + 1) / 100
     errors = [
         sum(n for p, n in yes.items() if p < t) + sum(n for p, n in no.items() if p >= t)
         for t in range(101)
@@ -151,7 +136,7 @@ def fit_all(db, previous: dict[str, float]) -> dict:
     for name in NAMES:
         yes, no = counts[name]["yes"], counts[name]["no"]
         support[name] = {"same": sum(yes.values()), "different": sum(no.values())}
-        fitted = fit(yes, no, precision=name in _PRECISION_FITTED)
+        fitted = fit(yes, no)
         if fitted is not None:
             values[name] = fitted
             fitted_names.append(name)

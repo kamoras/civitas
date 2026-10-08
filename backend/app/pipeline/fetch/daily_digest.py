@@ -183,7 +183,12 @@ def _split_name(text: str) -> tuple[str, str]:
 
 # ── Chamber action ────────────────────────────────────────────────
 
-_TIME = r"(\d{1,2}(?::\d{2})?\s[ap]\.m\.|12 noon|noon|midnight)"
+# Seconds too: the Senate's pro forma entries give them ("10:30:06 a.m.").
+_TIME = r"(\d{1,2}(?::\d{2}){0,2}\s[ap]\.m\.|12 noon|noon|midnight)"
+# A pro forma day is one sentence under Chamber Action, with no
+# "Adjournment:" heading: "The Senate met at 10:30:06 a.m. in pro forma
+# session, and adjourned at 10:33:29 a.m., until 11 a.m., on Monday, ...".
+_PRO_FORMA_RE = re.compile(r"\bThe (?:Senate|House) met at\b.*?\bpro forma session\b.*?(?:\d{4}\.|$)")
 _CONVENED_RE = re.compile(r"\b(?:convened|met)\b.*?\bat " + _TIME)
 _ADJOURNED_RE = re.compile(r"\badjourned\b.*?\bat " + _TIME)
 _NOT_IN_SESSION_RE = re.compile(r"\bwas not in session\b")
@@ -282,6 +287,14 @@ def parse_chamber_action(text: str) -> dict:
         elif heading and _HOUSE_PASSED_RE.search(rest) and first_bill_id(rest):
             out["events"].append({"kind": "passed", "name": heading, "text": rest,
                                   "bill_id": first_bill_id(rest), "pages": entry["pages"]})
+    if not out["adjournment_text"] and (m := _PRO_FORMA_RE.search(joined)):
+        # Read as a session with no times, the day said "met and took no
+        # record votes" (2026-10-01, 10-05 and 10-06).
+        out["adjournment_text"] = m.group(0).strip()
+        if c := _CONVENED_RE.search(out["adjournment_text"]):
+            out["convened_at"] = c.group(1)
+        if a := _ADJOURNED_RE.search(out["adjournment_text"]):
+            out["adjourned_at"] = a.group(1)
     return out
 
 

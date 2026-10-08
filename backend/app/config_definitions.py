@@ -73,7 +73,10 @@ INDUSTRIES: dict[str, dict] = {
     "MANUFACTURING":   {"name": "Manufacturing",            "color": "#95a5a6"},
     "HEALTHCARE":      {"name": "Healthcare / Hospitals",   "color": "#ff6b81"},
     "OTHER":           {"name": "Other (Unclassified)",     "color": "#444444"},
-    "SMALL_DONORS":    {"name": "Small Donors (<$200)",     "color": "#00ff41"},
+    # The FEC's unitemized individual contributions: donors who gave $200
+    # or less in the cycle. Small gifts a conduit itemizes (ActBlue,
+    # WinRed itemize every gift) are not in it.
+    "SMALL_DONORS":    {"name": "Small Donors (unitemized)", "color": "#00ff41"},
     "LARGE_INDIVIDUAL":{"name": "Large Individual Donors",  "color": "#39ff14"},
     "UNCLASSIFIED":    {"name": "Other Sources",            "color": "#666666"},
 }

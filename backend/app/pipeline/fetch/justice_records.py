@@ -43,7 +43,16 @@ _rate_limiter = RateLimiter(rps=1.0)
 _RELEASE_RE = re.compile(r"https://scdb\.la\.psu\.edu/data/(\d{4})-release-(\d{2})/")
 _DOWNLOAD_RE = re.compile(r'<a[^>]+href="(https://scdb\.la\.psu\.edu/\?jet_download=[0-9a-f]+)"[^>]*>(.*?)</a>', re.S)
 _SCDB_COLUMNS = {"justiceName", "voteId", "dateDecision", "term", "decisionType",
-                 "petitioner", "respondent", "partyWinning", "majority"}
+                 "petitioner", "respondent", "partyWinning", "majority",
+                 "caseId", "docket", "caseName", "justice", "vote", "opinion",
+                 "majOpinWriter", "majVotes", "minVotes"}
+# Orally argued cases, the Database's own unit for a term's decisions: an
+# opinion of the Court (1), a per curiam after argument (6) or a judgment
+# of the Court (7).
+_ARGUED_DECISIONS = {"1", "6", "7"}
+# Terms of case votes kept for the scorecard's record (the same window the
+# Oyez fetch reads, justice_votes.fetch_case_votes).
+RECENT_TERMS = 4
 # Orally argued, signed decisions: an opinion of the Court (1) or a
 # judgment of the Court (7), as Epstein & Posner count them.
 _SIGNED_DECISIONS = {"1", "7"}
@@ -105,10 +114,47 @@ def scdb_president_votes(rows) -> tuple[list[tuple[Vote, int]], set[str], int]:
     return votes, newest.get(last, set()), last
 
 
+def _int(value: str) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def scdb_case_votes(rows, first_term: int) -> list[list]:
+    """Each justice's vote in each orally argued case from `first_term` on:
+    [case id, docket, case name, term, decided, justice name, side,
+    opinion, majority votes, minority votes]. side is "majority" or
+    "minority"; opinion "majority", "dissent", "concurrence" or "none",
+    the shape justice_votes.fetch_case_votes reads from Oyez. A justice not
+    participating (no majority code) has no row."""
+    out: dict[tuple[str, str], list] = {}
+    for r in rows:
+        term = _int(r["term"])
+        decided = _iso(r["dateDecision"])
+        if term < first_term or r["decisionType"] not in _ARGUED_DECISIONS or r["majority"] not in ("1", "2") or not decided:
+            continue
+        side = "majority" if r["majority"] == "2" else "minority"
+        opinion = "none"
+        if r["opinion"] in ("2", "3"):  # wrote or joined in writing an opinion
+            if side == "minority":
+                opinion = "dissent"
+            elif r["vote"] in ("3", "4") or r["justice"] != r["majOpinWriter"]:
+                opinion = "concurrence"
+            else:
+                opinion = "majority"
+        out[(r["caseId"], r["justiceName"])] = [
+            r["caseId"], r["docket"].strip(), r["caseName"], term, decided, r["justiceName"],
+            side, opinion, _int(r["majVotes"]), _int(r["minVotes"]),
+        ]
+    return list(out.values())
+
+
 async def fetch_scdb(client: httpx.AsyncClient, db: Session) -> dict | None:
     """The newest release's president-case votes: {"release", "term",
     "current": [justiceName], "votes": [[justice, date, government
-    petitioner, for government, term], ...]}. None when the archive, the
+    petitioner, for government, term], ...], "cases": scdb_case_votes for
+    the last RECENT_TERMS + 1 terms}. None when the archive, the
     release page or its download can't be read, or the file isn't the
     justice-centered data it should be."""
     archive = await _get(client, SCDB_ARCHIVE, "SCDB archive")
@@ -121,7 +167,7 @@ async def fetch_scdb(client: httpx.AsyncClient, db: Session) -> dict | None:
         return None
     year, number = releases[-1]
     label = f"{year} Release {number:02d}"
-    cached = api_cache_get(db, _CACHE_TIER, f"scdb-{year}-{number:02d}", max_age_hours=24 * 365)
+    cached = api_cache_get(db, _CACHE_TIER, f"scdb-v2-{year}-{number:02d}", max_age_hours=24 * 365)
     if cached is not None:
         return cached
     page = await _get(client, f"{SCDB_ARCHIVE}{year}-release-{number:02d}/", f"SCDB {label}")
@@ -148,15 +194,20 @@ async def fetch_scdb(client: httpx.AsyncClient, db: Session) -> dict | None:
             if not _SCDB_COLUMNS <= set(reader.fieldnames or ()):
                 logger.warning("SCDB %s: unexpected columns %s", label, reader.fieldnames)
                 return None
-            votes, current, term = scdb_president_votes(reader)
+            rows = list(reader)
+            votes, current, term = scdb_president_votes(rows)
+            # One term more than the window: the cached release outlives a
+            # calendar year, and the caller picks the window by the clock.
+            cases = scdb_case_votes(rows, term - RECENT_TERMS)
     except (zipfile.BadZipFile, StopIteration, KeyError):
         logger.warning("SCDB %s: the download is not the justice-centered data", label, exc_info=True)
         return None
     result = {
         "release": label, "term": term, "current": sorted(current),
         "votes": [[v.justice, v.date, v.government_petitioner, v.for_government, t] for v, t in votes],
+        "cases": cases,
     }
-    api_cache_set(db, _CACHE_TIER, f"scdb-{year}-{number:02d}", result, normal_ttl_hours=24 * 365)
+    api_cache_set(db, _CACHE_TIER, f"scdb-v2-{year}-{number:02d}", result, normal_ttl_hours=24 * 365)
     return result
 
 

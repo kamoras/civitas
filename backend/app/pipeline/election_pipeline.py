@@ -60,6 +60,7 @@ from app.models import (
 )
 from app.pipeline.analyze import election_bluesky, election_coverage, race_relevance
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
+from app.pipeline.fetch.congress_legislators import fetch_bioguide_to_fec_ids
 from app.pipeline.fetch.fec import fetch_all_candidates, fetch_candidate_financials
 from app.pipeline.fetch.state_candidates import (
     crawl_for_new_sources,
@@ -1427,6 +1428,24 @@ async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
     return detail
 
 
+def link_members(db: Session, cycle: int, crosswalk: dict[str, list[str]]) -> int:
+    """Record, on every candidate of `cycle` whose FEC id the bioguide->FEC
+    crosswalk lists, the member it belongs to (Candidate.member_bioguide).
+    An empty crosswalk (the read failed) changes nothing. Returns how many
+    candidates carry a member."""
+    if not crosswalk:
+        return 0
+    owner = {fec_id: bioguide for bioguide, ids in crosswalk.items() for fec_id in ids}
+    linked = 0
+    for cand in db.query(Candidate).join(Race, Candidate.race_id == Race.id).filter(Race.cycle_year == cycle):
+        member = owner.get(cand.id)
+        if cand.member_bioguide != member:
+            cand.member_bioguide = member
+        linked += member is not None
+    db.commit()
+    return linked
+
+
 async def run_election_pipeline(cycle: int | None = None) -> dict:
     """Sync candidate rosters, refresh a prioritized batch of financials,
     ingest race coverage, post grounded Bluesky updates, and snapshot
@@ -1486,6 +1505,12 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 db.rollback()
                 logger.exception("Roster sync failed — continuing")
                 progress.fail("roster_sync")
+            try:
+                linked = link_members(db, cycle, await fetch_bioguide_to_fec_ids(client, db))
+                logger.info("Linked %d candidates to their member records", linked)
+            except Exception:
+                db.rollback()
+                logger.exception("Member linking failed — continuing")
 
             run.current_phase = "financial"
             db.commit()

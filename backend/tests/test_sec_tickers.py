@@ -124,3 +124,22 @@ def _no_retry(fetch):
     async def once(*args, **kwargs):
         return await fetch(*args, **{**kwargs, "retries": 1, "backoff_s": 0})
     return once
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("UNION PAC CORP", 1),                         # an abbreviated word
+    ("HONEYWELL INTL INC COM", 2),                 # letters in order, then the security
+    ("PROCTER GAMBLE CO", 3),                      # "&" dropped
+    ("ADVANCED MICRO DEVIC", 4),                   # cut short
+    ("BERKSHIRE HATHAWAY INC DEL CL B", 5),        # state of incorporation and share class
+    ("UNION PACIFIC CORP 5% NOTES DUE 2030", None),  # a bond: words that aren't the security's
+    ("UNION PAC RESOURCES", None),                 # more words than the title
+    ("AMERICAN WTR WKS CO INC", None),             # two titles fit: left
+])
+def test_a_statements_short_form_matches_one_sec_title(name, expected):
+    titles = {issuer_key(t): cik for t, cik in [
+        ("Union Pacific Corp", 1), ("Honeywell International Inc", 2), ("Procter & Gamble Co", 3),
+        ("Advanced Micro Devices Inc", 4), ("Berkshire Hathaway Inc", 5),
+        ("American Water Works Co Inc", 6), ("American Western Works Co", 7),
+    ]}
+    assert sec_tickers.abbreviated_match(name, titles) == expected

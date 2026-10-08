@@ -154,7 +154,7 @@ describe("PresidentScorecard", () => {
     expect(screen.getByText("Ranked once the term ends")).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Approval has averaged 37\.3% so far, below the 50\.9% past presidents averaged over their first 20 months\. It fell 5\.6 points from 41\.0% at the start\. Presidents who started there typically rose 4\.8 points, so this is worse than usual\./
+        /Approval has averaged 37\.3% so far, below the 50\.9% past presidents averaged over their first 20 months\. Averaged over the first quarter of its polls and then the last, it fell 5\.6 points from 41\.0%\. Presidents who started there typically rose 4\.8 points, so this is worse than usual\./
       )
     ).toBeInTheDocument();
     // Each score shows its actual share of this president's overall, not

@@ -1,9 +1,7 @@
 {
-  "_source": "The values action_center.py used before calibration existed, each measured by hand and documented at its old definition: cluster_title 0.40 (complete-linkage cut, #659 replay of the 2026-09-27 feed), near_identical 0.92 (120 production issue pairs, 2026-07), monitor_issue 0.70 and monitor_merge 0.42 (2026-07). No script generates them; they are the starting point action_thresholds.calibrate() replaces, name by name, once it has MIN_PER_CLASS labelled pairs on each side. Regenerate this file from a calibration with scripts/calibrate_action_thresholds.py.",
+  "_source": "The values action_center.py used before calibration existed, each measured by hand and documented at its old definition: cluster_title 0.40 (complete-linkage cut, #659 replay of the 2026-09-27 feed) and near_identical 0.92 (120 production issue pairs, 2026-07). cluster_title is the starting point action_thresholds.calibrate() replaces once it has MIN_PER_CLASS labelled pairs on each side; near_identical is not fitted (see action_thresholds' docstring). Regenerate this file from a calibration with scripts/calibrate_action_thresholds.py.",
   "values": {
-    "cluster_title": 0.40,
-    "near_identical": 0.92,
-    "monitor_issue": 0.70,
-    "monitor_merge": 0.42
+    "cluster_title": 0.4,
+    "near_identical": 0.92
   }
 }
