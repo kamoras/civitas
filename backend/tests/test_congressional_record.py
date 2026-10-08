@@ -3,7 +3,6 @@ Record's own layout. Fixtures are real GovInfo granule HTML, trimmed
 (tests/fixtures/crec/)."""
 
 import asyncio
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -205,21 +204,23 @@ class TestPackageIndex:
     """GovInfo's collection lists packages by last modification: a
     reprocessed 1996 issue came back in a 60-day window."""
 
-    def test_only_this_congress_and_the_window(self, monkeypatch, freeze_utcnow):
-        freeze_utcnow(datetime(2026, 10, 7, 12))
+    def test_only_the_sitting_congress_newest_first(self, monkeypatch):
+        urls = []
         pages = [{"packages": [{"packageId": p} for p in (
-            "CREC-1996-07-10", "CREC-2026-09-24", "CREC-2026-07-01", "CREC-2026-10-06", "FR-2026-10-06",
+            "CREC-1996-07-10", "CREC-2026-09-24", "CREC-2025-01-02", "CREC-2025-01-03", "FR-2026-10-06",
         )]}]
 
         async def fake(client, url):
+            urls.append(url)
             return pages.pop(0)
 
         monkeypatch.setattr(cr, "_fetch_json", fake)
-        assert asyncio.run(cr.fetch_crec_packages(None, 60)) == ["CREC-2026-10-06", "CREC-2026-09-24"]
+        assert asyncio.run(cr.fetch_crec_packages(None)) == ["CREC-2026-09-24", "CREC-2025-01-03"]
+        assert "/collections/CREC/2025-01-03T00:00:00Z" in urls[0]  # the 119th convened
 
     def test_an_unreadable_index_is_none_not_empty(self, monkeypatch):
         async def fake(client, url):
             return None
 
         monkeypatch.setattr(cr, "_fetch_json", fake)
-        assert asyncio.run(cr.fetch_crec_packages(None, 60)) is None
+        assert asyncio.run(cr.fetch_crec_packages(None)) is None

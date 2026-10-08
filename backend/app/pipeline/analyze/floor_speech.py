@@ -53,7 +53,7 @@ speech prototypes), best 155; on an earlier sample of 300 turns under
 "I yield myself such time as I may consume" reads as floor business whole.
 
 Change a prototype or either constant and re-measure; then bump
-SPEECH_FORMAT in explore_pipeline.py so the stored window is re-read.
+SPEECH_FORMAT in explore_pipeline.py so the Congress is re-read.
 """
 
 import logging

@@ -35,7 +35,12 @@ from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.analyze.floor_speech import speech_flags, titled_speeches
 from app.pipeline.fetch.congress import congress_of_date
-from app.pipeline.fetch.congressional_record import CHAMBERS, fetch_crec_packages, fetch_day_speeches
+from app.pipeline.fetch.congressional_record import (
+    CHAMBERS,
+    congress_start,
+    fetch_crec_packages,
+    fetch_day_speeches,
+)
 from app.pipeline.fetch.presidential_actions import (
     fetch_recent_presidential_actions,
     _fetch_body_text,
@@ -318,35 +323,71 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
     return filled
 
 
-# Floor speeches, stored per day of the Record. Bump SPEECH_FORMAT when
-# what a day becomes changes (the parse, the floor-business test, titles,
-# the external_id): every day in the window is then read again, and its
-# documents replaced.
+# Floor speeches, stored per day of the Record, for the whole sitting
+# Congress (AGENTS.md §6). Bump SPEECH_FORMAT when what a day becomes
+# changes (the parse, the floor-business test, titles, the external_id):
+# every day is then read again, SPEECH_DAYS_PER_RUN a run, and each day's
+# documents are replaced as it is read — the old ones stay searchable
+# until then.
 SPEECH_FORMAT = "v1"
 _SPEECH_TYPES = {"Senate": "Senate Floor Speech", "House": "House Floor Speech"}
-# How long a day stays recorded as read: past any fetch window, since the
+# How long a day stays recorded as read: past the Congress, since the
 # Record of a day does not change once published.
-_DAY_READ_TTL_HOURS = 24 * 365
-_SPEECH_ID_PREFIX = "crec-"
+_DAY_READ_TTL_HOURS = 24 * 365 * 3
+_SPEECH_ID_PREFIX = f"crec-{SPEECH_FORMAT}-"
+
+# Days of the Record read per run, newest unread first: new issues, then
+# the back-fill toward the start of the Congress. Each costs, for a full
+# session day (measured over 14 days of the Record, 2026-03 to 2026-09):
+# about 73 GovInfo requests at GOVINFO_RPS = 1, so ~75 s waiting on the
+# rate limiter (the event loop free throughout); ~1,270 paragraphs through
+# the floor-business test (436/s on a desktop CPU, so ~32 s on the Pi,
+# which embedded at 8 windows/s against the desktop's 86 — run 2026-09-20)
+# in a worker thread; and ~286,000 characters of speech for the embed
+# step, ~320 windows or ~40 s on the Pi, also in a worker thread. About
+# 2.5 minutes a day, so 15 days add at most ~36 minutes to the nightly
+# Supplementary run (8-hour overrun budget); pro forma days cost a few
+# requests. The 119th Congress had 372 issues on 2026-10-08 (GovInfo's
+# CREC sitemaps), so a full back-fill, or a SPEECH_FORMAT re-read, takes
+# about 25 nights. The work on the event loop itself is parsing a
+# granule's text (~2 ms) and one commit a day.
+SPEECH_DAYS_PER_RUN = 15
 
 
 def _day_read_key(package_id: str) -> str:
     return f"crec-speeches-{SPEECH_FORMAT}-{package_id}"
 
 
-def _purge_out_of_scope_speeches(db: Session) -> int:
-    """Delete floor speeches outside the sitting Congress, and any stored
-    in a format this ingest no longer produces.
+def _read_frontier(packages: list[str], read: set[str]) -> str | None:
+    """The cursor: the oldest date down to which every issue, from the
+    newest, has been read in this format — the Congress's first day once
+    all have; None when the newest has not been. A day that failed holds
+    it until a later run reads that day."""
+    frontier = None
+    for package_id in packages:  # newest first
+        if package_id not in read:
+            return frontier
+        frontier = package_id.removeprefix("CREC-")
+    return congress_start(settings.CURRENT_CONGRESS).isoformat()
+
+
+def _purge_out_of_scope_speeches(db: Session, frontier: str | None) -> int:
+    """Delete floor speeches outside the sitting Congress, and those in an
+    older format dated on or after the read frontier.
 
     Explore's speeches are the sitting Congress's, as every scored window
     is (AGENTS.md §6). GovInfo's collection index lists packages by when
     they were last modified, and speeches from a reprocessed 1996 issue
     (six) and 2017 ones (two) reached the index that way (fixed at the
-    source in fetch_crec_packages). Speeches stored before
-    SPEECH_FORMAT existed carry "senate-floor-"/"house-floor-" ids: each
-    turn cut to 400/500 characters and titled after its whole Record
-    section, often another member's tribute — the ones inside the window
-    are read again in the new format; older ones cannot be fixed in place.
+    source in fetch_crec_packages).
+
+    An older format's speech — before SPEECH_FORMAT, "senate-floor-"/
+    "house-floor-" ids, each turn cut to 400/500 characters and titled
+    after its whole Record section — goes when its day is read again (the
+    day's documents are replaced). What this sweeps is what is left past
+    the frontier, where every issue has been read: rows on a date with no
+    issue. Nothing older than the frontier is touched, so search has no
+    gap while the back-fill runs.
     """
     rows = (
         db.query(ExploreDocument.id, ExploreDocument.date, ExploreDocument.external_id)
@@ -356,7 +397,8 @@ def _purge_out_of_scope_speeches(db: Session) -> int:
     doomed = [
         r.id for r in rows
         if congress_of_date(r.date or "") != settings.CURRENT_CONGRESS
-        or not (r.external_id or "").startswith(_SPEECH_ID_PREFIX)
+        or (frontier is not None and (r.date or "") >= frontier
+            and not (r.external_id or "").startswith(_SPEECH_ID_PREFIX))
     ]
     for i in range(0, len(doomed), 500):
         (db.query(ExploreDocument)
@@ -387,30 +429,33 @@ def _speech_documents(chamber: str, speeches: list[dict], lookup: "_SpeakerLooku
     ]
 
 
-async def _ingest_floor_speeches(db: Session, client: httpx.AsyncClient, days_back: int) -> dict[str, int]:
-    """Store the window's floor speeches, a day of the Record at a time;
+async def _ingest_floor_speeches(db: Session, client: httpx.AsyncClient) -> dict[str, int]:
+    """Store the sitting Congress's floor speeches, up to
+    SPEECH_DAYS_PER_RUN days of the Record a run, newest unread first;
     returns how many were added per chamber.
 
     A day is read whole (every granule in which the Record lists a member
     speaking), its turns sorted into speeches and floor business
-    (analyze/floor_speech.py), and its stored speeches replaced by what it
-    holds now; then it is recorded as read and not fetched again. A day
-    that could not be fetched whole is left unrecorded and tried next run.
+    (analyze/floor_speech.py), and its stored speeches — any format —
+    replaced by what it holds now; then it is recorded as read and not
+    fetched again. A day that could not be fetched whole is left
+    unrecorded: it holds the read frontier (_read_frontier) and is tried
+    next run, never taken as a day with no speeches.
     """
     added = {chamber: 0 for chamber in CHAMBERS}
-    _purge_out_of_scope_speeches(db)
-    packages = await fetch_crec_packages(client, days_back)
+    packages = await fetch_crec_packages(client)
     if packages is None:
         logger.warning("Congressional Record index unavailable — floor speeches not updated this run")
+        _purge_out_of_scope_speeches(db, None)
         return added
+    read = {p for p in packages
+            if api_cache_get(db, "govinfo", _day_read_key(p), max_age_hours=_DAY_READ_TTL_HOURS)}
     lookups = {"Senate": _senator_lookup(db), "House": _rep_lookup(db)}
-    unread = 0
-    for package_id in packages:
-        if api_cache_get(db, "govinfo", _day_read_key(package_id), max_age_hours=_DAY_READ_TTL_HOURS):
-            continue
+    failed: list[str] = []
+    for package_id in [p for p in packages if p not in read][:SPEECH_DAYS_PER_RUN]:
         day = await fetch_day_speeches(client, package_id)
         if day is None:
-            unread += 1
+            failed.append(package_id)
             continue
         stored = {
             r.external_id: r.id for r in db.query(ExploreDocument.id, ExploreDocument.external_id).filter(
@@ -436,9 +481,14 @@ async def _ingest_floor_speeches(db: Session, client: httpx.AsyncClient, days_ba
         api_cache_set(db, "govinfo", _day_read_key(package_id), True,
                       normal_ttl_hours=_DAY_READ_TTL_HOURS, commit=False)
         db.commit()
-    if unread:
-        logger.warning("Congressional Record: %d of %d days could not be read whole — retried next run",
-                       unread, len(packages))
+        read.add(package_id)
+    frontier = _read_frontier(packages, read)
+    _purge_out_of_scope_speeches(db, frontier)
+    logger.info("Congressional Record: %d of %d days read in format %s, frontier %s",
+                len(read), len(packages), SPEECH_FORMAT, frontier or "none yet")
+    if failed:
+        logger.warning("Congressional Record: %d days could not be read whole (%s) — retried next run",
+                       len(failed), ", ".join(failed))
     return added
 
 
@@ -659,7 +709,7 @@ def _purge_orphaned_vectors(db: Session) -> int:
     return removed
 
 
-async def run_explore_pipeline(days_back: int = 60) -> dict:
+async def run_explore_pipeline() -> dict:
     """Run the full explore document ingestion pipeline.
 
     Returns dict with counts of documents ingested per source.
@@ -682,7 +732,7 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
             # --- 1-2. Senate and House floor speeches ---
             logger.info("Explore pipeline: fetching floor speeches...")
             try:
-                floor = await _ingest_floor_speeches(db, client, days_back)
+                floor = await _ingest_floor_speeches(db, client)
                 stats["senate_floor"], stats["house_floor"] = floor["Senate"], floor["House"]
                 logger.info("Explore pipeline: ingested %d Senate and %d House floor speeches",
                             floor["Senate"], floor["House"])

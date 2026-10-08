@@ -5,10 +5,10 @@ The Congressional Record (CREC) is published daily when Congress is in
 session, one GovInfo package per day, one granule per Record section.
 
 Data flow, per day:
-  1. List the window's packages via the GovInfo collections endpoint,
-     keeping only issues dated inside it (the endpoint lists packages
-     *modified* since a date, and GovInfo reprocesses old issues: a 1996
-     issue once came back in a 60-day window).
+  1. List the sitting Congress's packages via the GovInfo collections
+     endpoint, keeping only issues dated inside it (the endpoint lists
+     packages *modified* since a date, and GovInfo reprocesses old issues:
+     a 1996 issue once came back in a 60-day window).
   2. Read the package's MODS: every granule with its chamber and the
      members the Record lists as SPEAKING in it. Only granules of the
      chamber with a speaking member are fetched — the rest (prayer,
@@ -27,19 +27,19 @@ saved under the granule's title, so a member answering a colleague's
 tribute was credited with a speech titled after the tribute.
 """
 
+import asyncio
 import html
 import logging
 import re
 import xml.etree.ElementTree as ET
-from datetime import timedelta
+from datetime import date
 
 import httpx
 
 from app.config import settings
-from app.pipeline.fetch.congress import congress_of_date
+from app.pipeline.fetch.congress import congress_first_year, congress_of_date
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry, redact_url
 from app.pipeline.rate_limiter import RateLimiter
-from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -92,30 +92,35 @@ async def _fetch_htm(client: httpx.AsyncClient, url: str) -> str | None:
 # ── Package index ────────────────────────────────────────────────
 
 
+def congress_start(congress: int) -> date:
+    """The day a Congress convenes: January 3 of its first year (20th
+    Amendment)."""
+    return date(congress_first_year(congress), 1, 3)
+
+
 def issue_date(package_id: str) -> str:
     """"CREC-2026-09-24" -> "2026-09-24"."""
     return package_id.removeprefix("CREC-")
 
 
-async def fetch_crec_packages(client: httpx.AsyncClient, days_back: int = 60) -> list[str] | None:
-    """Daily CREC package IDs (e.g. ``CREC-2025-02-20``) issued in the last
-    *days_back* days and in the sitting Congress, newest first; None when
-    the index could not be read.
+async def fetch_crec_packages(client: httpx.AsyncClient) -> list[str] | None:
+    """Daily CREC package IDs (e.g. ``CREC-2025-02-20``) of the sitting
+    Congress, newest first; None when the index could not be read.
 
-    Not cached: a page of the index is one request, and the days it lists
-    are each read once (the caller records them), so a fresh listing every
-    run costs nothing and shows a new issue the night it is published —
-    the 72-hour cache it had held one back for up to three days."""
-    since = utcnow() - timedelta(days=days_back)
-    first_day = since.strftime("%Y-%m-%d")
-    logger.info("Fetching CREC package index (last %d days)...", days_back)
+    Not cached: the index is a few requests (about 370 issues a Congress,
+    100 a page), and each day it lists is read once (the caller records
+    it), so a fresh listing every run shows a new issue the night it is
+    published — the 72-hour cache it had held one back for up to three
+    days."""
+    since = congress_start(settings.CURRENT_CONGRESS)
+    logger.info("Fetching CREC package index (since %s)...", since)
 
     packages: list[str] = []
     offset = 0
     while True:
         data = await _fetch_json(
             client,
-            f"{GOVINFO_API_BASE}/collections/CREC/{since.strftime('%Y-%m-%dT00:00:00Z')}"
+            f"{GOVINFO_API_BASE}/collections/CREC/{since.isoformat()}T00:00:00Z"
             f"?pageSize=100&offset={offset}",
         )
         if data is None:
@@ -125,8 +130,7 @@ async def fetch_crec_packages(client: httpx.AsyncClient, days_back: int = 60) ->
             pid = pkg.get("packageId", "")
             # The endpoint filters on last modification, not issue date:
             # a reprocessed 1996 issue is "modified" this month.
-            if (pid.startswith("CREC-") and issue_date(pid) >= first_day
-                    and congress_of_date(issue_date(pid)) == settings.CURRENT_CONGRESS):
+            if pid.startswith("CREC-") and congress_of_date(issue_date(pid)) == settings.CURRENT_CONGRESS:
                 packages.append(pid)
         if len(batch) < 100:
             break
@@ -414,7 +418,9 @@ async def fetch_day_speeches(client: httpx.AsyncClient, package_id: str) -> dict
     if mods is None:
         return None
     try:
-        granules = {chamber: speech_granules(mods, chamber.upper()) for chamber in CHAMBERS}
+        # Off the event loop: a busy day's MODS is 2 MB of XML.
+        granules = await asyncio.to_thread(
+            lambda: {chamber: speech_granules(mods, chamber.upper()) for chamber in CHAMBERS})
     except ET.ParseError:
         logger.warning("CREC MODS for %s is not XML", package_id)
         return None

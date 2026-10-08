@@ -245,7 +245,7 @@ class TestCpuWorkDoesNotBlockTheEventLoop:
             index_is_whole=MagicMock(return_value=True),
         ):
             beat = asyncio.create_task(heartbeat())
-            run = asyncio.create_task(run_explore_pipeline(days_back=1))
+            run = asyncio.create_task(run_explore_pipeline())
             await embed_started.wait()
             before = ticks
             await run
@@ -272,7 +272,7 @@ async def test_an_incomplete_index_is_rebuilt_whole_in_the_run_not_topped_up(db_
         rebuild_explore_index=rebuild,
         top_up_explore_index=embed,
     ):
-        await run_explore_pipeline(days_back=1)
+        await run_explore_pipeline()
     rebuild.assert_called_once()
     embed.assert_not_called()
 
@@ -297,31 +297,63 @@ def _speech_doc(doc_id: int, ext_id: str, date: str, chamber: str = "Senate") ->
     )
 
 
-class TestOutOfScopeSpeechPurge:
-    """Speeches are the sitting Congress's (119 in tests), in the current
-    format; anything else stored goes, by the run itself."""
+OLD = "senate-floor-SMITH-{}-aaaaaaaa"  # the format before SPEECH_FORMAT
+NEW = "crec-v1-CREC-{}-pt1-PgS1-ab12cd34"
 
-    def test_old_issues_and_the_old_format_go_and_the_rest_stays(self, db_session):
+
+class TestOutOfScopeSpeechPurge:
+    """Speeches are the sitting Congress's (119 in tests). An older
+    format's go only where the read frontier has passed."""
+
+    def test_outside_the_congress_goes_whatever_the_frontier(self, db_session):
         db_session.add_all([
-            _speech_doc(1, "crec-CREC-1996-07-10-pt1-PgS1-ab12cd34", "1996-07-10"),  # a reprocessed issue
-            _speech_doc(2, "crec-CREC-2024-06-11-pt1-PgS1-ab12cd34", "2024-06-11"),  # the last Congress
-            _speech_doc(3, "senate-floor-SMITH-2026-05-19-aaaaaaaa", "2026-05-19"),  # truncated, mistitled
-            _speech_doc(4, "crec-CREC-2026-05-19-pt1-PgS2-ab12cd34", "2026-05-19"),
+            _speech_doc(1, NEW.format("1996-07-10"), "1996-07-10"),  # a reprocessed issue
+            _speech_doc(2, NEW.format("2024-06-11"), "2024-06-11"),  # the last Congress
+            _speech_doc(3, OLD.format("2026-05-19"), "2026-05-19"),
             _regulatory_doc("A rule from 1996.", doc_id=5),
         ])
         db_session.commit()
-        assert _purge_out_of_scope_speeches(db_session) == 3
-        assert {d.id for d in db_session.query(ExploreDocument)} == {4, 5}
+        assert _purge_out_of_scope_speeches(db_session, None) == 2
+        assert {d.id for d in db_session.query(ExploreDocument)} == {3, 5}
+
+    def test_an_old_format_goes_only_on_or_after_the_frontier(self, db_session):
+        db_session.add_all([
+            _speech_doc(1, OLD.format("2026-05-19"), "2026-05-19"),  # not yet re-read: kept
+            _speech_doc(2, OLD.format("2026-09-20"), "2026-09-20"),  # past the frontier
+            _speech_doc(3, NEW.format("2026-09-24"), "2026-09-24"),
+        ])
+        db_session.commit()
+        assert _purge_out_of_scope_speeches(db_session, "2026-09-01") == 1
+        assert {d.id for d in db_session.query(ExploreDocument)} == {1, 3}
+
+
+class TestReadFrontier:
+    PACKAGES = ["CREC-2026-09-24", "CREC-2026-09-23", "CREC-2026-09-22"]  # newest first
+
+    @pytest.mark.parametrize("read, frontier", [
+        (set(), None),
+        ({"CREC-2026-09-24"}, "2026-09-24"),
+        ({"CREC-2026-09-24", "CREC-2026-09-22"}, "2026-09-24"),  # 09-23 failed: held there
+        ({"CREC-2026-09-23", "CREC-2026-09-22"}, None),           # the newest is unread
+        (set(PACKAGES), "2025-01-03"),  # all read: the Congress from its first day
+    ])
+    def test_the_frontier_stops_at_the_first_unread_day(self, read, frontier):
+        assert explore_pipeline._read_frontier(self.PACKAGES, read) == frontier
 
 
 def _turn(text, speaker="ALPHA", heading="Artificial Intelligence", opens=True, granule="CREC-2026-09-24-pt1-PgS4962"):
     return {"speaker": speaker, "text": text, "heading": heading, "opens": opens, "granule_title": "SECTION",
-            "granule_id": granule, "date": "2026-09-24",
-            "url": f"https://www.govinfo.gov/app/details/CREC-2026-09-24/{granule}"}
+            "granule_id": granule, "date": granule[5:15],
+            "url": f"https://www.govinfo.gov/app/details/{granule[:15]}/{granule}"}
+
+
+def _day(text, date="2026-09-24"):
+    return {"Senate": [_turn(text, granule=f"CREC-{date}-pt1-PgS1")], "House": []}
 
 
 class TestFloorSpeechIngest:
-    """A day of the Record becomes documents once, and is replaced whole."""
+    """Days of the Record become documents once, newest first, a bounded
+    number a run, and each is replaced whole."""
 
     SPEECH = "Madam President, we are living through the biggest technological transformation in generations."
     BUSINESS = "Madam President, I ask unanimous consent that the order for the quorum call be rescinded."
@@ -336,7 +368,7 @@ class TestFloorSpeechIngest:
         monkeypatch.setattr(explore_pipeline, "fetch_crec_packages", AsyncMock(return_value=list(packages)))
         monkeypatch.setattr(explore_pipeline, "fetch_day_speeches", day)
         monkeypatch.setattr(explore_pipeline, "speech_flags", lambda texts: [t != self.BUSINESS for t in texts])
-        added = asyncio.run(_ingest_floor_speeches(db_session, None, 60))
+        added = asyncio.run(_ingest_floor_speeches(db_session, None))
         return added, fetched
 
     def test_speeches_are_stored_titled_and_linked_and_business_is_not(self, db_session, monkeypatch):
@@ -351,6 +383,7 @@ class TestFloorSpeechIngest:
         ]
         assert docs[0].body == self.SPEECH and docs[0].doc_type == "Senate Floor Speech"
         assert docs[0].url.endswith("/CREC-2026-09-24/CREC-2026-09-24-pt1-PgS4962")
+        assert docs[0].external_id.startswith("crec-v1-CREC-2026-09-24-pt1-PgS4962-")
 
     def test_the_same_words_twice_in_a_section_are_one_document(self, db_session, monkeypatch):
         added, _ = self._run(db_session, monkeypatch, {
@@ -359,31 +392,56 @@ class TestFloorSpeechIngest:
         assert added["Senate"] == 1 and db_session.query(ExploreDocument).count() == 1
 
     def test_a_day_read_is_not_fetched_again(self, db_session, monkeypatch):
-        day = {"Senate": [_turn(self.SPEECH)], "House": []}
-        self._run(db_session, monkeypatch, {"CREC-2026-09-24": day})
-        _, fetched = self._run(db_session, monkeypatch, {"CREC-2026-09-24": day})
+        days = {"CREC-2026-09-24": _day(self.SPEECH)}
+        self._run(db_session, monkeypatch, days)
+        _, fetched = self._run(db_session, monkeypatch, days)
         assert fetched == []
         assert db_session.query(ExploreDocument).count() == 1
 
-    def test_a_day_that_could_not_be_read_is_tried_again(self, db_session, monkeypatch):
-        self._run(db_session, monkeypatch, {})
-        _, fetched = self._run(db_session, monkeypatch, {"CREC-2026-09-24": {"Senate": [], "House": []}})
-        assert fetched == ["CREC-2026-09-24"]
-
-    def test_reading_a_day_again_replaces_what_it_held(self, db_session, monkeypatch):
-        """A new SPEECH_FORMAT re-reads the window: the day's documents are
-        what the day holds now."""
-        db_session.add(_speech_doc(1, "crec-CREC-2026-09-24-pt1-PgS4962-0badbeef", "2026-09-24"))
-        db_session.add(_speech_doc(2, "crec-CREC-2026-09-23-pt1-PgS4900-0badbeef", "2026-09-23"))
+    def test_reading_a_day_replaces_what_it_held_in_any_format(self, db_session, monkeypatch):
+        db_session.add(_speech_doc(1, OLD.format("2026-09-24"), "2026-09-24"))
+        db_session.add(_speech_doc(2, NEW.format("2026-09-23"), "2026-09-23"))
         db_session.commit()
-        self._run(db_session, monkeypatch, {"CREC-2026-09-24": {"Senate": [_turn(self.SPEECH)], "House": []}})
+        self._run(db_session, monkeypatch, {"CREC-2026-09-24": _day(self.SPEECH)})
         assert sorted((d.date, d.body) for d in db_session.query(ExploreDocument)) == [
             ("2026-09-23", "Words."), ("2026-09-24", self.SPEECH),
         ]
 
+    def test_the_back_fill_reads_a_bounded_number_of_days_a_run_newest_first(self, db_session, monkeypatch):
+        monkeypatch.setattr(explore_pipeline, "SPEECH_DAYS_PER_RUN", 2)
+        packages = ("CREC-2026-09-24", "CREC-2026-09-23", "CREC-2026-09-22")
+        days = {p: _day(self.SPEECH, p[5:]) for p in packages}
+        _, fetched = self._run(db_session, monkeypatch, days, packages)
+        assert fetched == ["CREC-2026-09-24", "CREC-2026-09-23"]
+        _, fetched = self._run(db_session, monkeypatch, days, packages)
+        assert fetched == ["CREC-2026-09-22"]
+
+    def test_a_failed_day_holds_the_cursor_and_old_speeches_stay_searchable(self, db_session, monkeypatch):
+        """Outage is not "no data": the day is retried, and nothing older
+        than it loses its old-format speeches before it is read."""
+        packages = ("CREC-2026-09-24", "CREC-2026-09-23", "CREC-2026-09-22")
+        db_session.add_all([
+            _speech_doc(1, OLD.format("2026-09-23"), "2026-09-23"),
+            _speech_doc(2, OLD.format("2026-09-21"), "2026-09-21"),  # a date with no issue
+        ])
+        db_session.commit()
+        days = {"CREC-2026-09-24": _day(self.SPEECH), "CREC-2026-09-22": _day(self.SPEECH, "2026-09-22")}
+        self._run(db_session, monkeypatch, days, packages)  # 09-23 fails
+        assert {d.id for d in db_session.query(ExploreDocument).filter(ExploreDocument.id.in_([1, 2]))} == {1, 2}
+
+        days["CREC-2026-09-23"] = _day(self.SPEECH, "2026-09-23")
+        _, fetched = self._run(db_session, monkeypatch, days, packages)
+        assert fetched == ["CREC-2026-09-23"]
+        # Every issue read: the old speeches are gone, replaced or swept.
+        assert sorted(d.date for d in db_session.query(ExploreDocument)) == ["2026-09-22", "2026-09-23", "2026-09-24"]
+        assert all(d.external_id.startswith("crec-v1-") for d in db_session.query(ExploreDocument))
+
     def test_an_unreadable_index_changes_nothing(self, db_session, monkeypatch):
+        db_session.add(_speech_doc(1, OLD.format("2026-09-23"), "2026-09-23"))
+        db_session.commit()
         monkeypatch.setattr(explore_pipeline, "fetch_crec_packages", AsyncMock(return_value=None))
-        assert asyncio.run(_ingest_floor_speeches(db_session, None, 60)) == {"Senate": 0, "House": 0}
+        assert asyncio.run(_ingest_floor_speeches(db_session, None)) == {"Senate": 0, "House": 0}
+        assert db_session.query(ExploreDocument).count() == 1
 
 
 class TestOrphanedVectorPurge:
@@ -475,7 +533,7 @@ async def test_a_run_that_waited_out_a_rebuild_purges_again_and_resolves_the_ale
         top_up_explore_index=MagicMock(return_value=0),
         _purge_orphaned_vectors=purge,
     ), patch("app.ops_alerts.resolve_ops_alert", resolve):
-        await run_explore_pipeline(days_back=1)
+        await run_explore_pipeline()
     assert purge.call_count == 2
     resolve.assert_called_once_with("explore-index-rebuild")
 
@@ -495,7 +553,7 @@ async def test_a_run_facing_a_locked_index_neither_rebuilds_nor_tops_it_up(db_se
         top_up_explore_index=embed,
         _purge_orphaned_vectors=MagicMock(return_value=0),
     ), patch("app.ops_alerts.resolve_ops_alert", resolve):
-        await run_explore_pipeline(days_back=1)
+        await run_explore_pipeline()
     rebuild.assert_not_called()
     embed.assert_not_called()
     resolve.assert_not_called()

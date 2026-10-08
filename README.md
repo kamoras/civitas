@@ -1063,16 +1063,26 @@ Floor speeches come from the Congressional Record, a day at a time
   measurement is in `floor_speech.py`). Before, one leader's quorum-call
   rescissions made them Explore's most prolific "speaker".
 - **Links and scope.** Each speech links to its own section's page on
-  GovInfo, not the whole day. Only the sitting Congress is kept: GovInfo's
-  collection lists packages by last modification, and a reprocessed 1996
-  issue once came through; the run itself deletes speeches outside the
-  Congress, and those stored in the old format.
-- **Cost.** A day is about 73 requests at GovInfo's 1 request/second, read
-  once (recorded per day; `SPEECH_FORMAT` re-reads the window when the
-  parse or the test changes) — the first run reads the 60-day window: 27
-  issues on 2026-10-06, many of them August's pro forma days, under 2,000
-  requests. A day that cannot be read whole is retried, never taken as a day
-  with none.
+  GovInfo, not the whole day. The whole sitting Congress is indexed, and
+  only it: GovInfo's collection lists packages by last modification, and a
+  reprocessed 1996 issue once came through; the run itself deletes
+  speeches outside the Congress.
+- **Back-fill, without a gap.** Each run reads up to `SPEECH_DAYS_PER_RUN`
+  (15) unread days, newest first — new issues, then back toward the
+  Congress's first day — and records each day read. A day's stored
+  speeches, in any format, are replaced only when that day is read again,
+  so speeches stored before this format stay searchable until their day
+  is re-read. A day that cannot be read whole is retried next run, never
+  taken as a day with none, and holds the read frontier: older-format
+  speeches on dates with no issue are swept only behind a frontier every
+  issue has passed. Bumping `SPEECH_FORMAT` re-reads the Congress the
+  same way.
+- **Cost.** A full session day is about 73 requests at GovInfo's 1
+  request/second (~75 s, the event loop free), ~32 s of floor-business
+  classification and ~40 s of embedding on the Pi, both in worker threads:
+  about 2.5 minutes, so a run adds at most ~36 minutes. The 119th Congress
+  had 372 issues on 2026-10-08, so the back-fill (or a format re-read)
+  takes about 25 nights; after that a run reads only the new issues.
 
 Every document feeds three structures, all rebuilt from the
 `explore_documents` table at the end of each ingest run:
