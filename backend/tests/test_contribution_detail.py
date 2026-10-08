@@ -57,7 +57,7 @@ def _no_model():
 
 
 def _breakdown(detail):
-    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, FINANCIALS, [], [], [],
+    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, FINANCIALS, [], [],
                              ai_classifications=AI, detail=detail)
     return {row["industry"]: row["total"] for row in f["industryBreakdown"]}, f
 
@@ -128,7 +128,7 @@ def test_an_organization_also_written_as_an_occupation_is_kept():
 def test_a_missing_source_falls_back_to_the_samples_not_to_zero():
     # Occupations unreadable: the breakdown uses the sampled receipts.
     receipt = {"contributor_employer": "GOOGLE", "contribution_receipt_amount": 3_000, "memo_text": ""}
-    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, FINANCIALS, [receipt], [], [],
+    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, FINANCIALS, [receipt], [],
                              ai_classifications=AI, detail=_detail(occupations=None))
     by = {row["industry"]: row["total"] for row in f["industryBreakdown"]}
     assert by["TECH"] == 3_000

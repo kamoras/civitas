@@ -110,6 +110,9 @@ class TestDigestOtherGranules:
 
     @pytest.mark.parametrize("title,role", [
         ("Daily Digest/Senate", ("senate", "floor")),
+        # A day's first granule carries the Highlights with its chamber.
+        ("Daily Digest/Highlights + Senate", ("senate", "floor")),
+        ("Daily Digest/Highlights + House of Representatives", ("house", "floor")),
         ("Daily Digest/House of Representatives", ("house", "floor")),
         ("Daily Digest/Senate Committee Meetings", ("senate", "committees")),
         ("Daily Digest/House Committee Meetings", ("house", "committees")),
@@ -233,6 +236,27 @@ class TestSyncDigest:
         _run(ca.sync_digest(None, db_session, date(2026, 9, 21)))
         house = db_session.query(CongressDay).filter_by(chamber="house", date="2026-09-21").one()
         assert (house.in_session, house.is_final, house.source) == (True, False, "floor_log")
+
+    def test_the_highlights_granule_is_the_senate_floor(self, db_session, monkeypatch):
+        listing = json.dumps({"granules": [
+            {"granuleId": "CREC-2025-01-06-pt1-PgD14", "granuleClass": "DAILYDIGEST",
+             "title": "Daily Digest/Highlights + Senate"},
+        ]}).encode()
+        monkeypatch.setattr(ca, "_get", _fake_get({
+            "api.govinfo.gov/packages/CREC-2025-01-06/granules": listing,
+            "PgD14.htm": (FIX / "daily_digest" / "CREC-2025-01-06-pt1-PgD14.htm").read_bytes(),
+        }))
+        assert _run(ca.sync_digest(None, db_session, date(2025, 1, 6))) == "ok"
+        senate = db_session.query(CongressDay).filter_by(chamber="senate", date="2025-01-06").one()
+        assert senate.in_session and senate.is_final
+        assert senate.adjourned_at == "1:36 p.m."
+
+    def test_an_empty_listing_is_absent(self, db_session, monkeypatch):
+        # GovInfo's answer for a day with no Record: 200, no granules.
+        empty = json.dumps({"count": 0, "granules": []}).encode()
+        monkeypatch.setattr(ca, "_get", _fake_get({"api.govinfo.gov": empty}))
+        assert _run(ca.sync_digest(None, db_session, date(2025, 1, 4))) == "absent"
+        assert db_session.query(CongressDay).count() == 0
 
     def test_no_record_that_day_is_absent(self, db_session, monkeypatch):
         monkeypatch.setattr(ca, "_get", _fake_get({"api.govinfo.gov": ca._ABSENT}))

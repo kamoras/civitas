@@ -355,6 +355,10 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     """Read stored filings again when an older ptr_common.PARSER_VERSION
     read them, replacing their rows — the Senate's first (its owners were
     misread), newest first within each, until PTR_REREAD_BUDGET is spent.
+    The budget is shared: each source gets an equal part of what is left
+    when it starts, and whatever it doesn't use passes on — otherwise one
+    source's backlog (a scan's OCR can take minutes) keeps the next source's
+    filings waiting for weeks.
     Every stored row names its filing's URL, so this needs no search or
     index, whose windows reach back only weeks. A filing that doesn't read
     keeps its rows and waits _REREAD_RETRY_HOURS — or sits out a night, when
@@ -373,8 +377,10 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     ]
     deadline = time.monotonic() + PTR_REREAD_BUDGET.total_seconds()
     reread = 0
-    for source in sources:
+    for index, source in enumerate(sources):
         model = source.model
+        share = (deadline - time.monotonic()) / (len(sources) - index)
+        source_deadline = time.monotonic() + share
         query = db.query(
             model.filing_id,
             func.min(model.source_url),
@@ -390,7 +396,7 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
             continue
         read, failed = 0, []
         for position, (filing_id, url, filed) in enumerate(stale):
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= source_deadline:
                 logger.info("PTR re-read: time budget spent — %d %s filings wait", len(stale) - position, source.label)
                 break
             failed_key = f"failed-{source.label}-{filing_id}"
@@ -448,8 +454,6 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
                 db, _REREAD_TIER, failed_key, {"url": url, "retry_after": (utcnow() + wait).isoformat()},
                 normal_ttl_hours=_REREAD_RETRY_HOURS,
             )
-        if time.monotonic() >= deadline:
-            break
     return reread
 
 

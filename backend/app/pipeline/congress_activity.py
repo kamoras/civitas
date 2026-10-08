@@ -235,6 +235,11 @@ async def sync_digest(client: httpx.AsyncClient, db: Session, day: date) -> str:
         granules = httpx.Response(200, content=listing).json().get("granules", [])
     except ValueError:
         return "failed"
+    if not granules:
+        # GovInfo answers a day with no Record issue (a weekend, a recess)
+        # with 200 and an empty listing, not a 404: it is absent, and the
+        # back-fill moves past it.
+        return "absent"
 
     texts: dict[tuple[str, str], str] = {}
     for g in granules:

@@ -59,7 +59,6 @@ from app.pipeline.fetch.fec import (
     committee_id_of,
     committee_master_cycles,
     compute_recent_election_cycles,
-    fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
     fetch_committee_contributions,
@@ -68,7 +67,6 @@ from app.pipeline.fetch.fec import (
     fetch_contribution_detail,
     fetch_pac_receipts,
     find_candidate,
-    reset_run_state as reset_fec_run_state,
     resolve_committee_meta,
 )
 from app.pipeline.fetch.floor_logs import bill_id_from_number
@@ -199,7 +197,6 @@ async def run_house_pipeline() -> dict:
         return {"status": "skipped", "reason": refused}
 
     start_time = time.time()
-    reset_fec_run_state()  # clear the by_contributor circuit breaker from any prior run
 
     progress = ProgressTracker(house_run, HOUSE_PIPELINE_STEPS, db, start_time)
 
@@ -347,10 +344,16 @@ async def run_house_pipeline() -> dict:
             current_year, year_is_young = roll_call_year(scored, utcnow())
             recent_rcs = await fetch_recent_house_roll_calls(client, db, year=current_year, count=120)
             same_congress_prior_year = current_year > congress_first_year(scored)
-            if len(recent_rcs) < 60 and year_is_young and same_congress_prior_year:
-                recent_rcs += await fetch_recent_house_roll_calls(
+            if recent_rcs is not None and len(recent_rcs) < 60 and year_is_young and same_congress_prior_year:
+                earlier = await fetch_recent_house_roll_calls(
                     client, db, year=current_year - 1, count=120 - len(recent_rcs),
                 )
+                recent_rcs = None if earlier is None else recent_rcs + earlier
+            if recent_rcs is None:
+                # The Clerk could not be read. Saving now would replace
+                # every member's stored votes with none, so the run fails
+                # here, before any member is written.
+                raise RuntimeError("House roll calls could not be read from clerk.house.gov")
             recent_rcs = in_congress(recent_rcs, scored)
             logger.info("Fetched %d recent House roll calls", len(recent_rcs))
 
@@ -788,14 +791,12 @@ async def run_house_pipeline() -> dict:
 
                         raw_receipts = []
                         raw_pac_receipts = []
-                        aggregated = []
 
                         for comm in committees:
                             comm_id = comm.get("committee_id", "")
                             if comm_id:
                                 raw_receipts.extend(await fetch_committee_receipts(client, db, comm_id, cycles=recent_cycles))
                                 raw_pac_receipts.extend(await fetch_pac_receipts(client, db, comm_id, cycles=recent_cycles))
-                                aggregated.extend(await fetch_aggregated_contributors(client, db, comm_id, cycles=recent_cycles))
 
                         # Resolve PAC committee type, designation and
                         # connected organization: the tier-1
@@ -827,7 +828,7 @@ async def run_house_pipeline() -> dict:
 
                         finance_data = normalize_finance(
                             fec_candidate, financials, raw_receipts, raw_pac_receipts,
-                            aggregated, db_session=db,
+                            db_session=db,
                             committee_meta_map=committee_meta_map,
                             detail=detail,
                         )

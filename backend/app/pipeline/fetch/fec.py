@@ -28,20 +28,6 @@ RETRY_BACKOFF_S = 2.0
 
 _rate_limiter = RateLimiter(settings.FEC_RPS)
 
-# Set to True once we detect the by_contributor endpoint is broken for this run,
-# so we skip all 3 URL variants for every remaining senator instead of retrying.
-# Reset at the start of each pipeline run via reset_run_state() — otherwise a
-# single transient outage would latch this on for the life of the (long-lived)
-# server process and permanently skip the endpoint until restart.
-_by_contributor_broken = False
-
-
-def reset_run_state() -> None:
-    """Clear per-run FEC circuit-breaker state. Call at pipeline start."""
-    global _by_contributor_broken
-    _by_contributor_broken = False
-
-
 async def _fetch_with_retry(
     client: httpx.AsyncClient, url: str, retries: int = MAX_RETRIES
 ) -> dict | None:
@@ -65,6 +51,20 @@ async def _fetch_with_retry(
         request_url=full_url,
     )
     return resp.json() if resp is not None else None
+
+
+class FecUnavailable(RuntimeError):
+    """The FEC API could not be read (retries exhausted, 5xx, a 4xx). Raised
+    rather than returning [] so an outage is never cached or saved as a
+    member who raised nothing: the caller skips that member and the stored
+    funding stays."""
+
+
+async def _fetch_or_raise(client: httpx.AsyncClient, url: str) -> dict:
+    data = await _fetch_with_retry(client, url)
+    if data is None:
+        raise FecUnavailable(url)
+    return data
 
 
 async def _candidate_latest_election(
@@ -177,8 +177,8 @@ async def find_candidate(
     base_query = f"{FEC_API_BASE}/candidates/search/?name={quote(last_name)}&state={state}&office={office}&per_page=20"
     query = base_query + (f"&district={district}" if district else "")
 
-    data = await _fetch_with_retry(client, query)
-    results = (data or {}).get("results") or []
+    data = await _fetch_or_raise(client, query)
+    results = data.get("results") or []
 
     # FEC's `district` on a candidate record can lag a member's current
     # Congress.gov district after redistricting — the candidate ID keeps
@@ -193,8 +193,8 @@ async def find_candidate(
     # name match on this pass (no falling back to the first hit) since
     # nothing here disambiguates candidates the way district normally does.
     if not results and district:
-        data = await _fetch_with_retry(client, base_query)
-        fallback_results = (data or {}).get("results") or []
+        data = await _fetch_or_raise(client, base_query)
+        fallback_results = data.get("results") or []
         results = [
             c for c in fallback_results
             if all(part.upper() in (c.get("name") or "").upper() for part in name_parts)
@@ -556,11 +556,11 @@ async def fetch_candidate_financials(
         # stored in whatever order the API returned.
         return _sort_financials_recent_first(cached)
 
-    data = await _fetch_with_retry(
+    data = await _fetch_or_raise(
         client,
         f"{FEC_API_BASE}/candidate/{candidate_id}/totals/?sort=-cycle&per_page={FINANCIALS_PER_PAGE}",
     )
-    results = _sort_financials_recent_first((data or {}).get("results", []))
+    results = _sort_financials_recent_first(data.get("results", []))
     api_cache_set(db, "fec", cache_key, results)
     return results
 
@@ -574,11 +574,11 @@ async def fetch_candidate_committees(
     if cached is not None:
         return cached
 
-    data = await _fetch_with_retry(
+    data = await _fetch_or_raise(
         client,
         f"{FEC_API_BASE}/candidate/{candidate_id}/committees/?designation=P&per_page=5",
     )
-    results = (data or {}).get("results", [])
+    results = data.get("results", [])
     api_cache_set(db, "fec", cache_key, results)
     return results
 
@@ -615,13 +615,13 @@ async def fetch_committee_receipts(
         return cached
 
     # Get individual contributions only (for employer grouping)
-    data = await _fetch_with_retry(
+    data = await _fetch_or_raise(
         client,
         f"{FEC_API_BASE}/schedules/schedule_a/?committee_id={committee_id}"
         f"&sort=-contribution_receipt_amount&per_page=100&is_individual=true"
         f"{_cycle_query(cycles)}",
     )
-    results = (data or {}).get("results", [])
+    results = data.get("results", [])
     api_cache_set(db, "fec", cache_key, results)
     return results
 
@@ -643,13 +643,13 @@ async def fetch_pac_receipts(
         return cached
 
     # is_individual=false returns committee-to-committee contributions (PACs)
-    data = await _fetch_with_retry(
+    data = await _fetch_or_raise(
         client,
         f"{FEC_API_BASE}/schedules/schedule_a/?committee_id={committee_id}"
         f"&sort=-contribution_receipt_amount&per_page=100&is_individual=false"
         f"{_cycle_query(cycles)}",
     )
-    results = (data or {}).get("results", [])
+    results = data.get("results", [])
     api_cache_set(db, "fec", cache_key, results)
     return results
 
@@ -1134,58 +1134,3 @@ def is_political_committee(meta: dict | None) -> bool:
         meta.get("type") in POLITICAL_COMMITTEE_TYPES
         or meta.get("designation") in POLITICAL_COMMITTEE_DESIGNATIONS
     )
-
-
-async def fetch_aggregated_contributors(
-    client: httpx.AsyncClient, db: Session, committee_id: str,
-    cycles: list[int] | None = None,
-) -> list[dict]:
-    """Fetch aggregated totals by contributor for a committee.
-
-    Uses best-effort fallbacks for FEC endpoints that don't support the
-    preferred `-total` sort field (some committees return 422). The
-    function will try a small set of alternative queries before giving up
-    and returning an empty list — the pipeline will continue. See
-    fetch_committee_receipts for why `cycles` should match the window
-    used for receipt totals.
-    """
-    global _by_contributor_broken
-
-    cache_key = f"aggregated-contributors-v2-{committee_id}-{_cycle_tag(cycles)}"
-    cached = api_cache_get(db, "fec", cache_key)
-    if cached is not None:
-        return cached
-
-    # If a previous senator already proved the endpoint is down, skip entirely.
-    if _by_contributor_broken:
-        logger.debug("Skipping by_contributor for %s (endpoint known broken)", committee_id)
-        api_cache_set(db, "fec", cache_key, [])
-        return []
-
-    cq = _cycle_query(cycles)
-    # Try preferred query first, then fall back to alternatives when a
-    # 422/other failures are encountered.
-    urls = [
-        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&sort=-total&per_page=20{cq}",
-        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&sort=-contribution_receipt_amount&per_page=20{cq}",
-        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&per_page=20{cq}",
-    ]
-
-    data = None
-    for idx, url in enumerate(urls):
-        data = await _fetch_with_retry(client, url)
-        if data is not None:
-            if idx > 0:
-                logger.info("FEC fallback used for %s: %s", committee_id, url)
-            break
-
-    if data is None:
-        logger.warning(
-            "FEC aggregated contributors failed for %s — continuing with empty result",
-            committee_id,
-        )
-        _by_contributor_broken = True
-
-    results = (data or {}).get("results", [])
-    api_cache_set(db, "fec", cache_key, results)
-    return results

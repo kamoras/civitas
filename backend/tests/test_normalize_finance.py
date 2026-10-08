@@ -75,7 +75,6 @@ class TestNormalizeFinance:
             financials=financials,
             individual_receipts=[],
             pac_receipts=[],
-            aggregated_contributors=[],
         )
 
         assert result["totalRaised"] == 1_000_000
@@ -91,7 +90,6 @@ class TestNormalizeFinance:
             financials=[{"receipts": 0}],
             individual_receipts=[],
             pac_receipts=[],
-            aggregated_contributors=[],
         )
         assert result["totalRaised"] == 0
         assert result["smallDonorPercentage"] == 0
@@ -111,7 +109,6 @@ class TestNormalizeFinance:
             financials=financials,
             individual_receipts=[],
             pac_receipts=[],
-            aggregated_contributors=[],
         )
         assert result["totalRaised"] == 500_000
         # totalFromPACs is computed from actual donor records
@@ -137,7 +134,6 @@ class TestNormalizeFinance:
             financials=financials,
             individual_receipts=[],
             pac_receipts=[],
-            aggregated_contributors=[],
         )
         assert result["totalRaised"] == 100  # 2024 only, not 2018 or 2012
 
@@ -161,7 +157,6 @@ class TestNormalizeFinance:
         donors = build_top_donors(
             pac_receipts=pac_receipts,
             individual_receipts=[],
-            aggregated_contributors=[],
             candidate_name="TEST, PERSON",
         )
         names = {d["name"] for d in donors}
@@ -175,7 +170,6 @@ class TestNormalizeFinance:
         donors = build_top_donors(
             pac_receipts=pac_receipts,
             individual_receipts=[],
-            aggregated_contributors=[],
             candidate_name="UNRELATED, NAME",
         )
         assert len(donors) == 1
@@ -206,7 +200,6 @@ class TestNormalizeFinance:
             financials=financials,
             individual_receipts=[],
             pac_receipts=[],
-            aggregated_contributors=[],
         )
         assert result["totalRaised"] == 1_200_000  # 2024 once, not the 2018 race
         assert result["totalFromPACs"] == 120_000
@@ -236,7 +229,6 @@ class TestNormalizeFinance:
                 financials=financials,
                 individual_receipts=[],
                 pac_receipts=[],
-                aggregated_contributors=[],
             )
         assert result["totalRaised"] == 9_660_670
 
@@ -256,7 +248,6 @@ class TestNormalizeFinance:
             financials=financials,
             individual_receipts=[],
             pac_receipts=[],
-            aggregated_contributors=[],
         )
         assert result["totalRaised"] == 0
         assert result["totalFromPACs"] == 0
@@ -272,7 +263,7 @@ class TestBuildTopDonors:
             {"contributor_name": "BIG PAC", "contribution_receipt_amount": 5000, "memo_text": ""},
             {"contributor_name": "BIG PAC", "contribution_receipt_amount": 3000, "memo_text": ""},
         ]
-        donors = build_top_donors(pac_receipts, [], [], "")
+        donors = build_top_donors(pac_receipts, [], "")
         assert len(donors) == 1
         assert donors[0]["total"] == 8000
 
@@ -282,7 +273,7 @@ class TestBuildTopDonors:
             {"contributor_name": "ACTBLUE", "contribution_receipt_amount": 30000, "memo_text": ""},
             {"contributor_name": "REAL PAC", "contribution_receipt_amount": 5000, "memo_text": ""},
         ]
-        donors = build_top_donors(pac_receipts, [], [], "")
+        donors = build_top_donors(pac_receipts, [], "")
         names = [d["name"] for d in donors]
         assert len(donors) == 1
         assert "Real PAC" in names[0] or "REAL PAC" in names[0].upper()
@@ -291,7 +282,7 @@ class TestBuildTopDonors:
         pac_receipts = [
             {"contributor_name": "SOME PAC", "contribution_receipt_amount": 5000, "memo_text": "TRANSFER FROM ACCOUNT"},
         ]
-        donors = build_top_donors(pac_receipts, [], [], "")
+        donors = build_top_donors(pac_receipts, [], "")
         assert len(donors) == 0
 
     def test_ai_classification_used(self):
@@ -299,7 +290,7 @@ class TestBuildTopDonors:
             {"contributor_name": "MYSTERY PAC", "contribution_receipt_amount": 5000, "memo_text": ""},
         ]
         ai = {"MYSTERY PAC": {"type": "PAC", "industry": "PHARMA", "skip": False}}
-        donors = build_top_donors(pac_receipts, [], [], "", ai_classifications=ai)
+        donors = build_top_donors(pac_receipts, [], "", ai_classifications=ai)
         assert donors[0]["type"] == "PAC"
         assert donors[0]["industry"] == "PHARMA"
 
@@ -308,7 +299,7 @@ class TestBuildTopDonors:
             {"contributor_name": "PAYMENT PROCESSOR", "contribution_receipt_amount": 50000, "memo_text": ""},
         ]
         ai = {"PAYMENT PROCESSOR": {"type": "SKIP", "industry": "OTHER", "skip": True}}
-        donors = build_top_donors(pac_receipts, [], [], "", ai_classifications=ai)
+        donors = build_top_donors(pac_receipts, [], "", ai_classifications=ai)
         assert len(donors) == 0
 
     def test_individual_contributions_grouped_by_employer(self):
@@ -317,7 +308,7 @@ class TestBuildTopDonors:
             {"contributor_employer": "Goldman Sachs", "contribution_receipt_amount": 2800},
             {"contributor_employer": "Google", "contribution_receipt_amount": 1000},
         ]
-        donors = build_top_donors([], individual, [], "")
+        donors = build_top_donors([], individual, "")
         gs = next((d for d in donors if "Goldman" in d["name"] or "GOLDMAN" in d["name"].upper()), None)
         assert gs is not None
         assert gs["total"] == 5600
@@ -328,7 +319,7 @@ class TestBuildTopDonors:
             {"contributor_employer": "SELF-EMPLOYED", "contribution_receipt_amount": 1000},
             {"contributor_employer": "Real Company", "contribution_receipt_amount": 2000},
         ]
-        donors = build_top_donors([], individual, [], "")
+        donors = build_top_donors([], individual, "")
         assert len(donors) == 1
 
     def test_top_100_limit(self):
@@ -336,7 +327,7 @@ class TestBuildTopDonors:
             {"contributor_name": f"PAC {i}", "contribution_receipt_amount": i, "memo_text": ""}
             for i in range(150)
         ]
-        donors = build_top_donors(pac_receipts, [], [], "")
+        donors = build_top_donors(pac_receipts, [], "")
         assert len(donors) <= 100
 
     def test_sorted_by_total_descending(self):
@@ -345,7 +336,7 @@ class TestBuildTopDonors:
             {"contributor_name": "BIG PAC", "contribution_receipt_amount": 10000, "memo_text": ""},
             {"contributor_name": "MEDIUM PAC", "contribution_receipt_amount": 1000, "memo_text": ""},
         ]
-        donors = build_top_donors(pac_receipts, [], [], "")
+        donors = build_top_donors(pac_receipts, [], "")
         assert donors[0]["total"] == 10000
         assert donors[-1]["total"] == 100
 
@@ -365,7 +356,7 @@ class TestCommitteeMasterMetadata:
     def test_party_committee_is_political_not_its_name_industry(self):
         ai = {"NRSC": {"type": "PAC", "industry": "GUNS", "skip": False}}
         donors = build_top_donors(
-            [self._receipt("NRSC", "C00027466")], [], [], "", ai_classifications=ai,
+            [self._receipt("NRSC", "C00027466")], [], "", ai_classifications=ai,
             committee_meta_map={"C00027466": {"type": "Y", "designation": "U", "connectedOrg": None}},
         )
         assert donors[0]["industry"] == "POLITICAL"
@@ -373,7 +364,7 @@ class TestCommitteeMasterMetadata:
     def test_leadership_pac_is_political(self):
         ai = {"SOME LEADERSHIP PAC": {"type": "PAC", "industry": "ENERGY", "skip": False}}
         donors = build_top_donors(
-            [self._receipt("SOME LEADERSHIP PAC", "C1")], [], [], "", ai_classifications=ai,
+            [self._receipt("SOME LEADERSHIP PAC", "C1")], [], "", ai_classifications=ai,
             committee_meta_map={"C1": {"type": "Q", "designation": "D", "connectedOrg": None}},
         )
         assert donors[0]["industry"] == "POLITICAL"
@@ -383,7 +374,7 @@ class TestCommitteeMasterMetadata:
             "type": "PAC", "industry": "FINANCE", "skip": False}}
         donors = build_top_donors(
             [self._receipt("JPMORGAN CHASE & CO. FEDERAL POLITICAL ACTION COMMITTEE", "C00104299")],
-            [], [], "", ai_classifications=ai,
+            [], "", ai_classifications=ai,
             committee_meta_map={"C00104299": {"type": "Q", "designation": "B", "connectedOrg": "JPMORGAN CHASE & CO."}},
         )
         assert donors[0]["industry"] == "FINANCE"
@@ -398,7 +389,7 @@ class TestCommitteeMasterMetadata:
         receipt["entity_type"] = "IND"
         ai = {"NRSC": {"type": "PAC", "industry": "GUNS", "skip": False}}
         donors = build_top_donors(
-            [receipt], [], [], "", ai_classifications=ai,
+            [receipt], [], "", ai_classifications=ai,
             committee_meta_map={"C00027466": {"type": "Y", "designation": "U", "connectedOrg": None}},
         )
         assert donors[0]["industry"] == "GUNS"
