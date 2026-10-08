@@ -1199,31 +1199,22 @@ class TestIssueSignatureMatching:
         match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, {420})
         assert match is None
 
-    def test_find_matching_issue_catches_a_shared_source_url_despite_a_reworded_title(self):
-        # Live 2026-08-26 bug: "DHS data claims and think tank connections"
-        # and "DHS data claims and state ballot measures", a day apart,
-        # both cited the exact same single NPR URL — different enough
-        # secondary framing that title cosine and signature overlap both
-        # missed it, so it became a second row instead of an update.
+    def test_a_shared_source_matches_only_with_titles_that_agree(self):
+        """One roundup article is cited by unrelated stories (2026-10-08:
+        a shared source alone merged 45 different-story pairs)."""
         existing = ActionIssue(
             id=621, date="2026-08-25", rank=3,
             title="DHS data claims and think tank connections",
             facts=json.dumps(["DHS cited a report from a conservative think tank."]),
             source_urls=json.dumps(["https://npr.org/nx-s1-5940807"]),
         )
-        # Deliberately dissimilar title embedding — this pair must match
-        # on source URL alone, not by accidentally clearing the title
-        # cosine floor.
         recent_embs = np.array([[1.0, 0.0]])
-        title_emb = np.array([0.0, 1.0])
-
-        match = _find_matching_issue(
-            "DHS data claims and state ballot measures",
-            ["DHS data was cited in a state ballot measure debate."],
-            [existing], recent_embs, title_emb, set(),
-            source_urls=["https://npr.org/nx-s1-5940807"],
-        )
-        assert match is existing
+        args = ("DHS data claims and state ballot measures", ["DHS data was cited in a state ballot measure debate."],
+                [existing], recent_embs)
+        orthogonal, agreeing = np.array([0.0, 1.0]), np.array([0.7, (1 - 0.7 ** 2) ** 0.5])
+        url = ["https://npr.org/nx-s1-5940807"]
+        assert _find_matching_issue(*args, orthogonal, set(), source_urls=url) is None
+        assert _find_matching_issue(*args, agreeing, set(), source_urls=url) is existing
 
     def test_find_matching_issue_does_not_match_on_url_when_none_are_shared(self):
         existing = ActionIssue(
@@ -1345,20 +1336,15 @@ class TestDedupeNearIdenticalIssues:
         assert result == [a, b]
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
-    def test_shared_source_url_collapses_regardless_of_title_similarity(self, mock_embed):
-        # Same underlying article, LLM reworded the headline enough that the
-        # titles are orthogonal in embedding space — same real-world case
-        # _find_matching_issue's #434 fix handles (checked before title
-        # cosine at all). The read-time pass must catch it too.
+    def test_a_shared_source_collapses_only_with_titles_that_agree(self, mock_embed):
         a = self._issue(1, "DHS data claims and think tank connections", datetime(2026, 8, 21))
         b = self._issue(2, "DHS data claims and state ballot measures", datetime(2026, 8, 22))
         a.source_urls = json.dumps(["https://npr.org/dhs-story"])
         b.source_urls = json.dumps(["https://npr.org/dhs-story"])
         mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0]])
-
-        result = dedupe_near_identical_issues([a, b])
-
-        assert result == [b]
+        assert dedupe_near_identical_issues([a, b]) == [a, b]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.7, (1 - 0.7 ** 2) ** 0.5]])
+        assert dedupe_near_identical_issues([a, b]) == [b]
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     def test_shared_names_below_a_near_identical_title_stay_separate(self, mock_embed):
@@ -1419,13 +1405,11 @@ class TestDedupeNearIdenticalIssues:
         c = self._issue(3, "Senate advances Varga attorney general pick 54-45", datetime(2026, 8, 22, 2))
         a.source_urls = json.dumps(["https://npr.org/dhs-story"])
         b.source_urls = json.dumps(["https://npr.org/dhs-story"])
-        # A-B: orthogonal (merge is via shared URL alone, not cosine).
-        # B-C: cosine 0.7, same gap that collapses via signature overlap
-        # in test_signature_overlap_collapses_below_near_identical_title_threshold.
-        # A-C: orthogonal — no shared URL, no shared signature either.
+        # A-B: shared URL and titles agreeing (0.7). B-C: 0.5, no link.
+        # A-C: orthogonal.
         mock_embed.return_value = np.array([
             [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
+            [0.7, (1 - 0.7 ** 2) ** 0.5, 0.0],
             [0.0, 0.7, (1 - 0.7 ** 2) ** 0.5],
         ])
 
@@ -1872,8 +1856,11 @@ class TestFindMatchingIssueAgainstDevelopingRows:
         assert match is existing
 
     def test_a_developing_row_matches_on_shared_source_url(self):
+        # The draft's source is its vote record: a story citing it is the
+        # draft's story whatever its headline (SHARED_SOURCE_TITLE_SIM is
+        # for news rows).
         existing = ActionIssue(
-            id=901, title="Senate action on arms sale",
+            id=901, title="Senate action on arms sale", source_type="senate_roll_call_vote",
             facts=json.dumps(["A fact."]),
             source_urls=json.dumps(["https://www.senate.gov/legislative/vote.xml"]),
             status=ActionIssueStatus.DEVELOPING,
