@@ -14,12 +14,15 @@ TREND_THRESHOLD = 0.5
 
 def _comparable(older: ScoreSnapshot, latest: ScoreSnapshot) -> bool:
     """Whether a score change between two snapshots can be read as the
-    member's own: same algorithm version (where both recorded one) and
+    member's own: the same algorithm version, recorded on both, and the
     same Congress. A methodology change moves everyone's score at once, and
     a new Congress resets the current-term window (AGENTS.md principle 6)
     — the trend chart already marks both as boundaries; the leaderboard's
-    week-over-week arrow ignored them and reported the jump as movement."""
-    if older.algorithm_version and latest.algorithm_version and older.algorithm_version != latest.algorithm_version:
+    week-over-week arrow ignored them and reported the jump as movement. A
+    snapshot that recorded no version is of an unknown methodology: read as
+    comparable to anything, it made 96 of 100 senators' arrows report
+    methodology changes (2026-10-08)."""
+    if not older.algorithm_version or older.algorithm_version != latest.algorithm_version:
         return False
     return congress_of_date(older.date) == congress_of_date(latest.date)
 

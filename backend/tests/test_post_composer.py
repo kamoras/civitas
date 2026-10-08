@@ -320,3 +320,10 @@ class TestLiveCompositionDefects:
     def test_a_number_still_does_not_end_the_clause(self):
         src = "The Senate cuts $1.5 billion from the program."
         assert compose("The Senate", "cuts $1", src) == "The Senate cuts $1.5 billion from the program."
+
+
+def test_a_quotation_the_span_opens_is_closed_from_the_source():
+    source = ('Doe said Tuesday that he has seen one of the ads and that it '
+              '"looked like a public service announcement." Others disagreed.')
+    got = compose("Doe", 'said Tuesday that he has seen one of the ads and that it "looked like a public service announcement', source)
+    assert got is not None and got.endswith('announcement."')

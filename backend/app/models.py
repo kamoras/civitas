@@ -141,7 +141,9 @@ class Senator(Base):
     # to the stored votes.
     party_line_record: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
-    small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    # NULL: the filings report no unitemized money (every gift itemized), so
+    # the small-donor share can't be read from them (normalize_finance).
+    small_donor_percentage: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
 
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -416,7 +418,9 @@ class Representative(Base):
     # to the stored votes.
     party_line_record: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
-    small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    # NULL: the filings report no unitemized money (every gift itemized), so
+    # the small-donor share can't be read from them (normalize_finance).
+    small_donor_percentage: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
 
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -974,6 +978,16 @@ class Candidate(Base):
     # them, and never set from a "Last, First" printing (see
     # state_candidates._note_ballot_name).
     ballot_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The party that state's list prints for them (an FEC code, or the
+    # printed label for a party FEC has no code for), set beside
+    # ballot_name. The page shows it over `party`, the FEC filing's code,
+    # which can be a typo ("08") or a code nothing labels.
+    ballot_party: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The member of Congress this FEC candidate id belongs to, by the
+    # congress-legislators bioguide->FEC crosswalk (the election run sets
+    # it). Ties a sitting member to their scorecard when the FEC codes
+    # their own row a challenger, as it does after a special election.
+    member_bioguide: Mapped[str | None] = mapped_column(String, nullable=True)
     # last_coverage_search (the removed Bluesky candidate search's watermark)
     # is no longer mapped; the next release drops it (migrations/README.md).
 

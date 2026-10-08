@@ -29,6 +29,7 @@ fetchers are already built around.
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime
 
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
@@ -41,6 +42,24 @@ from app.pipeline.rate_limiter import RateLimiter
 logger = logging.getLogger(__name__)
 
 ROSTER_URL = "https://www.presidency.ucsb.edu/presidents"
+UCSB_BASE = "https://www.presidency.ucsb.edu"
+
+# Display names UCSB writes differently from the White House's own list of
+# presidents (whitehouse.gov/about-the-white-house/presidents): "Martin van
+# Buren" (he signed "Van Buren"), and plain "George Bush" for the 41st
+# president, which beside his son's "George W. Bush" names neither
+# unambiguously. Only the display changes; ids and the name joins still
+# use UCSB's text.
+_DISPLAY_NAME_CORRECTIONS = {
+    "Martin van Buren": "Martin Van Buren",
+    "George Bush": "George H. W. Bush",
+}
+
+# A president's own UCSB page: "Dates In Office: March 04, 1881 to
+# September 19, 1881".
+_DATES_IN_OFFICE_RE = re.compile(
+    r"Dates In Office:\s*([A-Z][a-z]+ \d{1,2}, \d{4})\s+to\s+([A-Z][a-z]+ \d{1,2}, \d{4})"
+)
 
 _RATE_LIMITER = RateLimiter(rps=1.0)
 _CACHE_TIER = "presidential-roster"
@@ -55,6 +74,10 @@ class RosterEntry:
     term_start: str  # YYYY-MM-DD
     term_end: str | None  # None means still serving
     number: int  # position in US presidential history (1 = Washington)
+    page: str = ""  # the president's own UCSB page path
+    # term_end is the successor's first day, standing in for a date the
+    # roster page didn't give (see _parse_roster)
+    end_from_successor: bool = False
 
 
 def _normalize_name(text: str) -> str:
@@ -106,6 +129,7 @@ def _parse_roster(html: str) -> list[RosterEntry]:
     # "- I"/"- II") needed only to resolve the right id — never shown to
     # a user.
     parsed: list[tuple[str, str, str, str | None]] = []
+    pages: list[str] = []
     cleveland_seen = 0
     for a in rows:
         full_text = a.text_content().strip()
@@ -119,6 +143,7 @@ def _parse_roster(html: str) -> list[RosterEntry]:
         raw_name = re.sub(r"\d{4}.*$", "", full_text).strip()
         lookup_name = raw_name
         display_name = re.sub(r"\s*\((?:1st|2nd) Term\)\s*$", "", raw_name).strip()
+        display_name = _DISPLAY_NAME_CORRECTIONS.get(display_name, display_name)
 
         # Grover Cleveland's two non-consecutive terms render with
         # identical text on this page (unlike Trump's, which are
@@ -130,12 +155,14 @@ def _parse_roster(html: str) -> list[RosterEntry]:
             lookup_name = f"{display_name} - {'I' if cleveland_seen == 1 else 'II'}"
 
         parsed.append((display_name, lookup_name, start, end))
+        pages.append(a.get("href") or "")
 
     # Page order is newest-first; reverse so Washington is entry 0 and
     # "number" falls directly out of position — but that means Cleveland's
     # two terms get visited newest-first above, so fix up the numbering
     # label after reversing (his 1st term, 1885, must get "- I").
     parsed.reverse()
+    pages.reverse()
     cleveland_order = [i for i, (n, _, _, _) in enumerate(parsed) if n == "Grover Cleveland"]
     if len(cleveland_order) == 2:
         earlier, later = cleveland_order
@@ -151,19 +178,20 @@ def _parse_roster(html: str) -> list[RosterEntry]:
         # them left the sitting president off the site, and the row count
         # still passed the sanity floor below.
         pid = _resolve_id(lookup_name) or derived_president_id(display_name, i)
-        entries.append(RosterEntry(id=pid, name=display_name, term_start=start, term_end=end, number=i))
+        entries.append(RosterEntry(id=pid, name=display_name, term_start=start, term_end=end, number=i,
+                                   page=pages[i - 1]))
 
-    # UCSB's page has no end date at all for a president who died in
-    # office (Garfield, W.H. Harrison — a single dc:date span, verified
-    # live 2026-07, not a "died within a day" special case as originally
-    # assumed). Not a data gap this platform needs a second source for:
-    # presidential succession has no gap, so the next president's own
-    # term_start IS this one's term_end, derivable from data already
-    # fetched rather than hand-typed. Only the actual current president
-    # (no successor yet in this list) legitimately keeps term_end=None.
+    # The roster page has no end date for two presidents who died in office
+    # (a single dc:date span, verified live 2026-07). The successor's first
+    # day stands in until fetch_presidential_roster reads the president's
+    # own page: it is not the end of the term, since a successor can take
+    # the oath days after the death (one died on April 4, the next was
+    # sworn on April 6). Only the current president (no successor yet)
+    # keeps term_end=None.
     for i in range(len(entries) - 1):
         if entries[i].term_end is None:
             entries[i].term_end = entries[i + 1].term_start
+            entries[i].end_from_successor = True
 
     return entries
 
@@ -204,6 +232,14 @@ async def fetch_presidential_roster(db: Session) -> list[RosterEntry]:
         # worse than none: return nothing and let the prior DB rows stand.
         return []
 
+    for e in entries:
+        if e.end_from_successor and e.page:
+            end = await _end_from_own_page(e.page)
+            if end:
+                e.term_end, e.end_from_successor = end, False
+            else:
+                logger.warning("No term end on UCSB's page for %s; the successor's first day stands in", e.name)
+
     api_cache_set(db, _CACHE_TIER, _CACHE_KEY, {
         "entries": [
             {"id": e.id, "name": e.name, "term_start": e.term_start, "term_end": e.term_end, "number": e.number}
@@ -211,3 +247,21 @@ async def fetch_presidential_roster(db: Session) -> list[RosterEntry]:
         ],
     })
     return entries
+
+
+def parse_dates_in_office(html: str) -> str | None:
+    """The last day in office from a president's own UCSB page, ISO."""
+    text = re.sub(r"\s+", " ", lxml_html.fromstring(html).text_content().replace("\xa0", " "))
+    m = _DATES_IN_OFFICE_RE.search(text)
+    if not m:
+        return None
+    return datetime.strptime(m.group(2), "%B %d, %Y").date().isoformat()
+
+
+async def _end_from_own_page(path: str) -> str | None:
+    resp = await fetch_with_retry_requests(
+        _RATE_LIMITER, "GET", UCSB_BASE + path, log_label="UCSB president page",
+    )
+    if resp is None or resp.status_code != 200:
+        return None
+    return parse_dates_in_office(resp.text)

@@ -38,11 +38,20 @@ export const PARTY_META: Record<string, { label: string; color: string; rule: st
 
 /** A candidate's party label and colours: their own FEC code's where
  * there is one, else their party group's (a U.S. Taxpayers filer reads as
- * CONSTITUTION), else the bare code. */
-export function getPartyMeta(c: { party: string; partyGroup?: string | null }) {
+ * CONSTITUTION), else what the FEC's table says the code names ("TX":
+ * TAXPAYERS), else the code or printed label as given. */
+export function getPartyMeta(c: {
+  party: string;
+  partyGroup?: string | null;
+  partyLabel?: string | null;
+}) {
   return (
     PARTY_META[c.party] ??
-    PARTY_META[c.partyGroup ?? ""] ?? { label: c.party, color: "text-ink-lo", rule: "bg-ink-min" }
+    PARTY_META[c.partyGroup ?? ""] ?? {
+      label: (c.partyLabel ?? c.party).toUpperCase(),
+      color: "text-ink-lo",
+      rule: "bg-ink-min",
+    }
   );
 }
 

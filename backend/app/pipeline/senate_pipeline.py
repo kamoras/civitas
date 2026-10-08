@@ -98,6 +98,7 @@ from app.pipeline.transform.normalize_votes import (
     normalize_votes,
     stamp_roll_call_outcome,
     vote_identity,
+    vote_date_iso,
 )
 
 # Analyze modules
@@ -224,7 +225,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         "caucus_party": (data.get("votingRecord") or {}).get("effectiveParty"),
         "party_line_record": _record_json((data.get("votingRecord") or {}).get("partyLineRecord")),
         "total_from_pacs": funding.get("totalFromPACs") or 0,
-        "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
+        "small_donor_percentage": funding.get("smallDonorPercentage"),
         "website_url": data.get("officialWebsiteUrl") or "",
         "contact_form_url": data.get("contactFormUrl") or "",
         "office_phone": data.get("officePhone") or "",
@@ -300,7 +301,10 @@ def upsert_senator(db: Session, data: dict) -> None:
                 senator_id=senator_id,
                 bill_name=vote_data.get("billName") or "Unknown Bill",
                 bill_id=vote_data.get("billId") or "",
-                date=vote_data.get("date") or "",
+                # ISO, so the voting record's date order is the calendar's:
+                # Senate.gov's "October 14, 2025, 05:34 PM" sorted September
+                # ahead of October.
+                date=vote_date_iso(vote_data.get("date")) or vote_data.get("date") or "",
                 vote=vote_data.get("vote") or "Not Voting",
                 policy_area=vote_data.get("policyArea") or "PROCEDURAL",
                 policy_areas=json.dumps(vote_data.get("policyAreas") or []),
@@ -897,7 +901,7 @@ async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], 
             try:
                 sp_actions = await _sponsored_bill_actions(client, db, sp)
                 sp["isLaw"] = sp.get("isLaw", False) or is_enacted(sp.get("latestAction"), sp_actions)
-                sp["stage"] = classify_bill_stage_from_actions(sp_actions, sp["isLaw"])
+                sp["stage"] = classify_bill_stage_from_actions(sp_actions, sp["isLaw"], sp.get("billType"))
             except Exception:
                 # Leave stage unset: _les_bill_stage falls back to
                 # isLaw/latestAction for this bill. One unreachable
