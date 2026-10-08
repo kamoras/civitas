@@ -193,6 +193,13 @@ Optional, each because a live state needed it:
                                      ballot). An unparsable payload -- an
                                      empty body is how Arkansas's API refuses
                                      -- is a failed read, never no rows
+  format.ruled_columns               a PDF table drawn with rules, its
+                                     columns named left to right: the
+                                     vertical rules are the column edges and
+                                     a rule spanning the whole table closes
+                                     an office's group, its office printed
+                                     once beside its candidates (Clark
+                                     County, Nevada -- ruled_table_rows)
   format.office_parts                [[column, prefix], ...]: the office is
                                      spread over several fields, joined with
                                      each non-blank one after its prefix
@@ -301,6 +308,71 @@ def _column_starts(header: list[dict], rows: list[list[dict]]) -> list[tuple[flo
             if len(hits) == 1:
                 starts[hits[0]["text"]] = min(starts[hits[0]["text"]], cell["x0"])
     return sorted((x, text) for text, x in starts.items())
+
+
+# Points. A ruling is a filled rectangle this thin; words whose tops are
+# this close are one printed line (rows on Clark County's list are 19pt
+# apart, and a row's words share their top to within 1pt).
+_RULE = 2.0
+_SAME_LINE = 4.0
+
+
+def ruled_table_rows(pages: list[tuple[list[dict], list[dict]]], names: list[str]) -> list[dict] | None:
+    """Rows of a PDF table drawn with rules, one row per candidate, keyed by
+    `names` (the columns left to right) -- for a list whose office cell is
+    printed once, centred beside its candidates, rather than on their first
+    row (Clark County, Nevada's "Candidates and Contests").
+
+    The table's own drawing decides everything: the thin vertical rules
+    are the column edges, and a horizontal rule spanning the whole table
+    closes one office's group (a rule between two candidates of one
+    office spans only the candidate columns). The first column's words in
+    a group are its office, joined in reading order; every other printed
+    line in the group is a row carrying that office.
+
+    None when a page's rules do not divide it into exactly len(names)
+    columns, or a group lists candidates with no office beside them (an
+    office split across a page break): a row placed under a guessed office
+    is worse than no list. `pages` is (words, rects) per page."""
+    rows: list[dict] = []
+    for words, rects in pages:
+        thin_v = sorted({round((r["x0"] + r["x1"]) / 2) for r in rects
+                         if r["x1"] - r["x0"] < _RULE and r["bottom"] - r["top"] > _RULE})
+        edges: list[float] = []
+        for x in thin_v:
+            if not edges or x - edges[-1] > _RULE:
+                edges.append(x)
+        if not edges:
+            continue  # a page with no table on it
+        if len(edges) != len(names) + 1:
+            logger.warning("ruled table has %d columns, expected %d", len(edges) - 1, len(names))
+            return None
+        left, right = edges[0], edges[-1]
+        closes = sorted({round(r["top"]) for r in rects
+                         if r["bottom"] - r["top"] < _RULE and r["x0"] <= left + _RULE and r["x1"] >= right - _RULE})
+        for top, bottom in zip(closes, closes[1:]):
+            inside = [w for w in words if top <= (w["top"] + w["bottom"]) / 2 < bottom
+                      and left <= (w["x0"] + w["x1"]) / 2 <= right]
+            column = {id(w): sum(1 for x in edges[1:-1] if (w["x0"] + w["x1"]) / 2 > x) for w in inside}
+            office = " ".join(w["text"] for w in sorted(
+                (w for w in inside if column[id(w)] == 0), key=lambda w: (round(w["top"]), w["x0"])))
+            lines: list[list[dict]] = []
+            for w in sorted((w for w in inside if column[id(w)] > 0), key=lambda w: w["top"]):
+                if lines and w["top"] - lines[-1][0]["top"] < _SAME_LINE:
+                    lines[-1].append(w)
+                else:
+                    lines.append([w])
+            if lines and not office:
+                logger.warning("ruled table lists candidates with no office beside them")
+                return None
+            for line in lines:
+                row = {name: "" for name in names}
+                row[names[0]] = office
+                for w in sorted(line, key=lambda w: w["x0"]):
+                    name = names[column[id(w)]]
+                    row[name] = f"{row[name]} {w['text']}".strip()
+                rows.append(row)
+    return rows
 
 
 def pdf_table_rows(pages: list[list[dict]], headings: list[str]) -> list[dict]:
@@ -511,6 +583,10 @@ def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
         headings = _headings(fmt)
         try:
             with pdfplumber.open(io.BytesIO(payload)) as pdf:
+                if fmt.get("ruled_columns"):
+                    return ruled_table_rows(
+                        [(page.extract_words(), page.rects) for page in pdf.pages], fmt["ruled_columns"],
+                    )
                 return pdf_table_rows([page.extract_words() for page in pdf.pages], headings)
         except Exception:
             logger.exception("certified list PDF %s failed to parse", url)

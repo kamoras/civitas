@@ -322,3 +322,70 @@ async def test_a_general_list_that_cannot_be_read_falls_back_to_its_spare(db_ses
 
     assert civic.await_count == 1
     assert {c.id: c.confirmed_general for c in db_session.query(Candidate)} == {"S6AR1": False, "S6AR2": True}
+
+
+# --- Nevada (Clark County's republication; the state's list is walled) ---
+
+NV_PAGE = ('<a href="https://www.clarkcountynv.gov/adobe/assets/urn:aaid:aem:1db09a57/original/as/'
+           'officesup-26g.pdf">Candidates and Contests</a>')
+
+
+def _nv_handler(pdf: bytes):
+    def handler(request):
+        if request.url.path.endswith(".pdf"):
+            return httpx.Response(200, content=pdf, headers={"content-type": "application/pdf"})
+        return httpx.Response(200, text=NV_PAGE)
+    return handler
+
+
+@pytest.mark.asyncio
+async def test_nevada_reads_each_office_group_by_the_tables_rules():
+    pdf = (FIXTURES / "nv_clark_candidates_and_contests.pdf").read_bytes()
+    async with _client(_nv_handler(pdf)) as client:
+        records = await ct.fetch_confirmed_candidates(client, 2026, "NV", SOURCES["NV"]["general_list"])
+
+    # Each office is printed once, centred beside its candidates: a row is
+    # placed by the full-width rules around it, never by the nearest label.
+    # "No Political Party" and the Independent American Party are entries.
+    assert _parties(records, "H", 1) == ["D", "I", "I", "R"]
+    assert _parties(records, "H", 3) == ["D", "I", "R"]
+    assert _parties(records, "H", 4) == ["D", "I", "I", "R"]
+    # NV-2 is outside the county; "None of these candidates" is no one; and
+    # no state office is read from a county's list.
+    assert {r["office"] for r in records} == {"H"}
+    assert {r["district"] for r in records} == {1, 3, 4}
+    assert {"No Political Party", "Independent American Party"} <= {r["party_label"] for r in records}
+
+
+def _rule(x0, x1, top, bottom):
+    return {"x0": x0, "x1": x1, "top": top, "bottom": bottom}
+
+
+def _word(text, x0, top):
+    return {"text": text, "x0": x0, "x1": x0 + 20, "top": top, "bottom": top + 8}
+
+
+def test_a_ruled_table_whose_columns_changed_is_refused():
+    verticals = [_rule(x, x + 1, 0, 100) for x in (0, 100, 200)]  # two columns, three configured
+    full = [_rule(0, 201, 0, 1), _rule(0, 201, 99, 100)]
+    words = [_word("Governor", 10, 40), _word("Doe", 110, 40)]
+    assert ct.ruled_table_rows([(words, verticals + full)], ["Contest", "Last", "Party"]) is None
+
+
+def test_candidates_with_no_office_beside_them_are_refused():
+    # An office group split across a page break: guessing its office would
+    # place real candidates under the wrong one.
+    verticals = [_rule(x, x + 1, 0, 100) for x in (0, 100, 200, 300)]
+    full = [_rule(0, 301, 0, 1), _rule(0, 301, 99, 100)]
+    words = [_word("Doe", 110, 40), _word("REP", 210, 40)]
+    assert ct.ruled_table_rows([(words, verticals + full)], ["Contest", "Last", "Party"]) is None
+    words.append(_word("Governor", 10, 45))
+    assert ct.ruled_table_rows([(words, verticals + full)], ["Contest", "Last", "Party"]) == [
+        {"Contest": "Governor", "Last": "Doe", "Party": "REP"}]
+
+
+def test_nevadas_no_political_party_is_an_independent_entry_on_a_ballot():
+    from app.pipeline.fetch.state_candidates_common import normalize_party
+    assert normalize_party("NPP", ballot_list=True) == "I"
+    assert normalize_party("No Political Party", ballot_list=True) == "I"
+    assert normalize_party("NPP") is None  # never on primary results

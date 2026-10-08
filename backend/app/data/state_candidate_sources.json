@@ -1367,7 +1367,43 @@
         "3": "7785 W Sahara Ave, Suite 203, Las Vegas, NV 89117",
         "4": "2250 N Las Vegas Blvd, Suite 500, North Las Vegas, NV 89030"
       },
-      "description": "Same google_civic national-fallback strategy as DE's entry above \u2014 see that entry and state_candidates_civic.py's module docstring for the shared mechanism and dormant-until-November caveats. Each of the 4 addresses above was independently VERIFIED against the Census Bureau geocoder, not trusted on the strength of being a real official address: district 1's real current member's (Titus) own district office (495 South Main St, Las Vegas \u2014 Las Vegas City Hall) resolved to district 4, not 1, as did four other downtown Las Vegas landmarks tried afterward (Historic Fifth Street School, Clark County Government Center, The Smith Center, Las Vegas-Clark County Library) \u2014 downtown/central Las Vegas is not actually part of NV-1's real current, post-redistricting territory, which instead covers the area east of Interstate 15 and south of Nellis Air Force Base (Henderson, Paradise, Sunrise Manor, Winchester, and all of Boulder City). Boulder City's own City Hall was tried instead and verified correctly. Districts 2 (Reno), 3, and 4 (both Las Vegas Valley) verified on their first real district-office address tried."
+      "description": "Same google_civic national-fallback strategy as DE's entry above \u2014 see that entry and state_candidates_civic.py's module docstring for the shared mechanism and dormant-until-November caveats. Each of the 4 addresses above was independently VERIFIED against the Census Bureau geocoder, not trusted on the strength of being a real official address: district 1's real current member's (Titus) own district office (495 South Main St, Las Vegas \u2014 Las Vegas City Hall) resolved to district 4, not 1, as did four other downtown Las Vegas landmarks tried afterward (Historic Fifth Street School, Clark County Government Center, The Smith Center, Las Vegas-Clark County Library) \u2014 downtown/central Las Vegas is not actually part of NV-1's real current, post-redistricting territory, which instead covers the area east of Interstate 15 and south of Nellis Air Force Base (Henderson, Paradise, Sunrise Manor, Winchester, and all of Boulder City). Boulder City's own City Hall was tried instead and verified correctly. Districts 2 (Reno), 3, and 4 (both Las Vegas Valley) verified on their first real district-office address tried.",
+      "general_list": {
+        "source_name": "Clark County Election Department (Candidates and Contests, republishing Nevada's certified candidates)",
+        "strategy": "certified_table",
+        "runoff_threshold_pct": null,
+        "discovery": {
+          "page_url": "https://www.clarkcountynv.gov/government/departments/elections/",
+          "link_regex": "href=\"(https://www\\.clarkcountynv\\.gov/adobe/assets/[^\"]+/officesup-{yy}g\\.pdf)\""
+        },
+        "format": {
+          "ruled_columns": [
+            "Contest",
+            "Last",
+            "First",
+            "Party",
+            "Term"
+          ],
+          "office_column": "Contest",
+          "office_parse": true,
+          "office_regex": "^(.*?)(?:\\s+NOTE:.*)?$",
+          "party_column": "Party",
+          "name_columns": [
+            "First",
+            "Last"
+          ],
+          "surname_column": "Last",
+          "exclude": {
+            "Party": ""
+          },
+          "party_names": {
+            "IAP": "Independent American Party",
+            "LPN": "Libertarian Party of Nevada",
+            "NPP": "No Political Party"
+          }
+        },
+        "description": "Added 2026-10-08. Nevada's own certified candidate list (the Secretary of State's CertCandList.aspx, which Washoe County's elections page links as \"Who has Filed?\") and every other nvsos.gov and silverstateelection.nv.gov page answer with an Imperva/Incapsula bot challenge, and getting past one is not an option. Clark County's Election Department publishes the general election's contests and candidates \"in order of appearance on the ballot\" as a PDF linked from its elections page (officesup-26g.pdf, the cycle's two-digit year then g), so its federal contests are read from there, as the ballot-measure readers read a walled state's documents from a county's republication. A U.S. House contest's candidates are the same in every county it touches, so the county's list decides NV-1, NV-3 and NV-4 in full (NV-4's note says it covers parts of six other counties too). NV-2 lies outside Clark County and keeps its other sources (the per-race merge); Nevada has no U.S. Senate race in 2026. The state offices are not read from it: a county list holds only that county's legislative districts, so the opt-in would publish part of each chamber as the whole. Its table prints each office once, centred beside its candidates, so it is read by its rules (ruled_columns): full-width rules close an office's group, and the vertical rules are the column edges. \"None of these candidates\" (Nevada's statutory ballot line) has no party and is not a candidate; IAP, LPN and NPP are spelled out as the list's own legend spells them."
+      }
     },
     "NH": {
       "source_name": "New Hampshire Secretary of State (real per-office county/town results, xlsx)",

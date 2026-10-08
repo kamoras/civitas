@@ -194,6 +194,14 @@ export default async function ElectionsChapter() {
             removes the name. Where one of these lists can&apos;t be read, the page goes back to
             saying its names come from primary results and may be incomplete.
           </P>
+          <P>
+            The same audit found every House race in Nevada and New York still listing everyone who
+            filed with the FEC. Both states&apos; election sites answer with a bot challenge. Clark
+            County, Nevada publishes its own list of November contests, which now settles three of
+            the state&apos;s four House races. New York City&apos;s Board of Elections posts a
+            contest list too, but it is marked tentative, predates the state&apos;s certification
+            and covers only the city&apos;s districts, so it isn&apos;t presented as the ballot.
+          </P>
         </More>
         <More label="How the candidate lists were checked, September 2026">
           <P>
@@ -230,8 +238,9 @@ export default async function ElectionsChapter() {
             races. Michigan, Ohio and Oklahoma are read from lists the states publish themselves
             (Oklahoma&apos;s results API requires a login, so its State Election Board&apos;s
             published list of November ballots is read instead). Nevada and New York answer every
-            request with a bot challenge, so Google&apos;s election index is their only source until
-            that changes.
+            request with a bot challenge. Three of Nevada&apos;s four House races are read from
+            Clark County&apos;s own list of November contests; for the rest, and for New York,
+            Google&apos;s election index is the only source until that changes.
           </P>
           <P>
             Where a state&apos;s results are reached through a link on its own site, each linked

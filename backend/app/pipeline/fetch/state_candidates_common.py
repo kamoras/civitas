@@ -1232,6 +1232,8 @@ def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] 
 # Nebraska writes the same thing out as "By Petition". DTS is New Mexico's
 # "Declined to Select". "Unenrolled" is Maine's word for a voter in no
 # party (its 2026 General Candidate List prints it beside "Independent").
+# NPP is Nevada's "No Political Party" (Clark County's candidate list
+# legend: "indicated for partisan offices only").
 # Minor parties with an FEC code of their own, recognised ONLY on a
 # certified general-election list (normalize_party's ballot_list). On
 # primary results the same word is refused, deliberately: Vermont's
@@ -1245,9 +1247,9 @@ _BALLOT_LIST_PARTY_PATTERNS = [
     (re.compile(r"\b(?:progressive|prog)\b", re.IGNORECASE), "P"),
 ]
 
-_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS"})
+_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS", "NPP"})
 _INDEPENDENT_RE = re.compile(
-    r"\b(independent|unaffiliated|unenrolled|undeclared|no\s+party(\s+affiliation)?"
+    r"\b(independent|unaffiliated|unenrolled|undeclared|no\s+(?:political\s+)?party(\s+affiliation)?"
     r"|non[\s-]?partisan|by\s+petition)\b",
     re.IGNORECASE,
 )
