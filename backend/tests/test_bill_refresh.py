@@ -497,3 +497,79 @@ def test_bills_left_at_the_fetch_cap_are_read_again_next_cycle(db_session, monke
     assert marker["lastRun"] == "2026-07-22T00:00:00"
     assert summary["resumes_at"] == "2026-07-22T00:00:00"
 
+
+
+# ── Latest actions are never rolled back; the Congress's laws ─────
+
+_sync_laws = bill_refresh.sync_laws  # the real one; the fixture below stubs it for the full cycles
+
+
+@pytest.fixture(autouse=True)
+def no_law_list(monkeypatch):
+    """A full refresh cycle also reads Congress.gov's law list: stubbed, so
+    no test reaches the network."""
+    async def _none(db, client, congress):
+        return 0
+    monkeypatch.setattr(bill_refresh, "sync_laws", _none)
+
+
+def test_a_newer_stored_action_survives_the_nightly_rewrite(db_session):
+    # S. 2403 (2026-10-08): the hourly refresh had stored "Presented to
+    # President." of 2026-10-05; the nightly run's cached member list still
+    # said the House's motion to reconsider of 2026-09-16.
+    _make_senate_bill(db_session, bill_id="S.2403", latest_action="Presented to President.",
+                      latest_action_date="2026-10-05")
+    _make_senate_bill(db_session, bill_id="S.240", latest_action="Message on Senate action sent to the House.",
+                      latest_action_date="2026-09-28")
+    bills = [
+        {"billId": "S.2403", "congress": CURRENT, "latestActionDate": "2026-09-16",
+         "latestAction": "Motion to reconsider laid on the table Agreed to without objection."},
+        # Newer in the list than stored: the list's stands.
+        {"billId": "S.240", "congress": CURRENT, "latestActionDate": "2026-10-05", "latestAction": "Presented to President."},
+        {"billId": "S.9", "congress": CURRENT, "latestActionDate": "2026-01-02", "latestAction": "Introduced."},
+    ]
+    kept = bill_refresh.keep_newer_latest_actions(
+        db_session, SponsoredBill, SponsoredBill.senator_id == "s1", bills,
+    )
+    assert kept == 1
+    assert [(b["latestActionDate"], b["latestAction"]) for b in bills] == [
+        ("2026-10-05", "Presented to President."),
+        ("2026-10-05", "Presented to President."),
+        ("2026-01-02", "Introduced."),
+    ]
+
+
+def test_the_law_list_with_each_law_on_the_day_it_became_law(db_session, monkeypatch):
+    # Trimmed from Congress.gov: GET /law/119 and H.R. 1043's actions, whose
+    # latest action (a Senate committee report) came after it became law.
+    listing = {"bills": [
+        {"congress": 119, "type": "HR", "number": "1043", "title": "Pine Valley Project Act",
+         "laws": [{"number": "119-68", "type": "Public Law"}]},
+    ]}
+    actions = {"actions": [
+        {"actionDate": "2026-02-11", "type": "Committee",
+         "text": "By Senator Lee from Committee on Energy and Natural Resources filed written report. Report No. 119-109."},
+        {"actionDate": "2025-12-29", "type": "President", "actionCode": "E40000", "text": "Became Public Law No: 119-68."},
+        {"actionDate": "2025-12-29", "type": "President", "actionCode": "E30000", "text": "Signed by President."},
+    ]}
+    asked = []
+
+    async def fake_fetch(client, url):
+        asked.append(url)
+        return listing if "/law/" in url else actions
+
+    monkeypatch.setattr(bill_refresh, "_fetch_with_retry", fake_fetch)
+    assert asyncio.run(_sync_laws(db_session, None, 119)) == 1
+    assert bill_refresh.stored_laws(db_session, 119)["HR.1043"] == {
+        "title": "Pine Valley Project Act", "law": "119-68", "kind": "Public", "date": "2025-12-29",
+    }
+    asked.clear()
+    assert asyncio.run(_sync_laws(db_session, None, 119)) == 0
+    assert len(asked) == 1  # a law's date is read once
+
+
+def test_an_unreadable_law_list_is_not_an_empty_one(db_session, monkeypatch):
+    async def down(client, url):
+        return None
+    monkeypatch.setattr(bill_refresh, "_fetch_with_retry", down)
+    assert asyncio.run(_sync_laws(db_session, None, 119)) is None

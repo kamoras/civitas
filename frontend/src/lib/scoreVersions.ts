@@ -32,6 +32,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.33",
+    date: "2026-10-08",
+    title: "State partisan lean matches Cook's published figures",
+    tldr: "A senator's seat expectation reads the state's Cook PVI. Ours averaged the 2020 and 2024 presidential votes equally; Cook weights 2024 three times as heavily, and with that weighting ours matches all 51 of Cook's published state figures, where 18 had been a point off.",
+    changes: [
+      "State PVI moves by one point toward Cook's published value in 18 jurisdictions: AK, AR, IN, KS, ND, NE, OK, UT and WY one point less Republican; OH, NC and WI too (Wisconsin to EVEN); ME, MN, OR and WA one point more Democratic, NJ one point less, DC one point more. Senators from those states have Constituent Alignment (the expected party-break rate, position congruence and the approval part) read on the corrected lean; representatives are unaffected, since House seats were already on Cook's published district figures.",
+      "The weighting was measured, not assumed: against the generator's own pinned returns, 75/25 reproduces every published state value, and 70/30 or 80/20 miss four each. District figures were already Cook's published numbers. docs/methodology/member-score/v6.33.md has the details.",
+    ],
+  },
+  {
     version: "v6.32",
     date: "2026-10-08",
     title: "The candidate's own money and vetoed bills",

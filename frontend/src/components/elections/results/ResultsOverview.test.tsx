@@ -448,3 +448,43 @@ describe("a chamber with no count shown while the other has one", () => {
     expect(row("GA")).not.toHaveTextContent(/HOUSE:/);
   });
 });
+
+describe("the totals cards' live counts", () => {
+  // A covered state whose every read was refused (test data) or failed is
+  // not "read live": the cards counted it as read while its row said its
+  // feed couldn't be read.
+  const feeds = {
+    GA: { status: "ok", checkedAt: "2026-11-04T02:55:00Z", lastOkAt: "2026-11-04T02:55:00Z" },
+    CO: { status: "untrusted", checkedAt: "2026-11-04T02:55:00Z", lastOkAt: null },
+    NC: { status: "failed", checkedAt: "2026-11-04T02:55:00Z", lastOkAt: null },
+  };
+
+  it("counts only states whose feed is being read", () => {
+    render(
+      <ResultsOverview
+        results={results({ liveStates: ["GA", "CO", "NC"], senateStates: ["GA", "CO"], feeds })}
+        now={NOW}
+        states={["GA", "CO", "NC"]}
+      />
+    );
+    expect(
+      screen.getByText(/Read live in 1 of the 2 states electing a senator/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/of 1 state read live/)).toBeInTheDocument();
+  });
+
+  it("counts every covered state while each read is going through", () => {
+    const ok = { ...feeds, CO: feeds.GA, NC: feeds.GA };
+    render(
+      <ResultsOverview
+        results={results({ liveStates: ["GA", "CO", "NC"], senateStates: ["GA", "CO"], feeds: ok })}
+        now={NOW}
+        states={["GA", "CO", "NC"]}
+      />
+    );
+    expect(
+      screen.getByText(/Read live in 2 of the 2 states electing a senator/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/of 3 states read live/)).toBeInTheDocument();
+  });
+});

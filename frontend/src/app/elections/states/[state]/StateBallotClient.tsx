@@ -1097,7 +1097,7 @@ function HouseDetail({
                 aria-label={`${ballot.officialLookup.label} (opens in new tab)`}
                 className="text-signal-cyan hover:text-phos"
               >
-                {stateName}&apos;s own ballot lookup ↗
+                {stateName}&apos;s own voter lookup ↗
               </a>
             </>
           ) : null}
@@ -1799,8 +1799,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   aria-label={`${officialLookup.label} (opens in new tab)`}
                   className="font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
                 >
-                  {officialLookup.isStateSpecific
-                    ? `SEE YOUR FULL ${ballot.state} BALLOT ↗`
+                  {/* lookupIsStateSpecific, not the raw flag: a URL safeHref
+                    rejected sends this link to USAGov. "Voter lookup", not
+                    "your full ballot": some states' link is their polling-
+                    place page, which shows where to vote, not the ballot. */}
+                  {lookupIsStateSpecific
+                    ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
                     : "FIND YOUR ELECTION OFFICE ↗"}
                 </a>
               </div>

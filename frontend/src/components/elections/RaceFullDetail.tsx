@@ -43,9 +43,7 @@ function TailRow({ candidate }: { candidate: BallotCandidate }) {
     <div className="flex items-center gap-2.5 border-b border-white/[0.05] py-1.5 text-sm last:border-b-0">
       <span className={`h-2 w-2 shrink-0 ${getPartyMeta(candidate).rule}`} aria-hidden="true" />
       <span className="flex-1 truncate text-ink-lo">{candidateName(candidate)}</span>
-      <span className="shrink-0 font-mono text-xs text-ink-min">
-        {cash == null ? "—" : cash.label === "Debt" ? `debt ${cash.amount}` : cash.amount}
-      </span>
+      <span className="shrink-0 font-mono text-xs text-ink-min">{cash?.amount ?? "—"}</span>
     </div>
   );
 }

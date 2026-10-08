@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   asLabel,
+  cashOnHandDisplay,
   commentDaysLeft,
   competitionRanks,
   displayScore,
@@ -43,6 +44,20 @@ describe("formatCurrency", () => {
     expect(formatCurrency(383.2)).toBe("$383");
     expect(formatCurrency(944.54)).toBe("$945");
     expect(formatCurrency(-781.22)).toBe("-$781");
+  });
+
+  it("never prints a nonzero amount under a dollar as $0", () => {
+    expect(formatCurrency(-0.04)).toBe("-$0.04");
+    expect(formatCurrency(0.4)).toBe("$0.40");
+    expect(formatCurrency(0.001)).toBe("$0.01");
+  });
+});
+
+describe("cashOnHandDisplay", () => {
+  it("shows a negative figure as the FEC reports it, not as debt", () => {
+    expect(cashOnHandDisplay(-0.04)).toEqual({ label: "Cash on hand", amount: "-$0.04" });
+    expect(cashOnHandDisplay(-3500)).toEqual({ label: "Cash on hand", amount: "-$4K" });
+    expect(cashOnHandDisplay(null)).toBeNull();
   });
 });
 
