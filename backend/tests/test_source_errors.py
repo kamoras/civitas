@@ -111,6 +111,8 @@ async def test_a_house_run_that_cannot_read_its_roll_calls_saves_no_member(db_se
     saved = MagicMock()
     with (
         patch.object(house_pipeline, "SessionLocal", return_value=db_session),
+        # Party-platform seeds are embedded at run start; not under test.
+        patch.object(house_pipeline, "initialize_platform_embeddings"),
         patch.object(house_pipeline, "fetch_representatives", new_callable=AsyncMock, return_value=[{"bioguideId": "R000001"}]),
         patch.object(house_pipeline, "fetch_member_detail", new_callable=AsyncMock, return_value={}),
         patch.object(house_pipeline, "normalize_house_members", return_value=[{"bioguideId": "R000001"}]),
