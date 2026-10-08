@@ -41,7 +41,7 @@ from sqlalchemy.orm import Session
 from app.models import FinancialDisclosure, FinancialHolding
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline.fetch.fd_common import UNREADABLE_SCANNED, AnnualReport, until_deadline
-from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
+from app.pipeline.fetch.house_fd import NEW_FILER_TYPE, PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
 from app.pipeline.fetch.house_fd import report_still_loads as house_report_still_loads
 from app.pipeline.fetch.president_fd import HOLDINGS_PARSER_VERSION as PRESIDENT_PARSER_VERSION
@@ -312,9 +312,25 @@ def _replace_disclosure(
 
 
 def _house_report_label(filing: dict) -> str:
+    if filing.get("filing_type") == NEW_FILER_TYPE:
+        # It states no date its values describe (see _house_as_of), so it is
+        # named by when it was filed.
+        filed = filing.get("filing_date")
+        return f"new-filer report filed {filed}" if filed else "new-filer report"
     year = filing.get("year")
     base = f"{year} annual report" if year else "annual report"
     return f"{base} (amended)" if filing.get("filing_type") == "A" else base
+
+
+def _house_as_of(filing: dict) -> str | None:
+    """The date a House report's holdings describe: an annual report's (or
+    its amendment's) year end. A new-filer report states none — neither on
+    its cover nor in the index, whose year is only the year it was filed
+    under — so it has none and ranks below every annual report (_rank): it
+    is shown for a member who has filed nothing else."""
+    if filing.get("filing_type") == NEW_FILER_TYPE or not filing.get("year"):
+        return None
+    return f"{filing['year']}-12-31"
 
 
 def _is_member_prefix(prefix: str | None) -> bool:
@@ -643,6 +659,18 @@ async def _house_candidates(db: Session, client: httpx.AsyncClient) -> dict[str,
         for filing in filings:
             if (rep_id := match(filing["last"], filing["first"], filing["state_district"])) is not None:
                 per_rep.setdefault(rep_id, []).append(filing)
+    # This year's index too, for new-filer reports alone: a member seated
+    # this year files one months before any annual report (two of the four
+    # sitting members whose only report was one, 2026-10, filed it in the
+    # year it is indexed under). Best-effort — early in a year the index can
+    # be missing, and nothing else is read from it — so a failure here costs
+    # only those reports, until the next run.
+    current = await fetch_annual_filing_index(client, db, utcnow().year, filing_types={NEW_FILER_TYPE})
+    if current is None:
+        logger.warning("House index for %d not loaded — this year's new-filer reports wait for the next run", utcnow().year)
+    for filing in current or []:
+        if (rep_id := match(filing["last"], filing["first"], filing["state_district"])) is not None:
+            per_rep.setdefault(rep_id, []).append(filing)
     if indexed == 0:
         # Two calendar years with no annual report from anyone in the House
         # is a failed or changed index, not a quiet year — fail the phase so
@@ -681,7 +709,7 @@ async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
             "report_label": _house_report_label(f),
             "filed_date": f.get("filing_date") or None,
             "source_url": f["pdf_url"],
-            "as_of_date": f"{f['year']}-12-31" if f.get("year") else None,  # annual: holdings at year end
+            "as_of_date": _house_as_of(f),
             "amended": f.get("filing_type") == "A",
             "seq": int(f["doc_id"]) if str(f["doc_id"]).isdigit() else 0,  # see _rank
         },
