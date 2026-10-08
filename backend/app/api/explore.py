@@ -20,6 +20,7 @@ from app.api.response_helpers import (
     retry_soon_json,
 )
 from app.database import get_db, off_loop
+from app.member_ids import resolve_member_id
 from app.models import ExploreDocument
 from app.services.explore_search import browse_documents, hybrid_search
 from app.time_utils import comment_period_today
@@ -82,7 +83,7 @@ async def search_explore(
         if not politician_id:
             raise HTTPException(status_code=422, detail="q is required without politician_id")
         outcome = await off_loop(db, lambda session: browse_documents(
-            session, politician_id, limit=limit, doc_type=doc_type,
+            session, resolve_member_id(session, politician_id), limit=limit, doc_type=doc_type,
             chamber=canonical_chamber, commentable=commentable,
         ))
         return JSONResponse(
@@ -99,7 +100,7 @@ async def search_explore(
         limit=limit,
         doc_type=doc_type,
         chamber=canonical_chamber,
-        politician_id=politician_id,
+        politician_id=resolve_member_id(session, politician_id) if politician_id else None,
         commentable=commentable,
         sort=sort,
     ))

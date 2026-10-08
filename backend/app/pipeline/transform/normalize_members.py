@@ -5,6 +5,7 @@ import re
 import unicodedata
 
 from app.election_calendar import federal_states
+from app.member_ids import member_slug
 from app.state_names import STATE_NAME_TO_CODE as STATE_NAMES_TO_CODES
 from app.time_utils import utcnow
 from app.pipeline.transform.committee_data import (
@@ -64,18 +65,16 @@ def normalize_members(
         if not senate_term and m.get("chamber") != "Senate":
             continue
 
-        raw_name = m.get("name") or f"{m.get('firstName', '')} {m.get('lastName', '')}"
+        raw_name = m.get("name") or f"{m.get('lastName', '')}, {m.get('firstName', '')}"
         state = _extract_state_code(m, detail)
         party = _normalize_party(m.get("partyName") or m.get("party"))
         years_in_office = _calculate_years_in_office(m, detail)
 
         last_name_for_match = _extract_last_name(raw_name)
 
-        # Generate ID from raw name for backward compatibility with DB records
-        raw_parts = raw_name.split()
-        raw_last = re.sub(r"[^a-z]", "", raw_parts[-1].lower()) if raw_parts else ""
-        raw_first = re.sub(r"[^a-z]", "", raw_parts[0].lower()) if raw_parts else ""
-        senator_id = f"{raw_last}-{raw_first}"
+        # The slug; unique across both chambers once app.member_ids.
+        # assign_member_ids has settled it against the stored members.
+        senator_id = member_slug(raw_name)
 
         # Clean name to "First Last" order for display and initials
         name = _clean_name(raw_name)
@@ -158,7 +157,7 @@ def normalize_house_members(
         if most_recent.get("chamber") != "House of Representatives":
             continue
 
-        raw_name = m.get("name") or f"{m.get('firstName', '')} {m.get('lastName', '')}"
+        raw_name = m.get("name") or f"{m.get('lastName', '')}, {m.get('firstName', '')}"
         state = _extract_state_code(m, detail)
 
         # Skip non-voting delegates (DC, PR, GU, VI, AS, MP): only the
@@ -174,10 +173,7 @@ def normalize_house_members(
 
         last_name_for_match = _extract_last_name(raw_name)
 
-        raw_parts = raw_name.split()
-        raw_last = re.sub(r"[^a-z]", "", raw_parts[-1].lower()) if raw_parts else ""
-        raw_first = re.sub(r"[^a-z]", "", raw_parts[0].lower()) if raw_parts else ""
-        rep_id = f"{raw_last}-{raw_first}"
+        rep_id = member_slug(raw_name)  # settled by app.member_ids.assign_member_ids
 
         name = _clean_name(raw_name)
         name_parts = name.split()

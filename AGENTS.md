@@ -578,6 +578,31 @@ name from the Congress.gov "LastName, FirstName" format during member
 normalization and stores it as `lastNameForVoteMatch`.  Unicode accents are
 stripped (NFD decomposition) so "Núñez" matches "Nunez" in the XML.
 
+### 4b. Member ids are slugs, renamed in place
+
+A member's id (the `senators` / `representatives` primary key and the URL
+`/politicians/<id>`) is `first-last` from Congress.gov's "Last, First Middle"
+name, ASCII-folded (`app/member_ids.member_slug`): the first given name
+(initials, a quoted nickname and Jr./Sr./II–IV passed over) and the whole
+surname. The formal name string is the source, not the member detail's
+`firstName`, which holds the familiar form for some members. One URL
+namespace covers both chambers: the same bioguide id keeps one id in both
+tables, and a second person with the same slug gets the state code
+appended (then the bioguide id); whoever holds an id keeps it.
+
+Ids are re-derived every run, so `assign_member_ids` runs on each chamber's
+roster before anything writes a member by id: it matches stored members by
+**bioguide id**, never by id, and renames a changed one in place — the row,
+every foreign-key child (found from the metadata, since SQLite has no ON
+UPDATE CASCADE), and the references no foreign key covers (the same ones
+`member_lifecycle._purge_member_traces` clears) — recording the old id in
+`member_id_aliases`. Never let an id change read as a member leaving: that
+retires the row and purges its history after `RETIREMENT_GRACE_DAYS`. A new
+table or JSON field that stores a member id must be added to
+`member_ids._move` and to the purge. The API resolves an old id
+(`resolve_member_id`) and serves the member under the current id; the
+profile page answers it with a permanent redirect (308).
+
 ### 5. Config as single source of truth
 
 All dynamic enums, category codes, industry definitions, score weights, and
@@ -1188,6 +1213,7 @@ the pending list).
 |------|-------|
 | Pipeline orchestration | `backend/app/scheduler.py` (entrypoint), `backend/app/pipeline/senate_pipeline.py` / `house_pipeline.py` |
 | Departed-member detection + removal | `backend/app/pipeline/member_lifecycle.py` |
+| Member ids (slug, cross-chamber uniqueness, rename in place, old-id aliases) | `backend/app/member_ids.py` |
 | Stock trade disclosures | `backend/app/pipeline/stock_pipeline.py` |
 | Annual-report holdings (scorecard pie) | `backend/app/pipeline/holdings_pipeline.py`, `fetch/house_fd.py`, `fetch/senate_fd.py`, `fetch/fd_common.py`, `services/holdings_service.py`, `frontend/src/components/checker/Holdings.tsx` |
 | Scoring formulas | `backend/app/pipeline/analyze/score_calculator.py` |

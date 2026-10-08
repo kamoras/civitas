@@ -73,6 +73,7 @@ from app.pipeline.fetch.fec import (
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
+from app.member_ids import assign_member_ids
 from app.pipeline.member_lifecycle import (
     CHAMBER_SENATE,
     purge_departed_members,
@@ -1148,6 +1149,10 @@ async def run_senate_pipeline(
             logger.info("--- Phase 2: TRANSFORM (members) ---")
             progress.begin("normalize_members")
             senators = normalize_members(raw_members, member_details)
+            # Settle ids against the stored members by bioguide id, renaming
+            # any whose id changed, before anything below writes by id.
+            assign_member_ids(db, CHAMBER_SENATE, senators)
+            db.commit()
             roster = list(senators)  # the whole chamber, for the party-line records
             logger.info("Normalized %d senators", len(senators))
             progress.complete("normalize_members", detail=f"{len(senators)} senators")

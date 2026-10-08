@@ -177,6 +177,7 @@ Normalizes raw API payloads into typed domain objects. Key operations:
 - **Bill title normalization**: Congress.gov returns bill titles in several formats (official, short, display, popular). Transform picks the most human-readable, falling back through the hierarchy.
 - **Employer name normalization**: FEC contributor employer fields are free text. A batch embedding pass maps variant spellings (e.g. "Goldman Sachs & Co", "GOLDMAN SACHS") to a canonical form before classification.
 - **Memo text parsing**: FEC memo text fields encode earmarks and transfers in free-form text. A batch skip-entity classifier separates genuine contributions from administrative memo entries.
+- **Member ids**: a member's id, and their URL `/politicians/<id>`, is `first-last` from Congress.gov's "Last, First Middle" name (`app/member_ids.py`): the first given name (passing over initials, a quoted nickname and suffixes), the whole surname (`jane-doe-roe` for "Doe Roe, Jane Q."), accents folded to ASCII (`ana-nunez`). One person keeps one id in both chambers; two people with the same name are told apart by state code (`jane-doe-oh`), whoever held the id first keeping it. Ids are derived each run and matched to stored members by bioguide id, so a changed id (a new derivation, a legal name change) renames the member in place — the row, every child table, score history, Explore links, action issues, the spotlight rotation — and records the old id in `member_id_aliases`. The API answers an old id under the new one and `/politicians/<old id>` redirects permanently (308) to the new URL; the sitemap lists current ids only.
 
 ### Phase 3 — ANALYZE
 
@@ -1179,6 +1180,10 @@ Conventions: lists are pages (`entries`, `total`, `page`, `perPage`,
 the filters; an unknown id is a 404 (history included); every record has a
 `siteUrl`; filter values (party, chamber, document type) are enumerated in
 the spec and a value outside them is a 422.
+
+A member's id is their `first-last` name (see Phase 2 — TRANSFORM), and an id a member had
+before a rename still works: the record comes back under the current id
+(`id`, `siteUrl`), so a client holding an old one is not broken.
 
 The same API is an **MCP server** at `/api/public/v1/mcp` (streamable HTTP,
 stateless, JSON responses — `backend/app/api/public_mcp.py`). Its tools are
