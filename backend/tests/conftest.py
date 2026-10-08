@@ -215,6 +215,9 @@ def throttle_store(_throttle_dir):
 TEST_RANKING_CALIBRATION = {
     "field_weights": {"title": 8.0, "summary": 3.0, "body": 1.0},
     "prior_weights": {"freshness": 0.4, "authority": 0.3},
+    # δ, and so RRF's K (explore_ranking.rrf_k): 60, the value the fusion tests
+    # below were written against.
+    "retriever_resolution_ranks": 60.0,
     "candidate_pool": {"default": 200, "max": 600},
     "source_diversity_cap": 3,
     "fingerprint": {"prefix_chars": 400, "min_chars": 80},
