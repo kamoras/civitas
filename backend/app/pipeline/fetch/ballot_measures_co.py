@@ -41,6 +41,7 @@ measure's own "Placed on the ballot by ..." line.
 """
 
 import re
+import statistics
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import (
     clean_text,
@@ -59,8 +60,12 @@ _BADGE_X0_MAX = 90.0  # excludes the decorative badge, which sits left of the ti
 _GUIDE_HEADER = "Quick Ballot Reference Guide"
 
 _PLACED_RE = re.compile(r"^Placed on the ballot by (.+?)\s*•", re.IGNORECASE)
-_YES_RE = re.compile(r'^(?:YES\s+)?A\s+[“"]?yes[”"]?\s+vote on (?:Amendment|Proposition)\s+\S+\s+(.*)$', re.IGNORECASE)
-_NO_RE = re.compile(r'^(?:NO\s+)?A\s+[“"]?no[”"]?\s+vote on (?:Amendment|Proposition)\s+\S+\s+(.*)$', re.IGNORECASE)
+# The whole sentence, "A “yes” vote on Amendment 81 requires ..." — only
+# the column's decorative YES/NO badge is dropped. It used to keep just
+# what followed the measure number, so every Colorado yes/no line was
+# stored as a lowercase fragment of the Blue Book's sentence (§7).
+_YES_RE = re.compile(r'^(?:YES\s+)?(A\s+[“"]?yes[”"]?\s+vote on (?:Amendment|Proposition)\s+\S+\s+.*)$', re.IGNORECASE)
+_NO_RE = re.compile(r'^(?:NO\s+)?(A\s+[“"]?no[”"]?\s+vote on (?:Amendment|Proposition)\s+\S+\s+.*)$', re.IGNORECASE)
 
 
 def _row_words(page_rows: dict, rid: int) -> list[dict]:
@@ -74,12 +79,106 @@ def _row_words(page_rows: dict, rid: int) -> list[dict]:
     return row
 
 
+# A table inside a ballot title (Amendment 87, 2026: the estimated change
+# in tax owed by income category) puts its cells 11pt+ apart; words within
+# a cell, like body text, sit ~2.7pt apart.
+_CELL_GAP = 6.0
+_EDGE_TOLERANCE = 1.0
+# Header lines are closer together than table rows: 13pt against 16pt in
+# Amendment 87's table, so under 90% of the row pitch is a wrapped line.
+_HEADER_LEADING = 0.9
+
+
+def _cells(row: list[dict]) -> list[list[dict]]:
+    """One row's words split into cells at gaps wider than _CELL_GAP."""
+    cells: list[list[dict]] = []
+    for w in sorted(row, key=lambda w: w["x0"]):
+        if cells and w["x0"] - cells[-1][-1]["x1"] <= _CELL_GAP:
+            cells[-1].append(w)
+        else:
+            cells.append([w])
+    return cells
+
+
+def _text(words: list[dict]) -> str:
+    return " ".join(w["text"] for w in words)
+
+
+def _lines(words: list[dict]) -> list[str]:
+    """The zone's lines top to bottom, with a table's wrapped column
+    headers read column by column.
+
+    Read row by row, a header whose cells wrap over three lines comes out
+    interleaved — "Current Average Proposed Change in Average Income
+    Income Tax Proposed Average ..." for the Blue Book's "Current Average
+    Income Tax Owed" | "Proposed Average Income Tax Owed" | ... The table's
+    data rows (two or more consecutive rows of cells ending at the same
+    right edges, as numbers right-aligned in columns do) give the
+    columns; the closely spaced rows above them whose every cell starts at
+    the first column or ends on a column's edge are its header, and each column's
+    header words are joined top to bottom. Only the order of those words
+    changes; none is added or dropped."""
+    bands = rows(words)
+    ids = sorted(bands)
+    cells = {i: _cells(bands[i]) for i in ids}
+    lines = {i: _text(sorted(bands[i], key=lambda w: w["x0"])) for i in ids}
+
+    def edges(i: int) -> list[float]:
+        return [c[-1]["x1"] for c in cells[i][1:]]
+
+    def same(a: list[float], b: list[float]) -> bool:
+        return len(a) == len(b) and all(abs(x - y) <= _EDGE_TOLERANCE for x, y in zip(a, b))
+
+    first = next(
+        (k for k in range(len(ids) - 1)
+         if len(cells[ids[k]]) >= 3 and same(edges(ids[k]), edges(ids[k + 1]))),
+        None,
+    )
+    if first is None:
+        return [lines[i] for i in ids]
+    col_edges = edges(ids[first])
+    left = cells[ids[first]][0][0]["x0"]
+
+    def column(cell: list[dict]) -> int | None:
+        if abs(cell[0]["x0"] - left) <= _EDGE_TOLERANCE:
+            return 0
+        return next((n + 1 for n, e in enumerate(col_edges) if abs(cell[-1]["x1"] - e) <= _EDGE_TOLERANCE), None)
+
+    def top(k: int) -> float:
+        return min(w["top"] for w in bands[ids[k]])
+
+    # The aligned run: the data rows and, above them, the header rows. A
+    # header's last line can fill every column like a data row (Amendment
+    # 87's "Income Categories | Owed | Income Tax Owed | + or ‑"), so what
+    # separates them is spacing: header lines sit at the font's leading
+    # (13pt there), table rows at a wider pitch (16pt).
+    start = first
+    while start > 0 and all(column(c) is not None for c in cells[ids[start - 1]]):
+        start -= 1
+    end = first
+    while end + 1 < len(ids) and same(edges(ids[end + 1]), col_edges):
+        end += 1
+    pitch = statistics.median(top(k + 1) - top(k) for k in range(first, end))
+    last = start
+    while last < end and top(last + 1) - top(last) < _HEADER_LEADING * pitch:
+        last += 1
+    header = ids[start:last + 1]
+    if len(header) < 2:  # a one-line header already reads in order
+        return [lines[i] for i in ids]
+    columns: list[list[str]] = [[] for _ in range(len(col_edges) + 1)]
+    for i in header:
+        for c in cells[i]:
+            columns[column(c)].append(_text(c))
+    merged = " ".join(" ".join(col) for col in columns if col)
+    return [lines[i] for i in ids if i < header[0]] + [merged] + [lines[i] for i in ids if i > header[-1]]
+
+
 def _zone_text(page_rows: dict, row_ids: list[int], start: int, end: int | None) -> str | None:
     words = [
         w for rid in row_ids if start < rid < (end if end is not None else row_ids[-1] + 1)
         for w in _row_words(page_rows, rid)
     ]
-    return clean_text(" ".join(lines_from_words(words)))
+    return clean_text(" ".join(_lines(words)))
 
 
 def _placed_rows(page_rows: dict, row_ids: list[int]) -> list[int]:

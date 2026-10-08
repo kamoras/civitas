@@ -85,6 +85,8 @@ def test_advisory_question_reads_both_option_columns_in_order():
     order = [s.index(f"({c})") for c in "abcdef"]
     assert order == sorted(order)
     assert "bolt-action rifle (.30-06)" in s
+    # The purpose follows under the pamphlet's heading as printed.
+    assert " BRIEF STATEMENT OF PURPOSE: " in s
     assert adv["yes_means"] is None and adv["no_means"] is None
 
 
