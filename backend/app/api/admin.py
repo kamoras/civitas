@@ -28,6 +28,7 @@ from app.models import (
     ActionIssue,
     AnalysisCache,
     ApiCache,
+    ApiRejectionCount,
     ApiRequestCount,
     CampaignPromise,
     Donor,
@@ -490,11 +491,14 @@ def admin_api_usage(
     """Public API and MCP use for the last N calendar days (ApiRequestCount).
 
     ``days`` is zero-filled like visitor-stats, one entry per day: requests
-    over plain HTTP and as MCP tool calls, how many of all of them were
-    refused for the rate limit (429) or were otherwise errors (4xx/5xx),
-    and ``mcpConnections`` — tool listings, which a client makes when it
-    connects. ``totals`` sums the window; ``byEndpoint`` totals it per
-    endpoint, busiest first.
+    over plain HTTP and as MCP tool calls; of all of them, how many were
+    refused for the rate limit (429), ``rejected`` as the caller's mistake
+    (any other 4xx: an invalid parameter, an id that doesn't exist) and
+    ``serverErrors`` (5xx, the API's own failures); and ``mcpConnections``
+    — tool listings, which a client makes when it connects. ``totals`` sums
+    the window; ``byEndpoint`` totals it per endpoint, busiest first;
+    ``rejections`` says which parameter broke which rule on the invalid
+    (422) requests (ApiRejectionCount), most frequent first.
     Counts only: nothing here identifies a caller, and none of it is in the
     visitor figures (a program calling the API is not a visitor).
     """
@@ -505,7 +509,16 @@ def admin_api_usage(
         .filter(ApiRequestCount.date >= dates[0])
         .all()
     )
-    per_day = {d: {"date": d, "http": 0, "mcp": 0, "rateLimited": 0, "errors": 0, "mcpConnections": 0}
+    outcomes = ("rateLimited", "rejected", "serverErrors")
+
+    def outcome(status: int) -> str | None:
+        if status == 429:
+            return "rateLimited"
+        if 400 <= status < 500:
+            return "rejected"
+        return "serverErrors" if status >= 500 else None
+
+    per_day = {d: {"date": d, "http": 0, "mcp": 0, **{k: 0 for k in outcomes}, "mcpConnections": 0}
                for d in dates}
     per_endpoint: dict[str, dict] = {}
     for date, endpoint, channel, status, count in rows:
@@ -516,23 +529,30 @@ def admin_api_usage(
             day["mcpConnections"] += count
             continue
         day[channel] += count
-        if status == 429:
-            day["rateLimited"] += count
-        elif status >= 400:
-            day["errors"] += count
         totals = per_endpoint.setdefault(
-            endpoint, {"endpoint": endpoint, "http": 0, "mcp": 0, "rateLimited": 0, "errors": 0},
+            endpoint, {"endpoint": endpoint, "http": 0, "mcp": 0, **{k: 0 for k in outcomes}},
         )
         totals[channel] += count
-        if status == 429:
-            totals["rateLimited"] += count
-        elif status >= 400:
-            totals["errors"] += count
-    keys = ("http", "mcp", "rateLimited", "errors", "mcpConnections")
+        if kind := outcome(status):
+            day[kind] += count
+            totals[kind] += count
+    rejections: dict[tuple, int] = {}
+    for endpoint, parameter, reason, count in (
+        db.query(ApiRejectionCount.endpoint, ApiRejectionCount.parameter, ApiRejectionCount.reason,
+                 ApiRejectionCount.count)
+        .filter(ApiRejectionCount.date >= dates[0])
+        .all()
+    ):
+        rejections[(endpoint, parameter, reason)] = rejections.get((endpoint, parameter, reason), 0) + count
+    keys = ("http", "mcp", *outcomes, "mcpConnections")
     return {
         "days": list(per_day.values()),
         "totals": {k: sum(day[k] for day in per_day.values()) for k in keys},
         "byEndpoint": sorted(per_endpoint.values(), key=lambda e: e["http"] + e["mcp"], reverse=True),
+        "rejections": [
+            {"endpoint": e, "parameter": p, "reason": r, "count": n}
+            for (e, p, r), n in sorted(rejections.items(), key=lambda kv: -kv[1])
+        ],
     }
 
 

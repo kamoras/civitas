@@ -161,3 +161,39 @@ def test_promise_persistence_is_published_as_not_measured(client, chamber, membe
     assert _body(client, f"/{chamber}/{member}")["representationScore"]["promisePersistence"] is None
     (snap,) = _body(client, f"/{chamber}/{member}/history")["snapshots"]
     assert snap["promisePersistence"] is None
+
+
+class TestCallerMistakes:
+    """A filter the endpoint doesn't take is refused, not ignored; a choice
+    written another way than the documented one is read as it; an unknown
+    member id is a 404, not an empty search; and every 422 records which
+    parameter broke which rule (ApiRejectionCount)."""
+
+    def test_an_unknown_parameter_is_refused(self, client):
+        r = client.get("/api/public/v1/search", params={"q": "tax", "type": "speech"})
+        assert r.status_code == 422
+        assert r.json()["detail"][0]["loc"] == ["query", "type"]
+        assert "doc_type" in r.json()["detail"][0]["msg"]
+
+    def test_choices_are_read_whatever_their_case_or_separators(self):
+        from app.api.public import _canonical
+
+        types = ("Senate Floor Speech", "Executive Order")
+        assert _canonical("doc_type", "senate-floor-speech", types) == "Senate Floor Speech"
+        assert _canonical("doc_type", "executive_order", types) == "Executive Order"
+        assert _canonical("chamber", "Senate", ("senate", "house")) == "senate"
+        assert _canonical("party", "Republican", ("D", "R", "I")) == "R"
+        assert _canonical("state", "georgia", ()) == "GA"
+        assert _canonical("doc_type", "speech", types) == "speech"  # left for validation to refuse
+
+    def test_an_unknown_politician_is_a_404(self, client):
+        r = client.get("/api/public/v1/search", params={"q": "tax", "politician_id": "nobody-here"})
+        assert r.status_code == 404
+
+    def test_a_422_records_the_parameter_and_rule(self, client, monkeypatch):
+        from app.api import public
+
+        recorded = []
+        monkeypatch.setattr(public, "record_api_request", lambda *a, **k: recorded.append((a, k)))
+        client.get("/api/public/v1/search", params={"q": "x"})
+        assert recorded[-1] == (("search_documents", "http", 422), {"rejection": ("q", "string_too_short")})

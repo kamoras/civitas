@@ -143,6 +143,10 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
   // Every run that finished since the banner was last clear — two
   // pipelines can end between polls, and each deserves its line.
   const [finishedRuns, setFinishedRuns] = useState<FinishedRun[]>([]);
+  // The pipeline service restarting (a deploy): nginx answers its routes
+  // 503 for about half a minute. Said, rather than leaving stale figures
+  // looking current.
+  const [pipelineRestarting, setPipelineRestarting] = useState(false);
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Read once from the URL the page was opened with (this view only renders
   // client-side, after the session token loads, so window is available).
@@ -221,6 +225,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
     try {
       const s = await fetchAdminPipelineStatus(token);
       setPipelineStatus(s);
+      setPipelineRestarting(false);
 
       const watched: WatchedPipeline[] = [
         { key: "senate", label: "SENATE", running: senateIsRunning(s), run: s.lastRun },
@@ -263,7 +268,9 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
         loadDashboard();
       }
       wasRunningRef.current = Object.fromEntries(watched.map((w) => [w.key, w.running]));
-    } catch {}
+    } catch (e) {
+      setPipelineRestarting(e instanceof Error && e.message.endsWith(": 503"));
+    }
   }, [token, loadDashboard]);
 
   const dashboardPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -345,6 +352,16 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
             </button>
           </div>
         </div>
+
+        {pipelineRestarting && (
+          <p
+            role="status"
+            className="mb-6 border border-signal-amber/40 bg-signal-amber/10 p-4 text-sm"
+          >
+            The pipeline service is restarting (a deploy). The figures below are from before it
+            stopped and will refresh when it is back, usually within a minute.
+          </p>
+        )}
 
         {/* Completion banner: one line per run that finished. Partial is
             its own outcome (amber), never folded into success. */}

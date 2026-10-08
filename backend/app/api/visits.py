@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.database import VisitsSessionLocal
 from app.issue_ids import from_public_id
-from app.models import ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
+from app.models import ApiRejectionCount, ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
 
 logger = logging.getLogger(__name__)
 
@@ -115,15 +115,21 @@ class _ApiEvent:
     endpoint: str
     channel: str
     status: int
+    # For a 422: (parameter, validation error type), see ApiRejectionCount.
+    rejection: tuple[str, str] | None = None
 
 
-def record_api_request(endpoint: str, channel: str, status: int) -> None:
+def record_api_request(
+    endpoint: str, channel: str, status: int, rejection: tuple[str, str] | None = None,
+) -> None:
     """Count one public API or MCP request (ApiRequestCount). Takes nothing
     about the caller. Queued for the same consumer as visits, so it never
     writes on the request path; must be called on the event loop (the
     queue is an asyncio one)."""
     try:
-        _visit_queue.put_nowait(_ApiEvent(date=_today(), endpoint=endpoint, channel=channel, status=status))
+        _visit_queue.put_nowait(_ApiEvent(
+            date=_today(), endpoint=endpoint, channel=channel, status=status, rejection=rejection,
+        ))
     except asyncio.QueueFull:
         logger.warning("Visit queue full (%d) — dropping API request count", _VISIT_QUEUE_MAXSIZE)
 
@@ -172,6 +178,16 @@ def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent | _ApiEvent"], db
                         set_={"count": ApiRequestCount.count + 1},
                     )
                 )
+                if event.rejection:
+                    db.execute(
+                        sqlite_insert(ApiRejectionCount).values(
+                            date=event.date, endpoint=event.endpoint, channel=event.channel,
+                            parameter=event.rejection[0][:64], reason=event.rejection[1][:64], count=1,
+                        ).on_conflict_do_update(
+                            index_elements=["date", "endpoint", "channel", "parameter", "reason"],
+                            set_={"count": ApiRejectionCount.count + 1},
+                        )
+                    )
                 continue
 
             stmt = sqlite_insert(SiteVisit).values(
