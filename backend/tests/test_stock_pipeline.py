@@ -14,9 +14,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.models import HousePipelineRun, PipelineRun, PipelineStatus, StockTradesPipelineRun
+from app.models import HousePipelineRun, PipelineRun, PipelineStatus, Senator, StockTrade, StockTradesPipelineRun
 from app.pipeline import stock_pipeline
 from app.pipeline.fetch.ptr_common import TradeRow
+from app.pipeline.fetch.senate_ptr import report_version
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
@@ -385,9 +386,7 @@ class TestRereadTrades:
     stored URLs; a filing that doesn't read keeps its rows and waits a week."""
 
     def _stored(self, db_session, filing_id, url, version=1, owner="self", confidence="text"):
-        from app.models import Senator, StockTrade
-
-        if db_session.get(Senator, "S1") is None:
+            if db_session.get(Senator, "S1") is None:
             db_session.add(Senator(id="S1", name="Jane Doe", state="TX", party="R"))
         db_session.add(StockTrade(
             senator_id="S1", asset_name="Apple Inc.", owner=owner, transaction_type="purchase",
@@ -591,8 +590,6 @@ class TestRereadHouseFiling:
 
 
 def test_a_trade_two_reports_list_counts_once_at_its_first_disclosure(db_session):
-    from app.models import Senator, StockTrade
-
     db_session.add(Senator(id="S1", name="Sen One", state="CA", party="D"))
     trade = dict(senator_id="S1", ticker="CVX", asset_name="Chevron", owner="self", transaction_type="purchase",
                  transaction_date="2026-07-02", days_to_disclose=0, amount_low=1001.0, amount_high=15000.0,
@@ -609,3 +606,37 @@ def test_a_trade_two_reports_list_counts_once_at_its_first_disclosure(db_session
     assert sorted((t.asset_name, t.filing_id) for t in db_session.query(StockTrade)) == [
         ("Chevron", "first"), ("Ecolab", "first"), ("Ecolab", "first")]
     assert stock_pipeline.collapse_refiled_trades(db_session, StockTrade, "senator_id") == 0
+
+
+@pytest.mark.parametrize("title,version", [
+    ("Periodic Transaction Report for 11/15/2024 (Amendment 2)", ("2024-11-15", 2)),
+    ("Periodic Transaction Report for 09/11/2026", ("2026-09-11", 0)),
+    ("Something else", (None, 0)),
+])
+def test_an_efd_title_names_its_report_and_amendment(title, version):
+    assert report_version(title) == version
+
+
+def test_an_amended_report_keeps_its_newest_version_at_first_disclosure(db_session):
+    db_session.add(Senator(id="S1", name="Sen One", state="CA", party="D"))
+    base = dict(senator_id="S1", ticker=None, owner="self", transaction_type="purchase",
+                transaction_date="2024-10-29", days_to_disclose=0, amount_low=1001.0, amount_high=15000.0,
+                industry="TECH", source_url="https://example.com")
+    db_session.add_all([
+        StockTrade(**base, asset_name="Acme", filing_id="orig", disclosure_date="2024-11-15"),
+        StockTrade(**{**base, "amount_high": 50000.0}, asset_name="Acme", filing_id="amend", disclosure_date="2026-08-05"),
+        StockTrade(**base, asset_name="Added Later", filing_id="amend", disclosure_date="2026-08-05"),
+    ])
+    db_session.commit()
+    filings = [
+        {"last": "One", "first": "Sen", "title": "Periodic Transaction Report for 11/15/2024",
+         "report_url": "https://efd/view/ptr/orig/", "filed_date": "2024-11-15"},
+        {"last": "One", "first": "Sen", "title": "Periodic Transaction Report for 11/15/2024 (Amendment 1)",
+         "report_url": "https://efd/view/ptr/amend/", "filed_date": "2026-08-05"},
+    ]
+    assert stock_pipeline.settle_amended_reports(db_session, filings) == 1
+    rows = {t.asset_name: (t.filing_id, t.disclosure_date, t.amount_high) for t in db_session.query(StockTrade)}
+    # The corrected amount stands, at the date the trade was first disclosed;
+    # the trade the amendment added was first disclosed by the amendment.
+    assert rows == {"Acme": ("amend", "2024-11-15", 50000.0), "Added Later": ("amend", "2026-08-05", 15000.0)}
+    assert stock_pipeline._marked(db_session, stock_pipeline._SUPERSEDED_KEY.format("orig"))

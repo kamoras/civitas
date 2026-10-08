@@ -353,6 +353,21 @@ def _collect_rows(by_id: dict[str, dict], unparsed: set[str], rows: list) -> Non
             by_id.setdefault(senate_filing_id(parsed["report_url"]), parsed)
 
 
+_REPORT_VERSION_RE = re.compile(r"\bfor (\d{1,2}/\d{1,2}/\d{4})(?:\s*\(Amendment (\d+)\))?", re.IGNORECASE)
+
+
+def report_version(title: str) -> tuple[str | None, int]:
+    """(the date of the report this filing is a version of, its amendment
+    number; 0 for the original) from an eFD title: "Periodic Transaction
+    Report for 11/15/2024 (Amendment 2)" amends the report filed 11/15/2024.
+    An amendment is the whole report again, corrected; its own filed date
+    is not when its trades were first disclosed."""
+    m = _REPORT_VERSION_RE.search(title or "")
+    if not m:
+        return None, 0
+    return normalize_date(m.group(1)), int(m.group(2) or 0)
+
+
 def senate_filing_id(report_url: str) -> str:
     """A report's stable id: the UUID that ends its eFD URL
     (".../view/annual/<uuid>/"). The one derivation every Senate ingest
