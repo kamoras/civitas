@@ -16,7 +16,7 @@ import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
 const SOURCE_NOTE: Record<RaceWithCandidates["candidateSource"], string> = {
   confirmed: "This state's official general-election ballot for this race.",
   nominees:
-    "Nominees confirmed by this state's primary results. Candidates who reach the general election without running in a primary (Libertarian, Green or independent) aren't covered for this state yet, so this list may be short.",
+    "Nominees confirmed by this state's primary results. A nominee who never ran in a primary (one a party convention chose, or a Libertarian, Green or independent candidate) isn't covered for this state yet, so this list may be short.",
   primary: "Ranked by money raised: the nominee isn't decided until this state's primary.",
   filers:
     "Ranked by money raised: this state's nominees aren't confirmed yet, so this is every FEC filer.",

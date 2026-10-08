@@ -63,6 +63,26 @@ async function openList() {
 beforeEach(() => fetchSenatorVotes.mockReset());
 
 describe("VotingRecord", () => {
+  it("states the API's party-line counts as given, with nothing worked out here", () => {
+    render(
+      <VotingRecord
+        senatorId="S1"
+        votingRecord={{
+          ...record,
+          votedWithPartyCount: 288,
+          votedAgainstPartyCount: 3,
+          partyLoyaltyPct: 99,
+        }}
+      />
+    );
+    expect(screen.getByText("99%")).toBeInTheDocument();
+    expect(screen.getByText("with the party on 288")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("BROKE PARTY LINE")).toBeInTheDocument();
+    // The old box: 100 minus the rounded loyalty, worked out in the browser.
+    expect(screen.queryByText("INDEPENDENT")).not.toBeInTheDocument();
+  });
+
   it("a slow response to an earlier filter never replaces a later one", async () => {
     fetchSenatorVotes.mockResolvedValueOnce(votes("all", "First bill"));
     await openList();

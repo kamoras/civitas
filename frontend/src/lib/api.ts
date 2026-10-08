@@ -495,6 +495,9 @@ export interface AppConfig {
   platformCategories: Record<string, string>;
   policyAreas: string[];
   billStages: Record<string, BillStageInfo>;
+  /** Bill types Legislative Effectiveness counts as bills ("S", "HR",
+   *  "SJRES", "HJRES"); simple and concurrent resolutions are not. */
+  substantiveBillTypes?: string[];
   /** Each dimension's share of the Representation Score (config_definitions.SCORE_WEIGHTS). */
   scoreWeights?: Record<string, number>;
   /** Each dimension's share of the Presidential Score (PRESIDENT_SCORE_WEIGHTS). */
@@ -1779,6 +1782,10 @@ export interface ScoreSnapshot {
 
 export interface ScoreHistory {
   snapshots: ScoreSnapshot[];
+  /** The latest score's change since the earliest snapshot on the same
+   *  scoring method (and, for a member, the same Congress); null when
+   *  there is none to compare with. */
+  change?: { since: string; points: number } | null;
 }
 
 export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHistory> {

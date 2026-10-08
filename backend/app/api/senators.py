@@ -41,6 +41,7 @@ def get_config() -> JSONResponse:
         PRESIDENT_SCORE_WEIGHTS,
         SCORE_WEIGHTS,
     )
+    from app.pipeline.analyze.score_calculator import SUBSTANTIVE_BILL_TYPES
 
     return _cached_json({
         "scoreWeights": SCORE_WEIGHTS,
@@ -49,6 +50,10 @@ def get_config() -> JSONResponse:
         "platformCategories": PLATFORM_CATEGORIES,
         "policyAreas": POLICY_AREAS,
         "billStages": BILL_STAGES,
+        # Bills and joint resolutions, as Congress.gov spells the type: what
+        # Legislative Effectiveness counts as a bill (simple and concurrent
+        # resolutions are weighted a fifth as much and listed apart).
+        "substantiveBillTypes": sorted(t.upper() for t in SUBSTANTIVE_BILL_TYPES),
     }, max_age=CACHE_TTL_CONFIG_S)
 
 

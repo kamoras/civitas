@@ -31,7 +31,7 @@ from app.schemas import (
     StockTradeSchema,
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
 )
-from app.services._scorecard_common import pac_share_pct, score_breakdown
+from app.services._scorecard_common import pac_share_pct, party_line_counts, score_breakdown
 from app.services.constituent_survey import constituent_approval
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
@@ -85,18 +85,17 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
     recent_votes_db = [v for v in key_votes if v.vote_category == "recent"]
     key_votes_db = [v for v in key_votes if v.vote_category == "key"]
 
-    all_votes = key_votes
-    total_votes = len(all_votes)
-    voted_with = sum(1 for v in all_votes if v.voted_with_party is True)
-    voted_against = sum(1 for v in all_votes if v.voted_with_party is False)
-    party_total = voted_with + voted_against
-    party_loyalty_pct = round(voted_with / party_total * 100, 1) if party_total > 0 else 0.0
+    total_votes = len(key_votes)
+    # Party-line counts as Constituent Alignment scores them, not the
+    # stored sample's: the drawer and the column must agree.
+    voted_with, voted_against, party_loyalty_pct = party_line_counts(rep)
 
     initials = _compute_initials(rep.name) or rep.initials
 
     return RepresentativeSchema(
         id=rep.id,
         name=rep.name,
+        bioguide_id=rep.bioguide_id,
         state=rep.state,
         district=rep.district,
         party=rep.party,

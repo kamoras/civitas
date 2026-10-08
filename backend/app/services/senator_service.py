@@ -17,7 +17,7 @@ from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
 )
-from app.services._scorecard_common import pac_share_pct, score_breakdown
+from app.services._scorecard_common import pac_share_pct, party_line_counts, score_breakdown
 from app.services.constituent_survey import constituent_approval
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
@@ -223,19 +223,17 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
     recent_votes_db = [v for v in key_votes if v.vote_category == "recent"]
     key_votes_db = [v for v in key_votes if v.vote_category == "key"]
 
-    all_votes = key_votes
-    total_votes = len(all_votes)
-    voted_with = sum(1 for v in all_votes if v.voted_with_party is True)
-    voted_against = sum(1 for v in all_votes if v.voted_with_party is False)
-
-    party_total = voted_with + voted_against
-    party_loyalty_pct = round(voted_with / party_total * 100, 1) if party_total > 0 else 0.0
+    total_votes = len(key_votes)
+    # Party-line counts as Constituent Alignment scores them, not the
+    # stored sample's: the drawer and the column must agree.
+    voted_with, voted_against, party_loyalty_pct = party_line_counts(senator)
 
     # 6. Assemble the nested schema
     initials = _compute_initials(senator.name) or senator.initials
     return SenatorSchema(
         id=senator.id,
         name=senator.name,
+        bioguide_id=senator.bioguide_id,
         state=senator.state,
         party=senator.party,
         years_in_office=senator.years_in_office,

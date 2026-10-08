@@ -12,6 +12,9 @@ import { billHref } from "@/lib/congress";
 // Bills listed as furthest along; the drawer lists every one.
 const BILLS_SHOWN = 4;
 
+const TOOLTIP =
+  "Whether the member's legislation goes anywhere, following Volden and Wiseman's Legislative Effectiveness Score. 60% is the member's bills, each credited at every stage it reached (a law counts for far more than an introduction), against the median sponsor of the same majority or minority status in this chamber; simple and concurrent resolutions count a fifth as much as bills. 25% is how central the member is in the chamber's cosponsorship network, pulled toward 50 for under six years in office. 15% is the share of cosponsors on the member's own bills who come from the other party, against the median member of the same party. Without cosponsorship data it is 70% bills and 30% network.";
+
 function stageLabels(chamber: "senate" | "house"): string[] {
   return [
     "Introduced or referred",
@@ -22,16 +25,27 @@ function stageLabels(chamber: "senate" | "house"): string[] {
   ];
 }
 
-function Lede({ byStage, chamber }: { byStage: number[]; chamber: "senate" | "house" }) {
-  const total = byStage.reduce((a, b) => a + b, 0);
-  if (total === 0) {
-    return <p className="text-base leading-relaxed text-ink">No bills sponsored this Congress.</p>;
+/** The bill counts in a sentence. Bills and joint resolutions only, the
+ *  ones the score's own sentence counts: a simple resolution the chamber
+ *  agreed to (electing a member to a committee) is not a bill that passed. */
+function Lede({ facts, chamber }: { facts: EffectivenessFacts; chamber: "senate" | "house" }) {
+  const { billsByStage, bills, resolutions } = facts;
+  const besides =
+    resolutions > 0
+      ? ` (and ${count(resolutions, "simple or concurrent resolution", "simple or concurrent resolutions")})`
+      : "";
+  if (bills === 0) {
+    return (
+      <p className="text-base leading-relaxed text-ink">
+        No bills sponsored this Congress{besides}.
+      </p>
+    );
   }
-  const [, committee, beyond, passed, law] = byStage;
+  const [, committee, beyond, passed, law] = billsByStage;
   const chamberName = chamber === "house" ? "the House" : "the Senate";
   return (
     <p className="text-base leading-relaxed text-ink">
-      Sponsored {count(total, "bill", "bills")} this Congress.{" "}
+      Sponsored {count(bills, "bill", "bills")} this Congress{besides}.{" "}
       {passed > 0 ? `${passed} passed ${chamberName}` : `None has passed ${chamberName}`}
       {committee + beyond > 0 ? `, ${committee + beyond} got committee action` : ""};{" "}
       {law === 0 ? "none has" : `${law} ${law === 1 ? "has" : "have"}`} become law.
@@ -55,12 +69,17 @@ export default function EffectivenessColumn({
   onMore: () => void;
 }) {
   const config = useConfig();
-  const byStage = (dimension?.facts as EffectivenessFacts | undefined)?.billsByStage;
-  const total = byStage?.reduce((a, b) => a + b, 0) ?? bills.length;
+  const facts = dimension?.facts as EffectivenessFacts | undefined;
+  const byStage = facts?.billsByStage;
+  const total = facts?.bills ?? 0;
   const order = (stage: string | null | undefined) =>
     (stage && config?.billStages[stage]?.order) || 0;
-  // Furthest first; only bills that got past automatic referral.
+  const isBill = (type: string | undefined) =>
+    !!type && !!config?.substantiveBillTypes?.includes(type.toUpperCase());
+  // Furthest first; only bills (not resolutions, which the counts above
+  // leave out too) that got past automatic referral.
   const furthest = [...bills]
+    .filter((b) => isBill(b.billType))
     .filter((b) => order(b.stage) > (config?.billStages.REFERRED?.order ?? 2))
     .sort((a, b) => order(b.stage) - order(a.stage))
     .slice(0, BILLS_SHOWN);
@@ -70,14 +89,18 @@ export default function EffectivenessColumn({
     <ScoreColumn
       title="Legislative Effectiveness"
       shareId="legislative-effectiveness"
+      tooltip={TOOLTIP}
       weight={weight}
       score={score}
-      more={{ label: `All ${total} sponsored bills`, onClick: onMore }}
+      more={{
+        label: `All ${bills.length} sponsored bills and resolutions`,
+        onClick: onMore,
+      }}
     >
-      {byStage ? (
-        <Lede byStage={byStage} chamber={chamber} />
+      {facts?.bills != null ? (
+        <Lede facts={facts} chamber={chamber} />
       ) : (
-        <p className="text-base text-ink-lo">No sponsored bills on record yet.</p>
+        !facts && <p className="text-base text-ink-lo">No sponsored bills on record yet.</p>
       )}
 
       {byStage && total > 0 && (

@@ -413,6 +413,17 @@ def general_contests(search: dict, results: dict, parties: dict) -> list[Contest
     return out
 
 
+def _is_preview_id(eid) -> bool:
+    """The vendor's own mark for a preview copy of an election: its id with
+    "_Preview" on the end. North Dakota's config lists them
+    (previewElections); the vendor's current front end, which Arkansas
+    serves at arkansas.tally-enr.com and which reads no such config, tells
+    one by this suffix alone (getProductionElectionIdFromId in its bundle,
+    read 2026-10-08). So a state with no client_config is still guarded:
+    a preview is never the count, whatever it is named or dated."""
+    return str(eid).lower().endswith("_preview")
+
+
 async def _refuse_preview(client: httpx.AsyncClient, state: str, source: dict, eid: str) -> bool:
     """The state's own front-end config names its demo mode and the
     election ids it serves as previews; a count from either is a test.
@@ -463,6 +474,7 @@ async def fetch_general_results(
     election = pick_general([
         (e.get("electionName") or "", e) for e in elections
         if str(e.get("electionDate") or "").startswith(day) and e.get("electionID")
+        and not _is_preview_id(e["electionID"])
     ], state)
     if election is None:
         return None

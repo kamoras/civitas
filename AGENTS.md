@@ -1027,12 +1027,20 @@ wrong number on election night is worse than none:
   (`fetch/poll_close.py`, `app/data/poll_close_times.json` from
   `scripts/fetch_poll_close_times.py` — regenerate each cycle).
 - Test, preview or mismatched data raises `UntrustedCount` and stores nothing
-  (Enhanced Voting `isProduction`, Clarity `istestmode`, Tally
-  `previewElections`/`electionID`; a general's date listing no general —
-  several unsingled entries, or only a runoff, recount or special —
-  `pick_general`); a feed that goes backwards in time or
+  (Enhanced Voting `isProduction`, Clarity `istestmode`/`showtestdatawatermark`
+  — read as flags: the watermark is the string `"0"` on real elections —
+  Tally `previewElections`, `_Preview` ids and `electionID`; a general's date
+  listing no general — several unsingled entries, or only a runoff, recount
+  or special — `pick_general`, unless the entries are copies of one election
+  by the vendor's own id); a feed that goes backwards in time or
   version is refused; an impossible count is dropped; a poll whose total fell
   is stored but announces nothing.
+- A covered state with no count stored an hour after its polls close sends
+  an ops alert whatever its reads said (`check_missing_counts`): a walled or
+  moved feed fails visibly, never as a quiet night and never worked around.
+  A primary's contest labels are not proof of the general's — check each
+  vendor's staged general feed before election night (Washington's House
+  labels changed between the two in 2026).
 - Civitas never calls a race. A count is "leading" — "not final" until the
   source itself says official, and still "leading", never "wins", after (an
   official count's leader can face a runoff: Georgia's general needs a
@@ -1089,7 +1097,10 @@ up. Asset categories (`HOLDING_CATEGORIES` in `config_definitions.py`) come
 only from the asset type the *filer* declared (the House's two-letter codes,
 the Senate's type/subtype), mapped in `fd_common.py` — a form-vocabulary
 translation, never a guess from the asset's name. Values stay brackets
-(`low == high` is the same open-ended sentinel); the pie is drawn by bracket
+(`low == high` is the same open-ended sentinel — except an exact value a House
+filer states instead of a bracket, "$1,251.00", which is stored the same way
+and told apart by its printed text: `schemas.EXACT_VALUE_RE`, passed to
+`is_open_ended`); the pie is drawn by bracket
 midpoints and says so, and no net-worth figure is produced. Reports that can't
 be read are stored `parsed=False` with a reason (`scanned` paper filing,
 `unrecognized` layout) and linked, not OCR'd. A Senate paper filing states
@@ -1097,7 +1108,14 @@ no year anywhere eFD shows it (its page is page images), so no year is
 claimed or inferred for it: it ranks below every dated report, and an undated
 filing (paper, or a title with no year) filed on or after the shown report's
 date is named beside it ("also filed, on or after this report's filing date")
-rather than guessed to be newer. Each fetch module's
+rather than guessed to be newer. A House member's new-filer report (index type
+"H", read from this year's index too) is read for a member with nothing newer;
+it states no date its values describe, so it is labelled by filing date and any
+annual report outranks it. Filers are matched in `filer_matching.py`: the
+last-name field up to its first comma ("Doe, Jr."), and a House filer listed
+under a district no member of that surname holds — the Clerk keeps a member's
+pre-redistricting district — is matched across the state only when the first
+names agree (a shared token, or a measured similarity ratio). Each fetch module's
 `PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
 parser's output changes, and already-ingested reports are re-read (a re-read
 that can't read the report at all keeps the earlier holdings; one that reads

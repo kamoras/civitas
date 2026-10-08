@@ -160,9 +160,6 @@ export default function ResultsOverview({
   // one of them; the counter's card names those separately.
   const flips = results.races.filter(flipShown);
   const flipsNotShown = results.races.filter((r) => flipNotShownText(r) != null);
-  // States, not races: a state electing both its senators counts once —
-  // the response lists which states elect one, not how many seats each.
-  const liveSenate = [...senateStates].filter((s) => live.has(s)).length;
   // A covered state whose feed isn't being read: its latest read failed,
   // or the backend hasn't read it for well over a sync pass (feedBehind —
   // its sync has stopped, whatever the last read said). With no count it
@@ -175,6 +172,14 @@ export default function ResultsOverview({
     !refreshFailed && live.has(state) && stateFeedBehind(results, state, now);
   const readFailed = (state: string) =>
     !refreshFailed && live.has(state) && (feedFailed(feeds[state]) || behind(state));
+  // States whose feed is being read: covered, and its latest read neither
+  // failed nor refused (test data, an outage) nor fallen behind. A covered
+  // state whose feed couldn't be read is not "read live", which the totals
+  // cards claimed while every read of it was refused. States, not races: a
+  // state electing both its senators counts once.
+  const readLive = (state: string) => live.has(state) && !readFailed(state);
+  const liveSenate = [...senateStates].filter(readLive).length;
+  const liveRead = [...live].filter(readLive).length;
   // What a stale count's row and map name say about it: when the feed was
   // last tried or last gave a count.
   const staleParts = (state: string): [string, string] => {
@@ -397,7 +402,7 @@ export default function ResultsOverview({
           <p className="mt-1 text-sm text-ink-lo">
             {houseCounted} {houseCounted === 1 ? "district" : "districts"} with a count so far
             {houseCounted > 0 && `, in ${houseStates} ${houseStates === 1 ? "state" : "states"}`},
-            of {live.size} states read live
+            of {liveRead} {liveRead === 1 ? "state" : "states"} read live
           </p>
         </div>
         <div

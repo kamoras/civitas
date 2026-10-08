@@ -16,7 +16,8 @@ export const OWNER_LABEL: Record<DisclosureOwner, string> = {
 /** A disclosed amount bracket, or a sum of them. The forms' open-ended top
  * bracket ("Over $50,000,000") states a floor and no ceiling, so it renders
  * as "$X+" — never as a range, since the stored upper figure is only a
- * placeholder equal to the floor. */
+ * placeholder equal to the floor. Equal bounds that aren't open-ended are an
+ * exact value a filer stated instead of a bracket, shown as that one figure. */
 export function formatBracket(
   low: number,
   high: number,
@@ -25,7 +26,8 @@ export function formatBracket(
    * ("$1.2M") for sums. The open-ended rule is the same either way. */
   fmt: (n: number) => string = (n) => `$${n.toLocaleString()}`
 ): string {
-  return openEnded ? `${fmt(low)}+` : `${fmt(low)} – ${fmt(high)}`;
+  if (openEnded) return `${fmt(low)}+`;
+  return low === high ? fmt(low) : `${fmt(low)} – ${fmt(high)}`;
 }
 
 /** When a report's holdings were held, for sentences like "None at year

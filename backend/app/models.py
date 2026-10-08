@@ -1000,6 +1000,12 @@ class Candidate(Base):
     disbursements: Mapped[float | None] = mapped_column(Float, nullable=True)
     cash_on_hand: Mapped[float | None] = mapped_column(Float, nullable=True)
     individual_itemized_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The last day the FEC figures above cover ("YYYY-MM-DD", the totals
+    # row's coverage_end_date) — what the figures are as of. The sync date
+    # below is only when we last asked: on 2026-10-08 a Senate nominee
+    # checked that day had reported through 2026-06-30. NULL with the
+    # figures when the FEC holds no report for this race's election.
+    financials_through: Mapped[str | None] = mapped_column(String(10), nullable=True)
     last_financials_sync: Mapped[datetime | None] = mapped_column(nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(default=utcnow)

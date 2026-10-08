@@ -4,11 +4,11 @@ counted, and each measure counts once however many times it was voted on."""
 
 import json
 
-from app.models import Representative, RollCall, RollCallPosition
+from app.models import RepKeyVote, Representative, RollCall, RollCallPosition
 from app.pipeline.analyze import party_line_record
 from app.pipeline.analyze.party_line_record import measure_key, party_line_records
 from app.pipeline.analyze.score_calculator import party_break_rate
-from app.services.representative_service import get_representative_score_breakdown
+from app.services.representative_service import build_rep_response, get_representative_score_breakdown
 
 # Five Republicans from the center (R0) to the flank (R4), five Democrats.
 DIM1 = {"R0": 0.2, "R1": 0.5, "R2": 0.5, "R3": 0.5, "R4": 0.9, **{f"D{i}": -0.4 for i in range(5)}}
@@ -125,6 +125,33 @@ def test_the_breakdown_serves_each_counted_break_with_its_roll_call(db_session):
     assert facts["breakVotes"][0]["vote"] == "Nay"
     assert facts["breakVotes"][0]["rollCall"]["parties"][0] == {"party": "R", "yea": 4, "nay": 1, "present": 0, "notVoting": 0}
     assert facts["flankBreakVotes"][0]["rollCall"]["billId"] == "HR.2"
+
+
+def test_the_voting_record_states_the_counts_the_score_reads(db_session):
+    """The profile's "broke party line" figure is the party-line record's,
+    not the stored sample's: three stored votes against the party (two of
+    them, say, from the flank or one measure voted twice) beside one
+    counted break used to read "3 broke party line" next to a column
+    saying 1, and a member whose sample held none read 100% loyal."""
+    record = {"congress": 119, "votes": 40, "breaks": [{"rollCall": "house-119-2-10", "vote": "Nay"}],
+              "flankBreaks": []}
+    rep = Representative(id="r0", bioguide_id="R0", name="R0 LastR0", state="TN", district=2, party="R",
+                         party_line_record=json.dumps(record))
+    db_session.add(rep)
+    db_session.flush()
+    for i in range(3):
+        db_session.add(RepKeyVote(representative_id="r0", bill_name=f"Bill {i}", bill_id=f"HR.{i}",
+                                  date="2026-03-01", vote="Nay", voted_with_party=False, vote_category="recent"))
+    db_session.commit()
+    db_session.refresh(rep)
+
+    vr = build_rep_response(rep, db_session).voting_record
+    assert (vr.voted_with_party_count, vr.voted_against_party_count, vr.party_loyalty_pct) == (39, 1, 97.5)
+    assert vr.total_votes == 3
+    assert build_rep_response(rep, db_session).bioguide_id == "R0"
+    facts = get_representative_score_breakdown(db_session, "r0")["constituentAlignment"]["facts"]
+    assert (facts["partyVotes"], facts["breaks"]) == (vr.voted_with_party_count + vr.voted_against_party_count,
+                                                      vr.voted_against_party_count)
 
 
 def test_a_thin_records_position_barely_moves_the_direction_of_a_break(db_session, monkeypatch):
