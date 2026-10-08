@@ -117,10 +117,12 @@ class TestFusion:
         exact = _add(indexed_db, title="Air plan approval", body="Published at 89 FR 52508.")
         noise = _add(indexed_db, title="Rangeland grazing permits", body="Livestock.")
         stub_semantic([noise.id])
-        outcome = hybrid_search(indexed_db, "89 FR 52508", limit=10)
-        assert [r["id"] for r in outcome["results"]] == [exact.id]
-        assert outcome["results"][0]["matchedBy"] == ["keyword"]
-        assert outcome["semanticUnavailable"] is False
+        # Typed lowercase too, as people do in a search box.
+        for query in ("89 FR 52508", "89 fr 52508"):
+            outcome = hybrid_search(indexed_db, query, limit=10)
+            assert [r["id"] for r in outcome["results"]] == [exact.id]
+            assert outcome["results"][0]["matchedBy"] == ["keyword"]
+            assert outcome["semanticUnavailable"] is False
 
     def test_a_vector_hit_with_no_surviving_row_is_dropped(
         self, indexed_db, stub_semantic

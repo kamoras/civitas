@@ -198,7 +198,7 @@ chunks per document, written at embed time.
 a document both channels place 30th and 8th outscores one only keyword
 placed 1st. That is right when both channels carry evidence and wrong when
 one carries none, which is the case for a query that is nothing but
-publisher identifiers ("89 FR 52508", "RIN 1615-AD22", a docket id) — the
+publisher identifiers, in any case ("89 FR 52508", "rin 1615-ad22", a docket id) — the
 semantic channel found 2–3% of such targets in its top 20, and fused R@1 on
 them was 0.25 against keyword's 0.65. `is_identifier_query` (built on the
 identifier formats `document_authority` already parses for the citation

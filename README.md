@@ -1142,7 +1142,7 @@ inverted-index retrieval is best at those and weakest where the embedding is
 strong (paraphrase, synonymy, topical queries). Running both and fusing them
 is why this is a hybrid engine rather than a bigger embedding model.
 
-A query that is *only* publisher identifiers (`89 FR 52508`, `RIN 1615-AD22`,
+A query that is *only* publisher identifiers, in any case (`89 FR 52508`, `rin 1615-ad22`,
 an executive order or proclamation number, a regulations.gov docket id — the
 formats `document_authority` already parses for the citation graph) goes to
 the keyword channel alone. The encoder's ranking for it is noise, and fused,

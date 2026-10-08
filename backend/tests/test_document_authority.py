@@ -61,6 +61,12 @@ class TestIsIdentifierQuery:
         ("E.O. 13563, E.O. 12866", True),
         ("EPA-HQ-OAR-2021-0317", True),
         ("OSHA-2006-0040-0097", True),
+        # Typed lowercase into a search box, still a lookup.
+        ("rin 1615-ad22", True),
+        ("eo 14067", True),
+        ("89 fr 52508", True),
+        ("epa-hq-oar-2021-0317", True),
+        ("fr doc. 2024-01234", True),
         # Words beside the identifier are something an encoder can read.
         ("executive order 14110 artificial intelligence", False),
         ("drinking water contaminants", False),
@@ -69,6 +75,11 @@ class TestIsIdentifierQuery:
     ])
     def test_classifies(self, query, expected):
         assert is_identifier_query(query) is expected
+
+    def test_query_case_does_not_loosen_citation_extraction(self):
+        # Edges stay case-sensitive, so authority scores don't move.
+        assert is_identifier_query("rin 2060-av50")
+        assert extract_citations("see rin 2060-av50 and 89 fr 12345") == set()
 
     def test_a_docket_id_is_not_a_citation_edge(self):
         assert extract_citations("EPA-HQ-OAR-2021-0317") == set()
