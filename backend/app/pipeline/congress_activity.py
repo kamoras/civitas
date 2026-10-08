@@ -94,7 +94,8 @@ def congress_sync_age() -> timedelta | None:
 
 
 def eastern_today() -> date:
-    return datetime.now(_EASTERN).date()
+    # Through time_utils.utcnow, the one clock tests pin (AGENTS.md, Testing).
+    return utcnow().replace(tzinfo=ZoneInfo("UTC")).astimezone(_EASTERN).date()
 
 
 def _suffix(path: str) -> str:

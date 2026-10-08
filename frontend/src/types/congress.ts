@@ -138,8 +138,9 @@ export interface PeriodReport {
   votes: RollCallSummary[];
   becameLaw: BecameLaw[];
   syncedAt: string | null;
-  previous: string;
-  next: string;
+  /** The neighbouring week or month, null past either end of the record. */
+  previous: string | null;
+  next: string | null;
 }
 
 export interface MonthReport extends PeriodReport {

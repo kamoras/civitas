@@ -2,7 +2,7 @@
 synced from fixtures, plus roll calls."""
 
 import asyncio
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -65,6 +65,10 @@ class TestDay:
 
 
 class TestPeriods:
+    @pytest.fixture(autouse=True)
+    def today(self, freeze_utcnow):
+        freeze_utcnow(datetime(2026, 9, 28, 16))
+
     def test_week(self, week_of_sept_21):
         r = cs.week_report(week_of_sept_21, date(2026, 9, 24))
         assert (r["start"], r["end"]) == ("2026-09-21", "2026-09-27")
@@ -75,14 +79,15 @@ class TestPeriods:
         assert [e["billId"] for e in r["passedBothChambers"]] == ["HR.2388"]
         assert [e["billId"] for e in r["passedOneChamber"]] == ["S.3257", "S.3258"]
         assert [v["number"] for v in r["closestVotes"]][:2] == [244, 241]
-        assert r["previous"] == "2026-09-14"
+        assert r["previous"] is None  # the week before the first day on record
+        assert r["next"] == "2026-09-28"
         assert len(r["days"]) == 7
 
     def test_month(self, week_of_sept_21):
         r = cs.month_report(week_of_sept_21, 2026, 9)
         assert (r["start"], r["end"]) == ("2026-09-01", "2026-09-30")
         assert [w["start"] for w in r["weeks"]][:2] == ["2026-09-01", "2026-09-07"]
-        assert (r["previous"], r["next"]) == ("2026-08", "2026-10")
+        assert (r["previous"], r["next"]) == (None, None)  # nothing on record in August, nor yet in October
         assert "The Senate met 2 days" in r["sentence"]
 
 
@@ -142,8 +147,45 @@ class TestDateBounds:
     def test_out_of_range_is_422(self, client, url):
         assert client.get(url).status_code == 422
 
-    def test_first_congress_is_in_range(self, client):
-        assert client.get("/api/congress/month/1789-03").status_code == 200
+    def test_a_date_congress_could_have_met_but_with_no_record_here_is_a_404(self, client):
+        # In range for the calendar (the 1st Congress, 1789), but before the
+        # first day on record: nothing to report, so no page (record_span).
+        assert client.get("/api/congress/month/1789-03").status_code == 404
+
+
+class TestRecordSpan:
+    """A report exists only for dates on record: from the first day either
+    chamber is on record as meeting to today. Every other well-formed date
+    answered a page of placeholders, and the week and month pages linked
+    their neighbours without end, so a crawler walked dates into the next
+    year and back toward 1789 (2026-10)."""
+
+    @pytest.fixture(autouse=True)
+    def today(self, freeze_utcnow):
+        freeze_utcnow(datetime(2026, 9, 28, 16))
+
+    def test_days_outside_the_record_are_404(self, client):
+        first = cs.record_span(client.app.dependency_overrides[get_db]())[0]
+        assert first == date(2026, 9, 23)  # the Senate's vote that day
+        assert client.get("/api/congress/day/2026-09-23").status_code == 200
+        assert client.get("/api/congress/day/2026-09-27").status_code == 200  # on record, didn't meet
+        assert client.get("/api/congress/day/2026-09-29").status_code == 404  # tomorrow
+        assert client.get("/api/congress/day/2027-04-27").status_code == 404
+        assert client.get("/api/congress/day/2026-09-22").status_code == 404  # before the first day on record
+
+    def test_a_week_or_month_overlapping_the_record_is_kept(self, client):
+        assert client.get("/api/congress/week/2026-09-28").status_code == 200  # this week, so far
+        assert client.get("/api/congress/week/2026-10-05").status_code == 404
+        assert client.get("/api/congress/month/2026-09").status_code == 200
+        assert client.get("/api/congress/month/2026-10").status_code == 404
+        assert client.get("/api/congress/month/2026-08").status_code == 404
+
+    def test_neighbours_are_linked_only_when_on_record(self, client):
+        week = client.get("/api/congress/week/2026-09-24").json()
+        assert week["previous"] is None and week["next"] == "2026-09-28"
+        assert client.get("/api/congress/week/2026-09-28").json()["next"] is None
+        month = client.get("/api/congress/month/2026-09").json()
+        assert month["previous"] is None and month["next"] is None
 
 
 def test_closest_votes_are_measured_from_what_each_vote_needed():

@@ -19,6 +19,14 @@ export async function generateMetadata({
       noindex: true,
     });
   const report = await fetchMonth(month);
+  // No record for this date: the page is a 404, and says so to crawlers.
+  if (!report)
+    return pageMetadata({
+      title: "Not found",
+      description: "",
+      path: `/congress/month/${month}`,
+      noindex: true,
+    });
   return pageMetadata({
     title: `Congress in ${monthLabel(month)}`,
     description: report?.sentence ?? `What the Senate and the House did in ${monthLabel(month)}.`,
