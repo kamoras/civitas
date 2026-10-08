@@ -246,8 +246,9 @@ def dimensions_available(entity) -> int:
 # v9 = average approval by party, against the era's polarization
 # (approval_vs_era); v10 = since 1947 the economy is also judged on
 # unemployment and inflation, each against what its starting rate predicts,
-# four parts weighed equally (POSTWAR_ECONOMY_WEIGHTS).
-PRESIDENT_ALGORITHM_VERSION = "v10"
+# four parts weighed equally (POSTWAR_ECONOMY_WEIGHTS); v11 = jobs from
+# the roster's own term dates, which gives Truman a jobs figure.
+PRESIDENT_ALGORITHM_VERSION = "v11"
 
 
 # Full credit/deficit approached asymptotically at this many population
@@ -458,7 +459,8 @@ def _effectiveness_core(
         components.append(_population_zscore_component(
             "Jobs created", weights["jobs"], rate, jobs_stat[0], jobs_stat[1],
             f"{jobs_created_millions:.1f} million jobs, {rate:.2f} million a year leaving out the "
-            f"first year, against {jobs_stat[0]:.2f} million for presidents since 1939",
+            f"first year, against {jobs_stat[0]:.2f} million for the presidents BLS's payroll "
+            "series covers (Truman on)",
         ))
 
     population = _macro_reference(reference, president_id) if postwar and macro else {}
@@ -1050,9 +1052,11 @@ def _public_mandate_core(
     elif avg_approval is None and election_margin is not None and margin:
         components.append(_population_zscore_component(
             "Election margin (pre-polling-era proxy)", 1.0, election_margin, margin[0], margin[1],
-            f"Won by an average of {election_margin:.1f} points, against {margin[0]:.1f} for "
-            "presidents generally (election results stand in for approval polls, which "
-            "began with Truman)",
+            f"An average margin of {election_margin:+.1f} points in their elections, against "
+            f"{margin[0]:+.1f} for presidents generally. Before 1824 there was no national popular "
+            "vote, so the margin is estimated from the electoral vote. Election results stand in for "
+            "approval polls: before Truman the only ones are 20 of Franklin Roosevelt's, from 1941 "
+            "to 1943, without the by-party figures this score reads",
         ))
 
     return {**_blend_live_components(components), "facts": facts}

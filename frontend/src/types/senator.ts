@@ -46,7 +46,7 @@ export interface Senator {
         "high" | "medium" | "low"
       >
     > & {
-      /** "neutral:few-votes" | "neutral:no-expectation" | "shrunk:<share kept>" | "full" */
+      /** "neutral:few-votes" | "neutral:no-party" | "neutral:no-expectation" | "shrunk:<share kept>" | "full" */
       constituentAlignmentVotePart?: string;
     };
   };
@@ -57,7 +57,7 @@ export interface Senator {
     totalFromPacs: number;
     /** Backend-computed PAC share of contributions, 0-100 unrounded — never re-derive. */
     pacSharePct: number;
-    smallDonorPercentage: number;
+    smallDonorPercentage: number | null;
     topDonors: Donor[];
     industryBreakdown: IndustryDonation[];
   };
@@ -304,7 +304,7 @@ export interface LeaderboardEntry {
   totalFromPacs: number;
   /** Backend-computed PAC share of contributions, 0-100 unrounded — never re-derive. */
   pacSharePct: number;
-  smallDonorPercentage: number;
+  smallDonorPercentage: number | null;
   topIndustry: string | null;
   trend?: ScoreTrend;
   /** 0 = most-left, 1 = most-right; null if too little cosponsorship data. */

@@ -1075,7 +1075,7 @@ class TestCalculateConfidence:
 
     def test_empty_data_is_low_everywhere(self):
         from app.pipeline.analyze.score_calculator import calculate_confidence
-        conf = calculate_confidence({})
+        conf = calculate_confidence({"party": "D"})
         status = conf.pop("constituentAlignmentVotePart")
         assert set(conf.values()) == {"low"}
         assert status == "neutral:few-votes"
@@ -1101,8 +1101,8 @@ class TestCalculateConfidence:
         }
         conf = calculate_confidence(senator)
         # The vote-part status rides along; this member has no party, so no
-        # party norm to score the vote part against.
-        assert conf.pop("constituentAlignmentVotePart") == "neutral:no-expectation"
+        # party line to score the vote part against.
+        assert conf.pop("constituentAlignmentVotePart") == "neutral:no-party"
         assert set(conf.values()) == {"high"}
 
     def test_unlabeled_votes_do_not_count(self):

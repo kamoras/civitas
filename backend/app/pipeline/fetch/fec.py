@@ -1226,6 +1226,16 @@ def committee_id_of(receipt: dict) -> str | None:
     return None
 
 
+def is_joint_fundraiser(meta: dict | None) -> bool:
+    """Whether the FEC registers this committee as a joint fundraising
+    representative (designation "J"). What it sends a participant is the
+    participant's share of individual donors' gifts, which the candidate
+    reports as a transfer and the FEC's totals leave out of contributions:
+    listed as a donor it was the candidate's own fundraising counted again
+    (2026-10-08: "... Victory" committees among senators' top donors)."""
+    return bool(meta) and meta.get("designation") == "J"
+
+
 def is_political_committee(meta: dict | None) -> bool:
     """Whether the FEC's own registration says this committee is a party,
     candidate, joint-fundraising or leadership committee — money from it is

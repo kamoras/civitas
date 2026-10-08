@@ -64,3 +64,22 @@ def test_a_union_pac_is_labor_whatever_its_name_reads_like():
         committee_meta_map={"C00000001": {"type": "Q", "designation": "B", "orgType": "L", "connectedOrg": None}},
     )
     assert donors[0]["industry"] == "LABOR_UNIONS"
+
+
+def test_a_joint_fundraiser_is_not_a_donor():
+    """Its distributions are the candidate's own fundraising (the FEC
+    totals count them as transfers): "... Victory" committees were among
+    senators' top donors."""
+    from app.pipeline.transform.normalize_finance import normalize_finance
+
+    meta = {"C1": {"name": "SMITH VICTORY", "type": "N", "designation": "J", "orgType": None, "connectedOrg": None},
+            "C2": {"name": "ACME PAC", "type": "Q", "designation": "B", "orgType": "C", "connectedOrg": "ACME CORP",
+                   "sponsorIndustry": "MANUFACTURING"}}
+    f = normalize_finance(
+        {"name": "SMITH, JO", "office": "S"},
+        [{"candidate_election_year": 2024, "receipts": 900_000, "contributions": 900_000}], [], [],
+        detail={"pacs": {"C1": 400_000, "C2": 50_000}, "committees": meta, "occupations": None, "employers": None},
+    )
+    names = {d["name"].upper() for d in f["topDonors"]}
+    assert "ACME CORP" in names and "SMITH VICTORY" not in names
+    assert sum(r["total"] for r in f["industryBreakdown"] if r["industry"] == "POLITICAL") == 0

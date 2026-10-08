@@ -102,8 +102,9 @@ class FundingSchema(CamelModel):
         validation_alias=AliasChoices("totalFromPACs", "totalFromPacs"), serialization_alias="totalFromPacs",
     )
     pac_share_pct: float = Field(0.0, description="PAC money as a percentage of contributions, 0-100")
-    small_donor_percentage: float = Field(
-        description="Share of contributions that were unitemized individual gifts (donors giving $200 or less), 0-100")
+    small_donor_percentage: float | None = Field(
+        description="Share of contributions that were unitemized individual gifts (donors giving $200 or less), "
+                    "0-100; null when the campaign itemizes every gift, so the filings can't say")
     top_donors: list[DonorSchema]
     industry_breakdown: list[IndustryDonationSchema] = Field(description="Contributions by industry")
 
@@ -546,7 +547,7 @@ class LeaderboardEntrySchema(CamelModel):
     total_contributions: float | None = None
     total_from_pacs: float
     pac_share_pct: float = Field(0.0, description="PAC money as a percentage of contributions, 0-100")
-    small_donor_percentage: float
+    small_donor_percentage: float | None = None
     top_industry: str | None = None
     trend: ScoreTrendSchema = Field(default_factory=ScoreTrendSchema)
     # SVD-based, cosponsorship-derived (Tauberer 2012) — 0 = most-left,

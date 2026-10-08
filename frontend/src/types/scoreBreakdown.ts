@@ -31,7 +31,8 @@ export type RepresentationScoreBreakdown = Record<string, ScoreBreakdownDimensio
 export interface FundingFacts {
   contributions: number;
   pacShare: number;
-  smallDonorShare: number;
+  /** Null: the campaign itemizes every gift, so the filings can't say. */
+  smallDonorShare: number | null;
   smallDonorExpectedShare: number | null;
   smallDonorComparison: "house-median" | "state-size";
 }

@@ -210,3 +210,13 @@ def test_occupations_are_read_against_the_census_and_onet_data(occupation, indus
 def test_titles_meet_in_the_singular():
     assert normalize_title("Registered Nurses") == normalize_title("REGISTERED NURSE") == "REGISTERED NURSE"
     assert normalize_title("Business") == "BUSINESS"  # -ss is not a plural
+
+
+def test_employer_money_is_employees_whatever_the_name_classifier_says():
+    """1,352 Senate employer rows read Party/Ideological (2026-10-08): the
+    name classifier's type for the name was applied to employees' money."""
+    ai = {**AI, "STANFORD UNIVERSITY": {"type": "Party/Ideological", "industry": "EDUCATION", "skip": False}}
+    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, FINANCIALS, [], [], ai_classifications=ai,
+                             detail=_detail(employers=[{"employer": "STANFORD UNIVERSITY", "total": 90_000}]))
+    (row,) = [d for d in f["topDonors"] if d["name"].upper() == "STANFORD UNIVERSITY"]
+    assert (row["type"], row["industry"]) == ("Org/Employees", "EDUCATION")

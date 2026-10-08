@@ -40,16 +40,6 @@ def _bundled_rows() -> dict[str, list[tuple[int, int, int]]]:
     return rows
 
 
-# Oyez and UCSB spell a president's name nearly alike ("Donald J. Trump" /
-# "Donald Trump": 0.92 as keyed below), but presidents who share a surname
-# are close too (George W. Bush against George H. W. Bush: 0.93). So a name
-# resolves only when its best match is near-exact AND clearly ahead of the
-# runner-up; anything less falls back to the term dates, which can't be
-# ambiguous.
-_NAME_MATCH_MIN = 0.9
-_NAME_MATCH_MARGIN = 0.05
-
-
 def _name_key(name: str) -> str:
     return re.sub(r"[^a-z]", "", name.lower())
 
@@ -95,7 +85,9 @@ async def _measure_loyalty(client: httpx.AsyncClient, db: Session) -> tuple[dict
     logger.info("Justice loyalty: %d justices, mean %+.3f, between-justice sd %.3f (%s)",
                 len(loyalty), mean, spread, scdb["release"])
     return {"loyalty": loyalty, "term": scdb["term"], "current": scdb["current"],
-            "ideal": await fetch_martin_quinn(client, db) or {}}, None
+            # None when the Martin-Quinn file couldn't be read: the stored
+            # positions stay (an outage read as {} erased every justice's).
+            "ideal": await fetch_martin_quinn(client, db)}, None
 
 
 def _database_name(justice: dict, current: list[str]) -> str | None:
@@ -106,8 +98,10 @@ def _database_name(justice: dict, current: list[str]) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
-def _loyalty_fields(result: Loyalty | None, term: int, ideal: list | None) -> dict:
-    fields = {"ideal_points": json.dumps(ideal) if ideal else None, "loyalty_through_term": term}
+def _loyalty_fields(result: Loyalty | None, term: int, ideal: list | None, ideal_read: bool = True) -> dict:
+    fields = {"loyalty_through_term": term}
+    if ideal_read:
+        fields["ideal_points"] = json.dumps(ideal) if ideal else None
     if result is None:
         # Not in the Database yet (a justice newer than its release):
         # unscored, never a neutral or fabricated number.
@@ -122,12 +116,14 @@ def _loyalty_fields(result: Loyalty | None, term: int, ideal: list | None) -> di
     }
 
 
-# Oyez and UCSB spell a president's name nearly alike ("Donald J. Trump" /
-# "Donald Trump": 0.92 as keyed below), but presidents who share a surname
-# are close too (George W. Bush against George H. W. Bush: 0.93). So a name
-# resolves only when its best match is near-exact AND clearly ahead of the
-# runner-up; anything less falls back to the term dates, which can't be
-# ambiguous.
+# Only when the justice's start date is unknown: Oyez and UCSB spell a
+# president's name nearly alike ("Donald J. Trump" / "Donald Trump": 0.92
+# as keyed below), but not always the same one — UCSB lists the 41st
+# president as "George Bush", and Oyez's "George H. W. Bush" scored 0.93
+# against "George W. Bush", so the name made the 43rd president every Bush
+# appointee's (three justices, until 2026-10-08). The term dates can't be
+# ambiguous. A name resolves only when its best match is near-exact AND
+# clearly ahead of the runner-up.
 _NAME_MATCH_MIN = 0.9
 _NAME_MATCH_MARGIN = 0.05
 
@@ -143,10 +139,15 @@ def resolve_appointment(
     (UCSB's roster, president_pipeline) — never a hand-typed list, so a new
     president is known the night the roster names them.
 
-    Oyez's name for the appointing president when it gives one, matched by
-    name; otherwise the president in office on the day the justice took the
-    seat (Oyez leaves the name empty for some justices). ("", "") when
-    neither resolves, which the site shows as no party."""
+    The president in office on the day the justice took the seat; Oyez's
+    name for the appointing president, matched by name, only when the date
+    is unknown. ("", "") when neither resolves, which the site shows as no
+    party."""
+    if date_start:
+        in_office = president_on(date_start, [(p.id, p.term_start, p.term_end) for p in presidents if p.term_start])
+        for p in presidents:
+            if p.id == in_office:
+                return p.name, p.party or ""
     if appointing:
         key = _president_key(appointing)
         scored = sorted(
@@ -157,11 +158,6 @@ def resolve_appointment(
             len(scored) == 1 or scored[0][0] - scored[1][0] >= _NAME_MATCH_MARGIN
         ):
             return scored[0][1].name, scored[0][1].party or ""
-    if date_start:
-        in_office = president_on(date_start, [(p.id, p.term_start, p.term_end) for p in presidents if p.term_start])
-        for p in presidents:
-            if p.id == in_office:
-                return p.name, p.party or ""
     return appointing or "", ""
 
 
@@ -222,9 +218,10 @@ async def run_justice_pipeline(db: Session) -> dict:
         }
         if measured is not None:
             name = _database_name(j, measured["current"])
+            ideal = measured["ideal"]
             record.update(_loyalty_fields(
                 measured["loyalty"].get(name) if name else None, measured["term"],
-                measured["ideal"].get(name) if name else None,
+                ideal.get(name) if name and ideal else None, ideal_read=ideal is not None,
             ))
 
         upsert_justice(db, record, jvotes)

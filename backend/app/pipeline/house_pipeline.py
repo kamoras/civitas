@@ -545,11 +545,18 @@ async def run_house_pipeline() -> dict:
                             # vote-refined elsewhere on the same scorecard.
                             policy_areas_raw: list[dict] = []
                             party_leaning = None
-                            if sp_title and len(sp_title) > 10:
-                                policy_areas_raw = classify_policy_areas_multi(sp_title, db_session=db)
+                            # The CRS policy area Congress.gov assigns, as the
+                            # Senate reads it: shown as the bill's area, and in
+                            # the classified text beside the title. The short
+                            # title alone filed about half of a sample wrong
+                            # (2,072 House bills under LABOR, 2026-10-08).
+                            crs_area = (sp.get("policyArea") or {}).get("name", "")
+                            classify_text = " ".join(t for t in (sp_title, crs_area) if t)
+                            if classify_text and len(classify_text) > 10:
+                                policy_areas_raw = classify_policy_areas_multi(classify_text, db_session=db)
                                 if policy_areas_raw:
                                     alignment = classify_party_alignment_multi(
-                                        sp_title, policy_areas_raw, "pro",
+                                        classify_text, policy_areas_raw, "pro",
                                     )
                                     party_leaning = alignment.get("overall", "bipartisan")
                                     rc = house_roll_calls.get(sp_key)
@@ -562,7 +569,10 @@ async def run_house_pipeline() -> dict:
                                 "introducedDate": sp.get("introducedDate", ""),
                                 "latestAction": latest_action_text,
                                 "latestActionDate": (sp.get("latestAction") or {}).get("actionDate", ""),
-                                "policyArea": policy_areas_raw[0]["area"] if policy_areas_raw else "",
+                                "policyArea": (
+                                    crs_area.upper().replace(" ", "_") if crs_area
+                                    else policy_areas_raw[0]["area"] if policy_areas_raw else ""
+                                ),
                                 "policyAreas": [
                                     {
                                         "area": a["area"],
@@ -591,7 +601,14 @@ async def run_house_pipeline() -> dict:
                     # positions_from_sponsored_bills is cheap (no LLM), so
                     # there's no real cost to a generous cap.
                     r["sponsoredBills"] = sp_list[:500]
-                    for sp_data in sp_list[:5]:
+                    # Every current-Congress sponsored bill feeds ideology
+                    # (SVD) and leadership (PageRank), as in the Senate: the
+                    # first five per member were 18% of the House's 12,287
+                    # (2026-10-08), so a prolific sponsor was read from a
+                    # sliver of their own record.
+                    for sp_data in sp_list:
+                        if sp_data.get("congress", settings.CURRENT_CONGRESS) != settings.CURRENT_CONGRESS:
+                            continue
                         sp_bill_id = sp_data["billId"]
                         if sp_bill_id in cosponsors_map:
                             continue

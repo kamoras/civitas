@@ -186,7 +186,8 @@ class TestResolveAppointment:
         from types import SimpleNamespace as P
 
         return [
-            P(id="bush-41", name="George H. W. Bush", party="R", term_start="1989-01-20", term_end="1993-01-20"),
+            # The roster's (UCSB's) own spelling of the 41st president.
+            P(id="bush-41", name="George Bush", party="R", term_start="1989-01-20", term_end="1993-01-20"),
             P(id="bush-43", name="George W. Bush", party="R", term_start="2001-01-20", term_end="2009-01-20"),
             P(id="obama-44", name="Barack Obama", party="D", term_start="2009-01-20", term_end="2017-01-20"),
             P(id="trump-45", name="Donald J. Trump", party="R", term_start="2017-01-20", term_end="2021-01-20"),
@@ -196,7 +197,10 @@ class TestResolveAppointment:
 
     @pytest.mark.parametrize("name, confirmed, expected", [
         pytest.param("Barack Obama", "2010-08-07", ("Barack Obama", "D"), id="oyez_names_the_president"),
-        pytest.param("George H. W. Bush", "1991-10-23", ("George H. W. Bush", "R"), id="oyez_names_the_elder_bush"),
+        # Oyez's "George H. W. Bush" is nearer "George W. Bush" than the
+        # roster's "George Bush"; the date decides (2026-10-08: every Bush
+        # appointee had read as the 43rd president's).
+        pytest.param("George H. W. Bush", "1991-10-23", ("George Bush", "R"), id="oyez_names_the_elder_bush"),
         # Oyez leaves Ketanji Brown Jackson's appointing president empty;
         # the old table then gave no party, and the Action Center filled "R".
         pytest.param("", "2022-06-30", ("Joseph R. Biden", "D"), id="no_name_resolves_by_who_was_in_office"),
@@ -211,3 +215,11 @@ class TestResolveAppointment:
         from app.pipeline.justice_pipeline import resolve_appointment
 
         assert resolve_appointment(name, confirmed, self._presidents()) == expected
+
+
+def test_an_unreadable_martin_quinn_file_keeps_the_stored_positions():
+    from app.pipeline.justice_pipeline import _loyalty_fields
+
+    assert "ideal_points" not in _loyalty_fields(None, 2024, None, ideal_read=False)
+    assert _loyalty_fields(None, 2024, [[2024, 1.0]])["ideal_points"] == "[[2024, 1.0]]"
+    assert _loyalty_fields(None, 2024, None)["ideal_points"] is None  # read, and not in it

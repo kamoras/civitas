@@ -32,6 +32,28 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.31",
+    date: "2026-10-08",
+    title: "Funding and cosponsorship inputs corrected",
+    tldr: "A campaign that itemizes every gift reports no unitemized money, so its small-donor share read 0%; it is now marked not measured and left out of its score. A candidate's own joint fundraising committee is no longer listed as a donor, money grouped by employer always counts as employees' money, and the House's cosponsorship measures read every bill a member sponsored this Congress instead of the first five.",
+    changes: [
+      "Small-donor share: one senator and 22 representatives itemize every gift. Their Funding Independence moves by -4 to +6 points; every other member by at most one. The FEC's contributions-by-size tables were checked as a replacement and not used: they total more than the campaigns' own contributions.",
+      "Donors: a joint fundraising committee passes along a candidate's share of individual gifts, which the FEC counts as a transfer, so listing it as a donor counted the campaign's own fundraising twice. 1,352 Senate rows of money grouped by employer (universities, law firms, technology companies) had been typed as party or ideological money.",
+      "House cosponsorship: only each member's first five sponsored bills, 18% of the House's, fed leadership, bipartisan coalition and the ideology prior. The effect is measured on the first run with every bill. docs/methodology/member-score/v6.31.md has the details.",
+      "Also: partisan depth reads each bill's lean from how the parties voted; House bills show Congress.gov's own policy area; trend arrows compare only scores from the same algorithm version; the voting record lists votes in date order.",
+    ],
+  },
+  {
+    version: "President v11",
+    date: "2026-10-08",
+    title: "Jobs for every president the payroll series covers",
+    tldr: "Jobs created came from a hand-typed table of term years that started with Eisenhower, so Truman, whose term the BLS payroll series covers, had no jobs figure. Term years now come from the presidents table itself. Truman's is 10.3 million jobs, 1.47 million a year, against 1.44 million for the others.",
+    changes: [
+      "Truman's Effectiveness now includes jobs at a quarter weight, as every other postwar president's does. His rate is close to the average, so that part sits near 50; the average itself moves by less than 0.01 million a year, so no other president moves by more than a fraction of a point.",
+      'Wording only: the election-margin line no longer says a president "won by" a negative margin, says when the margin is estimated from the electoral vote (before 1824), and no longer claims polls began with Truman (UCSB has 20 polls of Franklin Roosevelt\'s, from 1941 to 1943, without the by-party figures this score reads).',
+    ],
+  },
+  {
     version: "v6.30",
     date: "2026-10-08",
     title: "Funding: the election that seated the member, and PAC industries from the records",

@@ -123,9 +123,13 @@ export default function ScoresChapter() {
             candidates rely on PAC money far more than Senate candidates.
           </Step>
           <Step n={2} title="Small-donor share">
-            Money in gifts under $200: the broadest possible funding base. A senator is compared
-            with what a state of that population typically raises this way; a representative, with
-            the House median.
+            The money the FEC reports as unitemized: gifts from donors who gave $200 or less in the
+            cycle, the broadest funding base the filings measure. It leaves out small gifts made
+            through conduits such as ActBlue and WinRed, which itemize every gift whatever its size,
+            so it undercounts small-dollar money for campaigns that raise that way, and a campaign
+            that itemizes every gift has no share to read: that part is then left out, like any part
+            that can&apos;t be measured. A senator is compared with what a state of that population
+            typically raises this way; a representative, with the House median.
           </Step>
           <Step n={3} title="Top-donor concentration">
             How much of all the outside money came from the top ten donors, ranked against the rest
