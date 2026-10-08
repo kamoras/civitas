@@ -233,3 +233,13 @@ def test_a_resolution_goes_no_further_than_its_kind_can():
     presented = [{"actionCode": "E20000", "type": "President", "text": "Presented to President."}]
     assert classify_bill_stage_from_actions(presented, bill_type="hconres") == BillStage.IN_OTHER_CHAMBER
     assert classify_bill_stage_from_actions(presented, bill_type="hr") == BillStage.TO_PRESIDENT
+
+
+def test_a_veto_with_the_signing_code_is_a_veto():
+    # Newest first. Congress.gov gives "Vetoed by President." code E30000,
+    # the code of "Signed by President.".
+    vetoed = [{"actionCode": "E30000", "type": "President", "text": "Vetoed by President."},
+              {"actionCode": "E20000", "type": "Floor", "text": "Presented to President."}]
+    signed = [{"actionCode": "E30000", "type": "President", "text": "Signed by President."}]
+    assert classify_bill_stage_from_actions(vetoed) == BillStage.VETOED
+    assert classify_bill_stage_from_actions(signed) == BillStage.ENACTED
