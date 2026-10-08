@@ -149,7 +149,7 @@ function RecordColumn({ justice: j }: { justice: Justice }) {
   return (
     <ScoreColumn title="Voting record" shareId="voting-record" score={null} aside="Not scored">
       <p className="text-base leading-relaxed text-ink">
-        {j.casesDecided} cases decided in the recent terms Oyez records.
+        {j.casesDecided} orally argued cases decided in the last four terms.
       </p>
       <dl className="flex flex-col gap-1.5 text-sm">
         {rows.map(([k, v]) => (

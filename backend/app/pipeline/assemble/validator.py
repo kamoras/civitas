@@ -12,7 +12,7 @@ from app.pipeline.analyze.score_bounds import clamp
 logger = logging.getLogger(__name__)
 
 VALID_PARTIES = {"D", "R", "I"}
-VALID_VOTES = {"Yea", "Nay", "Not Voting"}
+VALID_VOTES = {"Yea", "Nay", "Present", "Not Voting"}
 
 # Neutral prior for a score dimension we have no computed value for. Matches
 # the scoring engine's own standard (score_calculator's module docstring:

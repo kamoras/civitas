@@ -295,3 +295,23 @@ def test_party_line_records_read_the_whole_chamber_scored_first():
     out = party_line_members(scored, roster)
     assert out[:2] == scored and [m["id"] for m in out[2:]] == ["S1", "S3"]
     assert party_line_members(roster, roster) == roster
+
+
+def test_vote_dates_are_stored_iso_so_the_record_sorts_by_the_calendar(db_session):
+    """Senate.gov's "October 14, 2025, 05:34 PM" stored as text sorted the
+    voting record alphabetically: September ahead of October."""
+    from app.pipeline.senate_pipeline import upsert_senator
+    from app.services.senator_service import get_senator_votes
+
+    votes = [
+        {"billName": "A", "billId": "S.1", "date": "September 30, 2025,  02:00 PM", "vote": "Yea"},
+        {"billName": "B", "billId": "S.2", "date": "October 14, 2025,  05:34 PM", "vote": "Nay"},
+        {"billName": "C", "billId": "S.3", "date": "November 3, 2025,  11:00 AM", "vote": "Yea"},
+    ]
+    upsert_senator(db_session, {
+        "id": "s-test", "name": "Senator Test", "state": "SW", "party": "D",
+        "votingRecord": {"recentVotes": votes},
+    })
+    db_session.commit()
+    page = get_senator_votes(db_session, "s-test", category="recent")
+    assert [v.date for v in page.votes] == ["2025-11-03", "2025-10-14", "2025-09-30"]

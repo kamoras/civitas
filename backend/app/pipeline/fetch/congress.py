@@ -461,6 +461,13 @@ async def fetch_bill(
     return None
 
 
+class CongressUnavailable(RuntimeError):
+    """Congress.gov could not be read for something a score depends on (a
+    bill's actions decide its stage and whether it became law). Raised, not
+    cached as [], so the run keeps the stored record instead of saving a
+    bill as never acted on."""
+
+
 async def fetch_bill_actions(
     client: httpx.AsyncClient,
     db: Session,
@@ -478,11 +485,20 @@ async def fetch_bill_actions(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/actions?limit=100",
     )
-    raw = (data or {}).get("actions", [])
+    if data is None:
+        raise CongressUnavailable(f"actions of {bill_type.upper()}.{bill_number} ({congress})")
+    raw = data.get("actions", [])
     # Congress.gov v3 may return {"count": N, "item": [...]} instead of a list
     results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
     return results
+
+
+# A bill's cosponsor list changes slowly once it is a few weeks old, and
+# both chambers now read every current-Congress sponsored bill's (about
+# 19,000 in the 119th): at a week, a night refreshes about 2,700 of them,
+# where the 72-hour default would refresh about 6,400.
+COSPONSORS_CACHE_HOURS = 24 * 7
 
 
 async def fetch_bill_cosponsors(
@@ -494,7 +510,7 @@ async def fetch_bill_cosponsors(
 ) -> list[dict]:
     """Fetch cosponsors for a bill (includes bioguideId, party, state)."""
     cache_key = f"bill-cosponsors-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = api_cache_get(db, "congress", cache_key, max_age_hours=COSPONSORS_CACHE_HOURS)
     if cached is not None:
         return cached
 
@@ -502,9 +518,11 @@ async def fetch_bill_cosponsors(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/cosponsors?limit=250",
     )
-    raw = (data or {}).get("cosponsors", [])
+    if data is None:
+        return []  # not cached: this run goes without, the next asks again
+    raw = data.get("cosponsors", [])
     results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
-    api_cache_set(db, "congress", cache_key, results)
+    api_cache_set(db, "congress", cache_key, results, normal_ttl_hours=COSPONSORS_CACHE_HOURS)
     return results
 
 
@@ -525,7 +543,9 @@ async def fetch_bill_summaries(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/summaries",
     )
-    raw = (data or {}).get("summaries", [])
+    if data is None:
+        return []  # not cached: this run classifies from the title, the next asks again
+    raw = data.get("summaries", [])
     results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
     return results

@@ -218,7 +218,7 @@ async def run_president_pipeline(db: Session) -> dict:
             term_start_year = int(p.term_start[:4])
             if term_start_year < _BLS_COVERAGE_START_YEAR:
                 continue
-            jobs = await fetch_jobs_for_president(client, p.id)
+            jobs = await fetch_jobs_for_president(client, p.term_start, p.term_end)
             if jobs is not None:
                 jobs_data[p.id] = jobs
 

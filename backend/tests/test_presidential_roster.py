@@ -6,12 +6,11 @@ this page, must not leak into the display name), Grover Cleveland's two
 terms (rendered with *identical* text, disambiguated only by page order),
 Garfield/Truman's name-punctuation mismatches against NAME_TO_ID's keys
 (sourced from a different UCSB table with slightly different formatting),
-and Garfield's term_end backfill (UCSB's page has no end date at all for
-a president who died in office — derived from the next president's
-term_start instead, since succession has no gap). Chester Arthur (who
-actually succeeded Garfield) is included specifically so this fixture's
-succession chain has no artificial gap that would make the backfill
-derive a wrong date.
+and Garfield's term_end (UCSB's roster page has no end date for a
+president who died in office: the successor's first day stands in until
+the president's own page is read, which gives the day of death). Chester
+Arthur (who actually succeeded Garfield) is included so the stand-in is
+his real first day.
 
 Fixture HTML is a trimmed real excerpt (div/span structure copied
 verbatim from a live fetch, 2026-07) rather than a full 47-row page.
@@ -21,7 +20,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.pipeline.fetch.presidential_roster import _parse_roster, fetch_presidential_roster
+from app.pipeline.fetch import presidential_roster as roster
+from app.pipeline.fetch.presidential_roster import _parse_roster, fetch_presidential_roster, parse_dates_in_office
 
 # Newest-first, matching the real page's order. Row structure copied
 # verbatim from a live fetch of https://www.presidency.ucsb.edu/presidents.
@@ -87,9 +87,9 @@ def test_roster_parser_edge_cases():
     assert by_id["garfield-20"].name == "James A. Garfield"
     assert by_id["truman-33"].name == "Harry S Truman"
 
-    # Garfield's page has no end date at all (died in office) — backfilled
-    # from Arthur's real term_start, not left None (which would incorrectly
-    # read as "still serving").
+    # The roster page has no end date for Garfield (died in office): Arthur's
+    # first day stands in, not None (which would read as "still serving"),
+    # until the fetch reads Garfield's own page (test below).
     assert by_id["garfield-20"].term_end == "1881-09-20"
     # The actual current president (no successor in the data) correctly
     # keeps term_end=None — the backfill must not run off the end of the list.
@@ -132,3 +132,25 @@ def test_a_president_the_id_table_does_not_list_is_kept_with_a_derived_id():
     # The listed ids are untouched, and the previous president's term now ends.
     assert {e.id for e in entries} >= {"trump-45", "trump-47", "cleveland-22"}
     assert next(e for e in entries if e.id == "trump-47").term_end == "2029-01-20"
+
+
+_GARFIELD_PAGE = """<html><body><div class="field-docs-content">
+<div>Dates In Office:&nbsp; March 04, 1881 to September 19, 1881</div>
+<div>Birth - Death:&nbsp; November 19, 1831 to September 19, 1881</div></div></body></html>"""
+
+
+def test_a_term_ended_by_death_ends_on_the_death_not_the_successors_oath():
+    assert parse_dates_in_office(_GARFIELD_PAGE) == "1881-09-19"
+    assert parse_dates_in_office("<html><body>Dates In Office: January 20, 2025 to Present</body></html>") is None
+
+
+@pytest.mark.asyncio
+async def test_the_fetch_reads_the_presidents_own_page_for_a_missing_end(db_session, monkeypatch):
+    entries = _parse_roster(_FIXTURE_HTML)
+    garfield = next(e for e in entries if e.id == "garfield-20")
+    assert garfield.end_from_successor and garfield.page == "/people/president/james-garfield"
+    monkeypatch.setattr(roster, "_parse_roster", lambda html: entries * 6)  # past the 40-row floor
+    page = MagicMock(status_code=200, text=_GARFIELD_PAGE)
+    with patch.object(roster, "fetch_with_retry_requests", new=AsyncMock(return_value=page)):
+        await fetch_presidential_roster(db_session)
+    assert garfield.term_end == "1881-09-19" and not garfield.end_from_successor
