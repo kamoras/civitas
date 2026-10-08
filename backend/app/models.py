@@ -141,7 +141,9 @@ class Senator(Base):
     # to the stored votes.
     party_line_record: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
-    small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    # NULL: the filings report no unitemized money (every gift itemized), so
+    # the small-donor share can't be read from them (normalize_finance).
+    small_donor_percentage: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
 
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -416,7 +418,9 @@ class Representative(Base):
     # to the stored votes.
     party_line_record: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
-    small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    # NULL: the filings report no unitemized money (every gift itemized), so
+    # the small-donor share can't be read from them (normalize_finance).
+    small_donor_percentage: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
 
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 

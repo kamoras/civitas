@@ -61,6 +61,20 @@ export default async function LimitationsChapter() {
       </Summary>
 
       <Section id="money" title="Money">
+        <Limitation title="Small-donor money is undercounted">
+          <P>
+            The small-donor share is the money the FEC reports as unitemized: gifts from donors who
+            gave $200 or less in the cycle. Conduits such as ActBlue and WinRed itemize every gift
+            they pass on, whatever its size, so small gifts made through them count as itemized and
+            are left out. A campaign that raises small money that way shows a smaller small-donor
+            share than it has, and one that itemizes every gift reports no unitemized money at all:
+            its share is marked not measured and left out of its score rather than counted as 0%.
+            The FEC&apos;s contributions-by-size tables would count them, but they total more than
+            the campaigns&apos; own reported individual contributions (in one Senate race checked,
+            $72.7 million against $62.0 million) and are empty for some candidates, so they are not
+            used.
+          </P>
+        </Limitation>
         <Limitation title="Funding windows differ by chamber">
           <P>
             Funding covers a member&apos;s most recent completed election: six years of fundraising
@@ -240,9 +254,12 @@ export default async function LimitationsChapter() {
             Embedding-based classification is fast and consistent, but it knows only what the text
             says. Shell companies and deliberately obscure names can land in the wrong industry. For
             PACs it is the last resort: a union&apos;s PAC, and a company&apos;s PAC the SEC lists,
-            take their industry from those records. Trade associations and private companies have no
-            such record, and their names are still read; measured against the records, the name
-            reading agreed with them on about six PACs in ten.
+            take their industry from those records, and a PAC with no sponsoring organization counts
+            as political money. That last rule is right for about seven in ten of them; the rest are
+            law and accounting partnerships&apos; and physician groups&apos; PACs, whose money then
+            counts toward no industry. Trade associations and private companies have no such record,
+            and their names are still read; measured against the records, the name reading agreed
+            with them on about six PACs in ten.
           </P>
         </Limitation>
       </Section>

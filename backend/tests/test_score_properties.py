@@ -107,9 +107,12 @@ def test_score_invariants_hold_for_any_record(seed):
             more_pac["funding"]["totalFromPACs"] += 0.1 * base
             assert sc.calculate_scores(more_pac)["fundingIndependence"] <= fi
 
-        more_small = copy.deepcopy(member)
-        more_small["funding"]["smallDonorPercentage"] = min(100, (more_small["funding"]["smallDonorPercentage"] or 0) + 10)
-        assert sc.calculate_scores(more_small)["fundingIndependence"] >= fi
+        # None is "not measured" (every gift itemized): the part is left
+        # out, so a measured share is a different record, not more of one.
+        if member["funding"]["smallDonorPercentage"] is not None:
+            more_small = copy.deepcopy(member)
+            more_small["funding"]["smallDonorPercentage"] = min(100, more_small["funding"]["smallDonorPercentage"] + 10)
+            assert sc.calculate_scores(more_small)["fundingIndependence"] >= fi
 
         one_more_law = copy.deepcopy(member)
         one_more_law["sponsoredBills"].append({

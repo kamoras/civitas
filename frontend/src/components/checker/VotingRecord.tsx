@@ -67,7 +67,7 @@ function VoteRow({ vote }: { vote: KeyVote }) {
           <span className="block text-sm text-ink break-words">{title}</span>
         )}
         <p className="mt-0.5 text-xs text-ink-min">
-          {[rc?.question, rc ? shortDate(rc.date) : vote.date].filter(Boolean).join(" · ")}
+          {[rc?.question, shortDate(rc?.date ?? vote.date)].filter(Boolean).join(" · ")}
         </p>
       </div>
       {/* Stacked below sm: side by side, AGAINST PARTY and the vote badge

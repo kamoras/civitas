@@ -133,7 +133,7 @@ function MandateColumn({
           <Lede>
             {`Approval ${months != null ? "has averaged" : "averaged"} ${one(f.approval)}%${months != null ? " so far" : ""}: ${Math.round(f.approvalGroups.own)}% in the president's party, ${Math.round(f.approvalGroups.opp)}% in the other party and ${Math.round(f.approvalGroups.ind)}% among independents. Under the same polarization, presidents typically got ${Math.round(f.approvalExpected.own)}%, ${Math.round(f.approvalExpected.opp)}% and ${Math.round(f.approvalExpected.ind)}%${months != null ? ` over their first ${months} months` : ""}. That puts this term ${aboveBelow(f.approvalVsEra)} the era; the typical president comes out ${aboveBelow(f.approvalVsEraMean)}.`}
             {f.approvalTrend != null && f.trendExpected != null && f.approvalStart != null
-              ? ` It ${moved(f.approvalTrend)} from ${one(f.approvalStart)}% at the start. Presidents who started there typically ${moved(f.trendExpected)}, so this is ${f.approvalTrend >= f.trendExpected ? "better" : "worse"} than usual.`
+              ? ` Averaged over the first quarter of its polls and then the last, it ${moved(f.approvalTrend)} from ${one(f.approvalStart)}%. Presidents who started there typically ${moved(f.trendExpected)}, so this is ${f.approvalTrend >= f.trendExpected ? "better" : "worse"} than usual.`
               : ""}
           </Lede>
           <ComparisonScale
@@ -154,7 +154,7 @@ function MandateColumn({
               ? `Approval has averaged ${one(f.approval)}% so far, ${side(f.approval, f.approvalMean)} the ${one(f.approvalMean)}% past presidents averaged ${over}.`
               : `Approval averaged ${one(f.approval)}% over the term, ${side(f.approval, f.approvalMean)} the ${one(f.approvalMean)}% average for past presidents.`}
             {f.approvalTrend != null && f.trendExpected != null && f.approvalStart != null
-              ? ` It ${moved(f.approvalTrend)} from ${one(f.approvalStart)}% at the start. Presidents who started there typically ${moved(f.trendExpected)}, so this is ${f.approvalTrend >= f.trendExpected ? "better" : "worse"} than usual.`
+              ? ` Averaged over the first quarter of its polls and then the last, it ${moved(f.approvalTrend)} from ${one(f.approvalStart)}%. Presidents who started there typically ${moved(f.trendExpected)}, so this is ${f.approvalTrend >= f.trendExpected ? "better" : "worse"} than usual.`
               : f.approvalTrend != null &&
                 f.trendMean != null &&
                 ` It ${moved(f.approvalTrend)} over the term; presidents typically ${moved(f.trendMean)}.`}
