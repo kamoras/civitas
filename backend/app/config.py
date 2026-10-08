@@ -95,6 +95,10 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///data/civitas.db"
     DATA_GOV_API_KEY: str = ""
+    # Bureau of Labor Statistics v2 registration key (optional): lifts the
+    # public API's 25 requests a day to 500. Unset, the jobs data is read
+    # without one.
+    BLS_API_KEY: str = ""
     # Google Civic Information API (voterInfoQuery) — town-level ballot
     # content (city council, school board, local measures) that a statewide
     # page structurally can't show, since a real ballot is defined per

@@ -709,7 +709,11 @@ Corollaries that follow from the same rule, all enforced in code:
   state's own would; a state page that was read and refused never falls
   back to one, since that would publish past the refusal; and the card
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
-  past the wall itself is not an option: it is the state saying no.
+  past the wall itself is not an option: it is the state saying no. That
+  is enforced in the HTTP layer for every source: the client forgets the
+  cookies a challenge response sets (`http_client.is_bot_challenge`), and
+  `fetch_with_retry` never retries a challenge. Until 2026-10 a retry sent
+  the challenge's cookie back and got through one state's wall unnoticed.
 - Scope is stated as content, not as a footnote: the API enumerates what a
   statewide page omits (`omits`) and the page renders it above the measures.
 - **`omits` is a live description, not a fixed disclaimer.** Each entry is
@@ -1148,6 +1152,7 @@ See `.env.example` for all options. Key variables:
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
+| `BLS_API_KEY` | No | Bureau of Labor Statistics v2 registration key: lifts the jobs API from 25 to 500 requests a day; works without it |
 | `CURRENT_CONGRESS` | **Never in production** | Leave unset — computed from the clock. Setting it pins the scored windows *and* House members' district lines to that Congress past the next Jan 3; only for re-running an archived database |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see

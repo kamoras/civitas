@@ -35,7 +35,7 @@ import requests
 
 from app.contact import CONTACT_EMAIL
 from app.error_utils import redact_sensitive_params
-from app.http_client import DEFAULT_FETCH_TIMEOUT_S, bounded
+from app.http_client import DEFAULT_FETCH_TIMEOUT_S, bounded, is_bot_challenge
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -113,9 +113,10 @@ def retryable_status(status: int) -> bool:
     """Whether a failed HTTP status could succeed if asked again without
     the resource changing: a rate limit, a timeout (408) or a server error
     can, and so can 425 (Too Early: retry later, by definition) and a
-    refusal (401/403) — a key the operator has to fix, or a site's bot
-    challenge that refuses for a while and then doesn't; remembered, the
-    refusal would keep being served after it lifted. Any other client
+    refusal (401/403) — a key the operator has to fix, or a refusal that
+    lifts; remembered, it would keep being served after it lifted. A bot
+    wall's challenge is never retried within a fetch (fetch_with_retry),
+    only tried again on a later run. Any other client
     error (not found, gone, a malformed request) is the same answer next
     time, and may be remembered."""
     return status in (401, 403, 408, 425, 429) or status >= 500
@@ -198,6 +199,12 @@ async def fetch_with_retry(
                 logger.warning("%s rate limited, waiting %.1fs...", label, wait)
                 await asyncio.sleep(wait)
                 continue
+
+            if is_bot_challenge(resp):
+                # Not retried: a retry is how a wall gets passed (AGENTS.md
+                # §7). The caller sees a failed fetch, as for any refusal.
+                logger.warning("%s: %s — bot challenge (HTTP %d), not retried", label, url, resp.status_code)
+                return None
 
             if resp.status_code in expected_statuses:
                 logger.debug("%s: %s — HTTP %d (expected)", label, url, resp.status_code)

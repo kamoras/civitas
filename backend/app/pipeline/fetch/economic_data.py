@@ -1,6 +1,8 @@
 """Fetch economic data from BLS public API.
 
-BLS public API (api.bls.gov) requires no key for basic access (25 queries/day).
+BLS public API (api.bls.gov) requires no key for basic access (25 queries a
+day). With BLS_API_KEY set (a free v2 registration key) it allows 500 a day;
+the key is sent as `registrationkey` and never logged.
 Series used:
   - CES0000000001: Total nonfarm employment (thousands, seasonally adjusted)
 """
@@ -9,6 +11,7 @@ import logging
 
 import httpx
 
+from app.config import settings
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 from app.time_utils import utcnow
 
@@ -58,6 +61,8 @@ async def fetch_employment_data(
         "startyear": str(start_year),
         "endyear": str(capped_end),
     }
+    if settings.BLS_API_KEY:
+        payload["registrationkey"] = settings.BLS_API_KEY
 
     try:
         resp = await client.post(
