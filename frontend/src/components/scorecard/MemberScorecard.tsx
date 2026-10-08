@@ -9,6 +9,7 @@ import { displayScore } from "@/lib/formatting";
 import { PARTY_LABELS } from "@/lib/partyStyles";
 import { getScoreColor } from "@/lib/representation";
 import { absoluteUrl } from "@/lib/site";
+import { houseSeatLabel } from "@/lib/elections";
 import type { ShareSubject } from "@/lib/shareImage";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
@@ -79,7 +80,7 @@ export default function MemberScorecard({
   const scores = member.representationScore;
   const seat =
     chamber === "house" && district != null
-      ? `seats that lean like ${member.state}-${district}`
+      ? `seats that lean like ${houseSeatLabel(member.state, district)}`
       : `states that lean like ${stateName ?? member.state}`;
 
   // What every section's share image says it is from: the member, and the
@@ -90,7 +91,7 @@ export default function MemberScorecard({
     subtitle: [
       chamber === "senate" ? "Senator" : "Representative",
       chamber === "house" && district != null
-        ? `${member.state}-${district === 0 ? "AL" : district}`
+        ? houseSeatLabel(member.state, district)
         : (stateName ?? member.state),
       PARTY_LABELS[member.party] ?? member.party,
     ].join(" · "),

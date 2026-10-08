@@ -1,9 +1,12 @@
 "use client";
 
-import type { ScoreSnapshot } from "@/lib/api";
+import type { ScoreHistory, ScoreSnapshot } from "@/lib/api";
+import { shortDate } from "@/components/scorecard/format";
 
 interface ScoreTrendProps {
   snapshots: ScoreSnapshot[];
+  /** The API's change on the current scoring method (ScoreHistory.change). */
+  change?: ScoreHistory["change"];
 }
 
 /* SVG paints through `stroke`/`fill` attributes and an inline `style`, none of
@@ -43,13 +46,12 @@ function ordinal(n: number): string {
   }
 }
 
-export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
+export default function ScoreTrend({ snapshots, change = null }: ScoreTrendProps) {
   if (snapshots.length < 2) return null;
 
   const scores = snapshots.map((s) => s.overallScore);
   const first = scores[0];
   const last = scores[scores.length - 1];
-  const change = Math.round(last - first);
   const minScore = Math.max(0, Math.min(...scores) - 5);
   const maxScore = Math.min(100, Math.max(...scores) + 5);
   const range = maxScore - minScore || 1;
@@ -93,8 +95,14 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
     }
   }
 
-  const changeColor = change > 0 ? PHOS : change < 0 ? SIGNAL_RED : INK_MIN;
-  const changeLabel = change > 0 ? `↑ +${change}` : change < 0 ? `↓ ${change}` : "→ 0";
+  // The change the API measured on the current scoring method only: a
+  // methodology change moves every score at once, so a change "since first
+  // snapshot" across one reported the formula's movement as the member's.
+  const delta = change?.points ?? 0;
+  const changeColor = delta > 0 ? PHOS : delta < 0 ? SIGNAL_RED : INK_MIN;
+  const changeLabel = !change
+    ? "no earlier score on the current method"
+    : `${delta > 0 ? `↑ +${delta.toFixed(1)}` : delta < 0 ? `↓ ${delta.toFixed(1)}` : "→ 0"} since ${shortDate(change.since)}`;
 
   return (
     <div
@@ -104,7 +112,7 @@ export default function ScoreTrend({ snapshots }: ScoreTrendProps) {
       <div className="flex items-center justify-between mb-1">
         <span className="font-mono text-xs text-ink-lo tracking-widest">SCORE HISTORY</span>
         <span className="font-mono text-xs" style={{ color: changeColor }}>
-          {changeLabel} since first snapshot
+          {changeLabel}
         </span>
       </div>
       <svg

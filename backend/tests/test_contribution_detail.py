@@ -8,6 +8,7 @@ committee contribution from the FEC's bulk file, itemized individual money
 by occupation, the employee side of donors by employer.
 """
 
+import contextlib
 import io
 import zipfile
 from unittest.mock import patch
@@ -52,7 +53,14 @@ def _detail(**overrides):
 def _no_model():
     # The employer-status filter is an embedding check; stub it as the one
     # FEC convention these fixtures use.
-    with patch.object(nf, "classify_employer_skips_batch", lambda names: {n for n in names if n == "RETIRED"}):
+    # The industry classifier and its batch priming are embedding checks
+    # too: the fixtures' ai_classifications answer the names that matter,
+    # and any other reads as OTHER. No fixture name is a payment processor.
+    with patch.object(nf, "classify_employer_skips_batch", lambda names: {n for n in names if n == "RETIRED"}), \
+         patch.object(nf, "primed_industry_lookups", lambda names, db=None: contextlib.nullcontext()), \
+         patch.object(nf, "classify_with_learning", lambda name, db=None: ("OTHER", "test")), \
+         patch.object(nf, "skip_entities_batch", lambda names: set()), \
+         patch.object(nf, "is_skip_entity", lambda name: False):
         yield
 
 

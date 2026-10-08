@@ -22,6 +22,16 @@ const LINK = "font-mono text-[13px] text-ink-lo underline underline-offset-2 hov
 // beyond is drawn at the edge.
 const AXIS_POINTS = 30;
 
+// What each column's figure measures (the [?] beside its title).
+const TOOLTIPS = {
+  loyalty:
+    "How much more often the justice sided with the federal government in the cases it argued while the appointing president's administration was arguing them than under other administrations, with the government's side of each case held fixed and set against every justice since 1937 (Epstein and Posner 2016, from the Supreme Court Database). 100 is no favoritism either way; the score falls to 0 at twice the spread between justices.",
+  ideology:
+    "The Martin-Quinn score: a left-right position estimated each term from the justice's votes beside the other justices'. Negative is liberal, positive conservative. Shown for context, not scored.",
+  record:
+    "Orally argued cases decided in the last four terms: how often the justice was in the majority, in dissent, and in the majority of close cases (decided by one vote), how many cases were unanimous, and the opinions they wrote. Shown for context, not scored.",
+};
+
 function pts(share: number) {
   return (share * 100).toFixed(1);
 }
@@ -81,7 +91,12 @@ function LoyaltyColumn({ justice }: { justice: Justice }) {
   const score = justice.score.loyalty;
   const appointer = justice.appointingPresident ?? "the appointing president";
   return (
-    <ScoreColumn title="Independence from the appointing president" shareId="loyalty" score={score}>
+    <ScoreColumn
+      title="Independence from the appointing president"
+      shareId="loyalty"
+      tooltip={TOOLTIPS.loyalty}
+      score={score}
+    >
       {l && score != null ? (
         <>
           <p className="text-base leading-relaxed text-ink">
@@ -114,7 +129,13 @@ function IdeologyColumn({ points }: { points: [number, number][] }) {
   const first = points[0];
   const last = points[points.length - 1];
   return (
-    <ScoreColumn title="Ideology" shareId="ideology" score={null} aside="Not scored">
+    <ScoreColumn
+      title="Ideology"
+      shareId="ideology"
+      tooltip={TOOLTIPS.ideology}
+      score={null}
+      aside="Not scored"
+    >
       {last ? (
         <p className="text-base leading-relaxed text-ink">
           Martin-Quinn position {last[1] > 0 ? "+" : ""}
@@ -147,7 +168,13 @@ function RecordColumn({ justice: j }: { justice: Justice }) {
     ["Concurrences written", `${j.authoredConcurrence}`],
   ];
   return (
-    <ScoreColumn title="Voting record" shareId="voting-record" score={null} aside="Not scored">
+    <ScoreColumn
+      title="Voting record"
+      shareId="voting-record"
+      tooltip={TOOLTIPS.record}
+      score={null}
+      aside="Not scored"
+    >
       <p className="text-base leading-relaxed text-ink">
         {j.casesDecided} orally argued cases decided in the last four terms.
       </p>

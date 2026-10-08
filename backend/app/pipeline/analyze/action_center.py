@@ -20,7 +20,7 @@ import threading
 from collections import Counter
 from functools import lru_cache
 import time
-from typing import NamedTuple
+from typing import Iterator, NamedTuple
 import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
@@ -1829,12 +1829,21 @@ def _rank_clusters(
 def _deduplicate_top_clusters(
     ranked_clusters: list[list[NewsArticle]],
     ranked_scores: list[float],
-    max_issues: int,
-) -> list[list[NewsArticle]]:
-    """Select top clusters ensuring no two cover the same topic.
+    max_candidates: int,
+    published: list[int],
+) -> Iterator[tuple[int, list[NewsArticle]]]:
+    """Yield (index, cluster) candidates in rank order, skipping any cluster
+    that covers the same story as one that PUBLISHED this run.
 
-    Greedily picks the highest-ranked cluster, then skips any subsequent
-    cluster whose centroid is too similar to an already-selected one.
+    ``published`` is the caller's list of yielded indices that became
+    issues. It is read at each step, so a cluster is judged against what
+    the run has actually published so far, not against what it merely
+    tried. Comparing against every earlier candidate dropped stories for
+    nothing: on 2026-10-08 a live blog whose headline named two stories (a
+    work-visa penalty, a court order on a press ban) ranked first, both
+    stories' own clusters were dropped as its duplicates (sim 0.50 and
+    0.42), and the live blog itself then failed the two-claim gate, so
+    neither story had a chance in either of two consecutive runs.
 
     A duplicate is dropped, not merged into the cluster it resembles. It
     used to be appended to it, which is single linkage again one step
@@ -1842,23 +1851,19 @@ def _deduplicate_top_clusters(
     this step folded Hurricane Nolo into the nor'easter, an AI-fund tax
     story into an AI-hacking one and a voter-database ruling into the
     Missouri map. Title similarity can't tell those from same-story pairs
-    (see _cluster_articles), and the higher-ranked cluster already carries
+    (see _cluster_articles), and the published cluster already carries
     the story. The cluster_dedup_merged_* counters keep their name for the
     series; they count clusters judged duplicates.
 
-    ranked_scores[i] is ranked_clusters[i]'s combined _rank_clusters score
-    — needed here, not in _rank_clusters, because THIS function decides
-    final selection (a higher-ranked cluster can still be merged away as a
-    near-duplicate, promoting a lower-ranked one instead); logging the
-    selected/rejected boundary anywhere else would mislabel whatever this
-    merge step changes.
+    ranked_scores[i] is ranked_clusters[i]'s combined _rank_clusters score,
+    logged here as selected (tried) or rejected (a duplicate) because this
+    function decides which clusters are tried.
     """
-    if len(ranked_clusters) <= 1:
-        return ranked_clusters[:max_issues]
-
+    if not ranked_clusters:
+        return
 
     # Threshold in normalized-centered-embedding space, above which two
-    # top-ranked clusters are treated as the same story and merged.
+    # top-ranked clusters are treated as the same story.
     #
     # THE DATA THIS ASKED FOR HAS NOW ACCUMULATED, and it says the gate
     # was unreachable. Across 1,039 persisted runs the bucketed counters
@@ -1885,50 +1890,38 @@ def _deduplicate_top_clusters(
     norms = np.linalg.norm(centered, axis=1, keepdims=True)
     embeddings = centered / np.where(norms < 1e-9, 1.0, norms)
 
-    selected: list[int] = []
-    examined: list[int] = []
-    for i in range(len(ranked_clusters)):
-        if len(selected) >= max_issues:
-            break
-        examined.append(i)
+    tried = 0
+    for i, cluster in enumerate(ranked_clusters):
+        if tried >= max_candidates:
+            return
+        action_metrics.increment("clusters_considered")
 
         merged_into = None
         best_sim = -1.0
-        for j in selected:
+        for j in published:
             sim = float(embeddings[i] @ embeddings[j])
             best_sim = max(best_sim, sim)
             if sim >= DEDUP_THRESHOLD:
                 merged_into = j
                 break
 
-        if selected:
+        if published:
             outcome = "merged" if merged_into is not None else "kept"
             action_metrics.increment_bucket(f"cluster_dedup_{outcome}_sim_bucket", best_sim)
 
         if merged_into is not None:
             logger.info(
                 "Dropped cluster '%s...' as a duplicate of '%s...' (sim=%.3f)",
-                ranked_clusters[i][0].title[:40],
+                cluster[0].title[:40],
                 ranked_clusters[merged_into][0].title[:40],
                 float(embeddings[i] @ embeddings[merged_into]),
             )
-        else:
-            selected.append(i)
+            action_metrics.increment_bucket("cluster_rank_score_rejected", ranked_scores[i])
+            continue
 
-    # Logged against the real outcome of the loop above, not raw rank
-    # position — `examined` can run past index max_issues-1 when earlier
-    # candidates get merged away, so a promoted lower-ranked cluster is
-    # correctly counted "selected" rather than silently excluded.
-    selected_set = set(selected)
-    for i in examined:
-        outcome = "selected" if i in selected_set else "rejected"
-        action_metrics.increment_bucket(f"cluster_rank_score_{outcome}", ranked_scores[i])
-
-    logger.info(
-        "Cluster dedup: selected %d of %d ranked clusters",
-        len(selected), len(ranked_clusters),
-    )
-    return [ranked_clusters[i] for i in selected]
+        action_metrics.increment_bucket("cluster_rank_score_selected", ranked_scores[i])
+        tried += 1
+        yield i, cluster
 
 
 # Last names that are also common English words — require a full-name match
@@ -2312,10 +2305,18 @@ def _find_related_explore_docs(
     except Exception:
         sims = np.zeros(len(passed))
 
-    # Measured under the similarity model: genuine issue-doc matches score
-    # 0.467-0.776, unrelated floor-speech noise 0.128-0.183 — 0.33 sits
-    # mid-gap.
-    min_sim = 0.33
+    # Min-error on the 299 links stored on issues since 2026-09-01, each
+    # read and labelled by hand (2026-10-08): 0.49. The earlier 0.33 came
+    # from a sample whose unrelated pairs all scored 0.13-0.18 (floor
+    # speeches), but the federal register supplies unrelated documents
+    # that score well above that — Coast Guard safety zones in Miami on a
+    # story about a Florida golf club (0.34-0.38), an executive order on
+    # "Made in America" advertising on a story about political ads
+    # (0.43-0.45). 189 of the 299 stored links were unrelated; at 0.49, 6
+    # unrelated are kept and 58 related are lost. The loss is the cheap
+    # side: a missing link shows nothing, a wrong one misleads, and two
+    # wrong ones also passed the publication gate below as an anchor.
+    min_sim = 0.49
 
     scored = sorted(
         zip(passed, sims),
@@ -4673,11 +4674,15 @@ def _run_refresh(db: Session) -> int:
     _set_refresh_state(stage="rank")
     ranked_clusters, ranked_scores = _rank_clusters(clusters, trending, db)
 
-    # 5b. Deduplicate top clusters so two angles on the same story
-    # don't both appear (e.g., "Tariff hikes" and "Market fallout from tariffs")
-    top_clusters = _deduplicate_top_clusters(ranked_clusters, ranked_scores, CANDIDATE_POOL)
-    action_metrics.increment("clusters_considered", len(top_clusters))
-    _set_refresh_state(stage="issues", stage_detail=f"0/{len(top_clusters)}")
+    # 5b. Candidates in rank order, skipping a cluster on the same story as
+    # one already published this run (e.g., "Tariff hikes" and "Market
+    # fallout from tariffs"). Lazy: `published_clusters` is filled below as
+    # clusters publish, and only those count (_deduplicate_top_clusters).
+    published_clusters: list[int] = []
+    top_clusters = _deduplicate_top_clusters(
+        ranked_clusters, ranked_scores, CANDIDATE_POOL, published_clusters,
+    )
+    _set_refresh_state(stage="issues", stage_detail=f"0/{CANDIDATE_POOL}")
 
     # 6. Generate analysis for each via LLM
 
@@ -4722,11 +4727,9 @@ def _run_refresh(db: Session) -> int:
     # (_resolve_bills).
     bill_short_titles = short_title_index(db)
     bill_titles = bill_title_lists(db)
-    for rank, cluster in enumerate(top_clusters, start=1):
-        if issues_created >= MAX_ISSUES:
-            break
+    for rank, (cluster_index, cluster) in enumerate(top_clusters, start=1):
         action_metrics.increment("clusters_attempted")
-        _set_refresh_state(stage_detail=f"{rank}/{len(top_clusters)}")
+        _set_refresh_state(stage_detail=f"{rank}/{CANDIDATE_POOL}")
         # Filter the cluster to articles that are genuinely on-topic using
         # centered embeddings — the same space the clustering used. Raw cosine
         # similarity is useless here because every news headline sits in the
@@ -5134,6 +5137,11 @@ def _run_refresh(db: Session) -> int:
                 stories_built += 1
 
         issues_created += 1
+        published_clusters.append(cluster_index)
+        # Stop before asking for another candidate: the generator counts
+        # each one it yields as tried.
+        if issues_created >= MAX_ISSUES:
+            break
 
     # Flush to assign IDs to newly inserted rows, then mark them as touched.
     db.flush()
@@ -5244,8 +5252,10 @@ def _run_refresh(db: Session) -> int:
 
     elapsed = time.perf_counter() - t0
     logger.info(
-        "Action center refresh complete: %d issues created in %.1fs",
-        issues_created, elapsed,
+        # Most published issues re-match an existing row: "2 issues
+        # created" for two refreshed rows read as two new stories.
+        "Action center refresh complete: %d issues published (%d new) in %.1fs",
+        issues_created, len(_new_issues), elapsed,
     )
     _set_refresh_state(
         is_running=False, stage=None, stage_detail=None,

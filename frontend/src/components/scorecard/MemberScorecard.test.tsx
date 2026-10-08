@@ -3,6 +3,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import MemberScorecard from "./MemberScorecard";
+import { ConfigProvider } from "@/hooks/useConfig";
+import type { AppConfig } from "@/lib/api";
 import type { KeyVote, Senator } from "@/types/senator";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 
@@ -163,7 +165,7 @@ const breakdown: RepresentationScoreBreakdown = {
         detail: "PageRank leadership 33/100",
       },
     ],
-    facts: { billsByStage: [58, 3, 0, 4, 0] },
+    facts: { billsByStage: [58, 3, 0, 4, 0], bills: 65, resolutions: 6 },
   },
 };
 
@@ -248,7 +250,7 @@ describe("MemberScorecard", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Sponsored 65 bills this Congress\. 4 passed the House, 3 got committee action; none has become law\./
+        /Sponsored 65 bills this Congress \(and 6 simple or concurrent resolutions\)\. 4 passed the House, 3 got committee action; none has become law\./
       )
     ).toBeInTheDocument();
     // A member's own committee isn't one of their donors.
@@ -401,6 +403,8 @@ describe("MemberScorecard", () => {
       expect.stringMatching(/Republicans74% approve90 with an opinion$/),
     ]);
     expect(within(column).getByText(/Informational, not scored\./)).toBeInTheDocument();
+    // The House isn't scored on approval: no [?] claims it is.
+    expect(within(column).queryByText(/part of the score/)).not.toBeInTheDocument();
     const violations = (
       await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } })
     ).violations.map((v) => v.id);
@@ -409,7 +413,9 @@ describe("MemberScorecard", () => {
 
   it("opens the full record in a drawer and closes it with Escape", async () => {
     renderCard();
-    await userEvent.click(screen.getByRole("button", { name: /All 65 sponsored bills/ }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /All 2 sponsored bills and resolutions/ })
+    );
     const dialog = screen.getByRole("dialog", { name: "Sponsored bills" });
     expect(within(dialog).getByText(/SPONSORED LEGISLATION/)).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
@@ -426,5 +432,139 @@ describe("MemberScorecard", () => {
     expect(await run()).toEqual([]);
     await userEvent.click(screen.getByRole("button", { name: /All donors and industries/ }));
     expect(await run()).toEqual([]);
+  });
+
+  it("names an at-large seat as one, never district 0", async () => {
+    render(
+      <main>
+        <MemberScorecard
+          member={{ ...member, yearsInOffice: 1 }}
+          chamber="house"
+          breakdown={breakdown}
+          district={0}
+          stateName="Tennessee"
+          committees={[]}
+        />
+      </main>
+    );
+    await screen.findByText("H.R. 8800");
+    expect(
+      screen.getByText(/Tennessee · At-large district · REPUBLICAN · 1 year in office/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/in seats that lean like TN-AL do that/)).toBeInTheDocument();
+    expect(screen.queryByText(/District 0|TN-0/)).not.toBeInTheDocument();
+  });
+
+  it("links Congress.gov by the member's Bioguide id, and not at all without one", async () => {
+    const { unmount } = renderCard();
+    expect(screen.queryByRole("link", { name: /Congress\.gov/ })).not.toBeInTheDocument();
+    unmount();
+    render(
+      <main>
+        <MemberScorecard
+          member={{ ...member, bioguideId: "H000001" }}
+          chamber="house"
+          breakdown={breakdown}
+          district={2}
+          committees={[]}
+        />
+      </main>
+    );
+    expect(screen.getByRole("link", { name: /Congress\.gov/ })).toHaveAttribute(
+      "href",
+      "https://www.congress.gov/member/jordan-hale/H000001"
+    );
+  });
+
+  it("says which approval figures the score reads", async () => {
+    // Driven by the breakdown's facts.approval (served for senators, v6.29).
+    const rated = {
+      ...member,
+      constituentApproval: {
+        survey: "CES 2024 Common Content (pre-election wave, Oct-Nov 2024)",
+        fielded: "2024-10/2024-11",
+        surveyedAs: "Jordan Hale",
+        byParty: [
+          { party: "D" as const, approve: 0.2, ownWeight: 0.6, respondents: 300 },
+          { party: "R" as const, approve: 0.9, ownWeight: 0.7, respondents: 500 },
+          { party: "I" as const, approve: 0.5, ownWeight: 0.6, respondents: 400 },
+        ],
+      },
+    };
+    const approval = {
+      groups: [
+        { group: "D" as const, approve: 0.2, typical: 0.13 },
+        { group: "I" as const, approve: 0.5, typical: 0.44 },
+      ],
+      z: 0.4,
+      survey: "CES 2024",
+    };
+    const ca = breakdown.constituentAlignment;
+    render(
+      <main>
+        <MemberScorecard
+          member={rated}
+          chamber="house"
+          breakdown={{
+            ...breakdown,
+            constituentAlignment: { ...ca, facts: { ...ca.facts, approval } },
+          }}
+          stateName="Tennessee"
+          committees={[]}
+        />
+      </main>
+    );
+    const column = document.getElementById("constituent-alignment")!;
+    expect(
+      within(column).getByText(
+        /The Democrats' and independents' figures are part of the score \(constituent approval, below\); the rest is shown, not scored\./
+      )
+    ).toBeInTheDocument();
+    expect(within(column).queryByText(/Informational, not scored/)).not.toBeInTheDocument();
+  });
+
+  it("lists only bills as furthest along, not resolutions the chamber agreed to", async () => {
+    const config = {
+      industries: {},
+      platformCategories: {},
+      policyAreas: [],
+      billStages: {
+        REFERRED: { name: "Referred to Committee", color: "", order: 2 },
+        PASSED_CHAMBER: { name: "Passed Chamber", color: "", order: 6 },
+        IN_OTHER_CHAMBER: { name: "In Other Chamber", color: "", order: 7 },
+      },
+      substantiveBillTypes: ["HJRES", "HR", "S", "SJRES"],
+    } as AppConfig;
+    const withResolution = {
+      ...member,
+      sponsoredBills: [
+        ...(member.sponsoredBills ?? []),
+        {
+          ...member.sponsoredBills![0],
+          billId: "HRES.1",
+          title: "Electing a Member to a certain standing committee",
+          billType: "HRES",
+          stage: "PASSED_CHAMBER",
+        },
+      ],
+    };
+    render(
+      <ConfigProvider value={config}>
+        <main>
+          <MemberScorecard
+            member={withResolution}
+            chamber="house"
+            breakdown={breakdown}
+            district={2}
+            committees={[]}
+          />
+        </main>
+      </ConfigProvider>
+    );
+    const column = document.getElementById("legislative-effectiveness")!;
+    expect(
+      within(column).getByText("Tennessee Valley Authority Transparency Act of 2025")
+    ).toBeInTheDocument();
+    expect(within(column).queryByText(/Electing a Member/)).not.toBeInTheDocument();
   });
 });

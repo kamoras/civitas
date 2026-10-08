@@ -372,16 +372,28 @@ links to its election office, never as a state where nothing has happened.
   regenerate each cycle).
 - Test, preview or mismatched data raises `UntrustedCount` and stores
   nothing: Enhanced Voting `isProduction` and `_Demo` elections, Clarity
-  `istestmode`, Tally `previewElections`/`electionID` and a `versionID` that
-  changes mid-read. The election is found by its statutory date; a demo,
-  recount or runoff is never taken for the general (a runoff name that also
-  says "general" — "General Election and Nonpartisan Runoff" — is, when
-  nothing plainer is held that day), two candidates for the same day are
-  refused rather than guessed between, and so is a day holding only
-  recounts or runoffs.
+  `istestmode` / `showtestdatawatermark` (read as flags, not truthiness:
+  every real 2026 Clarity election carries the watermark as the string
+  `"0"`), Tally `previewElections`, `_Preview` ids and `electionID`, and a
+  `versionID` that changes mid-read. The election is found by its statutory
+  date; a demo, recount or runoff is never taken for the general (a runoff
+  name that also says "general" — "General Election and Nonpartisan
+  Runoff" — is, when nothing plainer is held that day), two candidates for
+  the same day are refused rather than guessed between, and so is a day
+  holding only recounts or runoffs. The one exception is two index entries
+  that are the same election: Enhanced Voting entries whose payloads carry
+  one election `id` (Virginia lists its 2026 general twice, once as a dated
+  copy) are read as one, from the copy updated last.
 - A feed that goes backwards in time or version (a version compared only
   with the same election id's), or is stamped in the future, is refused. An impossible count (more units reporting than exist)
   is dropped. A poll whose vote total fell is stored but announces nothing.
+- Failures page someone rather than reading as a quiet night: a refusal
+  seen on two reads in a row, a count with units out and no change for two
+  hours (`check_stalled_feeds`), and a covered state with no count stored
+  an hour after its polls close, whatever its reads said
+  (`check_missing_counts`: a bot wall's 403, a results host that now
+  redirects to a landing page, or every contest dropped). A walled feed is
+  never worked around.
 - Civitas never calls a race. A count is "leading" — "not final" until the
   source itself says official, and still "leading", never "wins", after. A
   flip needs half the reporting units in; where the units are places

@@ -66,7 +66,9 @@ export default function NewsChapter() {
           the government documents we index), 35% breadth (how many independent newsrooms cover it)
           and 25% whether people are talking about it on Google Trends and Bluesky. Trending counts
           least because it is the most volatile. At most two issues publish per hourly run, in rank
-          order; if a top story fails the checks below, the next one is tried.
+          order; if a top story fails the checks below, the next one is tried. A story is passed
+          over as a repeat only of one that actually published in that run: a briefing that named
+          two stories once crowded both out and then published nothing itself.
         </P>
         <More label="How stories are grouped, and why it errs toward keeping them apart">
           <P>
@@ -105,11 +107,12 @@ export default function NewsChapter() {
           the article asserts one of the other rather than merely containing both, and that the span
           runs to the end of its clause. Where the model stops short (&ldquo;Senator sues&rdquo;),
           the site reads on in the article to the end of that clause, and drops the claim if it
-          can&apos;t tell where the clause ends. Only then is the sentence shown, in the
-          source&apos;s own words, naming the outlet and linking the article it came from. The
-          summary at the top of an issue is one of these lines, and names its outlet the same way.
-          The headline is the top article&apos;s real headline, and an issue&apos;s full story is
-          every checked sentence, listed under the outlet that reported it.
+          can&apos;t tell where the clause ends, and a line with a bracket it opens or closes but
+          doesn&apos;t match is dropped too. Only then is the sentence shown, in the source&apos;s
+          own words, naming the outlet and linking the article it came from. The summary at the top
+          of an issue is one of these lines, and names its outlet the same way. The headline is the
+          top article&apos;s real headline, and an issue&apos;s full story is every checked
+          sentence, listed under the outlet that reported it.
         </P>
         <P>
           This replaced asking a model to write neutrally and checking whether it had. That approach
@@ -173,8 +176,10 @@ export default function NewsChapter() {
         </List>
         <P>
           When a scored politician is part of a story, it links to their scorecard; related
-          government documents are matched from the Explore index. Elections, with the countdown to
-          the next Election Day, have their own page.
+          government documents are matched from the Explore index, and only when their titles
+          closely match the story&apos;s: a looser bar once linked boating safety zones in Miami to
+          a story about a Florida golf club. Elections, with the countdown to the next Election Day,
+          have their own page.
         </P>
       </Section>
 

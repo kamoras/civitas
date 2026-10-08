@@ -30,6 +30,17 @@ function districtToken(district: number): string {
   return district === 0 ? "AL" : String(district);
 }
 
+/** "TN-2", "AK-AL": a House seat's short label. Never `${state}-${district}`,
+ *  which reads "AK-0" for an at-large seat. */
+export function houseSeatLabel(state: string, district: number): string {
+  return `${state}-${districtToken(district)}`;
+}
+
+/** "District 2", "At-large district": a House seat named on its own. */
+export function districtName(district: number): string {
+  return district === 0 ? "At-large district" : `District ${district}`;
+}
+
 /** A race's short label without the state — "SENATE" / "HOUSE-7" /
  * "HOUSE-AL" — for badges inside a page already scoped to one state (e.g. the state ballot's aggregated coverage feed), where
  * repeating the state on every item would be redundant. */

@@ -12,7 +12,7 @@ TREND_LOOKBACK_DAYS = 7
 TREND_THRESHOLD = 0.5
 
 
-def _comparable(older: ScoreSnapshot, latest: ScoreSnapshot) -> bool:
+def _comparable(older: ScoreSnapshot, latest: ScoreSnapshot, by_congress: bool = True) -> bool:
     """Whether a score change between two snapshots can be read as the
     member's own: the same algorithm version, recorded on both, and the
     same Congress. A methodology change moves everyone's score at once, and
@@ -24,7 +24,25 @@ def _comparable(older: ScoreSnapshot, latest: ScoreSnapshot) -> bool:
     methodology changes (2026-10-08)."""
     if not older.algorithm_version or older.algorithm_version != latest.algorithm_version:
         return False
-    return congress_of_date(older.date) == congress_of_date(latest.date)
+    return not by_congress or congress_of_date(older.date) == congress_of_date(latest.date)
+
+
+def change_on_current_method(snapshots: list[ScoreSnapshot], by_congress: bool = True) -> dict | None:
+    """How far the latest score has moved since the earliest snapshot still
+    comparable to it (_comparable): {"since": date, "points": change}, or
+    None when there is no such earlier snapshot. A profile's score history
+    once stated its change "since first snapshot", across every methodology
+    change in between (one senator read 24 points down over 22 versions,
+    nearly all of it formula changes). `by_congress` is False for a
+    president, whose score isn't windowed to a Congress. `snapshots` is
+    oldest first."""
+    if len(snapshots) < 2:
+        return None
+    latest = snapshots[-1]
+    for snap in snapshots[:-1]:
+        if snap.date < latest.date and _comparable(snap, latest, by_congress):
+            return {"since": snap.date, "points": round(latest.overall_score - snap.overall_score, 1)}
+    return None
 
 
 def compute_score_trend_map(db: Session, entity_type: str) -> dict[str, dict]:

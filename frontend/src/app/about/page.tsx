@@ -77,7 +77,11 @@ const SCORE_PARTS: readonly {
 ];
 
 const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
-  { what: "Senate & House", detail: "All 535 members, scored and ranked", href: "/politicians" },
+  {
+    what: "Senate & House",
+    detail: "Every sitting member, scored and ranked",
+    href: "/politicians",
+  },
   {
     what: "Presidents",
     detail: "Every president, on economic, public and historical records",
@@ -174,9 +178,10 @@ export default function AboutOverview() {
         </div>
         <P>
           Scores cover the current Congress (two years of votes and bills), not a whole career,
-          except funding, which covers the election that won the member their seat. Every number on
-          a scorecard has a <span className="font-mono text-ink-hi">[?]</span> beside it explaining
-          what it measures. <A href="/about/scores">Read how each part is calculated</A>.
+          except funding, which covers the election that won the member their seat. The
+          Representation Score, each of its three parts and each of their components has a{" "}
+          <span className="font-mono text-ink-hi">[?]</span> beside it explaining what it measures.{" "}
+          <A href="/about/scores">Read how each part is calculated</A>.
         </P>
       </Section>
 
