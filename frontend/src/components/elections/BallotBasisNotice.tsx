@@ -85,8 +85,9 @@ export default function BallotBasisNotice({ basis }: { basis?: BallotBasis | nul
         className="mb-6 font-mono text-xs leading-relaxed text-ink-min"
         data-testid="ballot-nominees"
       >
-        Nominees confirmed from primary results. A primary cannot show a Libertarian, Green or
-        independent who never ran in one, so this list is real and may be incomplete.
+        Nominees confirmed from primary results. A primary cannot show a nominee who never ran in
+        one (one a party convention chose, or a Libertarian, Green or independent candidate), so
+        this list is real and may be incomplete.
       </p>
     );
   }

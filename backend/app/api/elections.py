@@ -292,6 +292,10 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
         # refresh turn hasn't come up must not read as "$0 raised"
         # (2026-07 review F10).
         "lastFinancialsSync": _iso_utc(cand.last_financials_sync),
+        # The last day the FEC figures cover ("YYYY-MM-DD") — what they
+        # are as of. Null with figures from before this field existed, and
+        # with no figures when the FEC holds no report for this election.
+        "financialsThrough": cand.financials_through,
     }
 
 
@@ -440,8 +444,11 @@ def _candidate_source(candidates: list[Candidate], complete: bool) -> str:
     "confirmed"  — the state has named its whole November ballot, minor
                    parties included.
     "nominees"   — the state has confirmed nominees, but only from PRIMARY
-                   results, which structurally cannot see a Libertarian,
-                   Green or independent candidate who never ran in one. The
+                   results, which structurally cannot see a nominee who
+                   never ran in one: a party convention's choice (Utah's
+                   2026 House Democratic and Republican nominees chosen at
+                   convention were missing), or a Libertarian, Green or
+                   independent candidate. The
                    list is real and incomplete, and saying so is the
                    difference between a short ballot and a wrong one.
     "primary"    — no nominee yet, but the state lists these as being on

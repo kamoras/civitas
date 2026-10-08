@@ -4,6 +4,7 @@ import type { Committee } from "@/types/politicians";
 import { asLabel, displayScore, safeHref } from "@/lib/formatting";
 import { getScoreColor, getScoreLabel } from "@/lib/representation";
 import { currentCongressLabel } from "@/lib/sources";
+import { districtName } from "@/lib/elections";
 import { PARTY_BORDER, PARTY_COLORS, PARTY_LABELS } from "@/lib/partyStyles";
 import MetricTooltip from "@/components/checker/MetricTooltip";
 import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
@@ -44,9 +45,14 @@ export default function ScorecardHeader({
 }) {
   const overall = displayScore(member.representationScore.overall);
   const office = chamber === "senate" ? "Senator" : "Representative";
-  const place = [stateName ?? member.state, district != null ? `District ${district}` : null]
+  const place = [stateName ?? member.state, district != null ? districtName(district) : null]
     .filter(Boolean)
     .join(" · ");
+  const years = member.yearsInOffice;
+  const tenure =
+    years < 1
+      ? "less than a year in office"
+      : `${years} ${years === 1 ? "year" : "years"} in office`;
   const fecOffice = chamber === "senate" ? "S" : "H";
   const phone = member.officePhone;
 
@@ -81,8 +87,7 @@ export default function ScorecardHeader({
             {member.name}
           </Title>
           <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
-            {office} · {place} · {PARTY_LABELS[member.party] ?? member.party} ·{" "}
-            {member.yearsInOffice} years in office
+            {office} · {place} · {PARTY_LABELS[member.party] ?? member.party} · {tenure}
           </p>
           {(leadershipTitle || member.sponsorshipDescription) && (
             <p className="flex flex-wrap items-center gap-2 text-sm text-ink-lo">
@@ -92,7 +97,7 @@ export default function ScorecardHeader({
                 </span>
               )}
               {member.sponsorshipDescription && (
-                <MetricTooltip text="Derived from cosponsorship patterns: PageRank for influence and SVD for ideology, relative to the rest of the chamber.">
+                <MetricTooltip text="From who cosponsors whose bills this Congress. The ideology word is the member's third of their own party on a left-right position read from cosponsorships (SVD), not from votes; leader or follower is their PageRank position in the chamber's cosponsorship network, pulled toward the middle for under six years in office.">
                   {asLabel(member.sponsorshipDescription)}
                 </MetricTooltip>
               )}
@@ -184,14 +189,19 @@ export default function ScorecardHeader({
               Official site ↗
             </a>
           )}
-          <a
-            href={`https://www.congress.gov/member/${member.name.toLowerCase().replace(/\s+/g, "-")}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={LINK}
-          >
-            Congress.gov ↗
-          </a>
+          {/* Congress.gov's member pages are keyed by Bioguide id; the name
+              part of the path is decoration (it redirects to its own
+              spelling). A name alone is a "Page Not Found". */}
+          {member.bioguideId && (
+            <a
+              href={`https://www.congress.gov/member/${member.name.toLowerCase().replace(/\s+/g, "-")}/${member.bioguideId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={LINK}
+            >
+              Congress.gov ↗
+            </a>
+          )}
           <a
             href={`https://www.fec.gov/data/candidates/?search=${encodeURIComponent(member.name)}&office=${fecOffice}`}
             target="_blank"

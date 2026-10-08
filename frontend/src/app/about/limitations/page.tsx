@@ -134,10 +134,13 @@ export default async function LimitationsChapter() {
             elections from 1990 to 2024, members who broke more than their seat&apos;s norm did
             somewhat better, and some heavy breakers keep winning by appealing to both sides. A
             roll-call record can&apos;t tell them apart from members whose breaks cost them their
-            base. That takes approval split by party, so each profile now shows it beside the score:
-            approval of the member among the Democrats, Republicans and independents they represent,
-            from the Cooperative Election Study. It is shown, not scored, until a second survey wave
-            shows it is stable.
+            base. That takes approval split by party: approval of the member among the Democrats,
+            Republicans and independents they represent, from the Cooperative Election Study, shown
+            on each profile. For senators the gap is closed: since v6.29 their approval among the
+            state&apos;s other-party voters and independents is part of Constituent Alignment, after
+            the 2022 and 2024 surveys gave the same senators closely agreeing figures. For House
+            members it stays open: it is shown, not scored, because a district&apos;s figure barely
+            agrees from one survey to the next.
           </P>
           <More label="How sharp the approval figures can be">
             <P>
@@ -146,12 +149,13 @@ export default async function LimitationsChapter() {
               who has since moved to another seat or district shows none. Small groups are pulled
               toward what a typical member of the same party gets from that group, by an amount
               estimated from how much members actually differ. The survey&apos;s size sets how sharp
-              the House figures can be: a district has about a hundred respondents, so most House
-              figures come mostly from what similar members get. Only Democrats&apos; ratings rest
-              mostly on the district&apos;s own respondents, for about three in five Democratic
-              members and two in five Republican ones, and the profile marks every figure that
-              doesn&apos;t. Senators&apos; figures mostly rest on their own state&apos;s respondents
-              (a median of 672).
+              the House figures can be: a district has about a hundred respondents with an opinion
+              (a median of 96), so most House figures come mostly from what similar members get.
+              Democrats&apos; ratings are nearly the only ones that rest mostly on the
+              district&apos;s own respondents, for about three in five Democratic members and two in
+              five Republican ones (another group&apos;s does for ten members in all), and the
+              profile marks every figure that doesn&apos;t. Senators&apos; figures mostly rest on
+              their own state&apos;s respondents (a median of 672).
             </P>
           </More>
         </Limitation>

@@ -1,6 +1,7 @@
 "use client";
 
 import { displayScore } from "@/lib/formatting";
+import { districtName } from "@/lib/elections";
 import { Suspense, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -95,7 +96,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
   const subtitle = [
     p.role,
     p.stateName ?? null,
-    p.district != null ? `District ${p.district}` : null,
+    p.district != null ? districtName(p.district) : null,
   ]
     .filter(Boolean)
     .join(" · ");

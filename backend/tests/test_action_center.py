@@ -163,6 +163,19 @@ class TestRankClusters:
         assert len(ranked_scores) == len(ranked_clusters)
 
 
+def _tried(clusters, scores, n, publishes=lambda i: True):
+    """Drive _deduplicate_top_clusters as the refresh loop does: every
+    candidate it yields is tried, and those that `publishes` are reported
+    back through the shared list."""
+    published: list[int] = []
+    tried = []
+    for i, cluster in _deduplicate_top_clusters(clusters, scores, n, published):
+        tried.append(cluster)
+        if publishes(i):
+            published.append(i)
+    return tried
+
+
 class TestDeduplicateTopClusters:
     """Cross-cluster deduplication prevents two angles on the same story."""
 
@@ -172,7 +185,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        result = _deduplicate_top_clusters([c1, c2, c3], ranked_scores=[0.9, 0.8, 0.5], max_issues=4)
+        result = _tried([c1, c2, c3], [0.9, 0.8, 0.5], 4)
         assert len(result) == 2
         titles = [r[0].title for r in result]
         assert "Trade war tariffs increase on Chinese goods" in titles
@@ -192,7 +205,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        _deduplicate_top_clusters([c1, c2, c3], ranked_scores=[0.9, 0.8, 0.5], max_issues=4)
+        _tried([c1, c2, c3], [0.9, 0.8, 0.5], 4)
 
         counts = action_metrics.snapshot()
         merged = sum(v for k, v in counts.items() if k.startswith("cluster_dedup_merged_sim_bucket_"))
@@ -224,7 +237,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        result = _deduplicate_top_clusters([c1, c2, c3], ranked_scores=[0.9, 0.8, 0.5], max_issues=2)
+        result = _tried([c1, c2, c3], [0.9, 0.8, 0.5], 2)
 
         result_titles = {a.title for cluster in result for a in cluster}
         assert "Healthcare bill passes Senate committee" in result_titles
@@ -246,6 +259,24 @@ class TestDeduplicateTopClusters:
         assert counts.get(f"cluster_rank_score_rejected_{action_metrics.decile_bucket(0.8)}") == 1
         assert f"cluster_rank_score_selected_{action_metrics.decile_bucket(0.8)}" not in counts
         assert f"cluster_rank_score_rejected_{action_metrics.decile_bucket(0.5)}" not in counts
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    def test_a_duplicate_of_a_cluster_that_did_not_publish_is_still_tried(self, mock_embed):
+        # 2026-10-08: a live blog naming two stories ranked first, both
+        # stories were dropped as its duplicates, and the live blog then
+        # published nothing — in two consecutive runs. Only a published
+        # cluster carries its story; one that failed carries none.
+        mock_embed.return_value = np.array([[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+        live_blog = [_make_article("Live updates: work visa penalties; judge extends media ban block")]
+        story = [_make_article("Judge extends temporary block on media ban")]
+        other = [_make_article("Healthcare bill passes Senate committee")]
+
+        tried = _tried([live_blog, story, other], [0.9, 0.8, 0.5], 3, publishes=lambda i: i != 0)
+        assert tried == [live_blog, story, other]
+
+        # Once the story does publish, its duplicate is not tried after it.
+        tried = _tried([story, live_blog, other], [0.9, 0.8, 0.5], 3)
+        assert tried == [story, other]
 
 
 class TestNationalMonitorCreation:
@@ -703,11 +734,26 @@ class TestExploreDocThresholds:
         mock_search.return_value = [
             {"id": 1, "title": "Certain Steel Products From China: Preliminary Results", "distance": 0.5},
         ]
-        # cos_sim ~= 0.25 — above zero, below the similarity-model bar
-        # (0.33, measured 2026-07: genuine matches 0.467+, noise <=0.183).
+        # cos_sim ~= 0.25 — above zero, below the similarity-model bar.
         mock_embed.return_value = np.array([[1.0, 0.0], [0.25, 0.968]])
 
         result = _find_related_explore_docs("Sports story", "summary", [], db_session)
+        assert result == []
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_a_same_place_notice_below_the_measured_bar_is_rejected(self, mock_search, mock_embed, db_session):
+        # Linked 2026-10-08 at title similarity 0.381, under the old 0.33
+        # bar: 189 of 299 stored links were unrelated like this one.
+        title = "Safety Zone; Bayfront Park 4th of July Fireworks Display, Intercoastal Waterway, Biscayne Bay, Miami, FL"
+        self._seed_doc(db_session, 1, title)
+        mock_search.return_value = [{"id": 1, "title": title, "distance": 0.80}]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.381, 0.925]])
+
+        result = _find_related_explore_docs(
+            "President proposes a presidential retreat at a private Florida golf club",
+            "summary", [], db_session,
+        )
         assert result == []
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")

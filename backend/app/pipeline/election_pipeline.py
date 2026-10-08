@@ -107,6 +107,15 @@ ELECTION_PIPELINE_STEPS = [
 # set cycles through over multiple nightly runs rather than one multi-hour pass.
 FINANCIALS_BATCH_SIZE = 500
 
+# A candidate not refreshed in this many days goes ahead of the priority
+# order. Without it incumbents and fundraisers (~2,800 in 2026, back in the
+# pool every PIPELINE_CACHE_TTL_HOURS) filled every batch, and the ~1,450
+# candidates the FEC flags as not having raised money had not been
+# refreshed since 2026-08-01 when measured on 2026-10-08 — 169 of them
+# confirmed nominees. At 500 a night, that group costs ~105 slots a night
+# at fourteen days, leaving the rest a rotation of about a week.
+FINANCIALS_OVERDUE_DAYS = 14
+
 # The states (election_calendar.federal_states: every state with Senate
 # seats, read from the Senate's own list) are the only jurisdictions that
 # hold federal Senate/House elections. FEC candidate files also include DC
@@ -369,8 +378,9 @@ def _remove_senate_races_nobody_holds(db: Session, cycle: int) -> int:
 
 
 def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate]:
-    """Never-synced candidates first, then oldest-synced first; within each
-    group, incumbents before active fundraisers before everyone else.
+    """Never-synced candidates first, then anyone not refreshed in
+    FINANCIALS_OVERDUE_DAYS, then the rest; within each group, incumbents
+    before active fundraisers before everyone else, oldest sync first.
 
     Candidates synced within the FEC cache TTL are excluded entirely
     (2026-07 review M3): fetch_candidate_financials serves from ApiCache
@@ -387,6 +397,7 @@ def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate
         else_=2,
     )
     stale_before = utcnow() - timedelta(hours=settings.PIPELINE_CACHE_TTL_HOURS)
+    overdue = Candidate.last_financials_sync < utcnow() - timedelta(days=FINANCIALS_OVERDUE_DAYS)
     return (
         db.query(Candidate)
         .filter(or_(
@@ -397,6 +408,7 @@ def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate
         .filter(~Candidate.id.startswith(BALLOT_ONLY_ID_PREFIX))
         .order_by(
             Candidate.last_financials_sync.is_(None).desc(),
+            overdue.desc(),
             priority,
             Candidate.last_financials_sync.asc(),
         )
@@ -405,20 +417,37 @@ def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate
     )
 
 
+def race_election_totals(totals: list[dict], election_year: int) -> dict | None:
+    """The candidate's FEC totals row for the election `election_year`
+    decides — the whole election period (election_full), or failing that
+    any row for that election — or None when the FEC has none.
+
+    Not simply the newest row: a candidate who has filed for this
+    election but not yet reported has only older elections' rows, and
+    the newest of those was shown as this race's money. Live on
+    2026-10-08, 41 of the 1,539 candidates with cached totals showed an
+    earlier election's figures — sitting members' 2024 re-election
+    money, one filer's 2004 race.
+    """
+    rows = [t for t in totals if t.get("candidate_election_year") == election_year]
+    return next((t for t in rows if t.get("election_full")), rows[0] if rows else None)
+
+
 async def _refresh_financials(db: Session, client: httpx.AsyncClient, batch_size: int) -> int:
     candidates = _prioritize_for_financial_refresh(db, batch_size)
     refreshed = 0
     for cand in candidates:
         try:
             totals = await fetch_candidate_financials(client, db, cand.id)
-            if totals:
-                latest = totals[0]
-                cand.contributions = latest.get("contributions")
-                cand.disbursements = latest.get("disbursements")
-                cand.cash_on_hand = latest.get("last_cash_on_hand_end_period")
-                cand.individual_itemized_contributions = latest.get(
-                    "individual_itemized_contributions",
-                )
+            # Every field is written, None included: a row that stops
+            # existing (or never matched this election) must clear what an
+            # earlier sync stored, not leave it standing.
+            row = race_election_totals(totals, cand.race.cycle_year) or {}
+            cand.contributions = row.get("contributions")
+            cand.disbursements = row.get("disbursements")
+            cand.cash_on_hand = row.get("last_cash_on_hand_end_period")
+            cand.individual_itemized_contributions = row.get("individual_itemized_contributions")
+            cand.financials_through = (row.get("coverage_end_date") or "")[:10] or None
             cand.last_financials_sync = utcnow()
             refreshed += 1
             db.commit()

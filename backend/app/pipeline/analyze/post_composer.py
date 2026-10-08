@@ -328,6 +328,13 @@ def _complete_predicate(actor: str, predicate: str, source: str) -> str | None:
         # The 400-character window ran out before any punctuation: no
         # boundary seen, so nothing is assumed.
         return None
+    # A clause end inside a bracket the span opened is not the clause's
+    # end: "berated Sen. Kim Lee (R-Ark.) over the vote" stopped at the
+    # "." before ")" and composed "...Sen. Kim Lee (R-Ark." (2026-10-08).
+    while _unbalanced(hit.group(0) + rest[:end.start()]):
+        end = _CLAUSE_END.search(rest, end.end())
+        if end is None:
+            return None
     completion = rest[:end.start()]
     if len(completion.split()) > _MAX_COMPLETION_WORDS:
         return None
@@ -338,6 +345,12 @@ def _complete_predicate(actor: str, predicate: str, source: str) -> str | None:
         # attempted — the claim is dropped, as it was before.
         return None
     return (hit.group(0) + completion).strip()
+
+
+def _unbalanced(text: str) -> bool:
+    """True when TEXT opens or closes a parenthesis or bracket it doesn't
+    match: a span cut inside a parenthetical, or begun inside one."""
+    return text.count("(") != text.count(")") or text.count("[") != text.count("]")
 
 
 def _may_be_abbreviation(word: str) -> bool:
@@ -410,6 +423,17 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
 
     sentence = f"{actor}{gap or ' '}{predicate}"
     sentence = re.sub(r"\s+", " ", sentence).strip().rstrip(".")
+    # An actor named inside a parenthetical leaves its ")" in the sentence:
+    # "Food and Drug Administration (FDA) won't publish" located as "FDA" +
+    # "won't publish" composed "FDA) won't publish..." (2026-10-08). The
+    # subject is the words before the bracket, which the span left out.
+    if _unbalanced(sentence):
+        return None
+    # The span can open mid-sentence ("...but the Senate passes the bill",
+    # "A federal court" located without its article); the rendered
+    # sentence starts with a capital like any other. Case only — the
+    # verbatim check is case-blind already (_normalise).
+    sentence = sentence[:1].upper() + sentence[1:]
     return _close_quotation(sentence, predicate, source)
 
 
@@ -421,13 +445,23 @@ def _close_quotation(sentence: str, predicate: str, source: str) -> str | None:
     the source puts after the span when the span opened a quotation it
     didn't close; None when the source closes it nowhere there. A span that
     ends at the quoted sentence's own period leaves its mark behind:
-    published 2026-10, 'it "looked like a public service announcement.'"""
+    published 2026-10, 'it "looked like a public service announcement.'
+
+    A comma before the closing mark is the source's sentence running on,
+    so the rendered sentence still ends with a period, as a span ending at
+    a comma outside quotes does: 'called the candidate "terrible,"' went
+    out as an election post with no end (2026-10-08)."""
     marks = sum(sentence.count(q) for q in ('"', "\u201c", "\u201d"))
     if marks % 2 == 0:
+        closed = re.search(r"([.,!?])([\"”])$", sentence)
+        if closed:
+            end = "." if closed.group(1) == "," else closed.group(1)
+            return f"{sentence[:closed.start()]}{end}{closed.group(2)}"
         return sentence + "."
     haystack, needle = _flatten(source), _flatten(predicate)
     for match in re.finditer(re.escape(needle), haystack, re.IGNORECASE):
         closing = re.match(r"\s*([.,!?]?)\s*([\"\u201d])", haystack[match.end():])
         if closing:
-            return f"{sentence}{closing.group(1) or '.'}{closing.group(2)}"
+            end = closing.group(1) if closing.group(1) in ("!", "?") else "."
+            return f"{sentence.rstrip(',')}{end}{closing.group(2)}"
     return None

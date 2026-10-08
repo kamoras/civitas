@@ -46,7 +46,7 @@ blanks a page.
 ```mermaid
 flowchart TB
     ROSTER["<b>1. Roster</b><br/>bulk FEC candidate fetch, H and S<br/>→ Race + Candidate rows<br/>Senate only where the FEC calendar<br/>lists a Senate election"]
-    ROSTER --> FIN["<b>2. Financials</b><br/>FEC totals, 0.25 req/s<br/>FINANCIALS_BATCH_SIZE = 500 per night,<br/>incumbents first, watermarked"]
+    ROSTER --> FIN["<b>2. Financials</b><br/>FEC totals, 0.25 req/s<br/>FINANCIALS_BATCH_SIZE = 500 per night,<br/>overdue (14 days) first, then incumbents,<br/>watermarked; only the race's own election"]
     FIN --> CONF
     subgraph CONF["<b>3. Confirmed candidates</b> (state_candidates.py)"]
         direction TB

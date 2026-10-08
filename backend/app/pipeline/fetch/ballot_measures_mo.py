@@ -78,8 +78,11 @@ _SECTION_HEADING_RE = re.compile(r"The following ballot measures", re.IGNORECASE
 _SUMMARY_HEADING_RE = re.compile(r"^Official Ballot Title:\s*$", re.IGNORECASE)
 _FAIR_LANGUAGE_HEADING_RE = re.compile(r"Fair Ballot Language:", re.IGNORECASE)
 _FISCAL_START_RE = re.compile(r"^State\b.*\bestimate", re.IGNORECASE)
+# Each group is the source's whole sentence, "A “yes” vote will ...": it
+# used to start after "will", storing a fragment that read "A YES VOTE
+# repeal Article I ..." under the page's heading (§7: verbatim).
 _YES_NO_RE = re.compile(
-    r'A\s*[“"]?yes[”"]?\s*vote will\s*(.*?)\s*A\s*[“"]?no[”"]?\s*vote will\s*(.*)$',
+    r'(A\s*[“"]?yes[”"]?\s*vote will\s*.*?)\s*(A\s*[“"]?no[”"]?\s*vote will\s*.*)$',
     re.IGNORECASE | re.DOTALL,
 )
 
