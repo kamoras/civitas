@@ -17,12 +17,14 @@ import json
 import logging
 import re
 import threading
+from collections import Counter
 from functools import lru_cache
 import time
 from typing import NamedTuple
 import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -81,7 +83,8 @@ from app.pipeline.vector_store import (
     get_embedding_model,
     search_explore_documents,
 )
-from app.services.bill_service import names_phrase, short_title_index
+from app.pipeline.analyze.lobbying_records import bill_mentions, names_bill
+from app.services.bill_service import bill_title_lists, names_phrase, short_title_index
 from app.time_utils import utcnow
 
 _US_EAST = ZoneInfo("America/New_York")
@@ -208,18 +211,8 @@ ACTION_CENTER_PROMPT_VERSION = "action-v21"
 # retirement pass in _run_refresh for the full reasoning.
 _RETIREMENT_GRACE_HOURS = 24
 
-# No-signature fallback for topic matching (rows with no stored facts —
-# rare). Measured under the similarity model: a reworded same headline
-# scores 0.823, a different-story same-vocab pair 0.552 —
-# 0.65 splits them. Signature overlap (see _signatures_match) remains
-# the primary same-story decider; this fires only when signatures are
-# unavailable. (The old 0.82 was calibrated to the retrieval model's
-# compressed 0.74+ band and is meaningless on this scale.)
-TOPIC_CHANGE_THRESHOLD = 0.65  # typed, measured by hand; not yet calibrated
-
-# Where title cosine alone decides "same story" is calibrated, not typed:
-# action_thresholds.get("near_identical"), fitted for precision against the
-# signature test (was a hand-measured 0.92 on 120 issues, 2026-07).
+# Where title cosine alone decides "same story": action_thresholds
+# .get("near_identical"), hand-measured 0.92 on 120 issues (2026-07).
 
 
 def _full_story_should_invalidate(
@@ -229,8 +222,8 @@ def _full_story_should_invalidate(
     full_story (if any) now describes the wrong event and must be
     regenerated rather than left stale.
 
-    A topic-similarity match (TOPIC_CHANGE_THRESHOLD) can still land on a
-    substantively different story sharing a category — e.g. two different
+    A match can still land on a substantively different story sharing a
+    category — e.g. two different
     senators' health events both matching "ailing senior senator". full_story
     is only ever generated once per issue (Stage 4 filters on
     ``full_story IS NULL``), so if the row's content is silently replaced
@@ -257,15 +250,36 @@ _SIGNATURE_GENERIC_TOKENS = {
 }
 
 
+# A date names when, not what: on 2026-10-08, 8 of the 23 rows the feed had
+# marked duplicates shared little but a date ("2026", "September", "28"),
+# one news story hidden as a duplicate of an unrelated Senate vote's draft.
+# Removed before the signature is read: a month with its day and year, an
+# ISO date, a weekday, and a year standing alone.
+_MONTHS = (
+    "January|February|March|April|May|June|July|August|September|October|"
+    "November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec"
+)
+_DATE_RE = re.compile(
+    rf"\b(?:{_MONTHS})\.?(?:\s+\d{{1,2}}(?:st|nd|rd|th)?)?(?:,?\s+\d{{4}})?\b"
+    rf"|\b\d{{1,2}}\s+(?:{_MONTHS})\b(?:\s+\d{{4}})?"
+    r"|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b"
+    r"|\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b"
+    r"|\b(?:19|20)\d{2}\b"
+)
+
+
 def _issue_signature(title: str, facts: list[str]) -> set[str]:
     """Identity fingerprint of an issue: specific capitalized entities plus
     digit groups from its title and facts, minus generic civic vocabulary
-    (see _SIGNATURE_GENERIC_TOKENS). Two rows about the same real-world
-    story share the numbers and named entities that define it; two rows
-    that merely sound alike share only the generic tokens this strips."""
-    text = f"{title} {' '.join(facts)}"
+    (see _SIGNATURE_GENERIC_TOKENS) and dates (_DATE_RE). Two rows about
+    the same real-world story share the numbers and named entities that
+    define it; two rows that merely sound alike share only the generic
+    tokens this strips."""
+    text = _DATE_RE.sub(" ", f"{title} {' '.join(facts)}").translate(_APOSTROPHES)
+    # A possessive is the same entity: "Trump" and "Trump's" counted as two
+    # shared tokens matched unrelated stories about one person (2026-10-08).
     tokens = {
-        m.group(0).lower()
+        _POSSESSIVE_SUFFIX_RE.sub("", m.group(0).lower())
         for m in re.finditer(r"\b[A-Z][a-zA-Z'\-]{2,}\b", text)
     } - _SIGNATURE_GENERIC_TOKENS
     numbers = {
@@ -629,40 +643,39 @@ def _is_exact_content_duplicate(
     return title == cand_title and facts == cand_facts
 
 
-def _same_story(
-    sim: float,
-    title: str,
-    facts: list,
-    cand_title: str,
-    cand_facts: list,
-    sig: set | None = None,
-    cand_sig: set | None = None,
-) -> bool:
-    """The single "is this the same real-world story" decision, shared by
-    _find_matching_issue (write-time) and dedupe_near_identical_issues
-    (read-time) so the two passes can't drift apart the way two
-    independent hand-written copies of the same 4-condition boolean would.
-    `sig`/`cand_sig` may be passed in precomputed
-    (dedupe_near_identical_issues does this for all issues up front to
-    avoid recomputing a signature per pair); left as None they're computed
-    lazily here, only if the cheaper checks above don't already decide it —
-    same laziness _find_matching_issue relied on before this was extracted.
-    Shared source-URL matching is NOT part of this predicate: it isn't
-    pairwise-local the same way (write-time checks it against every
-    candidate before the embedding-based loop even starts), so each caller
-    still checks it separately.
+def _same_story(sim: float, title: str, facts: list, cand_title: str, cand_facts: list) -> bool:
+    """The "is this the same real-world story" decision from the text, shared
+    by _find_matching_issue (write time) and the feed's duplicate pass
+    (_near_identical_clusters) so the two can't drift apart: the same
+    content, or a title near-identical to the other's. A shared source
+    article, the strongest evidence, is checked by each caller first.
+
+    Shared names and numbers (_signatures_match) decided it until
+    2026-10-08, when 65 pairs of issues two days apart or less that the
+    test called the same story were read by their titles: 16 were. Two
+    stories about one senator, or two about Iran, share two names. Above
+    any rarity weighting of the shared names the best was 3 of 6, and rows
+    updated by a match had swapped to another story in about 10 of 45.
+    Merging two stories hides one, and a write-time merge replaces a row's
+    story under its earlier posts; a missed match shows a second card.
     """
-    if _is_exact_content_duplicate(title, facts, cand_title, cand_facts):
-        return True
-    if sim >= action_thresholds.get("near_identical"):
-        return True
-    if sig is None:
-        sig = _issue_signature(title, facts)
-    if cand_sig is None:
-        cand_sig = _issue_signature(cand_title, cand_facts)
-    if _signatures_match(sig, cand_sig):
-        return True
-    return bool((not sig or not cand_sig) and sim >= TOPIC_CHANGE_THRESHOLD)
+    return _is_exact_content_duplicate(title, facts, cand_title, cand_facts) or (
+        sim >= action_thresholds.get("near_identical")
+    )
+
+
+# How far back (days, by issue date) a new story is matched against
+# existing rows, and the widest gap between two rows the feed's duplicate
+# pass (_near_identical_clusters) compares: one window, so the two passes
+# can't disagree about which rows are candidates.
+REMATCH_WINDOW_DAYS = 2
+
+
+def _issue_day(issue) -> "date | None":
+    try:
+        return date.fromisoformat((issue.date or "")[:10])
+    except ValueError:
+        return None
 
 
 def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
@@ -700,11 +713,9 @@ def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
     embs = np.array(_embed_texts_sim([i.title or "" for i in issues]))
     sims = embs @ embs.T
 
-    # Precomputed once per issue (not per pair, O(n) not O(n^2)) — facts,
-    # source_urls and _issue_signature only depend on one issue each.
+    # Precomputed once per issue (not per pair, O(n) not O(n^2)).
     facts_list: list[list] = []
     urls_list: list[set] = []
-    sigs: list[set] = []
     for issue in issues:
         try:
             facts = json.loads(issue.facts or "[]")
@@ -716,18 +727,34 @@ def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
             urls = set()
         facts_list.append(facts)
         urls_list.append(urls)
-        sigs.append(_issue_signature(issue.title or "", facts))
 
     n = len(issues)
+    days = [_issue_day(issue) for issue in issues]
     same_story = [[False] * n for _ in range(n)]
     for i in range(n):
         for j in range(i + 1, n):
             a, b = issues[i], issues[j]
-            sim = float(sims[i, j])
-            m = bool(urls_list[i] & urls_list[j]) or _same_story(
-                sim, a.title or "", facts_list[i], b.title or "", facts_list[j],
-                sig=sigs[i], cand_sig=sigs[j],
-            )
+            # Only rows the write-time matcher could also have compared
+            # (REMATCH_WINDOW_DAYS): further apart, the matcher already
+            # kept them as separate developments, and on 2026-10-08 most
+            # rows this pass had marked duplicates were 6 to 24 days from
+            # the row they "duplicated" (one candidate's two unrelated
+            # stories, Ukraine talks and a Russian vote).
+            if days[i] is None or days[j] is None or abs((days[i] - days[j]).days) > REMATCH_WINDOW_DAYS:
+                continue
+            if a.source_type or b.source_type:
+                # A vote draft or rule is its record, written from a fixed
+                # template: two House votes matched on "Passed" and
+                # "Representatives". Only the same content or source is the
+                # same item; a draft a news story covers is decided by its
+                # bill (covering_issue, mark_recent_duplicates).
+                m = bool(urls_list[i] & urls_list[j]) or _is_exact_content_duplicate(
+                    a.title or "", facts_list[i], b.title or "", facts_list[j],
+                )
+            else:
+                m = bool(urls_list[i] & urls_list[j]) or _same_story(
+                    float(sims[i, j]), a.title or "", facts_list[i], b.title or "", facts_list[j],
+                )
             same_story[i][j] = same_story[j][i] = m
 
     # Complete-linkage: only merge two clusters when every issue in one
@@ -900,6 +927,7 @@ def _build_actions_from_data(
     source_urls: list[str],
     source_names: list[str],
     related_senators: list[dict],
+    policy_areas: list[str] | None = None,
 ) -> list[dict]:
     """Build action items from real data — no LLM hallucinations.
 
@@ -920,8 +948,12 @@ def _build_actions_from_data(
             })
 
     # Generic contact fallback — only emitted when no named senators found,
-    # so the frontend has something to show in that case
-    if not related_senators:
+    # so the frontend has something to show in that case, and only for a
+    # story in a federal policy area or about a bill. Emitted for every
+    # issue, it asked readers to contact their senators about a French
+    # protest, a Brazilian election and a campaign's fundraising total
+    # (2026-10-08: the issues with no policy area were those stories).
+    if not related_senators and (policy_areas or resolved_bills):
         actions.append({
             "text": f"Contact your senators or representative about {title}",
             "type": "contact_senator",
@@ -1140,22 +1172,12 @@ _POSSESSIVE_SUFFIX_RE = re.compile(r"'s?$")
 
 
 def _topic_tokens(text: str) -> set[str]:
-    """Entity signature normalized for comparing a headline against its own
-    body — apostrophes unified, trailing possessives dropped.
-
-    _issue_signature keeps "'s" inside a token, which is right for telling
-    two stories apart and wrong here: a possessive-led headline ("Varga's
-    tariff order faces court test", the most common headline shape there
-    is) yields {varga's} and shares nothing with a body that says "Varga",
-    so the headline would read as failing to describe its own story. The
-    typographic apostrophe compounds it — "Varga’s" tokenizes as {varga}
-    while "Varga's" tokenizes as {varga's}, so the same headline matched or
-    missed depending on which character the feed emitted.
-    """
-    return {
-        _POSSESSIVE_SUFFIX_RE.sub("", token)
-        for token in _issue_signature(text.translate(_APOSTROPHES), [])
-    }
+    """Entity signature of one text, for comparing a headline against its
+    own body. _issue_signature unifies apostrophes and drops possessives, so
+    a possessive-led headline ("Varga's tariff order faces court test", the
+    most common headline shape there is) shares {varga} with a body that
+    says "Varga", whichever apostrophe the feed emitted."""
+    return _issue_signature(text, [])
 
 
 def _item_entities(item: str, forced_capital: bool) -> set[str]:
@@ -1220,8 +1242,20 @@ def _multi_topic_body(summary: str, title: str, truncated: bool = False) -> bool
     return covered <= _DIGEST_MAX_TITLE_COVERED_ITEMS
 
 
+# The outlet's own section for its newsletters. A newsletter is a
+# multi-section product ("The Big Story", then other news, with "Welcome to
+# ... newsletter" and photo-credit boilerplate in its feed description), so
+# it is a digest by the outlet's own filing, whatever its headline says.
+# One outlet syndicates them into its news feed (3 of 4,067 items across
+# all 49 feeds, 2026-10-08); one was published as an issue whose "fact" was
+# four of its section headings run together.
+_NEWSLETTER_SECTIONS = frozenset({"newsletter", "newsletters"})
+
+
 def _digest_reason(article: NewsArticle) -> str | None:
     """Why ``article`` is a multi-story digest, or None if it is one story."""
+    if _NEWSLETTER_SECTIONS & {s.lower() for s in urlparse(article.url or "").path.split("/")}:
+        return "newsletter section"
     title = article.title.translate(_APOSTROPHES)
     if (
         _DIGEST_TITLE_PATTERNS.search(title)
@@ -1940,7 +1974,7 @@ def _surname_owned_by_other_name(text: str, match: "re.Match", member_name: str)
         # word before it belongs to the previous sentence, not this name.
         return False
     prev = raw.rstrip("'")
-    if not prev or not prev[0].isupper() or len(prev) < 3:
+    if not prev or not prev[0].isupper() or len(prev) < 2:
         return False  # lowercase word or bare initial — not a claiming name
     prev_lower = prev.lower()
     if prev_lower in _NAME_PRECEDING_TITLES:
@@ -1955,13 +1989,17 @@ def _find_related_senators(
     facts: list[str],
     db: Session,
 ) -> list[dict]:
-    """Find senators mentioned in issue text using embedding similarity.
+    """Members of Congress the issue names: by full name, or by a surname
+    only one current member has, used as no one else's name.
 
-    Uses a two-pass approach:
-    1. Substring scan for last-name / full-name hits, with disambiguation
-       to reject matches where the name is used in an institutional context
-       (e.g. "Department of Justice" should not match Senator Justice).
-    2. Embedding fallback when no substring matches are found.
+    A surname two or more members share names none of them. On 2026-10-08,
+    69 of the 120 links made from a bare surname were such surnames: one
+    story about the Speaker linked five Johnsons, the Kennedy Center three
+    Kennedys. The embedding check that was meant to settle it scored real
+    and unrelated contexts in overlapping ranges (measured, see below), so
+    it could not pick one; it is gone. The same rule governs naming a
+    candidate on election night: a surname alone never picks between
+    namesakes.
     """
     senators = db.query(
         Senator.id, Senator.name, Senator.state, Senator.party,
@@ -1999,9 +2037,6 @@ def _find_related_senators(
             "website_url": getattr(s, "website_url", "") or "",
         }
 
-    # Pass 1: substring matches with contextual disambiguation
-    candidates_needing_disambiguation: list[tuple] = []
-
     all_members = [(s, "senate") for s in senators] + [(r, "house") for r in representatives]
 
     # Full-name matches first, over every member, before any last-name-only
@@ -2019,11 +2054,14 @@ def _find_related_senators(
             matched[s.id] = _make_entry(s, chamber, match_reason="named in coverage")
             full_name_matched_last_names.add(s.name.split()[-1].lower())
 
+    surname_holders = Counter(s.name.split()[-1].lower() for s, _ in all_members if s.name)
     for s, chamber in all_members:
         if s.id in matched:
             continue
 
         last_name = s.name.split()[-1].lower() if s.name else ""
+        if surname_holders[last_name] > 1:
+            continue
 
         if len(last_name) < 4:
             continue
@@ -2051,63 +2089,13 @@ def _find_related_senators(
             # person's full name — generalizes the full-name-matched-member
             # exclusion above to people the platform doesn't track at all
             # (e.g. an athlete sharing a surname with a member of Congress).
-            # The embedding disambiguation below can't catch this on its
-            # own: measured against real cases, an unrelated context scored
+            # An embedding check of the context couldn't tell these apart:
+            # measured against real cases, an unrelated context scored
             # 0.78-0.80 against the "Representative X from NY" style
-            # prototypes while genuine civic references scored 0.77-0.85 —
-            # the ranges overlap completely, so no threshold separates them.
+            # prototypes while genuine civic references scored 0.77-0.85.
             continue
         if occurrences:
-            candidates_needing_disambiguation.append((s, last_name, pattern, chamber))
-
-    if candidates_needing_disambiguation:
-        senator_phrases = []
-        context_phrases = []
-        candidate_refs = []
-
-        for s, last_name, pattern, chamber in candidates_needing_disambiguation:
-            if s.id in matched:
-                continue
-            # Was hardcoded "Senator" for every candidate, including the
-            # ~435 House members — weakening disambiguation quality for
-            # every Representative match, since the prototype phrase
-            # didn't match their actual title.
-            #
-            # Named chamber_title, not title: `title` is this function's own
-            # issue-title parameter, and shadowing it here left the summary
-            # log below reporting "Senator"/"Representative" as the issue it
-            # had just matched against — blinding the one line you would read
-            # to work out why a member got linked to a story.
-            chamber_title = "Senator" if chamber == "senate" else "Representative"
-            senator_phrases.append(f"{chamber_title} {s.name} from {s.state}")
-
-            # Extract ~60 chars of context around each match
-            contexts = []
-            for m in pattern.finditer(issue_text):
-                start = max(0, m.start() - 30)
-                end = min(len(issue_text), m.end() + 30)
-                contexts.append(issue_text[start:end].strip())
-            context_phrases.append(" | ".join(contexts[:3]))
-            candidate_refs.append((s, chamber))
-
-        if senator_phrases:
-            all_texts = senator_phrases + context_phrases
-            embeddings = _embed_texts(all_texts)
-            n = len(senator_phrases)
-            senator_embeds = embeddings[:n]
-            context_embeds = embeddings[n:]
-
-            DISAMBIGUATION_THRESHOLD = 0.35
-            for i, (s, chamber) in enumerate(candidate_refs):
-                sim = float(np.dot(senator_embeds[i], context_embeds[i]))
-                if sim >= DISAMBIGUATION_THRESHOLD:
-                    matched[s.id] = _make_entry(s, chamber, match_reason="referenced in coverage")
-                else:
-                    logger.debug(
-                        "Rejected senator match '%s' (sim=%.3f < %.2f) — "
-                        "likely institutional reference",
-                        s.name, sim, DISAMBIGUATION_THRESHOLD,
-                    )
+            matched[s.id] = _make_entry(s, chamber, match_reason="referenced in coverage")
 
     result = list(matched.values())
     if result:
@@ -2163,55 +2151,35 @@ def _find_related_officials(
                     "match_reason": "named in coverage",
                 })
 
-    # Justice detection — last-name + embedding disambiguation (same as senators)
+    # Justices: by full name, or by a surname no member or other justice
+    # holds and no one else's name uses (the rules _find_related_senators
+    # documents).
     justices = db.query(
         Justice.id, Justice.name, Justice.appointing_party,
     ).filter(Justice.is_active == True).all()  # noqa: E712
 
     if justices:
-        candidates_needing_disambiguation: list[tuple] = []
         matched_justices: dict[str, dict] = {}
-        DISAMBIGUATION_THRESHOLD = 0.35
-
+        member_names = [n for (n,) in db.query(Senator.name).all()] + [n for (n,) in db.query(Representative.name).all()]
+        surname_holders = Counter(n.split()[-1].lower() for n in [*member_names, *(j.name for j in justices)] if n)
         for j in justices:
             last = j.name.split()[-1]
-            if len(last) < 4:
+            if _mentions_full_name(text, j.name):
+                reason = "named in coverage"
+            elif (
+                len(last) < 4 or last.lower() in _COMMON_WORD_SURNAMES
+                or surname_holders[last.lower()] > 1
+            ):
                 continue
-            full_match = _mentions_full_name(text, j.name)
-            if full_match:
-                matched_justices[j.id] = {
-                    "id": j.id, "name": j.name, "party": j.appointing_party or "",
-                    "branch": "scotus", "match_reason": "named in coverage",
-                }
-                continue
-            # Same common-word-surname gap as senators/reps — Justice
-            # Ketanji Brown Penrose's surname is a common place name
-            # ("Penrose, Mississippi") and everyday word.
-            if last.lower() in _COMMON_WORD_SURNAMES:
-                continue
-            pattern = re.compile(r"\b" + re.escape(last) + r"\b", re.IGNORECASE)
-            m = pattern.search(text)
-            if m:
-                start = max(0, m.start() - 60)
-                end = min(len(text), m.end() + 60)
-                context = text[start:end]
-                candidates_needing_disambiguation.append((j, context))
-
-        if candidates_needing_disambiguation:
-            justice_phrases = [f"Justice {j.name}" for j, _ in candidates_needing_disambiguation]
-            context_phrases = [ctx for _, ctx in candidates_needing_disambiguation]
-            try:
-                justice_embeds = np.array(_embed_texts(justice_phrases))
-                context_embeds = np.array(_embed_texts(context_phrases))
-                for i, (j, _) in enumerate(candidates_needing_disambiguation):
-                    sim = float(np.dot(justice_embeds[i], context_embeds[i]))
-                    if sim >= DISAMBIGUATION_THRESHOLD:
-                        matched_justices[j.id] = {
-                            "id": j.id, "name": j.name, "party": j.appointing_party or "",
-                            "branch": "scotus", "match_reason": "referenced in coverage",
-                        }
-            except Exception as exc:
-                logger.debug("Justice embedding disambiguation failed: %s", exc)
+            else:
+                occurrences = list(re.finditer(r"\b" + re.escape(last) + r"\b", text, re.IGNORECASE))
+                if not occurrences or all(_surname_owned_by_other_name(text, m, j.name) for m in occurrences):
+                    continue
+                reason = "referenced in coverage"
+            matched_justices[j.id] = {
+                "id": j.id, "name": j.name, "party": j.appointing_party or "",
+                "branch": "scotus", "match_reason": reason,
+            }
 
         for entry in matched_justices.values():
             if not any(e["id"] == entry["id"] for e in combined):
@@ -2421,274 +2389,66 @@ def _congress_gov_bill_url(congress: int, url_type: str, number: str | int) -> s
 
 
 def _resolve_bills(
-    raw_bills: list, article_texts: list[str], titles: dict[str, set[str]] | None = None,
+    article_texts: list[str],
+    titles: dict[str, set[str]] | None = None,
+    bill_titles: dict[str, list[str]] | None = None,
 ) -> list[dict]:
-    """Resolve bill names from LLM output + article text to Congress.gov URLs.
+    """The bills the articles name, as {"name", "id", "url", "congress"}.
 
-    Regex-extracted bill IDs (e.g. "H.R. 22") are resolved first since they
-    map directly to URLs, then any bill the articles name by its short
-    title (`titles`, bill_service.short_title_index) — news names a bill
-    that way far more often than by number ("the Protect College Sports
-    Act", 2026-09-28, never "S. 4668"). A title two bills share (House and
-    Senate companions) names neither. LLM-extracted names without IDs fall
-    back to API search only if no regex match already covers that bill.
+    A number counts only when the words around it name that bill
+    (lobbying_records.bill_mentions and names_bill, against `bill_titles`,
+    {bill id: its titles}, the Congress's bills the site holds). A bare
+    pattern match took any "s 2026" for a Senate bill: on 2026-10-08, most
+    Senate bills on recent issues were "S.2024", "S.2025", "S.2026", "S.50"
+    from text like "Trump's 2026". And a number alone doesn't identify a
+    bill: news still cites the last Congress's numbers.
 
-    Returns list of {"name": str, "id": str, "url": str} dicts.
+    A bill the articles name by its short title (`titles`,
+    bill_service.short_title_index) counts too: news names a bill that way
+    far more often than by number ("the Protect College Sports Act",
+    2026-09-28, never "S. 4668"). A title two bills share (House and Senate
+    companions) names neither.
     """
-    id_refs: list[dict] = []
-    name_refs: list[dict] = []
-
-    # Scan article text for bill patterns like "H.R. 22", "S. 1234"
     combined_text = " ".join(article_texts)
-    bill_pattern = re.compile(
-        r'\b(H\.?\s*R\.?\s*\d+|S\.?\s*\d+|H\.?\s*J\.?\s*Res\.?\s*\d+'
-        r'|S\.?\s*J\.?\s*Res\.?\s*\d+)\b',
-        re.IGNORECASE,
-    )
-    seen_raw: set[str] = set()
-    for match in bill_pattern.finditer(combined_text):
-        raw_id = re.sub(r'\s+', '', match.group(0)).upper()
-        raw_id = raw_id.replace("H.R.", "HR.").replace("HR", "HR.")
-        raw_id = re.sub(r'\.+', '.', raw_id)
-        if not raw_id.startswith("S."):
-            raw_id = raw_id.replace("S", "S.")
-            raw_id = re.sub(r'\.+', '.', raw_id)
-        if raw_id not in seen_raw:
-            seen_raw.add(raw_id)
-            id_refs.append({"name": raw_id, "id": raw_id})
+    ids: list[str] = []
+    for bill_id, before, after in bill_mentions(combined_text):
+        bill_title_list = (bill_titles or {}).get(bill_id)
+        if bill_id not in ids and bill_title_list and names_bill(before, after, bill_title_list, bill_id, None):
+            ids.append(bill_id)
 
     combined_text_lower = combined_text.lower()
-    for name, ids in (titles or {}).items():
-        if len(ids) == 1 and names_phrase(combined_text_lower, name):
-            (bill_id,) = ids
-            if bill_id not in seen_raw:
-                seen_raw.add(bill_id)
-                id_refs.append({"name": bill_id, "id": bill_id})
+    for name, named in (titles or {}).items():
+        if len(named) == 1 and names_phrase(combined_text_lower, name):
+            (bill_id,) = named
+            if bill_id not in ids:
+                ids.append(bill_id)
 
-    # Collect LLM-extracted bills — always search by name, never trust LLM IDs.
-    # LLMs frequently hallucinate bill numbers (e.g. "S.2026" when the year is 2026).
-    # Regex extraction from article text above is the only source of trusted IDs.
-    #
-    # Also require the extracted NAME itself to appear verbatim in the source
-    # articles before trusting it — confirmed live 2026-07: a smaller LLM
-    # (post model-swap) anchored on this prompt's own example bill name and
-    # repeated it across unrelated articles (World Cup coverage, a AG
-    # confirmation hearing) that never mentioned any bill at all. Article
-    # text is the only source of truth for what was actually named, same
-    # principle as the ID-regex extraction above.
-    for b in raw_bills:
-        if isinstance(b, dict) and b.get("name"):
-            name = b["name"].strip()
-            if name and name.lower() in combined_text_lower:
-                name_refs.append({"name": name, "id": None})
-            elif name:
-                logger.warning(
-                    "Dropping LLM-extracted bill %r — not found verbatim in "
-                    "source articles (likely hallucinated)", name,
-                )
-
-    bill_refs = id_refs + name_refs
-
-    if bill_refs:
-        logger.info("Bill refs to resolve: %s",
-                     ", ".join(f"{r['name']}(id={r.get('id')})" for r in bill_refs))
-
-    if not bill_refs:
-        return []
-
+    if ids:
+        logger.info("Bills named: %s", ", ".join(ids))
     resolved: list[dict] = []
-    seen_ids: set[str] = set()
-
-    for ref in bill_refs:
-        bill_id = ref.get("id")
-
-        # If we have a bill ID like "HR.22" or "S.1234", build URL directly
-        if bill_id and re.match(r'^(HR|S|HJRES|SJRES)\.\d+$', bill_id):
-            if bill_id in seen_ids:
-                continue
-            seen_ids.add(bill_id)
-            parts = bill_id.split(".")
-            type_map = {
-                "HR": "house-bill", "S": "senate-bill",
-                "HJRES": "house-joint-resolution",
-                "SJRES": "senate-joint-resolution",
-            }
-            url_type = type_map.get(parts[0])
-            if url_type:
-                url = _congress_gov_bill_url(
-                    settings.CURRENT_CONGRESS, url_type, parts[1]
-                )
-                resolved.append({
-                    "name": ref["name"], "id": bill_id, "url": url,
-                    "congress": settings.CURRENT_CONGRESS,
-                })
-                continue
-
-        # Otherwise search Congress.gov API by bill name
-        if ref["name"] and ref["name"] not in seen_ids:
-            seen_ids.add(ref["name"])
-            found = _search_congress_bill(ref["name"])
-            if found:
-                resolved.append(found)
-
+    for bill_id in ids:
+        prefix, _, number = bill_id.partition(".")
+        url_type = _BILL_URL_TYPES.get(prefix)
+        if url_type:
+            resolved.append({
+                "name": bill_id, "id": bill_id,
+                "url": _congress_gov_bill_url(settings.CURRENT_CONGRESS, url_type, number),
+                "congress": settings.CURRENT_CONGRESS,
+            })
     return resolved[:5]
 
 
-_BILL_TYPE_MAP = {
-    "hr": ("HR", "house-bill"),
-    "s": ("S", "senate-bill"),
-    "hjres": ("HJRES", "house-joint-resolution"),
-    "sjres": ("SJRES", "senate-joint-resolution"),
-    "hconres": ("HCONRES", "house-concurrent-resolution"),
-    "sconres": ("SCONRES", "senate-concurrent-resolution"),
-    "hres": ("HRES", "house-resolution"),
-    "sres": ("SRES", "senate-resolution"),
+# Site bill-id prefix -> Congress.gov's URL segment for the bill type.
+_BILL_URL_TYPES = {
+    "HR": "house-bill",
+    "S": "senate-bill",
+    "HJRES": "house-joint-resolution",
+    "SJRES": "senate-joint-resolution",
+    "HCONRES": "house-concurrent-resolution",
+    "SCONRES": "senate-concurrent-resolution",
+    "HRES": "house-resolution",
+    "SRES": "senate-resolution",
 }
-
-_STOP_WORDS = frozenset({
-    "act", "of", "the", "for", "a", "an", "to", "and", "in", "on",
-})
-
-
-def _score_bill_match(query_lower: str, query_words: set[str],
-                      bill: dict, congress: int) -> float:
-    """Score how well a Congress.gov bill record matches a query.
-
-    Checks both directions: query words appearing in the title, and title
-    words appearing in the query (handles LLM adding extra words to a
-    short official title like "SAVE Act").
-    """
-    title = (bill.get("title") or "").lower().strip()
-    short_title = (bill.get("shortTitle") or "").lower().strip()
-
-    if query_lower == title or query_lower == short_title:
-        score = 2.0
-    elif query_lower in title or query_lower in short_title:
-        score = 1.0
-    elif title in query_lower and len(title) > 3:
-        score = 1.5
-    elif query_words:
-        title_words = {w for w in title.split() if w not in _STOP_WORDS}
-        if not title_words:
-            score = 0.0
-        else:
-            query_in_title = len(query_words & title_words) / len(query_words)
-            title_in_query = len(query_words & title_words) / len(title_words)
-            score = max(query_in_title, title_in_query) * 0.8
-    else:
-        score = 0.0
-
-    if bill.get("congress") == congress:
-        score += 0.1
-    return score
-
-
-def _bill_record_to_result(bill: dict, query: str, congress: int) -> dict | None:
-    """Convert a Congress.gov bill record to {name, id, url} or None."""
-    bill_type = (bill.get("type") or "").lower()
-    bill_number = bill.get("number")
-    try:
-        bill_congress = int(bill.get("congress") or congress)
-    except (TypeError, ValueError):
-        bill_congress = congress
-
-    if not bill_type or not bill_number:
-        return None
-    mapped = _BILL_TYPE_MAP.get(bill_type)
-    if not mapped:
-        return None
-
-    prefix, url_type = mapped
-    bill_id = f"{prefix}.{bill_number}"
-    url = _congress_gov_bill_url(bill_congress, url_type, bill_number)
-    return {
-        "name": bill.get("title", query)[:200],
-        "id": bill_id,
-        "url": url,
-        "congress": bill_congress,
-    }
-
-
-def _search_congress_bill(query: str) -> dict | None:
-    """Search Congress.gov for a bill by name. Returns {name, id, url} or None.
-
-    Strategy:
-    1. Full-text search API (current congress, then any congress).
-    2. If no confident match, fall back to browsing the bill-list endpoint
-       for HR and S bills in the current congress and matching by title.
-       The search API often misses short-titled bills like "SAVE Act" (HR.22).
-    """
-    api_key = settings.DATA_GOV_API_KEY
-    if not api_key:
-        return None
-
-    congress = settings.CURRENT_CONGRESS
-    query_lower = query.lower().strip()
-    query_words = {w for w in query_lower.split() if w not in _STOP_WORDS}
-
-    best: dict | None = None
-    best_score = 0.0
-
-    with httpx.Client(timeout=15.0) as client:
-        # --- Strategy 1: full-text search API ---
-        for search_congress in [congress, None]:
-            congress_filter = f"&congress={search_congress}" if search_congress else ""
-            search_url = (
-                f"{CONGRESS_API_BASE}/bill"
-                f"?query={query}&limit=10&sort=updateDate+desc"
-                f"{congress_filter}&api_key={api_key}&format=json"
-            )
-            try:
-                resp = client.get(search_url)
-                if resp.status_code != 200:
-                    continue
-                bills = resp.json().get("bills", [])
-            except Exception:
-                logger.debug("Congress.gov search failed for %r", query, exc_info=True)
-                continue
-
-            for b in bills:
-                s = _score_bill_match(query_lower, query_words, b, congress)
-                if s > best_score:
-                    best_score = s
-                    best = b
-
-            if best_score >= 1.0:
-                break
-
-        # --- Strategy 2: browse bill list by title (catches short-titled bills) ---
-        if best_score < 1.0:
-            for bill_type in ("hr", "s"):
-                list_url = (
-                    f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}"
-                    f"?limit=50&sort=number+asc"
-                    f"&api_key={api_key}&format=json"
-                )
-                try:
-                    resp = client.get(list_url)
-                    if resp.status_code != 200:
-                        continue
-                    bills = resp.json().get("bills", [])
-                except Exception:
-                    continue
-
-                for b in bills:
-                    s = _score_bill_match(query_lower, query_words, b, congress)
-                    if s > best_score:
-                        best_score = s
-                        best = b
-                if best_score >= 1.0:
-                    break
-
-    if not best or best_score < 0.5:
-        logger.info("Bill search %r: no match (best_score=%.2f)", query, best_score)
-        return None
-
-    result = _bill_record_to_result(best, query, congress)
-    if result:
-        logger.info("Bill search %r -> %s (%s) score=%.2f",
-                     query, result["id"], result["name"][:60], best_score)
-    return result
 
 
 _PERIOD_REVIEW_SYSTEM = (
@@ -2969,6 +2729,19 @@ def _save_timeline_entry(today: str, db: Session) -> None:
     )
 
     existing = db.query(TimelineEntry).filter(TimelineEntry.date == today).first()
+    # A story that leads two days running is one entry, on the day it first
+    # led: the year in review listed three stories twice in a row
+    # (2026-10-01..08), each time under the same source.
+    lead_url = source_urls[0] if source_urls else None
+    before = (
+        db.query(TimelineEntry).filter(TimelineEntry.date < today)
+        .order_by(TimelineEntry.date.desc()).first()
+    )
+    if lead_url and before is not None and before.source_url == lead_url:
+        if existing:
+            db.delete(existing)
+            db.commit()
+        return
     if existing:
         existing.title = top_issue.title
         existing.summary = top_issue.summary[:500]
@@ -2990,16 +2763,21 @@ def _save_timeline_entry(today: str, db: Session) -> None:
     logger.info("Timeline entry saved for %s: %s", today, top_issue.title[:60])
 
 
-# The issue-to-monitor and monitor-merge floors are calibrated against the
-# LLM gates' own verdicts (action_thresholds.get("monitor_issue" /
-# "monitor_merge")). The three below are still typed and unmeasured; the
-# gates' logged verdicts are what a measurement of them would read.
-_MONITOR_ISSUE_TITLE_SIM = 0.62
+# Measured 2026-10-08 on the 453 updates the one monitor then held (each
+# labelled on- or off-topic by what it names): issue title against the
+# monitor's title and description on the retrieval model, the value that
+# misclassifies fewest. The floor it replaced (0.70, calibrated against the
+# LLM gate, which approved 81 of 88) sat below most off-topic updates, and
+# a title-only floor of 0.62 was below the off-topic median (0.78).
+_MONITOR_ISSUE_SIM = 0.71
 _MONITOR_ISSUE_SIM_HIGH = 0.80   # above this: skip LLM gate, auto-match
-# Above this, two monitors are similar enough to merge outright without the
-# LLM verification step below the monitor_merge floor uses — was a bare 0.55
-# duplicated at both monitor-merge call sites with no name or rationale.
-_MONITOR_AUTO_MERGE_SIM = 0.55
+# Merging deletes the absorbed monitor, so it needs certainty. On the
+# similarity model's title similarity no two updates about different topics
+# (Iran, Canada trade, Korea drills, Ukraine, Gaza, a Saudi deal) reached
+# 0.75 (the highest was 0.746). The retrieval-model floor of 0.55 this
+# replaced merged every pair of different topics: the site had one monitor,
+# "U.S.-Iran Conflict", holding the Canada, Korea and Ukraine stories.
+_MONITOR_MERGE_TITLE_SIM = 0.75
 # Headline-to-headline floor is ~0.74; use 0.83 to distinguish same-topic from
 # any-two-news-headlines so Step 3 doesn't create monitors for unrelated topics.
 _MONITOR_HISTORY_SIM = 0.83
@@ -3026,25 +2804,6 @@ Analyze these articles and provide a JSON object:
 - "is_significant": Boolean. True if this is a recurring national issue with long-term implications. False if it is a transient news story, a niche event, or lacks broad civic relevance.
 
 Respond with ONLY the JSON object."""
-
-
-_MONITOR_MERGE_PROMPT = """\
-You are a civic data analyst. Decide if these two National Monitors should be MERGED.
-A merge should occur if they are tracking the SAME underlying national or international issue.
-
-Monitor A: "{title_a}"
-Description A: "{desc_a}"
-
-Monitor B: "{title_b}"
-Description B: "{desc_b}"
-
-Rules:
-- Merge if B is a specific event or facet within the broader context of A (e.g., a specific strike within a conflict).
-- Merge if they cover the same topic but from different angles (e.g., "Oil Prices" and "Middle East Conflict").
-- Do NOT merge if they are distinct issues that simply happen in the same region or share a keyword but address different civic concerns.
-
-Return a JSON object: {{"should_merge": boolean, "reason": "short explanation"}}
-"""
 
 
 def _slugify(text: str) -> str:
@@ -3079,44 +2838,6 @@ _CONTRADICTION_RE = re.compile(
 def _reason_contradicts_positive_verdict(reason: str) -> bool:
     """True if an LLM's own explanation text undercuts the positive verdict it just gave."""
     return bool(reason) and bool(_CONTRADICTION_RE.search(reason))
-
-
-def _should_merge_monitors_llm(
-    a: NationalMonitor,
-    b: NationalMonitor,
-    db: Session,
-) -> bool:
-    """Use LLM to decide if two monitors should be merged."""
-
-    user_prompt = _MONITOR_MERGE_PROMPT.format(
-        title_a=a.title, desc_a=a.description[:300],
-        title_b=b.title, desc_b=b.description[:300],
-    )
-
-    result = call_llm(
-        prompt_version="monitor-merge-v1",
-        system_prompt="You are a civic data analyst. Respond in JSON.",
-        user_prompt=user_prompt,
-        cache_key={"type": "monitor_merge", "ids": sorted([a.id, b.id])},
-        db_session=db,
-        max_tokens=256,
-    )
-
-    if isinstance(result, str):
-        result = extract_json(result)
-
-    if isinstance(result, dict) and result.get("should_merge"):
-        reason = result.get("reason", "")
-        if _reason_contradicts_positive_verdict(reason):
-            logger.warning(
-                "LLM merge verdict contradicts its own reasoning, overriding to False: "
-                "'%s' + '%s' — %s", a.title, b.title, reason,
-            )
-            return False
-        logger.info("LLM approved merge: '%s' + '%s' because: %s",
-                    a.title, b.title, reason)
-        return True
-    return False
 
 
 def _should_match_monitor_llm(
@@ -3240,74 +2961,43 @@ def _merge_monitors(keep: NationalMonitor, absorb: NationalMonitor,
     db.delete(absorb)
 
 
-def _merge_similar_monitors(monitors: list[NationalMonitor], model, db: Session) -> bool:
-    """Pairwise-compare a monitor list and merge any that are similar
-    enough. Above _MONITOR_AUTO_MERGE_SIM, monitors merge outright;
-    between that and _MONITOR_MERGE_SIM, an LLM call verifies first.
-    Returns True if anything merged, so the caller knows to commit.
+def _merge_similar_monitors(monitors: list[NationalMonitor], db: Session) -> bool:
+    """Merge monitors whose titles are near-identical on the similarity
+    model (_MONITOR_MERGE_TITLE_SIM). Returns True if anything merged, so
+    the caller knows to commit.
 
     _update_national_monitors calls this twice — once for monitors that
     existed before today's new ones are created, once again afterward to
-    catch newly-created near-duplicates — previously as two copy-pasted
-    loops.
+    catch newly-created near-duplicates.
     """
     if len(monitors) < 2:
         return False
 
-    mon_embs = model.encode(
-        [f"{m.title} {m.description}" for m in monitors],
-        normalize_embeddings=True,
-    )
-    mon_title_embs = model.encode(
-        [m.title for m in monitors],
-        normalize_embeddings=True,
-    )
+    mon_title_embs = np.array(_embed_texts_sim([m.title for m in monitors]))
     merged_ids: set[int] = set()
-    below: list[tuple[float, int, int]] = []
     for a_idx in range(len(monitors)):
         if monitors[a_idx].id in merged_ids:
             continue
         for b_idx in range(a_idx + 1, len(monitors)):
             if monitors[b_idx].id in merged_ids:
                 continue
-            full_sim = float((mon_embs[a_idx] @ mon_embs[b_idx].T).item())
-            title_sim = float((mon_title_embs[a_idx] @ mon_title_embs[b_idx].T).item())
-
-            should_merge = False
-            if full_sim >= _MONITOR_AUTO_MERGE_SIM or title_sim >= _MONITOR_AUTO_MERGE_SIM:
-                should_merge = True
-            elif max(full_sim, title_sim) >= action_thresholds.get("monitor_merge"):
-                should_merge = _should_merge_monitors_llm(monitors[a_idx], monitors[b_idx], db)
-                action_thresholds.record("monitor_merge", max(full_sim, title_sim), should_merge)
-            else:
-                below.append((max(full_sim, title_sim), a_idx, b_idx))
-
-            if should_merge:
-                keep = monitors[a_idx]
-                absorb = monitors[b_idx]
-                if len(keep.updates or []) < len(absorb.updates or []):
-                    keep, absorb = absorb, keep
-                _merge_monitors(keep, absorb, db)
-                merged_ids.add(absorb.id)
-                if absorb is monitors[a_idx]:
-                    # The swap deleted the OUTER monitor: stop pairing
-                    # against it. Continuing the inner loop used a deleted
-                    # row as a merge target — a later match could re-parent
-                    # a third monitor's updates onto the deleted parent and
-                    # destroy them via the delete-orphan cascade. (The
-                    # merged_ids guard only runs at the top of the outer
-                    # loop.)
-                    break
-
-    # The gate only ever sees pairs above the floor, so ask it once about
-    # the closest pair below — the only evidence that can lower the floor
-    # (see action_thresholds). Recorded, never acted on.
-    below = [b for b in below if not {monitors[b[1]].id, monitors[b[2]].id} & merged_ids]
-    if below:
-        sim, a_idx, b_idx = max(below)
-        action_thresholds.record(
-            "monitor_merge", sim, _should_merge_monitors_llm(monitors[a_idx], monitors[b_idx], db),
-        )
+            if float(mon_title_embs[a_idx] @ mon_title_embs[b_idx]) < _MONITOR_MERGE_TITLE_SIM:
+                continue
+            keep = monitors[a_idx]
+            absorb = monitors[b_idx]
+            if len(keep.updates or []) < len(absorb.updates or []):
+                keep, absorb = absorb, keep
+            _merge_monitors(keep, absorb, db)
+            merged_ids.add(absorb.id)
+            if absorb is monitors[a_idx]:
+                # The swap deleted the OUTER monitor: stop pairing
+                # against it. Continuing the inner loop used a deleted
+                # row as a merge target — a later match could re-parent
+                # a third monitor's updates onto the deleted parent and
+                # destroy them via the delete-orphan cascade. (The
+                # merged_ids guard only runs at the top of the outer
+                # loop.)
+                break
     return bool(merged_ids)
 
 
@@ -3436,7 +3126,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
     # Step 1: Merge any existing monitors that are too similar to each other.
     _set_refresh_state(stage_detail="1/4 dedup")
-    if _merge_similar_monitors(existing_monitors, model, db):
+    if _merge_similar_monitors(existing_monitors, db):
         db.commit()
         existing_monitors = db.query(NationalMonitor).all()
 
@@ -3450,29 +3140,18 @@ def _update_national_monitors(today: str, db: Session) -> None:
             [f"{m.title} {m.description}" for m in existing_monitors],
             normalize_embeddings=True,
         )
-        monitor_title_embeddings = model.encode(
-            [m.title for m in existing_monitors],
-            normalize_embeddings=True,
-        )
         sims = today_embeddings @ monitor_embeddings.T
-        title_sims = today_embeddings @ monitor_title_embeddings.T
 
-        below: list[tuple[float, int, int]] = []
         for i, issue in enumerate(today_issues):
             for j, monitor in enumerate(existing_monitors):
                 full_sim = float(sims[i][j])
-                title_sim = float(title_sims[i][j])
-                if title_sim < _MONITOR_ISSUE_TITLE_SIM:
-                    continue
-                if full_sim < action_thresholds.get("monitor_issue"):
-                    below.append((full_sim, i, j))
+                if full_sim < _MONITOR_ISSUE_SIM:
                     continue
                 # LLM gate for borderline matches: require high confidence or LLM approval
-                if full_sim < _MONITOR_ISSUE_SIM_HIGH:
-                    approved = _should_match_monitor_llm(issue.title, issue.summary or "", monitor, db)
-                    action_thresholds.record("monitor_issue", full_sim, approved)
-                    if not approved:
-                        continue
+                if full_sim < _MONITOR_ISSUE_SIM_HIGH and not _should_match_monitor_llm(
+                    issue.title, issue.summary or "", monitor, db,
+                ):
+                    continue
 
                 issue_monitor_slugs.setdefault(i, []).append(monitor.slug)
 
@@ -3482,16 +3161,15 @@ def _update_national_monitors(today: str, db: Session) -> None:
                     matched_issues.add(i)
                     continue
 
-                # Match against ANY of today's source URLs, not just the
+                # Match against ANY of the issue's source URLs, not just the
                 # first: source ordering shifts between hourly runs as new
-                # articles arrive, so keying the duplicate check on
-                # source_urls[0] alone let the same story accrue a second
-                # same-day update whenever its leading source changed.
+                # articles arrive. And on any date: an issue that stays
+                # current for days added the same article again each day
+                # (the monitor showed one story on consecutive dates).
                 already_exists = (
                     db.query(MonitorUpdate)
                     .filter(
                         MonitorUpdate.monitor_id == monitor.id,
-                        MonitorUpdate.date == today,
                         MonitorUpdate.source_url.in_(source_urls),
                     )
                     .first()
@@ -3514,13 +3192,6 @@ def _update_national_monitors(today: str, db: Session) -> None:
                 logger.info("Monitor updated: '%s' <- '%s'",
                             monitor.title, issue.title[:60])
 
-        # Same probe as _merge_similar_monitors: the closest pair the floor
-        # turned away, recorded and never acted on.
-        if below:
-            sim, i, j = max(below)
-            action_thresholds.record("monitor_issue", sim, _should_match_monitor_llm(
-                today_issues[i].title, today_issues[i].summary or "", existing_monitors[j], db,
-            ))
 
     # Tag issues with their related monitor slugs
     for i, issue in enumerate(today_issues):
@@ -3589,7 +3260,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
             if mon_embs is not None:
                 dup_sims = today_embeddings[i] @ mon_embs.T
-                if float(dup_sims.max()) >= action_thresholds.get("monitor_issue"):
+                if float(dup_sims.max()) >= _MONITOR_ISSUE_SIM:
                     continue
 
             # --- LLM Metadata Generation ---
@@ -3656,7 +3327,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
 
     # Step 3b: Re-merge after creating new monitors.
     all_monitors = db.query(NationalMonitor).all()
-    if _merge_similar_monitors(all_monitors, model, db):
+    if _merge_similar_monitors(all_monitors, db):
         db.commit()
 
     # Step 4: Lifecycle management — watching, closing, and cleaning up
@@ -4739,11 +4410,11 @@ def _find_matching_issue(
                 except (ValueError, TypeError):
                     continue
                 if new_urls & cand_urls:
+                    action_metrics.increment("issues_matched_by_source")
                     return candidate
 
     if recent_embs is None:
         return None
-    new_sig = _issue_signature(title, facts)
     sims = recent_embs @ title_emb
     for cand_idx in np.argsort(-sims):
         sim = float(sims[cand_idx])
@@ -4756,20 +4427,10 @@ def _find_matching_issue(
             cand_facts = json.loads(candidate.facts or "[]")
         except (ValueError, TypeError):
             cand_facts = []
-        # See _same_story for the exact-content / near-identical-title /
-        # signature-overlap / low-signature-fallback decision (a
-        # near-identical title is conclusive on its own — facts are FREE to
-        # differ, that's a real update, not a mismatch — while a same-
-        # headline story whose facts got reworded slightly between
-        # generations, live 2026-08 bug: "Varga defends beef import plan
-        # amid GOP criticism" regenerated an hour apart with "cattle
-        # producers" vs "producers"/"ranchers", needs the near-identical-
-        # title check to still catch it since that sinks signature overlap
-        # below _signatures_match's floor).
-        cand_sig = _issue_signature(candidate.title, cand_facts)
-        if new_sig and cand_sig:
-            action_thresholds.record("near_identical", sim, _signatures_match(new_sig, cand_sig))
-        if _same_story(sim, title, facts, candidate.title, cand_facts, sig=new_sig, cand_sig=cand_sig):
+        # A near-identical title is conclusive on its own: facts are free
+        # to differ, that's a real update (_same_story).
+        if _same_story(sim, title, facts, candidate.title, cand_facts):
+            action_metrics.increment("issues_matched_by_title")
             return candidate
     return None
 
@@ -4994,7 +4655,7 @@ def _run_refresh(db: Session) -> int:
     # do we re-match ordinary news" tuning knob, and decoupling the two
     # means a longer confirmation_deadline later doesn't silently need a
     # matching change here too.
-    _lookback = (datetime.now(_US_EAST) - timedelta(days=2)).strftime("%Y-%m-%d")
+    _lookback = (datetime.now(_US_EAST) - timedelta(days=REMATCH_WINDOW_DAYS)).strftime("%Y-%m-%d")
     # A retired election-results issue (the count reverted, or the refresh
     # retired it) is left out: promoted, it came back as current news.
     _recent_issues: list[ActionIssue] = (
@@ -5022,8 +4683,10 @@ def _run_refresh(db: Session) -> int:
     # (title, embedding) pairs for post-LLM dedup within a single run
     generated_title_embs: list[tuple[str, "np.ndarray"]] = []
 
-    # The Congress's bills by short title, read once per run (_resolve_bills).
-    bill_titles = short_title_index(db)
+    # The Congress's bills by short title and by id, read once per run
+    # (_resolve_bills).
+    bill_short_titles = short_title_index(db)
+    bill_titles = bill_title_lists(db)
     for rank, cluster in enumerate(top_clusters, start=1):
         if issues_created >= MAX_ISSUES:
             break
@@ -5090,10 +4753,17 @@ def _run_refresh(db: Session) -> int:
             ", ".join("%.2f" % s for _, s in sorted([(a, float(s)) for a, s in zip(cluster, centered_sims)], key=lambda x: -x[1])[:6]),
         )
 
+        resolved_urls: dict[str, str] = {}
+
+        def _url_of(url: str) -> str:
+            if url not in resolved_urls:
+                resolved_urls[url] = _resolve_url(url)
+            return resolved_urls[url]
+
         seen_sources: dict[str, str] = {}
         for a, _ in on_topic:
             if a.source_name not in seen_sources:
-                seen_sources[a.source_name] = _resolve_url(a.url)
+                seen_sources[a.source_name] = _url_of(a.url)
         source_names = list(seen_sources.keys())
         source_urls = list(seen_sources.values())
 
@@ -5153,8 +4823,11 @@ def _run_refresh(db: Session) -> int:
         # clusters in three days skipped as too few facts).
         # Deduped together, so a summary claim that only restates a
         # headline one (or contains it) can't make one fact count as two.
-        headline_claims = claim_layer.extract_claims(cluster, _locate)
-        kept = claim_layer.dedupe_claims(headline_claims + claim_layer.extract_body_claims(cluster, _locate))
+        # Claims come from the on-topic articles only: one from an article
+        # the coherence filter dropped was published with a source the
+        # issue doesn't list (2026-10-08).
+        headline_claims = claim_layer.extract_claims(filtered_cluster, _locate)
+        kept = claim_layer.dedupe_claims(headline_claims + claim_layer.extract_body_claims(filtered_cluster, _locate))
         ordered = [c for c in headline_claims if c in kept] + [c for c in kept if c not in headline_claims]
         cluster_claims = claim_layer.on_topic(ordered, filtered_cluster)
         if not cluster_claims:
@@ -5184,6 +4857,17 @@ def _run_refresh(db: Session) -> int:
         # against live articles showed immediately (a summit story: the
         # summary and the first key fact were the same sentence).
         facts, fact_sources, fact_source_urls = claim_layer.build_facts(cluster_claims[1:])
+        # Every article a published line quotes is listed, under the same
+        # resolved URL. The list keeps one article per outlet, so a line
+        # from an outlet's second article, or one stored under its Google
+        # News redirect, linked to a source the issue didn't list
+        # (5 of 119 issues since 2026-09-01).
+        summary_source_url = _url_of(summary_source_url)
+        fact_source_urls = [_url_of(u) for u in fact_source_urls]
+        for quoted_name, quoted_url in [(summary_source, summary_source_url), *zip(fact_sources, fact_source_urls)]:
+            if quoted_url and quoted_url not in source_urls:
+                source_names.append(quoted_name)
+                source_urls.append(quoted_url)
 
         # Backstop, not the primary defence. Every word here is either a
         # verbatim span or a real outlet's headline, so this should
@@ -5273,15 +4957,9 @@ def _run_refresh(db: Session) -> int:
             facts = []
         policy_areas = _classify_issue_policy_areas(title, summary)
 
-        # 7. Resolve bill references to Congress.gov URLs.
-        # No LLM-suggested names any more: _resolve_bills already scans
-        # the article text itself with a regex for "H.R. 22" / "S. 1234",
-        # and its own docstring notes LLM ids were never trusted ("always
-        # search by name, never trust LLM IDs"). The mechanical path is
-        # unchanged; only the model's guesses are gone.
-        raw_bills: list = []
+        # 7. The bills the articles themselves name (_resolve_bills).
         article_texts = [f"{a.title} {a.summary}" for a in cluster]
-        resolved_bills = _resolve_bills(raw_bills, article_texts, bill_titles)
+        resolved_bills = _resolve_bills(article_texts, bill_short_titles, bill_titles)
         if resolved_bills:
             logger.info("  Resolved %d bill(s): %s",
                         len(resolved_bills),
@@ -5330,7 +5008,7 @@ def _run_refresh(db: Session) -> int:
 
         # 10. Build data-driven actions (no LLM hallucinations)
         actions = _build_actions_from_data(
-            title, resolved_bills, source_urls, source_names, related_senators,
+            title, resolved_bills, source_urls, source_names, related_senators, policy_areas,
         )
 
         # Track the date of the newest article driving this cluster so the

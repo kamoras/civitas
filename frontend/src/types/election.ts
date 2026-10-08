@@ -10,6 +10,10 @@ export interface CandidateSummary {
    * Minnesota's DFL is "DEM") — majorPartyOf reads this. Optional: an
    * older backend omits it. */
   partyGroup?: string | null;
+  /** What the code names in the FEC's own party table ("TX": "Taxpayers"),
+   * for a code the page has no label of its own for. Null for a printed
+   * state label or a code the FEC's table doesn't define. */
+  partyLabel?: string | null;
   /** Whether a state source actually confirmed this person as a
    * general-election nominee. A "confirmed"/"nominees" race can mix
    * both: a candidate whose primary was uncontested is never listed in

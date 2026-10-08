@@ -15,6 +15,7 @@ import logging
 
 from app.pipeline.fetch.fec import (
     committee_id_of,
+    is_joint_fundraiser,
     is_political_committee,
     select_recent_elections,
     structured_industry,
@@ -133,6 +134,8 @@ def summarize_election_totals(recent_cycles: list[dict]) -> dict:
         "total_raised": total_raised,
         "total_contributions": contributions if contributions > 0 else total_raised,
         "total_from_pacs": total("other_political_committee_contributions"),
+        "total_from_committees": total("other_political_committee_contributions")
+        + total("political_party_committee_contributions"),
         "small_individual": total("individual_unitemized_contributions"),
         "large_individual": total("individual_itemized_contributions"),
     }
@@ -186,9 +189,17 @@ def normalize_finance(
     total_from_pacs = totals["total_from_pacs"]
     small_individual = totals["small_individual"]
     large_individual = totals["large_individual"]
-    small_donor_percentage = (
-        round((small_individual / contribution_base) * 100) if contribution_base > 0 else 0
-    )
+    # None, not 0, when the filings report no unitemized money at all: the
+    # campaign itemizes every gift, so its small donors are among the
+    # itemized and the share can't be read from the totals (2026-10-08: 26
+    # House members raising over $500K, and one senator in every cycle,
+    # read 0%). The scores leave the part out rather than count it as 0.
+    if contribution_base <= 0:
+        small_donor_percentage = 0
+    elif small_individual <= 0:
+        small_donor_percentage = None
+    else:
+        small_donor_percentage = round((small_individual / contribution_base) * 100)
 
     # Build top donors: PACs first, then employer-grouped individuals
     candidate_name = (candidate or {}).get("name", "")
@@ -223,6 +234,7 @@ def normalize_finance(
             candidate_name=candidate_name,
             committee_meta_map=committee_meta_map,
             detail=detail,
+            committee_total=totals["total_from_committees"],
         )
 
     computed_pac_total = sum(
@@ -348,6 +360,8 @@ def build_top_donors(
         pac_skips = skip_entities_batch([committee_donor_name(committees.get(cid), cid).upper().strip() for cid in pacs])
         for cid, amount in pacs.items():
             meta = committees.get(cid)
+            if is_joint_fundraiser(meta):
+                continue
             name = committee_donor_name(meta, cid)
             key = name.upper().strip()
             ai_class = ai_classifications.get(key) or {}
@@ -372,6 +386,8 @@ def build_top_donors(
         if not _is_contribution_row(r):
             continue
         if pacs is not None and not _is_candidate_line(r):
+            continue
+        if is_joint_fundraiser(committee_meta_map.get(committee_id_of(r) or "")):
             continue
 
         name = r.get("contributor_name") or ""
@@ -440,8 +456,12 @@ def build_top_donors(
             if ai_class.get("skip"):
                 continue
             industry = ai_class.get("industry") or classify_with_learning(employer, db_session)[0]
+            # Money grouped by the donor's stated employer is its employees'
+            # by construction, whatever a name classifier makes of the name:
+            # 1,352 Senate rows (universities, law firms, Apple) read
+            # Party/Ideological (2026-10-08).
             existing = donor_map.setdefault(employer, {
-                "name": employer, "total": 0, "type": ai_class.get("type", "Org/Employees"), "industry": industry,
+                "name": employer, "total": 0, "type": "Org/Employees", "industry": industry,
             })
             existing["total"] += r.get("total") or 0
 
@@ -455,11 +475,10 @@ def build_top_donors(
             continue
 
         ai_class = ai_classifications.get(employer)
+        donor_type = "Org/Employees"  # employees' money, as in 2a
         if ai_class:
-            donor_type = ai_class.get("type", "Org/Employees")
             industry = ai_class.get("industry", "OTHER")
         else:
-            donor_type = "Org/Employees"
             industry, _ = classify_with_learning(r.get("contributor_employer", ""), db_session)
 
         existing = donor_map.get(employer, {
@@ -527,6 +546,7 @@ def _build_industry_breakdown(
     candidate_name: str = "",
     committee_meta_map: dict[str, dict] | None = None,
     detail: dict | None = None,
+    committee_total: float | None = None,
 ) -> list[dict]:
     """Build a funding breakdown showing all sources by industry.
 
@@ -538,6 +558,15 @@ def _build_industry_breakdown(
     in LARGE_INDIVIDUAL. Each part falls back to the sampled receipts when
     its source couldn't be read. Until 2026-10 only the samples existed, and
     under 1% of a large campaign's money was ever industry-classified.
+
+    `committee_total` is the committee money the campaign itself reported
+    receiving (FEC totals: other political plus party committees). The
+    bulk file is what the giving committees reported, and runs over it
+    where the money reached the campaign through a joint fundraising
+    committee, which the campaign reports as a transfer (one House leader:
+    $2.0M given against $187K received). The committee part is scaled down
+    to it when it runs over, as the occupation part is to the itemized
+    total, so the breakdown never sums past the contributions.
     """
     industry_totals: dict[str, dict] = {}
     ai_classifications = ai_classifications or {}
@@ -546,9 +575,12 @@ def _build_industry_breakdown(
     pacs = detail.get("pacs")
     occupations = detail.get("occupations")
 
-    def _add(industry: str, amount: float) -> None:
-        existing = industry_totals.setdefault(industry, {"industry": industry, "name": industry, "total": 0})
+    def _add(industry: str, amount: float, into: dict | None = None) -> None:
+        totals = industry_totals if into is None else into
+        existing = totals.setdefault(industry, {"industry": industry, "name": industry, "total": 0})
         existing["total"] += amount
+
+    committee_part: dict[str, dict] = {}
 
     if small_individual_total > 0:
         industry_totals["SMALL_DONORS"] = {
@@ -590,11 +622,13 @@ def _build_industry_breakdown(
         committees = detail.get("committees") or {}
         for cid, amount in pacs.items():
             meta = committees.get(cid)
+            if is_joint_fundraiser(meta):
+                continue
             name = committee_donor_name(meta, cid)
             key = name.upper().strip()
             if _should_skip_for_breakdown(key):
                 continue
-            _add(structured_industry(meta) or _get_industry(name, key), amount)
+            _add(structured_industry(meta) or _get_industry(name, key), amount, committee_part)
             counted_donors.add(key)
 
     for r in pac_receipts if pacs is None else []:
@@ -613,15 +647,21 @@ def _build_industry_breakdown(
             (committee_meta_map or {}).get(r.get("contributor_id") or "")
             if committee_id_of(r) else None
         )
+        if is_joint_fundraiser(meta):
+            continue
         # Same tier-1 rule as build_top_donors: the FEC's registration, not
         # the name, decides that a party/candidate/leadership committee's
         # money is political rather than an industry's.
         industry = structured_industry(meta) or _get_industry(org, org_upper)
-
-        existing = industry_totals.get(industry, {"industry": industry, "name": industry, "total": 0})
-        existing["total"] += amount
-        industry_totals[industry] = existing
+        _add(industry, amount, committee_part)
         counted_donors.add(org_upper)
+
+    given = sum(ind["total"] for ind in committee_part.values())
+    committee_scale = (
+        min(1.0, committee_total / given) if committee_total is not None and given > 0 else 1.0
+    )
+    for industry, ind in committee_part.items():
+        _add(industry, ind["total"] * committee_scale)
 
     classified_individual_total = 0.0
     if occupations is not None:

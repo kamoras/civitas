@@ -640,3 +640,27 @@ def test_an_amended_report_keeps_its_newest_version_at_first_disclosure(db_sessi
     # the trade the amendment added was first disclosed by the amendment.
     assert rows == {"Acme": ("amend", "2024-11-15", 50000.0), "Added Later": ("amend", "2026-08-05", 15000.0)}
     assert stock_pipeline._marked(db_session, stock_pipeline._SUPERSEDED_KEY.format("orig"))
+
+
+@pytest.mark.asyncio
+async def test_the_president_s_annual_report_rows_are_never_reread(db_session):
+    """They are president_fd's: the 278-T parser the re-read runs would
+    replace them with whatever it made of a 278e (21,285 rows at stake)."""
+    from app.models import President, PresidentTrade
+
+    db_session.add(President(id="p-1", name="Test President", party="R", number=99,
+                             term_start="2025-01-20", is_current=True))
+    common = dict(president_id="p-1", owner="self", transaction_type="purchase",
+                  transaction_date="2025-11-01", disclosure_date="2026-05-15", parser_version=1)
+    db_session.add_all([
+        PresidentTrade(asset_name="Annual holding", source_url="https://example.test/annual.pdf",
+                       filing_id="annual", report_kind="annual", **common),
+        PresidentTrade(asset_name="Periodic trade", source_url="https://example.test/p.pdf",
+                       filing_id="p", report_kind="periodic", **common),
+    ])
+    db_session.commit()
+    read = AsyncMock(return_value=[])
+    with patch.object(stock_pipeline, "_read_president_filing", read), \
+         patch.object(stock_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"):
+        await stock_pipeline._reread_trades(db_session, None)
+    assert [c.args[1]["doc_id"] for c in read.await_args_list] == ["p"]

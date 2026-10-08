@@ -4,13 +4,17 @@ Tests the Oyez API response parsing, date conversion, HTML stripping,
 and deduplication logic without making real HTTP requests.
 """
 
-import pytest
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from app.pipeline.fetch.supreme_court import (
     _strip_html,
     _unix_to_date,
     fetch_scotus_cases,
+    justice_for_code,
+    parse_slip_opinions,
 )
 
 
@@ -131,8 +135,15 @@ class TestFetchScotusCases:
         response_2023.status_code = 200
         response_2023.json.return_value = [case_2023]
 
+        missing = MagicMock(status_code=404)
+
+        async def get(url, **kwargs):
+            if "slipopinion" in url:
+                return missing
+            return response if kwargs["params"]["filter"] == "term:2024" else response_2023
+
         client = AsyncMock()
-        client.get = AsyncMock(side_effect=[response, response_2023])
+        client.get = AsyncMock(side_effect=get)
         results = await fetch_scotus_cases(client, terms=["2024", "2023"])
         assert len(results) == 2
 
@@ -142,3 +153,40 @@ class TestFetchScotusCases:
         client = self._mock_client([case])
         results = await fetch_scotus_cases(client, terms=["2024"])
         assert "1983" in results[0]["summary"]
+
+
+SLIP = (Path(__file__).parent / "fixtures" / "scotus_slipopinion_25.html").read_text()
+SITTING = [("John G. Roberts, Jr.", "Roberts"), ("Clarence Thomas", "Thomas"), ("Samuel A. Alito, Jr.", "Alito"),
+           ("Brett M. Kavanaugh", "Kavanaugh"), ("Amy Coney Barrett", "Barrett"), ("Ketanji Brown Jackson", "Jackson")]
+
+
+def test_the_courts_slip_opinion_table_gives_pdf_author_and_holding():
+    slips = parse_slip_opinions(SLIP)
+    assert slips["24-43"]["pdf"] == "https://www.supremecourt.gov/opinions/25pdf/24-43_2b35.pdf"
+    assert slips["24-43"]["author"] == "BK"
+    assert slips["24-43"]["holding"].startswith("Title IX allows schools")
+    assert slips["26A388"]["author"] == "PC"
+
+
+@pytest.mark.parametrize("code,name", [
+    ("BK", "Brett M. Kavanaugh"), ("R", "John G. Roberts, Jr."), ("A", "Samuel A. Alito, Jr."),
+    ("AB", "Amy Coney Barrett"), ("KJ", "Ketanji Brown Jackson"), ("PC", None), ("ZZ", None),
+])
+def test_an_author_code_names_one_sitting_justice(code, name):
+    assert justice_for_code(code, SITTING) == name
+
+
+@pytest.mark.asyncio
+async def test_a_decided_case_links_its_opinion_and_names_its_author():
+    case = {**TestFetchScotusCases.SAMPLE_CASE, "docket_number": "24-43", "name": "West Virginia v. B.P.J."}
+
+    async def get(url, **kwargs):
+        if "slipopinion" in url:
+            return MagicMock(status_code=200, text=SLIP)
+        return MagicMock(status_code=200, json=MagicMock(return_value=[case]))
+
+    client = AsyncMock()
+    client.get = AsyncMock(side_effect=get)
+    [doc] = await fetch_scotus_cases(client, terms=["2025"], justices=SITTING)
+    assert doc["url"].endswith("24-43_2b35.pdf") and doc["politician_name"] == "Brett M. Kavanaugh"
+    assert doc["summary"].startswith("Title IX allows schools")

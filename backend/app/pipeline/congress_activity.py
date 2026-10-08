@@ -316,8 +316,12 @@ async def sync_digests(client: httpx.AsyncClient, db: Session, today: date) -> d
     recent_start = today - timedelta(days=_RECENT_DAYS)
     for offset in range(1, _RECENT_DAYS + 1):
         day = today - timedelta(days=offset)
+        # A day in session whose adjournment the parser didn't find was
+        # read before the parser understood its wording (the Senate's
+        # one-sentence pro forma days, 2026-10): not settled, read again.
         final = db.query(func.count(CongressDay.id)).filter(
             CongressDay.date == day.isoformat(), CongressDay.is_final.is_(True),
+            ~(CongressDay.in_session.is_(True) & (func.coalesce(CongressDay.adjournment_text, "") == "")),
         ).scalar()
         if final >= 2:
             continue
@@ -411,6 +415,19 @@ def _roll_call_url(chamber: str, congress: int, session: int, number: int) -> st
     return floor_logs.house_roll_call_url(congress_first_year(congress) + session - 1, number)
 
 
+async def _roll_call_body(client: httpx.AsyncClient, chamber: str, congress: int,
+                          session: int, number: int):
+    """`_get` for one roll call. clerk.house.gov answers a roll that does
+    not exist yet with 200 and `<xml>Error sanitizing file ...</xml>`, so a
+    House body that is not a vote document is the roll being absent, not
+    a parse failure (every run past the last roll was logged failed)."""
+    body = await _get(client, _roll_call_url(chamber, congress, session, number),
+                      label=f"{chamber} roll call")
+    if chamber == "house" and isinstance(body, bytes) and b"<rollcall-vote" not in body:
+        return _ABSENT
+    return body
+
+
 def _parse_roll_call(chamber: str, text: str, congress: int, session: int, number: int) -> dict | None:
     if chamber == "senate":
         return parse_senate_vote_xml(text, congress, session, number)
@@ -423,7 +440,7 @@ async def _retry_gaps(client: httpx.AsyncClient, db: Session, chamber: str,
     stored = 0
     for number in _gaps_to_retry(db, chamber, congress, session, eastern_today()):
         url = _roll_call_url(chamber, congress, session, number)
-        body = await _get(client, url, label=f"{chamber} roll call")
+        body = await _roll_call_body(client, chamber, congress, session, number)
         if body is None:
             return stored, "failed"
         if body is _ABSENT:
@@ -453,7 +470,7 @@ async def sync_roll_calls(client: httpx.AsyncClient, db: Session, chamber: str,
     misses = 0
     while stored < limit:
         url = _roll_call_url(chamber, congress, session, number)
-        body = await _get(client, url, label=f"{chamber} roll call")
+        body = await _roll_call_body(client, chamber, congress, session, number)
         if body is None:
             return stored, "failed"
         if body is _ABSENT:

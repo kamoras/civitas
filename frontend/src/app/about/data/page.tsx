@@ -128,12 +128,13 @@ export default function DataChapter() {
         <Sub title="Courts, elections and documents">
           <Facts>
             <Fact label="Oyez · supremecourt.gov">
-              Cases, justices&apos; votes, and official slip opinions.
+              Cases, justices&apos; votes in a term the Supreme Court Database doesn&apos;t cover
+              yet, and official slip opinions.
             </Fact>
             <Fact label="Supreme Court Database · Federal Judicial Center · Martin-Quinn">
-              Every justice&apos;s votes in cases the federal government argued, with Epstein and
-              Posner&apos;s coding through 2014; nomination dates; each justice&apos;s position per
-              term.
+              Every justice&apos;s votes in orally argued cases (the voting record, and the cases
+              the federal government argued for the score, with Epstein and Posner&apos;s coding
+              through 2014); nomination dates; each justice&apos;s position per term.
             </Fact>
             <Fact label="State election offices">
               Certified candidate lists and primary results, from each state&apos;s own site. And
@@ -296,7 +297,10 @@ export default function DataChapter() {
       <Section id="explore" title="How Explore search ranks results">
         <P>
           Explore searches floor speeches, presidential actions, Federal Register rules and Supreme
-          Court opinions. Four rankings are combined
+          Court opinions. A floor speech is one member&apos;s own words, whole, under the heading
+          the Congressional Record printed over them, or as remarks on the debate they joined; floor
+          business such as quorum calls and requests to schedule a vote is left out. Four rankings
+          are combined
           <Cite id="cormack2009" />:
         </P>
         <List>

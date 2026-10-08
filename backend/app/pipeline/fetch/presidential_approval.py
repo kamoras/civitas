@@ -28,10 +28,11 @@ presidency.ucsb.edu during development (2026-07). A president sworn in
 after that list is found in UCSB's own index of approval pages, by name
 (approval_slugs), so the list never needs a new entry. Only presidents with
 real polling-era coverage are included (Truman #33 onward, matching this
-platform's existing "modern presidents" framing) — pre-Truman presidents
-have no live source; their Public Mandate uses the election-margin
-historical proxy instead (see presidential_elections.py), never a seed
-value.
+platform's existing "modern presidents" framing). UCSB has a Franklin
+Roosevelt page too, but it holds 20 polls from 1941 to 1943, two years of
+twelve, without the by-party figures president v9 reads, so pre-Truman
+Public Mandate uses the election-margin historical proxy instead (see
+presidential_elections.py), never a seed value.
 
 The pages also publish Gallup's by-party breakdown (Democrats,
 Independents and Republicans approving) for every president from Truman.

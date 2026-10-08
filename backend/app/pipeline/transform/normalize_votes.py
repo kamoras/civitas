@@ -274,13 +274,14 @@ def _determine_party_alignment(
 
     Args:
         senator_party: "R", "D", or "I" (Independents use inferred caucus)
-        vote: "Yea", "Nay", or "Not Voting"
+        vote: "Yea", "Nay", "Present" or "Not Voting"
         party_leaning: "R", "D", "bipartisan", or None
 
     Returns:
         True = voted with party, False = voted against party, None = N/A
     """
-    if vote == "Not Voting" or not party_leaning or party_leaning == "bipartisan":
+    # "Present" is a recorded answer but takes no side: no party signal.
+    if vote not in ("Yea", "Nay") or not party_leaning or party_leaning == "bipartisan":
         return None
 
     effective_party = senator_party
@@ -544,6 +545,10 @@ def member_vote_entry(
         vote = "Yea"
     elif direction in ("NAY", "NO"):
         vote = "Nay"
+    elif direction.startswith("PRESENT"):
+        # Answered present (the Senate's "Present, Giving Live Pair" too):
+        # attended and declined to take a side, which is not a missed vote.
+        vote = "Present"
 
     party_split = bill.get("partySplit")
     reconsider_switch = is_reconsider_switch(bill, leader_spans)
@@ -631,23 +636,29 @@ def compute_party_vote_split(roll_call_data: dict) -> dict | None:
     Republican bill, Democratic bill, or bipartisan vote — without relying on
     LLM classification.
 
+    The shares are of the members who voted Yea or Nay, as in CQ's party
+    unity votes: an absent or "present" member took no side, and counting
+    them as not-Yea let a party's absences decide the label (a 143-73 vote
+    read bipartisan beside the other party's 0-212).
+
     Returns:
         {"label": "R"|"D"|"bipartisan", "r_yea_pct": float, "d_yea_pct": float},
-        or None if either party has fewer than 3 recorded votes.
+        or None if either party has fewer than 3 Yea/Nay votes.
     """
     members = roll_call_data.get("members", [])
     r_yea = r_total = d_yea = d_total = 0
     for m in members:
         party = m.get("party", "")
         vote = (m.get("voteCast") or "").upper()
+        yea = vote in ("YEA", "AYE", "YES")
+        if not yea and vote not in ("NAY", "NO"):
+            continue
         if party == "R":
             r_total += 1
-            if vote in ("YEA", "AYE", "YES"):
-                r_yea += 1
+            r_yea += yea
         elif party == "D":
             d_total += 1
-            if vote in ("YEA", "AYE", "YES"):
-                d_yea += 1
+            d_yea += yea
 
     if r_total < 3 or d_total < 3:
         return None  # Not enough party data
@@ -761,7 +772,8 @@ def extract_senator_vote(
             ("" matches nothing).
 
     Returns:
-        Vote position ("Yea", "Nay", "Not Voting") or None.
+        Vote position as recorded (e.g. "Yea", "Nay", "Present",
+        "Not Voting") or None.
     """
     if not roll_call_data or not roll_call_data.get("members"):
         return None
