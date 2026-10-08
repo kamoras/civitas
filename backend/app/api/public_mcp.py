@@ -89,6 +89,18 @@ async def _call_tool(ctx, params: mcp_types.CallToolRequestParams) -> mcp_types.
     if found is None:
         return _error(f"No tool named {params.name!r}.")
     path, op = found
+    # The input schema says additionalProperties: false, and the route
+    # would drop an unknown query parameter without a word: search_documents
+    # with `politician` instead of `politician_id` returned everyone's
+    # speeches as if filtered. Refuse it by name, so the model can correct
+    # the call.
+    accepted = [p["name"] for p in op.get("parameters", [])]
+    unknown = sorted(set(params.arguments or {}) - set(accepted))
+    if unknown:
+        return _error(
+            f"Unknown argument{'s' if len(unknown) > 1 else ''} {', '.join(map(repr, unknown))} "
+            f"for {params.name}. Accepted: {', '.join(accepted) or 'none'}."
+        )
     # A null is "not given", which each optional parameter's input schema
     # allows (anyOf [..., null]); passed on, httpx sent it as an empty
     # value and the route refused it (422 on party=, state=, chamber=).

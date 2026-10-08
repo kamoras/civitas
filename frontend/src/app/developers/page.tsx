@@ -295,6 +295,8 @@ export default async function DevelopersPage() {
                 The same API is an MCP server, so an assistant such as Claude can look up members,
                 scores and documents itself. Every endpoint below is a tool of the same name,
                 answering exactly what the API does. It uses streamable HTTP and needs no sign-in.
+                An argument a tool doesn&apos;t take is refused by name rather than ignored, so a
+                misnamed filter can&apos;t come back looking applied.
               </P>
               <CopyText text={MCP_URL} label="MCP server address" />
               <List>

@@ -121,6 +121,23 @@ async def test_errors_come_back_as_readable_tool_results(db_session):
         assert unknown["isError"]
 
 
+async def test_an_argument_outside_the_schema_is_refused_by_name(db_session):
+    """The schema says additionalProperties: false, but the route dropped an
+    unknown query parameter: `politician` for `politician_id` came back
+    unfiltered, looking filtered."""
+    async with mcp_client(db_session) as mcp:
+        wrong = await mcp("tools/call", {"name": "search_documents",
+                                         "arguments": {"q": "climate", "politician": "jon-brennan"}})
+        text = wrong["content"][0]["text"]
+        assert wrong["isError"] and "'politician'" in text and "politician_id" in text
+        limit = await mcp("tools/call", {"name": "list_senators", "arguments": {"limit": 3, "state": "GA"}})
+        assert limit["isError"] and "'limit'" in limit["content"][0]["text"]
+        assert "per_page" in limit["content"][0]["text"]
+        # A known name with a null value is still just "not given".
+        ok = await mcp("tools/call", {"name": "list_senators", "arguments": {"state": "GA", "party": None}})
+        assert not ok.get("isError"), ok
+
+
 async def test_tool_calls_and_connections_are_counted_on_the_mcp_channel(db_session):
     async with mcp_client(db_session) as mcp:
         await mcp("tools/list")
