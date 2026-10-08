@@ -999,6 +999,6 @@ def test_each_tables_width_is_its_models_own():
     # A vec0 table's width is fixed at creation from these constants: one
     # left behind by a model change recreates the table at the wrong width,
     # and every insert into it fails.
-    assert vector_store.get_similarity_model().get_sentence_embedding_dimension() == vector_store.SIMILARITY_DIMENSIONS
-    assert vector_store.get_embedding_model().get_sentence_embedding_dimension() == vector_store.EMBEDDING_DIMENSIONS
+    assert vector_store.get_similarity_model().get_embedding_dimension() == vector_store.SIMILARITY_DIMENSIONS
+    assert vector_store.get_embedding_model().get_embedding_dimension() == vector_store.EMBEDDING_DIMENSIONS
 

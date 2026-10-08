@@ -71,8 +71,10 @@ export default async function LimitationsChapter() {
             yet (appointed, or seated by a special election), who is measured on the campaign still
             in progress; across chambers the scores are best read side by side, not ranked, which is
             why the compare page names no winner when a senator and a representative are compared.
-            The window itself is deliberate: a strict two-year window would leave most senators with
-            little or no fundraising to measure. FEC filings also lag donations by weeks or months.
+            Where FEC&apos;s candidate totals leave out the race that won a House seat, that
+            election is read from the campaign committee&apos;s own totals for the cycle. The window
+            itself is deliberate: a strict two-year window would leave most senators with little or
+            no fundraising to measure. FEC filings also lag donations by weeks or months.
           </P>
         </Limitation>
       </Section>
@@ -236,7 +238,11 @@ export default async function LimitationsChapter() {
         <Limitation title="Classification lacks world knowledge">
           <P>
             Embedding-based classification is fast and consistent, but it knows only what the text
-            says. Shell companies and deliberately obscure names can land in the wrong industry.
+            says. Shell companies and deliberately obscure names can land in the wrong industry. For
+            PACs it is the last resort: a union&apos;s PAC, and a company&apos;s PAC the SEC lists,
+            take their industry from those records. Trade associations and private companies have no
+            such record, and their names are still read; measured against the records, the name
+            reading agreed with them on about six PACs in ten.
           </P>
         </Limitation>
       </Section>

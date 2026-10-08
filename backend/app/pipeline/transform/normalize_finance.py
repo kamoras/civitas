@@ -13,7 +13,12 @@ industry classifier.
 
 import logging
 
-from app.pipeline.fetch.fec import committee_id_of, is_political_committee, select_recent_elections
+from app.pipeline.fetch.fec import (
+    committee_id_of,
+    is_political_committee,
+    select_recent_elections,
+    structured_industry,
+)
 from app.pipeline.transform.candidate_names import is_candidate_self_donor
 from app.pipeline.transform.industry_classifier import classify_with_learning, primed_industry_lookups
 from app.pipeline.transform.occupation_industry import industry_of_occupation
@@ -348,8 +353,7 @@ def build_top_donors(
             ai_class = ai_classifications.get(key) or {}
             if ai_class.get("skip") or key in pac_skips:
                 continue
-            political = is_political_committee(meta)
-            industry = "POLITICAL" if political else (
+            industry = structured_industry(meta) or (
                 ai_class.get("industry") or classify_with_learning(name, db_session)[0]
             )
             existing = donor_map.setdefault(key, {
@@ -410,13 +414,14 @@ def build_top_donors(
                 existing["committeeType"] = meta["type"]
             if meta and meta.get("connectedOrg"):
                 existing["connectedOrg"] = meta["connectedOrg"]
-            # Tier 1 (FEC structured metadata) outranks the name classifier:
+            # Tier 1 (FEC and SEC records) outranks the name classifier:
             # the NRSC's name embeds near nothing political enough, and it
             # was headlining a senator's "gun industry" donor-vote match.
-            if is_political_committee(meta) and existing.get("type") not in (
+            structured = structured_industry(meta)
+            if structured and existing.get("type") not in (
                 "Self-Funded", "CandidateAffiliated", "SKIP",
             ):
-                existing["industry"] = "POLITICAL"
+                existing["industry"] = structured
         donor_map[name_upper] = existing
 
     # 2a. Employees, from the FEC's employer totals.
@@ -589,7 +594,7 @@ def _build_industry_breakdown(
             key = name.upper().strip()
             if _should_skip_for_breakdown(key):
                 continue
-            _add("POLITICAL" if is_political_committee(meta) else _get_industry(name, key), amount)
+            _add(structured_industry(meta) or _get_industry(name, key), amount)
             counted_donors.add(key)
 
     for r in pac_receipts if pacs is None else []:
@@ -611,7 +616,7 @@ def _build_industry_breakdown(
         # Same tier-1 rule as build_top_donors: the FEC's registration, not
         # the name, decides that a party/candidate/leadership committee's
         # money is political rather than an industry's.
-        industry = "POLITICAL" if is_political_committee(meta) else _get_industry(org, org_upper)
+        industry = structured_industry(meta) or _get_industry(org, org_upper)
 
         existing = industry_totals.get(industry, {"industry": industry, "name": industry, "total": 0})
         existing["total"] += amount

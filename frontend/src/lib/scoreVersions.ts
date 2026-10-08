@@ -32,6 +32,18 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.30",
+    date: "2026-10-08",
+    title: "Funding: the election that seated the member, and PAC industries from the records",
+    tldr: "Ten House members were scored on the money from a different race, an old losing run or a campaign still under way; each is now scored on the election that won them their seat. And a PAC's industry now comes from the FEC's and the SEC's records where they state it, instead of from reading its name, which had filed a fifth of union PAC money and most \"National ... Association\" PACs under the wrong industry.",
+    changes: [
+      "The check that keeps an election too old to have won the current seat out of the funding window never ran for members matched through the bioguide-to-FEC crosswalk, so their window could reach back to a run from years earlier, in one case 2002. It now runs for every member.",
+      "For eight members seated by the 2024 general, FEC's candidate totals leave out the 2024 race, though the committee that ran it reports the money under its 2024 cycle. For a member sworn in when the Congress convened, that election is now read from the committee totals, FEC's own figures. A member seated by a special election keeps the campaign FEC records for them. Senators are unaffected: every senator's window was already the election that seated them.",
+      "A PAC sponsored by a labor organization (its FEC registration says so) is now labor money: 21% of such rows had been filed elsewhere, one union's under firearms. A corporation's PAC whose sponsor the SEC lists takes the industry of the SIC code the SEC assigned the sponsor, as stock trades already do; the name-based reading had agreed with it on 59.5% of rows.",
+      'Where no record states an industry (trade and membership associations, private companies), the name is still read. Its firearms and real-estate descriptions no longer name organizations: "National Rifle Association" and "National Association of Realtors" pulled every "National ... Association" toward them. On the stored PAC names, firearms labels fell from 97 to 6. Three gun-issue committees, one on each side, now read as political. Funding Diversity and the industry breakdown move for members whose PAC money was misfiled. docs/methodology/member-score/v6.30.md has the measurements.',
+    ],
+  },
+  {
     version: "v6.29",
     date: "2026-10-07",
     title: "Senators: how the other party's voters and independents in the state rate them",
