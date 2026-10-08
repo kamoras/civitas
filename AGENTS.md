@@ -934,8 +934,13 @@ below. Block tags become `"; "` so item boundaries survive, and the
 Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
 outlet's recurring briefing ("Up First", "Morning news brief", "The week in
 politics") is a single RSS item covering three to five unrelated stories, and
-every stage downstream treats it as one story. Two mechanical signals:
+every stage downstream treats it as one story. Three mechanical signals:
 
+- **The outlet's newsletter section.** An item whose URL sits under a
+  `newsletter`/`newsletters` path segment is the outlet's own newsletter, a
+  multi-section product whose feed description runs its section headings
+  together (one became an issue "fact" of four headings in a row). Only the
+  path segment counts, not a slug that mentions a newsletter.
 - **A recurring-product title.** Matching is split by where the marker may
   appear, because most of these phrases are ordinary English somewhere else
   in a headline: product names count only title-initial ("Pentagon holds

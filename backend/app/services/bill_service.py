@@ -507,6 +507,18 @@ def short_title_index(db: Session, congress: int | None = None) -> dict[str, set
     return index
 
 
+def bill_title_lists(db: Session, congress: int | None = None) -> dict[str, list[str]]:
+    """{bill id: its titles} for the Congress's bills that current members
+    sponsor (the bills the site holds)."""
+    congress = congress or settings.CURRENT_CONGRESS
+    out: dict[str, list[str]] = {}
+    for model in (SponsoredBill, RepSponsoredBill):
+        for bill_id, title in db.query(model.bill_id, model.title).filter(model.congress == congress).distinct():
+            if title and title not in out.setdefault(bill_id.upper(), []):
+                out[bill_id.upper()].append(title)
+    return out
+
+
 def names_phrase(text_lower: str, phrase: str) -> bool:
     """`phrase` appears in the (lowercased) text as whole words."""
     return phrase in text_lower and re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", text_lower) is not None
