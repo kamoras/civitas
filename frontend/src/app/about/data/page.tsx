@@ -297,7 +297,10 @@ export default function DataChapter() {
       <Section id="explore" title="How Explore search ranks results">
         <P>
           Explore searches floor speeches, presidential actions, Federal Register rules and Supreme
-          Court opinions. Four rankings are combined
+          Court opinions. A floor speech is one member&apos;s own words, whole, under the heading
+          the Congressional Record printed over them, or as remarks on the debate they joined; floor
+          business such as quorum calls and requests to schedule a vote is left out. Four rankings
+          are combined
           <Cite id="cormack2009" />:
         </P>
         <List>

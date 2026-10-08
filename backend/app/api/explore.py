@@ -459,7 +459,7 @@ async def _run_explore_pipeline():
         async with lease.job_async(lease.EXPLORE) as held:
             if not held:
                 return
-            result = await run_explore_pipeline(days_back=60)
+            result = await run_explore_pipeline()
         logger.info("Explore pipeline result: %s", result)
     except Exception as e:
         logger.error("Explore pipeline background task failed: %s", e)

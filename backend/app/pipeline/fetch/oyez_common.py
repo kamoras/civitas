@@ -3,8 +3,7 @@
 Both supreme_court.py (case decisions for the explore store) and
 justice_votes.py (per-justice vote records) fetch from api.oyez.org and had
 independent, verbatim copies of the base URL and the Unix-timestamp date
-parser. This is the one canonical copy, mirroring how house_record.py reuses
-congressional_record._strip_html.
+parser. This is the one canonical copy.
 """
 
 import re
