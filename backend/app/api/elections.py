@@ -66,6 +66,7 @@ from app.pipeline.fetch.state_candidates_common import (
     judicial_marker_key,
     state_nominee_party,
     fec_party,
+    fec_party_label,
     STATE_LEG_CHAMBER_LABELS,
     district_label,
     district_sort_key,
@@ -261,11 +262,17 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
         # The state's printed ballot name when a state source has named
         # this candidate; the page prefers it and falls back to `name`.
         "ballotName": cand.ballot_name,
-        "party": cand.party,
-        # The party that FEC code belongs to (fec_party: Minnesota's DFL is
+        # The party the state's list prints, once one has named them; the
+        # FEC filing's code until then.
+        "party": cand.ballot_party or cand.party,
+        # The party that code belongs to (fec_party: Minnesota's DFL is
         # DEM) — the one place the page learns which codes are the same
         # party, so it keeps no list of its own.
-        "partyGroup": fec_party(cand.party),
+        "partyGroup": fec_party(cand.ballot_party or cand.party),
+        # What the code names in the FEC's table ("TX": Taxpayers), for a
+        # party the page has no label of its own for; null for a printed
+        # label or a code the table doesn't define (shown as is).
+        "partyLabel": fec_party_label(cand.ballot_party or cand.party),
         # Per-CANDIDATE confidence, which `candidateSource` cannot carry:
         # a race's list can now mix a state-confirmed nominee with an
         # unopposed one the primary file never listed (see
@@ -626,6 +633,18 @@ def _incumbent_link(
     no `district`/`seat` is said, since the table no longer tells the seat
     held going in from the one held now.
     """
+    if cand.member_bioguide:
+        # The crosswalk says this FEC id is a member's own: their record,
+        # whatever the FEC's incumbency code says (it codes a sitting
+        # member a challenger after a special election: 12 members on
+        # 2026-10-08). Only for the seat's own chamber.
+        holders = reps_by_district.values() if race.office == "H" else senators
+        holder = next((m for m in holders if m.bioguide_id == cand.member_bioguide), None)
+        if holder is not None:
+            link = {"id": holder.id, "score": compute_overall_score(holder)}
+            if race.office == "H" and not elected_congress_sits(race.cycle_year):
+                link.update(district=holder.district, seat=_seat_label(race.state, holder.district))
+            return link
     if cand.incumbent_challenge != "I" or cand.id in stale_incumbent_ids:
         return None
     # Reuses candidate_dedup's surname extraction rather than a second
@@ -703,14 +722,30 @@ def _race_full(
         "counties": counties,
         "candidateSource": _candidate_source(race.candidates, complete),
         "candidates": [
-            {
-                **_candidate_summary(c, stale_incumbent_ids),
-                "incumbentRecord": _incumbent_link(
-                    c, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids),
-            }
+            _ballot_candidate(c, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids)
             for c in candidates
         ],
     }
+
+
+def _ballot_candidate(
+    cand: Candidate, race: Race, reps_by_district: dict[int, Representative], senators: list[Senator],
+    namesake_fields: list[list[Candidate]], stale_incumbent_ids: frozenset[str],
+) -> dict:
+    """A candidate on the ballot page with their record link. One the
+    crosswalk ties to this seat's own member is the incumbent, which the
+    page reads from incumbentChallenge, though the FEC codes them a
+    challenger (after a special election)."""
+    link = _incumbent_link(cand, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids)
+    summary = {**_candidate_summary(cand, stale_incumbent_ids), "incumbentRecord": link}
+    holds_this_seat = link is not None and cand.member_bioguide and (
+        race.office == "S"
+        or link.get("district") in (None, race.district)
+        or race.state in redrawn_states(race.cycle_year)
+    )
+    if holds_this_seat:
+        summary["incumbentChallenge"] = "I"
+    return summary
 
 
 # How many state-wide coverage items the ballot page's top-of-page teaser

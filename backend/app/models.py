@@ -974,6 +974,16 @@ class Candidate(Base):
     # them, and never set from a "Last, First" printing (see
     # state_candidates._note_ballot_name).
     ballot_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The party that state's list prints for them (an FEC code, or the
+    # printed label for a party FEC has no code for), set beside
+    # ballot_name. The page shows it over `party`, the FEC filing's code,
+    # which can be a typo ("08") or a code nothing labels.
+    ballot_party: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The member of Congress this FEC candidate id belongs to, by the
+    # congress-legislators bioguide->FEC crosswalk (the election run sets
+    # it). Ties a sitting member to their scorecard when the FEC codes
+    # their own row a challenger, as it does after a special election.
+    member_bioguide: Mapped[str | None] = mapped_column(String, nullable=True)
     # last_coverage_search (the removed Bluesky candidate search's watermark)
     # is no longer mapped; the next release drops it (migrations/README.md).
 
