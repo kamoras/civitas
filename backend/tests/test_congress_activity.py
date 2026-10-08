@@ -327,6 +327,12 @@ class TestSyncRollCalls:
         assert (stored, status) == (2, "ok")
         assert sorted(n for (n,) in db_session.query(RollCall.number)) == [1, 3]
 
+    def test_the_clerks_error_page_past_the_last_roll_is_absent(self, db_session, monkeypatch):
+        vote = (FIX / "roll_calls" / "house_2026_roll309.xml").read_bytes()
+        error = b'<xml>Error sanitizing file "roll002.xml". Please try again.</xml>'
+        monkeypatch.setattr(ca, "_get", _fake_get({"roll001.xml": vote, "clerk.house.gov": error}))
+        assert _run(ca.sync_roll_calls(None, db_session, "house", 119, 2)) == (1, "ok")
+
     def test_a_failed_fetch_is_reported(self, db_session, monkeypatch):
         monkeypatch.setattr(ca, "_get", _fake_get({"clerk.house.gov": None}))
         assert _run(ca.sync_roll_calls(None, db_session, "house", 119, 2)) == (0, "failed")
