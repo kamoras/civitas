@@ -41,7 +41,7 @@ _INSTRUCTIONS = (
     "Civitas scores U.S. senators and representatives on how well they represent their "
     "constituents (0-100, higher is better) from official voting, funding and legislative "
     "records, and searches floor speeches, presidential actions, Supreme Court opinions and "
-    "federal rules. Members are identified by the id in their Civitas URL (e.g. jon-ossoff); "
+    "federal rules. Members are identified by the id in their Civitas URL (first-last, e.g. jane-doe); "
     "find one with list_senators or list_representatives, filtered by state. Cite a record's "
     f"siteUrl when you use it. How scores are computed: {SITE_URL}/about/scores."
 )
@@ -89,7 +89,10 @@ async def _call_tool(ctx, params: mcp_types.CallToolRequestParams) -> mcp_types.
     if found is None:
         return _error(f"No tool named {params.name!r}.")
     path, op = found
-    args = dict(params.arguments or {})
+    # A null is "not given", which each optional parameter's input schema
+    # allows (anyOf [..., null]); passed on, httpx sent it as an empty
+    # value and the route refused it (422 on party=, state=, chamber=).
+    args = {k: v for k, v in (params.arguments or {}).items() if v is not None}
     for p in op.get("parameters", []):
         if p["in"] == "path":
             if p["name"] not in args:

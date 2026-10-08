@@ -5,6 +5,7 @@ every preflight before routing, so without api/public.PublicApiPreflight a
 preflight from any other origin to the public API got 400 — the open CORS
 the spec promises held only for simple GETs."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.public import PREFIX
@@ -35,6 +36,21 @@ def test_a_browser_mcp_client_can_post():
     assert resp.status_code == 204
     assert resp.headers["access-control-allow-origin"] == "*"
     assert "POST" in resp.headers["access-control-allow-methods"]
+
+
+@pytest.mark.parametrize("path,status", [
+    ("/nonexistent", 404),            # was 405: a catch-all OPTIONS route matched the path
+    ("/senators/a%2Fb/extra", 404),
+    ("/search?q=x", 422),
+])
+def test_errors_are_readable_from_any_origin(path, status):
+    """An error is an answer too: without the open origin, a page on
+    another origin saw a network error instead of the 404 or 422."""
+    resp = client.get(f"{PREFIX}{path}", headers={"Origin": FOREIGN})
+    assert resp.status_code == status
+    assert resp.headers["access-control-allow-origin"] == "*"
+    assert "X-RateLimit-Remaining" in resp.headers["access-control-expose-headers"]
+    assert "Retry-After" in resp.headers["access-control-expose-headers"]
 
 
 def test_the_rest_of_the_api_keeps_the_site_only_policy():

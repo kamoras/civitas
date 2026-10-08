@@ -48,7 +48,10 @@ export interface DayCounts {
   resolutionsPassed: number;
   failed: number;
   reported: number;
+  /** Nominees counted from the Digest; routine promotion lists, whose size
+   * it doesn't give, are counted apart in confirmedLists. */
   confirmed: number;
+  confirmedLists: number;
   committeeMeetings: number;
 }
 

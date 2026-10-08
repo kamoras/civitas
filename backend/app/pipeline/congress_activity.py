@@ -77,6 +77,14 @@ _GAP_RETRY_DAYS = 14
 _GAP_RETRIES = 10
 
 _DIGEST_CURSOR_KEY = "congress-digest-backfill-cursor"
+# What reading a Digest produces. Raise it when daily_digest.py's parsing
+# or sync_digest's reading of a day changes what is stored: every day the
+# back-fill already settled is then read again, a batch per run
+# (reparse_digests). 2: passages the House indented or the Senate listed
+# after amendment sub-headings, concurrences, suspensions that failed,
+# rules, confirmations one per entry, a chamber's missing section.
+DIGEST_PARSE_VERSION = 2
+_REPARSE_KEY = "congress-digest-reparse"
 _LAST_RUN_KEY = "congress-sync-last-run"
 _CACHE_TIER = "congress"
 
@@ -217,24 +225,52 @@ async def sync_floor_logs(client: httpx.AsyncClient, db: Session, day: date) -> 
 
 # ── Daily Digest ──────────────────────────────────────────────────
 
+# A long Record issue has more granules than one listing page holds
+# (2025-02-20: 1,117), and the Digest's come last. Pages followed per day.
+_LISTING_PAGES = 10
+# The granule class of each chamber's own pages of the Record.
+_CHAMBER_CLASS = {"senate": "SENATE", "house": "HOUSE"}
+
+
+async def _granules(client: httpx.AsyncClient, package: str):
+    """Every granule of a Record issue, following the listing's pages, or
+    _ABSENT / None as `_get` returns them. Read only to the first page, the
+    2025-02-20 issue had no Digest in it, and the back-fill stopped there
+    for good."""
+    granules: list[dict] = []
+    offset = "*"
+    for _ in range(_LISTING_PAGES):
+        url = f"{GOVINFO_API_BASE}/packages/{package}/granules?pageSize=1000&offsetMark={offset}"
+        body = await _get(
+            client, url, label="GovInfo CREC granules",
+            request_url=str(httpx.URL(url).copy_merge_params({"api_key": settings.DATA_GOV_API_KEY})),
+        )
+        if body is None or body is _ABSENT:
+            return body if not granules else None
+        try:
+            page = httpx.Response(200, content=body).json()
+        except ValueError:
+            return None
+        granules += page.get("granules") or []
+        nxt = page.get("nextPage")
+        if not nxt:
+            return granules
+        offset = httpx.URL(nxt).params.get("offsetMark")
+        if not offset:
+            return None
+    return None
+
+
 async def sync_digest(client: httpx.AsyncClient, db: Session, day: date) -> str:
     """One day's Daily Digest -> "ok" | "absent" (no Record that day) |
     "failed". Writes nothing unless every granule it needs was read, so a
     day is never marked final from half a Digest."""
     package = f"CREC-{day.isoformat()}"
-    listing_url = f"{GOVINFO_API_BASE}/packages/{package}/granules?pageSize=1000&offsetMark=*"
-    listing = await _get(
-        client, listing_url, label="GovInfo CREC granules",
-        request_url=str(httpx.URL(listing_url).copy_merge_params({"api_key": settings.DATA_GOV_API_KEY})),
-    )
-    if listing is None:
+    granules = await _granules(client, package)
+    if granules is None:
         return "failed"
-    if listing is _ABSENT:
+    if granules is _ABSENT:
         return "absent"
-    try:
-        granules = httpx.Response(200, content=listing).json().get("granules", [])
-    except ValueError:
-        return "failed"
     if not granules:
         # GovInfo answers a day with no Record issue (a weekend, a recess)
         # with 200 and an empty listing, not a 404: it is absent, and the
@@ -289,8 +325,20 @@ async def sync_digest(client: httpx.AsyncClient, db: Session, day: date) -> str:
         # (2026-09-21: the Senate's section only). Recorded as final, or the
         # day would read "no record yet" and be fetched again every run
         # for a week. A floor log that says the chamber met is left alone.
+        #
+        # Unless the chamber's own pages are in the issue, or it held a roll
+        # call that day: then it met, and GovInfo's split of the Digest into
+        # granules dropped its section. The printed Digest of 2025-02-07 has
+        # the House's (H.R. 26 passed, Roll Nos. 34 and 35), the granules
+        # don't, and the day read "The House did not meet". Over 43 issues
+        # checked, a chamber recorded as not meeting never had pages of its
+        # own; the two that did (2025-01-28, 2025-02-07) had met.
         row = _day_row(db, chamber, iso)
-        if row.in_session:
+        printed = any((g.get("granuleClass") or "").upper() == _CHAMBER_CLASS[chamber] for g in granules)
+        voted = db.query(RollCall.id).filter_by(chamber=chamber, date=iso).first() is not None
+        if printed or voted:
+            row.in_session = True
+        elif row.in_session:
             continue
         row.source = "digest"
         row.source_url = f"https://www.govinfo.gov/app/details/{package}"
@@ -338,6 +386,39 @@ async def sync_digests(client: httpx.AsyncClient, db: Session, today: date) -> d
             break  # the cursor stays before the failed day; the next run retries it
         cursor = day
         api_cache_set(db, _CACHE_TIER, _DIGEST_CURSOR_KEY, {"date": cursor.isoformat()},
+                      normal_ttl_hours=24 * 365 * 10)
+    outcomes.update(await reparse_digests(client, db, min(cursor, recent_start - timedelta(days=1))))
+    return outcomes
+
+
+def _reparse_cursor(db: Session) -> date:
+    """The last day re-read under DIGEST_PARSE_VERSION: before the first
+    day when the stored days were read by an earlier version."""
+    stored = api_cache_get(db, _CACHE_TIER, _REPARSE_KEY, max_age_hours=24 * 365 * 10) or {}
+    if stored.get("version") == DIGEST_PARSE_VERSION and stored.get("date"):
+        return date.fromisoformat(stored["date"])
+    return _BACKFILL_START - timedelta(days=1)
+
+
+async def reparse_digests(client: httpx.AsyncClient, db: Session, through: date) -> dict:
+    """Read again, a batch per run, the days the back-fill settled under an
+    earlier DIGEST_PARSE_VERSION, through `through` (the back-fill cursor;
+    days after it are read by the current version anyway). Only days with a
+    stored row: a day with none had no Record."""
+    start = _reparse_cursor(db)
+    days = [
+        date.fromisoformat(d) for (d,) in db.query(CongressDay.date).filter(
+            CongressDay.date > start.isoformat(), CongressDay.date <= through.isoformat(),
+        ).distinct().order_by(CongressDay.date).limit(_DIGEST_BACKFILL_BATCH)
+    ]
+    outcomes: dict[str, str] = {}
+    for day in days:
+        result = await sync_digest(client, db, day)
+        outcomes[day.isoformat()] = result
+        if result == "failed":
+            return outcomes
+        start = day
+        api_cache_set(db, _CACHE_TIER, _REPARSE_KEY, {"version": DIGEST_PARSE_VERSION, "date": start.isoformat()},
                       normal_ttl_hours=24 * 365 * 10)
     return outcomes
 
