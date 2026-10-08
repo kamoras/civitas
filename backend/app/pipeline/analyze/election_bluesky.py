@@ -410,6 +410,14 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
         text = _generate_post_text(item, race, roster_fact)
         if not text:
             continue
+        # A newsroom's articles can share a description (a standing photo
+        # caption, a series blurb), and the fact is copied from it: two
+        # articles a week apart once published the same sentence about the
+        # same race, word for word, to the feed and Bluesky (2026-10-01 and
+        # 10-08). Said once, it is not an update the second time.
+        if broadcast.text_was_published(db, text):
+            logger.info("Skipping item %s — its post repeats one already published", item.id)
+            continue
 
         # Marked in the same commit that stores the post (_publish commits).
         item.bsky_posted = True

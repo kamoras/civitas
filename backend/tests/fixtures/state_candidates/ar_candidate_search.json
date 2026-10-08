@@ -1,0 +1,231 @@
+{
+ "draw": 1,
+ "recordsTotal": 32,
+ "recordsFiltered": 32,
+ "data": [
+  {
+   "FilerID": "1958",
+   "Descript": "Attorney General",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Attorney General Tim Griffin",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "1882",
+   "Descript": "Auditor of State",
+   "FilingDate": "2025-11-04",
+   "CanBallotName": "Auditor of State Dennis Milligan",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "4375",
+   "Descript": "U.S. Congress District 03",
+   "FilingDate": "2026-03-03",
+   "CanBallotName": "Bobby Wilson",
+   "PartyAffiliation": "Libertarian"
+  },
+  {
+   "FilerID": "3473",
+   "Descript": "U.S. Congress District 02",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Chris Jones",
+   "PartyAffiliation": "Democratic"
+  },
+  {
+   "FilerID": "200",
+   "Descript": "Commissioner of State Lands",
+   "FilingDate": "2026-03-03",
+   "CanBallotName": "Christopher Olson",
+   "PartyAffiliation": "Libertarian"
+  },
+  {
+   "FilerID": "4785",
+   "Descript": "Governor",
+   "FilingDate": "2026-03-03",
+   "CanBallotName": "Colt Shelby",
+   "PartyAffiliation": "Libertarian"
+  },
+  {
+   "FilerID": "344",
+   "Descript": "U.S. Congress District 04",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Congressman Bruce Westerman",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "293",
+   "Descript": "U.S. Congress District 02",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Congressman French Hill",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "343",
+   "Descript": "U.S. Congress District 01",
+   "FilingDate": "2025-11-07",
+   "CanBallotName": "Congressman Rick Crawford",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "337",
+   "Descript": "U.S. Congress District 03",
+   "FilingDate": "2025-11-05",
+   "CanBallotName": "Congressman Steve Womack",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "3509",
+   "Descript": "Governor",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Governor Sarah Huckabee Sanders",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "4677",
+   "Descript": "U.S. Senate",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Hallie Shoffner",
+   "PartyAffiliation": "Democratic"
+  },
+  {
+   "FilerID": "3502",
+   "Descript": "U.S. Congress District 04",
+   "FilingDate": "2025-11-06",
+   "CanBallotName": "James \"Rus\" Russell, III",
+   "PartyAffiliation": "Democratic"
+  },
+  {
+   "FilerID": "4787",
+   "Descript": "U.S. Senate",
+   "FilingDate": "2026-03-03",
+   "CanBallotName": "Jeff Wadlin",
+   "PartyAffiliation": "Libertarian"
+  },
+  {
+   "FilerID": "4716",
+   "Descript": "Secretary of State",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Kelly Grappe",
+   "PartyAffiliation": "Democratic"
+  },
+  {
+   "FilerID": "1895",
+   "Descript": "Lieutenant Governor",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Lieutenant Governor Leslie Rutledge",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "218",
+   "Descript": "Lieutenant Governor",
+   "FilingDate": "2026-02-24",
+   "CanBallotName": "Michael Kalagias",
+   "PartyAffiliation": "Libertarian"
+  },
+  {
+   "FilerID": "4377",
+   "Descript": "Secretary of State",
+   "FilingDate": "2026-03-03",
+   "CanBallotName": "Michael Pakko",
+   "PartyAffiliation": "Libertarian"
+  },
+  {
+   "FilerID": "2045",
+   "Descript": "U.S. Congress District 03",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Robb Ryerse",
+   "PartyAffiliation": "Democratic"
+  },
+  {
+   "FilerID": "4582",
+   "Descript": "Commissioner of State Lands",
+   "FilingDate": "2025-11-04",
+   "CanBallotName": "Secretary of State Cole Jester",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "204",
+   "Descript": "Secretary of State",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Senator Kim Hammer",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "3012",
+   "Descript": "U.S. Senate",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Senator Tom Cotton",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "168",
+   "Descript": "Governor",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "State Senator Fred Love",
+   "PartyAffiliation": "Democratic"
+  },
+  {
+   "FilerID": "1921",
+   "Descript": "State Treasurer",
+   "FilingDate": "2025-11-04",
+   "CanBallotName": "State Treasurer John Thurston",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "3444",
+   "Descript": "U.S. Congress District 01",
+   "FilingDate": "2026-03-03",
+   "CanBallotName": "Steve G. Parsons",
+   "PartyAffiliation": "Libertarian"
+  },
+  {
+   "FilerID": "4756",
+   "Descript": "U.S. Congress District 01",
+   "FilingDate": "2025-11-10",
+   "CanBallotName": "Terri Yarbrough Green",
+   "PartyAffiliation": "Democratic"
+  },
+  {
+   "FilerID": "4341",
+   "Descript": "State Representative District 70",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Alex Holladay",
+   "PartyAffiliation": "Democratic"
+  },
+  {
+   "FilerID": "3599",
+   "Descript": "State Senate District 13",
+   "FilingDate": "2025-11-10",
+   "CanBallotName": "Allison Grigsby Sweatman",
+   "PartyAffiliation": "Democratic"
+  },
+  {
+   "FilerID": "4702",
+   "Descript": "State Representative District 70",
+   "FilingDate": "2025-11-03",
+   "CanBallotName": "Bo Renshaw",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "3512",
+   "Descript": "State Senate District 13",
+   "FilingDate": "2025-11-06",
+   "CanBallotName": "State Representative Brandon Achor",
+   "PartyAffiliation": "Republican"
+  },
+  {
+   "FilerID": "360",
+   "Descript": "State Representative District 45",
+   "FilingDate": "2025-11-06",
+   "CanBallotName": "Debra Hobbs",
+   "PartyAffiliation": "Independent"
+  },
+  {
+   "FilerID": "4653",
+   "Descript": "Circuit Judge, District 02, Division 04, At Large",
+   "FilingDate": "2025-09-17",
+   "CanBallotName": "Andrew Nadzam",
+   "PartyAffiliation": "Non Partisan Judicial"
+  }
+ ]
+}

@@ -134,8 +134,10 @@ export default function ScoresChapter() {
           <Step n={3} title="Top-donor concentration">
             How much of all the outside money came from the top ten donors, ranked against the rest
             of the chamber: the fewer big donors a campaign needs, the higher it scores. The
-            member&apos;s own money and transfers from their own committees are left out. Without a
-            donor list to measure, this part is left out of the score the same way.
+            member&apos;s own money (loans to the campaign and their own contributions, as the FEC
+            reports them; since v6.32, the loans too) and transfers from their own committees are
+            left out. Without a donor list to measure, this part is left out of the score the same
+            way.
           </Step>
           <Step n={4} title="Industry concentration">
             How spread out the money is across industries, measured with the Herfindahl-Hirschman
