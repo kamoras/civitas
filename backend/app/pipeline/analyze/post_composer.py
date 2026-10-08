@@ -410,4 +410,24 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
 
     sentence = f"{actor}{gap or ' '}{predicate}"
     sentence = re.sub(r"\s+", " ", sentence).strip().rstrip(".")
-    return sentence + "."
+    return _close_quotation(sentence, predicate, source)
+
+
+_OPEN_QUOTES = ('"', "\u201c")
+
+
+def _close_quotation(sentence: str, predicate: str, source: str) -> str | None:
+    """`sentence` ended with a period, and with the closing quotation mark
+    the source puts after the span when the span opened a quotation it
+    didn't close; None when the source closes it nowhere there. A span that
+    ends at the quoted sentence's own period leaves its mark behind:
+    published 2026-10, 'it "looked like a public service announcement.'"""
+    marks = sum(sentence.count(q) for q in ('"', "\u201c", "\u201d"))
+    if marks % 2 == 0:
+        return sentence + "."
+    haystack, needle = _flatten(source), _flatten(predicate)
+    for match in re.finditer(re.escape(needle), haystack, re.IGNORECASE):
+        closing = re.match(r"\s*([.,!?]?)\s*([\"\u201d])", haystack[match.end():])
+        if closing:
+            return f"{sentence}{closing.group(1) or '.'}{closing.group(2)}"
+    return None
