@@ -160,6 +160,7 @@ export interface StockTrade {
   parseConfidence: "text" | "ocr";
   /** "annual": from a president's annual report (OGE Form 278e). */
   reportKind: "periodic" | "annual";
+  beforeTermStart?: boolean;
 }
 
 export interface PaginatedStockTrades {

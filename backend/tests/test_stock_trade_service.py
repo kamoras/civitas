@@ -186,3 +186,20 @@ def test_all_three_chambers_serialize_trades_identically(db_session):
         )
     }
     assert len(shapes) == 1, "trade payloads diverged between filer groups"
+
+
+def test_a_presidents_trade_before_the_term_is_flagged(db_session):
+    from app.models import President, PresidentTrade
+    from app.services.president_service import get_president_trades
+
+    db_session.add(President(id="p-1", name="Pres One", party="R", number=47, term_start="2025-01-20", is_current=True))
+    for day, filing in (("2025-01-10", "F1"), ("2025-03-01", "F2")):
+        db_session.add(PresidentTrade(
+            president_id="p-1", ticker="MSFT", asset_name="Microsoft Corp.", owner="self",
+            transaction_type="purchase", transaction_date=day, disclosure_date="2026-05-15",
+            days_to_disclose=None, amount_low=15001.0, amount_high=50000.0, industry="TECH",
+            source_url="https://example.com/278e.pdf", filing_id=filing, report_kind="annual",
+        ))
+    db_session.commit()
+    trades = get_president_trades(db_session, "p-1").trades
+    assert {t.transaction_date: t.before_term_start for t in trades} == {"2025-01-10": True, "2025-03-01": False}

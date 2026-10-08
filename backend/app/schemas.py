@@ -191,6 +191,12 @@ class StockTradeSchema(CamelModel):
     parse_confidence: Literal["text", "ocr"] = "text"
     # "annual": a presidential annual report's transaction (PresidentTrade).
     report_kind: Literal["periodic", "annual"] = "periodic"
+    # A president's trade dated before the term began: an annual report
+    # covers the calendar year, so the first one lists the weeks before the
+    # inauguration. Members are never flagged: a representative's sworn
+    # date is this Congress's oath, which a returning member's earlier
+    # trades also predate.
+    before_term_start: bool = False
 
     @model_validator(mode="after")
     def _compute_derived_flags(self) -> "StockTradeSchema":
