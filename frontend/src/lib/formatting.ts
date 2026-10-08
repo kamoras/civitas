@@ -19,22 +19,26 @@ export function formatCurrency(amount: number): string {
   // precision (a $1.2M figure doesn't show its cents either); showing
   // "$383.2" vs "$200" side by side in the same list read as
   // inconsistent/buggy rather than as real precision (2026-08 review).
+  // Except under a dollar, where rounding would print a real, nonzero
+  // figure as "$0" (a campaign at -$0.04 read "$0"): there the cents are
+  // the figure. FEC amounts are in cents, so a nonzero one is at least $0.01.
+  if (abs > 0 && abs < 1) {
+    return `${sign}$${Math.max(abs, 0.01).toFixed(2)}`;
+  }
   return `${sign}$${Math.round(abs).toLocaleString()}`;
 }
 
-/** FEC debt (disbursements/liabilities exceeding receipts) reports as
- * negative cash on hand — a real, if confusing, campaign-finance fact
- * (Maine's 2026 Senate race, live-verified: -$3,500). Relabeling it as
- * debt reframes the SAME number as what it actually means, rather than
- * printing "-$4K" next to a label that reads as an achievement. Shared
- * by CandidateCard and RaceFullDetail's tail rows so the two don't drift
- * (both used to compute this inline). */
+/** Cash on hand exactly as the FEC reports it, sign included: a negative
+ * figure reads "Cash on hand -$4K". It used to be relabelled "Debt" and
+ * shown unsigned, but the FEC reports a committee's debts as a separate
+ * figure, so that label named a number we weren't showing. Shared by
+ * CandidateCard, RaceMoneyBars and RaceFullDetail's tail rows so they
+ * don't drift. */
 export function cashOnHandDisplay(
   cashOnHand: number | null
 ): { label: string; amount: string } | null {
   if (cashOnHand == null) return null;
-  const debt = cashOnHand < 0;
-  return { label: debt ? "Debt" : "Cash on hand", amount: formatCurrency(Math.abs(cashOnHand)) };
+  return { label: "Cash on hand", amount: formatCurrency(cashOnHand) };
 }
 
 /** Returns the local date as "YYYY-MM-DD" — never UTC, so it matches the user's calendar. */

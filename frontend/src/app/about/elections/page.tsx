@@ -102,6 +102,13 @@ export default async function ElectionsChapter() {
           office. Once a gap closes for a state, it comes off that state&apos;s list: a disclaimer
           that outlives the gap stops describing the page.
         </P>
+        <P>
+          That link goes to the state&apos;s own voter lookup, where you can see your sample ballot
+          or polling place on the state&apos;s site (or its polling-place page, where the lookup
+          itself refuses automated checks). Each night Civitas checks that the link still opens that
+          page; when it doesn&apos;t, or when a state&apos;s site turns away the check, the page
+          links USAGov&apos;s directory of election offices instead.
+        </P>
       </Section>
 
       <Section id="finding-your-district" title="Finding your district without typing an address">
@@ -123,8 +130,8 @@ export default async function ElectionsChapter() {
           election, or those sitting now), a lookup by representative (house.gov&apos;s, or your
           current member&apos;s name) answers for the district your current member was elected in,
           which on the new map can be a different place under the same number. Those pages point to
-          the map, the counties and the state&apos;s own ballot lookup instead. For the same reason
-          a member of Congress running there is marked a &ldquo;sitting member&rdquo; (from election
+          the map, the counties and the state&apos;s own voter lookup instead. For the same reason a
+          member of Congress running there is marked a &ldquo;sitting member&rdquo; (from election
           day on, a &ldquo;member before this election&rdquo;, since the results can stay up until
           the new Congress is sworn in), not the &ldquo;incumbent&rdquo;: no seat on the new map has
           a previous holder.
