@@ -278,9 +278,11 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
 
 
 def get_rep_states_with_counts(db: Session) -> list[dict]:
-    """Return a list of states that have representatives, with counts."""
+    """States with serving representatives, and how many each has (a
+    departed member's row is not counted: see get_states_with_counts)."""
     rows = (
         db.query(Representative.state, func.count(Representative.id).label("cnt"))
+        .filter(Representative.is_current == True)  # noqa: E712
         .group_by(Representative.state)
         .order_by(Representative.state)
         .all()
