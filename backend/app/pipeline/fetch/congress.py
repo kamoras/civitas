@@ -1070,7 +1070,11 @@ def parse_house_vote_xml(
         members.append({
             "bioguideId": legislator.get("name-id", ""),
             "lastName": legislator.get("sort-field", ""),
-            "firstName": legislator.text or "",
+            # The Clerk's XML names a member only by surname (the element's
+            # text is the surname, with the state where two share it:
+            # "Johnson (LA)"). It was stored as the first name, and the vote
+            # page showed "Aderholt Aderholt".
+            "firstName": "",
             "party": legislator.get("party", ""),
             "state": legislator.get("state", ""),
             "voteCast": (vote_el.text or "").strip(),

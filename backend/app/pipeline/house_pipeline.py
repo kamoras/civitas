@@ -588,7 +588,7 @@ async def run_house_pipeline() -> dict:
                                 "congress": sp_congress,
                                 "billType": sp.get("type", ""),
                                 "isLaw": is_law,
-                                "stage": classify_bill_stage_from_actions(bill_actions, is_law),
+                                "stage": classify_bill_stage_from_actions(bill_actions, is_law, sp.get("type")),
                             })
                     # sp_list is already bounded to the current + previous
                     # congress (min_congress filter above), so this is a
