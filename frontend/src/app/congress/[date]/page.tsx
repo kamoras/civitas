@@ -19,6 +19,14 @@ export async function generateMetadata({
       noindex: true,
     });
   const report = await fetchDay(date);
+  // No record for this date: the page is a 404, and says so to crawlers.
+  if (!report)
+    return pageMetadata({
+      title: "Not found",
+      description: "",
+      path: `/congress/${date}`,
+      noindex: true,
+    });
   const title = `Congress on ${longDate(date)}`;
   return pageMetadata({
     title,

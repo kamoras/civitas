@@ -287,6 +287,17 @@ def session_days(db: Session) -> list[str]:
     return sorted(d for d in days if d)
 
 
+def record_span(db: Session) -> tuple[date, date] | None:
+    """(the first day either chamber is on record as meeting, today): the
+    dates a report can say anything about. Outside it a report is only
+    placeholders ("no record of the Senate for this day yet"), and a page
+    for every such date is an unbounded set of pages a crawler can walk
+    (2026-10: one walked dates into 2027 from rotating addresses, each
+    counted as a new visitor). None before anything is recorded."""
+    days = session_days(db)
+    return (date.fromisoformat(days[0]), eastern_today()) if days else None
+
+
 def latest_day(db: Session) -> date | None:
     today = eastern_today().isoformat()
     past = [d for d in session_days(db) if d <= today]
@@ -447,11 +458,20 @@ def month_bounds(year: int, month: int) -> tuple[date, date]:
     return start, nxt - timedelta(days=1)
 
 
+def _on_record(span: tuple[date, date] | None, first: date, last: date) -> bool:
+    """Whether a period overlaps the days on record (record_span)."""
+    return span is not None and last >= span[0] and first <= span[1]
+
+
 def week_report(db: Session, day: date) -> dict:
     start, end = week_bounds(day)
     out = period_report(db, start, end)
-    out["previous"] = (start - timedelta(days=7)).isoformat()
-    out["next"] = (start + timedelta(days=7)).isoformat()
+    # Only a neighbour with a record to show: an always-present link let a
+    # crawler walk weeks without end in both directions.
+    span = record_span(db)
+    before, after = start - timedelta(days=7), start + timedelta(days=7)
+    out["previous"] = before.isoformat() if _on_record(span, before, before + timedelta(days=6)) else None
+    out["next"] = after.isoformat() if _on_record(span, after, after + timedelta(days=6)) else None
     return out
 
 
@@ -468,8 +488,11 @@ def month_report(db: Session, year: int, month: int) -> dict:
                       "sentence": _period_sentence(totals), "totals": totals})
         monday += timedelta(days=7)
     out["weeks"] = weeks
-    out["previous"] = (start - timedelta(days=1)).strftime("%Y-%m")
-    out["next"] = (end + timedelta(days=1)).strftime("%Y-%m")
+    span = record_span(db)
+    before = month_bounds((start - timedelta(days=1)).year, (start - timedelta(days=1)).month)
+    after = month_bounds((end + timedelta(days=1)).year, (end + timedelta(days=1)).month)
+    out["previous"] = before[0].strftime("%Y-%m") if _on_record(span, *before) else None
+    out["next"] = after[0].strftime("%Y-%m") if _on_record(span, *after) else None
     return out
 
 
