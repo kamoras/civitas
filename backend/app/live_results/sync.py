@@ -783,6 +783,10 @@ async def sync_live_results(db: Session, client: httpx.AsyncClient, election_day
         check_stalled_feeds(db, election_day)
     except Exception:
         logger.exception("Stalled-feed check failed")
+    try:
+        check_missing_counts(db, election_day)
+    except Exception:
+        logger.exception("Missing-count check failed")
     from app.live_results.bluesky import post_result_updates
 
     try:
@@ -798,6 +802,44 @@ async def sync_live_results(db: Session, client: httpx.AsyncClient, election_day
 # every 2-15 minutes on election night, so two hours of silence with the
 # count incomplete is a feed that stopped, not a quiet stretch.
 STALL_ALERT_AFTER = timedelta(hours=2)
+
+
+# A covered state with no count stored this long after its last polls
+# closed gets an ops alert. Every vendor here stages its general's feed
+# days before election night (Nebraska's, Washington's and Virginia's were
+# up on 2026-10-08), so an hour past closing with nothing stored is a feed
+# that can't be read, has moved, or reads as something this system drops —
+# not a slow count. check_stalled_feeds only watches states that have rows;
+# without this, a state whose every read came back "unavailable" (a bot
+# wall's 403, a host now redirecting to a landing page) or "ok" with every
+# contest dropped showed no count all night and paged no one.
+NO_COUNT_ALERT_AFTER = timedelta(hours=1)
+
+
+def check_missing_counts(db: Session, election_day: date) -> list[str]:
+    now = utcnow()
+    missing = []
+    for state in sorted(live_results_states()):
+        if now < last_poll_close(state, election_day) + NO_COUNT_ALERT_AFTER:
+            continue
+        stored = (
+            db.query(RaceResult.race_id).join(Race, Race.id == RaceResult.race_id)
+            .filter(Race.state == state, RaceResult.election_date == election_day.isoformat()).first()
+        )
+        if stored is not None:
+            continue
+        missing.append(state)
+        read = db.get(LiveResultRead, (state, election_day.isoformat()))
+        how = f"its last read was '{read.status}' at {read.checked_at.isoformat()}Z" if read and read.checked_at \
+            else "no read of it is recorded"
+        send_ops_alert(
+            f"Live results: no count stored for {state}",
+            f"{state}'s polls closed over {int(NO_COUNT_ALERT_AFTER.total_seconds() // 3600)}h ago and no race "
+            f"has a count; {how}. Check the state's results feed: blocked, moved, not published, or every "
+            "contest dropped (unparsed labels, no matching race).",
+            dedupe_key=f"results-missing-{state}-{election_day.isoformat()}",
+        )
+    return missing
 
 
 def check_stalled_feeds(db: Session, election_day: date) -> list[str]:

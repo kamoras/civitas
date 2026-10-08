@@ -189,9 +189,14 @@ async def test_town_ballot_not_yet_covered_for_uncurated_town(monkeypatch, db_se
 
 class _OneShotClient:
     """Answers the elections index (listing the site's general) and
-    voterinfo; counts requests and keeps voterinfo's params."""
+    voterinfo; counts requests and keeps voterinfo's params. Reads the
+    site's election through the test's session: inside a results window
+    active_election() consults the count, and without one it opened the
+    app's own SessionLocal, which has no tables in a test (the suite
+    failed only when run on election night)."""
 
-    def __init__(self):
+    def __init__(self, db):
+        self.db = db
         self.calls = 0
         self.voterinfo_params = None
 
@@ -202,7 +207,7 @@ class _OneShotClient:
 
         self.calls += 1
         if url.endswith("/elections"):
-            day = active_election().election_day.isoformat()
+            day = active_election(self.db).election_day.isoformat()
             return httpx.Response(200, json={"elections": [
                 {"id": "2000", "electionDay": "2031-12-06", "ocdDivisionId": "ocd-division/country:us"},
                 {"id": "12000", "electionDay": day, "ocdDivisionId": "ocd-division/country:us"},
@@ -219,7 +224,7 @@ async def test_a_lookup_the_cache_cant_answer_is_charged_to_the_public_budget(mo
     our API key every time the route was hit."""
     monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
     charged: list[int] = []
-    client = _OneShotClient()
+    client = _OneShotClient(db_session)
 
     async def spend(n):  # async, as rate_limit.spend_upstream is
         charged.append(n)
@@ -237,7 +242,7 @@ async def test_a_lookup_the_cache_cant_answer_is_charged_to_the_public_budget(mo
 @pytest.mark.asyncio
 async def test_a_refused_charge_makes_no_request(monkeypatch, db_session):
     monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
-    client = _OneShotClient()
+    client = _OneShotClient(db_session)
 
     async def refuse(_calls):
         raise HTTPException(status_code=503, detail="budget spent")

@@ -505,6 +505,19 @@ def general_contests(summary: dict) -> list[ContestCount]:
     return out
 
 
+def _flag_set(value) -> bool:
+    """A Clarity settings flag. The file mixes JSON booleans with strings:
+    `istestmode` is false, but `showtestdatawatermark` is the STRING "0" on
+    every real 2026 election (CO, IA, SC, WV primaries, read 2026-10-08), and
+    a plain truthiness test read that "0" as a test watermark and refused
+    every one of those states' counts. Off only when the value says off;
+    anything else (a value this does not know) counts as set, so an
+    unfamiliar flag errs toward refusing."""
+    if value is None or value is False or value == 0:
+        return False
+    return str(value).strip().lower() not in ("", "0", "false", "no", "off")
+
+
 async def fetch_general_results(
     client: httpx.AsyncClient, election_day, state: str, source: dict,
 ) -> StateCount | None:
@@ -540,7 +553,7 @@ async def fetch_general_results(
     if details is None:
         return None
     key = (base, state, day)
-    if details.get("istestmode") or details.get("showtestdatawatermark"):
+    if _flag_set(details.get("istestmode")) or _flag_set(details.get("showtestdatawatermark")):
         _general_eids.pop(key, None)
         raise UntrustedCount(f"{state} Clarity election {eid} is in test mode")
     if _clarity_date(str(details.get("electiondate") or "")) != day:

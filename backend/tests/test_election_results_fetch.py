@@ -277,12 +277,12 @@ class TestTally:
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         got = await tally.fetch_general_results(None, date(2024, 11, 5), "AR", {
             "base_url": "https://enr-results-api.totalresults.com", "cid": "arkansas",
-            "results_page": "https://results.sos.arkansas.gov/",
+            "results_page": "https://arkansas.tally-enr.com/",
         })
         assert any("electionID=1846" in u for u in urls)
         assert urls[-1].endswith("&contestType=FED")
         assert got.official is True
-        assert got.page_url == "https://results.sos.arkansas.gov/"
+        assert got.page_url == "https://arkansas.tally-enr.com/"
         assert len(got.contests) == 4
 
 

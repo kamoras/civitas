@@ -418,6 +418,9 @@
         "require_official": true,
         "settle_days": 30
       },
+      "house_label_regex": [
+        "Congressional District (?P<district>\\d+) - U\\.S\\. Representative"
+      ],
       "format": {
         "format": "xlsx",
         "contest_column": "Office Name",
@@ -946,7 +949,7 @@
       "runoff_threshold_pct": 50.0,
       "base_url": "https://enr-results-api.totalresults.com",
       "cid": "arkansas",
-      "results_page": "https://results.sos.arkansas.gov/",
+      "results_page": "https://arkansas.tally-enr.com/",
       "primary_name_regex": "preferential primary",
       "runoff_name_regex": "primary runoff",
       "contest_type_filter": "Federal",
