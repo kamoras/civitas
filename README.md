@@ -1192,9 +1192,21 @@ by the API, MCP tool calls and the site's own Explore search. Headers:
 `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
 
 Use is counted per day, endpoint, channel (HTTP or MCP) and status, with
-nothing about the caller (`ApiRequestCount`), and shown in the admin
-dashboard's API tab (`GET /api/admin/api-usage`) — apart from the visitor
-figures, since a program calling the API is not a visitor.
+nothing about the caller (`ApiRequestCount`); a request refused as invalid
+(422) also counts which parameter broke which rule (`ApiRejectionCount`),
+never the value sent. The admin dashboard's API tab (`GET
+/api/admin/api-usage`) shows rejected requests (the caller's mistake: an
+invalid parameter, an unknown id), server errors (5xx) and rate-limit
+refusals separately, and why requests were rejected — apart from the
+visitor figures, since a program calling the API is not a visitor.
+
+A parameter an endpoint doesn't take is refused (422) rather than ignored,
+since an ignored misspelt filter returned unfiltered results that looked
+like an answer; a choice is read in any case and with hyphens or underscores
+for its spaces (`Senate`, `senate-floor-speech`), a party may be named
+(`Republican`) and a state written out (`Georgia`). Search's
+`politician_id` takes a Civitas id or a bioguide id, and one that is neither
+is a 404 rather than an empty result.
 
 Score weights, industry codes and policy areas are also at `GET /api/config`,
 the lighter endpoint the frontend itself uses.

@@ -2173,6 +2173,22 @@ class PageLoadTiming(VisitsBase):
     count: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class ApiRejectionCount(VisitsBase):
+    """Why public API requests were refused as invalid (422), as daily
+    counters: the parameter and the rule it broke ("doc_type",
+    "literal_error"), never the value sent and nothing about the caller.
+    Without it a run of 422s says only that callers got something wrong,
+    not what to fix in the API or its documentation."""
+    __tablename__ = "api_rejection_counts"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD, UTC
+    endpoint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    channel: Mapped[str] = mapped_column(String(8), primary_key=True)  # http | mcp
+    parameter: Mapped[str] = mapped_column(String(64), primary_key=True)
+    reason: Mapped[str] = mapped_column(String(64), primary_key=True)  # the validation error type
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class ApiRequestCount(VisitsBase):
     """Public API and MCP use, as daily counters — never per caller.
 

@@ -1497,7 +1497,19 @@ export interface ApiUsageCounts {
   http: number;
   mcp: number;
   rateLimited: number;
-  errors: number;
+  /** Refused as the caller's mistake: any 4xx but 429 (an invalid
+   *  parameter, an id that doesn't exist). */
+  rejected: number;
+  /** The API's own failures (5xx). */
+  serverErrors: number;
+}
+
+/** Which parameter broke which rule on the invalid (422) requests. */
+export interface ApiRejection {
+  endpoint: string;
+  parameter: string;
+  reason: string;
+  count: number;
 }
 
 export interface ApiUsageDay extends ApiUsageCounts {
@@ -1510,6 +1522,7 @@ export interface ApiUsage {
   days: ApiUsageDay[];
   totals: ApiUsageCounts & { mcpConnections: number };
   byEndpoint: (ApiUsageCounts & { endpoint: string })[];
+  rejections: ApiRejection[];
 }
 
 export async function fetchAdminApiUsage(token: string, days: number = 30): Promise<ApiUsage> {
