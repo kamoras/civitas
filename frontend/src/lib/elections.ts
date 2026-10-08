@@ -4,6 +4,7 @@
  */
 
 import type { BallotCandidate, CandidateSummary } from "@/types/election";
+import { formatCurrency } from "@/lib/formatting";
 
 /** Formats a signed PVI int as "R+3"/"D+3"/"EVEN" — display-only, not a computation. */
 export function formatPvi(pvi: number | null): string {
@@ -136,6 +137,19 @@ export function matchesDistrictQuery(
       (c) => c.name.toLowerCase().includes(q) || (c.ballotName ?? "").toLowerCase().includes(q)
     )
   );
+}
+
+/** What a candidate's money column says: the FEC's contributions for this
+ * election, or in words why there is no figure. Never a fabricated $0 —
+ * someone the state lists who never filed, someone not synced yet, and
+ * someone with no FEC report for this election each say so. Read from the
+ * figure, not `hasRaisedFunds`: the FEC's roster flag can say no money
+ * while its totals report some (12 such candidates on 2026-10-08). */
+export function raisedLabel(c: BallotCandidate): string {
+  if (c.fecFiled === false) return "no FEC filing";
+  if (c.lastFinancialsSync == null) return "awaiting FEC sync";
+  if (!c.contributions) return "no funds reported";
+  return formatCurrency(c.contributions);
 }
 
 /** A candidate's name as the state prints it on its ballot, else the

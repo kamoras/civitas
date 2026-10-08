@@ -214,6 +214,7 @@ erDiagram
         string incumbent_challenge "I | C | O"
         float contributions "NULL = not yet synced, never 0"
         float cash_on_hand "NULL = not yet synced, never 0"
+        string financials_through "FEC report end the figures cover"
         datetime last_financials_sync "watermark for the rotating refresh"
     }
     RACE_COVERAGE_ITEMS {

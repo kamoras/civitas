@@ -62,6 +62,9 @@ describe("BallotBasisNotice", () => {
     render(<BallotBasisNotice basis={basis({ basis: "nominees" })} />);
     expect(screen.getByTestId("ballot-nominees")).toBeInTheDocument();
     expect(screen.getByText(/may be incomplete/i)).toBeInTheDocument();
+    // Not only minor parties: a convention's major-party nominee never runs
+    // in a primary either (three of Utah's four 2026 House races).
+    expect(screen.getByText(/party convention chose/i)).toBeInTheDocument();
   });
 
   it("warns that a primary ballot is not a general-election ballot", () => {

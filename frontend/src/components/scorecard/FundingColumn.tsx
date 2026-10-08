@@ -25,6 +25,7 @@ const SEGMENT_COLOR: Record<string, string> = {
   LARGE_INDIVIDUAL: "#CDC7BC",
   OTHER: "#8A8378",
   UNCLASSIFIED: "#5A554D",
+  CANDIDATE_FUNDS: "#B08D57",
 };
 const FALLBACK_COLOR = "#8A8378";
 

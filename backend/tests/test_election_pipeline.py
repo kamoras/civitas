@@ -481,6 +481,95 @@ class TestPrioritizeForFinancialRefresh:
         ordered = election_pipeline._prioritize_for_financial_refresh(db_session, limit=2)
         assert len(ordered) == 2
 
+    def test_overdue_candidate_goes_ahead_of_priority(self, db_session):
+        """Incumbents and fundraisers re-enter the pool every cache TTL and
+        used to fill every batch, so a candidate the FEC flags as not
+        having raised money went unrefreshed for two months."""
+        ttl = timedelta(hours=settings.PIPELINE_CACHE_TTL_HOURS + 1)
+        self._add_candidate(
+            db_session, "incumbent", "2026-SEN-GA", incumbent_challenge="I",
+            last_financials_sync=utcnow() - ttl,
+        )
+        self._add_candidate(
+            db_session, "starved", "2026-SEN-TX", has_raised_funds=False,
+            last_financials_sync=utcnow() - timedelta(days=election_pipeline.FINANCIALS_OVERDUE_DAYS + 1),
+        )
+        db_session.commit()
+
+        ordered = election_pipeline._prioritize_for_financial_refresh(db_session, limit=1)
+        assert [c.id for c in ordered] == ["starved"]
+
+
+# Trimmed from the FEC's /candidate/{id}/totals/ rows as cached live on
+# 2026-10-08, sorted the way fetch_candidate_financials returns them.
+_ELECTION_FULL_2026 = {
+    "candidate_election_year": 2026, "cycle": None, "election_full": True,
+    "coverage_end_date": "2026-06-30T00:00:00", "contributions": 87603239.28,
+    "disbursements": 55398788.04, "last_cash_on_hand_end_period": 42587451.0,
+    "individual_itemized_contributions": 50000000.0,
+}
+_TWO_YEAR_2026 = {
+    "candidate_election_year": 2026, "cycle": 2026, "election_full": False,
+    "coverage_end_date": "2026-06-30T00:00:00", "contributions": 68696041.05,
+    "disbursements": 40000000.0, "last_cash_on_hand_end_period": 42587451.0,
+}
+_PRIOR_ELECTION = {
+    "candidate_election_year": 2024, "cycle": None, "election_full": True,
+    "coverage_end_date": "2024-12-31T00:00:00", "contributions": 1604699.27,
+    "disbursements": 1500000.0, "last_cash_on_hand_end_period": 597195.09,
+}
+
+
+class TestRaceElectionTotals:
+    def test_whole_election_period_preferred(self):
+        rows = [_TWO_YEAR_2026, _ELECTION_FULL_2026, _PRIOR_ELECTION]
+        assert election_pipeline.race_election_totals(rows, 2026) is _ELECTION_FULL_2026
+
+    def test_any_row_for_the_election_when_no_full_one(self):
+        assert election_pipeline.race_election_totals([_TWO_YEAR_2026], 2026) is _TWO_YEAR_2026
+
+    def test_an_earlier_elections_money_is_not_this_races(self):
+        assert election_pipeline.race_election_totals([_PRIOR_ELECTION], 2026) is None
+        assert election_pipeline.race_election_totals([], 2026) is None
+
+
+class TestRefreshFinancials:
+    def _run(self, db, totals):
+        async def fake_fetch(client, db_, cand_id):
+            return totals
+
+        with patch.object(election_pipeline, "fetch_candidate_financials", fake_fetch):
+            return asyncio.run(election_pipeline._refresh_financials(db, None, 10))
+
+    def _candidate(self, db, **fields):
+        db.add(Race(id="2026-HOUSE-GA-10", cycle_year=2026, office="H", state="GA", district=10))
+        db.add(Candidate(id="H4GA10071", race_id="2026-HOUSE-GA-10", name="A", party="REP", **fields))
+        db.commit()
+        return db.get(Candidate, "H4GA10071")
+
+    def test_stores_this_elections_figures_and_their_end_date(self, db_session):
+        cand = self._candidate(db_session)
+        assert self._run(db_session, [_ELECTION_FULL_2026, _PRIOR_ELECTION]) == 1
+        assert cand.contributions == 87603239.28
+        assert cand.cash_on_hand == 42587451.0
+        assert cand.individual_itemized_contributions == 50000000.0
+        assert cand.financials_through == "2026-06-30"
+        assert cand.last_financials_sync is not None
+
+    def test_only_an_earlier_election_clears_what_was_stored(self, db_session):
+        """Null, not the 2024 race's money and not the last sync's figures:
+        no report for this election yet is not $0 and not someone else's
+        campaign."""
+        cand = self._candidate(
+            db_session, contributions=1604699.27, cash_on_hand=597195.09,
+            disbursements=1.0, individual_itemized_contributions=1.0,
+            last_financials_sync=utcnow() - timedelta(days=30),
+        )
+        self._run(db_session, [_PRIOR_ELECTION])
+        assert (cand.contributions, cand.cash_on_hand, cand.disbursements,
+                cand.individual_itemized_contributions, cand.financials_through) == (None,) * 5
+        assert cand.last_financials_sync > utcnow() - timedelta(minutes=1)
+
 
 class TestSnapshotCandidates:
     def test_snapshots_only_candidates_with_cash_on_hand(self, db_session):
