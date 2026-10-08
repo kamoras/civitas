@@ -1296,7 +1296,10 @@ by the API, MCP tool calls and the site's own Explore search. Headers:
 CORS is open on every answer under `/api/public/v1`, errors included, and
 exposes the rate-limit headers and `Retry-After` to a page's script
 (`public.PublicApiPreflight`, which also answers the preflights). An MCP tool
-argument sent as `null` counts as not given, as its input schema allows.
+argument sent as `null` counts as not given, as its input schema allows. An argument the
+tool's input schema doesn't name is refused as a tool error naming it and the
+accepted ones (`additionalProperties: false`): the route alone would drop it,
+and a misnamed filter (`politician` for `politician_id`) came back unfiltered.
 
 Use is counted per day, endpoint, channel (HTTP or MCP) and status, with
 nothing about the caller (`ApiRequestCount`); a request refused as invalid
