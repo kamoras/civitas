@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.database import get_db
+from app.member_ids import resolve_member_id
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
 from app.ordinals import ordinal
@@ -253,8 +254,8 @@ def list_politicians(
 # ---------------------------------------------------------------------------
 
 def _detect_branch(pid: str, db: Session) -> tuple[str, object] | None:
-    # Both chambers' ids are the member's "last-first" name, so one id can be
-    # a departed row in one chamber and a serving member in the other (a
+    # One person has one id in both chambers (app/member_ids.py), so one id
+    # can be a departed row in one chamber and a serving member in the other (a
     # representative who went on to the Senate, or back): the serving one is
     # who the page is about.
     senator = db.query(Senator).filter(Senator.id == pid).first()
@@ -449,7 +450,12 @@ def _get_gov_record(politician_id: str, db: Session) -> dict:
 
 @router.get("/politicians/{politician_id}")
 def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONResponse:
-    """Return full profile for a single politician."""
+    """Return full profile for a single politician.
+
+    A renamed member's old id (app/member_ids.py) is answered with the
+    member, under their current id: the response's `id` is the one to
+    link to, and the page redirects an old URL to it."""
+    politician_id = resolve_member_id(db, politician_id)
     result = _detect_branch(politician_id, db)
     if result is None:
         raise HTTPException(status_code=404, detail="Politician not found")

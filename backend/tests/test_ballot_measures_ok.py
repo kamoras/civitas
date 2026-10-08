@@ -8,6 +8,7 @@ fetched live 2026-09-28.
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -77,15 +78,22 @@ def _without_rows(page_html, keep):
     return lxml_html.tostring(tree, encoding="unicode")
 
 
-def _serve_pages(monkeypatch, first, following):
+def _serve_pages(monkeypatch, first, following, titles=None):
+    """The register's pages, and the Board's ballot-title copies: `titles`
+    maps an SQ number to its PDF's bytes (absent: 404)."""
+
     posts = []
 
     async def get_text(*a, **kw):
         return first
 
     async def post(client, limiter, method, url, **kw):
-        from types import SimpleNamespace
-
+        if method == "GET":
+            number = url.rsplit("/sq", 1)[1].split("-", 1)[0]
+            body = (titles or {}).get(number)
+            if body is False:  # an outage
+                return None
+            return SimpleNamespace(status_code=404 if body is None else 200, content=body)
         posts.append(kw["data"]["__EVENTARGUMENT"])
         return SimpleNamespace(text=following[len(posts) - 1]) if len(posts) <= len(following) else None
 
@@ -177,3 +185,53 @@ def test_a_question_no_longer_dated_for_the_ballot_is_reported_removed(monkeypat
     active = [m["number"] for m, _ in results if not m.get("removed")]
     markers = {m["number"] for m, _ in results if m.get("removed")}
     assert len(active) == 1 and ({"845", "847"} - set(active)) <= markers
+
+
+# ── the ballot title, from the State Election Board's accessible copy ──
+# fixtures_ok_sq845_ballot_title.txt is REAL: pdf_text() of
+# .../state-questions/sq2026/sq845-final-ballot-title-accessible.pdf,
+# fetched 2026-10-08. SQ 847 has no accessible copy (404).
+
+SQ845_TITLE = (Path(__file__).parent / "fixtures_ok_sq845_ballot_title.txt").read_text()
+
+
+def test_the_ballot_title_is_quoted_from_the_accessible_copy():
+    text = ok.parse_ballot_title(SQ845_TITLE, "845", ["379"])
+    assert text.startswith(
+        "This measure amends article 7-B, section 3 of the Oklahoma Constitution, changing the Judicial "
+        "Nominating Commission’s structure."
+    )
+    # The August correction's wording, and a hyphen wrapped at a line end kept whole.
+    assert "so that at-large commissioners would serve a two-year term" in text
+    assert "select three at-large members." in text
+    assert text.endswith("This measure will not have a fiscal impact.")
+    assert "Shall the proposal" not in text and "FILED" not in text
+
+
+def test_a_title_that_is_not_this_questions_is_refused():
+    assert ok.parse_ballot_title(SQ845_TITLE, "847", ["381"]) is None
+    assert ok.parse_ballot_title(SQ845_TITLE, "845", ["378"]) is None
+    assert ok.parse_ballot_title(SQ845_TITLE.replace("Shall the proposal be approved?", ""), "845", ["379"]) is None
+    assert ok.parse_ballot_title(SQ845_TITLE.replace("Against the proposal – NO", ""), "845", ["379"]) is None
+
+
+def test_fetch_quotes_the_title_where_the_board_posts_one(monkeypatch):
+    monkeypatch.setattr(ok, "pdf_text", lambda raw: raw.decode())
+    _serve_pages(monkeypatch, PAGES["page_1"], [PAGES["page_2"], PAGES["page_3"]], {"845": SQ845_TITLE.encode()})
+    measures = {m["number"]: (m, url) for m, url in asyncio.run(ok.fetch_measures(None, 2026)) if not m.get("removed")}
+    sq845, url845 = measures["845"]
+    assert sq845["official_title"] == ok.parse_ballot_title(SQ845_TITLE, "845", ["379"])
+    assert url845 == ok.BALLOT_TITLE_URL.format(year=2026, number="845")
+    assert sq845["official_summary"] is None and sq845["yes_means"] is None and sq845["title_authority"] is None
+    # No accessible copy (404): the register's listing, its filed PDF as source, no text.
+    sq847, url847 = measures["847"]
+    assert sq847["official_title"] is None and sq847["official_summary"] is None
+    assert url847 == "https://www.sos.ok.gov/documents/questions/847.pdf"
+
+
+def test_a_ballot_title_outage_or_wrong_document_fails_the_state(monkeypatch):
+    monkeypatch.setattr(ok, "pdf_text", lambda raw: raw.decode())
+    _serve_pages(monkeypatch, PAGES["page_1"], [PAGES["page_2"], PAGES["page_3"]], {"845": False})
+    assert asyncio.run(ok.fetch_measures(None, 2026)) is None
+    _serve_pages(monkeypatch, PAGES["page_1"], [PAGES["page_2"], PAGES["page_3"]], {"847": SQ845_TITLE.encode()})
+    assert asyncio.run(ok.fetch_measures(None, 2026)) is None

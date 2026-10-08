@@ -90,8 +90,11 @@ export default function DataChapter() {
               presidential report is printed at half size), the trade is listed with the date marked
               not legible, for members&apos; paper filings as for the president&apos;s. A
               trade&apos;s industry is the SEC&apos;s own industry code for the company behind it,
-              found by ticker or exact company name; bonds, funds and anything else the SEC
-              doesn&apos;t cover carry none rather than a guess.
+              found by ticker or by company name, exactly or in a brokerage statement&apos;s short
+              form when that fits one company only (&ldquo;HONEYWELL INTL INC&rdquo;); bonds, funds
+              and anything else the SEC doesn&apos;t cover carry none rather than a guess. A trade
+              two of a filer&apos;s reports both list counts once, at the earlier report&apos;s
+              date.
             </Fact>
             <Fact label="Lobbying Disclosure Act registry (lda.gov)">
               Registered lobbying spending by organizations that appear among donors, and the bills
@@ -294,7 +297,10 @@ export default function DataChapter() {
       <Section id="explore" title="How Explore search ranks results">
         <P>
           Explore searches floor speeches, presidential actions, Federal Register rules and Supreme
-          Court opinions. Four rankings are combined
+          Court opinions. A floor speech is one member&apos;s own words, whole, under the heading
+          the Congressional Record printed over them, or as remarks on the debate they joined; floor
+          business such as quorum calls and requests to schedule a vote is left out. Four rankings
+          are combined
           <Cite id="cormack2009" />:
         </P>
         <List>
