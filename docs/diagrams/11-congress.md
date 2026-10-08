@@ -117,7 +117,10 @@ passed bills' numbers (never titles), linking to `/congress/{date}`. Once the
 week (Monday to Sunday) is over and every day either chamber met is final, it
 also posts that week: the week report's sentence and the numbers of the bills
 that became law, linking to `/congress/week/{monday}`. Only the week just
-ended is eligible.
+ended is eligible. Either post waits until the page it links to shows the
+report it quotes (`page_shows`: the page's description is the report's
+sentence): the link card and the feed summary are read from that page, and
+right after the Digest lands its cached render is still the earlier record.
 
 **Bill ids** are the site's (`S.3257`, `HCONRES.89`) whichever spelling the
 source used: the Record's "H. Con. Res. 89", the House roll call's
