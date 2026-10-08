@@ -80,13 +80,15 @@ export default function NewsChapter() {
             smaller error than one built from unrelated stories.
           </P>
           <P>
-            How alike two headlines must be, when a new issue is the same story as an existing one,
-            and when an issue belongs to a long-running topic are learned from the pipeline&apos;s
-            own record: each run records pairs it compared with an independent verdict (do they name
-            the same people, places and numbers), and once a day each cut-off moves to where those
-            verdicts say it belongs, once there are enough to trust. Multi-story briefings
-            (&ldquo;Up First&rdquo;, &ldquo;Morning news brief&rdquo;) are dropped at the door,
-            because once several stories share one article they can&apos;t be separated later.
+            How alike two headlines must be to group them is learned from the pipeline&apos;s own
+            record: each run records pairs it compared with an independent verdict (do they name the
+            same people, places and numbers), and once a day the cut-off moves to where those
+            verdicts say it belongs, once there are enough to trust. A new issue is treated as an
+            existing one only when they share a source article, say the same thing, or carry
+            near-identical headlines: naming the same people turned out to be wrong three times in
+            four, and merging two stories hides one. Multi-story briefings (&ldquo;Up First&rdquo;,
+            &ldquo;Morning news brief&rdquo;) are dropped at the door, because once several stories
+            share one article they can&apos;t be separated later.
           </P>
           <P>
             Reddit was a trending source until September 2026, when it began requiring a login this
@@ -160,8 +162,9 @@ export default function NewsChapter() {
           </Item>
           <Item label="Ongoing">
             When a story persists across several days, it becomes a national monitor with its own
-            sourced timeline. Separate stories about the same underlying event are merged; a monitor
-            goes quiet (&ldquo;watching&rdquo;) when coverage fades and wakes when it returns.
+            sourced timeline. Two monitors are merged only when their titles are near-identical,
+            since a merge can&apos;t be undone; a monitor goes quiet (&ldquo;watching&rdquo;) when
+            coverage fades and wakes when it returns.
           </Item>
           <Item label="Archive">
             Each day&apos;s top issue is kept permanently, building a month-by-month record with a
