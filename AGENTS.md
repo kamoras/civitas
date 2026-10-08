@@ -537,8 +537,11 @@ their party" is defined by the parties' real split: a bill whose content
 reads partisan but passed with both party majorities must not count as a
 party-line vote. (Content used to win over a bipartisan split; a 2026-06
 audit found that pinned every House member's score near 87–89.) Content
-alignment still drives bills with no roll call and partisan depth (the lean and
-its per-area breakdown), housekeeping motions aside.
+alignment still drives bills with no roll call. Partisan depth (the lean and
+its per-area breakdown) credits each policy area a bill touches with the bill's
+own lean, from the roll call where there is one, housekeeping motions aside:
+reading each area's content label instead counted a Yea on a bill both parties
+passed as a partisan vote.
 
 One procedural exception, read from the chamber's own result field and
 never from vote counts: a **majority leader's** Nay on a motion the chamber
@@ -934,8 +937,13 @@ below. Block tags become `"; "` so item boundaries survive, and the
 Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
 outlet's recurring briefing ("Up First", "Morning news brief", "The week in
 politics") is a single RSS item covering three to five unrelated stories, and
-every stage downstream treats it as one story. Two mechanical signals:
+every stage downstream treats it as one story. Three mechanical signals:
 
+- **The outlet's newsletter section.** An item whose URL sits under a
+  `newsletter`/`newsletters` path segment is the outlet's own newsletter, a
+  multi-section product whose feed description runs its section headings
+  together (one became an issue "fact" of four headings in a row). Only the
+  path segment counts, not a slug that mentions a newsletter.
 - **A recurring-product title.** Matching is split by where the marker may
   appear, because most of these phrases are ordinary English somewhere else
   in a headline: product names count only title-initial ("Pentagon holds

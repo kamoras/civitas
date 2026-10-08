@@ -188,15 +188,26 @@ async def test_town_ballot_not_yet_covered_for_uncurated_town(monkeypatch, db_se
 
 
 class _OneShotClient:
-    """Answers one voterinfo request; counts how many were made."""
+    """Answers the elections index (listing the site's general) and
+    voterinfo; counts requests and keeps voterinfo's params."""
 
     def __init__(self):
         self.calls = 0
+        self.voterinfo_params = None
 
     async def get(self, url, params=None, timeout=None):
         import httpx
 
+        from app.election_phase import active_election
+
         self.calls += 1
+        if url.endswith("/elections"):
+            day = active_election().election_day.isoformat()
+            return httpx.Response(200, json={"elections": [
+                {"id": "2000", "electionDay": "2031-12-06", "ocdDivisionId": "ocd-division/country:us"},
+                {"id": "12000", "electionDay": day, "ocdDivisionId": "ocd-division/country:us"},
+            ]}, request=httpx.Request("GET", url))
+        self.voterinfo_params = params
         return httpx.Response(200, json={"contests": []}, request=httpx.Request("GET", url))
 
 
@@ -216,8 +227,11 @@ async def test_a_lookup_the_cache_cant_answer_is_charged_to_the_public_budget(mo
     await civic_info.fetch_town_ballot(client, db_session, "MA", "Cambridge", spend=spend)
     await civic_info.fetch_town_ballot(client, db_session, "MA", "Cambridge", spend=spend)
 
-    assert client.calls == 1
-    assert charged == [1]
+    # The elections index and voterinfo, once each.
+    assert client.calls == 2
+    assert charged == [1, 1]
+    # Without the id voterinfo answers "Election unknown" (2026-10-08).
+    assert client.voterinfo_params["electionId"] == "12000"
 
 
 @pytest.mark.asyncio

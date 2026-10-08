@@ -205,6 +205,9 @@ def _chamber_sentence(chamber: str, day: dict) -> str:
     if parts:
         return f"The {name} {_list_phrase(parts)}."
     minutes = day["minutesInSession"]
+    if "pro forma session" in (day.get("adjournmentText") or "").lower():
+        length = f" for {_plural(minutes, 'minute')}" if minutes is not None else ""
+        return f"The {name} met in pro forma session{length}."
     if minutes is not None and minutes < 60:
         return f"The {name} met for {_plural(minutes, 'minute')} and took no record votes."
     return f"The {name} met and took no record votes."

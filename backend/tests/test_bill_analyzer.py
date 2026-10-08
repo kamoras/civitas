@@ -491,20 +491,20 @@ class TestAlignmentsFromVotes:
 
         votes = [
             {
-                "vote": "Yea",
+                "vote": "Yea", "partyLeaning": "D",
                 "policyAreas": [
                     {"area": "HEALTHCARE", "confidence": 0.9, "party": "D"},
                     {"area": "TAXES", "confidence": 0.7, "party": "R"},
                 ],
             },
             {
-                "vote": "Yea",
+                "vote": "Yea", "partyLeaning": "D",
                 "policyAreas": [
                     {"area": "HEALTHCARE", "confidence": 0.8, "party": "D"},
                 ],
             },
             {
-                "vote": "Nay",
+                "vote": "Nay", "partyLeaning": "R",
                 "policyAreas": [
                     {"area": "HEALTHCARE", "confidence": 0.85, "party": "R"},
                 ],
@@ -554,7 +554,7 @@ class TestAlignmentsFromVotes:
         votes = []
         for _ in range(5):
             votes.append({
-                "vote": "Yea",
+                "vote": "Yea", "partyLeaning": "D",
                 "policyAreas": [
                     {"area": "IMMIGRATION", "confidence": 0.9, "party": "D"},
                 ],
@@ -564,6 +564,20 @@ class TestAlignmentsFromVotes:
         imm = [a for a in result if a["area"] == "IMMIGRATION"]
         assert len(imm) == 1
         assert imm[0]["alignment"] == "D"
+
+    def test_the_vote_decides_the_lean_not_an_area_s_content(self):
+        """A bill both parties passed is no partisan signal, whatever an
+        area's content reads (AGENTS.md §4); a bill one party carried
+        counts for that party in every area it touches."""
+        from app.pipeline.analyze.party_platform import _alignments_from_votes
+
+        areas = [{"area": "TAXES", "confidence": 0.9, "party": "D"}]
+        both = [{"vote": "Yea", "partyLeaning": "bipartisan", "policyAreas": areas}] * 4
+        assert _alignments_from_votes({"keyVotes": both}) == []
+
+        carried = [{"vote": "Yea", "partyLeaning": "R", "policyAreas": areas}] * 4
+        (taxes,) = _alignments_from_votes({"keyVotes": carried})
+        assert taxes["alignment"] == "R"
 
     def test_empty_record_returns_empty(self):
         from app.pipeline.analyze.party_platform import _alignments_from_votes

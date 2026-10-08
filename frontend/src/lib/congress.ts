@@ -31,6 +31,9 @@ export function longDate(iso: string): string {
 
 /** "Thu, Sep 24" */
 export function shortDate(iso: string): string {
+  // A vote stored before dates were ISO ("October 14, 2025, 05:34 PM") is
+  // shown as stored until the next run rewrites it.
+  if (!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso;
   const { m, d, weekday } = parts(iso);
   return `${WEEKDAYS[weekday].slice(0, 3)}, ${MONTHS[m - 1].slice(0, 3)} ${d}`;
 }

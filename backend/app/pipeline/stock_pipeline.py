@@ -369,6 +369,10 @@ class _StoredSource:
     model: type
     owner_key: str
     fetch: Callable[[str, str, str | None], Awaitable[list[TradeRow] | None]]
+    # Rows `fetch` can read: the president's annual-report (278e) rows are
+    # president_fd's, and the 278-T parser `fetch` runs would replace all
+    # 21,285 of them with whatever it made of that report.
+    readable: object = None
 
 
 # A filing that didn't read is not tried again for this long, so a few dead
@@ -407,7 +411,7 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
         )),
         _StoredSource("President", PresidentTrade, "president_id", lambda fid, url, _filed: _read_president_filing(
             db, {"doc_id": fid, "pdf_url": url},
-        )),
+        ), readable=PresidentTrade.report_kind != "annual"),
     ]
     deadline = time.monotonic() + PTR_REREAD_BUDGET.total_seconds()
     reread = 0
@@ -424,6 +428,8 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
             # the parser's fallback for its disclosure date is that same day.
             func.max(case((model.disclosure_date != model.transaction_date, model.disclosure_date))),
         ).filter(model.parser_version < PTR_PARSER_VERSION)
+        if source.readable is not None:
+            query = query.filter(source.readable)
         stale = query.group_by(model.filing_id).order_by(func.max(model.disclosure_date).desc()).all()
         if stale and source.label == "Senate" and await senate_accept_terms(client) is None:
             logger.warning("Senate PTR re-read skipped: no eFD session")

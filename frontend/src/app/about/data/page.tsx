@@ -128,12 +128,13 @@ export default function DataChapter() {
         <Sub title="Courts, elections and documents">
           <Facts>
             <Fact label="Oyez · supremecourt.gov">
-              Cases, justices&apos; votes, and official slip opinions.
+              Cases, justices&apos; votes in a term the Supreme Court Database doesn&apos;t cover
+              yet, and official slip opinions.
             </Fact>
             <Fact label="Supreme Court Database · Federal Judicial Center · Martin-Quinn">
-              Every justice&apos;s votes in cases the federal government argued, with Epstein and
-              Posner&apos;s coding through 2014; nomination dates; each justice&apos;s position per
-              term.
+              Every justice&apos;s votes in orally argued cases (the voting record, and the cases
+              the federal government argued for the score, with Epstein and Posner&apos;s coding
+              through 2014); nomination dates; each justice&apos;s position per term.
             </Fact>
             <Fact label="State election offices">
               Certified candidate lists and primary results, from each state&apos;s own site. And

@@ -18,6 +18,7 @@ from app.models import (
     Representative,
 )
 from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
@@ -491,7 +492,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     record = (rep_data.get("votingRecord") or {}).get("partyLineRecord")
     existing.party_line_record = json.dumps(record) if record else None
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
-    existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
+    existing.small_donor_percentage = funding.get("smallDonorPercentage")
     voting_record = rep_data.get("votingRecord", {})
     existing.website_url = rep_data.get("officialWebsiteUrl") or ""
     existing.contact_form_url = rep_data.get("contactFormUrl") or ""
@@ -537,7 +538,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             representative_id=rid,
             bill_name=v.get("billName", "Unknown Bill"),
             bill_id=v.get("billId", ""),
-            date=v.get("date", ""),
+            date=vote_date_iso(v.get("date")) or v.get("date", ""),  # ISO: sorts by the calendar
             vote=v.get("vote", "Not Voting"),
             policy_area=v.get("policyArea", "PROCEDURAL"),
             policy_areas=json.dumps(v.get("policyAreas") or []),
