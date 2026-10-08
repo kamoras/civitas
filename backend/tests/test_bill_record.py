@@ -317,3 +317,10 @@ def test_a_successor_of_the_same_surname_is_not_linked_to_the_predecessors_votes
     db_session.commit()
     pages = {rc.number: br.vote_detail(db_session, rc)["members"][0]["page"] for rc in db_session.query(RollCall)}
     assert pages == {624: None, 254: "/politicians/darline-graham"}
+
+
+def test_party_counts_read_positions_as_the_tally_does():
+    # "Guilty" / "Not Guilty" on an impeachment article count as a yea and a
+    # nay in the stored tally; the party breakdown read them as not voting.
+    positions = [RollCallPosition(party="R", position=p) for p in ("Guilty", "Not Guilty", "Present", "Not Voting")]
+    assert br.party_breakdown(positions) == [{"party": "R", "yea": 1, "nay": 1, "present": 1, "notVoting": 1}]
