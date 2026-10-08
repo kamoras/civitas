@@ -333,8 +333,8 @@ export function tierCandidates(candidates: BallotCandidate[]): RaceTiers {
     active.filter((c) => majorPartyOf(c) === party).sort((a, b) => byRaised(b) - byRaised(a))[0] ??
     null;
   const majorLeaders = [topOf("DEM"), topOf("REP")].filter((c): c is BallotCandidate => c != null);
-  // Debt (negative cash on hand) floors at 0 rather than going negative:
-  // a leader in debt still means "no real minor-party threat", not "any
+  // Negative cash on hand floors at 0 rather than going negative:
+  // a leader below zero still means "no real minor-party threat", not "any
   // non-negative minor candidate counts as one" (the >0 guard below).
   const bestMajorCash = Math.max(0, ...majorLeaders.map(byCash));
 

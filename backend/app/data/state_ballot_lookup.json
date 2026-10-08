@@ -1,12 +1,370 @@
 {
-  "_source": "USAGov state election office directory (https://www.usa.gov/election-office) and vote.gov",
-  "_method": "National directory used as the default target for every state. Per-state deep links live in `states` and are only ever SHOWN to a user after link_check.py has confirmed they resolve — see `states` note below.",
-  "_as_of": "2026-08-05",
-  "_note": "A dead link on 'here is how to see your real ballot', during election week, from a link Civitas vouched for, is the worst failure this feature has. So per-state URLs are gated: an entry is rendered only once `verified_at` is set by the liveness check (app/pipeline/fetch/ballot_lookup.py). Unverified or missing entries fall back to the national directory, which is stable and maintained by USAGov.",
+  "_source": "Each state's (and D.C.'s) own election authority: the voter lookup it publishes on its own domain, or a vendor portal it links as its official tool. Never a third-party aggregator. National fallback: USAGov's state election office directory (https://www.usa.gov/election-office).",
+  "_method": "Per state, the page where a voter sees their sample ballot or polling place: the state's personal lookup when an automated check can reach it, else the authority's own polling-place page that links it. Each was opened through the pipeline's HTTP client with BROWSER_HEADERS (what refresh_link_verification sends) from the development workstation and from production, and `_checked` records what was found. A state whose lookup sits behind a bot wall keeps its official URL, marked UNVERIFIABLE, and is never worked around (AGENTS.md section 7): the link check cannot confirm it, so its page shows the national directory until the wall stops refusing the check.",
+  "_as_of": "2026-10-08",
+  "_note": "A dead link on 'here is how to see your real ballot', during election week, from a link Civitas vouched for, is the worst failure this feature has. So per-state URLs are gated: an entry is rendered only once `verified_at` is set by the liveness check (app/pipeline/fetch/ballot_lookup.py), which this file never sets. The check reads its candidate URLs from this file every run, so an edit here reaches the site on the next election run. Unverified or missing entries fall back to the national directory, which is stable and maintained by USAGov.",
   "national_fallback": {
     "url": "https://www.usa.gov/election-office",
     "label": "Find your state or local election office",
     "source_name": "USAGov"
   },
-  "states": {}
+  "states": {
+    "AL": {
+      "url": "https://myinfo.alabamavotes.gov/voterview",
+      "label": "Alabama VoterView",
+      "source_name": "Alabama Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "AK": {
+      "url": "https://www.elections.alaska.gov/election-polls/",
+      "label": "Alaska polling place locations",
+      "source_name": "Alaska Division of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The personal portal (myvoterportal.alaska.gov) is behind a DataDome bot wall that refuses automated checks, so the Division's own polling-place page, which links it, is used instead"
+    },
+    "AZ": {
+      "url": "https://my.arizona.vote/PortalList.aspx",
+      "label": "Arizona Voter Information Portal",
+      "source_name": "Arizona Secretary of State",
+      "verified_at": null,
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the link check cannot confirm it, so the page shows the national directory"
+    },
+    "AR": {
+      "url": "https://www.voterview.ar-nova.org/voterview",
+      "label": "Arkansas VoterView",
+      "source_name": "Arkansas Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "CA": {
+      "url": "https://www.sos.ca.gov/elections/polling-place",
+      "label": "Find your polling place (California)",
+      "source_name": "California Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. My Voter Status (voterstatus.sos.ca.gov) is behind Imperva, so the Secretary of State's polling-place page, which links it and each county's lookup, is used instead"
+    },
+    "CO": {
+      "url": "https://www.coloradosos.gov/voter/pages/pub/olvr/findVoterReg.xhtml",
+      "label": "Colorado: find my voter registration",
+      "source_name": "Colorado Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "CT": {
+      "url": "https://portaldir.ct.gov/sots/LookUp.aspx",
+      "label": "Connecticut voter registration lookup",
+      "source_name": "Connecticut Secretary of the State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (a request without a browser's ordinary headers gets the firewall's 'Request Rejected' page)"
+    },
+    "DE": {
+      "url": "https://ivote.de.gov/VoterView",
+      "label": "Delaware voter lookup",
+      "source_name": "Delaware Department of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "DC": {
+      "url": "https://www.dcboe.org/voters/find-out-where-to-vote/vote-center-locator-tool",
+      "label": "D.C. vote center locator",
+      "source_name": "District of Columbia Board of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "FL": {
+      "url": "https://registration.dos.fl.gov/CheckVoterStatus",
+      "label": "Florida voter lookup",
+      "source_name": "Florida Division of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "GA": {
+      "url": "https://mvp.sos.ga.gov/s/",
+      "label": "Georgia My Voter Page",
+      "source_name": "Georgia Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "HI": {
+      "url": "https://elections.hawaii.gov/voter-service-centers-and-places-of-deposit/",
+      "label": "Hawaii voter service centers and ballot drop boxes",
+      "source_name": "Hawaii Office of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. Hawaii votes by mail; in-person voting is at these service centers"
+    },
+    "ID": {
+      "url": "https://votertools.voteidaho.gov/TEDElectionLink/VoterServices/voter-search/ovr-voter-search",
+      "label": "Idaho voter search",
+      "source_name": "Idaho Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "IL": {
+      "url": "https://ova.elections.il.gov/RegistrationLookup.aspx",
+      "label": "Illinois registration lookup",
+      "source_name": "Illinois State Board of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "IN": {
+      "url": "https://indianavoters.in.gov/",
+      "label": "Indiana Voters",
+      "source_name": "Indiana Election Division",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "IA": {
+      "url": "https://apps.sos.iowa.gov/elections/voterreg/pollingplace/search.aspx",
+      "label": "Iowa: find my polling place",
+      "source_name": "Iowa Secretary of State",
+      "verified_at": null,
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08 (one of several requests to the same host was answered). Official URL, linked from the Secretary of State's voter page; the page shows the national directory while the check cannot confirm it"
+    },
+    "KS": {
+      "url": "https://myvoteinfo.voteks.org/voterview",
+      "label": "Kansas VoterView",
+      "source_name": "Kansas Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "KY": {
+      "url": "https://elect.ky.gov/Voters/Pages/Polling-Locations.aspx",
+      "label": "Kentucky polling locations",
+      "source_name": "Kentucky State Board of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The Voter Information Center (vrsws.sos.ky.gov/vic, linked as 'Where to Vote' from that page) answers the Board's bot-activity refusal (403) to the pipeline's client from both machines, so the Board's polling-locations page is used instead"
+    },
+    "LA": {
+      "url": "https://voterportal.sos.la.gov/",
+      "label": "Louisiana Voter Portal",
+      "source_name": "Louisiana Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "ME": {
+      "url": "https://www.maine.gov/portal/government/edemocracy/voter_lookup.php",
+      "label": "Maine voter information lookup",
+      "source_name": "Maine Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "MD": {
+      "url": "https://voterservices.elections.maryland.gov/VoterSearch",
+      "label": "Maryland voter search",
+      "source_name": "Maryland State Board of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "MA": {
+      "url": "https://www.sec.state.ma.us/WhereDoIVoteMA/bal/MyElectionInfo.aspx",
+      "label": "Where do I vote? (Massachusetts)",
+      "source_name": "Secretary of the Commonwealth of Massachusetts",
+      "verified_at": null,
+      "_checked": "UNVERIFIABLE: Imperva challenge page (200 with challenge script) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows the national directory while the check cannot confirm it"
+    },
+    "MI": {
+      "url": "https://mvic.sos.state.mi.us/",
+      "label": "Michigan Voter Information Center",
+      "source_name": "Michigan Secretary of State",
+      "verified_at": null,
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows the national directory while the check cannot confirm it"
+    },
+    "MN": {
+      "url": "https://myballotmn.sos.mn.gov/",
+      "label": "Minnesota voting information portal",
+      "source_name": "Minnesota Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "MS": {
+      "url": "https://www.sos.ms.gov/elections-voting/polling-place-locator",
+      "label": "Mississippi polling place locator",
+      "source_name": "Mississippi Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (redirects to the Secretary of State's myelectionday.sos.state.ms.us)"
+    },
+    "MO": {
+      "url": "https://voteroutreach.sos.mo.gov/portal/",
+      "label": "Missouri voter registration lookup",
+      "source_name": "Missouri Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "MT": {
+      "url": "https://voterportal.mt.gov/WhereToVote.aspx",
+      "label": "Montana My Voter Page",
+      "source_name": "Montana Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "NE": {
+      "url": "https://www.votercheck.necvr.ne.gov/voterview",
+      "label": "Nebraska voter information lookup",
+      "source_name": "Nebraska Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "NV": {
+      "url": "https://www.nvsos.gov/votersearch/",
+      "label": "Nevada voter search",
+      "source_name": "Nevada Secretary of State",
+      "verified_at": null,
+      "_checked": "UNVERIFIABLE: Imperva challenge page (200 with challenge script) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows the national directory while the check cannot confirm it"
+    },
+    "NH": {
+      "url": "https://app.sos.nh.gov/viphome",
+      "label": "New Hampshire voter information lookup",
+      "source_name": "New Hampshire Secretary of State",
+      "verified_at": null,
+      "_checked": "UNVERIFIABLE: Akamai Access Denied (403) to the pipeline's client from the workstation and from production, 2026-10-08, on sos.nh.gov too (a plain curl from production was answered 'Voter Information Lookup'). Official URL kept; the page shows the national directory while the check cannot confirm it"
+    },
+    "NJ": {
+      "url": "https://www.nj.gov/state/elections/vote-polling-location.shtml",
+      "label": "New Jersey polling locations",
+      "source_name": "New Jersey Division of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The voter portal's own search (voter.svrs.nj.gov) is behind Imperva, so the Division's polling-location page, which links it, is used instead"
+    },
+    "NM": {
+      "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx",
+      "label": "New Mexico voter portal",
+      "source_name": "New Mexico Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "NY": {
+      "url": "https://voterlookup.elections.ny.gov/",
+      "label": "New York voter lookup",
+      "source_name": "New York State Board of Elections",
+      "verified_at": null,
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08, on elections.ny.gov too. Official URL kept; the page shows the national directory while the check cannot confirm it"
+    },
+    "NC": {
+      "url": "https://vt.ncsbe.gov/RegLkup/",
+      "label": "North Carolina voter search",
+      "source_name": "North Carolina State Board of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "ND": {
+      "url": "https://vip.sos.nd.gov/PortalList.aspx",
+      "label": "North Dakota My Voter Site",
+      "source_name": "North Dakota Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "OH": {
+      "url": "https://voterlookup.ohiosos.gov/voterlookup.aspx",
+      "label": "Ohio voter lookup",
+      "source_name": "Ohio Secretary of State",
+      "verified_at": null,
+      "_checked": "UNVERIFIABLE: challenge page (403) to the pipeline's client from the workstation and from production, 2026-10-08, on ohiosos.gov and voteohio.gov too. Official URL kept; the page shows the national directory while the check cannot confirm it"
+    },
+    "OK": {
+      "url": "https://okvoterportal.okelections.gov/",
+      "label": "OK Voter Portal",
+      "source_name": "Oklahoma State Election Board",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "OR": {
+      "url": "https://sos.oregon.gov/elections/pages/myvote.aspx",
+      "label": "Oregon My Vote",
+      "source_name": "Oregon Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The My Vote search itself sits behind a captcha, so its page on sos.oregon.gov, which links it, is used"
+    },
+    "PA": {
+      "url": "https://www.pa.gov/services/vote/find-your-local-polling-place",
+      "label": "Find your local polling place (Pennsylvania)",
+      "source_name": "Pennsylvania Department of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The voter-services search (pavoterservices.pa.gov) is behind Imperva, so the Department's own polling-place page, which links it, is used instead"
+    },
+    "RI": {
+      "url": "https://vote.sos.ri.gov/",
+      "label": "Rhode Island Voter Information Center",
+      "source_name": "Rhode Island Secretary of State",
+      "verified_at": null,
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows the national directory while the check cannot confirm it"
+    },
+    "SC": {
+      "url": "https://vrems.scvotes.sc.gov/Voter/Login?PageMode=Sampleballot",
+      "label": "South Carolina: get my sample ballot",
+      "source_name": "South Carolina Election Commission",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (linked as 'Get My Sample Ballot' from scvotes.gov)"
+    },
+    "SD": {
+      "url": "https://vip.sdsos.gov/VIPLogin.aspx",
+      "label": "South Dakota voter information portal",
+      "source_name": "South Dakota Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "TN": {
+      "url": "https://tnmap.tn.gov/voterlookup/",
+      "label": "Tennessee voter lookup",
+      "source_name": "Tennessee Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "TX": {
+      "url": "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do",
+      "label": "Texas My Voter Portal",
+      "source_name": "Texas Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (redirects to the state's Civix-hosted portal, which votetexas.gov links as 'Am I Registered?')"
+    },
+    "UT": {
+      "url": "https://votesearch.utah.gov/voter-search/search/search-by-address/how-and-where-can-i-vote",
+      "label": "Utah: how and where can I vote",
+      "source_name": "Utah Lieutenant Governor's Office of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (linked as 'How can I vote?' from vote.utah.gov)"
+    },
+    "VT": {
+      "url": "https://mvp.vermont.gov/",
+      "label": "Vermont My Voter Page",
+      "source_name": "Vermont Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (redirects to vote.vermont.gov)"
+    },
+    "VA": {
+      "url": "https://vote.elections.virginia.gov/VoterInformation",
+      "label": "Virginia citizen portal",
+      "source_name": "Virginia Department of Elections",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "WA": {
+      "url": "https://voter.votewa.gov/WhereToVote.aspx",
+      "label": "VoteWA voter portal",
+      "source_name": "Washington Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "WV": {
+      "url": "https://apps.sos.wv.gov/Elections/Voter/FindMyPollingPlace",
+      "label": "West Virginia: find my polling place",
+      "source_name": "West Virginia Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (linked as 'Find Your Polling Place' from sos.wv.gov)"
+    },
+    "WI": {
+      "url": "https://myvote.wi.gov/en-us/",
+      "label": "MyVote Wisconsin",
+      "source_name": "Wisconsin Elections Commission",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    },
+    "WY": {
+      "url": "https://myelectionday.sos.wyo.gov/WYVOTES/Pages/VOSearch.aspx",
+      "label": "Wyoming voter information tool",
+      "source_name": "Wyoming Secretary of State",
+      "verified_at": null,
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+    }
+  }
 }

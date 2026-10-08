@@ -10,7 +10,6 @@ import json
 import logging
 import threading
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -378,26 +377,141 @@ def test_lookup_uses_verified_state_entry(monkeypatch):
     assert result["isStateSpecific"] is True
 
 
-@pytest.mark.asyncio
-async def test_link_verification_clears_a_link_that_stops_resolving(monkeypatch, tmp_path):
-    """A link that rots between runs must stop being shown, not keep
-    riding a check that passed weeks ago."""
+def _link_files(monkeypatch, tmp_path, states, volume_states=None):
+    """Point the link check at a bundled file holding `states` (and, when
+    given, a volume copy from an earlier run holding `volume_states`)."""
     from app.pipeline.fetch import ballot_lookup
 
-    monkeypatch.setattr(ballot_lookup, "_VOLUME_PATH", str(tmp_path / "lookup.json"))
-    monkeypatch.setattr(ballot_lookup, "_cache", {
-        "national_fallback": {"url": "https://nat.example"},
-        "states": {"GA": {"url": "https://ga.example", "verified_at": "2026-01-01T00:00:00"}},
-    })
+    bundled, volume = tmp_path / "bundled.json", tmp_path / "volume.json"
+    fallback = {"url": "https://nat.example", "label": "N", "source_name": "S"}
+    bundled.write_text(json.dumps({"national_fallback": fallback, "states": states}))
+    if volume_states is not None:
+        volume.write_text(json.dumps({"national_fallback": fallback, "states": volume_states}))
+    monkeypatch.setattr(ballot_lookup, "_BUNDLED_PATH", str(bundled))
+    monkeypatch.setattr(ballot_lookup, "_VOLUME_PATH", str(volume))
+    monkeypatch.setattr(ballot_lookup, "_cache", None)
+    monkeypatch.setattr(ballot_lookup, "_cache_stamp", None)
+    return ballot_lookup, volume
+
+
+def _answering(**by_url):
+    """A client whose GET of each URL answers `by_url[url]` (status, final
+    URL, headers, body)."""
+    import httpx
 
     class _Client:
         async def get(self, url, **kwargs):
-            return SimpleNamespace(status_code=404)
+            status, final, headers, body = by_url[url]
+            return httpx.Response(
+                status, headers=headers, content=body,
+                request=httpx.Request("GET", final or url),
+            )
 
-    result = await ballot_lookup.refresh_link_verification(_Client())
+    return _Client()
+
+
+@pytest.mark.asyncio
+async def test_link_verification_clears_a_link_that_stops_resolving(monkeypatch, tmp_path):
+    """A link that rots between runs must stop being shown, not keep
+    riding a check that passed weeks ago — and the state's page falls back
+    to the national directory."""
+    ballot_lookup, volume = _link_files(
+        monkeypatch, tmp_path,
+        {"GA": {"url": "https://ga.example/lookup", "verified_at": None}},
+        volume_states={"GA": {"url": "https://ga.example/lookup", "verified_at": "2026-01-01T00:00:00"}},
+    )
+    assert ballot_lookup.lookup_for_state("GA")["isStateSpecific"] is True
+
+    client = _answering(**{"https://ga.example/lookup": (404, None, {}, b"")})
+    result = await ballot_lookup.refresh_link_verification(client)
     assert result["failed"] == 1
-    saved = json.loads((tmp_path / "lookup.json").read_text())
-    assert saved["states"]["GA"]["verified_at"] is None
+    assert json.loads(volume.read_text())["states"]["GA"]["verified_at"] is None
+    shown = ballot_lookup.lookup_for_state("GA")
+    assert shown["isStateSpecific"] is False
+    assert shown["url"] == "https://nat.example"
+
+
+@pytest.mark.asyncio
+async def test_link_verification_shows_a_link_that_resolves(monkeypatch, tmp_path):
+    ballot_lookup, _ = _link_files(
+        monkeypatch, tmp_path, {"GA": {"url": "https://ga.example/lookup", "label": "GA lookup"}},
+    )
+    client = _answering(**{"https://ga.example/lookup": (200, None, {}, b"<title>Lookup</title>")})
+    assert (await ballot_lookup.refresh_link_verification(client))["verified"] == 1
+    shown = ballot_lookup.lookup_for_state("GA")
+    assert shown["isStateSpecific"] is True
+    assert shown["url"] == "https://ga.example/lookup"
+
+
+@pytest.mark.asyncio
+async def test_link_verification_does_not_pass_a_bot_challenge(monkeypatch, tmp_path):
+    """Imperva serves its challenge with a 200. A wall that refuses the
+    check leaves the state unverified (AGENTS.md section 7), not shown."""
+    ballot_lookup, _ = _link_files(
+        monkeypatch, tmp_path, {"MA": {"url": "https://ma.example/lookup"}},
+    )
+    challenge = (200, None, {"x-iinfo": "1-2-3"}, b"<script src='/_Incapsula_Resource?x'></script>")
+    client = _answering(**{"https://ma.example/lookup": challenge})
+    assert (await ballot_lookup.refresh_link_verification(client))["failed"] == 1
+    assert ballot_lookup.lookup_for_state("MA")["isStateSpecific"] is False
+
+
+@pytest.mark.asyncio
+async def test_link_verification_does_not_pass_a_redirect_to_the_homepage(monkeypatch, tmp_path):
+    """A retired lookup redirected to its site's homepage resolves, but is
+    no longer the lookup. A redirect to the lookup's new address (another
+    host, or a deeper page) is fine."""
+    ballot_lookup, _ = _link_files(monkeypatch, tmp_path, {
+        "OH": {"url": "https://oh.example/voterlookup.aspx"},
+        "MS": {"url": "https://ms.example/elections/locator"},
+        "WA": {"url": "https://wa.example/WhereToVote.aspx"},
+    })
+    client = _answering(**{
+        "https://oh.example/voterlookup.aspx": (200, "https://oh.example/", {}, b""),
+        "https://ms.example/elections/locator": (200, "https://myelectionday.ms.example/", {}, b""),
+        "https://wa.example/WhereToVote.aspx": (200, "https://wa.example/portal/login.aspx", {}, b""),
+    })
+    result = await ballot_lookup.refresh_link_verification(client)
+    assert (result["verified"], result["failed"]) == (2, 1)
+    assert ballot_lookup.lookup_for_state("OH")["isStateSpecific"] is False
+    assert ballot_lookup.lookup_for_state("MS")["isStateSpecific"] is True
+    assert ballot_lookup.lookup_for_state("WA")["isStateSpecific"] is True
+
+
+@pytest.mark.asyncio
+async def test_link_verification_checks_the_bundled_urls_not_last_runs(monkeypatch, tmp_path):
+    """The volume copy is the check's own output; reading candidates from
+    it would keep checking a URL app/data has since corrected."""
+    ballot_lookup, volume = _link_files(
+        monkeypatch, tmp_path,
+        {"GA": {"url": "https://ga.example/new"}},
+        volume_states={"GA": {"url": "https://ga.example/old", "verified_at": "2026-01-01T00:00:00"}},
+    )
+    client = _answering(**{"https://ga.example/new": (200, None, {}, b"")})
+    await ballot_lookup.refresh_link_verification(client)
+    assert json.loads(volume.read_text())["states"]["GA"]["url"] == "https://ga.example/new"
+    assert ballot_lookup.lookup_for_state("GA")["url"] == "https://ga.example/new"
+
+
+def test_bundled_ballot_lookups_cover_every_state_from_its_own_authority():
+    """Every state and D.C. has an official lookup, none of them shown
+    before the link check has passed it, none from an aggregator."""
+    from urllib.parse import urlsplit
+
+    from app.pipeline.fetch import ballot_lookup
+    from app.state_names import STATE_NAMES
+
+    data = json.loads(open(ballot_lookup._BUNDLED_PATH, encoding="utf-8").read())
+    states = data["states"]
+    assert set(states) == set(STATE_NAMES)
+    for code, entry in states.items():
+        assert entry["verified_at"] is None, code  # only the link check sets it
+        assert urlsplit(entry["url"]).scheme == "https", code
+        host = urlsplit(entry["url"]).hostname
+        assert not any(host == d or host.endswith("." + d) for d in (
+            "vote.org", "ballotpedia.org", "usa.gov", "vote.gov",
+        )), code
+        assert entry["label"] and entry["source_name"] and entry["_checked"], code
 
 
 # ── direct path: each registered state read from its own office ────

@@ -34,7 +34,9 @@ from typing import Any
 import httpx
 
 from app.atomic_write import write_text_atomic
-from app.file_cache import Stamp, read_json_preferring, reload_if_moved, new_reload_lock
+from app.file_cache import Stamp, read_json, read_json_preferring, reload_if_moved, new_reload_lock
+from app.http_client import is_bot_challenge
+from app.pipeline.fetch.http_utils import BROWSER_HEADERS
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -107,8 +109,32 @@ def lookup_for_state(state: str) -> dict[str, Any]:
     }
 
 
+def _is_the_page(requested: str, response: httpx.Response) -> bool:
+    """Whether `response` is the page `requested` names, not a stand-in.
+
+    Two stand-ins answer below 400 and would otherwise pass: a bot
+    wall's challenge (Imperva serves its script with a 200; AGENTS.md
+    section 7 — a state whose wall refuses the check is unverifiable, not
+    worked around), and a retired lookup redirected to its site's
+    homepage, which "resolves" while no longer being the lookup.
+    """
+    if response.status_code >= 400 or is_bot_challenge(response):
+        return False
+    asked, landed = httpx.URL(requested), response.url
+    return not (
+        landed.host == asked.host
+        and asked.path.strip("/")
+        and not landed.path.strip("/")
+    )
+
+
 async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]:
     """Re-check every candidate per-state URL and rewrite the volume copy.
+
+    The candidates are the bundled file's entries, never the volume
+    copy's: the volume copy is this function's own output, so reading
+    candidates from it would keep checking last release's URLs forever
+    once it exists, and a corrected URL in app/data would never ship.
 
     Verification is one-directional in effect: a URL that resolves gets a
     fresh `verified_at` and becomes renderable; one that does not has its
@@ -120,8 +146,11 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
     fall back TO, and gating it would leave a state page with no escape
     hatch at all.
     """
-    data = _load()
+    data = read_json(_BUNDLED_PATH) or {}
     states = data.get("states") or {}
+    was_shown = {
+        code for code, entry in (_load().get("states") or {}).items() if entry.get("verified_at")
+    }
     if not states:
         return {"checked": 0, "verified": 0, "failed": 0}
 
@@ -132,10 +161,14 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
         if not url:
             continue
         try:
+            # BROWSER_HEADERS: honest identity, complete request — the shape
+            # several state WAFs require before they answer anyone (see
+            # http_utils). A wall that still refuses is left refusing.
             response = await client.get(
                 url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True,
+                headers=BROWSER_HEADERS,
             )
-            ok = response.status_code < 400
+            ok = _is_the_page(url, response)
         except Exception:
             ok = False
         if ok:
@@ -143,9 +176,9 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
             verified += 1
         else:
             # Clear rather than leave stale — see docstring.
-            if entry.get("verified_at"):
+            if code in was_shown:
                 logger.warning(
-                    "Ballot lookup link for %s no longer resolves; hiding it", code,
+                    "Ballot lookup link for %s no longer verifies; hiding it", code,
                 )
             entry["verified_at"] = None
             failed += 1
