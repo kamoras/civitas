@@ -664,6 +664,19 @@ def _same_story(sim: float, title: str, facts: list, cand_title: str, cand_facts
     )
 
 
+# A shared source article makes two rows the same story only when their
+# titles also agree this far (similarity model). Measured 2026-10-08 on all
+# 94 pairs of stored rows within REMATCH_WINDOW_DAYS that share a source,
+# each read by its titles: every pair at 0.70 or above was the same story,
+# the highest different-story pair scored 0.615 (both citing one roundup
+# article), and below that the two kinds mix. A shared source alone had
+# merged 45 different-story pairs (an AI debate with an interview on AI
+# regulation, a chip maker's lobbying with an NIH grants plan). Set in the
+# gap: no false merges on the 94, 11 same-story pairs left as two cards,
+# since merging two stories hides one and a missed match only shows a
+# second card.
+SHARED_SOURCE_TITLE_SIM = 0.62
+
 # How far back (days, by issue date) a new story is matched against
 # existing rows, and the widest gap between two rows the feed's duplicate
 # pass (_near_identical_clusters) compares: one window, so the two passes
@@ -752,7 +765,7 @@ def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
                     a.title or "", facts_list[i], b.title or "", facts_list[j],
                 )
             else:
-                m = bool(urls_list[i] & urls_list[j]) or _same_story(
+                m = (bool(urls_list[i] & urls_list[j]) and float(sims[i, j]) >= SHARED_SOURCE_TITLE_SIM) or _same_story(
                     float(sims[i, j]), a.title or "", facts_list[i], b.title or "", facts_list[j],
                 )
             same_story[i][j] = same_story[j][i] = m
@@ -4408,34 +4421,36 @@ def _find_matching_issue(
     (no facts stored) fall back to the old >= TOPIC_CHANGE_THRESHOLD
     title-only behavior rather than being unmatchable.
 
-    2026-08 audit: a shared source URL is checked BEFORE the title-cosine
-    candidate floor, not inside that loop — three real production pairs
-    (e.g. "DHS data claims and think tank connections" vs "DHS data
-    claims and state ballot measures", a day apart, both citing the same
-    single NPR URL) reworded titles enough between LLM generations that
-    they may not even clear _TOPIC_MATCH_CANDIDATE_FLOOR, so a check
-    nested inside that loop could never reach them. The same article
-    cited twice is stronger, independent evidence of one real-world
-    story than any text-similarity measure of what an LLM chose to call
-    it — same tier of conclusive as _is_exact_content_duplicate.
+    A shared source URL is checked before the title-cosine candidate
+    floor, so a reworded title can still match through it, but only with
+    the titles agreeing to SHARED_SOURCE_TITLE_SIM: one roundup article is
+    cited by unrelated stories (2026-10-08, see that constant). It was
+    treated as conclusive on its own from 2026-08.
     """
+    sims = recent_embs @ title_emb if recent_embs is not None else None
     if source_urls:
         new_urls = {u for u in source_urls if u}
         if new_urls:
-            for candidate in recent_issues:
+            for idx, candidate in enumerate(recent_issues):
                 if candidate.id in matched_issue_ids or not _may_match(candidate, title, facts, summary, db):
                     continue
                 try:
                     cand_urls = set(json.loads(candidate.source_urls or "[]"))
                 except (ValueError, TypeError):
                     continue
-                if new_urls & cand_urls:
+                # A vote draft's source is its record: a story citing it is
+                # the draft's story (promotion). A news row needs its title
+                # to agree too (SHARED_SOURCE_TITLE_SIM).
+                if new_urls & cand_urls and (
+                    candidate.source_type
+                    or (sims is not None and float(sims[idx]) >= SHARED_SOURCE_TITLE_SIM)
+                ):
                     action_metrics.increment("issues_matched_by_source")
                     return candidate
 
-    if recent_embs is None:
+    if sims is None:
         return None
-    sims = recent_embs @ title_emb
+
     for cand_idx in np.argsort(-sims):
         sim = float(sims[cand_idx])
         if sim < _TOPIC_MATCH_CANDIDATE_FLOOR:

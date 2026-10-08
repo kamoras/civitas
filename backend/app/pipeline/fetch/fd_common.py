@@ -31,6 +31,7 @@ import time
 from dataclasses import MISSING, asdict, dataclass, field, fields
 
 from app.pipeline.fetch.ptr_common import OPEN_ENDED_AMOUNT_RE, extract_ticker
+from app.schemas import EXACT_VALUE_RE
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,9 @@ class HoldingRow:
     Over $1,000,000") is (low, low) — the same encoding
     ``ptr_common.parse_amount_range`` and ``StockTradeSchema.amount_open_ended``
     use, so every consumer renders it as "$X+" rather than a ceiling the
-    filing never stated. value_text keeps the cell exactly as printed.
+    filing never stated. An exact value a filer stated instead of a bracket
+    ("$1,251.00") is (value, value) too; value_text, which keeps the cell
+    exactly as printed, tells the two apart (schemas.is_open_ended).
     """
     asset_name: str
     asset_type: str          # raw form value: House code ("ST") or Senate label ("Stocks")
@@ -258,6 +261,9 @@ def parse_holding_value(text: str) -> tuple[float | None, float | None]:
     - "Over $50,000,000" / "Spouse/DC Over $1,000,000" -> (floor, floor), open-ended
     - "None (or less than $1,001)"     -> (0, 1000): the Senate's lowest bracket
     - "None"                           -> (0, 0): nothing held at year end
+    - "$1,251.00"                      -> (1251.0, 1251.0): an exact value the
+      filer stated instead of a bracket (House); low == high like the
+      open-ended bracket, told apart by its text (schemas.is_open_ended)
     - "Undetermined", "--", ""         -> (None, None): no bracket stated
 
     Never guesses: anything that isn't one of these shapes is (None, None).
@@ -265,6 +271,9 @@ def parse_holding_value(text: str) -> tuple[float | None, float | None]:
     cleaned = " ".join((text or "").split())
     if not cleaned:
         return None, None
+    if EXACT_VALUE_RE.match(cleaned):
+        exact = float(cleaned.lstrip("$").replace(",", "").strip())
+        return exact, exact
     lowered = cleaned.lower()
     if lowered.startswith("none"):
         # The Senate's "None (or less than $1,001)" is a real bracket whose

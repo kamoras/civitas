@@ -289,15 +289,27 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
 
 _PREFLIGHT_HEADERS = {**_CORS_HEADERS, "Access-Control-Max-Age": "3600"}
 
-
-@router.options("/{path:path}", include_in_schema=False)
-def preflight(path: str) -> Response:
-    return Response(status_code=204, headers=_PREFLIGHT_HEADERS)
+# Added to every response under PREFIX that doesn't carry its own. Errors
+# included: a 404 or 422 raised before a route returns went out with no
+# Access-Control-Allow-Origin (live, 2026-10-08), so a page on another
+# origin saw a network error where the API had answered "no such member".
+# Expose-Headers, because without it a browser hides from the page the
+# rate-limit headers the spec says report the caller's quota.
+_RESPONSE_CORS = [
+    (b"access-control-allow-origin", b"*"),
+    (b"access-control-expose-headers", b"X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After"),
+]
 
 
 class PublicApiPreflight:
-    """Answers CORS preflights for this API before the site's CORSMiddleware
-    sees them (main.py adds this outside it).
+    """CORS for this API, outside the site's CORSMiddleware (main.py adds
+    this after it, so it runs first): answers preflights, and opens every
+    response (_RESPONSE_CORS).
+
+    Preflights are answered here only. A catch-all OPTIONS route used to
+    sit on the router too, and made every unknown path under the API (a
+    misspelt endpoint, an id with a slash in it) answer 405 Method Not
+    Allowed instead of 404.
 
     The site's CORSMiddleware allows the site's own origins only, and it
     answers every preflight itself, before routing: one from any other
@@ -324,7 +336,19 @@ class PublicApiPreflight:
             })
             await send({"type": "http.response.body", "body": b""})
             return
-        await self.app(scope, receive, send)
+        if scope["type"] != "http" or not scope["path"].startswith(PREFIX + "/"):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_open(message) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                present = {k.lower() for k, _ in headers}
+                headers += [(k, v) for k, v in _RESPONSE_CORS if k not in present]
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_open)
 
 
 # ---------------------------------------------------------------------------
@@ -359,7 +383,7 @@ def openapi_spec_dict() -> dict:
             summary="Open, read-only access to Civitas's scores, member records and document search.",
             description=(
                 f"No key or account. {PUBLIC_READ_LIMIT} requests per minute per IP, reported in the "
-                "X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset headers; over it, "
+                "X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset (a Unix time) headers; over it, "
                 "429 with Retry-After. CORS is open to every origin. Scores run 0-100, higher is a "
                 f"better representative; how each is computed: {SITE_URL}/about/scores. A parameter an "
                 "endpoint doesn't take is refused (422) rather than ignored, and a choice is read in "
@@ -466,7 +490,7 @@ def list_senators(
 def get_senator(
     _rl: PublicReadLimit,
     request: Request,
-    senator_id: str = Path(description="The senator's id, as in their Civitas URL (e.g. jon-ossoff)." + _RENAMED_ID),
+    senator_id: str = Path(description="The senator's id, as in their Civitas URL (first-last, e.g. jane-doe)." + _RENAMED_ID),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Scores, funding and top donors, voting record, lobbying matches,
@@ -521,7 +545,7 @@ def list_representatives(
 def get_representative(
     _rl: PublicReadLimit,
     request: Request,
-    rep_id: str = Path(description="The representative's id, as in their Civitas URL (e.g. joe-neguse)." + _RENAMED_ID),
+    rep_id: str = Path(description="The representative's id, as in their Civitas URL (first-last, e.g. john-roe)." + _RENAMED_ID),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Scores, funding and top donors, voting record, lobbying matches,
@@ -579,8 +603,8 @@ async def search_documents(
     chamber: Chamber | None = Query(None, description="Only documents from this branch"),
     doc_type: DocType | None = Query(None, description="Only this kind of document"),
     politician_id: str | None = Query(None, description="Only documents by this member or president: their "
-                                      "Civitas id (as in their URL, e.g. jon-ossoff) or their bioguide id "
-                                      "(e.g. O000174)"),
+                                      "Civitas id (as in their URL, e.g. jane-doe) or their bioguide id "
+                                      "(e.g. D000123)"),
     limit: int = Query(20, ge=1, le=50, description="How many results"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:

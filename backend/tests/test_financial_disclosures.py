@@ -46,9 +46,10 @@ class TestParseHoldingValue:
         ("Unascertainable", (None, None)),
         ("--", (None, None)),
         ("", (None, None)),
-        # A bare exact figure is not a bracket, and low == high is reserved
-        # for the open-ended encoding — so it is not guessed at.
-        ("$209,630.10", (None, None)),
+        # An exact value stated instead of a bracket: low == high, told
+        # apart from the open-ended bracket by its text (schemas.is_open_ended).
+        ("$209,630.10", (209630.1, 209630.1)),
+        ("$1,251.00", (1251.0, 1251.0)),
     ])
     def test_shapes(self, text, expected):
         assert parse_holding_value(text) == expected
@@ -138,6 +139,40 @@ class TestHouseScheduleAOnRealFilings:
         dacha = next(h for h in holdings if h.asset_type == "RP")
         assert dacha.owner == "spouse"
         assert dacha.account == "Shirleys Dacha LLC"
+
+    def test_numbered_accounts_are_not_asset_type_codes(self):
+        """Accounts numbered "[10]", "[11]", "[12]" have the shape of a code.
+        Read as one, each closed its row at the account line, dropping the
+        value with it and storing the asset beneath with none."""
+        holdings = parse_schedule_a(FIXTURE["numbered_accounts"])
+        assert [(h.account, h.asset_type, h.owner, h.value_text) for h in holdings] == [
+            ("Child savings account [1]", "OT", "spouse", "$1,001 - $15,000"),
+            ("Child savings account [10]", "5F", "self", "$1,001 - $15,000"),
+            ("Child savings account [11]", "5F", "spouse", "$1 - $1,000"),
+            ("Child savings account [12]", "5F", "self", "$1,001 - $15,000"),
+        ]
+        assert [h.asset_name for h in holdings[1:]] == [
+            "Iadvisor 529 Aggressive A", "Iadvisor 529 Aggressive A", "Iadvisor 529 Voya Lrg Cp Grw A",
+        ]
+
+    def test_an_exact_value_is_a_value(self):
+        holdings = parse_schedule_a(FIXTURE["exact_value"])
+        assert [(h.owner, h.value_text, h.value_low, h.value_high) for h in holdings] == [
+            ("self", "$1,251.00", 1251.0, 1251.0),
+            ("dependent", "$2,085.00", 2085.0, 2085.0),
+            ("dependent", "None", 0.0, 0.0),
+        ]
+
+    def test_new_filer_report(self):
+        """A new-filer report's Schedule A has a second income column
+        ("Current Year to Filing" / "Preceding Year") under a two-line header."""
+        holdings = parse_schedule_a(FIXTURE["new_filer"])
+        assert [(h.asset_type, h.owner, h.value_low, h.value_high) for h in holdings] == [
+            ("BA", "dependent", 100001.0, 250000.0),
+            ("BA", "joint", 50001.0, 100000.0),
+            ("BA", "dependent", 100001.0, 250000.0),
+            ("DO", "self", 250001.0, 500000.0),
+        ]
 
 
 def _w(text, x0, top, size=9.0):

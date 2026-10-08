@@ -28,11 +28,12 @@ fusion rather than score blending, and all four weights, are in
 `config_definitions` under "Explore search ranking".
 
 Two things happen after fusion that are ranking decisions in their own
-right. Near-duplicate documents are collapsed to their best-ranked
+right. Duplicate documents — identical text — are collapsed to their best-ranked
 representative — this corpus is known to accumulate byte-identical rows
 (a 2026-07 audit found 1,758, 31% of the table, from a hash-seed bug),
 and even with that fixed the Congressional Record legitimately reprints
-text. And no single member or agency may occupy more than
+text (a recurring notice that only opens the same way is not a copy; see
+_collapse_duplicates). And no single member or agency may occupy more than
 a measured cap of the first results before the remainder
 are demoted below other sources; they are moved, never dropped, so a
 member-scoped search still returns everything it found.
@@ -50,12 +51,12 @@ import re
 
 from sqlalchemy import text
 
-from app.config_definitions import EXPLORE_RRF_K
 from app.models import ExploreDocument
 from app.pipeline.explore_ranking import (
     candidate_pool,
     fingerprint_shape,
     fusion_weights,
+    rrf_k,
     source_diversity_cap,
 )
 from app.pipeline.lexical_index import search_lexical
@@ -90,6 +91,48 @@ def _fingerprint(doc_id: int, title: str, body: str) -> str:
     return hashlib.sha1(normalized[:prefix_chars].encode()).hexdigest()
 
 
+def _collapse_duplicates(db, ranked: list[dict]) -> list[dict]:
+    """The best-ranked copy of each document text, with how many copies it
+    stands for (`duplicateCount`); `ranked` is best first.
+
+    Only an identical text is a copy. The opening fingerprint alone is not
+    enough: a recurring Federal Register notice — the monthly antidumping
+    review notice, the weekly bank-holding-company list, each OFAC sanctions
+    action — opens with the same title and boilerplate every time, and on
+    the 2026-10-08 corpus (9,458 documents) the fingerprint hid 249 distinct
+    documents while catching 5 true copies. Even a 4,000-character prefix
+    of the whole text still hid 2. So the fingerprint plus the body's length
+    only groups candidates, and a candidate joins a group's copy only when
+    its whole normalised text matches; with the length in the key the full
+    texts are read only for the rare candidates that share both (7 groups
+    in that corpus, all distinct documents)."""
+    by_key: dict[tuple[str, int], list[dict]] = {}
+    texts: dict[int, str] = {}
+
+    def full_text(doc_id: int) -> str:
+        if doc_id not in texts:
+            row = db.execute(
+                text("SELECT title, coalesce(body, '') AS body FROM explore_documents WHERE id = :id"),
+                {"id": doc_id},
+            ).fetchone()
+            texts[doc_id] = _NON_WORD_RE.sub(" ", f"{row.title} {row.body}".lower()).strip() if row else ""
+        return texts[doc_id]
+
+    representatives: list[dict] = []
+    for doc in ranked:
+        doc.pop("_authority", None)
+        key = (_fingerprint(doc["id"], doc["title"], doc.pop("_bodyHead", "")), doc.pop("_bodyLength", 0))
+        group = by_key.setdefault(key, [])
+        copy_of = next((rep for rep in group if full_text(rep["id"]) == full_text(doc["id"])), None)
+        if copy_of is None:
+            doc["duplicateCount"] = 0
+            group.append(doc)
+            representatives.append(doc)
+        else:
+            copy_of["duplicateCount"] += 1
+    return representatives
+
+
 def _competition_ranks(ordered: list[tuple[int, object]]) -> dict[int, int]:
     """Standard competition ranking (1, 2, 2, 4) over a sorted list.
 
@@ -110,13 +153,13 @@ def _competition_ranks(ordered: list[tuple[int, object]]) -> dict[int, int]:
     return ranks
 
 
-def _rrf(rank: int | None, weight: float) -> float:
-    """One ranker's contribution. A ranker that didn't rank this document
-    contributes nothing — the property that lets authority sit in the sum
-    without penalising documents no one can cite."""
+def _rrf(rank: int | None, weight: float, k: float) -> float:
+    """One ranker's contribution (K: explore_ranking.rrf_k). A ranker that
+    didn't rank this document contributes nothing — the property that lets
+    authority sit in the sum without penalising documents no one can cite."""
     if rank is None or weight == 0:
         return 0.0
-    return weight / (EXPLORE_RRF_K + rank)
+    return weight / (k + rank)
 
 
 def _hydrate_chunk(db) -> int:
@@ -159,7 +202,8 @@ def _hydrate(db, doc_ids: list[int]) -> dict[int, dict]:
             f"""SELECT id, title, date, doc_type, source, politician_name,
                        politician_id, chamber, agency_name, url, summary,
                        comment_url, comments_close_on, cited_by_count, authority,
-                       substr(coalesce(body, ''), 1, 400) AS body_head
+                       substr(coalesce(body, ''), 1, 400) AS body_head,
+                       length(coalesce(body, '')) AS body_length
                 FROM explore_documents WHERE id IN ({placeholders})"""
         ), params).fetchall())
 
@@ -184,6 +228,7 @@ def _hydrate(db, doc_ids: list[int]) -> dict[int, dict]:
             # response exposes the citation count instead.
             "_authority": float(row.authority or 0.0),
             "_bodyHead": row.body_head or "",
+            "_bodyLength": int(row.body_length or 0),
         }
         for row in rows
     }
@@ -249,6 +294,7 @@ def browse_documents(
             continue
         doc.pop("_authority", None)
         doc.pop("_bodyHead", None)
+        doc.pop("_bodyLength", None)
         doc.update(matchedBy=[], distance=None, snippet=doc["summary"], duplicateCount=0)
         results.append(doc)
     return {
@@ -427,13 +473,14 @@ def hybrid_search(
         prior_scale = 0.0
 
     weights = fusion_weights()
+    k = rrf_k()
     for doc in candidates:
         doc_id = doc["id"]
         doc["_score"] = (
-            _rrf(semantic_rank.get(doc_id), weights["semantic"])
-            + _rrf(keyword_rank.get(doc_id), weights["keyword"])
-            + _rrf(freshness_rank.get(doc_id), weights["freshness"] * prior_scale)
-            + _rrf(authority_rank.get(doc_id), weights["authority"] * prior_scale)
+            _rrf(semantic_rank.get(doc_id), weights["semantic"], k)
+            + _rrf(keyword_rank.get(doc_id), weights["keyword"], k)
+            + _rrf(freshness_rank.get(doc_id), weights["freshness"] * prior_scale, k)
+            + _rrf(authority_rank.get(doc_id), weights["authority"] * prior_scale, k)
         )
         matched: list[str] = []
         if doc_id in semantic_rank:
@@ -449,20 +496,9 @@ def hybrid_search(
 
     candidates.sort(key=lambda doc: (-doc["_score"], doc["id"]))
 
-    # Collapse near-duplicates *after* fusion so the survivor is the copy
-    # the rankers liked best, not whichever row was inserted first.
-    representatives: list[dict] = []
-    by_fingerprint: dict[str, dict] = {}
-    for doc in candidates:
-        doc.pop("_authority", None)
-        key = _fingerprint(doc["id"], doc["title"], doc.pop("_bodyHead", ""))
-        existing = by_fingerprint.get(key)
-        if existing is None:
-            doc["duplicateCount"] = 0
-            by_fingerprint[key] = doc
-            representatives.append(doc)
-        else:
-            existing["duplicateCount"] += 1
+    # Collapse duplicates *after* fusion so the survivor is the copy the
+    # rankers liked best, not whichever row was inserted first.
+    representatives = _collapse_duplicates(db, candidates)
 
     if sort == "date":
         # Sorted over the whole filtered candidate pool, not over the page.

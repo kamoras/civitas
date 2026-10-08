@@ -91,6 +91,26 @@ def _eligible_days(db: Session, today: date) -> list[date]:
     return sorted(out, reverse=True)
 
 
+def page_shows(url: str, sentence: str) -> bool:
+    """Whether the page a post links to already says what the post says:
+    its card's description (the report sentence, cut to 160 characters
+    with "…") is the start of `sentence`.
+
+    The post goes out the moment the Digest makes a day final, and the
+    page's cached render (five minutes of data cache, served stale once
+    more on the next visit) still showed the record from before it. The
+    card and feed summary of the posts for 2026-09-29, 10-01 and 10-05 said
+    "No record of the House for this day yet", "No record of the Senate
+    for this day yet" and "met for 0 minutes" beside a post saying
+    otherwise. Reading the page also starts its re-render, so the next run
+    (half an hour on) finds it current. An unreadable page waits too."""
+    card = broadcast.fetch_og_card(url)
+    if not card:
+        return False
+    shown = " ".join((card.get("description") or "").split()).rstrip("…").rstrip()
+    return bool(shown) and " ".join(sentence.split()).startswith(shown)
+
+
 def _already_published(db: Session, subject: str, legacy_tier: str, key: str) -> bool:
     if broadcast.was_published(db, subject):
         return True
@@ -106,6 +126,9 @@ def post_daily_congress(db: Session, today: date) -> date | None:
         if _already_published(db, subject, _CACHE_TIER, key):
             continue
         report = day_report(db, day)
+        if not page_shows(url, report["sentence"]):
+            logger.info("Congress post for %s waits: its page doesn't show the final record yet", key)
+            return None
         broadcast.publish(db, kind="congress_day", subject=subject, title=f"Congress, {_day_label(day)}",
                           text=compose_post(report), url=url)
         api_cache_set(db, _CACHE_TIER, key, {"posted": True}, normal_ttl_hours=24 * 30)
@@ -148,6 +171,9 @@ def post_weekly_congress(db: Session, today: date) -> date | None:
     if not _week_is_final(db, start, end) or _already_published(db, subject, _WEEK_CACHE_TIER, key):
         return None
     report = week_report(db, start)
+    if not page_shows(url, report["sentence"]):
+        logger.info("Congress week post for %s waits: its page doesn't show the final record yet", key)
+        return None
     broadcast.publish(db, kind="congress_week", subject=subject, title=f"Congress, week of {_week_label(start, end)}",
                       text=compose_week_post(report), url=url)
     api_cache_set(db, _WEEK_CACHE_TIER, key, {"posted": True}, normal_ttl_hours=24 * 30)
