@@ -1027,12 +1027,20 @@ wrong number on election night is worse than none:
   (`fetch/poll_close.py`, `app/data/poll_close_times.json` from
   `scripts/fetch_poll_close_times.py` — regenerate each cycle).
 - Test, preview or mismatched data raises `UntrustedCount` and stores nothing
-  (Enhanced Voting `isProduction`, Clarity `istestmode`, Tally
-  `previewElections`/`electionID`; a general's date listing no general —
-  several unsingled entries, or only a runoff, recount or special —
-  `pick_general`); a feed that goes backwards in time or
+  (Enhanced Voting `isProduction`, Clarity `istestmode`/`showtestdatawatermark`
+  — read as flags: the watermark is the string `"0"` on real elections —
+  Tally `previewElections`, `_Preview` ids and `electionID`; a general's date
+  listing no general — several unsingled entries, or only a runoff, recount
+  or special — `pick_general`, unless the entries are copies of one election
+  by the vendor's own id); a feed that goes backwards in time or
   version is refused; an impossible count is dropped; a poll whose total fell
   is stored but announces nothing.
+- A covered state with no count stored an hour after its polls close sends
+  an ops alert whatever its reads said (`check_missing_counts`): a walled or
+  moved feed fails visibly, never as a quiet night and never worked around.
+  A primary's contest labels are not proof of the general's — check each
+  vendor's staged general feed before election night (Washington's House
+  labels changed between the two in 2026).
 - Civitas never calls a race. A count is "leading" — "not final" until the
   source itself says official, and still "leading", never "wins", after (an
   official count's leader can face a runoff: Georgia's general needs a

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { RaceWithCandidates } from "@/types/election";
+import { houseSeatLabel } from "@/lib/elections";
 
 /**
  * Find your district by pointing at where you live.
@@ -56,7 +57,7 @@ export default function DistrictFinder({
 
   const districtLabel = (id: string) => {
     const r = races.find((x) => x.id === id);
-    return r?.district != null ? `${r.state}-${r.district}` : id;
+    return r?.district != null ? houseSeatLabel(r.state, r.district) : id;
   };
 
   if (byCounty.size === 0) return null;

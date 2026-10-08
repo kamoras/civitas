@@ -1755,23 +1755,32 @@ def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     Congress when the pipeline has measured it (partyLineRecord,
     party_line_record.py): breaks toward the other party only, each measure
     once. The stored votes are read only when it hasn't."""
+    breaks, n = party_line_tally(voting_record)
+    if n < CONSTITUENT_MIN_VOTES:
+        return None, n
+    return breaks / n, n
+
+
+def party_line_tally(voting_record: dict) -> tuple[int, int]:
+    """(breaks, party-line votes) that party_break_rate reads: the member's
+    party-line record over the whole Congress when it has been measured,
+    otherwise the stored votes, each roll call once. The profile's voting
+    record states these same counts, so its "broke party line" figure can't
+    disagree with the Constituent Alignment column beside it (it once read
+    the stored sample's every vote against the party instead, and showed no
+    breaks for 149 of 532 members whose score counted some)."""
     from app.pipeline.transform.normalize_votes import dedupe_votes
 
     record = voting_record.get("partyLineRecord")
     if isinstance(record, dict) and isinstance(record.get("votes"), int):
-        n = record["votes"]
-        if n < CONSTITUENT_MIN_VOTES:
-            return None, n
-        return len(record.get("breaks") or []) / n, n
+        return len(record.get("breaks") or []), record["votes"]
 
     votes = dedupe_votes([
         v for v in (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
         if isinstance(v, dict)
     ])
     labeled = [v["votedWithParty"] for v in votes if v.get("votedWithParty") is not None]
-    if len(labeled) < CONSTITUENT_MIN_VOTES:
-        return None, len(labeled)
-    return sum(1 for wp in labeled if wp is not True) / len(labeled), len(labeled)
+    return sum(1 for wp in labeled if wp is not True), len(labeled)
 
 def _expected_break_rate(fit: dict, alignment: float) -> float:
     """The seat's expected break rate from a per-party fit. Measured fits
@@ -3533,15 +3542,28 @@ def _calc_legislative_effectiveness(
     )["score"]
 
 
-def _bills_by_stage(sponsored_bills: list[dict] | None) -> list[int]:
-    """How many of a member's sponsored bills got furthest to each of the
-    five V&W stages (introduced, action in committee, action beyond
-    committee, passed a chamber, became law), by the same stage mapping
-    the score uses (_les_bill_stage)."""
+def _bills_facts(sponsored_bills: list[dict] | None) -> dict:
+    """The Legislative Effectiveness column's figures: how many of a
+    member's bills and joint resolutions got furthest to each of the five
+    V&W stages (introduced, action in committee, action beyond committee,
+    passed a chamber, became law), by the same stage mapping the score uses
+    (_les_bill_stage), and how many simple and concurrent resolutions they
+    sponsored besides.
+
+    Bills only, the population the component's own sentence counts ("40
+    bills: 39 introduced only, ..."). Counting every resolution too made
+    the column say a member had "3 passed the House" beside "1 advanced
+    further", when two of the three were simple resolutions the House
+    agreed to (electing a member to a committee, say), which the score
+    weights as V&W do, a fifth of a bill."""
     counts = [0] * _LES_MAX_STAGE
+    resolutions = 0
     for bill in sponsored_bills or []:
-        counts[_les_bill_stage(bill) - 1] += 1
-    return counts
+        if (bill.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES:
+            counts[_les_bill_stage(bill) - 1] += 1
+        else:
+            resolutions += 1
+    return {"billsByStage": counts, "bills": sum(counts), "resolutions": resolutions}
 
 
 def _legislative_effectiveness_core(
@@ -3649,4 +3671,4 @@ def _legislative_effectiveness_core(
                 "against the median member of the same party (that median scores 50)"
             ),
         })
-    return {"score": score, "components": components, "facts": {"billsByStage": _bills_by_stage(sponsored_bills)}}
+    return {"score": score, "components": components, "facts": _bills_facts(sponsored_bills)}

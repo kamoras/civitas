@@ -257,6 +257,32 @@ def test_cloture_counts_the_senators_sworn_that_day_not_a_fixed_hundred():
     assert cs.votes_from_threshold(full) == 2
 
 
+def test_became_law_from_the_law_list_and_the_bills_just_signed(db_session):
+    from app.models import Senator, SponsoredBill
+    from app.pipeline.cache import api_cache_set
+
+    # Congress.gov's law list: one law whose sponsor has left Congress (no
+    # sponsored-bill row), one whose latest action came after it became law.
+    api_cache_set(db_session, "congress", "laws-119", {"laws": {
+        "S.550": {"title": "A law", "law": "119-60", "kind": "Public", "date": "2025-12-30"},
+        "HR.1043": {"title": "Pine Valley Project Act", "law": "119-68", "kind": "Public", "date": "2025-12-29"},
+    }}, normal_ttl_hours=24 * 365)
+    db_session.add(Senator(id="s1", name="Sen. Alpha", state="CA", party="D", is_current=True))
+    for bill_id, action, day in (
+        ("HR.1043", "By Senator Lee from Committee on Energy and Natural Resources filed written report.", "2026-02-11"),
+        ("S.766", "Signed by President.", "2025-12-31"),  # signed, no law number listed yet
+        ("HR.504", "The Chair directed the Clerk to notify the Senate of the action of the House.", "2025-12-31"),
+    ):
+        db_session.add(SponsoredBill(senator_id="s1", bill_id=bill_id, title="A bill", congress=119, is_law=True,
+                                     latest_action=action, latest_action_date=day, bill_type=bill_id.split(".")[0]))
+    db_session.commit()
+    week = cs._became_law(db_session, date(2025, 12, 29), date(2026, 1, 4))
+    assert [(b["billId"], b["date"]) for b in week] == [("HR.1043", "2025-12-29"), ("S.550", "2025-12-30"), ("S.766", "2025-12-31")]
+    assert week[0]["text"] == "Became Public Law No: 119-68."
+    # HR.1043 is not listed again in February under its later action.
+    assert cs._became_law(db_session, date(2026, 2, 9), date(2026, 2, 15)) == []
+
+
 def test_bill_days_are_of_the_bills_congress(week_of_sept_21):
     # S. 4668 of the next Congress is another bill.
     db = week_of_sept_21

@@ -29,6 +29,7 @@ import { asLabel, competitionRanks, displayScore, formatCurrency } from "@/lib/f
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry, JusticeLoyalty } from "@/types/justice";
+import { houseSeatLabel } from "@/lib/elections";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
 type SortKey = "score" | "pac_dollars" | "pac_pct" | "ideology" | "leadership";
@@ -1074,7 +1075,7 @@ function LeaderboardContent() {
                                   className={`text-xs px-2 py-0.5 border ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
                                 >
                                   {branch === "house" && entry.district != null
-                                    ? `${entry.state}-${entry.district}`
+                                    ? houseSeatLabel(entry.state, entry.district)
                                     : `${entry.state}-${entry.party}`}
                                 </span>
                               </td>
@@ -1143,7 +1144,7 @@ function LeaderboardContent() {
                                 className={`text-xs px-1 border shrink-0 ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
                               >
                                 {branch === "house" && entry.district != null
-                                  ? `${entry.state}-${entry.district}`
+                                  ? houseSeatLabel(entry.state, entry.district)
                                   : `${entry.state}-${entry.party}`}
                               </span>
                             </div>

@@ -80,6 +80,7 @@ from app.pipeline.member_lifecycle import (
     reconcile_roster,
 )
 from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
+from app.pipeline.bill_refresh import keep_newer_latest_actions
 from app.pipeline.progress_tracker import ProgressTracker
 # Transform modules
 from app.pipeline.transform.normalize_finance import MISSING_VALUE_TEXT, committee_donor_name, normalize_finance
@@ -364,6 +365,9 @@ def upsert_senator(db: Session, data: dict) -> None:
     # Add sponsored bills — unless this run couldn't fetch them, in which
     # case the empty list is not a record and the stored bills stay.
     if not data.get("sponsoredBillsUnavailable"):
+        keep_newer_latest_actions(
+            db, SponsoredBill, SponsoredBill.senator_id == senator_id, data.get("sponsoredBills", []),
+        )
         db.query(SponsoredBill).filter(
             SponsoredBill.senator_id == senator_id
         ).delete()

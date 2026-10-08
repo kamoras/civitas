@@ -255,8 +255,9 @@ export default function VotingRecord({
     votedAgainstPartyCount = 0,
   } = votingRecord;
 
-  const partyIndependencePct = 100 - Math.round(partyLoyaltyPct);
-  const partyTotal = votedWithPartyCount + votedAgainstPartyCount;
+  // Every figure here is the API's: the party-line counts are the ones
+  // Constituent Alignment scores (each measure once, breaks toward the
+  // other party only), so this panel and the column beside it agree.
 
   const statBoxes = (
     <div className="grid grid-cols-3 gap-2 mb-2 text-center text-sm">
@@ -265,7 +266,7 @@ export default function VotingRecord({
           {totalVotes.toLocaleString()}
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
-          <MetricTooltip text="Total roll-call votes tracked from Congress.gov and Senate.gov for this member across recent and key votes.">
+          <MetricTooltip text="Roll-call votes listed below for this member: the chamber's latest votes and the key bills Civitas follows, from Congress.gov and Senate.gov. The party-line figures beside it cover every party-line vote of this Congress, not only these.">
             TOTAL TRACKED
           </MetricTooltip>
         </div>
@@ -275,24 +276,24 @@ export default function VotingRecord({
           {Math.round(partyLoyaltyPct)}%
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
-          <MetricTooltip text="How often this member votes with the majority of the member's party. 100% = perfect party-line voter. Calculated from all scoreable roll-call votes.">
+          <MetricTooltip text="The share of this Congress's party-line votes (most of one party on each side) on which the member voted with most of their own party. Each bill or nomination counts once, however many times it came to a vote, and a vote against the party from its own flank isn't counted against it: the same count Constituent Alignment scores.">
             PARTY LOYALTY
           </MetricTooltip>
         </div>
-        <div className="text-xs text-ink-lo">votes with party line</div>
+        <div className="text-xs text-ink-lo">
+          with the party on {votedWithPartyCount.toLocaleString()}
+        </div>
       </div>
       <div className="panel px-2 py-3 sm:p-3">
         <div className="text-xl font-display font-semibold text-signal-amber">
-          {partyIndependencePct}%
+          {votedAgainstPartyCount.toLocaleString()}
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
-          <MetricTooltip text="How often this member votes against the member's own party. Higher = more willingness to break from party leadership on roll-call votes.">
-            INDEPENDENT
+          <MetricTooltip text="Party-line votes this Congress on which the member sided with the other party, each bill or nomination once: the breaks Constituent Alignment counts. Breaks from the party's own flank are listed on the scorecard but not counted.">
+            BROKE PARTY LINE
           </MetricTooltip>
         </div>
-        <div className="text-xs text-ink-lo">
-          {votedAgainstPartyCount} of {partyTotal} broke party line
-        </div>
+        <div className="text-xs text-ink-lo">toward the other party</div>
       </div>
     </div>
   );
@@ -308,7 +309,8 @@ export default function VotingRecord({
         <p className="text-xs text-ink-lo">
           Each vote links to its bill.{" "}
           <span className="font-mono text-signal-magenta">AGAINST PARTY</span> marks a vote with the
-          other side on a roll call the parties split on.
+          other side on a roll call the parties split on, including votes against the party from its
+          own flank and repeat votes on one bill, which the counts above leave out.
         </p>
         {keyVoteCount > 0 && (
           <div>

@@ -535,6 +535,9 @@ class TestOtherPlaceholderDoesNotBlockKnn:
         with patch(
             "app.pipeline.analyze.donor_classifier_ai.classify_industries_batch_scored",
             return_value={"Acme Corp": ("MANUFACTURING", 0.8)},
+        ), patch(
+            # The skip-entity check is an embedding comparison; not under test.
+            "app.pipeline.analyze.donor_classifier_ai.is_skip_entity", return_value=False,
         ):
             await classify_donors_hybrid(donors, db_session=db_session)
 

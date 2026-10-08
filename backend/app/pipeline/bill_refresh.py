@@ -24,7 +24,7 @@ run benefits from them too.
 Scheduling and the skip-while-nightly-runs guard live in scheduler.py.
 """
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy import and_, case, func, or_
@@ -41,7 +41,7 @@ from app.pipeline.analyze.bill_stage import (
     is_enacted,
 )
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.congress import CONGRESS_API_BASE, _fetch_with_retry
+from app.pipeline.fetch.congress import CONGRESS_API_BASE, _fetch_with_retry, congress_first_year
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
@@ -183,6 +183,38 @@ def _supersedes(new_date: str, stored_date: str | None, makes_law: bool = False)
     if not new_date:
         return False
     return new_date > stored_date or (makes_law and new_date == stored_date)
+
+
+def keep_newer_latest_actions(db: Session, model, owner_filter, bills: list[dict]) -> int:
+    """Before a member's sponsored-bill rows are rewritten from `bills` (the
+    nightly pipelines' dicts: billId, congress, latestAction,
+    latestActionDate), put back a stored latest action dated after the one
+    in `bills`. Returns how many it put back.
+
+    The nightly pipelines read the member's sponsored-legislation list from
+    a cache that lives PIPELINE_CACHE_TTL_HOURS (72 h), while this module
+    writes each bill's newer action within the hour. Rewritten from the
+    cache, S. 2403 went back from "Presented to President." (2026-10-05) to
+    the House's motion to reconsider of 2026-09-16, and the refresh never
+    saw the bill again: 25 of 5,653 bills updated since 2026-09-15 were
+    behind Congress.gov on 2026-10-08. The stage and is_law come from the
+    bill's action history, which this module also keeps current, so only
+    the latest action itself needs keeping."""
+    stored = {
+        (row.bill_id, row.congress): row
+        for row in db.query(model.bill_id, model.congress, model.latest_action, model.latest_action_date)
+        .filter(owner_filter)
+    }
+    kept = 0
+    for bill in bills:
+        row = stored.get((bill.get("billId"), bill.get("congress")))
+        if row is None or not row.latest_action_date:
+            continue
+        if row.latest_action_date > (bill.get("latestActionDate") or ""):
+            bill["latestAction"] = row.latest_action
+            bill["latestActionDate"] = row.latest_action_date
+            kept += 1
+    return kept
 
 
 def _newest_action(actions: list[dict]) -> str | None:
@@ -336,6 +368,82 @@ async def _apply_updates(
     return summary
 
 
+# ── The Congress's laws ───────────────────────────────────────────
+# Congress.gov's list of the laws a Congress enacted (GET /law/{congress}),
+# each with the day it became law, read from its action history once (a
+# law's date never changes). The weekly reports' "became law" read it: from
+# the sponsored-bill rows they missed every law whose sponsor has left
+# Congress (3 of the 119th's first 120), and dated a law by its latest
+# action, which can come after it (H.R. 1043, law 2025-12-29, latest
+# action a Senate committee report of 2026-02-11).
+_LAWS_KEY = "laws-{congress}"
+_LAWS_TIER = "congress"
+_LAWS_FOREVER_HOURS = 24 * 365 * 10
+# Law dates read per cycle, so a first run fills in over a few hours.
+_MAX_LAW_DATE_FETCHES = 50
+# The President has ten days (Sundays excepted) to sign a bill presented
+# as one Congress ends; the outgoing Congress's list is read this long into
+# the next one.
+_LATE_LAWS = timedelta(days=30)
+
+
+def stored_laws(db: Session, congress: int) -> dict[str, dict]:
+    """{bill id: {"title", "law" ("119-68"), "kind" ("Public"), "date"}}
+    for `congress`, as far as the refresh has read them."""
+    stored = api_cache_get(db, _LAWS_TIER, _LAWS_KEY.format(congress=congress), max_age_hours=_LAWS_FOREVER_HOURS)
+    return dict((stored or {}).get("laws") or {})
+
+
+def _law_date(actions: list[dict]) -> str | None:
+    """The day the bill became law: the date of its "Became Public/Private
+    Law No: ..." action."""
+    return next((a.get("actionDate") for a in actions if became_law_action(a.get("text"))), None)
+
+
+async def sync_laws(db: Session, client: httpx.AsyncClient, congress: int) -> int | None:
+    """Add the laws Congress.gov lists for `congress` that aren't stored yet.
+    Returns how many were added, or None when the list couldn't be read (the
+    stored laws stand)."""
+    listed: dict[str, dict] = {}
+    offset = 0
+    while True:
+        data = await _fetch_with_retry(client, f"{CONGRESS_API_BASE}/law/{congress}?limit={_PAGE_SIZE}&offset={offset}")
+        if data is None:
+            return None
+        page = data.get("bills") or []
+        for item in page:
+            if item.get("type") and item.get("number") is not None:
+                listed[f"{item['type'].upper()}.{item['number']}"] = item
+        if len(page) < _PAGE_SIZE:
+            break
+        offset += _PAGE_SIZE
+    laws = stored_laws(db, congress)
+    added = 0
+    for bill_id, item in listed.items():
+        if bill_id in laws:
+            continue
+        if added >= _MAX_LAW_DATE_FETCHES:
+            break
+        bill_type, number = bill_id.split(".")
+        data = await _fetch_with_retry(
+            client, f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type.lower()}/{number}/actions?limit=250",
+        )
+        raw = (data or {}).get("actions") or []
+        day = _law_date(raw.get("item", []) if isinstance(raw, dict) else raw)
+        if not day:
+            continue
+        law = (item.get("laws") or [{}])[0]
+        laws[bill_id] = {
+            "title": item.get("title") or "", "law": law.get("number") or "",
+            "kind": (law.get("type") or "Public Law").split()[0], "date": day,
+        }
+        added += 1
+    if added:
+        api_cache_set(db, _LAWS_TIER, _LAWS_KEY.format(congress=congress), {"laws": laws},
+                      normal_ttl_hours=_LAWS_FOREVER_HOURS)
+    return added
+
+
 def _resume_point(now: datetime, listing_cut_at: datetime | None, deferred_from: datetime | None) -> datetime:
     """Where the next cycle's window starts (less _WINDOW_OVERLAP): the
     oldest update this cycle did not apply, or now when it applied all."""
@@ -360,6 +468,10 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
         async with make_async_client() as client:
             recent, listing_cut_at = await _fetch_recently_updated(client, since)
             summary = await _apply_updates(db, client, recent)
+            laws_added = await sync_laws(db, client, settings.CURRENT_CONGRESS)
+            if now.date() < date(congress_first_year(settings.CURRENT_CONGRESS), 1, 3) + _LATE_LAWS:
+                # A Congress's last bills are signed after the next convenes.
+                await sync_laws(db, client, settings.CURRENT_CONGRESS - 1)
         # Only advance the window marker after a full successful pass, so
         # a crashed cycle is retried over the same window next hour — and
         # only as far as what it applied.
@@ -378,4 +490,5 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
     if resume != now:
         summary["resumes_at"] = resume.isoformat()
     summary["recently_updated"] = len(recent)
+    summary["laws_added"] = laws_added  # None: the law list couldn't be read
     return summary

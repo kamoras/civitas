@@ -121,9 +121,12 @@ class FundingSchema(CamelModel):
 
 class VotingRecordSchema(CamelModel):
     """Roll-call votes in the current Congress."""
-    total_votes: int = Field(description="Roll-call votes on the member's record")
-    voted_with_party_count: int = Field(0, description="Votes cast with the member's party majority")
-    voted_against_party_count: int = Field(0, description="Votes cast against the member's party majority")
+    total_votes: int = Field(description="Roll-call votes stored for the member: the key and recent votes listed")
+    voted_with_party_count: int = Field(
+        0, description="Party-line votes this Congress cast with the member's party, as Constituent Alignment counts them")
+    voted_against_party_count: int = Field(
+        0, description="Party-line votes this Congress cast against the member's party toward the other one "
+                       "(breaks), each measure once, as Constituent Alignment counts them")
     party_loyalty_pct: float = Field(0.0, description="With-party share of party-line votes, 0-100")
     recent_vote_count: int = 0
     key_vote_count: int = 0
@@ -524,6 +527,7 @@ class _PersonDetailBase(CamelModel):
     """
     id: str
     name: str
+    bioguide_id: str | None = Field(None, description="The member's Biographical Directory id (Congress.gov's)")
     state: str
     party: Literal["D", "R", "I"]
     years_in_office: int = Field(description="Whole years in this chamber")
