@@ -584,8 +584,9 @@ class LeaderboardEntrySchema(CamelModel):
     small_donor_percentage: float | None = Field(
         None, description="Share of contributions in unitemized gifts of $200 or less, 0-100; null when unknown")
     top_industry: str | None = Field(
-        None, description="The largest entry of the profile's funding.industryBreakdown, as words (which can be "
-                          "LARGE INDIVIDUAL or UNCLASSIFIED rather than an industry)")
+        None, description="The largest industry in the profile's funding.industryBreakdown, as words; small "
+                          "donors, unattributed individuals, party and candidate committees and unclassified "
+                          "money are not industries and never this; null when there is none")
     trend: ScoreTrendSchema = Field(default_factory=ScoreTrendSchema)
     # SVD-based, cosponsorship-derived (Tauberer 2012) — 0 = most-left,
     # 1 = most-right, computed without party labels as input. None when
