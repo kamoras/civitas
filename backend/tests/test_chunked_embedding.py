@@ -84,6 +84,42 @@ class TestChunkText:
         assert chunk_text(text, 20, _count_words) == chunk_text(text, 20, _count_words)
 
 
+class TestExploreChunks:
+    """The title leads every chunk, and has to fit inside the window with
+    it: the title and summary used to be prefixed to an already-full
+    window, the encoder's truncation cut the end off nearly every body
+    window, and that text was in no chunk at all."""
+
+    DOC = {
+        "title": "Grazing Permits",
+        "summary": "Rules for rangeland.",
+        "body": " ".join(f"Unique{i} token here." for i in range(120)),
+    }
+
+    def test_every_chunk_leads_with_the_title_and_fits(self):
+        chunks = vs.explore_chunks(self.DOC, 20, _count_words)
+        assert len(chunks) > 1
+        assert chunks[0].startswith("Grazing Permits Rules for rangeland.")
+        assert all(c.startswith("Grazing Permits ") for c in chunks)
+        assert all(_count_words(c) <= 20 for c in chunks)
+
+    def test_no_text_is_lost_to_the_title(self):
+        covered = " ".join(vs.explore_chunks(self.DOC, 20, _count_words))
+        assert "rangeland." in covered
+        for i in range(120):
+            assert f"Unique{i}" in covered
+
+    def test_a_long_title_leaves_the_body_half_the_window(self):
+        doc = {**self.DOC, "title": " ".join(f"t{i}" for i in range(100))}
+        chunks = vs.explore_chunks(doc, 20, _count_words)
+        assert all(_count_words(c) <= 20 for c in chunks)
+        assert "Unique119" in " ".join(chunks)
+
+    def test_head_only_and_empty_documents(self):
+        assert vs.explore_chunks({"title": "Just a title"}, 20, _count_words) == ["Just a title"]
+        assert vs.explore_chunks({"title": "", "summary": None, "body": ""}, 20, _count_words) == []
+
+
 class _FakeModel:
     """Deterministic hashing encoder — exact, and needs no weights."""
 
@@ -93,6 +129,10 @@ class _FakeModel:
         @staticmethod
         def tokenize(text):
             return text.split()
+
+        @staticmethod
+        def num_special_tokens_to_add():
+            return 0
 
     def encode(self, texts, **_kwargs):
         out = np.zeros((len(texts), vs.SIMILARITY_DIMENSIONS), dtype=np.float32)
@@ -141,6 +181,23 @@ class TestDeepPassageRetrieval:
         hits = vector_index.search_explore_documents(
             "Perfluorooctanoic contamination wellfields", n_results=5)
         assert hits[0]["id"] == 1
+
+    def test_every_encoded_chunk_fits_the_encoder_with_its_special_tokens(
+        self, vector_index, monkeypatch
+    ):
+        # max_seq_length counts [CLS] and [SEP]; tokenize() doesn't.
+        model = _FakeModel()
+        model.tokenizer = type("T", (), {
+            "tokenize": staticmethod(str.split),
+            "num_special_tokens_to_add": staticmethod(lambda: 2),
+        })
+        encoded: list[str] = []
+        real_encode = model.encode
+        model.encode = lambda texts, **kw: (encoded.extend(texts), real_encode(texts))[1]
+        monkeypatch.setattr(vs, "get_similarity_model", lambda: model)
+        vector_index.embed_explore_documents([_doc(1, "Notice of Procedure", FILLER + NEEDLE + FILLER)])
+        assert len(encoded) > 1
+        assert all(len(t.split()) <= model.max_seq_length - 2 for t in encoded)
 
     def test_results_are_documents_not_chunks(self, vector_index):
         # A long document occupies many chunk slots; without folding them

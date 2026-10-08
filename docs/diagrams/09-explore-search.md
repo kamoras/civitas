@@ -177,6 +177,15 @@ overlap measured in tokens would be a number someone picked. A short
 document is still exactly one window, so the index grows with the corpus's
 real length rather than uniformly.
 
+The title leads every window, so a passage from the middle of a rule still
+has its subject — and the windows are cut in the room the title leaves
+(less the encoder's own `[CLS]`/`[SEP]`), never filled first and prefixed
+after (`explore_chunks`). Until 2026-10 title *and* summary, a median 83
+tokens, were prefixed to windows that were already full: the encoder's
+truncation cut the end off 79% of windows, a quarter of each on average, and
+with one sentence of overlap that text was in no window at all. The summary
+is now embedded once, as the start of the text.
+
 At query time the index is searched at chunk level and folded back to
 documents by each document's best-matching chunk — max pooling, not
 averaging, because a long rule with one passage squarely on the query is a
@@ -294,10 +303,19 @@ style:
 
 | Style | Query built from | What it probes |
 |---|---|---|
-| `title` | the document's own title | the easy case |
-| `paraphrase` | body content words, title words removed | where dense retrieval should win |
+| `title` | the document's own title words, in order | the easy case |
+| `paraphrase` | the body's eight most frequent content words, title words removed | despite the name, an exact-term bag of words — keyword's home ground |
 | `identifier` | serial numbers and citations in the document | where dense retrieval cannot compete |
 | `rare` | the document's least common terms corpus-wide | the long tail, where IDF earns its keep |
+| `passage` | one verbatim body sentence, from anywhere in the body | whether a specific passage, deep text included, is reachable |
+
+Every style is built from the document's own words, so the protocol measures
+lexical findability and the keyword channel leads by construction. Read the
+semantic channel against itself across a change to the index, never against
+keyword: on the 2026-10 corpus it found 53% of targets in its top 20 overall,
+and 1.6% of identifier probes, which no encoder can do better on. The probes
+are also deterministic for a given `--seed` (they used to depend on Python's
+per-process string-hash order, so two runs never measured the same queries).
 
 Relevance judgments are derived, not hand-labelled: this is known-item
 retrieval, where a document is pulled from the corpus, a query a person

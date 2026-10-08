@@ -508,8 +508,12 @@ here: **do not change a ranking weight because a result set looks better.**
 
 `backend/scripts/evaluate_explore_search.py` is the instrument. It reports
 MRR and Recall@k for each channel and for the fusion, broken out by query
-style (title / paraphrase / identifier / rare-term), against the live index.
-Run it before and after, and say what moved.
+style (title / paraphrase / identifier / rare-term / passage), against the
+live index. Run it before and after, and say what moved. Every probe is built
+from the document's own words (the "paraphrase" style is a bag of its most
+frequent words, not a rewording), so keyword leads semantic by construction
+and identifier probes are near zero for any encoder: compare the semantic
+channel with itself across a change, not with keyword.
 
 Relevance judgments there are derived by known-item retrieval, not
 hand-labelled — a document is pulled from the corpus, a plausible query for

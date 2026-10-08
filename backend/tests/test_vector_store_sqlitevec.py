@@ -33,6 +33,7 @@ def vec_env(tmp_path, monkeypatch):
 
     fake_model = MagicMock()
     fake_model.encode.side_effect = fake_encode
+    fake_model.tokenizer.num_special_tokens_to_add.return_value = 0
     with patch.object(vector_store, "get_similarity_model", return_value=fake_model):
         yield fake_encode
     conn, vector_store._vec_conn = vector_store._vec_conn, None
