@@ -10,6 +10,7 @@ from app.api.response_helpers import (
     score_history_json,
 )
 from app.database import get_db
+from app.member_ids import resolve_member_id
 from app.services.holdings_service import HOLDING_CATEGORY_PATTERN, get_senator_holdings
 
 from app.services.senator_service import (
@@ -89,14 +90,14 @@ def list_leaderboard(db: Session = Depends(get_db)) -> JSONResponse:
 @router.get("/senators/{senator_id}/history")
 def get_senator_history(senator_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     """Return historical score snapshots for a senator."""
-    return score_history_json(db, "senator", senator_id)
+    return score_history_json(db, "senator", resolve_member_id(db, resolve_member_id(db, senator_id)))
 
 
 @router.get("/senators/{senator_id}/score-breakdown")
 def get_senator_score_breakdown_route(senator_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     """Return the full component-level derivation behind each of a senator's
     scored dimensions — the "show the math" panel's data source."""
-    breakdown = get_senator_score_breakdown(db, senator_id)
+    breakdown = get_senator_score_breakdown(db, resolve_member_id(db, senator_id))
     if breakdown is None:
         raise HTTPException(status_code=404, detail="Senator not found")
     return _cached_json(breakdown, max_age=CACHE_TTL_DETAIL_S)
@@ -112,7 +113,7 @@ def get_votes(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Return paginated votes for a senator."""
-    result = get_senator_votes(db, senator_id, category, page, per_page, filter)
+    result = get_senator_votes(db, resolve_member_id(db, senator_id), category, page, per_page, filter)
     if result is None:
         raise HTTPException(status_code=404, detail="Senator not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
@@ -126,7 +127,7 @@ def get_stock_trades(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Return paginated STOCK Act trade disclosures for a senator."""
-    result = get_senator_stock_trades(db, senator_id, page, per_page)
+    result = get_senator_stock_trades(db, resolve_member_id(db, senator_id), page, per_page)
     if result is None:
         raise HTTPException(status_code=404, detail="Senator not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
@@ -143,7 +144,7 @@ def get_senator_holdings_route(
     """Return the asset holdings from the latest annual financial disclosure:
     a by-category breakdown plus a page of holdings, largest first
     (optionally one category's)."""
-    result = get_senator_holdings(db, senator_id, page, per_page, category)
+    result = get_senator_holdings(db, resolve_member_id(db, senator_id), page, per_page, category)
     if result is None:
         raise HTTPException(status_code=404, detail="Senator not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
@@ -152,7 +153,7 @@ def get_senator_holdings_route(
 @router.get("/senators/{senator_id}")
 def get_senator(senator_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     """Return a single senator by ID."""
-    result = get_senator_by_id(db, senator_id)
+    result = get_senator_by_id(db, resolve_member_id(db, senator_id))
     if result is None:
         raise HTTPException(status_code=404, detail="Senator not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)

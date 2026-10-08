@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from app.api import public
 from app.api.router import api_router
 from app.database import get_db
-from app.models import ExploreDocument, Representative, ScoreSnapshot, Senator
+from app.models import ExploreDocument, MemberIdAlias, Representative, ScoreSnapshot, Senator
 from app.pipeline.lexical_index import ensure_lexical_index
 from app.schemas import (
     PublicApiIndexSchema,
@@ -86,6 +86,24 @@ def test_every_response_matches_its_documented_schema(client, path, params, sche
     schema.model_validate(body)
     # Non-empty, or a list-of-anything schema would pass vacuously.
     assert body.get("entries") or body.get("snapshots") or body.get("results") or "entries" not in body
+
+
+@pytest.mark.parametrize("path,member,schema", [
+    ("/senators/old-s", "S000001", PublicSenatorProfileSchema),
+    ("/senators/old-s/history", "S000001", PublicHistorySchema),
+    ("/representatives/old-r", "R000001", PublicRepresentativeProfileSchema),
+    ("/representatives/old-r/history", "R000001", PublicHistorySchema),
+])
+def test_a_renamed_id_answers_under_the_current_one(client, db_session, path, member, schema):
+    """As documented on the id parameter: an id a member had before a
+    rename (app/member_ids.py) still works, and the body names the current id."""
+    db_session.add_all([MemberIdAlias(old_id="old-s", new_id="S000001"),
+                        MemberIdAlias(old_id="old-r", new_id="R000001")])
+    db_session.commit()
+    body = _body(client, path)
+    schema.model_validate(body)
+    assert body["id"] == member
+    assert body.get("siteUrl", f"/politicians/{member}").endswith(f"/politicians/{member}")
 
 
 def test_states_match_their_documented_schema(client):

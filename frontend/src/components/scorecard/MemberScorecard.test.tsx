@@ -200,14 +200,14 @@ const recommit: KeyVote = {
   },
 };
 
-function renderCard() {
+function renderCard(cardBreakdown: RepresentationScoreBreakdown = breakdown) {
   // Inside <main>, as the profile page mounts it.
   return render(
     <main>
       <MemberScorecard
         member={member}
         chamber="house"
-        breakdown={breakdown}
+        breakdown={cardBreakdown}
         district={2}
         stateName="Tennessee"
         rank={{ rank: 412, of: 433 }}
@@ -238,7 +238,7 @@ describe("MemberScorecard", () => {
     expect(screen.getByText("#412 of 433 representatives")).toBeInTheDocument();
     expect(
       screen.getByText(
-        /11% of \$1\.2M in contributions came from PACs\. 24% came from donors giving under \$200; the House median is 6%\./
+        /11% of \$1\.2M in contributions came from PACs\. 24% came from donors giving \$200 or less; the House median is 6%\./
       )
     ).toBeInTheDocument();
     expect(
@@ -253,6 +253,17 @@ describe("MemberScorecard", () => {
     ).toBeInTheDocument();
     // A member's own committee isn't one of their donors.
     expect(screen.queryByText("Hale for Congress")).not.toBeInTheDocument();
+  });
+
+  it("says when the filings can't measure small donors", async () => {
+    const fi = breakdown.fundingIndependence;
+    renderCard({
+      ...breakdown,
+      fundingIndependence: { ...fi, facts: { ...fi.facts, smallDonorShare: null } },
+    } as RepresentationScoreBreakdown);
+    expect(
+      screen.getByText(/The campaign itemizes every gift, so its filings can.t say how much came/)
+    ).toBeInTheDocument();
   });
 
   it("lists every vote against party with the chamber's own tallies", async () => {

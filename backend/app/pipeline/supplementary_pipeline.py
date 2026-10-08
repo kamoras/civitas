@@ -79,7 +79,7 @@ async def run_supplementary_pipeline() -> dict:
                     progress.skip("explore_documents", detail=f"skipped: {held.why}")
                 else:
                     from app.pipeline.explore_pipeline import run_explore_pipeline
-                    explore_result = await run_explore_pipeline(days_back=60)
+                    explore_result = await run_explore_pipeline()
                     # Count NEW documents per source — the old sum over all int
                     # values picked up total_embedded (historically the whole
                     # corpus), reporting "N ingested" when nothing new arrived.

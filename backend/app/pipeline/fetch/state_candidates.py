@@ -88,6 +88,7 @@ from app.pipeline.fetch.state_candidates_common import (
     PARTY_CODE_MAP,
     fec_party,
     ballot_basis_key,
+    ballot_party,
     is_not_a_person,
     clean_display_name,
     JUDICIAL_COURT_LABELS,
@@ -1300,10 +1301,15 @@ _SUFFIX_AFTER_COMMA_RE = re.compile(r",\s*(?:Jr|Sr|II|III|IV|V)\.?$", re.IGNOREC
 
 
 def _note_ballot_name(db: Session, cand: Candidate, record: dict) -> None:
-    """Keep the name the state prints for a candidate it matched. A
-    "Last, First" printing is left out rather than reordered: a comma does
+    """Keep the name and party the state prints for a candidate it matched.
+    A "Last, First" printing is left out rather than reordered: a comma does
     not reliably mark where the surname ends, and the FEC name already
-    reads that way."""
+    reads that way. The party is the list's, over the FEC filing's code
+    (2026-10-08: confirmed nominees showed "08" and "REO")."""
+    party = ballot_party(record)
+    if party and cand.ballot_party != party:
+        cand.ballot_party = party
+        db.commit()
     printed = clean_display_name(record.get("display_name") or "")
     if len(printed.split()) < 2:
         return

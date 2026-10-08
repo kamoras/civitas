@@ -282,7 +282,7 @@ async def _apply_updates(
                 # time) keeps its stage whatever the actions said.
                 values["stage"] = case(
                     (model.is_law, _ENACTED),
-                    else_=str(classify_bill_stage_from_actions(actions, is_law)),
+                    else_=str(classify_bill_stage_from_actions(actions, is_law, bill_type)),
                 )
             # else: keep the stored stage — a failed/empty actions fetch
             # must not regress a real stage to the INTRODUCED fallback.

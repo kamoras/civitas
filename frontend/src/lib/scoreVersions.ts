@@ -32,6 +32,32 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.31",
+    date: "2026-10-08",
+    title: "Funding and cosponsorship inputs corrected",
+    tldr: "A campaign that itemizes every gift reports no unitemized money, so its small-donor share read 0%; it is now marked not measured and left out of its score. A candidate's own joint fundraising committee is no longer listed as a donor, money grouped by employer always counts as employees' money, and the House's cosponsorship measures read every bill a member sponsored this Congress instead of the first five.",
+    changes: [
+      "Small-donor share: one senator and 22 representatives itemize every gift. Their Funding Independence moves by -4 to +6 points; every other member by at most one. The FEC's contributions-by-size tables were checked as a replacement and not used: they total more than the campaigns' own contributions.",
+      "Donors: a joint fundraising committee passes along a candidate's share of individual gifts, which the FEC counts as a transfer, so listing it as a donor counted the campaign's own fundraising twice. 1,352 Senate rows of money grouped by employer (universities, law firms, technology companies) had been typed as party or ideological money.",
+      "House cosponsorship: only each member's first five sponsored bills, 18% of the House's, fed leadership, bipartisan coalition and the ideology prior. The effect is measured on the first run with every bill. docs/methodology/member-score/v6.31.md has the details.",
+      "Industry breakdown: 76 members' breakdowns summed past their contributions. The detail now covers the same cycles as the FEC totals beside it (a senator seated by a special election had the special's committee money counted in), and committee money is capped at what the campaign reported receiving from committees: money passed through a joint fundraising committee is a transfer the totals leave out.",
+      "PACs registered with no sponsoring organization are political money by their FEC registration, as party and leadership committees already were; the name reading had filed two in three of the ideological ones under an industry.",
+      'Votes: an answer of "present" was stored as "Not Voting" and counted as a missed vote; it is now shown as cast and counts as attending. A party\'s lean on a roll call is now read from the members who voted Yea or Nay, as in CQ\'s party unity votes, not from every member including absentees: 8 of 1,588 stored roll calls change label.',
+      "Also: partisan depth reads each bill's lean from how the parties voted; House bills show Congress.gov's own policy area; trend arrows compare only scores from the same algorithm version; the voting record lists votes in date order.",
+    ],
+  },
+  {
+    version: "President v11",
+    date: "2026-10-08",
+    title: "Jobs for every president the payroll series covers",
+    tldr: "Jobs created came from a hand-typed table of term years that started with Eisenhower, so Truman, whose term the BLS payroll series covers, had no jobs figure. Term years now come from the presidents table itself. Truman's is 10.3 million jobs, 1.47 million a year, against 1.44 million for the others.",
+    changes: [
+      "Truman's Effectiveness now includes jobs at a quarter weight, as every other postwar president's does. His rate is close to the average, so that part sits near 50; the average itself moves by less than 0.01 million a year, so no other president moves by more than a fraction of a point.",
+      'Wording only: the election-margin line no longer says a president "won by" a negative margin, says when the margin is estimated from the electoral vote (before 1824), and no longer claims polls began with Truman (UCSB has 20 polls of Franklin Roosevelt\'s, from 1941 to 1943, without the by-party figures this score reads).',
+      "Also corrected: two presidents who died in office showed their successor's oath date as their last day (one two days late, one a day late); the last day now comes from the president's own American Presidency Project page. The approval trend's starting figure is described as what it is, the average of the first quarter of the term's polls, not the first poll. Names follow the White House's list: Martin Van Buren, and George H. W. Bush, who appeared as plain \"George Bush\". A part with no source for a president no longer claims none could exist.",
+    ],
+  },
+  {
     version: "v6.30",
     date: "2026-10-08",
     title: "Funding: the election that seated the member, and PAC industries from the records",
@@ -84,6 +110,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
       "Also fixed: the House's data check counted members, and delegates and mid-term replacements had pushed it past its limit, so House positions had stopped refreshing. It now counts seats.",
       "Tested and kept: this part scores 50 for sitting where members of their party from similar seats sit, and above 50 for sitting nearer the seat's center. Scoring it like the vote part (100 at the typical position) was tested against House and Senate general-election results and predicted nothing, while the current shape did; neither shape predicted primary results. One scale for both parties was also kept (our choice: a scale per party predicted elections no better and no worse), though it leaves more of the party whose members spread more widely near 0 and 100.",
       "Effect on October 2026 data: the average member moves 0.5 points (Senate) and under 0.2 (House) on Constituent Alignment through the position part; on the vote part, the new weighting changes no break in either chamber (6,055 House, 2,351 Senate). Two recently sworn-in representatives' position part moves from 23.3 and 31.1 to 50 (it is 30% of Constituent Alignment). Members scored on 1 to 39 votes or Voteview's placeholder, all since departed, move by up to 50 points on that part. docs/methodology/member-score/v6.27.md has the measurements.",
+      "Released before this version without a number of its own (2026-10-03), so snapshots on either side of it carry v6.26: the FEC's totals were read from a truncated list, so some long-serving members were scored on an old campaign (one leader's $68.1M race read as $5.0M); a senator appointed to a seat was credited with the votes of the predecessor who shared the surname; and \"Null\", the FEC's text for a missing employer, counted as a top donor on 354 scorecards. Funding Independence moved by up to about 40 points for the members on the wrong campaign on the first run after; that movement is the correction, not a change in their records.",
     ],
   },
   {

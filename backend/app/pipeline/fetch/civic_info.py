@@ -62,6 +62,7 @@ import httpx
 
 from app.config import settings
 from app.database import off_loop
+from app.election_phase import active_election
 from app.pipeline.cache import api_cache_get, api_cache_set_async
 from app.pipeline.fetch.town_directory import address_for_town
 
@@ -165,6 +166,41 @@ def _parse_contests(payload: dict) -> list[dict]:
     return parsed
 
 
+async def _election_id(
+    client: httpx.AsyncClient, db, state: str, spend: Callable[[int], Awaitable[None]] | None,
+) -> str | None:
+    """Google's id for the site's general election (from its elections
+    index, cached like a lookup), or None when it lists none yet or the
+    index can't be read. Without it, voterinfo answers "Election unknown"
+    for an election the index already lists (verified 2026-10-08), and
+    could pick an off-cycle election of its own (state_candidates_civic
+    passes it for the same reason)."""
+    day = await off_loop(db, lambda session: active_election(session).election_day.isoformat())
+    cache_key = f"civic-election-id-{day}"
+    cached = await off_loop(db, lambda session: api_cache_get(session, "google_civic", cache_key, max_age_hours=TOWN_CACHE_TTL_HOURS))
+    if cached is not None:
+        return cached.get("id")
+    if spend is not None:
+        await spend(1)
+    try:
+        response = await client.get(f"{CIVIC_BASE}/elections", params={"key": settings.GOOGLE_CIVIC_API_KEY}, timeout=30.0)
+        response.raise_for_status()
+        elections = response.json().get("elections") or []
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Civic elections index failed: HTTP %d", exc.response.status_code)
+        return None
+    except Exception:
+        logger.exception("Civic elections index failed")
+        return None
+    scopes = {"ocd-division/country:us", f"ocd-division/country:us/state:{state.lower()}"}
+    match = next((
+        str(e["id"]) for e in elections
+        if isinstance(e, dict) and e.get("electionDay") == day and e.get("ocdDivisionId") in scopes
+    ), None)
+    await api_cache_set_async(db, "google_civic", cache_key, {"id": match}, normal_ttl_hours=TOWN_CACHE_TTL_HOURS)
+    return match
+
+
 async def fetch_town_ballot(
     client: httpx.AsyncClient, db, state: str, town: str,
     spend: Callable[[int], Awaitable[None]] | None = None,
@@ -192,14 +228,14 @@ async def fetch_town_ballot(
     if cached is not None:
         return _to_result(cached, address)
 
+    election_id = await _election_id(client, db, state, spend)
+    params = {"key": settings.GOOGLE_CIVIC_API_KEY, "address": address}
+    if election_id:
+        params["electionId"] = election_id
     if spend is not None:
         await spend(1)
     try:
-        response = await client.get(
-            f"{CIVIC_BASE}/voterinfo",
-            params={"key": settings.GOOGLE_CIVIC_API_KEY, "address": address},
-            timeout=30.0,
-        )
+        response = await client.get(f"{CIVIC_BASE}/voterinfo", params=params, timeout=30.0)
         response.raise_for_status()
         payload = response.json()
     except httpx.HTTPStatusError as exc:

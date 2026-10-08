@@ -1020,11 +1020,12 @@ def _alignments_from_votes(voting_record: dict) -> list[dict]:
     """Derive per-policy-area partisan alignments from actual votes.
 
     Uses multi-area bill data when available: each bill may span multiple
-    policy areas (e.g. a bill touching HEALTHCARE and TAXES), each with
-    its own per-area party alignment.  A senator's Yea/Nay on the bill
-    registers as a signal in each area separately, weighted by the area's
+    policy areas (e.g. a bill touching HEALTHCARE and TAXES). A senator's
+    Yea/Nay on the bill registers the bill's own lean (how the parties
+    voted on it) in each area separately, weighted by the area's
     confidence.  This follows Adler & Wilkerson (2012) in treating
-    legislation as multi-dimensional.
+    legislation as multi-dimensional, and Poole & Rosenthal (1985) in
+    reading lean from roll-call behaviour.
 
     Fallback: when `policyAreas` is absent, uses the single `policyArea`
     with the bill's overall `partyLeaning`.
@@ -1060,15 +1061,22 @@ def _alignments_from_votes(voting_record: dict) -> list[dict]:
 
         multi_areas = v.get("policyAreas") or []
         if multi_areas and isinstance(multi_areas, list):
+            # The bill's lean is how the parties voted on it (partyLeaning,
+            # refine_with_vote_data; its content only where the roll call
+            # gave no split), credited to each policy area it touches by
+            # the area's confidence. Each area's content label decided it
+            # before, so a Yea on a bill both parties passed counted as a
+            # Democratic or Republican vote in an area (AGENTS.md §4).
+            bill_party = v.get("partyLeaning") or v.get("party_leaning", "")
+            if bill_party not in ("D", "R"):
+                continue
             for pa in multi_areas:
                 if not isinstance(pa, dict):
                     continue
                 area = pa.get("area", "")
                 if not area or area == "PROCEDURAL":
                     continue
-                area_party = pa.get("party", "")
-                if area_party not in ("D", "R"):
-                    continue
+                area_party = bill_party
                 conf = pa.get("confidence", 0.5)
 
                 if vote == "Yea":

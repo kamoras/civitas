@@ -33,12 +33,21 @@ const INDUSTRIES_NAMED = 6;
 const DONORS_SHOWN = 5;
 
 function Lede({ facts }: { facts: FundingFacts }) {
-  const small = percent(facts.smallDonorShare);
   const expected = facts.smallDonorExpectedShare;
+  if (facts.smallDonorShare == null) {
+    return (
+      <p className="text-base leading-relaxed text-ink">
+        {percent(facts.pacShare)} of {formatCurrency(facts.contributions)} in contributions came
+        from PACs. The campaign itemizes every gift, so its filings can&apos;t say how much came
+        from donors giving $200 or less.
+      </p>
+    );
+  }
+  const small = percent(facts.smallDonorShare);
   return (
     <p className="text-base leading-relaxed text-ink">
       {percent(facts.pacShare)} of {formatCurrency(facts.contributions)} in contributions came from
-      PACs. {small} came from donors giving under $200
+      PACs. {small} came from donors giving $200 or less
       {expected != null &&
         (facts.smallDonorComparison === "house-median"
           ? `; the House median is ${percent(expected)}.`
