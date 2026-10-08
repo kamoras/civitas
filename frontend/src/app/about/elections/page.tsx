@@ -155,9 +155,9 @@ export default async function ElectionsChapter() {
             word: anyone not on it comes off the page.
           </Item>
           <Item label="Nominees from primary results">
-            Stands in until a state certifies. It can&apos;t see a Libertarian, Green or independent
-            who never ran in a primary, so the page says &ldquo;nominees&rdquo;, not &ldquo;the
-            ballot&rdquo;.
+            Stands in until a state certifies. It can&apos;t see a nominee who never ran in a
+            primary (one a party convention chose, or a Libertarian, Green or independent
+            candidate), so the page says &ldquo;nominees&rdquo;, not &ldquo;the ballot&rdquo;.
           </Item>
           <Item label="A primary ballot">Before the primary, the people running in it.</Item>
           <Item label="Campaign filings">
@@ -174,6 +174,12 @@ export default async function ElectionsChapter() {
           candidate lists published only as scanned images (one misread name would take a real
           nominee off the page), and we don&apos;t work around bot challenges or logins on state
           election sites.
+        </P>
+        <P>
+          Fundraising figures are the FEC&apos;s totals for this race&apos;s election only, dated by
+          the last day the candidate&apos;s reports cover (&ldquo;FEC reports through&rdquo;), not
+          by when we last checked. A candidate with no report for this election yet says so; their
+          money from an earlier race is never shown in its place.
         </P>
         <More label="Three lists corrected, October 2026">
           <P>

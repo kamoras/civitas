@@ -199,7 +199,7 @@ class TestListRaces:
         _candidate(
             db_session, "S1", "2026-SEN-GA", "OSSOFF, JON",
             candidate_status="C", cash_on_hand=500.0,
-            last_financials_sync=datetime(2026, 7, 20, 8, 30),
+            last_financials_sync=datetime(2026, 7, 20, 8, 30), financials_through="2026-06-30",
         )
         # Never-synced challenger: null watermark, not a fabricated time —
         # the frontend renders "awaiting FEC sync" instead of "$0 raised".
@@ -213,6 +213,9 @@ class TestListRaces:
         # doesn't parse it as viewer-local time.
         assert synced["lastFinancialsSync"] == "2026-07-20T08:30:00Z"
         assert unsynced["lastFinancialsSync"] is None
+        # What the figures are as of is the FEC report's end, not the sync.
+        assert synced["financialsThrough"] == "2026-06-30"
+        assert unsynced["financialsThrough"] is None
 
     def test_confirmed_candidates_filter_out_defeated_primary_fec_filers(self, db_session):
         """Same filtering as the ballot page and race-detail route — a
