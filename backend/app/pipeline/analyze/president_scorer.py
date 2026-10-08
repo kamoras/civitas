@@ -79,7 +79,7 @@ def _blend_live_components(components: list[dict]) -> dict:
     genuinely inapplicable (e.g. Public Mandate for a president who never
     won an election) —
     scoring it neutral would still be presenting a number for something
-    that isn't measurable even in principle. Callers (president_pipeline.
+    no source here measures. Callers (president_pipeline.
     py) skip writing a None score, leaving the DB column NULL; compute_
     president_overall_score renormalizes across whichever dimensions
     aren't NULL for that specific president.
@@ -87,7 +87,7 @@ def _blend_live_components(components: list[dict]) -> dict:
     if not components:
         return {
             "score": None, "components": [],
-            "note": "Not applicable for this president: no data source exists even in principle, not merely unfetched.",
+            "note": "Not scored for this president: none of the sources this part reads covers them.",
         }
 
     total_weight = sum(c["weight"] for c in components)
@@ -1038,8 +1038,9 @@ def _public_mandate_core(
             facts["trendExpected"] = round(expected, 1)
             components.append(_population_zscore_component(
                 "Approval trend", 0.30, approval_trend, expected, fit["resid_sd"],
-                f"Approval {_moved(approval_trend)} from {approval_start:.0f}% at the start; "
-                f"presidents who started there typically {_moved(expected)}",
+                f"Approval {_moved(approval_trend)} from {approval_start:.0f}%, its average over the "
+                f"first quarter of the term's polls, to the last quarter's; presidents who started "
+                f"there typically {_moved(expected)}",
             ))
         elif approval_trend is not None and trend and window_days is None:
             # No fit yet (the persisted reference predates it): against the

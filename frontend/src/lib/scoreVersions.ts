@@ -54,6 +54,7 @@ export const SCORE_VERSIONS: ScoreVersion[] = [
     changes: [
       "Truman's Effectiveness now includes jobs at a quarter weight, as every other postwar president's does. His rate is close to the average, so that part sits near 50; the average itself moves by less than 0.01 million a year, so no other president moves by more than a fraction of a point.",
       'Wording only: the election-margin line no longer says a president "won by" a negative margin, says when the margin is estimated from the electoral vote (before 1824), and no longer claims polls began with Truman (UCSB has 20 polls of Franklin Roosevelt\'s, from 1941 to 1943, without the by-party figures this score reads).',
+      "Also corrected: two presidents who died in office showed their successor's oath date as their last day (one two days late, one a day late); the last day now comes from the president's own American Presidency Project page. The approval trend's starting figure is described as what it is, the average of the first quarter of the term's polls, not the first poll. Names follow the White House's list: Martin Van Buren, and George H. W. Bush, who appeared as plain \"George Bush\". A part with no source for a president no longer claims none could exist.",
     ],
   },
   {
