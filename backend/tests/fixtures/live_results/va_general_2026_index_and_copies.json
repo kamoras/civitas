@@ -1,0 +1,1311 @@
+{
+ "_source": "Virginia's real Enhanced Voting index (/api/jurisdictions/Virginia, elections cut to id/date/English name, newest six) and the two entries it lists for 2026-11-03, both named '2026 November General': '2026-November-General' and '_20261001151803', a dated copy of the same election (the same election.id, an older lastUpdated). Fetched 2026-10-08; payloads trimmed to the Senate item, two House items and the envelope.",
+ "index": {
+  "elections": [
+   {
+    "publicElectionId": "_20261001151803",
+    "electionDate": "2026-11-03",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "2026 November General"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "2026-November-General",
+    "electionDate": "2026-11-03",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "2026 November General"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "2026-August-Republican-Primary",
+    "electionDate": "2026-08-04",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "2026 August Republican Primary"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "2026-August-Democratic-Primary",
+    "electionDate": "2026-08-04",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "2026 August Democratic Primary"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "2026-April-21-Special",
+    "electionDate": "2026-04-21",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "2026 April 21 Special"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "2026-April-14-Special",
+    "electionDate": "2026-04-14",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "2026 April 14 Special"
+     }
+    ]
+   }
+  ]
+ },
+ "payloads": {
+  "2026-November-General": {
+   "election": {
+    "id": "01000000-ebdd-00dc-0143-08df1fee4ade",
+    "electionDate": "2026-11-03",
+    "isProduction": true,
+    "isOfficialResults": false,
+    "lastUpdated": "2026-10-07T17:54:22.8002483Z",
+    "asOf": "2026-10-08T15:45:55.7644269Z"
+   },
+   "localityElections": [
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    }
+   ],
+   "ballotItems": [
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, United States Senate"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 0,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 133
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Mark R. Warner"
+         }
+        ],
+        "party": {
+         "abbreviation": "D"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Bert Mizusawa"
+         }
+        ],
+        "party": {
+         "abbreviation": "R"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "party": {
+         "abbreviation": null
+        },
+        "voteCount": 0,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (1st District)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 0,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 18
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Shannon L. Taylor"
+         }
+        ],
+        "party": {
+         "abbreviation": "D"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Robert J. \"Rob\" Wittman"
+         }
+        ],
+        "party": {
+         "abbreviation": "R"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "party": {
+         "abbreviation": null
+        },
+        "voteCount": 0,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (2nd District)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 0,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 8
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Elaine G. Luria"
+         }
+        ],
+        "party": {
+         "abbreviation": "D"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jen A. Kiggans"
+         }
+        ],
+        "party": {
+         "abbreviation": "R"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Geral D. \"Bishop\" Staten"
+         }
+        ],
+        "party": {
+         "abbreviation": "I"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "J. Matt Baker"
+         }
+        ],
+        "party": {
+         "abbreviation": "I"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "party": {
+         "abbreviation": null
+        },
+        "voteCount": 0,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "_20261001151803": {
+   "election": {
+    "id": "01000000-ebdd-00dc-0143-08df1fee4ade",
+    "electionDate": "2026-11-03",
+    "isProduction": true,
+    "isOfficialResults": false,
+    "lastUpdated": "2026-10-01T19:16:05.7601797Z",
+    "asOf": "2026-10-01T19:22:27.0203414Z"
+   },
+   "localityElections": [
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    },
+    {
+     "isProduction": true
+    }
+   ],
+   "ballotItems": [
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, United States Senate"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 0,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 133
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Mark R. Warner"
+         }
+        ],
+        "party": {
+         "abbreviation": "D"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Bert Mizusawa"
+         }
+        ],
+        "party": {
+         "abbreviation": "R"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "party": {
+         "abbreviation": null
+        },
+        "voteCount": 0,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (1st District)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 0,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 18
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Shannon L. Taylor"
+         }
+        ],
+        "party": {
+         "abbreviation": "D"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Robert J. \"Rob\" Wittman"
+         }
+        ],
+        "party": {
+         "abbreviation": "R"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "party": {
+         "abbreviation": null
+        },
+        "voteCount": 0,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false
+       }
+      ]
+     }
+    },
+    {
+     "name": [
+      {
+       "languageId": "en",
+       "text": "Member, House of Representatives (2nd District)"
+      }
+     ],
+     "contestType": "Candidate",
+     "voteTotal": 0,
+     "reportingStatus": {
+      "reportingUnits": 0,
+      "totalUnits": 8
+     },
+     "summaryResults": {
+      "ballotOptions": [
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Elaine G. Luria"
+         }
+        ],
+        "party": {
+         "abbreviation": "D"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Jen A. Kiggans"
+         }
+        ],
+        "party": {
+         "abbreviation": "R"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Geral D. \"Bishop\" Staten"
+         }
+        ],
+        "party": {
+         "abbreviation": "I"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "J. Matt Baker"
+         }
+        ],
+        "party": {
+         "abbreviation": "I"
+        },
+        "voteCount": 0,
+        "isWriteIn": false,
+        "isQualifiedWriteIn": false
+       },
+       {
+        "name": [
+         {
+          "languageId": "en",
+          "text": "Write-In"
+         }
+        ],
+        "party": {
+         "abbreviation": null
+        },
+        "voteCount": 0,
+        "isWriteIn": true,
+        "isQualifiedWriteIn": false
+       }
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

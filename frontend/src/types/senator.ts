@@ -20,6 +20,8 @@ export interface SponsoredBill {
 export interface Senator {
   id: string;
   name: string;
+  /** Biographical Directory id, which Congress.gov's member pages are keyed by. */
+  bioguideId?: string | null;
   state: string;
   party: "D" | "R" | "I";
   yearsInOffice: number;

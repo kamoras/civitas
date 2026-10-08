@@ -32,6 +32,26 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.33",
+    date: "2026-10-08",
+    title: "State partisan lean matches Cook's published figures",
+    tldr: "A senator's seat expectation reads the state's Cook PVI. Ours averaged the 2020 and 2024 presidential votes equally; Cook weights 2024 three times as heavily, and with that weighting ours matches all 51 of Cook's published state figures, where 18 had been a point off.",
+    changes: [
+      "State PVI moves by one point toward Cook's published value in 18 jurisdictions: AK, AR, IN, KS, ND, NE, OK, UT and WY one point less Republican; OH, NC and WI too (Wisconsin to EVEN); ME, MN, OR and WA one point more Democratic, NJ one point less, DC one point more. Senators from those states have Constituent Alignment (the expected party-break rate, position congruence and the approval part) read on the corrected lean; representatives are unaffected, since House seats were already on Cook's published district figures.",
+      "The weighting was measured, not assumed: against the generator's own pinned returns, 75/25 reproduces every published state value, and 70/30 or 80/20 miss four each. District figures were already Cook's published numbers. docs/methodology/member-score/v6.33.md has the details.",
+    ],
+  },
+  {
+    version: "v6.32",
+    date: "2026-10-08",
+    title: "The candidate's own money and vetoed bills",
+    tldr: "Top-donor concentration is meant to leave out the candidate's own money, but a candidate's loans to the campaign were counted as if a donor had given them, so a mostly self-funded campaign's donors looked unconcentrated. And a vetoed bill was counted as a law, because Congress.gov gives a veto and a signature the same action code.",
+    changes: [
+      'Candidate\'s own money: 95 sitting members have loans or contributions from the candidate in their election window, 29 of them more than 10% of the base. It is now taken out of the outside money top-donor concentration is measured over, and shown as its own category in the funding breakdown instead of "Other sources". It stays in the base of the PAC and small-donor shares. docs/methodology/member-score/v6.32.md has the measurements.',
+      "Vetoed bills: two bills vetoed in December 2025, whose overrides failed, counted toward their sponsors' Legislative Effectiveness and appeared under \"Became law\". The President action's text now decides signed or vetoed.",
+    ],
+  },
+  {
     version: "v6.31",
     date: "2026-10-08",
     title: "Funding and cosponsorship inputs corrected",

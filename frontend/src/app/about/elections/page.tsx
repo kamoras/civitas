@@ -102,6 +102,13 @@ export default async function ElectionsChapter() {
           office. Once a gap closes for a state, it comes off that state&apos;s list: a disclaimer
           that outlives the gap stops describing the page.
         </P>
+        <P>
+          That link goes to the state&apos;s own voter lookup, where you can see your sample ballot
+          or polling place on the state&apos;s site (or its polling-place page, where the lookup
+          itself refuses automated checks). Each night Civitas checks that the link still opens that
+          page; when it doesn&apos;t, or when a state&apos;s site turns away the check, the page
+          links USAGov&apos;s directory of election offices instead.
+        </P>
       </Section>
 
       <Section id="finding-your-district" title="Finding your district without typing an address">
@@ -123,8 +130,8 @@ export default async function ElectionsChapter() {
           election, or those sitting now), a lookup by representative (house.gov&apos;s, or your
           current member&apos;s name) answers for the district your current member was elected in,
           which on the new map can be a different place under the same number. Those pages point to
-          the map, the counties and the state&apos;s own ballot lookup instead. For the same reason
-          a member of Congress running there is marked a &ldquo;sitting member&rdquo; (from election
+          the map, the counties and the state&apos;s own voter lookup instead. For the same reason a
+          member of Congress running there is marked a &ldquo;sitting member&rdquo; (from election
           day on, a &ldquo;member before this election&rdquo;, since the results can stay up until
           the new Congress is sworn in), not the &ldquo;incumbent&rdquo;: no seat on the new map has
           a previous holder.
@@ -155,9 +162,9 @@ export default async function ElectionsChapter() {
             word: anyone not on it comes off the page.
           </Item>
           <Item label="Nominees from primary results">
-            Stands in until a state certifies. It can&apos;t see a Libertarian, Green or independent
-            who never ran in a primary, so the page says &ldquo;nominees&rdquo;, not &ldquo;the
-            ballot&rdquo;.
+            Stands in until a state certifies. It can&apos;t see a nominee who never ran in a
+            primary (one a party convention chose, or a Libertarian, Green or independent
+            candidate), so the page says &ldquo;nominees&rdquo;, not &ldquo;the ballot&rdquo;.
           </Item>
           <Item label="A primary ballot">Before the primary, the people running in it.</Item>
           <Item label="Campaign filings">
@@ -174,6 +181,12 @@ export default async function ElectionsChapter() {
           candidate lists published only as scanned images (one misread name would take a real
           nominee off the page), and we don&apos;t work around bot challenges or logins on state
           election sites.
+        </P>
+        <P>
+          Fundraising figures are the FEC&apos;s totals for this race&apos;s election only, dated by
+          the last day the candidate&apos;s reports cover (&ldquo;FEC reports through&rdquo;), not
+          by when we last checked. A candidate with no report for this election yet says so; their
+          money from an earlier race is never shown in its place.
         </P>
         <More label="Three lists corrected, October 2026">
           <P>

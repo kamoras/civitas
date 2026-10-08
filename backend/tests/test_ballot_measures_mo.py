@@ -42,8 +42,8 @@ class TestFetchMeasuresParsing:
         measures = self._measures()
         three = measures["3"]
         assert three["origin"] == "Missouri General Assembly"
-        assert three["yes_means"].startswith("repeal Article I, Section 36")
-        assert three["no_means"].startswith("leave Article I, Section 36")
+        assert three["yes_means"].startswith("A “yes” vote will repeal Article I, Section 36")
+        assert three["no_means"].startswith("A “no” vote will leave Article I, Section 36")
         assert three["fiscal_impact"].startswith("State governmental entities estimate")
         # The fiscal sentence must not leak into the summary, and vice versa.
         assert "estimate no costs" not in three["official_summary"]
@@ -169,5 +169,5 @@ class TestFetchMeasures:
         assert prop["origin"] == "Missouri voters (referendum petition)"
         assert prop["official_summary"].startswith("Do the people of the state of Missouri approve the act")
         # A veto referendum: the state's own framing says what YES does.
-        assert prop["yes_means"].startswith("approve the act of the General Assembly")
+        assert prop["yes_means"].startswith("A “yes” vote will approve the act of the General Assembly")
         assert prop["fiscal_impact"] == "State and local governmental entities estimate no costs or savings."

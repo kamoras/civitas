@@ -49,7 +49,7 @@ flowchart TB
         AUTHR["Authority ranker<br/>cited documents only"] --> FUSE
 
         FUSE["Weighted reciprocal rank fusion<br/>score = Σ wᵣ / (60 + rankᵣ)"]
-        FUSE --> DEDUP["Collapse near-duplicate documents"]
+        FUSE --> DEDUP["Collapse identical documents"]
         DEDUP --> DIV["Cap results per member/agency<br/>(demoted, never dropped)"]
         DIV --> OUT["Return keyword-in-context excerpt with matched<br/>terms marked, source URL, doc type, citation count<br/>+ comment link and deadline for open rulemakings"]
         OUT -.->|"optional, streamed"| SUM["LLM summary of the document<br/>(POST, on request, cached)"]
@@ -82,7 +82,8 @@ comparable quantities, and the usual fix — min-max normalise each, then add �
 makes the blend depend on whatever the best and worst scores happened to be
 for that one query. Reciprocal rank fusion (Cormack, Clarke & Büttcher, SIGIR
 2009) discards the scores and fuses the *rankings*, `score(d) = Σ wᵣ / (K +
-rankᵣ(d))` with K = 60. A ranker that did not return a document contributes
+rankᵣ(d))`, with K the retrievers' measured resolution δ rather than the
+published 60 (below). A ranker that did not return a document contributes
 nothing for it — which is also what lets the two priors sit in the same sum as
 extra voters. The weights are in `config_definitions.py` under "Explore search
 ranking".
@@ -112,9 +113,23 @@ in both rows because known-item retrieval scores query-independent priors
 that way by construction — the 0.752 → 0.850 recovery is the signal, not
 the gap to 0.978.
 
-**Recency is a voter, not a sort.** At K = 60 a weight-`w` voter's whole swing
-is about `w/(K+1)`, so at 0.4 the entire freshness signal is worth roughly the
-distance between rank 1 and rank 40 of one retrieval channel. It can lift a
+**K is measured, not published.** Cormack et al.'s K = 60 was chosen for TREC
+runs a thousand documents deep. Here each channel returns at most 150, and the
+two channels disagree on a shared document by a median of δ = 10 ranks. At
+K = 60 a document both channels placed around 30th scored 2/90, above one
+channel's first hit at 1/61, so a document the keyword channel found first
+and the encoder never saw was buried: on the 2026-10-08 corpus the keyword
+channel alone found the known item first 66-68% of the time and the fusion
+36-40%. K is now δ (`explore_ranking.rrf_k`; the prior weights below use the
+same K), which on two harness samples (508 and 1,008 probes) raised fusion MRR
+from 0.491 to 0.565 and 0.514 to 0.580, and hybrid from 0.437 to 0.518 and
+0.482 to 0.538, on every query style. Smaller K scored higher still on these
+probes, which reward trusting a lone top hit; K is the measured δ, not the
+harness's best value.
+
+**Recency is a voter, not a sort.** A weight-`w` voter's whole swing is about
+`w/(K+1)`, which the prior weights' formula below sets equal to the score gap
+δ ranks buys, so recency reorders only what the retrievers cannot tell apart. It can lift a
 markedly newer document over a slightly more relevant one and cannot flip an
 adjacent pair — the division of labour `tests/test_explore_search.py` pins
 down in both directions.
@@ -140,9 +155,13 @@ demote every speech in the corpus on every query. On a corpus too new to have
 accumulated cross-references, nobody clears the bar and the prior does nothing
 at all — the correct failure mode for a signal like this.
 
-**Near-duplicates are collapsed, crowding is demoted.** This corpus is known
+**Duplicates are collapsed, crowding is demoted.** This corpus is known
 to accumulate byte-identical rows (a 2026-07 audit found 1,758 of them, 31% of
-the table), and the Congressional Record legitimately reprints text.
+the table), and the Congressional Record legitimately reprints text. Only an
+identical text counts: a prefix fingerprint alone hid 249 distinct documents
+on the 2026-10-08 corpus (recurring notices that repeat their title and
+boilerplate past any prefix up to 4,000 characters), so the fingerprint and
+the body's length only group candidates and the whole text decides.
 Duplicates collapse to their best-ranked copy *after* fusion, so the survivor
 is the one the rankers liked, and the result reports how many were folded in.
 Separately, no single member or agency may take more than three of the leading
@@ -264,10 +283,10 @@ response is already on screen.
 
 ## Nothing here is a hand-set number
 
-Two constants in this feature are typed in, and both are published results
-rather than properties of this corpus: reciprocal rank fusion's K = 60
-(Cormack, Clarke & Büttcher 2009) and PageRank's damping 0.85 (Brin & Page
-1998). They live in code with their citations.
+One constant in this feature is typed in, a published result rather than a
+property of this corpus: PageRank's damping 0.85 (Brin & Page 1998). It lives
+in code with its citation. Reciprocal rank fusion's K used to be a second
+(Cormack, Clarke & Büttcher's 60); it is now the measured δ.
 
 Everything else — BM25F field weights, both prior weights, candidate pool
 depth, the source diversity cap, near-duplicate fingerprint lengths,
@@ -284,7 +303,8 @@ loaders raise rather than rank with invented numbers.
 | freshness / authority weights | the retrievers' measured resolution limit δ, times each prior's measured coverage of the corpus |
 | candidate pool | measured post-filter survival rate, so a filtered search still fills a page |
 | source diversity cap | the corpus's own median documents-per-source among repeat publishers |
-| fingerprint lengths | the corpus's prefix-collision curve |
+| RRF's K | δ, the retrievers' measured resolution limit |
+| fingerprint lengths | the corpus's prefix-collision curve (a grouping key only; an identical full text decides a duplicate) |
 | snippet width, minimum term length | the corpus's median sentence length; the shortest term length that is not near-universal |
 
 The prior weights deserve their formula written out, because they are the

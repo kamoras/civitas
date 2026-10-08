@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session
 from app.models import CongressDay, CongressEvent, RepSponsoredBill, RollCall, SponsoredBill
 from app.pipeline.congress_activity import digest_cursor, eastern_today, last_run
 from app.pipeline.fetch.daily_digest import words_to_int
+from app.pipeline.analyze.bill_stage import became_law_action
+from app.pipeline.bill_refresh import stored_laws
 from app.pipeline.fetch.congress import congress_of_date
 
 CHAMBERS = ("senate", "house")
@@ -49,24 +51,51 @@ def is_resolution(bill_id: str | None) -> bool:
     return _prefix(bill_id) in _RESOLUTIONS
 
 
-def passed_both_chambers(bill_id: str | None, passing_chamber: str) -> bool:
+# The chamber a measure started in agreeing, without a further amendment,
+# to the other chamber's amendment: the Record's "concurred in the Senate
+# amendment to H.R. 5371", "agreed to the motion to concur in the Senate
+# amendment to H.R. 1", "Concurred in the Senate amendments to H.R. 6500",
+# "Senate concurred in the amendment of the House of Representatives to S.
+# 1071". Each cleared the measure for the President, and read as a first
+# passage each said "Goes to the Senate" (2025-07-02, 2025-11-12).
+_CONCURRENCE_RE = re.compile(
+    r"\bconcur(?:red)? in the (?:(?:Senate|House) amendments?|amendments? of the (?:Senate|House))"
+    r"(?![^;]{0,200}?\bwith (?:an|a further) amendment)",
+    re.IGNORECASE,
+)
+
+
+def passed_both_chambers(bill_id: str | None, passing_chamber: str, text: str = "") -> bool:
     """A measure passed by the chamber it did not start in has passed both:
-    it reached the second chamber only by passing the first. Says nothing
-    about amendments still to be reconciled."""
+    it reached the second chamber only by passing the first. So has one its
+    own chamber passed by concurring in the other's amendment (`text`, the
+    Record's entry). Says nothing about amendments still to be reconciled."""
     prefix = _prefix(bill_id)
     if not prefix or prefix in _SIMPLE_RESOLUTIONS:
         return False
     origin = "house" if prefix.startswith("H") else "senate"
-    return origin != passing_chamber
+    return origin != passing_chamber or bool(_CONCURRENCE_RE.search(text or ""))
 
 
 _NOMINATIONS_RE = re.compile(r"^([\w-]+(?: hundred(?: and)?(?: [\w-]+)?)?) (?:[^.]*? )?nominations\b", re.IGNORECASE)
 
 
+# "Routine lists in the Air Force, Army, Marine Corps, Navy, and Space
+# Force." confirms promotion lists whose size the Digest doesn't give.
+_ROUTINE_LIST_RE = re.compile(r"^(?:A )?routine lists? in\b", re.IGNORECASE)
+
+
+def is_routine_list(text: str) -> bool:
+    return bool(_ROUTINE_LIST_RE.match(text or ""))
+
+
 def nominations_in(text: str) -> int:
     """How many nominations one confirmation entry covers: "3 Coast Guard
     nominations in the rank of admiral." is 3; an entry naming one nominee
-    is 1."""
+    is 1; a routine list, whose size the Digest doesn't state, none (it is
+    counted apart, as a list)."""
+    if is_routine_list(text):
+        return 0
     m = _NOMINATIONS_RE.match(text or "")
     if m:
         n = words_to_int(m.group(1))
@@ -108,6 +137,19 @@ def _plural(n: int, one: str, many: str | None = None) -> str:
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
+def _confirmed_phrase(counts: dict) -> str | None:
+    """"confirmed 9 nominations", "... and routine lists" when the Senate
+    also confirmed lists it doesn't count, or None."""
+    n, lists = counts["confirmed"], counts.get("confirmedLists", 0)
+    if n and lists:
+        return f"confirmed {_plural(n, 'nomination')} and routine lists"
+    if n:
+        return "confirmed " + _plural(n, "nomination")
+    if lists:
+        return "confirmed routine lists of nominations"
+    return None
+
+
 def _list_phrase(parts: list[str]) -> str:
     if len(parts) <= 1:
         return "".join(parts)
@@ -122,7 +164,7 @@ def _next_step(e: CongressEvent) -> str | None:
     passage)."""
     if e.kind != "passed" or not e.bill_id or is_resolution(e.bill_id):
         return None
-    if passed_both_chambers(e.bill_id, e.chamber):
+    if passed_both_chambers(e.bill_id, e.chamber, e.text):
         return "both"
     return "house" if e.chamber == "senate" else "senate"
 
@@ -158,6 +200,7 @@ def _counts(events: list[CongressEvent], votes: list[RollCall]) -> dict:
         "failed": sum(1 for e in events if e.kind == "failed"),
         "reported": sum(1 for e in events if e.kind == "reported"),
         "confirmed": sum(nominations_in(e.text) for e in events if e.kind == "confirmed"),
+        "confirmedLists": sum(1 for e in events if e.kind == "confirmed" and is_routine_list(e.text)),
         "committeeMeetings": sum(1 for e in events if e.kind == "committee"),
     }
 
@@ -198,8 +241,8 @@ def _chamber_sentence(chamber: str, day: dict) -> str:
         parts.append("passed " + _plural(c["billsPassed"], "bill"))
     if c["resolutionsPassed"]:
         parts.append("agreed to " + _plural(c["resolutionsPassed"], "resolution"))
-    if c["confirmed"]:
-        parts.append("confirmed " + _plural(c["confirmed"], "nomination"))
+    if confirmed := _confirmed_phrase(c):
+        parts.append(confirmed)
     if c["recordVotes"]:
         parts.append("took " + _plural(c["recordVotes"], "record vote"))
     if parts:
@@ -376,38 +419,58 @@ def _period_sentence(totals: dict) -> str:
             parts.append("took " + _plural(t["recordVotes"], "record vote"))
         if t["billsPassed"]:
             parts.append("passed " + _plural(t["billsPassed"], "bill"))
-        if t["confirmed"]:
-            parts.append("confirmed " + _plural(t["confirmed"], "nomination"))
+        if confirmed := _confirmed_phrase(t):
+            parts.append(confirmed)
         if len(parts) == 1:
             parts.append("took no record votes")
         sentences.append(f"The {name} {_list_phrase(parts)}.")
     return " ".join(sentences)
 
 
+# Congress.gov's own words for the President signing a bill, the day it
+# becomes law, before the law number is assigned.
+_SIGNED_RE = re.compile(r"^signed by (?:the )?president\b", re.IGNORECASE)
+
+
 def _became_law(db: Session, start: date, end: date) -> list[dict]:
-    """Bills whose latest action, dated in the period, is becoming law.
-    Read from the sponsored-bill rows, so a bill no current member
-    sponsored is not listed."""
+    """Bills that became law in the period: Congress.gov's list of the
+    Congress's laws, each on the day it became law (bill_refresh.sync_laws),
+    and a bill signed in the period whose law number isn't on that list yet,
+    from the sponsored-bill rows (its latest action is the signing)."""
     s, e = start.isoformat(), end.isoformat()
     seen: dict[tuple[str, int | None], dict] = {}
+    for congress in sorted({congress_of_date(s), congress_of_date(e)} - {None}):
+        for bill_id, law in stored_laws(db, congress).items():
+            if s <= law["date"] <= e:
+                seen[(bill_id, congress)] = {
+                    "billId": bill_id, "billLabel": bill_label(bill_id), "name": law["title"], "congress": congress,
+                    "date": law["date"], "text": f"Became {law['kind']} Law No: {law['law']}.",
+                }
     for model in (SponsoredBill, RepSponsoredBill):
         for b in db.query(model).filter(
             model.is_law.is_(True), model.latest_action_date >= s, model.latest_action_date <= e,
         ):
-            seen.setdefault((b.bill_id, b.congress), {
-                "billId": b.bill_id, "billLabel": bill_label(b.bill_id), "name": b.title, "congress": b.congress,
-                "date": b.latest_action_date, "text": b.latest_action,
-            })
-    return sorted(seen.values(), key=lambda b: b["date"])
+            if (b.bill_id, b.congress) in seen or b.bill_id in stored_laws(db, b.congress):
+                continue  # on the list, under the day it became law
+            if became_law_action(b.latest_action) or _SIGNED_RE.match(b.latest_action or ""):
+                seen[(b.bill_id, b.congress)] = {
+                    "billId": b.bill_id, "billLabel": bill_label(b.bill_id), "name": b.title,
+                    "congress": b.congress, "date": b.latest_action_date, "text": b.latest_action,
+                }
+    return sorted(seen.values(), key=lambda b: (b["date"], b["billId"]))
 
 
 def period_report(db: Session, start: date, end: date) -> dict:
     p = _period(db, start, end)
     totals = {c: _totals(p, c) for c in CHAMBERS}
     passed = sorted((e for e in p["events"] if e.kind == "passed"), key=lambda e: (e.date, e.seq))
-    both = [_event(e) for e in passed if passed_both_chambers(e.bill_id, e.chamber)]
+    both = [_event(e) for e in passed if passed_both_chambers(e.bill_id, e.chamber, e.text)]
+    # A bill that passed its first chamber and then its second in the same
+    # period is listed once, as through both.
+    cleared = {b["billId"] for b in both}
     one = [_event(e) for e in passed
-           if not is_resolution(e.bill_id) and e.bill_id and not passed_both_chambers(e.bill_id, e.chamber)]
+           if not is_resolution(e.bill_id) and e.bill_id and e.bill_id not in cleared
+           and not passed_both_chambers(e.bill_id, e.chamber, e.text)]
     decided = [v for v in p["votes"] if v.yeas + v.nays > 0]
     closest = sorted(decided, key=lambda v: (votes_from_threshold(v), v.date, v.number))[:3]
 
@@ -499,15 +562,18 @@ def month_report(db: Session, year: int, month: int) -> dict:
     return out
 
 
-def bill_days(db: Session, bill_id: str) -> list[dict]:
+def bill_days(db: Session, bill_id: str, congress: int) -> list[dict]:
     """The days a bill appears in the Congress record (for its detail
-    page's "in the daily reports" list): Digest entries and roll calls."""
-    rows = db.query(CongressEvent).filter(CongressEvent.bill_id == bill_id).all()
+    page's "in the daily reports" list): Digest entries and roll calls, of
+    `congress` only — H.R. 1 of one Congress is another bill from H.R. 1 of
+    the next."""
+    rows = [e for e in db.query(CongressEvent).filter(CongressEvent.bill_id == bill_id)
+            if congress_of_date(e.date) == congress]
     out: dict[tuple[str, str], dict] = {}
     for e in rows:
         out.setdefault((e.date, e.chamber), {"date": e.date, "chamber": e.chamber, "entries": []})["entries"].append(
             {"kind": e.kind, "text": e.text, "source": e.source})
-    for v in db.query(RollCall).filter(RollCall.bill_id == bill_id):
+    for v in db.query(RollCall).filter(RollCall.bill_id == bill_id, RollCall.congress == congress):
         out.setdefault((v.date, v.chamber), {"date": v.date, "chamber": v.chamber, "entries": []})["entries"].append(
             {"kind": "vote", "text": f"{v.question}: {v.result}, {v.yeas}-{v.nays}", "source": "roll_call"})
     return sorted(out.values(), key=lambda d: d["date"], reverse=True)

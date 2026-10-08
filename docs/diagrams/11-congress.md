@@ -31,7 +31,34 @@ pulls out the bill number. Entries split at page-reference lines and at
 column-0 heading lines after a finished sentence; a two-space indent always
 opens a sub-item, because continuation lines are at column 0
 (`app/pipeline/fetch/daily_digest.py`, tested against real issues in
-`backend/tests/fixtures/daily_digest`).
+`backend/tests/fixtures/daily_digest`). Only a list heading keeps its
+sub-items ("Measures Passed:", "Suspensions:", "Reports Filed:", "Nominations
+Confirmed:", the Senate's "House Messages:"); the House indents a measure's
+own paragraph after a page reference, so any other entry's indented
+paragraphs are entries of their own, and the Senate's amendment sub-headings
+("Adopted:", "Withdrawn:" …) continue the list above them. A passage is the
+chamber's own sentence about it: a motion to table a resolution passes
+nothing, a suspension that "failed" is a failure, a rule the House adopted
+that day counts, and concurring in the other chamber's amendment is a passage.
+Over 70 random session days this reads 244 of 246 passage sentences; the two
+it leaves are a motion to discharge and a motion to table.
+
+**The listing has pages.** A long Record issue has more granules than one
+listing page (2025-02-20: 1,117), so the listing is followed to its end.
+Read only to its first page, that day had no Digest and the back-fill stopped
+there for months.
+
+**A missing section is not a day off.** GovInfo's split of the Digest into
+granules sometimes drops a chamber's section that the printed Digest has
+(the House on 2025-02-07). A chamber with no section met if its own pages are
+in the issue or it held a roll call that day; otherwise it did not meet. The
+same split also drops the "Next Meeting" granule on some days (6 of 70
+sampled, e.g. 2025-11-18): it is only in the PDF, so those days show no next
+meeting.
+
+**Re-reading.** `DIGEST_PARSE_VERSION` (`congress_activity.py`) names what
+reading a Digest produces; raising it makes every run re-read a batch of the
+days the back-fill had settled until all are read again.
 
 **A file is not a session.** On a day the Senate does not meet, senate.gov
 still publishes its floor file, holding only when it reconvenes; with no
@@ -58,7 +85,10 @@ run's per-source outcome is stored (`api_cache`, tier `congress`, key
 
 **Reports.** `app/services/congress_service.py` builds the day, week and
 month reports from these rows: counts, "passed both chambers" (a measure
-passed by the chamber it did not start in; simple resolutions never count),
+passed by the chamber it did not start in, or by its own chamber concurring
+in the other's amendment; simple resolutions never count), confirmations
+(each nominee the Digest counts; routine promotion lists, whose size it
+doesn't give, are named rather than counted),
 the three closest votes (by how far the yeas were from what the vote
 needed: a simple majority, two-thirds of those voting, or cloture's 60), and
 a one-line summary filled from counts by
@@ -87,7 +117,23 @@ passed bills' numbers (never titles), linking to `/congress/{date}`. Once the
 week (Monday to Sunday) is over and every day either chamber met is final, it
 also posts that week: the week report's sentence and the numbers of the bills
 that became law, linking to `/congress/week/{monday}`. Only the week just
-ended is eligible.
+ended is eligible. Either post waits until the page it links to shows the
+report it quotes (`page_shows`: the page's description is the report's
+sentence): the link card and the feed summary are read from that page, and
+right after the Digest lands its cached render is still the earlier record.
+
+**Became law.** The week and month reports list Congress.gov's own list of
+the Congress's laws (`GET /law/{congress}`, read by the hourly bill refresh,
+`pipeline/bill_refresh.sync_laws`), each on the day its "Became Public Law"
+action is dated, plus any bill signed that week whose law number isn't on
+the list yet. Read from the sponsored-bill rows alone, they left out every
+law whose sponsor has left Congress and dated a law by its latest action,
+which can come after it.
+
+**Latest actions.** The hourly bill refresh writes each bill's newer action
+within the hour; the nightly pipelines rebuild the rows from a member list
+cached for up to 72 hours, so at that rewrite a stored action dated after
+the list's is kept (`bill_refresh.keep_newer_latest_actions`).
 
 **Bill ids** are the site's (`S.3257`, `HCONRES.89`) whichever spelling the
 source used: the Record's "H. Con. Res. 89", the House roll call's

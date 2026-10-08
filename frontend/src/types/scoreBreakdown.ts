@@ -56,12 +56,24 @@ export interface AlignmentFacts {
   flankBreaks?: number | null;
   breakVotes?: BreakVote[];
   flankBreakVotes?: BreakVote[];
+  /** Senators: the approval groups the score reads (the state's other-party
+   *  voters and independents), against the typical senator; null where
+   *  approval isn't scored (the House) or not measured. */
+  approval?: {
+    groups: { group: "D" | "R" | "I"; approve: number; typical: number }[];
+    z: number;
+    survey: string;
+  } | null;
 }
 
-/** legislativeEffectiveness.facts: bills whose furthest stage is each of
- *  introduced, committee action, beyond committee, passed a chamber, law. */
+/** legislativeEffectiveness.facts: bills and joint resolutions whose
+ *  furthest stage is each of introduced, committee action, beyond
+ *  committee, passed a chamber, law; how many that is; and how many simple
+ *  and concurrent resolutions the member sponsored besides. */
 export interface EffectivenessFacts {
   billsByStage: number[];
+  bills: number;
+  resolutions: number;
 }
 
 /** President: the three dimensions, each with `facts` (the figures below).

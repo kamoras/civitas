@@ -1,0 +1,15 @@
+{
+ "_source": "Colorado's real Clarity electionsettings.json for its certified 2026 primary (EID 126592, version 377440), fetched 2026-10-08, cut to the fields the reader uses. showtestdatawatermark is the STRING '0'; istestmode a JSON false.",
+ "settings": {
+  "electiondetails": {
+   "internalname": "2026 Primary",
+   "electiondate": "6/30/2026",
+   "istestmode": false,
+   "showtestdatawatermark": "0",
+   "participatingcounties": [
+    "Adams|126595|377379|7/21/2026 10:59:18 AM MDT|16",
+    "Alamosa|126596|377347|7/20/2026 1:37:35 PM MDT|16"
+   ]
+  }
+ }
+}

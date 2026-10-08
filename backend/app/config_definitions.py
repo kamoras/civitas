@@ -79,6 +79,10 @@ INDUSTRIES: dict[str, dict] = {
     "SMALL_DONORS":    {"name": "Small Donors (unitemized)", "color": "#00ff41"},
     "LARGE_INDIVIDUAL":{"name": "Large Individual Donors",  "color": "#39ff14"},
     "UNCLASSIFIED":    {"name": "Other Sources",            "color": "#666666"},
+    # The candidate's own money: loans to and contributions from the
+    # candidate (FEC totals). In the shares' denominator by design, never an
+    # industry, never outside money (v6.32).
+    "CANDIDATE_FUNDS": {"name": "Candidate's Own Money",    "color": "#8a7f6e"},
 }
 
 PLATFORM_CATEGORIES: dict[str, str] = {
@@ -194,17 +198,18 @@ BillStage = StrEnum("BillStage", {stage: stage for stage in BILL_STAGES})
 # with no way to earn a citation is passed over rather than penalised
 # (see pipeline/analyze/document_authority.py).
 #
-# TWO published constants live here, with their citations. Everything else
-# about this ranking is generated data, loaded from
+# ONE published constant lives here. Everything else about this ranking —
+# K included — is generated data, loaded from
 # app/data/explore_ranking.json and produced by
 # scripts/calibrate_explore_ranking.py against the live corpus — the same
 # pattern as district_pvi.json and state_population.json (principle 3a).
 # Do not hand-edit the JSON; re-run the script.
 
-# K = 60 is the constant Cormack et al. published and the de-facto default.
-# It flattens the contribution curve so no single ranker's top hit can run
-# away with the result. A property of the algorithm, not of this corpus.
-EXPLORE_RRF_K: int = 60
+# K is not the K = 60 Cormack et al. published: that value was chosen for
+# TREC runs a thousand documents deep, and against this corpus it buried
+# one channel's top hit under documents both channels ranked middling —
+# on the known-item harness fusion missed 17% of targets, keyword alone 4-5%.
+# K is the retrievers' measured resolution instead (explore_ranking.rrf_k).
 
 # The two retrieval channels carry equal weight, which is unweighted RRF
 # exactly as published — there is no prior reason to trust the encoder over
@@ -213,8 +218,8 @@ EXPLORE_RRF_K: int = 60
 EXPLORE_RETRIEVAL_WEIGHT: float = 1.0
 
 # Everything else about this ranking — BM25F field weights, the two prior
-# weights, candidate pool depth, the diversity cap, fingerprint lengths,
-# snippet width — is generated data, not a constant. It is measured
+# weights, RRF's K, candidate pool depth, the diversity cap, fingerprint
+# lengths, snippet width — is generated data, not a constant. It is measured
 # against the live corpus by pipeline/calibrate_ranking.py on every
 # explore pipeline run and read through pipeline/explore_ranking.py.
 # There is deliberately nothing to hand-edit here.

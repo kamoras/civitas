@@ -12,17 +12,24 @@ election data, so the value traces back to real vote counts rather than a
 transcribed number:
 
     Cook PVI methodology — the state's Democratic share of the TWO-PARTY
-    presidential vote, averaged over the last two presidential elections,
-    minus the national two-party Democratic share over those same
-    elections. Positive result => the state ran more Democratic than the
-    nation (D lean); we negate so positive = R lean, matching the rest of
-    this codebase.
+    presidential vote minus the national two-party Democratic share, over
+    the last two presidential elections, weighted 75% to the more recent
+    and 25% to the earlier (Cook's formula since its 2022 release).
+    Positive result => the state ran more Democratic than the nation
+    (D lean); we negate so positive = R lean, matching the rest of this
+    codebase.
 
-        pvi_D(state) = mean over {2020, 2024} of
-                         [ state_two_party_D_share - national_two_party_D_share ]
+        pvi_D(state) = 0.25 * [state_D_2020 - national_D_2020]
+                     + 0.75 * [state_D_2024 - national_D_2024]
         STATE_PVI(state) = -round(pvi_D * 100)
 
-This is the standard, widely-reproduced PVI formula, over the same
+The weighting is checked, not assumed: an equal-weight mean, which this
+script used until 2026-10, put 18 of the 51 jurisdictions one point off
+Cook's published 2025 state PVIs (Oregon D+7 against Cook's D+8); 75/25
+reproduces all 51 exactly, and 70/30 or 80/20 miss four each (measured
+2026-10-08 against this script's own pinned returns and the state table
+of the Wikipedia revision pinned in district_pvi_sources.json). This is
+over the same
 2020+2024 window Cook's current (2025) published PVIs use — re-windowed
 from 2016+2020 in 2026-07 (platform review F6) when the midterm-elections
 feature made this number public: presenting a 2016+2020 lean on a page
@@ -104,9 +111,13 @@ SOURCE_DESC = (
 REGENERATE = "backend/scripts/fetch_state_pvi.py"
 
 WINDOW = "2020+2024"
-AS_OF = "2026-07-24"  # retrieval date of the pinned sources above
+AS_OF = "2026-10-08"  # last regenerated from the pinned sources above
 
 CYCLES = ("2020", "2024")
+
+# Cook's weights for the two elections, most recent heaviest (module
+# docstring). A methodology fact, not a fitted value.
+CYCLE_WEIGHTS = {"2020": 0.25, "2024": 0.75}
 
 # Max per-state divergence (percentage points of two-party D share)
 # tolerated between MEDSL's and the county dataset's 2020 numbers before
@@ -219,7 +230,7 @@ def compute_pvi(by_cycle: dict[str, dict[str, dict[str, int]]]) -> dict[str, int
                 break
             margins.append(c["D"] / (c["D"] + c["R"]) - nat_tp_d[y])
         if ok:
-            out[st] = -round(sum(margins) / len(margins) * 100)
+            out[st] = -round(sum(CYCLE_WEIGHTS[y] * m for y, m in zip(CYCLES, margins)) * 100)
     return out
 
 
@@ -310,10 +321,11 @@ def main() -> int:
             "_source": SOURCE_DESC,
             "_regenerate": REGENERATE,
             "_method": (
-                "STATE_PVI(st) = -round(100 * mean over {2020,2024} of "
-                "[state two-party D share - national two-party D share]); "
-                "positive = R lean. Same window as Cook Political Report's "
-                "current (2025) published PVIs."
+                "STATE_PVI(st) = -round(100 * (0.25 * d2020 + 0.75 * d2024)), "
+                "d = state two-party D share - national two-party D share; "
+                "positive = R lean. Cook Political Report's formula and window "
+                "for its current (2025) published PVIs, all 51 of which it "
+                "reproduces."
             ),
             "_sign": "positive = R lean, negative = D lean (matches district_pvi.json)",
             "_window": WINDOW,

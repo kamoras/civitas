@@ -148,9 +148,9 @@ export default function DataChapter() {
               town selector, a fixed public building per district to fill in candidate lists), never
               a visitor&apos;s.
             </Fact>
-            <Fact label="USAGov">
-              Each state&apos;s election office, linked only after a check that the link still
-              works.
+            <Fact label="State election offices · USAGov">
+              Each state&apos;s own voter lookup, linked only after a nightly check that it still
+              opens; otherwise USAGov&apos;s directory of election offices.
             </Fact>
             <Fact label="News & trends">
               RSS feeds from seven newsrooms, Google Trends and Bluesky, for the Action Center.
@@ -319,9 +319,10 @@ export default function DataChapter() {
           </Item>
         </List>
         <P>
-          Near-duplicates are collapsed, and no single member or agency can crowd the top results:
-          the rest are moved down, never dropped. Ranking weights are changed only when a
-          measurement of search quality says to, never because one set of results looks better.
+          Copies of the same document are collapsed (a recurring notice that only opens the same way
+          is not a copy), and no single member or agency can crowd the top results: the rest are
+          moved down, never dropped. Ranking weights are changed only when a measurement of search
+          quality says to, never because one set of results looks better.
         </P>
       </Section>
 

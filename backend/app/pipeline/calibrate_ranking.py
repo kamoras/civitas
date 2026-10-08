@@ -3,11 +3,11 @@ Derive every tunable in explore search from the corpus it runs against.
 
 Nothing in `app/data/explore_ranking.json` is typed by a human. This script
 computes it, the same generated-data pattern as `district_pvi.json` and
-`state_population.json` (AGENTS.md principle 3a). Two constants are
-deliberately NOT here because they are published results rather than
-properties of this corpus, and they live in code with their citations:
-reciprocal rank fusion's K = 60 (Cormack, Clarke & Büttcher, SIGIR 2009)
-and PageRank's damping 0.85 (Brin & Page, 1998).
+`state_population.json` (AGENTS.md principle 3a). One constant is
+deliberately NOT here because it is a published result rather than a
+property of this corpus, and it lives in code with its citation: PageRank's
+damping 0.85 (Brin & Page, 1998). Reciprocal rank fusion's K is the
+measured δ below (explore_ranking.rrf_k).
 
 Lives in app code rather than in a script because the explore pipeline
 calls it on every run (`services/explore_ranking.calibrate_and_store`), so
@@ -80,11 +80,11 @@ import random
 import re
 import statistics
 
+from app.pipeline.explore_ranking import rrf_k
+
 logger = logging.getLogger(__name__)
 
-# Published constants, restated so the arithmetic below is self-contained.
-# Their home is config_definitions / document_authority.
-RRF_K = 60
+# The two retrieval channels (semantic and keyword) the fusion sums.
 RETRIEVAL_CHANNELS = 2
 
 # The API's own `limit` ceiling — a contract, not a tuning value.
@@ -199,12 +199,14 @@ def _competition_coverage(values: list) -> float:
 
 
 def derive_prior_weights(delta: float, coverage: dict[str, float]) -> dict:
-    """w = channels × (K+1) × [1/(K+1) − 1/(K+1+δ)] × coverage."""
+    """w = channels × (K+1) × [1/(K+1) − 1/(K+1+δ)] × coverage, with the
+    fusion's own K (explore_ranking.rrf_k, itself from δ)."""
+    k = rrf_k(delta)
     if delta <= 0:
         gap = 0.0
     else:
-        gap = 1.0 / (RRF_K + 1) - 1.0 / (RRF_K + 1 + delta)
-    swing = RETRIEVAL_CHANNELS * (RRF_K + 1) * gap
+        gap = 1.0 / (k + 1) - 1.0 / (k + 1 + delta)
+    swing = RETRIEVAL_CHANNELS * (k + 1) * gap
     return {name: round(swing * cov, 4) for name, cov in coverage.items()}
 
 

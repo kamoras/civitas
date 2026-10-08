@@ -3,14 +3,16 @@ from senator_service.py's _compute_trend_map and representative_service.py's
 _compute_rep_trend_map (previously copy-pasted, down to the same lookback
 window and change threshold)."""
 
+import json
 from datetime import datetime, timedelta
 
 import pytest
 
 from app.time_utils import utcnow
 
+from app.api.response_helpers import score_history_json
 from app.models import ScoreSnapshot
-from app.services.score_trends import compute_score_trend_map
+from app.services.score_trends import change_on_current_method, compute_score_trend_map
 
 
 # Mid-congress, so "a week ago" is never in the previous congress (which
@@ -170,3 +172,39 @@ def test_a_snapshot_that_recorded_no_version_is_not_compared(db_session):
     ])
     db_session.commit()
     assert compute_score_trend_map(db_session, "senator")["S001"]["direction"] == "reset"
+
+
+def test_history_change_starts_at_the_current_method():
+    """A profile's headline change counts only snapshots on the latest
+    snapshot's method: a formula change in between is not the member's."""
+    history = [
+        ScoreSnapshot(entity_type="senator", entity_id="S001", date="2026-04-27", overall_score=75.2),
+        _versioned("S001", "2026-07-06", 45.5, "v5"),
+        _versioned("S001", "2026-09-29", 50.0, "v6.30"),
+        _versioned("S001", "2026-10-05", 51.7, "v6.30"),
+    ]
+    assert change_on_current_method(history) == {"since": "2026-09-29", "points": 1.7}
+
+
+def test_history_change_is_none_without_a_comparable_snapshot():
+    history = [_versioned("S001", "2026-09-29", 60.0, "v6.29"), _versioned("S001", "2026-10-05", 51.7, "v6.30")]
+    assert change_on_current_method(history) is None
+    assert change_on_current_method(history[-1:]) is None
+
+
+def test_history_change_stops_at_a_new_congress_for_members_only():
+    history = [_versioned("S001", "2026-12-30", 60.0, "v7"), _versioned("S001", "2027-01-05", 55.0, "v7")]
+    assert change_on_current_method(history) is None
+    assert change_on_current_method(history, by_congress=False) == {"since": "2026-12-30", "points": -5.0}
+
+
+def test_history_endpoint_serves_the_change(db_session):
+    db_session.add_all([
+        _versioned("S001", "2026-09-01", 40.0, "v6.29"),
+        _versioned("S001", "2026-09-29", 50.0, "v6.30"),
+        _versioned("S001", "2026-09-30", 52.0, "v6.30"),
+    ])
+    db_session.commit()
+    body = json.loads(score_history_json(db_session, "senator", "S001").body)
+    assert body["change"] == {"since": "2026-09-29", "points": 2.0}
+    assert len(body["snapshots"]) == 3

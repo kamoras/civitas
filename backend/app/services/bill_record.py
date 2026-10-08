@@ -26,6 +26,7 @@ from app.config import settings
 from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async, api_cache_set_many_async
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, _rate_limiter, congress_gov_bill_url
+from app.pipeline.fetch import floor_logs
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
 from app.services.congress_service import bill_days, bill_label
@@ -240,15 +241,14 @@ class MemberLinks:
         return f"/politicians/{found}" if found else None
 
 
-_YEA = {"yea", "aye"}
-_NAY = {"nay", "no"}
-
-
 def _bucket(position: str) -> str:
+    """The same reading as the stored tally (floor_logs.tally), so a
+    party's counts add up to the totals beside them — "Guilty" on an
+    impeachment article is a yea there, and was "not voting" here."""
     p = (position or "").strip().lower()
-    if p in _YEA:
+    if p in floor_logs.YEA_POSITIONS:
         return "yea"
-    if p in _NAY:
+    if p in floor_logs.NAY_POSITIONS:
         return "nay"
     if p == "present":
         return "present"
@@ -387,7 +387,7 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
             for t in raw.get("text") or []
         ],
         "votes": vote_summaries,
-        "days": bill_days(db, bill_id),
+        "days": bill_days(db, bill_id, congress),
         "congressGovUrl": congress_gov_bill_url(
             congress, _CONGRESS_GOV_TYPE.get(parse_bill_id(bill_id)[0], "bill"), parse_bill_id(bill_id)[1],
         ),

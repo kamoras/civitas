@@ -53,14 +53,15 @@ def test_yes_no_and_summary_match_the_real_source_text():
     h = next(r for r in co.parse_page(_fake_page(FIXTURE)) if r["number"] == "H")
     assert h["origin"] == "the legislature"
     assert h["official_summary"].startswith("Shall there be an amendment")
+    # The Blue Book's whole sentence, its lead-in included (§7).
     assert h["yes_means"] == (
-        "creates an independent adjudicative board made up of citizens, "
+        "A “yes” vote on Amendment H creates an independent adjudicative board made up of citizens, "
         "lawyers, and judges to conduct judicial misconduct hearings and "
         "impose disciplinary actions, and allows more information to be "
         "shared earlier with the public."
     )
     assert h["no_means"] == (
-        "means that a select panel of judges will continue to conduct "
+        "A “no” vote on Amendment H means that a select panel of judges will continue to conduct "
         "judicial misconduct hearings and recommend disciplinary actions, "
         "and cases remain confidential unless public sanctions are "
         "recommended at the end of the process."
@@ -117,17 +118,17 @@ PAGE_133 = json.loads((Path(__file__).parent / "fixtures_co_bluebook_2026_page11
 def test_a_narrow_gutter_is_split_at_the_no_badge():
     (m87,) = co.parse_page(_fake_page(PAGE_87))
     assert m87["yes_means"] == (
-        "creates a graduated state income tax that increases revenue; uses the additional money for "
+        "A “yes” vote on Amendment 87 creates a graduated state income tax that increases revenue; uses the additional money for "
         "K-12 education, health care, and early childhood care and education; and exempts additional "
         "revenue collected from the state’s constitutional revenue limit."
     )
-    assert m87["no_means"] == "keeps the current constitutional requirement for a flat state income tax rate."
+    assert m87["no_means"] == "A “no” vote on Amendment 87 keeps the current constitutional requirement for a flat state income tax rate."
 
 
 def test_a_phrase_the_official_text_repeats_is_kept():
     m133 = next(m for m in co.parse_page(_fake_page(PAGE_133)) if m["number"] == "133")
     assert m133["yes_means"].endswith("expands child sex trafficking to include buying sexual activity with a minor.")
-    assert m133["no_means"].startswith("keeps the existing felony criminal penalties")
+    assert m133["no_means"].startswith("A “no” vote on Proposition 133 keeps the existing felony criminal penalties")
 
 
 def _analysis_page(count: int):
@@ -153,3 +154,24 @@ def test_only_the_quick_reference_guide_pages_are_read():
 def test_a_guide_short_of_the_documents_analyses_is_refused():
     with pytest.raises(ValueError, match="2 guide measures but 3 analysis sections"):
         co.parse_document([_fake_page(FIXTURE), _analysis_page(2), _analysis_page(1)])
+
+
+def test_a_tables_wrapped_column_headers_are_read_column_by_column():
+    """Amendment 87's ballot title carries a table whose headers wrap over
+    three lines; read row by row they interleaved into "Current Average
+    Proposed Change in Average Income Income Tax ..."."""
+    (m87,) = co.parse_page(_fake_page(PAGE_87))
+    assert (
+        "Change in Income Taxes Owed by Income Category Income Categories "
+        "Current Average Income Tax Owed Proposed Average Income Tax Owed "
+        "Proposed Change in Average Income Tax Owed if Passed + or ‑ "
+        "$25,000 or less $59 $50 -$9 $25,001 - $50,000"
+    ) in m87["official_summary"]
+    # Reordered, never dropped: the same words as the zone read row by row.
+    zone = [w for w in PAGE_87 if 180 < w["top"] < 630]
+    assert sorted(m87["official_summary"].split()) == sorted(" ".join(co.lines_from_words(zone)).split())
+
+
+def test_body_text_without_a_table_reads_row_by_row():
+    h = next(r for r in co.parse_page(_fake_page(FIXTURE)) if r["number"] == "H")
+    assert h["official_summary"].startswith("Shall there be an amendment")
