@@ -41,14 +41,18 @@ from app.time_utils import utcnow
     ("Doe, Jane Q.", "jane-doe"),  # not the middle initial
     ("Doe, J. Quincy", "quincy-doe"),  # an initial is passed over for a name
     ("Doe, J.", "j-doe"),  # unless it is all there is
-    ('Doe, Jonathan Q. "Jack"', "jonathan-doe"),  # nor the quoted nickname
+    ('Doe, Jonathan Q. "Jack"', "jack-doe"),  # the quoted nickname: the name they go by
+    ('Doe, Henry C. "Hank", Jr.', "hank-doe"),
+    ("Doe, Jonathan \u201cJack\u201d", "jack-doe"),
+    ("Doe, Jonathan (Johnny)", "jonathan-doe"),  # a parenthesised aside is not one
     ("Doe, John, Jr.", "john-doe"),  # nor the suffix
     ("Doe, John Q. Sr.", "john-doe"),
     ("Doe, John III", "john-doe"),
     ("Doe Roe, Jane", "jane-doe-roe"),  # the whole surname
     ("Doe-Roe, Jane Q.", "jane-doe-roe"),
     ("Núñez, Ana María", "ana-nunez"),  # accents folded, not deleted
-    ('Pérez, Jesús G. "Chucho"', "jesus-perez"),
+    ('Pérez, Jesús G. "Chucho"', "chucho-perez"),
+    ("Pérez, Jesús G.", "jesus-perez"),
     ("De La Peña, Andrés", "andres-de-la-pena"),
     ("O'Doe, Seán", "sean-o-doe"),
     ("Jane Doe", "jane-doe"),  # no comma: "First ... Last"
@@ -57,15 +61,27 @@ def test_member_slug(raw, slug):
     assert member_slug(raw) == slug
 
 
+@pytest.mark.parametrize("raw,structured_last,slug", [
+    ("Roe, Jane Doe", "Doe Roe", "jane-doe-roe"),  # the longer surname the detail gives
+    ("Roe, Jane", "Roe", "jane-roe"),
+    ("Roe, Jane", "Smith", "jane-roe"),  # not a longer form of it: ignored
+    ("Roe, Jane", "Monroe", "jane-roe"),  # a word, not a suffix of letters
+    ("Roe, Jane", None, "jane-roe"),
+])
+def test_member_slug_takes_a_longer_structured_surname(raw, structured_last, slug):
+    assert member_slug(raw, structured_last) == slug
+
+
 def test_normalize_gives_first_last_in_both_chambers():
-    senate = normalize_members([{
-        "bioguideId": "D000001", "name": "Doe Roe, Jane Q.", "state": "Ohio", "chamber": "Senate",
-    }])
+    senate = normalize_members([
+        {"bioguideId": "D000001", "name": "Doe Roe, Jane Q.", "state": "Ohio", "chamber": "Senate"},
+        {"bioguideId": "R000001", "name": "Roe, Ann Poe", "state": "Iowa", "chamber": "Senate"},
+    ], {"R000001": {"lastName": "Poe Roe"}})
     house = normalize_house_members([{
         "bioguideId": "N000001", "name": "Núñez, Ana María", "state": "New Mexico",
         "terms": {"item": [{"chamber": "House of Representatives", "startYear": 2023}]},
     }])
-    assert [m["id"] for m in senate] == ["jane-doe-roe"]
+    assert [m["id"] for m in senate] == ["jane-doe-roe", "ann-poe-roe"]
     assert [m["id"] for m in house] == ["ana-nunez"]
 
 

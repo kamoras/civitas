@@ -59,7 +59,10 @@ ISSUE_MEMBER_FIELDS = ("related_senators", "related_officials")
 # Generational suffixes as Congress.gov prints them — a data-format
 # convention of the name string ("Doe, John Jr."), not a classification.
 _SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv", "v"})
-# A nickname printed inside the formal name: 'Doe, John Q. "Jack"'.
+# A nickname printed inside the formal name: 'Doe, John Q. "Jack"'. Quoted
+# is Congress.gov's marker for the name a member goes by; a parenthesised
+# aside is only dropped.
+_QUOTED = re.compile(r'"([^"]*)"|\u201c([^\u201d]*)\u201d')
 _NICKNAME = re.compile(r'"[^"]*"|“[^”]*”|\([^)]*\)')
 
 
@@ -70,18 +73,25 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")
 
 
-def member_slug(raw_name: str) -> str:
-    """`first-last` from Congress.gov's "Last, First Middle" name.
+def member_slug(raw_name: str, structured_last: str | None = None) -> str:
+    """`first-last` from Congress.gov's "Last, First Middle" name: the name
+    the member goes by, where the source says what it is.
 
-    last: the whole surname before the comma ("Doe Roe, Jane" -> doe-roe).
-    first: the first given name after it, passing over a quoted nickname,
-    initials and suffixes ("Doe, J. Quincy "Q" Jr." -> quincy-doe); an
-    initial only when the name has nothing else.
+    first: the quoted nickname when the name has one — Congress.gov's own
+    marker for the name a member goes by ('Doe, Jonathan Q. "Jack"' ->
+    jack-doe). Otherwise the first given name, passing over initials and
+    suffixes ("Doe, J. Quincy Jr." -> quincy-doe); an initial only when the
+    name has nothing else. The member detail's structured firstName is not
+    used: it holds a familiar form for some members without the name
+    string marking it, which would rename members whose ids are already
+    right.
 
-    The formal string is the source, not the member detail's structured
-    firstName: that field holds the familiar form for some members (a
-    "Robert" listed as "Bob"), which would rename members whose ids are
-    already right. A name with no comma is read as "First ... Last".
+    last: the whole surname before the comma ("Doe Roe, Jane" -> doe-roe),
+    or `structured_last` (the member detail's lastName) when that is a
+    longer multi-word surname ending with it ("Roe" vs "Doe Roe") — the
+    longer form is the surname the member goes by.
+
+    A name with no comma is read as "First ... Last".
     """
     if "," in raw_name:
         last, given = raw_name.split(",", 1)
@@ -91,11 +101,16 @@ def member_slug(raw_name: str) -> str:
     last_words = last.split()
     while len(last_words) > 1 and _slug(last_words[-1]) in _SUFFIXES:
         last_words.pop()
+    surname = _slug(" ".join(last_words))
+    longer = _slug(structured_last or "")
+    if surname and longer.endswith(f"-{surname}"):
+        surname = longer
+    nickname = next((_slug(a or b) for a, b in _QUOTED.findall(given) if _slug(a or b)), "")
     tokens = [t for t in _NICKNAME.sub(" ", given).replace(",", " ").split() if _slug(t)]
     tokens = [t for t in tokens if _slug(t) not in _SUFFIXES] or tokens
     names = [t for t in tokens if len(_slug(t)) > 1]  # "J." is an initial
-    first = (names or tokens or [""])[0]
-    return "-".join(p for p in (_slug(first), _slug(" ".join(last_words))) if p)
+    first = nickname or _slug((names or tokens or [""])[0])
+    return "-".join(p for p in (first, surname) if p)
 
 
 def _chamber_of(row) -> str:

@@ -74,7 +74,7 @@ def normalize_members(
 
         # The slug; unique across both chambers once app.member_ids.
         # assign_member_ids has settled it against the stored members.
-        senator_id = member_slug(raw_name)
+        senator_id = member_slug(raw_name, detail.get("lastName"))
 
         # Clean name to "First Last" order for display and initials
         name = _clean_name(raw_name)
@@ -173,7 +173,7 @@ def normalize_house_members(
 
         last_name_for_match = _extract_last_name(raw_name)
 
-        rep_id = member_slug(raw_name)  # settled by app.member_ids.assign_member_ids
+        rep_id = member_slug(raw_name, detail.get("lastName"))  # settled by app.member_ids.assign_member_ids
 
         name = _clean_name(raw_name)
         name_parts = name.split()

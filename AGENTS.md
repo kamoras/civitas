@@ -582,10 +582,14 @@ stripped (NFD decomposition) so "Núñez" matches "Nunez" in the XML.
 
 A member's id (the `senators` / `representatives` primary key and the URL
 `/politicians/<id>`) is `first-last` from Congress.gov's "Last, First Middle"
-name, ASCII-folded (`app/member_ids.member_slug`): the first given name
-(initials, a quoted nickname and Jr./Sr./II–IV passed over) and the whole
-surname. The formal name string is the source, not the member detail's
-`firstName`, which holds the familiar form for some members. One URL
+name, ASCII-folded (`app/member_ids.member_slug`) — the name the member
+goes by where the source marks it: the quoted nickname when the name string
+has one (`Doe, Henry C. "Hank"` → `hank-doe`), else the first given name
+(initials and Jr./Sr./II–IV passed over); and the whole surname before the
+comma, or the member detail's `lastName` when that is a longer multi-word
+form ending with it. The detail's `firstName` is not used: it holds a
+familiar form for some members without the name string marking it, and
+would rename members whose ids are already right. One URL
 namespace covers both chambers: the same bioguide id keeps one id in both
 tables, and a second person with the same slug gets the state code
 appended (then the bioguide id); whoever holds an id keeps it.
