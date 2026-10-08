@@ -19,6 +19,7 @@ import json
 import logging
 import time
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -703,6 +704,52 @@ def invalidate_stale_analysis(db: Session) -> None:
         invalidate_on_model_change(db_session=db)
     else:
         _write_model_version()
+
+
+async def _fetch_senator_fec(
+    client: httpx.AsyncClient, db: Session, senator: dict,
+    committee_contributions, committee_master,
+) -> dict | None:
+    """One senator's FEC data for normalize_finance: None when no FEC
+    candidate matches, {"unavailable": True} when the FEC could not be read
+    — not "raised nothing": the senator is skipped at prepare and keeps the
+    stored record."""
+    try:
+        candidate = await find_candidate(
+            client, db, senator["name"], senator["state"],
+            bioguide_id=senator.get("bioguideId"),
+        )
+        if not candidate or not candidate.get("candidate_id"):
+            logger.warning("No FEC match for %s (%s)", senator["name"], senator["state"])
+            return None
+        candidate_id = candidate["candidate_id"]
+        financials = await fetch_candidate_financials(client, db, candidate_id)
+        committees = await fetch_candidate_committees(client, db, candidate_id)
+        committee_id = committees[0].get("committee_id") if committees else None
+
+        # Match the receipt-detail and outside-spending windows to the
+        # receipt-totals window (normalize_finance sums only the most recent
+        # election, one deduped totals row).
+        recent_cycles = compute_recent_election_cycles(financials, "S")
+        receipts: list = []
+        pac_receipts: list = []
+        if committee_id:
+            receipts = await fetch_committee_receipts(client, db, committee_id, cycles=recent_cycles)
+            pac_receipts = await fetch_pac_receipts(client, db, committee_id, cycles=recent_cycles)
+        detail = await fetch_contribution_detail(
+            client, db, candidate_id, [committee_id] if committee_id else [],
+            recent_cycles, committee_contributions, committee_master,
+        )
+    except FecUnavailable as e:
+        logger.warning("FEC unreachable for %s: %s", senator["name"], e)
+        return {"unavailable": True}
+    return {
+        "candidate": candidate,
+        "financials": financials,
+        "receipts": receipts,
+        "pacReceipts": pac_receipts,
+        "detail": detail,
+    }
 
 
 def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
@@ -1452,63 +1499,11 @@ async def run_senate_pipeline(
                 client, db, committee_master_cycles(),
             )
             for fec_idx, senator in enumerate(senators):
-                try:
-                    candidate = await find_candidate(
-                        client, db, senator["name"], senator["state"],
-                        bioguide_id=senator.get("bioguideId"),
-                    )
-                    if not candidate or not candidate.get("candidate_id"):
-                        logger.warning(
-                            "No FEC match for %s (%s)",
-                            senator["name"],
-                            senator["state"],
-                        )
-                        continue
-
-                    candidate_id = candidate["candidate_id"]
-                    financials = await fetch_candidate_financials(
-                        client, db, candidate_id
-                    )
-                    committees = await fetch_candidate_committees(
-                        client, db, candidate_id
-                    )
-                    committee_id = (
-                        committees[0].get("committee_id")
-                        if committees
-                        else None
-                    )
-
-                    # Match the receipt-detail and outside-spending windows to
-                    # the receipt-totals window (normalize_finance sums only the
-                    # most recent election, one deduped totals row).
-                    recent_cycles = compute_recent_election_cycles(financials, "S")
-
-                    receipts: list = []
-                    pac_receipts_data: list = []
-                    if committee_id:
-                        receipts = await fetch_committee_receipts(
-                            client, db, committee_id, cycles=recent_cycles
-                        )
-                        pac_receipts_data = await fetch_pac_receipts(
-                            client, db, committee_id, cycles=recent_cycles
-                        )
-                    detail = await fetch_contribution_detail(
-                        client, db, candidate_id, [committee_id] if committee_id else [],
-                        recent_cycles, committee_contributions, committee_master,
-                    )
-
-                    fec_data[senator["id"]] = {
-                        "candidate": candidate,
-                        "financials": financials,
-                        "receipts": receipts,
-                        "pacReceipts": pac_receipts_data,
-                        "detail": detail,
-                    }
-                except FecUnavailable as e:
-                    # Not "raised nothing": the senator is skipped at
-                    # prepare and keeps the stored record.
-                    logger.warning("FEC unreachable for %s: %s", senator["name"], e)
-                    fec_data[senator["id"]] = {"unavailable": True}
+                fec = await _fetch_senator_fec(
+                    client, db, senator, committee_contributions, committee_master,
+                )
+                if fec is not None:
+                    fec_data[senator["id"]] = fec
                 progress.update("fetch_fec", done=fec_idx + 1)
             unreachable = sum(1 for f in fec_data.values() if f.get("unavailable"))
             matched = len(fec_data) - unreachable
