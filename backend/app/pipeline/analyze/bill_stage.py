@@ -216,7 +216,22 @@ def is_enacted(latest_text: str | None, actions: list[dict] | None = None) -> bo
     return bool(actions) and classify_bill_stage_from_actions(actions) == BillStage.ENACTED
 
 
-def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) -> BillStage:
+# The furthest a resolution can go. A simple resolution (S.Res., H.Res.)
+# is one chamber's business and ends when that chamber agrees to it; a
+# concurrent resolution goes to the other chamber but never to the
+# President. Actions recorded after agreement ("Motion to reconsider laid
+# on the table", messages to the other chamber) read as later stages: 382
+# Senate resolutions showed as in the House and two House resolutions as
+# sent to the President (2026-10-07).
+_RESOLUTION_CEILING = {
+    "sres": BillStage.PASSED_CHAMBER, "hres": BillStage.PASSED_CHAMBER,
+    "sconres": BillStage.IN_OTHER_CHAMBER, "hconres": BillStage.IN_OTHER_CHAMBER,
+}
+
+
+def classify_bill_stage_from_actions(
+    actions: list[dict], is_law: bool = False, bill_type: str | None = None,
+) -> BillStage:
     """Classify a bill's stage as the FURTHEST stage reached across its
     full Congress.gov action history.
 
@@ -264,4 +279,7 @@ def classify_bill_stage_from_actions(actions: list[dict], is_law: bool = False) 
         if best is None or _STAGE_RANK[stage] > _STAGE_RANK[best]:
             best = stage
 
+    ceiling = _RESOLUTION_CEILING.get((bill_type or "").lower())
+    if best is not None and ceiling is not None and _STAGE_RANK[best] > _STAGE_RANK[ceiling]:
+        best = ceiling
     return best or _FALLBACK_STAGE

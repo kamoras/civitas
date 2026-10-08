@@ -896,7 +896,7 @@ async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], 
             try:
                 sp_actions = await _sponsored_bill_actions(client, db, sp)
                 sp["isLaw"] = sp.get("isLaw", False) or is_enacted(sp.get("latestAction"), sp_actions)
-                sp["stage"] = classify_bill_stage_from_actions(sp_actions, sp["isLaw"])
+                sp["stage"] = classify_bill_stage_from_actions(sp_actions, sp["isLaw"], sp.get("billType"))
             except Exception:
                 # Leave stage unset: _les_bill_stage falls back to
                 # isLaw/latestAction for this bill. One unreachable

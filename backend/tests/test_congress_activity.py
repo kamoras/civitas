@@ -486,3 +486,25 @@ def test_a_pending_day_of_the_last_week_is_read_again(db_session):
     db_session.commit()
     days = ca._floor_log_days(db_session, date(2026, 9, 27))
     assert [d.isoformat() for d in days] == ["2026-09-25", "2026-09-26", "2026-09-27"]
+
+
+def test_a_pro_forma_day_has_its_times_and_says_so():
+    from app.pipeline.fetch.daily_digest import parse_chamber_action
+    from app.services.congress_service import _chamber_sentence, _minutes
+
+    text = ("Chamber Action\nThe Senate met at 10:30:06 a.m. in pro forma session, and adjourned at "
+            "10:33:29 a.m., until 11 a.m., on Monday, October 5, 2026.")
+    parsed = parse_chamber_action(text)
+    assert (parsed["convened_at"], parsed["adjourned_at"]) == ("10:30:06 a.m.", "10:33:29 a.m.")
+    day = {"status": "final", "counts": {"billsPassed": 0, "resolutionsPassed": 0, "confirmed": 0, "recordVotes": 0},
+           "minutesInSession": _minutes(parsed["convened_at"], parsed["adjourned_at"]),
+           "adjournmentText": parsed["adjournment_text"]}
+    assert _chamber_sentence("senate", day) == "The Senate met in pro forma session for 3 minutes."
+
+
+def test_the_house_xml_gives_no_first_name_and_none_is_invented():
+    from app.pipeline.fetch.congress import parse_house_vote_xml
+
+    vote = (FIX / "roll_calls" / "house_2026_roll309.xml").read_text()
+    members = parse_house_vote_xml(vote, 2026, 309)["members"]
+    assert members and all(m["firstName"] == "" and m["lastName"] for m in members)

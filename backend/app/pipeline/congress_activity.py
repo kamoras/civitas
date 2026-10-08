@@ -316,8 +316,12 @@ async def sync_digests(client: httpx.AsyncClient, db: Session, today: date) -> d
     recent_start = today - timedelta(days=_RECENT_DAYS)
     for offset in range(1, _RECENT_DAYS + 1):
         day = today - timedelta(days=offset)
+        # A day in session whose adjournment the parser didn't find was
+        # read before the parser understood its wording (the Senate's
+        # one-sentence pro forma days, 2026-10): not settled, read again.
         final = db.query(func.count(CongressDay.id)).filter(
             CongressDay.date == day.isoformat(), CongressDay.is_final.is_(True),
+            ~(CongressDay.in_session.is_(True) & (func.coalesce(CongressDay.adjournment_text, "") == "")),
         ).scalar()
         if final >= 2:
             continue
