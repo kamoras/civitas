@@ -113,6 +113,19 @@ def test_states_match_their_documented_schema(client):
         PublicStateSchema.model_validate(state)
 
 
+def test_state_counts_are_serving_members_only(client, db_session):
+    """A departed member's row stays through the retirement grace period;
+    counted, it gave a state with a newly seated successor three senators
+    (live, 2026-10-08) while /senators listed two."""
+    db_session.add_all([
+        Senator(id="S000009", name="Old Doe", state="GA", party="D", is_current=False, **SCORES),
+        Representative(id="R000009", name="Old Roe", state="GA", district=6, party="R", is_current=False, **SCORES),
+    ])
+    db_session.commit()
+    ga = next(s for s in _body(client, "/states") if s["code"] == "GA")
+    assert (ga["senatorCount"], ga["representativeCount"]) == (1, 1)
+
+
 @pytest.mark.parametrize("chamber,member,state", [("senators", "S000001", "GA"), ("representatives", "R000001", "GA")])
 def test_rank_is_chamber_wide_whatever_the_filters(client, chamber, member, state):
     """Both lists rank the same way: second of two nationally stays second
