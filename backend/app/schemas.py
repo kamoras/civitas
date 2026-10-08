@@ -74,7 +74,7 @@ class KeyVoteSchema(CamelModel):
     bill_name: str
     bill_id: str
     date: str
-    vote: Literal["Yea", "Nay", "Not Voting"]
+    vote: Literal["Yea", "Nay", "Present", "Not Voting"]
     policy_area: str = "PROCEDURAL"
     policy_areas: list[PolicyAreaDetail] = []
     party_alignment_weight: float = 0.0

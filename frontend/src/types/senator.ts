@@ -175,7 +175,7 @@ export interface KeyVote {
   billName: string;
   billId: string;
   date: string;
-  vote: "Yea" | "Nay" | "Not Voting";
+  vote: "Yea" | "Nay" | "Present" | "Not Voting";
   policyArea: string;
   policyAreas: PolicyAreaDetail[];
   partyAlignmentWeight: number;
