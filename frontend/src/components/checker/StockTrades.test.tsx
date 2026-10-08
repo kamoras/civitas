@@ -30,7 +30,7 @@ vi.mock("@/lib/api", () => ({
   fetchRepStockTrades: vi.fn(),
   fetchPresidentStockTrades: vi.fn().mockResolvedValue({
     trades: [
-      base,
+      { ...base, beforeTermStart: true },
       { ...base, assetName: "BOND DUE 2038", reportKind: "periodic", parseConfidence: "ocr" },
       {
         ...base,
@@ -70,6 +70,8 @@ describe("StockTrades", () => {
     render(<StockTrades politicianId="trump-47" filer="president" />);
     await userEvent.click(await screen.findByRole("button", { name: /STOCK & CRYPTO TRADES/ }));
     expect(screen.getByText("ANNUAL REPORT")).toBeInTheDocument();
+    // Only the row the backend marks as predating the term.
+    expect(screen.getAllByText("BEFORE TAKING OFFICE")).toHaveLength(1);
     expect(screen.getAllByText("READ FROM A SCAN")).toHaveLength(3);
     // A scanned row whose date isn't legible says so, with its filing date.
     expect(screen.getByText("date not legible in the scan · filed 2026-05-14")).toBeInTheDocument();

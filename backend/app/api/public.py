@@ -47,6 +47,7 @@ from app.api.visits import record_api_request
 from app.broadcast import SITE_URL
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db, off_loop
+from app.member_ids import resolve_member_id
 from app.models import President, Representative, ScoreSnapshot, Senator
 from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
 from app.schemas import (
@@ -248,7 +249,14 @@ def _page(rows: list[dict], party: str | None, state: str | None, page: int, per
     }
 
 
+# Ids are renamed when the way they are derived changes, or a member's name
+# does (app/member_ids.py); a client holding the old one keeps working.
+_RENAMED_ID = (" An id the member had before a rename still works: the record comes back under the"
+               " current id (`id`, `siteUrl`).")
+
+
 def _history(db: Session, entity_type: str, model, member_id: str, request: Request) -> JSONResponse:
+    member_id = resolve_member_id(db, member_id)
     if db.get(model, member_id) is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     snapshots = (
@@ -458,16 +466,16 @@ def list_senators(
 def get_senator(
     _rl: PublicReadLimit,
     request: Request,
-    senator_id: str = Path(description="The senator's id, as in their Civitas URL (e.g. jon-ossoff)"),
+    senator_id: str = Path(description="The senator's id, as in their Civitas URL (e.g. jon-ossoff)." + _RENAMED_ID),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Scores, funding and top donors, voting record, lobbying matches,
     sponsored bills and contact details."""
-    senator = get_senator_by_id(db, senator_id)
+    senator = get_senator_by_id(db, resolve_member_id(db, senator_id))
     if senator is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     return _pub_json(
-        {**senator.model_dump(by_alias=True), "siteUrl": _member_url(senator_id)},
+        {**senator.model_dump(by_alias=True), "siteUrl": _member_url(senator.id)},
         request, max_age=CACHE_TTL_DETAIL_S,
     )
 
@@ -477,7 +485,7 @@ def get_senator(
 def get_senator_history(
     _rl: PublicReadLimit,
     request: Request,
-    senator_id: str = Path(description="The senator's id"),
+    senator_id: str = Path(description="The senator's id." + _RENAMED_ID),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """One snapshot per scoring run, oldest first."""
@@ -513,16 +521,16 @@ def list_representatives(
 def get_representative(
     _rl: PublicReadLimit,
     request: Request,
-    rep_id: str = Path(description="The representative's id, as in their Civitas URL (e.g. joe-neguse)"),
+    rep_id: str = Path(description="The representative's id, as in their Civitas URL (e.g. joe-neguse)." + _RENAMED_ID),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Scores, funding and top donors, voting record, lobbying matches,
     sponsored bills and contact details."""
-    rep = get_representative_by_id(db, rep_id)
+    rep = get_representative_by_id(db, resolve_member_id(db, rep_id))
     if rep is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     return _pub_json(
-        {**rep.model_dump(by_alias=True), "siteUrl": _member_url(rep_id)},
+        {**rep.model_dump(by_alias=True), "siteUrl": _member_url(rep.id)},
         request, max_age=CACHE_TTL_DETAIL_S,
     )
 
@@ -532,7 +540,7 @@ def get_representative(
 def get_representative_history(
     _rl: PublicReadLimit,
     request: Request,
-    rep_id: str = Path(description="The representative's id"),
+    rep_id: str = Path(description="The representative's id." + _RENAMED_ID),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """One snapshot per scoring run, oldest first."""
@@ -555,6 +563,8 @@ def _politician_id(db: Session, given: str) -> str:
         row = db.query(model.id).filter(model.bioguide_id == given.upper()).first()
         if row:
             return row[0]
+    if (renamed := resolve_member_id(db, given)) != given:
+        return renamed
     raise HTTPException(status_code=404, detail="No member or president with that id")
 
 

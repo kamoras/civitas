@@ -74,7 +74,7 @@ class KeyVoteSchema(CamelModel):
     bill_name: str
     bill_id: str
     date: str
-    vote: Literal["Yea", "Nay", "Not Voting"]
+    vote: Literal["Yea", "Nay", "Present", "Not Voting"]
     policy_area: str = "PROCEDURAL"
     policy_areas: list[PolicyAreaDetail] = []
     party_alignment_weight: float = 0.0
@@ -102,8 +102,9 @@ class FundingSchema(CamelModel):
         validation_alias=AliasChoices("totalFromPACs", "totalFromPacs"), serialization_alias="totalFromPacs",
     )
     pac_share_pct: float = Field(0.0, description="PAC money as a percentage of contributions, 0-100")
-    small_donor_percentage: float = Field(
-        description="Share of contributions that were unitemized individual gifts (donors giving $200 or less), 0-100")
+    small_donor_percentage: float | None = Field(
+        description="Share of contributions that were unitemized individual gifts (donors giving $200 or less), "
+                    "0-100; null when the campaign itemizes every gift, so the filings can't say")
     top_donors: list[DonorSchema]
     industry_breakdown: list[IndustryDonationSchema] = Field(description="Contributions by industry")
 
@@ -190,6 +191,12 @@ class StockTradeSchema(CamelModel):
     parse_confidence: Literal["text", "ocr"] = "text"
     # "annual": a presidential annual report's transaction (PresidentTrade).
     report_kind: Literal["periodic", "annual"] = "periodic"
+    # A president's trade dated before the term began: an annual report
+    # covers the calendar year, so the first one lists the weeks before the
+    # inauguration. Members are never flagged: a representative's sworn
+    # date is this Congress's oath, which a returning member's earlier
+    # trades also predate.
+    before_term_start: bool = False
 
     @model_validator(mode="after")
     def _compute_derived_flags(self) -> "StockTradeSchema":
@@ -546,7 +553,7 @@ class LeaderboardEntrySchema(CamelModel):
     total_contributions: float | None = None
     total_from_pacs: float
     pac_share_pct: float = Field(0.0, description="PAC money as a percentage of contributions, 0-100")
-    small_donor_percentage: float
+    small_donor_percentage: float | None = None
     top_industry: str | None = None
     trend: ScoreTrendSchema = Field(default_factory=ScoreTrendSchema)
     # SVD-based, cosponsorship-derived (Tauberer 2012) — 0 = most-left,

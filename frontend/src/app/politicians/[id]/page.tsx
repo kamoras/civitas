@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import { fetchRecord } from "@/lib/ssrPayload";
@@ -56,19 +56,21 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const profile = await fetchProfile(id);
-  const path = `/politicians/${encodeURIComponent(id)}`;
 
   if (!profile) {
     return pageMetadata({
       title: "Politician not found",
       description: "No record for this id.",
-      path,
+      path: `/politicians/${encodeURIComponent(id)}`,
       noindex: true,
     });
   }
 
+  // The canonical is the record's own id: a renamed member's old URL
+  // redirects there (below), and is never a second page.
+  const path = `/politicians/${encodeURIComponent(profile.id)}`;
   const { title, description } = describeProfile(profile);
-  const ogImage = absoluteUrl(`/api/og?politician=${encodeURIComponent(id)}`);
+  const ogImage = absoluteUrl(`/api/og?politician=${encodeURIComponent(profile.id)}`);
   return pageMetadata({
     title,
     description,
@@ -87,6 +89,10 @@ export default async function PoliticianProfilePage({
   const profile = await fetchProfile(id);
 
   if (!profile) notFound();
+  // A member id renamed since the URL was published or indexed (the
+  // backend answers the old id with the member under their current id):
+  // a permanent redirect, so links and search engines move to the new URL.
+  if (profile.id !== id) permanentRedirect(`/politicians/${encodeURIComponent(profile.id)}`);
   const breakdown = await fetchBreakdown(profile.branch, id);
 
   return (

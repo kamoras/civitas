@@ -195,7 +195,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.30"
+ALGORITHM_VERSION = "v6.31"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -878,7 +878,8 @@ def _constituent_vote_part_status(senator: dict) -> str:
     CONSTITUENT_MIN_VOTES, scored at the party's measured typical score),
     "neutral:few-votes" (under CONSTITUENT_MIN_VOTES with no measured
     typical — the bundled prior, or no reference for the party: neutral
-    50), "neutral:no-expectation" (no usable reference
+    50), "neutral:no-party" (caucuses with neither party: no party line
+    to break from, neutral 50), "neutral:no-expectation" (no usable reference
     for the member's party), "shrunk:<share kept>" (under
     CONSTITUENT_FULL_CONFIDENCE_VOTES, pulled toward the party's typical
     score), "shrunk-neutral:<share kept>" (the same, pulled toward a neutral
@@ -1319,10 +1320,13 @@ def compute_funding_reference(
         if base > 0:
             pac = f.get("totalFromPACs") or 0
             ratios.append(min(pac / base, 1.0))
-            small.append(f.get("smallDonorPercentage") or 0)
+            small_pct = f.get("smallDonorPercentage")  # None: not measurable, left out
+            if small_pct is not None:
+                small.append(small_pct)
             pop = population.get(states[i]) if states is not None and i < len(states) else None
             if pop:
-                by_population.append((pop, f.get("smallDonorPercentage") or 0))
+                if small_pct is not None:
+                    by_population.append((pop, small_pct))
                 pac_by_population.append((pop, min(pac / base, 1.0)))
         c, _, _ = _top_donor_concentration(f)
         if c is not None:
@@ -1340,10 +1344,15 @@ def compute_funding_reference(
         "pac_ratio_mean": round(statistics.mean(ratios), 6),
         "pac_ratio_p10": round(statistics.quantiles(ratios, n=10)[0], 6),
         "pac_ratio_p90": round(statistics.quantiles(ratios, n=10)[8], 6),
-        "small_donor_p10": round(statistics.quantiles(small, n=10)[0], 4),
-        "small_donor_median": round(statistics.median(small), 4),
-        "small_donor_p90": round(statistics.quantiles(small, n=10)[8], 4),
     }
+    # Over the campaigns whose share the filings can say (not those that
+    # itemize every gift).
+    if len(small) >= _MIN_FUNDING_REFERENCE_MEMBERS:
+        ref.update({
+            "small_donor_p10": round(statistics.quantiles(small, n=10)[0], 4),
+            "small_donor_median": round(statistics.median(small), 4),
+            "small_donor_p90": round(statistics.quantiles(small, n=10)[8], 4),
+        })
     if states is not None and (fit := small_donor_baseline_fit(by_population)):
         ref["small_donor_fit"] = fit
     if states is not None and (fit := pac_population_fit(pac_by_population)):
@@ -1405,8 +1414,12 @@ def _funding_independence_core(
 
     # Component 2: small-donor share (25% weight), state-relative for
     # senators — see _small_donor_capacity_score.
-    small_pct = funding.get("smallDonorPercentage", 0) or 0
-    small_score, small_expected_pct = _small_donor_capacity_score(small_pct, state, district, ref)
+    small_pct = funding.get("smallDonorPercentage", 0)
+    if small_pct is None:
+        # Every gift itemized: the filings can't say how much was small.
+        small_score, small_expected_pct = None, None
+    else:
+        small_score, small_expected_pct = _small_donor_capacity_score(small_pct, state, district, ref)
 
     # Component 3: relative top-donor concentration (25% weight)
     concentration, n_external, pool = _top_donor_concentration(funding)
@@ -1450,7 +1463,7 @@ def _funding_independence_core(
         "facts": {
             "contributions": round(total_raised),
             "pacShare": round(pac_ratio, 4),
-            "smallDonorShare": round(small_pct / 100, 4),
+            "smallDonorShare": None if small_pct is None else round(small_pct / 100, 4),
             "smallDonorExpectedShare": (
                 round(small_expected_pct / 100, 4) if small_expected_pct is not None else None
             ),
@@ -1471,9 +1484,12 @@ def _funding_independence_core(
             {
                 "label": "Small-donor share",
                 "weight": round(10 / 53, 4),
-                "score": round(small_score, 1),
+                "score": None if small_score is None else round(small_score, 1),
                 "detail": (
-                    f"{small_pct:.0f}% of contributions from small (<$200) donors"
+                    "the campaign itemizes every gift, so its filings report no unitemized "
+                    f"money to read a small-donor share from; {_NOT_MEASURED}"
+                ) if small_pct is None else (
+                    f"{small_pct:.0f}% of contributions unitemized (donors who gave $200 or less)"
                     + (
                         f" vs. an expected ~{small_expected_pct:.0f}% for a state this size"
                         if district is None
@@ -2346,7 +2362,14 @@ def _constituent_alignment_core(
         )
 
     break_rate, n_party = party_break_rate(voting_record)
-    if break_rate is None:
+    if eval_party not in ("D", "R"):
+        # A member who caucuses with neither party has no party line to
+        # break from. The record isn't thin; it measures nothing here. Said
+        # as "few votes" before, beside 676 recorded votes (2026-10-08).
+        party_score = 50.0
+        vote_part_status = "neutral:no-party"
+        party_alignment_detail = "caucuses with neither party, so there is no party line to break from: a neutral 50"
+    elif break_rate is None:
         if typical is not None:
             vote_part_status = "typical:few-votes"
             # No record to read: the party's typical score, not 50, which
@@ -2718,6 +2741,8 @@ def _funding_diversity_core(funding: dict) -> dict:
     value alongside the final score. Single implementation, same reuse
     contract as _funding_independence_core above."""
     industry_breakdown = funding.get("industryBreakdown", [])
+    # Not measurable (every gift itemized) counts as no small-donor money
+    # here; Funding Diversity is informational.
     small_donor_pct = funding.get("smallDonorPercentage", 0) or 0
     total_raised = funding_share_base(funding)
 

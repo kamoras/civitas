@@ -142,3 +142,17 @@ class TestSenateSmallDonorBaselineIsMeasured:
         fundings = [{"totalContributions": 1_000_000, "totalFromPACs": 100_000, "smallDonorPercentage": 20.0 + i % 5}
                     for i in range(40)]
         assert "small_donor_fit" not in sc.compute_funding_reference(fundings)
+
+
+def test_a_campaign_that_itemizes_every_gift_has_no_measured_small_donor_share():
+    """$0 unitemized with real contributions: the small donors are among the
+    itemized, so the part is left out, not scored as 0% (2026-10-08: 26 House
+    members raising over $500K read 0%)."""
+    row = {"candidate_election_year": 2024, "receipts": 900_000, "contributions": 900_000,
+           "individual_unitemized_contributions": 0, "individual_itemized_contributions": 800_000}
+    f = normalize_finance(None, [row], [], [])
+    assert f["smallDonorPercentage"] is None
+    core = _funding_independence_core({**f, "totalFromPACs": 90_000}, state="TX", district=3)
+    small = next(c for c in core["components"] if c["label"] == "Small-donor share")
+    assert small["score"] is None and "itemizes every gift" in small["detail"]
+    assert core["facts"]["smallDonorShare"] is None

@@ -24,6 +24,7 @@ def _mid_congress(freeze_utcnow):
 def _snapshot(entity_type, entity_id, date, overall_score):
     return ScoreSnapshot(
         entity_type=entity_type, entity_id=entity_id, date=date, overall_score=overall_score,
+        algorithm_version="v6.13",
     )
 
 
@@ -158,3 +159,14 @@ def test_jan_1_and_2_still_belong_to_the_old_congress(db_session):
     ])
     db_session.commit()
     assert compute_score_trend_map(db_session, "senator")["S001"]["direction"] == "down"
+
+
+def test_a_snapshot_that_recorded_no_version_is_not_compared(db_session):
+    """Its methodology is unknown: read as comparable, 96 of 100 senators'
+    arrows reported methodology changes as movement (2026-10-08)."""
+    db_session.add_all([
+        ScoreSnapshot(entity_type="senator", entity_id="S001", date="2026-09-10", overall_score=60.0),
+        _versioned("S001", "2026-09-17", 70.0, "v6.13"),
+    ])
+    db_session.commit()
+    assert compute_score_trend_map(db_session, "senator")["S001"]["direction"] == "reset"

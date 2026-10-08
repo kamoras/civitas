@@ -209,7 +209,7 @@ class TestValidateSenator:
             "policyBreakdown": [],
             "keyVotes": [
                 {"billName": "Bill", "billId": "HR.1", "date": "2025-01-01",
-                 "vote": "Present", "policyArea": "HEALTHCARE", "stance": "reform",
+                 "vote": "Abstain", "policyArea": "HEALTHCARE", "stance": "reform",
                  "stanceVote": "Yea"},
             ],
         })

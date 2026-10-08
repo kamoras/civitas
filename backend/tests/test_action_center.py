@@ -457,22 +457,6 @@ class TestNationalMonitorCreation:
         result = _generate_monitor_metadata(issue, [], mock_db)
         assert result is None
 
-    @patch("app.pipeline.analyze.action_center.call_llm")
-    def test_llm_assisted_merge(self, mock_call_llm):
-        """Monitors with moderate similarity should merge if LLM approves."""
-        from app.pipeline.analyze.action_center import _should_merge_monitors_llm
-
-        mock_call_llm.return_value = json.dumps({
-            "should_merge": True,
-            "reason": "Both about Iran conflict"
-        })
-        m1 = NationalMonitor(id=1, title="Iran War", description="War in Iran")
-        m2 = NationalMonitor(id=2, title="Iranian School", description="Targeted school")
-
-        result = _should_merge_monitors_llm(m1, m2, MagicMock())
-        assert result is True
-        mock_call_llm.assert_called_once()
-
 
 class TestFullStoryShouldInvalidate:
     """A topic-similarity match can land two substantively different stories
@@ -843,28 +827,27 @@ class TestFindRelatedSenatorsCommonWordSurnames:
         )
         assert [r["id"] for r in result] == ["s-figures"]
 
-    @patch("app.pipeline.analyze.action_center._embed_texts")
-    def test_disambiguation_phrase_uses_representative_title_not_senator(
-        self, mock_embed, db_session,
-    ):
-        """Every House candidate's disambiguation prototype was hardcoded
-        to "Senator {name} from {state}" regardless of chamber — weakening
-        the embedding signal for every one of the ~435 Representatives,
-        not just common-word-surname cases. "Delacroix" (>=4 chars, not a
-        common word) exercises the disambiguation path directly."""
-        db_session.add(Representative(
-            id="r-delacroix", name="Amara Delacroix", state="TX", party="R",
-        ))
+    def test_a_surname_several_members_share_names_none_of_them(self, db_session):
+        """2026-10-08: one story about the Speaker linked five members
+        sharing his surname."""
+        db_session.add_all([
+            Representative(id="r-1", name="Amara Delacroix", state="TX", party="R"),
+            Representative(id="r-2", name="Bryce Delacroix", state="OH", party="D"),
+            Representative(id="r-3", name="Celia Ostrander", state="NV", party="D"),
+        ])
         db_session.commit()
-        mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
 
-        _find_related_senators(
-            "Texas news", "Rep. Delacroix spoke at the event.", [], db_session,
+        result = _find_related_senators(
+            "Texas news", "Rep. Delacroix and Rep. Ostrander spoke at the event.", [], db_session,
         )
+        assert [m["id"] for m in result] == ["r-3"]
+        assert result[0]["match_reason"] == "referenced in coverage"
 
-        texts_embedded = mock_embed.call_args[0][0]
-        assert "Representative Amara Delacroix from TX" in texts_embedded
-        assert not any(t.startswith("Senator Amara Delacroix") for t in texts_embedded)
+    def test_a_two_letter_given_name_is_another_person(self, db_session):
+        db_session.add(Representative(id="r-1", name="Celia Ostrander", state="NV", party="D"))
+        db_session.commit()
+
+        assert _find_related_senators("Sports", "Former player Ed Ostrander was charged.", [], db_session) == []
 
 
 class TestFindRelatedSenatorsSameSurnameCollision:
@@ -1378,18 +1361,35 @@ class TestDedupeNearIdenticalIssues:
         assert result == [b]
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
-    def test_signature_overlap_collapses_below_near_identical_title_threshold(self, mock_embed):
-        # Same entities/numbers, title cosine sits in the gap between
-        # TOPIC_CHANGE_THRESHOLD (0.65) and _NEAR_IDENTICAL_TITLE_THRESHOLD
-        # (0.92) — only signature overlap should decide this one, same as
-        # _find_matching_issue.
+    def test_shared_names_below_a_near_identical_title_stay_separate(self, mock_embed):
+        """Shared names and numbers no longer decide: on 2026-10-08, 16 of
+        65 pairs the signature test called one story were (two stories
+        about one senator share two names)."""
         a = self._issue(1, "Varga attorney general nominee advances 54-45", datetime(2026, 8, 21))
-        b = self._issue(2, "Senate advances Varga attorney general pick 54-45", datetime(2026, 8, 22))
+        b = self._issue(2, "Varga campaign raises record sum 54-45", datetime(2026, 8, 22))
         mock_embed.return_value = np.array([[1.0, 0.0], [0.7, (1 - 0.7 ** 2) ** 0.5]])
 
-        result = dedupe_near_identical_issues([a, b])
+        assert dedupe_near_identical_issues([a, b]) == [a, b]
 
-        assert result == [b]
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_two_vote_drafts_are_only_the_same_item_with_the_same_content(self, mock_embed):
+        """Two House votes the same day matched on their template's words
+        ("Passed", "Representatives"); a draft is its record."""
+        a = self._issue(1, "House vote on S 2403: Passed, 401-14", datetime(2026, 9, 30, 10))
+        b = self._issue(2, "House vote on H R 9497: Passed, 415-9", datetime(2026, 9, 30, 11))
+        a.source_type = b.source_type = "house_roll_call_vote"
+        mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
+
+        assert dedupe_near_identical_issues([a, b]) == [a, b]
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_rows_further_apart_than_the_rematch_window_stay_separate(self, mock_embed):
+        a = self._issue(1, "Varga attorney general nominee advances", datetime(2026, 8, 1))
+        b = self._issue(2, "Varga attorney general nominee advances", datetime(2026, 8, 21))
+        a.date = "2026-08-01"
+        mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
+
+        assert dedupe_near_identical_issues([a, b]) == [a, b]
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     def test_different_signatures_below_near_identical_stay_separate(self, mock_embed):
@@ -2260,6 +2260,15 @@ class TestDigestFiltering:
 
         assert _digest_reason(_make_article(title)) == "recurring digest title"
 
+    def test_an_outlets_newsletter_section_is_a_digest(self):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        url = "https://example.com/newsletters/healthcare/123-drugmakers-challenge-pilot/"
+        assert _digest_reason(_make_article("Drugmakers challenge pilot program", url=url)) == "newsletter section"
+        # A slug that only mentions a newsletter is not the section.
+        url = "https://example.com/2026/10/08/123/up-first-newsletter-story"
+        assert _digest_reason(_make_article("Senate passes the budget", url=url)) is None
+
     @pytest.mark.parametrize("title", [
         "House approves Pentagon funding framework in narrow vote",
         "Israel and Hamas reach agreement on hostage release",
@@ -2591,56 +2600,32 @@ class TestCongressGovUrlBuilding:
         assert ordinal(121) == "121st"
         assert ordinal(20) == "20th"
 
-    def test_bill_record_uses_records_own_congress(self):
-        from app.pipeline.analyze.action_center import _bill_record_to_result
-
-        result = _bill_record_to_result(
-            {"type": "HR", "number": "3055", "congress": 101,
-             "title": "An old appropriations act"},
-            query="appropriations", congress=119,
-        )
-        assert result is not None
-        assert result["url"] == (
-            "https://www.congress.gov/bill/101st-congress/house-bill/3055"
-        )
-        assert result["congress"] == 101
-        assert result["id"] == "HR.3055"
-
-    def test_bill_record_falls_back_to_search_congress(self):
-        from app.pipeline.analyze.action_center import _bill_record_to_result
-
-        result = _bill_record_to_result(
-            {"type": "S", "number": "1234", "title": "A bill"},
-            query="a bill", congress=119,
-        )
-        assert result is not None
-        assert result["url"] == (
-            "https://www.congress.gov/bill/119th-congress/senate-bill/1234"
-        )
-        assert result["congress"] == 119
-
-    def test_bill_record_tolerates_string_congress(self):
-        from app.pipeline.analyze.action_center import _bill_record_to_result
-
-        result = _bill_record_to_result(
-            {"type": "HR", "number": "22", "congress": "119", "title": "SAVE Act"},
-            query="SAVE Act", congress=119,
-        )
-        assert result is not None
-        assert "119th-congress" in result["url"]
-
-    def test_resolved_regex_bills_record_current_congress(self):
+    def test_a_bill_number_counts_when_its_title_is_named(self):
         from app.config import settings
         from app.pipeline.analyze.action_center import _resolve_bills
 
-        resolved = _resolve_bills([], ["The House passed H.R. 22 yesterday."])
+        titles = {"HR.22": ["SAVE Act", "Safeguard American Voter Eligibility Act"]}
+        resolved = _resolve_bills(["The House passed H.R. 22, the SAVE Act, yesterday."], None, titles)
 
-        assert len(resolved) == 1
-        assert resolved[0]["id"] == "HR.22"
+        assert [b["id"] for b in resolved] == ["HR.22"]
         assert resolved[0]["congress"] == settings.CURRENT_CONGRESS
-        assert (
-            f"{settings.CURRENT_CONGRESS}th-congress" in resolved[0]["url"]
+        assert resolved[0]["url"] == (
+            f"https://www.congress.gov/bill/{settings.CURRENT_CONGRESS}th-congress/house-bill/22"
         )
+
+    @pytest.mark.parametrize("text", [
+        # 2026-10-08: "S.2026" and "S.50" on live issues came from prose.
+        "Trump's 2026 agenda faces the Senate.",
+        "The U.S. 50 states sued.",
+        # A number whose words don't name the bill: the last Congress's, or
+        # just a number.
+        "The House passed H.R. 22 on a party-line vote.",
+    ])
+    def test_a_number_alone_is_not_a_bill(self, text):
+        from app.pipeline.analyze.action_center import _resolve_bills
+
+        titles = {"S.2026": ["Rural Broadband Act"], "S.50": ["Clean Water Act"], "HR.22": ["SAVE Act"]}
+        assert _resolve_bills([text], None, titles) == []
 
 
 class TestCleanupOldUnpostedIssues:
@@ -2916,13 +2901,13 @@ def test_a_bill_named_by_its_short_title_is_resolved():
 
     titles = {"protect college sports act": {"S.4668"}, "college athlete protection act": {"S.10", "HR.20"}}
     resolved = _resolve_bills(
-        [], ["The Senate passes the Protect College Sports Act, but the bill's future is unclear"], titles,
+        ["The Senate passes the Protect College Sports Act, but the bill's future is unclear"], titles,
     )
     assert [b["id"] for b in resolved] == ["S.4668"]
     # A title two bills share (companions) names neither; a title inside a
     # longer word run doesn't count.
-    assert _resolve_bills([], ["The College Athlete Protection Act advanced."], titles) == []
-    assert _resolve_bills([], ["The Protect College Sports Actors Guild met."], titles) == []
+    assert _resolve_bills(["The College Athlete Protection Act advanced."], titles) == []
+    assert _resolve_bills(["The Protect College Sports Actors Guild met."], titles) == []
 
 
 class TestElectionResultsIssuesMatchOnlyTheirRace:
@@ -3699,3 +3684,64 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         db = self._count(db_session, "2026-HOUSE-TN-7", *names)
         issue = self._flip_issue("2026-HOUSE-TN-7", "Tennessee's 7th")
         assert (self._match(issue, text, db=db) is issue) is named, text
+
+
+def test_a_date_or_a_possessive_is_not_a_story_s_identity():
+    from app.pipeline.analyze.action_center import _issue_signature
+
+    assert _issue_signature("Senate vote on September 28, 2026", []) == set()
+    assert _issue_signature("Iranian school memorial", ["It was held 2026-09-28 on Monday."]) == {"iranian"}
+    assert _issue_signature("Trump's arch", ["Trump spoke."]) == {"trump"}
+    assert _issue_signature("Varga’s tariff order", []) == {"varga"}
+    # A figure is still identity.
+    assert "5000" in _issue_signature("A $5,000 dividend", [])
+
+
+def test_monitors_merge_only_with_near_identical_titles(monkeypatch):
+    """Merging deletes a monitor. The old 0.55 floor on the retrieval model
+    merged every pair of different topics (2026-10-08: one monitor held the
+    Iran, Canada-trade and Korea stories); no cross-topic pair of update
+    titles reached 0.75 on the similarity model."""
+    from types import SimpleNamespace
+
+    import app.pipeline.analyze.action_center as ac
+
+    monitors = [SimpleNamespace(id=i, title=t, updates=[]) for i, t in enumerate(["Iran", "Canada", "Iran again"])]
+    vecs = {"Iran": [1.0, 0.0], "Canada": [0.74, (1 - 0.74 ** 2) ** 0.5], "Iran again": [0.99, (1 - 0.99 ** 2) ** 0.5]}
+    monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: [vecs[t] for t in texts])
+    merged = []
+    monkeypatch.setattr(ac, "_merge_monitors", lambda keep, absorb, db: merged.append((keep.id, absorb.id)))
+
+    assert ac._merge_similar_monitors(monitors, db=None) is True
+    assert merged == [(0, 2)]
+
+
+def test_a_story_leading_two_days_is_one_timeline_entry(db_session):
+    from app.models import TimelineEntry
+    from app.pipeline.analyze.action_center import _save_timeline_entry
+
+    for day in ("2026-10-04", "2026-10-05"):
+        issue = _make_issue(day, "AI czar named", ["NPR"])
+        issue.is_current = True
+        db_session.add(issue)
+    db_session.commit()
+    _save_timeline_entry("2026-10-04", db_session)
+    _save_timeline_entry("2026-10-05", db_session)
+    assert [e.date for e in db_session.query(TimelineEntry)] == ["2026-10-04"]
+    # A different lead story the next day is its own entry.
+    other = _make_issue("2026-10-06", "Budget vote", ["AP"])
+    other.is_current = True
+    db_session.add(other)
+    db_session.commit()
+    _save_timeline_entry("2026-10-06", db_session)
+    assert sorted(e.date for e in db_session.query(TimelineEntry)) == ["2026-10-04", "2026-10-06"]
+
+
+def test_contact_your_senators_only_for_a_federal_policy_story():
+    from app.pipeline.analyze.action_center import _build_actions_from_data
+
+    def contact(**kw):
+        return any(a["type"] == "contact_senator" for a in _build_actions_from_data("t", [], [], [], [], **kw))
+
+    assert contact(policy_areas=["ENERGY"])
+    assert not contact(policy_areas=[])  # a foreign election, a fundraising total

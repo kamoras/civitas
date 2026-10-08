@@ -156,10 +156,10 @@ def _speaker_surname(speaker: str) -> str:
 def _justice_lookup(db: Session) -> dict[str, str]:
     """Build a map of UPPERCASE last name -> justice ID for linking."""
     lookup: dict[str, str] = {}
-    for j in db.query(Justice.id, Justice.name).filter(Justice.is_active == True).all():  # noqa: E712
-        parts = j.name.split()
-        if parts:
-            lookup[parts[-1].upper()] = j.id
+    for j in db.query(Justice.id, Justice.last_name).filter(Justice.is_active == True).all():  # noqa: E712
+        # The stored surname: a name's last word is "Jr." for two justices.
+        if j.last_name:
+            lookup[j.last_name.upper()] = j.id
     return lookup
 
 
@@ -780,21 +780,27 @@ async def run_explore_pipeline() -> dict:
             # --- 4. Supreme Court opinions ---
             logger.info("Explore pipeline: fetching Supreme Court opinions...")
             justice_map = _justice_lookup(db)
+            sitting = [(j.name, j.last_name) for j in db.query(Justice).filter(Justice.is_active == True)]  # noqa: E712
             try:
-                scotus_cases = await fetch_scotus_cases(client)
+                scotus_cases = await fetch_scotus_cases(client, justices=sitting)
                 for case in scotus_cases:
                     ext_id = case["external_id"]
 
-                    exists = db.query(ExploreDocument.id).filter(
-                        ExploreDocument.external_id == ext_id
-                    ).first()
-                    if exists:
-                        continue
-
                     # Link to the authoring justice when politician_name is set
                     author_name = case.get("politician_name") or ""
-                    author_last = author_name.split()[-1].upper() if author_name.strip() else ""
-                    justice_id = justice_map.get(author_last)
+                    author_last = next((last for name, last in sitting if name == author_name), "")
+                    justice_id = justice_map.get((author_last or "").upper())
+
+                    stored = db.query(ExploreDocument).filter(
+                        ExploreDocument.external_id == ext_id
+                    ).first()
+                    if stored is not None:
+                        # The Court posts an opinion after the case is first
+                        # stored: the link, author and holding follow it.
+                        if case.get("url") and case["url"] != stored.url:
+                            stored.url, stored.summary, stored.body = case["url"], case["summary"], case.get("body", "")
+                            stored.politician_name, stored.politician_id = author_name or None, justice_id
+                        continue
 
                     db.add(ExploreDocument(
                         doc_type=case["doc_type"],
