@@ -17,7 +17,7 @@ from app.models import (
     RepStockTrade,
     Representative,
 )
-from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.pipeline.analyze.score_calculator import NON_INDUSTRY_CODES, compute_overall_score
 from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
@@ -356,6 +356,10 @@ def get_rep_leaderboard(
     top_industry_map: dict[str, str] = {}
     ind_rows = (
         db.query(RepIndustryDonation.representative_id, RepIndustryDonation.name)
+        # An industry, not small donors, unattributed individuals or
+        # unclassified money: the leaderboard and public API read this as
+        # the member's top industry.
+        .filter(RepIndustryDonation.industry.notin_(NON_INDUSTRY_CODES))
         .order_by(RepIndustryDonation.representative_id, RepIndustryDonation.total.desc())
         .all()
     )
