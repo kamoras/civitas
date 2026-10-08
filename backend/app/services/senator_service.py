@@ -12,7 +12,7 @@ from app.pipeline.analyze.promise_quality import (
     _FILLER_RE,
     clean_promises,
 )
-from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.pipeline.analyze.score_calculator import NON_INDUSTRY_CODES, compute_overall_score
 from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
@@ -425,6 +425,10 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
     top_industry_map: dict[str, str] = {}
     ind_rows = (
         db.query(IndustryDonation.senator_id, IndustryDonation.name)
+        # An industry, not small donors, unattributed individuals or
+        # unclassified money: the leaderboard and public API read this as
+        # the member's top industry.
+        .filter(IndustryDonation.industry.notin_(NON_INDUSTRY_CODES))
         .order_by(IndustryDonation.senator_id, IndustryDonation.total.desc())
         .all()
     )
