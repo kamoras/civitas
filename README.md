@@ -200,7 +200,14 @@ per-vote reasoning — regardless of prompting approach. See
 Builds the search indexes over government activity documents — floor
 speeches (Senate and House), presidential actions (executive orders,
 proclamations, memoranda), Supreme Court opinions, and Federal Register
-rulemaking documents (including ones still open for public comment):
+rulemaking documents (including ones still open for public comment).
+A Supreme Court case links to the Court's own slip opinion where one is
+posted (`supreme_court.parse_slip_opinions`, the term's slip-opinion table),
+leads with the holding the Court states there and names the author, decoded
+from the table's code against the sitting justices; until then it links to
+the docket page. A Federal Register correction or republication of another
+document (its `correction_of` field) is skipped, since it repeats that
+document's title:
 - One embedding per document — no chunking — over `title + summary + body[:800 chars]`
 - Encodes with the **index** sentence-transformer (384-dim, all-MiniLM-L6-v2)
 - Upserts into the `vec_explore` sqlite-vec table with metadata: doc type, source, date, politician name/ID, chamber
