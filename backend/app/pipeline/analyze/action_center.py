@@ -927,6 +927,7 @@ def _build_actions_from_data(
     source_urls: list[str],
     source_names: list[str],
     related_senators: list[dict],
+    policy_areas: list[str] | None = None,
 ) -> list[dict]:
     """Build action items from real data — no LLM hallucinations.
 
@@ -947,8 +948,12 @@ def _build_actions_from_data(
             })
 
     # Generic contact fallback — only emitted when no named senators found,
-    # so the frontend has something to show in that case
-    if not related_senators:
+    # so the frontend has something to show in that case, and only for a
+    # story in a federal policy area or about a bill. Emitted for every
+    # issue, it asked readers to contact their senators about a French
+    # protest, a Brazilian election and a campaign's fundraising total
+    # (2026-10-08: the issues with no policy area were those stories).
+    if not related_senators and (policy_areas or resolved_bills):
         actions.append({
             "text": f"Contact your senators or representative about {title}",
             "type": "contact_senator",
@@ -2724,6 +2729,19 @@ def _save_timeline_entry(today: str, db: Session) -> None:
     )
 
     existing = db.query(TimelineEntry).filter(TimelineEntry.date == today).first()
+    # A story that leads two days running is one entry, on the day it first
+    # led: the year in review listed three stories twice in a row
+    # (2026-10-01..08), each time under the same source.
+    lead_url = source_urls[0] if source_urls else None
+    before = (
+        db.query(TimelineEntry).filter(TimelineEntry.date < today)
+        .order_by(TimelineEntry.date.desc()).first()
+    )
+    if lead_url and before is not None and before.source_url == lead_url:
+        if existing:
+            db.delete(existing)
+            db.commit()
+        return
     if existing:
         existing.title = top_issue.title
         existing.summary = top_issue.summary[:500]
@@ -4990,7 +5008,7 @@ def _run_refresh(db: Session) -> int:
 
         # 10. Build data-driven actions (no LLM hallucinations)
         actions = _build_actions_from_data(
-            title, resolved_bills, source_urls, source_names, related_senators,
+            title, resolved_bills, source_urls, source_names, related_senators, policy_areas,
         )
 
         # Track the date of the newest article driving this cluster so the

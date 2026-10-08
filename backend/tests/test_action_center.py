@@ -3714,3 +3714,34 @@ def test_monitors_merge_only_with_near_identical_titles(monkeypatch):
 
     assert ac._merge_similar_monitors(monitors, db=None) is True
     assert merged == [(0, 2)]
+
+
+def test_a_story_leading_two_days_is_one_timeline_entry(db_session):
+    from app.models import TimelineEntry
+    from app.pipeline.analyze.action_center import _save_timeline_entry
+
+    for day in ("2026-10-04", "2026-10-05"):
+        issue = _make_issue(day, "AI czar named", ["NPR"])
+        issue.is_current = True
+        db_session.add(issue)
+    db_session.commit()
+    _save_timeline_entry("2026-10-04", db_session)
+    _save_timeline_entry("2026-10-05", db_session)
+    assert [e.date for e in db_session.query(TimelineEntry)] == ["2026-10-04"]
+    # A different lead story the next day is its own entry.
+    other = _make_issue("2026-10-06", "Budget vote", ["AP"])
+    other.is_current = True
+    db_session.add(other)
+    db_session.commit()
+    _save_timeline_entry("2026-10-06", db_session)
+    assert sorted(e.date for e in db_session.query(TimelineEntry)) == ["2026-10-04", "2026-10-06"]
+
+
+def test_contact_your_senators_only_for_a_federal_policy_story():
+    from app.pipeline.analyze.action_center import _build_actions_from_data
+
+    def contact(**kw):
+        return any(a["type"] == "contact_senator" for a in _build_actions_from_data("t", [], [], [], [], **kw))
+
+    assert contact(policy_areas=["ENERGY"])
+    assert not contact(policy_areas=[])  # a foreign election, a fundraising total
