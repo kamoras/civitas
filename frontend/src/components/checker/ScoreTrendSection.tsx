@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchSenatorHistory, fetchRepresentativeHistory, fetchPresidentHistory } from "@/lib/api";
-import type { ScoreSnapshot } from "@/lib/api";
+import type { ScoreHistory } from "@/lib/api";
 import ScoreTrend from "./ScoreTrend";
 
 interface ScoreTrendSectionProps {
@@ -17,13 +17,13 @@ const FETCHERS = {
 } as const;
 
 export default function ScoreTrendSection({ entityId, entityType }: ScoreTrendSectionProps) {
-  const [snapshots, setSnapshots] = useState<ScoreSnapshot[]>([]);
+  const [history, setHistory] = useState<ScoreHistory>({ snapshots: [] });
 
   useEffect(() => {
     FETCHERS[entityType](entityId)
-      .then((data) => setSnapshots(data.snapshots))
+      .then(setHistory)
       .catch(() => {});
   }, [entityId, entityType]);
 
-  return <ScoreTrend snapshots={snapshots} />;
+  return <ScoreTrend snapshots={history.snapshots} change={history.change} />;
 }

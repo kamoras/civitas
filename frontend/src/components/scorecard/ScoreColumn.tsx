@@ -3,6 +3,7 @@ import { displayScore } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
+import MetricTooltip from "@/components/checker/MetricTooltip";
 
 /** One of a member's three scored dimensions, as a column: its name, its
  *  share of the Representation Score, the score itself, and the evidence
@@ -13,6 +14,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 export default function ScoreColumn({
   title,
   shareId,
+  tooltip,
   weight,
   score,
   more,
@@ -20,6 +22,8 @@ export default function ScoreColumn({
   children,
 }: {
   title: string;
+  /** What the column's score measures, in plain words (the [?] beside the title). */
+  tooltip?: string;
   /** The column's anchor id; also what its shared image and link are named by. */
   shareId: string;
   /** Share of the overall score, 0–1; omitted when the config hasn't loaded. */
@@ -39,7 +43,9 @@ export default function ScoreColumn({
     >
       <header className="flex items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
         <div className="min-w-0">
-          <h2 className="text-[19px] font-bold leading-tight text-ink-hi">{title}</h2>
+          <h2 className="text-[19px] font-bold leading-tight text-ink-hi">
+            {tooltip ? <MetricTooltip text={tooltip}>{title}</MetricTooltip> : title}
+          </h2>
           {weight != null && (
             <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
               {Math.round(weight * 100)}% of the score
