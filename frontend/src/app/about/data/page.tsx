@@ -319,9 +319,10 @@ export default function DataChapter() {
           </Item>
         </List>
         <P>
-          Near-duplicates are collapsed, and no single member or agency can crowd the top results:
-          the rest are moved down, never dropped. Ranking weights are changed only when a
-          measurement of search quality says to, never because one set of results looks better.
+          Copies of the same document are collapsed (a recurring notice that only opens the same way
+          is not a copy), and no single member or agency can crowd the top results: the rest are
+          moved down, never dropped. Ranking weights are changed only when a measurement of search
+          quality says to, never because one set of results looks better.
         </P>
       </Section>
 

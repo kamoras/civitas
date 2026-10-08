@@ -250,7 +250,9 @@ def _parse_block(heading: str, block: list[dict]) -> dict | None:
         purpose = _prose(sections.get("BRIEF STATEMENT OF PURPOSE", []))
         if not question:
             return None
-        summary = question if not purpose else f"{question} Brief Statement of Purpose: {purpose}"
+        # The heading as the pamphlet prints it, like the other sections
+        # here: it read "Brief Statement of Purpose", a casing of ours.
+        summary = question if not purpose else f"{question} BRIEF STATEMENT OF PURPOSE: {purpose}"
         return {
             "number": m.group(1),
             "title": heading,

@@ -195,7 +195,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.31"
+ALGORITHM_VERSION = "v6.32"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -235,7 +235,7 @@ def compute_overall_score(entity) -> float:
     return round(overall, 2)
 
 
-NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
+NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED", "CANDIDATE_FUNDS"}
 
 # Substantive legislation only — excludes simple/concurrent resolutions
 # (sres/hres/sconres/hconres), which are routinely ceremonial ("National
@@ -1221,7 +1221,14 @@ def _top_donor_concentration(funding: dict) -> tuple[float | None, int, float]:
         key=lambda d: d.get("total", 0),
         reverse=True,
     )
-    own = sum(d.get("total", 0) for d in donors if d.get("type") == "Self-Funded")
+    # The candidate's own money: the FEC totals' loans and contributions
+    # from the candidate (the breakdown's CANDIDATE_FUNDS row), or failing
+    # that the itemized self-funded donor rows. Until v6.32 only the donor
+    # rows were taken out, so a campaign funded 85% by its candidate's loans
+    # had them counted as outside money and its top ten read as 1.3%.
+    listed = sum(d.get("total", 0) for d in donors if d.get("type") == "Self-Funded")
+    stated = sum(i.get("total", 0) for i in funding.get("industryBreakdown") or [] if i.get("industry") == "CANDIDATE_FUNDS")
+    own = max(listed, stated)
     pool = max(0.0, funding_share_base(funding) - own)
     if not external or pool <= 0:
         return None, len(external), pool

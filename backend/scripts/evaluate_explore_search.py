@@ -93,12 +93,17 @@ def build_probes(docs: list[dict], corpus_df: dict[str, int], total: int) -> lis
     probes: list[dict] = []
     for doc in docs:
         body = (doc["body"] or "")[:6000]
-        title_terms = set(_terms(doc["title"]))
+        # In title order, not a set's: a set iterates in an order that
+        # changes with every process's hash seed, so the same --seed built
+        # different title and rare queries run to run, and two runs of an
+        # unchanged engine disagreed by up to 0.04 MRR on those styles.
+        ordered_title = list(dict.fromkeys(_terms(doc["title"])))
+        title_terms = set(ordered_title)
 
         if len(title_terms) >= 2:
             probes.append({
                 "style": "title", "doc_id": doc["id"],
-                "query": " ".join(list(title_terms)[:8]),
+                "query": " ".join(ordered_title[:8]),
             })
 
         body_terms = [t for t in _terms(body) if t not in title_terms]
@@ -110,10 +115,11 @@ def build_probes(docs: list[dict], corpus_df: dict[str, int], total: int) -> lis
             })
 
             # Rarest terms by inverse document frequency across this corpus.
+            # Ties (common: many terms occur once) broken by the term
+            # itself, for the same reason as the title order above.
             scored = sorted(
                 set(body_terms),
-                key=lambda t: math.log(total / max(corpus_df.get(t, 1), 1)),
-                reverse=True,
+                key=lambda t: (-math.log(total / max(corpus_df.get(t, 1), 1)), t),
             )
             probes.append({
                 "style": "rare", "doc_id": doc["id"],

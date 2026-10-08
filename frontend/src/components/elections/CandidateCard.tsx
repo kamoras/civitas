@@ -165,7 +165,13 @@ export default function CandidateCard({
               <dd className="font-mono text-xl tabular-nums text-ink-hi">{cash?.amount ?? "—"}</dd>
             </div>
           </dl>
-          <p className="mt-2 font-mono text-xs tracking-[0.08em] text-ink-min">AS OF {syncedOn}</p>
+          <p className="mt-2 font-mono text-xs tracking-[0.08em] text-ink-min">
+            {candidate.financialsThrough
+              ? `FEC REPORTS THROUGH ${candidate.financialsThrough} · CHECKED ${syncedOn}`
+              : candidate.contributions == null && candidate.cashOnHand == null
+                ? `NO FEC REPORT FOR THIS ELECTION · CHECKED ${syncedOn}`
+                : `CHECKED ${syncedOn}`}
+          </p>
         </>
       )}
     </article>

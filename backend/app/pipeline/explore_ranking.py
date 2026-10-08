@@ -1,10 +1,10 @@
 """Where explore search's ranking parameters come from.
 
 Every tunable in this feature is generated data, not a typed-in number.
-There are exactly two exceptions, both published results rather than
-properties of this corpus, and both live in `config_definitions` with
-their citations: reciprocal rank fusion's K = 60 (Cormack, Clarke &
-Büttcher, SIGIR 2009) and PageRank's damping 0.85 (Brin & Page, 1998).
+There is exactly one exception, a published result rather than a property
+of this corpus, in `document_authority` with its citation: PageRank's
+damping 0.85 (Brin & Page, 1998). Reciprocal rank fusion's K used to be a
+second (Cormack, Clarke & Büttcher's 60); it is now measured too (rrf_k).
 
 Three sources, in order:
 
@@ -43,7 +43,7 @@ _CACHE_KEY = "ranking_calibration"
 
 # The keys every consumer needs present for a calibration to be usable.
 _REQUIRED_KEYS = frozenset({
-    "field_weights", "prior_weights", "candidate_pool",
+    "field_weights", "prior_weights", "candidate_pool", "retriever_resolution_ranks",
     "source_diversity_cap", "fingerprint", "text_shape",
 })
 
@@ -181,6 +181,30 @@ def fusion_weights() -> dict[str, float]:
         "freshness": priors["freshness"],
         "authority": priors["authority"],
     }
+
+
+def rrf_k(delta: float | None = None) -> float:
+    """Reciprocal rank fusion's K: the retrievers' resolution δ (the median
+    rank disagreement between the two channels on documents both return,
+    calibrate_ranking.derive_retriever_resolution), at least 1.
+
+    K sets how slowly a channel's contribution falls off with rank. Ranks
+    closer than δ are below what the retrievers can tell apart, and ranks
+    many δ down are noise, so K is put on that scale: a channel's first hit
+    counts about twice its hit δ ranks lower. With the published K = 60 a
+    document two channels both placed around 30th outscored one channel's
+    first hit, and the known-item harness showed it (2026-10-08, 9,458
+    documents, δ = 10, 1,516 probes over two samples): fusion found the
+    target first 36-40% of the time against the keyword channel's 66-68%, and
+    missed 17% of targets against the keyword channel's 4-5%. K = δ lifted fusion
+    and hybrid on every query style (see the PR that made this change, and
+    scripts/evaluate_explore_search.py). Smaller K scored higher still on
+    known-item probes, which reward trusting a lone top hit; K is the
+    measured δ, not the harness's best value.
+    """
+    if delta is None:
+        delta = float(ranking()["retriever_resolution_ranks"])
+    return max(1.0, float(delta))
 
 
 def candidate_pool() -> tuple[int, int]:

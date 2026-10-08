@@ -15,7 +15,6 @@ from app.models import ExploreDocument  # noqa: F401  (registers the table)
 from app.pipeline import explore_ranking
 from app.pipeline.calibrate_ranking import (
     MAX_PAGE_SIZE,
-    RRF_K,
     derive_candidate_pool,
     derive_diversity_cap,
     derive_fingerprint,
@@ -54,9 +53,11 @@ class TestPriorWeights:
         # w is defined so its whole swing equals the score gap δ ranks buys
         # across both retrieval channels. Restating that here pins the
         # formula against an independent calculation of the same thing.
+        # K is δ itself (explore_ranking.rrf_k).
         delta, channels = 8.0, 2
-        gap = 1.0 / (RRF_K + 1) - 1.0 / (RRF_K + 1 + delta)
-        expected = channels * (RRF_K + 1) * gap
+        k = delta
+        gap = 1.0 / (k + 1) - 1.0 / (k + 1 + delta)
+        expected = channels * (k + 1) * gap
         assert derive_prior_weights(delta, {"freshness": 1.0})["freshness"] == (
             pytest.approx(round(expected, 4))
         )
@@ -297,3 +298,21 @@ def test_a_calibration_is_read_whatever_its_age(fresh_ranking, db_session, monke
     ))
     db_session.commit()
     assert fresh_ranking.source_diversity_cap() == 5
+
+
+class TestRrfK:
+    def test_k_is_the_measured_resolution_and_at_least_one(self):
+        assert explore_ranking.rrf_k(10.0) == 10.0
+        assert explore_ranking.rrf_k(0.0) == 1.0
+        with explore_ranking.override({"retriever_resolution_ranks": 11.0}):
+            assert explore_ranking.rrf_k() == 11.0
+
+    def test_one_channels_first_hit_outranks_a_document_both_place_thirtieth(self):
+        """What K = 60 got wrong on this corpus (δ = 10): a document two
+        channels both ranked around 30th outscored a channel's first hit."""
+        def both_thirtieth(k):
+            return 2 / (k + 30)
+
+        assert 1 / (60 + 1) < both_thirtieth(60)
+        k = explore_ranking.rrf_k(10.0)
+        assert 1 / (k + 1) > both_thirtieth(k)

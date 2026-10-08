@@ -98,6 +98,15 @@ class TestProbeConstruction:
         }
         assert "perfluoroalkyl" in probes["rare"]
 
+    def test_queries_do_not_depend_on_the_processs_hash_seed(self, harness):
+        """The same --seed must build the same queries in every run, or two
+        runs of an unchanged engine disagree. The title probe keeps the
+        title's order, and rare terms tied on frequency sort by the term."""
+        probes = {p["style"]: p["query"] for p in harness.build_probes(self._docs(), {}, 1)}
+        assert probes["title"] == "safe secure trustworthy artificial intelligence"
+        rare = probes["rare"].split()
+        assert rare == sorted(rare)  # every term is tied (no corpus frequencies)
+
 
 class TestMetrics:
     def test_rank_of_is_one_indexed_and_none_when_absent(self, harness):
