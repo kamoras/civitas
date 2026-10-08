@@ -1693,7 +1693,10 @@ async def run_senate_pipeline(
                     raise FecUnavailable(f"no FEC data read for {senator['name']}")
                 if fec:
                     funding = normalize_finance(
-                        fec["candidate"],
+                        # The chamber bounds the election window
+                        # (seat_winning_floor); a crosswalk match carries
+                        # only the id.
+                        {**fec["candidate"], "office": "S"},
                         fec.get("financials") or [],
                         fec.get("receipts") or [],
                         fec.get("pacReceipts") or [],

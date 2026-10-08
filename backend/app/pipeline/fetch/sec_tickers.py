@@ -123,11 +123,29 @@ def industry_for_sic(sic: int | None) -> str | None:
     return min(matches, key=lambda m: m[0])[1] if matches else None
 
 
+# Legal-form words a name is compared without. EDGAR's conformed names
+# abbreviate them ("COMCAST CORP", "HOME DEPOT, INC.") where a filer such
+# as a PAC's sponsor writes them out ("Comcast Corporation", "The Home
+# Depot Inc."), so exact names missed 45% of the corporate PAC sponsors the
+# SEC lists (measured 2026-10-08). A title two issuers share once these are
+# dropped is left out, as before.
+_LEGAL_FORMS = frozenset({
+    "INC", "INCORPORATED", "CORP", "CORPORATION", "CO", "COMPANY",
+    "LTD", "LIMITED", "LLC", "PLC", "LP", "&",
+})
+
+
 def issuer_key(name: str) -> str:
     """A company name as compared against the SEC's titles: upper case,
-    punctuation dropped, and the SEC's trailing state-of-incorporation tag
-    ("AMETEK INC/", "EXXON MOBIL CORP /NJ/") cut off."""
-    return " ".join(re.sub(r"[^A-Z0-9& ]", " ", name.upper().split("/")[0]).split())
+    punctuation dropped, the SEC's trailing state-of-incorporation tag
+    ("AMETEK INC/", "EXXON MOBIL CORP /NJ/") cut off, and a leading "The"
+    and trailing legal-form words dropped."""
+    words = re.sub(r"[^A-Z0-9& ]", " ", name.upper().split("/")[0]).split()
+    if words[:1] == ["THE"]:
+        words = words[1:]
+    while words and words[-1] in _LEGAL_FORMS:
+        words.pop()
+    return " ".join(words)
 
 
 async def _fetch_issuers(client: httpx.AsyncClient, db: Session) -> dict:
@@ -142,7 +160,7 @@ async def _fetch_issuers(client: httpx.AsyncClient, db: Session) -> dict:
     if _issuers_cache is not None and (time.time() - _issuers_cache_at) < _TICKERS_TTL_HOURS * 3600:
         return _issuers_cache
 
-    cached = api_cache_get(db, "sec_tickers", "company_issuers", max_age_hours=_TICKERS_TTL_HOURS)
+    cached = api_cache_get(db, "sec_tickers", "company_issuers-v2", max_age_hours=_TICKERS_TTL_HOURS)
     if cached is None:
         try:
             resp = await client.get(TICKERS_URL, headers=_HEADERS, timeout=DEFAULT_FETCH_TIMEOUT_S)
@@ -163,7 +181,7 @@ async def _fetch_issuers(client: httpx.AsyncClient, db: Session) -> dict:
             "tickers": {e["ticker"].upper(): e["cik_str"] for e in raw.values() if e.get("ticker")},
             "titles": {k: v for k, v in titles.items() if v is not None},
         }
-        api_cache_set(db, "sec_tickers", "company_issuers", cached, normal_ttl_hours=_TICKERS_TTL_HOURS)
+        api_cache_set(db, "sec_tickers", "company_issuers-v2", cached, normal_ttl_hours=_TICKERS_TTL_HOURS)
     _issuers_cache, _issuers_cache_at = cached, time.time()
     return cached
 

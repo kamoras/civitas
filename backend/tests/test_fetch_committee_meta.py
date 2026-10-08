@@ -17,11 +17,11 @@ from app.pipeline.fetch.fec import fetch_committee_meta
 async def test_returns_type_and_designation_and_caches_across_calls(db_session):
     with patch(
         "app.pipeline.fetch.fec._fetch_with_retry",
-        new=AsyncMock(return_value={"results": [{"committee_type": "Q", "designation": "D"}]}),
+        new=AsyncMock(return_value={"results": [{"committee_type": "Q", "designation": "D", "organization_type": "C"}]}),
     ) as mocked:
         first = await fetch_committee_meta(client=None, db=db_session, committee_id="C00429613")
         second = await fetch_committee_meta(client=None, db=db_session, committee_id="C00429613")
-    assert first == {"type": "Q", "designation": "D", "connectedOrg": None}
+    assert first == {"type": "Q", "designation": "D", "orgType": "C", "connectedOrg": None}
     assert second == first
     assert mocked.call_count == 1
 

@@ -527,6 +527,26 @@ class TestOtherPlaceholderDoesNotBlockKnn:
         assert stored.source == "fec"
 
 
+    async def test_an_fec_typed_donor_keeps_its_industry_s_own_provenance(self, db_session):
+        """The FEC's entity type says nothing about industry: an industry
+        the embedding chose is stored as the embedding's, not as FEC
+        metadata at confidence 1.0."""
+        donors = [{"name": "Acme Corp", "amount": 5000, "fec_receipt": {"entity_type": "ORG"}}]
+        with patch(
+            "app.pipeline.analyze.donor_classifier_ai.classify_industries_batch_scored",
+            return_value={"Acme Corp": ("MANUFACTURING", 0.8)},
+        ):
+            await classify_donors_hybrid(donors, db_session=db_session)
+
+        rows = {
+            r.entity_type: r for r in db_session.query(LearnedClassification)
+            .filter(LearnedClassification.entity_name == "ACME CORP")
+        }
+        assert (rows["donor_type"].source, rows["donor_type"].confidence) == ("fec", 1.0)
+        assert (rows["industry"].value, rows["industry"].source) == ("MANUFACTURING", "embedding")
+        assert rows["industry"].confidence < 1.0
+
+
 @pytest.mark.slow
 class TestSkipNamesBatch:
     """No prior coverage existed for these batch skip-detection functions

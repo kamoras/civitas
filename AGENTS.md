@@ -206,7 +206,7 @@ the residual.
 
 | Tier | Technique | Used For |
 |------|-----------|----------|
-| 1 | FEC structured metadata / learning store | Unambiguous entity types, previously classified entities |
+| 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
@@ -635,7 +635,12 @@ has passed — a re-election campaign still in progress is the *next*
 mandate's, not the current one), not the current congress. Itemized donor
 detail covers that election's full period (six years Senate, two House —
 `election_period_cycles`), and every funding share is taken over
-contributions, not receipts (`normalize_finance.summarize_election_totals`). Senators legitimately raise little money in the 4 non-election
+contributions, not receipts (`normalize_finance.summarize_election_totals`).
+Both chamber runs pass the chamber with the candidate record, or the
+seat-winning bound (`seat_winning_floor`) is off and the window can reach an
+old losing run. FEC's candidate totals can omit the race that won a House
+seat; for a member sworn in when the Congress convened, the House run reads
+it from the principal committees' cycle totals (`fec.with_seat_election`). Senators legitimately raise little money in the 4 non-election
 years of a 6-year term — a strict 2-year funding window would go near-empty
 most of the time for reasons that have nothing to do with coasting. Tying it
 to their current mandate's campaign instead fixes the same staleness problem

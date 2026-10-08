@@ -149,9 +149,11 @@ export default function ScoresChapter() {
             and the score is weighed over the other three, rather than counted as neutral. Money
             from a party, candidate, joint-fundraising or leadership committee is political money,
             not an industry&apos;s: the FEC&apos;s own registration of each committee decides that,
-            not its name. A state&apos;s home industry counts as concentration like any other,
-            because local economic weight plausibly gives an industry more leverage over a member,
-            not less.
+            not its name. The same records decide where they can: a PAC a labor organization
+            sponsors is labor money, and a company&apos;s PAC takes the SEC&apos;s industry code for
+            that company when the SEC lists it; only the rest is read from the name. A state&apos;s
+            home industry counts as concentration like any other, because local economic weight
+            plausibly gives an industry more leverage over a member, not less.
           </Step>
         </Steps>
         <P>

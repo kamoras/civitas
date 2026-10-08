@@ -13,7 +13,7 @@ computed deterministically and don't need LLM calls.
 
 import logging
 import time
-from datetime import timedelta
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -68,6 +68,7 @@ from app.pipeline.fetch.fec import (
     fetch_pac_receipts,
     find_candidate,
     resolve_committee_meta,
+    with_seat_election,
 )
 from app.pipeline.fetch.floor_logs import bill_id_from_number
 from app.pipeline.analyze.bill_learning import stamp_motion_type
@@ -172,6 +173,17 @@ def roll_call_year(congress: int, now) -> tuple[int, bool]:
     never young."""
     year = min(now.year, congress_first_year(congress) + 1)
     return year, year == now.year and now.month <= 6
+
+
+def seated_at_convening(sworn_date: str | None, congress: int) -> bool:
+    """Sworn in when `congress` convened (January 3 of its first year), so
+    the general election before it is the one that seated the member. A
+    special-election winner, or a member whose date isn't known, is not."""
+    try:
+        sworn = date.fromisoformat((sworn_date or "")[:10])
+    except ValueError:
+        return False
+    return sworn <= date(congress_first_year(congress), 1, 3)
 
 
 def in_congress(roll_calls: list[dict], congress: int) -> list[dict]:
@@ -786,6 +798,10 @@ async def run_house_pipeline() -> dict:
                         cand_id = fec_candidate.get("candidate_id", "")
                         financials = await fetch_candidate_financials(client, db, cand_id)
                         committees = await fetch_candidate_committees(client, db, cand_id)
+                        if seated_at_convening(rep.get("swornDate"), scored):
+                            financials = await with_seat_election(
+                                client, db, financials, committees, congress_first_year(scored) - 1,
+                            )
 
                         recent_cycles = compute_recent_election_cycles(financials, "H")
 
@@ -826,8 +842,11 @@ async def run_house_pipeline() -> dict:
                             recent_cycles, committee_contributions, committee_master,
                         )
 
+                        # The chamber bounds the election window
+                        # (seat_winning_floor); a crosswalk match carries
+                        # only the id.
                         finance_data = normalize_finance(
-                            fec_candidate, financials, raw_receipts, raw_pac_receipts,
+                            {**fec_candidate, "office": "H"}, financials, raw_receipts, raw_pac_receipts,
                             db_session=db,
                             committee_meta_map=committee_meta_map,
                             detail=detail,
