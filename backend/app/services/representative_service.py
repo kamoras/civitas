@@ -6,6 +6,7 @@ import math
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
+from app.pipeline.bill_refresh import keep_newer_latest_actions
 from app.models import (
     PromiseAlignment,
     RepCampaignPromise,
@@ -584,6 +585,9 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     # An unavailable list (the fetch failed, or Phase 4b never reached this
     # member) is not a record of zero bills: keep what is stored.
     if not rep_data.get("sponsoredBillsUnavailable"):
+        keep_newer_latest_actions(
+            db, RepSponsoredBill, RepSponsoredBill.representative_id == rid, rep_data.get("sponsoredBills", []),
+        )
         db.query(RepSponsoredBill).filter(RepSponsoredBill.representative_id == rid).delete()
     for sp_data in rep_data.get("sponsoredBills", []):
         db.add(RepSponsoredBill(

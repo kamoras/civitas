@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session
 from app.models import CongressDay, CongressEvent, RepSponsoredBill, RollCall, SponsoredBill
 from app.pipeline.congress_activity import digest_cursor, eastern_today, last_run
 from app.pipeline.fetch.daily_digest import words_to_int
+from app.pipeline.analyze.bill_stage import became_law_action
+from app.pipeline.bill_refresh import stored_laws
 from app.pipeline.fetch.congress import congress_of_date
 
 CHAMBERS = ("senate", "house")
@@ -384,21 +386,37 @@ def _period_sentence(totals: dict) -> str:
     return " ".join(sentences)
 
 
+# Congress.gov's own words for the President signing a bill, the day it
+# becomes law, before the law number is assigned.
+_SIGNED_RE = re.compile(r"^signed by (?:the )?president\b", re.IGNORECASE)
+
+
 def _became_law(db: Session, start: date, end: date) -> list[dict]:
-    """Bills whose latest action, dated in the period, is becoming law.
-    Read from the sponsored-bill rows, so a bill no current member
-    sponsored is not listed."""
+    """Bills that became law in the period: Congress.gov's list of the
+    Congress's laws, each on the day it became law (bill_refresh.sync_laws),
+    and a bill signed in the period whose law number isn't on that list yet,
+    from the sponsored-bill rows (its latest action is the signing)."""
     s, e = start.isoformat(), end.isoformat()
     seen: dict[tuple[str, int | None], dict] = {}
+    for congress in sorted({congress_of_date(s), congress_of_date(e)} - {None}):
+        for bill_id, law in stored_laws(db, congress).items():
+            if s <= law["date"] <= e:
+                seen[(bill_id, congress)] = {
+                    "billId": bill_id, "billLabel": bill_label(bill_id), "name": law["title"], "congress": congress,
+                    "date": law["date"], "text": f"Became {law['kind']} Law No: {law['law']}.",
+                }
     for model in (SponsoredBill, RepSponsoredBill):
         for b in db.query(model).filter(
             model.is_law.is_(True), model.latest_action_date >= s, model.latest_action_date <= e,
         ):
-            seen.setdefault((b.bill_id, b.congress), {
-                "billId": b.bill_id, "billLabel": bill_label(b.bill_id), "name": b.title, "congress": b.congress,
-                "date": b.latest_action_date, "text": b.latest_action,
-            })
-    return sorted(seen.values(), key=lambda b: b["date"])
+            if (b.bill_id, b.congress) in seen or b.bill_id in stored_laws(db, b.congress):
+                continue  # on the list, under the day it became law
+            if became_law_action(b.latest_action) or _SIGNED_RE.match(b.latest_action or ""):
+                seen[(b.bill_id, b.congress)] = {
+                    "billId": b.bill_id, "billLabel": bill_label(b.bill_id), "name": b.title,
+                    "congress": b.congress, "date": b.latest_action_date, "text": b.latest_action,
+                }
+    return sorted(seen.values(), key=lambda b: (b["date"], b["billId"]))
 
 
 def period_report(db: Session, start: date, end: date) -> dict:

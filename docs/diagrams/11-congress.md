@@ -89,6 +89,19 @@ also posts that week: the week report's sentence and the numbers of the bills
 that became law, linking to `/congress/week/{monday}`. Only the week just
 ended is eligible.
 
+**Became law.** The week and month reports list Congress.gov's own list of
+the Congress's laws (`GET /law/{congress}`, read by the hourly bill refresh,
+`pipeline/bill_refresh.sync_laws`), each on the day its "Became Public Law"
+action is dated, plus any bill signed that week whose law number isn't on
+the list yet. Read from the sponsored-bill rows alone, they left out every
+law whose sponsor has left Congress and dated a law by its latest action,
+which can come after it.
+
+**Latest actions.** The hourly bill refresh writes each bill's newer action
+within the hour; the nightly pipelines rebuild the rows from a member list
+cached for up to 72 hours, so at that rewrite a stored action dated after
+the list's is kept (`bill_refresh.keep_newer_latest_actions`).
+
 **Bill ids** are the site's (`S.3257`, `HCONRES.89`) whichever spelling the
 source used: the Record's "H. Con. Res. 89", the House roll call's
 "H CON RES 89", the Senate log's "H.Con.Res. 89".
