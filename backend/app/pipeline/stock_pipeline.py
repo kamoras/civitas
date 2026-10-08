@@ -221,6 +221,40 @@ async def _reclassify_stored_trades(db: Session, client: httpx.AsyncClient) -> i
     return changed
 
 
+def collapse_refiled_trades(db: Session, model, owner_key: str) -> int:
+    """Keep each transaction once when several of a filer's filings list
+    it: the same owner, asset, date, type and amount bracket in two reports
+    is one trade disclosed twice, an amended or re-submitted report, not
+    two trades. The rows of the earliest-filed report are kept (its date is
+    when the trade was first disclosed); the repeats are deleted. Returns
+    the rows deleted.
+
+    Measured 2026-10-08: 31 Senate groups (two reports filed the same day
+    with the same rows, and one report filed twice) and 2 House groups.
+    Repeats within one report are left: those can be separate same-day lots.
+    An amendment that corrects a trade's details doesn't match the original
+    and both stay; the forms don't link an amendment to what it amends.
+    """
+    owner = getattr(model, owner_key)
+    rows = db.query(
+        model.id, owner, model.asset_name, model.transaction_date, model.transaction_type,
+        model.amount_low, model.owner, model.filing_id, model.disclosure_date,
+    ).filter(model.transaction_date.isnot(None)).all()
+    groups: dict[tuple, list] = {}
+    for r in rows:
+        groups.setdefault(tuple(r[1:7]), []).append(r)
+    doomed: list[int] = []
+    for group in groups.values():
+        if len({r.filing_id for r in group}) < 2:
+            continue
+        first = min(group, key=lambda r: (r.disclosure_date or "9999", r.id)).filing_id
+        doomed += [r.id for r in group if r.filing_id != first]
+    if doomed:
+        db.query(model).filter(model.id.in_(doomed)).delete(synchronize_session=False)
+        db.commit()
+    return len(doomed)
+
+
 def _trade(model, *, row: TradeRow, **owner):
     """A stored trade row of `model` (StockTrade, RepStockTrade or
     PresidentTrade) for one parsed transaction; `owner` names the filer
@@ -660,6 +694,17 @@ async def run_stock_trades_pipeline() -> dict:
                 logger.exception("PTR re-read failed")
                 db.rollback()
                 error_parts.append("Re-read of stored filings: failed — see server logs")
+            # A trade two reports list counts once, at its first disclosure.
+            # After the re-read, which rewrites a filing's rows in full.
+            try:
+                for model, key in ((StockTrade, "senator_id"), (RepStockTrade, "representative_id")):
+                    collapsed = collapse_refiled_trades(db, model, key)
+                    if collapsed:
+                        logger.info("%s: %d trades listed again in a later report removed", model.__tablename__, collapsed)
+            except Exception:
+                logger.exception("Collapsing re-filed trades failed")
+                db.rollback()
+                error_parts.append("Collapsing re-filed trades: failed — see server logs")
             # Every stored trade's industry, whatever parser read it: not a
             # trade phase either.
             try:
