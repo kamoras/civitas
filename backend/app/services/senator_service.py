@@ -371,9 +371,13 @@ def get_senator_score_breakdown(db: Session, senator_id: str) -> dict | None:
 
 
 def get_states_with_counts(db: Session) -> list[StateCountSchema]:
-    """Return a list of states that have senators, with counts."""
+    """States with serving senators, and how many each has. A departed
+    senator's row stays through the retirement grace period
+    (member_lifecycle), so counting every row gave a state with a newly
+    seated successor three senators."""
     rows = (
         db.query(Senator.state, func.count(Senator.id).label("cnt"))
+        .filter(Senator.is_current == True)  # noqa: E712
         .group_by(Senator.state)
         .order_by(Senator.state)
         .all()
