@@ -518,12 +518,24 @@ def compute_recent_election_cycles(financials: list[dict], office: str) -> list[
     so the detail window is bounded exactly like the totals
     (normalize_finance) — otherwise an old losing run would supply the
     donor detail for a member whose totals come from the current campaign.
+
+    The cycles are the ones the FEC's own totals for that election cover
+    (its per-cycle rows), and the full period only when no such row is
+    held: a senator first elected in a special election has a regular
+    election whose totals start after it, and the six-year period read the
+    special's committee money into the regular election's detail (one
+    breakdown summed to 1.5 times the campaign's contributions).
     """
     cycles: list[int] = []
     for c in select_recent_elections(financials, office=office):
         election_year = financials_election_year(c)
-        if election_year:
-            cycles.extend(election_period_cycles(int(election_year), office))
+        if not election_year:
+            continue
+        covered = sorted({
+            int(r["cycle"]) for r in financials
+            if r.get("cycle") and financials_election_year(r) == election_year
+        }, reverse=True)
+        cycles.extend(covered or election_period_cycles(int(election_year), office))
     return cycles
 
 

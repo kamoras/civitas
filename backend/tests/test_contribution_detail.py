@@ -82,6 +82,15 @@ def test_occupation_money_never_exceeds_the_itemized_total():
     assert by["LAWYERS"] == 4_000_000 and "LARGE_INDIVIDUAL" not in by
 
 
+def test_committee_money_never_exceeds_what_the_campaign_received():
+    # Givers reported $1.2M; the campaign's own totals record $600K from
+    # committees (the rest came through a joint fundraising committee, a
+    # transfer). Scaled to it, proportions kept.
+    by, f = _breakdown(_detail(pacs={"C1": 1_000_000, "C2": 200_000}))
+    assert by["FINANCE"] == 500_000 and by["POLITICAL"] == 100_000
+    assert sum(by.values()) <= f["totalContributions"]
+
+
 def test_top_donors_come_from_the_complete_detail():
     _, f = _breakdown(_detail())
     donors = {d["name"].upper(): d for d in f["topDonors"]}
