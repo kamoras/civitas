@@ -25,7 +25,8 @@ from app.models import ExploreDocument
 from app.pipeline import explore_pipeline
 from app.pipeline.explore_pipeline import (
     _backfill_rulemaking_bodies,
-    _purge_duplicate_floor_speeches,
+    _ingest_floor_speeches,
+    _purge_out_of_scope_speeches,
     _stable_hash,
     run_explore_pipeline,
 )
@@ -51,8 +52,7 @@ def _stubbed_run(db_session, **stubs) -> Iterator[None]:
     the vector-index steps each test is about."""
     defaults = {
         "SessionLocal": MagicMock(return_value=db_session),
-        "fetch_floor_remarks": AsyncMock(return_value={}),
-        "fetch_house_floor_remarks": AsyncMock(return_value=[]),
+        "fetch_crec_packages": AsyncMock(return_value=[]),
         "fetch_recent_presidential_actions": AsyncMock(return_value=[]),
         "fetch_scotus_cases": AsyncMock(return_value=[]),
         "fetch_fr_rulemaking": AsyncMock(return_value=[]),
@@ -290,74 +290,100 @@ def _floor_doc(doc_id: int, ext_id: str, body: str) -> ExploreDocument:
     )
 
 
-class TestDuplicateFloorSpeechPurge:
-    """Residue from the hash() bug above, never cleaned up.
+def _speech_doc(doc_id: int, ext_id: str, date: str, chamber: str = "Senate") -> ExploreDocument:
+    return ExploreDocument(
+        id=doc_id, doc_type=f"{chamber} Floor Speech", source="Congressional Record (GovInfo)",
+        title="Remarks", summary="", body="Words.", date=date, chamber=chamber, external_id=ext_id,
+    )
 
-    _stable_hash stopped NEW duplicates being created; it did not remove
-    the ones already written. Measured on the live corpus: 377
-    floor-speech groups, 111 duplicated, 112 redundant documents, 110 of
-    them byte-identical. They surface the same speech two or three times
-    in one search result page, and skew the corpus sample that
-    calibrate_ranking reads its fingerprint length off.
-    """
 
-    QUORUM = ("Mr. President, I ask unanimous consent that the order for "
-              "the quorum call be rescinded.")
+class TestOutOfScopeSpeechPurge:
+    """Speeches are the sitting Congress's (119 in tests), in the current
+    format; anything else stored goes, by the run itself."""
 
-    def test_duplicates_are_removed_keeping_the_earliest(self, db_session):
-        body = "Mr. President, this is National Police Week."
-        # Same speaker and date, same text, three different legacy hashes —
-        # exactly the shape found in production.
-        for i, h in enumerate(("2989b8de", "d0f79242", "90a08c74"), start=1):
-            db_session.add(_floor_doc(i, f"senate-floor-GRASSLEY-2026-05-19-{h}", body))
+    def test_old_issues_and_the_old_format_go_and_the_rest_stays(self, db_session):
+        db_session.add_all([
+            _speech_doc(1, "crec-CREC-1996-07-10-pt1-PgS1-ab12cd34", "1996-07-10"),  # a reprocessed issue
+            _speech_doc(2, "crec-CREC-2024-06-11-pt1-PgS1-ab12cd34", "2024-06-11"),  # the last Congress
+            _speech_doc(3, "senate-floor-SMITH-2026-05-19-aaaaaaaa", "2026-05-19"),  # truncated, mistitled
+            _speech_doc(4, "crec-CREC-2026-05-19-pt1-PgS2-ab12cd34", "2026-05-19"),
+            _regulatory_doc("A rule from 1996.", doc_id=5),
+        ])
         db_session.commit()
+        assert _purge_out_of_scope_speeches(db_session) == 3
+        assert {d.id for d in db_session.query(ExploreDocument)} == {4, 5}
 
-        removed = _purge_duplicate_floor_speeches(db_session)
 
-        assert sorted(removed) == [2, 3], "should keep the earliest row only"
+def _turn(text, speaker="ALPHA", heading="Artificial Intelligence", opens=True, granule="CREC-2026-09-24-pt1-PgS4962"):
+    return {"speaker": speaker, "text": text, "heading": heading, "opens": opens, "granule_title": "SECTION",
+            "granule_id": granule, "date": "2026-09-24",
+            "url": f"https://www.govinfo.gov/app/details/CREC-2026-09-24/{granule}"}
+
+
+class TestFloorSpeechIngest:
+    """A day of the Record becomes documents once, and is replaced whole."""
+
+    SPEECH = "Madam President, we are living through the biggest technological transformation in generations."
+    BUSINESS = "Madam President, I ask unanimous consent that the order for the quorum call be rescinded."
+
+    def _run(self, db_session, monkeypatch, days, packages=("CREC-2026-09-24",)):
+        fetched = []
+
+        async def day(client, package_id):
+            fetched.append(package_id)
+            return days.get(package_id)
+
+        monkeypatch.setattr(explore_pipeline, "fetch_crec_packages", AsyncMock(return_value=list(packages)))
+        monkeypatch.setattr(explore_pipeline, "fetch_day_speeches", day)
+        monkeypatch.setattr(explore_pipeline, "speech_flags", lambda texts: [t != self.BUSINESS for t in texts])
+        added = asyncio.run(_ingest_floor_speeches(db_session, None, 60))
+        return added, fetched
+
+    def test_speeches_are_stored_titled_and_linked_and_business_is_not(self, db_session, monkeypatch):
+        day = {"Senate": [_turn(self.SPEECH), _turn(self.BUSINESS, speaker="BRAVO", opens=False),
+                          _turn(self.SPEECH + " Indeed.", speaker="CHARLIE", opens=False)],
+               "House": []}
+        added, _ = self._run(db_session, monkeypatch, {"CREC-2026-09-24": day})
+        assert added == {"Senate": 2, "House": 0}
+        docs = db_session.query(ExploreDocument).order_by(ExploreDocument.id).all()
+        assert [(d.politician_name, d.title) for d in docs] == [
+            ("Alpha", "Artificial Intelligence"), ("Charlie", "Remarks on Artificial Intelligence"),
+        ]
+        assert docs[0].body == self.SPEECH and docs[0].doc_type == "Senate Floor Speech"
+        assert docs[0].url.endswith("/CREC-2026-09-24/CREC-2026-09-24-pt1-PgS4962")
+
+    def test_the_same_words_twice_in_a_section_are_one_document(self, db_session, monkeypatch):
+        added, _ = self._run(db_session, monkeypatch, {
+            "CREC-2026-09-24": {"Senate": [_turn(self.SPEECH), _turn(self.SPEECH, opens=False)], "House": []},
+        })
+        assert added["Senate"] == 1 and db_session.query(ExploreDocument).count() == 1
+
+    def test_a_day_read_is_not_fetched_again(self, db_session, monkeypatch):
+        day = {"Senate": [_turn(self.SPEECH)], "House": []}
+        self._run(db_session, monkeypatch, {"CREC-2026-09-24": day})
+        _, fetched = self._run(db_session, monkeypatch, {"CREC-2026-09-24": day})
+        assert fetched == []
         assert db_session.query(ExploreDocument).count() == 1
-        assert db_session.query(ExploreDocument).one().id == 1
 
-    def test_identical_boilerplate_from_different_speakers_is_kept(self, db_session):
-        """The reason the key is not the body alone.
+    def test_a_day_that_could_not_be_read_is_tried_again(self, db_session, monkeypatch):
+        self._run(db_session, monkeypatch, {})
+        _, fetched = self._run(db_session, monkeypatch, {"CREC-2026-09-24": {"Senate": [], "House": []}})
+        assert fetched == ["CREC-2026-09-24"]
 
-        Procedural boilerplate is uttered verbatim by different senators
-        on the same day. Those are distinct remarks, and deduping on body
-        alone would silently delete real content.
-        """
-        db_session.add(_floor_doc(1, "senate-floor-GRASSLEY-2026-05-19-aaaaaaaa", self.QUORUM))
-        db_session.add(_floor_doc(2, "senate-floor-HOEVEN-2026-05-19-bbbbbbbb", self.QUORUM))
+    def test_reading_a_day_again_replaces_what_it_held(self, db_session, monkeypatch):
+        """A new SPEECH_FORMAT re-reads the window: the day's documents are
+        what the day holds now."""
+        db_session.add(_speech_doc(1, "crec-CREC-2026-09-24-pt1-PgS4962-0badbeef", "2026-09-24"))
+        db_session.add(_speech_doc(2, "crec-CREC-2026-09-23-pt1-PgS4900-0badbeef", "2026-09-23"))
         db_session.commit()
+        self._run(db_session, monkeypatch, {"CREC-2026-09-24": {"Senate": [_turn(self.SPEECH)], "House": []}})
+        assert sorted((d.date, d.body) for d in db_session.query(ExploreDocument)) == [
+            ("2026-09-23", "Words."), ("2026-09-24", self.SPEECH),
+        ]
 
-        assert _purge_duplicate_floor_speeches(db_session) == []
-        assert db_session.query(ExploreDocument).count() == 2
-
-    def test_same_speaker_different_days_is_kept(self, db_session):
-        db_session.add(_floor_doc(1, "senate-floor-GRASSLEY-2026-05-19-aaaaaaaa", self.QUORUM))
-        db_session.add(_floor_doc(2, "senate-floor-GRASSLEY-2026-05-20-bbbbbbbb", self.QUORUM))
-        db_session.commit()
-
-        assert _purge_duplicate_floor_speeches(db_session) == []
-        assert db_session.query(ExploreDocument).count() == 2
-
-    def test_a_clean_corpus_is_untouched(self, db_session):
-        db_session.add(_floor_doc(1, "senate-floor-GRASSLEY-2026-05-19-aaaaaaaa", "One."))
-        db_session.add(_floor_doc(2, "senate-floor-GRASSLEY-2026-05-19-bbbbbbbb", "Two."))
-        db_session.commit()
-
-        assert _purge_duplicate_floor_speeches(db_session) == []
-        assert db_session.query(ExploreDocument).count() == 2
-
-    def test_non_floor_documents_are_never_touched(self, db_session):
-        """Only floor speeches carry a content hash in their id. A Federal
-        Register notice's id is the FR document number, so two rows with
-        the same body are two real notices, not a duplicate."""
-        db_session.add(_regulatory_doc("identical body", doc_id=1))
-        db_session.add(_regulatory_doc("identical body", doc_id=2))
-        db_session.commit()
-
-        assert _purge_duplicate_floor_speeches(db_session) == []
-        assert db_session.query(ExploreDocument).count() == 2
+    def test_an_unreadable_index_changes_nothing(self, db_session, monkeypatch):
+        monkeypatch.setattr(explore_pipeline, "fetch_crec_packages", AsyncMock(return_value=None))
+        assert asyncio.run(_ingest_floor_speeches(db_session, None, 60)) == {"Senate": 0, "House": 0}
 
 
 class TestOrphanedVectorPurge:

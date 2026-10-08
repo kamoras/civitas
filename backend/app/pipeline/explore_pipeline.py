@@ -31,9 +31,11 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.http_client import make_async_client
 from app.models import ExploreDocument, Justice, Representative, Senator
-from app.pipeline.cache import api_cache_set
-from app.pipeline.fetch.congressional_record import fetch_floor_remarks
-from app.pipeline.fetch.house_record import fetch_house_floor_remarks
+from app.config import settings
+from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.analyze.floor_speech import speech_flags, titled_speeches
+from app.pipeline.fetch.congress import congress_of_date
+from app.pipeline.fetch.congressional_record import CHAMBERS, fetch_crec_packages, fetch_day_speeches
 from app.pipeline.fetch.presidential_actions import (
     fetch_recent_presidential_actions,
     _fetch_body_text,
@@ -83,24 +85,19 @@ def _stable_hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:8]
 
 
-def _crec_url(date_str: str, chamber: str) -> str:
-    """Build a Congressional Record URL for a given date and chamber."""
-    section = "senate-section" if chamber == "Senate" else "house-section"
-    return f"https://www.congress.gov/congressional-record/{date_str.replace('-', '/')}/{section}"
-
-
 _NAME_SUFFIXES = frozenset({"JR", "SR", "II", "III", "IV"})
 
 
 def _surname_keys(name: str) -> set[str]:
     """The ways the Record may print a member's surname: the last word, and
-    the last two for a two-word surname ("VAN HOLLEN", "BLUNT ROCHESTER"),
+    the last two or three for a surname of several words ("VAN DER BERG",
+    "VAN WEST", "DE LA PAZ"),
     accents dropped ("LUJAN") and suffixes ignored ("Robert P., Jr. Casey")."""
     words = [w for w in strip_accents(name).upper().replace(",", " ").replace(".", " ").split()
              if w not in _NAME_SUFFIXES]
     if not words:
         return set()
-    return {words[-1], " ".join(words[-2:])}
+    return {words[-1], " ".join(words[-2:]), " ".join(words[-3:])}
 
 
 class _SpeakerLookup:
@@ -321,59 +318,128 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
     return filled
 
 
-_FLOOR_ID_PREFIXES = ("senate-floor-", "house-floor-")
+# Floor speeches, stored per day of the Record. Bump SPEECH_FORMAT when
+# what a day becomes changes (the parse, the floor-business test, titles,
+# the external_id): every day in the window is then read again, and its
+# documents replaced.
+SPEECH_FORMAT = "v1"
+_SPEECH_TYPES = {"Senate": "Senate Floor Speech", "House": "House Floor Speech"}
+# How long a day stays recorded as read: past any fetch window, since the
+# Record of a day does not change once published.
+_DAY_READ_TTL_HOURS = 24 * 365
+_SPEECH_ID_PREFIX = "crec-"
 
 
-def _purge_duplicate_floor_speeches(db: Session) -> list[int]:
-    """Remove floor speeches stored more than once, keeping the earliest.
+def _day_read_key(package_id: str) -> str:
+    return f"crec-speeches-{SPEECH_FORMAT}-{package_id}"
 
-    Residue from an already-fixed bug, never cleaned up. Until the
-    2026-07 audit, external_id embedded Python's built-in hash(), which
-    is randomized per process — so every container restart re-ingested
-    the same recent speeches under new ids. `_stable_hash` (sha256)
-    fixed the cause; nobody removed what it had already produced.
-    Measured on the live corpus: 377 floor-speech groups, 111 of them
-    duplicated, 112 redundant documents, and 110 of the 111 are
-    byte-identical.
 
-    They are not harmless. The corpus backs a search index, so the same
-    speech returns two or three times in one result page; and
-    calibrate_ranking derives the fingerprint length and text shape from
-    a SAMPLE of this corpus, where duplicates distort the collision
-    curve those values are read off.
+def _purge_out_of_scope_speeches(db: Session) -> int:
+    """Delete floor speeches outside the sitting Congress, and any stored
+    in a format this ingest no longer produces.
 
-    The key is the external_id minus its trailing hash — i.e. chamber,
-    speaker and date — plus the body. Body alone would be wrong:
-    procedural boilerplate ("I ask unanimous consent that the order for
-    the quorum call be rescinded") is genuinely uttered verbatim by
-    different senators on the same day, and those are distinct remarks.
+    Explore's speeches are the sitting Congress's, as every scored window
+    is (AGENTS.md §6). GovInfo's collection index lists packages by when
+    they were last modified, and speeches from a reprocessed 1996 issue
+    (six) and 2017 ones (two) reached the index that way (fixed at the
+    source in fetch_crec_packages). Speeches stored before
+    SPEECH_FORMAT existed carry "senate-floor-"/"house-floor-" ids: each
+    turn cut to 400/500 characters and titled after its whole Record
+    section, often another member's tribute — the ones inside the window
+    are read again in the new format; older ones cannot be fixed in place.
     """
     rows = (
-        db.query(ExploreDocument.id, ExploreDocument.external_id,
-                 ExploreDocument.body)
-        .filter(or_(*[ExploreDocument.external_id.like(p + "%")
-                      for p in _FLOOR_ID_PREFIXES]))
-        .order_by(ExploreDocument.id)
+        db.query(ExploreDocument.id, ExploreDocument.date, ExploreDocument.external_id)
+        .filter(ExploreDocument.doc_type.in_(_SPEECH_TYPES.values()))
         .all()
     )
-    seen: set[tuple[str, str]] = set()
-    doomed: list[int] = []
-    for r in rows:
-        key = ((r.external_id or "").rpartition("-")[0], r.body or "")
-        if key in seen:
-            doomed.append(r.id)       # a later copy of one already kept
-        else:
-            seen.add(key)
-    if not doomed:
-        return []
-
+    doomed = [
+        r.id for r in rows
+        if congress_of_date(r.date or "") != settings.CURRENT_CONGRESS
+        or not (r.external_id or "").startswith(_SPEECH_ID_PREFIX)
+    ]
     for i in range(0, len(doomed), 500):
         (db.query(ExploreDocument)
            .filter(ExploreDocument.id.in_(doomed[i:i + 500]))
            .delete(synchronize_session=False))
     db.commit()
-    logger.info("Purged %d duplicate floor-speech documents", len(doomed))
-    return doomed
+    if doomed:
+        logger.info("Purged %d floor speeches outside the sitting Congress or in an old format", len(doomed))
+    return len(doomed)
+
+
+def _speech_documents(chamber: str, speeches: list[dict], lookup: "_SpeakerLookup") -> list[ExploreDocument]:
+    return [
+        ExploreDocument(
+            doc_type=_SPEECH_TYPES[chamber],
+            source="Congressional Record (GovInfo)",
+            title=s["title"],
+            summary=s["text"][:300],
+            body=s["text"],
+            date=s["date"],
+            url=s["url"],
+            politician_name=_speaker_surname(s["speaker"]),
+            politician_id=lookup.get(s["speaker"]),
+            chamber=chamber,
+            external_id=f"{_SPEECH_ID_PREFIX}{s['granule_id']}-{_stable_hash(s['speaker'] + chr(10) + s['text'])}",
+        )
+        for s in speeches
+    ]
+
+
+async def _ingest_floor_speeches(db: Session, client: httpx.AsyncClient, days_back: int) -> dict[str, int]:
+    """Store the window's floor speeches, a day of the Record at a time;
+    returns how many were added per chamber.
+
+    A day is read whole (every granule in which the Record lists a member
+    speaking), its turns sorted into speeches and floor business
+    (analyze/floor_speech.py), and its stored speeches replaced by what it
+    holds now; then it is recorded as read and not fetched again. A day
+    that could not be fetched whole is left unrecorded and tried next run.
+    """
+    added = {chamber: 0 for chamber in CHAMBERS}
+    _purge_out_of_scope_speeches(db)
+    packages = await fetch_crec_packages(client, days_back)
+    if packages is None:
+        logger.warning("Congressional Record index unavailable — floor speeches not updated this run")
+        return added
+    lookups = {"Senate": _senator_lookup(db), "House": _rep_lookup(db)}
+    unread = 0
+    for package_id in packages:
+        if api_cache_get(db, "govinfo", _day_read_key(package_id), max_age_hours=_DAY_READ_TTL_HOURS):
+            continue
+        day = await fetch_day_speeches(client, package_id)
+        if day is None:
+            unread += 1
+            continue
+        stored = {
+            r.external_id: r.id for r in db.query(ExploreDocument.id, ExploreDocument.external_id).filter(
+                ExploreDocument.doc_type.in_(_SPEECH_TYPES.values()),
+                ExploreDocument.date == package_id.removeprefix("CREC-"))
+        }
+        new: list[ExploreDocument] = []
+        seen: set[str] = set()
+        for chamber, turns in day.items():
+            # CPU: an embedding per paragraph. Off the event loop.
+            flags = await asyncio.to_thread(speech_flags, [t["text"] for t in turns])
+            for doc in _speech_documents(chamber, titled_speeches(turns, flags), lookups[chamber]):
+                if doc.external_id in seen:
+                    continue
+                seen.add(doc.external_id)
+                if doc.external_id not in stored:
+                    new.append(doc)
+                    added[chamber] += 1
+        stale = [i for ext, i in stored.items() if ext not in seen]  # held before, gone now
+        if stale:
+            db.query(ExploreDocument).filter(ExploreDocument.id.in_(stale)).delete(synchronize_session=False)
+        db.add_all(new)
+        api_cache_set(db, "govinfo", _day_read_key(package_id), True,
+                      normal_ttl_hours=_DAY_READ_TTL_HOURS, commit=False)
+        db.commit()
+    if unread:
+        logger.warning("Congressional Record: %d of %d days could not be read whole — retried next run",
+                       unread, len(packages))
+    return added
 
 
 async def _embed_step(db: Session) -> int:
@@ -610,85 +676,18 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
     # fetcher's own ApiCache), and the embed step below only encodes new or
     # refreshed documents, so running every night is cheap.
     try:
-        senator_map = _senator_lookup(db)
         stats = {"senate_floor": 0, "house_floor": 0, "presidential": 0, "scotus": 0, "fr_rulemaking": 0}
 
         async with make_async_client() as client:
-            # --- 1. Senate floor proceedings ---
-            logger.info("Explore pipeline: fetching Senate floor proceedings...")
+            # --- 1-2. Senate and House floor speeches ---
+            logger.info("Explore pipeline: fetching floor speeches...")
             try:
-                senate_remarks = await fetch_floor_remarks(
-                    client, db, days_back=days_back, max_granules_per_day=8
-                )
-                for speaker, remarks in senate_remarks.items():
-                    senator_id = senator_map.get(speaker)
-                    for remark in remarks:
-                        ext_id = f"senate-floor-{speaker}-{remark['date']}-{_stable_hash(remark['text'][:80])}"
-
-                        exists = db.query(ExploreDocument.id).filter(
-                            ExploreDocument.external_id == ext_id
-                        ).first()
-                        if exists:
-                            continue
-
-                        db.add(ExploreDocument(
-                            doc_type="Senate Floor Speech",
-                            source="Congressional Record (GovInfo)",
-                            title=remark.get("title", f"Sen. {_speaker_surname(speaker)} · Floor Remarks"),
-                            summary=remark["text"][:300],
-                            body=remark["text"],
-                            date=remark["date"],
-                            url=_crec_url(remark["date"], "Senate"),
-                            politician_name=_speaker_surname(speaker),
-                            politician_id=senator_id,
-                            chamber="Senate",
-                            external_id=ext_id,
-                        ))
-                        stats["senate_floor"] += 1
-
-                db.commit()
-                logger.info("Explore pipeline: ingested %d Senate floor remarks", stats["senate_floor"])
+                floor = await _ingest_floor_speeches(db, client, days_back)
+                stats["senate_floor"], stats["house_floor"] = floor["Senate"], floor["House"]
+                logger.info("Explore pipeline: ingested %d Senate and %d House floor speeches",
+                            floor["Senate"], floor["House"])
             except Exception as e:
-                logger.warning("Senate floor fetch failed: %s", e)
-                db.rollback()
-
-            # --- 2. House floor proceedings ---
-            logger.info("Explore pipeline: fetching House floor proceedings...")
-            rep_map = _rep_lookup(db)
-            try:
-                house_remarks = await fetch_house_floor_remarks(
-                    client, db, days_back=days_back, max_granules_per_day=8
-                )
-                for remark in house_remarks:
-                    speaker = remark["speaker"]
-                    ext_id = f"house-floor-{speaker}-{remark['date']}-{_stable_hash(remark['text'][:80])}"
-
-                    exists = db.query(ExploreDocument.id).filter(
-                        ExploreDocument.external_id == ext_id
-                    ).first()
-                    if exists:
-                        continue
-
-                    rep_id = rep_map.get(speaker)
-                    db.add(ExploreDocument(
-                        doc_type="House Floor Speech",
-                        source="Congressional Record (GovInfo)",
-                        title=remark.get("title", f"Rep. {_speaker_surname(speaker)} · Floor Remarks"),
-                        summary=remark["text"][:300],
-                        body=remark["text"],
-                        date=remark["date"],
-                        url=_crec_url(remark["date"], "House"),
-                        politician_name=_speaker_surname(speaker),
-                        politician_id=rep_id,
-                        chamber="House",
-                        external_id=ext_id,
-                    ))
-                    stats["house_floor"] += 1
-
-                db.commit()
-                logger.info("Explore pipeline: ingested %d House floor remarks", stats["house_floor"])
-            except Exception as e:
-                logger.warning("House floor fetch failed: %s", e)
+                logger.warning("Floor speech ingest failed: %s", e)
                 db.rollback()
 
             # --- 3. Presidential actions ---
@@ -814,12 +813,9 @@ async def run_explore_pipeline(days_back: int = 60) -> dict:
         if backfilled:
             logger.info("Explore pipeline: backfilled %d document bodies", len(backfilled))
 
-        # --- 7. Embed new/refreshed documents into ChromaDB ---
-        # Before embedding, not after: a duplicate removed now is one
-        # fewer document to encode, and the orphan sweep needs the
-        # deletions above to have happened. Both are no-ops on a clean
-        # corpus, so they cost one query a night once caught up.
-        _purge_duplicate_floor_speeches(db)
+        # --- 7. Embed new/refreshed documents into the vector index ---
+        # The orphan sweep goes first: it drops the vectors of documents
+        # deleted above (floor speeches out of scope or superseded).
         # Off the loop, which serves summary streams and the admin status
         # check-and-deploy polls: it scans every chunk's document id.
         await asyncio.to_thread(_purge_orphaned_vectors, db)

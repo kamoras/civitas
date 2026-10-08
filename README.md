@@ -201,7 +201,9 @@ Builds the search indexes over government activity documents — floor
 speeches (Senate and House), presidential actions (executive orders,
 proclamations, memoranda), Supreme Court opinions, and Federal Register
 rulemaking documents (including ones still open for public comment):
-- One embedding per document — no chunking — over `title + summary + body[:800 chars]`
+- Floor speeches are read a day of the Congressional Record at a time and split into each member's
+  speeches by the Record's own layout; floor business is not indexed (see "Hybrid Search" below)
+- Embeds each document whole, in windows of the encoder's context length (`chunk_text`), title and summary leading each window
 - Encodes with the **index** sentence-transformer (384-dim, all-MiniLM-L6-v2)
 - Upserts into the `vec_explore` sqlite-vec table with metadata: doc type, source, date, politician name/ID, chamber
 - Rebuilds the `explore_fts` FTS5 keyword index (BM25F over title/summary/body)
@@ -1033,17 +1035,51 @@ query-independent priors.
 **What is indexed:** Senate and House floor speeches, presidential actions
 (executive orders, proclamations, memoranda), Supreme Court opinions, and
 Federal Register rulemaking documents — five source types, not bill text.
-Floor speeches come from each day's Congressional Record granules, listed in
-full: until 2026-09 only the first page of 100 was read, and GovInfo lists a
-day's House granules first, so on busy days (four of about two dozen Senate
-session days from late July to late September 2026) no Senate remarks were
-indexed. A listing that fails is retried, never taken as a day with none.
+Floor speeches come from the Congressional Record, a day at a time
+(`fetch/congressional_record.py`, `analyze/floor_speech.py`):
+
+- **Which sections.** The day's package MODS lists every granule (Record
+  section) with the members it records as speaking; only Senate and House
+  granules with a speaking member are fetched — about 73 of 146 a day, and
+  the MODS missed a member's turn in 1 of 733 granules measured. Every such
+  section is read: the ingest used to read the first 8 of each day, which on
+  most days were the opening prayer, pledge and leader time.
+- **What a speech is.** A member's turn begins with the Record's designation
+  ("Mr. SMITH.") and ends at the next member, the presiding officer or a
+  clerk, or the next heading — never at a fixed length (turns used to be cut
+  to 400/500 characters). Inserted documents (an article, a bill's text,
+  under their own headline) are not the member's speech.
+- **What it is titled.** The Record prints its own heading over each speech
+  inside a section; a speech that follows a heading directly takes it. Any
+  other turn — a reply in a colloquy, a member speaking in a debate someone
+  else opened — is "Remarks on" the nearest heading a speech opened, else
+  the section's title. Every turn used to carry its section's title, so one
+  member was credited with speeches titled after another's tribute, and a
+  member's three tributes shared the first one's title.
+- **Floor business is not a speech.** Quorum calls, unanimous-consent and
+  scheduling requests, yielding time and motions are recognised paragraph by
+  paragraph by embedding similarity to the Record's own formulas against
+  speech-like sentences, calibrated against hand-labelled turns (the
+  measurement is in `floor_speech.py`). Before, one leader's quorum-call
+  rescissions made them Explore's most prolific "speaker".
+- **Links and scope.** Each speech links to its own section's page on
+  GovInfo, not the whole day. Only the sitting Congress is kept: GovInfo's
+  collection lists packages by last modification, and a reprocessed 1996
+  issue once came through; the run itself deletes speeches outside the
+  Congress, and those stored in the old format.
+- **Cost.** A day is about 73 requests at GovInfo's 1 request/second, read
+  once (recorded per day; `SPEECH_FORMAT` re-reads the window when the
+  parse or the test changes) — the first run reads the 60-day window: 27
+  issues on 2026-10-06, many of them August's pro forma days, under 2,000
+  requests. A day that cannot be read whole is retried, never taken as a day
+  with none.
+
 Every document feeds three structures, all rebuilt from the
 `explore_documents` table at the end of each ingest run:
 
 | Structure | Where | What it holds |
 |---|---|---|
-| `vec_explore` | `/data/vectors.db` (sqlite-vec) | One 384-dim embedding per document (no chunking) over `title + summary + body[:800 chars]`, with doc type / chamber / politician as filterable metadata |
+| `vec_explore` | `/data/vectors.db` (sqlite-vec) | 384-dim embeddings of each document's whole text, in windows of the encoder's context length led by title and summary, with doc type / chamber / politician as filterable metadata |
 | `explore_fts` | app DB (SQLite FTS5) | A BM25F inverted index over title, summary and body. External-content, so the text is not duplicated; triggers keep it live between runs |
 | `authority` / `cited_by_count` | `explore_documents` columns | PageRank over the citation graph between these documents |
 
