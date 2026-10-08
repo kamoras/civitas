@@ -590,6 +590,27 @@ class TestRereadHouseFiling:
         assert fetch.await_args.args[2]["filing_date"] is None
 
 
+def test_a_trade_two_reports_list_counts_once_at_its_first_disclosure(db_session):
+    from app.models import Senator, StockTrade
+
+    db_session.add(Senator(id="S1", name="Sen One", state="CA", party="D"))
+    trade = dict(senator_id="S1", ticker="CVX", asset_name="Chevron", owner="self", transaction_type="purchase",
+                 transaction_date="2026-07-02", days_to_disclose=0, amount_low=1001.0, amount_high=15000.0,
+                 industry="OIL_GAS", source_url="https://example.com")
+    db_session.add_all([
+        StockTrade(**trade, filing_id="later", disclosure_date="2026-08-20"),
+        StockTrade(**trade, filing_id="first", disclosure_date="2026-08-17"),
+        # Two same-day lots in one report stay two.
+        StockTrade(**{**trade, "asset_name": "Ecolab"}, filing_id="first", disclosure_date="2026-08-17"),
+        StockTrade(**{**trade, "asset_name": "Ecolab"}, filing_id="first", disclosure_date="2026-08-17"),
+    ])
+    db_session.commit()
+    assert stock_pipeline.collapse_refiled_trades(db_session, StockTrade, "senator_id") == 1
+    assert sorted((t.asset_name, t.filing_id) for t in db_session.query(StockTrade)) == [
+        ("Chevron", "first"), ("Ecolab", "first"), ("Ecolab", "first")]
+    assert stock_pipeline.collapse_refiled_trades(db_session, StockTrade, "senator_id") == 0
+
+
 @pytest.mark.asyncio
 async def test_the_president_s_annual_report_rows_are_never_reread(db_session):
     """They are president_fd's: the 278-T parser the re-read runs would
