@@ -453,7 +453,11 @@ Every hour at :15
        │         ingested civic-document corpus, not hand-authored keywords
        │         Try ranked clusters in order (up to CANDIDATE_POOL = 6)
        │         until MAX_ISSUES = 2 publish — a cluster that fails a gate
-       │         falls through to the next instead of ending the run
+       │         falls through to the next instead of ending the run. A
+       │         cluster is skipped as a duplicate only of one that
+       │         PUBLISHED this run: on 2026-10-08 a two-story live blog
+       │         ranked first, both stories were dropped as its duplicates,
+       │         and it then published nothing, two runs running
        ▼
   5. EXTRACT ─── The model LOCATES an assertion in one article; it never
        │         writes the sentence. post_composer.py checks both spans
@@ -472,7 +476,12 @@ Every hour at :15
        │         A predicate the model cut short ("sues", "grants review
        │         of") is read on in the source to the clause's punctuation
        │         — still verbatim, refused where it can't tell where the
-       │         clause ends ("Sens." might be an abbreviation). Each
+       │         clause ends ("Sens." might be an abbreviation), and a
+       │         period inside an open bracket ("(R-Ark.)") is not that
+       │         end. A sentence with an unmatched bracket is refused (an
+       │         actor named inside one composed "FDA) won't publish");
+       │         one opening mid-sentence starts with a capital; a quote
+       │         the source closes on a comma ends with a period. Each
        │         article's summary contributes its claim too, after the
        │         headlines: 2026-10-01, 78 of 300 clusters in three days
        │         were dropped as too few facts, 7 of 10 sampled failures
@@ -507,6 +516,10 @@ Every hour at :15
        │         (750) and filler (751); stored prose was cleared (0004).
        ▼
   7. ENRICH ──── sqlite-vec semantic search → link related bills/senators
+       │         Related documents need title similarity ≥ 0.49 (min-error
+       │         on 299 hand-read stored links; at the old 0.33, 189 were
+       │         unrelated, e.g. Miami boating safety zones on a story about
+       │         a Florida golf club)
        │         A bill number counts only when the words around it name
        │         that bill (lobbying_records.names_bill); a member's bare
        │         surname only when no other member shares it
