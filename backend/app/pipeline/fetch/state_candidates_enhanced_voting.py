@@ -96,6 +96,7 @@ contests still refused.
 
 import logging
 import re
+from datetime import datetime
 
 import httpx
 
@@ -347,6 +348,12 @@ def _house_patterns(source: dict) -> list[re.Pattern]:
           entry documents
       GA  "US House Dist 3"   2022's short form, printed beside the long
           "US House of Representatives - District 1" on the same ballot
+      WA  "Congressional District 1 - U.S. Representative"   the 2026
+          general's form (staged payload, read 2026-10-08), district FIRST;
+          the primary printed "U.S. Representative - Congressional
+          District 1", which parse_office reads. Read as at-large, all ten
+          seats collided and were dropped: a primary's labels are no proof
+          of the general's
 
     Configured per state rather than added to parse_office, because the
     bare forms are only unambiguous inside that one state's federal
@@ -466,6 +473,42 @@ def _unit_label(payload: dict, source: dict | None = None) -> str:
 _DEMO_ID_RE = re.compile(r"(?:^|[_\-\s])(?:demo|test|preview)(?:$|[_\-\s])", re.IGNORECASE)
 
 
+# The most same-day entries read to see whether they are one election.
+_MAX_COPIES = 4
+
+
+async def _one_election_listed_twice(
+    client: httpx.AsyncClient, data_url: str, entries: list[dict], state: str,
+) -> tuple[dict, dict] | None:
+    """(entry, payload) when several same-day index entries are copies of ONE
+    election, else None. Virginia's index lists its 2026 general twice, both
+    "2026 November General": "2026-November-General" and "_20261001151803",
+    a dated copy whose payload carries the same election `id` and an older
+    lastUpdated (read 2026-10-08). pick_general cannot tell them apart by
+    name and refuses, which left Virginia with no count. The payload's own
+    id is what says they are one election; of copies, the one updated last
+    is the live count (a copy stops moving). Entries naming different
+    elections, or any that can't be read, stay refused."""
+    if not 1 < len(entries) <= _MAX_COPIES:
+        return None
+    read = []
+    for entry in entries:
+        payload = await fetch_json_with_retry(
+            client, _rate_limiter, data_url.format(id=entry["publicElectionId"]),
+            f"{state} Enhanced Voting general results",
+        )
+        meta = payload.get("election") if isinstance(payload, dict) else None
+        if not isinstance(meta, dict) or not meta.get("id"):
+            return None
+        read.append((entry, payload, meta))
+    if len({meta["id"] for _, _, meta in read}) != 1:
+        return None
+    entry, payload, _ = max(read, key=lambda r: parse_utc(r[2].get("lastUpdated")) or datetime.min)
+    logger.info("%s Enhanced Voting: %d index entries are one election; reading %s, updated last",
+                state, len(read), entry["publicElectionId"])
+    return entry, payload
+
+
 async def fetch_general_results(
     client: httpx.AsyncClient, election_day, state: str, source: dict,
 ) -> StateCount | None:
@@ -485,15 +528,22 @@ async def fetch_general_results(
     demos = [e for e in held if _DEMO_ID_RE.search(str(e["publicElectionId"]))]
     if demos:
         logger.info("%s Enhanced Voting: ignoring demo election(s) %s", state, [e["publicElectionId"] for e in demos])
-    election = pick_general(
-        [(_text(e.get("name")), e) for e in held if not _DEMO_ID_RE.search(str(e["publicElectionId"]))], state,
-    )
+    real = [e for e in held if not _DEMO_ID_RE.search(str(e["publicElectionId"]))]
+    payload = None
+    try:
+        election = pick_general([(_text(e.get("name")), e) for e in real], state)
+    except UntrustedCount:
+        picked = await _one_election_listed_twice(client, data_url, real, state)
+        if picked is None:
+            raise
+        election, payload = picked
     if election is None:
         return None
     eid = election["publicElectionId"]
-    payload = await fetch_json_with_retry(
-        client, _rate_limiter, data_url.format(id=eid), f"{state} Enhanced Voting general results",
-    )
+    if payload is None:
+        payload = await fetch_json_with_retry(
+            client, _rate_limiter, data_url.format(id=eid), f"{state} Enhanced Voting general results",
+        )
     if not isinstance(payload, dict):
         return None
     meta = payload.get("election") or {}
