@@ -2260,6 +2260,15 @@ class TestDigestFiltering:
 
         assert _digest_reason(_make_article(title)) == "recurring digest title"
 
+    def test_an_outlets_newsletter_section_is_a_digest(self):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        url = "https://example.com/newsletters/healthcare/123-drugmakers-challenge-pilot/"
+        assert _digest_reason(_make_article("Drugmakers challenge pilot program", url=url)) == "newsletter section"
+        # A slug that only mentions a newsletter is not the section.
+        url = "https://example.com/2026/10/08/123/up-first-newsletter-story"
+        assert _digest_reason(_make_article("Senate passes the budget", url=url)) is None
+
     @pytest.mark.parametrize("title", [
         "House approves Pentagon funding framework in narrow vote",
         "Israel and Hamas reach agreement on hostage release",

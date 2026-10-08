@@ -24,6 +24,7 @@ from typing import NamedTuple
 import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -1236,8 +1237,20 @@ def _multi_topic_body(summary: str, title: str, truncated: bool = False) -> bool
     return covered <= _DIGEST_MAX_TITLE_COVERED_ITEMS
 
 
+# The outlet's own section for its newsletters. A newsletter is a
+# multi-section product ("The Big Story", then other news, with "Welcome to
+# ... newsletter" and photo-credit boilerplate in its feed description), so
+# it is a digest by the outlet's own filing, whatever its headline says.
+# One outlet syndicates them into its news feed (3 of 4,067 items across
+# all 49 feeds, 2026-10-08); one was published as an issue whose "fact" was
+# four of its section headings run together.
+_NEWSLETTER_SECTIONS = frozenset({"newsletter", "newsletters"})
+
+
 def _digest_reason(article: NewsArticle) -> str | None:
     """Why ``article`` is a multi-story digest, or None if it is one story."""
+    if _NEWSLETTER_SECTIONS & {s.lower() for s in urlparse(article.url or "").path.split("/")}:
+        return "newsletter section"
     title = article.title.translate(_APOSTROPHES)
     if (
         _DIGEST_TITLE_PATTERNS.search(title)
