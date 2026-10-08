@@ -29,7 +29,6 @@ from app.pipeline.fetch import (
     state_candidates_enhanced_voting as ev,
     state_candidates_tally_enr as tally,
 )
-from app.pipeline.fetch.election_results import ContestCount, StateCount
 from app.pipeline.fetch.state_candidate_sources import source_for_state
 
 FIXTURES = Path(__file__).parent / "fixtures" / "live_results"
