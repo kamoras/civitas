@@ -1991,6 +1991,21 @@ class PipelineRateLimitStat(Base):
     )
 
 
+class MemberIdAlias(Base):
+    """A member id that was renamed (app/member_ids.py), and the id it
+    became: posts and search engines still hold URLs under the old one, so
+    /politicians/<old_id> and the API answer it with the member it now
+    names. One row per old id; a later rename repoints every alias of the
+    person to the newest id. A live member's own id always wins over an
+    alias of the same string."""
+    __tablename__ = "member_id_aliases"
+
+    old_id: Mapped[str] = mapped_column(String, primary_key=True)
+    new_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    bioguide_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    renamed_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
 class BskySenatorSpotlight(Base):
     """Tracks which senators/representatives have been highlighted in daily
     Bluesky score posts.
