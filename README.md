@@ -1668,6 +1668,7 @@ See `.env.example` for all options. Key variables:
 | Variable | Required | Description |
 |---|---|---|
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov (covers Congress.gov, FEC, GovInfo) |
+| `BLS_API_KEY` | No | Free BLS v2 registration key (data.bls.gov/registrationEngine): 500 jobs-API requests a day instead of 25 |
 | `ADMIN_TOKEN` | Yes | Bearer token for admin panel and pipeline triggers |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama-server URL (default: `http://llama-server:8070`, the in-stack service) |
