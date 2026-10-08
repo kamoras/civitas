@@ -10,7 +10,6 @@ import json
 import logging
 import threading
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
