@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Annotated, Literal, get_args
 
@@ -146,12 +147,23 @@ class PaginatedVotesSchema(CamelModel):
     counts: VoteCountsSchema
 
 
-def is_open_ended(low: float | None, high: float | None) -> bool:
+# A holding's value stated as one exact figure ("$1,251.00") rather than a
+# bracket — the House form lets a filer give the exact value instead
+# (2025 reports: 15 holdings across 2 reports). Stored as low == high, the
+# same encoding as the open-ended bracket, and told apart from it by the
+# printed text, which every holding keeps (value_text).
+EXACT_VALUE_RE = re.compile(r"^\$\s*\d[\d,]*(?:\.\d+)?$")
+
+
+def is_open_ended(low: float | None, high: float | None, text: str | None = None) -> bool:
     """The disclosure forms' open-ended top bracket ("Over $50,000,000"),
     which states a floor and no ceiling. Stored as high == low — no real
     bracket on these forms has equal bounds (ptr_common.parse_amount_range).
     The one definition of that rule: trades, holdings, and every sum over
-    holdings use it."""
+    holdings use it. A holding passes its value_text, so an exact stated
+    value (EXACT_VALUE_RE), the one other low == high, isn't read as a floor."""
+    if text is not None and EXACT_VALUE_RE.match(text.strip()):
+        return False
     return low is not None and low > 0 and high == low
 
 
@@ -235,10 +247,11 @@ class PaginatedStockTradesSchema(CamelModel):
 
 class HoldingSchema(CamelModel):
     """One asset from a member's latest annual financial disclosure. The
-    value is the disclosed bracket, never an exact figure: value_low/high
-    are None when the filing states no bracket ("Undetermined"), 0/0 when
-    the asset was held at no value at year end, and equal when the filing
-    used an open-ended top bracket — see value_open_ended."""
+    value is the disclosed bracket: value_low/high are None when the filing
+    states no bracket ("Undetermined"), 0/0 when the asset was held at no
+    value at year end, and equal when the filing used an open-ended top
+    bracket (value_open_ended) or, on the House form, stated the exact value
+    instead of a bracket (value_open_ended false — see EXACT_VALUE_RE)."""
     asset_name: str
     account: str | None = None
     ticker: str | None = None
@@ -254,7 +267,7 @@ class HoldingSchema(CamelModel):
 
     @model_validator(mode="after")
     def _compute_open_ended(self) -> "HoldingSchema":
-        self.value_open_ended = is_open_ended(self.value_low, self.value_high)
+        self.value_open_ended = is_open_ended(self.value_low, self.value_high, self.value_text)
         return self
 
 

@@ -677,12 +677,14 @@ export default function ScoresChapter() {
           profit or net-worth figure is produced: the ranges are shown as filed. A range with no
           ceiling, such as &ldquo;Over $50,000,000&rdquo;, is shown as &ldquo;$50,000,000+&rdquo;.
           The holdings chart sizes each asset by its range&apos;s midpoint (an open-ended range by
-          its minimum) and says so. Asset categories come only from the type the filer declared on
-          the form, never guessed from an asset&apos;s name. The president&apos;s form has no type
-          column: a business is categorized by the underlying assets it states, a fund by the
-          form&apos;s fund marker, and every other security reads &ldquo;type not stated&rdquo;. A
-          report that can&apos;t be read, such as a scanned paper filing, is linked rather than
-          machine-read.
+          its minimum) and says so; a value a filer stated exactly instead of as a range is shown
+          and charted as that figure. A member who has filed no annual report yet, such as one
+          seated in a special election, is shown their new-filer report, named by the date it was
+          filed. Asset categories come only from the type the filer declared on the form, never
+          guessed from an asset&apos;s name. The president&apos;s form has no type column: a
+          business is categorized by the underlying assets it states, a fund by the form&apos;s fund
+          marker, and every other security reads &ldquo;type not stated&rdquo;. A report that
+          can&apos;t be read, such as a scanned paper filing, is linked rather than machine-read.
         </P>
       </Section>
     </AboutPage>

@@ -11,6 +11,7 @@ from app.models import FinancialDisclosure, FinancialHolding, President, Represe
 from app.pipeline import holdings_pipeline
 from app.pipeline.fetch.fd_common import HoldingRow
 from app.pipeline.fetch.house_fd import AnnualReport
+from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.services.holdings_service import get_rep_holdings, get_senator_holdings
 
 
@@ -90,10 +91,13 @@ class _Clock:
 
 
 async def _ingest_house(db_session, index_by_year, reports, on_fetch=None, on_index=None):
-    async def index(_client, _db, year):
+    async def index(_client, _db, year, filing_types=None):
         if on_index is not None:
             on_index(year)
-        return index_by_year.get(year, [])
+        filings = index_by_year.get(year, [])
+        if filings is None:
+            return None
+        return [f for f in filings if filing_types is None or f["filing_type"] in filing_types]
 
     async def fetch(_client, _db, filing, deadline=None):
         if on_fetch is not None:
@@ -393,6 +397,22 @@ class TestHoldingsService:
         clamped = get_rep_holdings(db_session, "R1", page=99, per_page=15)
         assert clamped.page == 2
 
+    def test_an_exact_stated_value_is_charted_and_not_open_ended(self, db_session, rep):
+        """The House form lets a filer state an exact value ("$1,251.00")
+        instead of a bracket: stored low == high like the open-ended bracket,
+        and told apart from it by the text."""
+        _store(db_session, [
+            _h("Exact", "STOCKS", 1251.0, 1251.0, value_text="$1,251.00"),
+            _h("Bracket", "STOCKS", 1001.0, 15000.0, value_text="$1,001 - $15,000"),
+        ], representative_id="R1")
+        result = get_rep_holdings(db_session, "R1")
+        assert (result.unvalued_count, result.total_low, result.total_high) == (0, 1251.0 + 1001.0, 1251.0 + 15000.0)
+        assert result.total_open_ended is False
+        assert result.categories[0].open_ended is False
+        assert result.categories[0].weight == pytest.approx(1251.0 + 8000.5)
+        exact = next(h for h in result.holdings if h.asset_name == "Exact")
+        assert (exact.value_low, exact.value_high, exact.value_open_ended) == (1251.0, 1251.0, False)
+
     def test_unparsed_report(self, db_session, senator):
         _store(db_session, [], parsed=False, senator_id="S1", unreadable_reason="scanned")
         result = get_senator_holdings(db_session, "S1")
@@ -537,6 +557,10 @@ class TestReportLabels:
         label = holdings_pipeline._house_report_label
         assert label({"year": 2025, "filing_type": "O"}) == "2025 annual report"
         assert label({"year": 2025, "filing_type": "A"}) == "2025 annual report (amended)"
+        # It states no date its values describe: named by when it was filed.
+        assert label({"year": 2026, "filing_type": "H", "filing_date": "2026-05-19"}) == (
+            "new-filer report filed 2026-05-19"
+        )
 
     def test_senate(self):
         def label(f):
@@ -672,6 +696,42 @@ async def test_trade_and_holdings_ingests_share_one_index_download(db_session):
     assert "/ptr-pdfs/" in ptrs[0]["pdf_url"]
     assert [(f["doc_id"], f["prefix"]) for f in annuals] == [("2", "Hon.")]
     assert "/financial-pdfs/2025/2.pdf" in annuals[0]["pdf_url"]
+
+
+class TestHouseNewFilerReports:
+    async def test_a_new_filer_report_is_shown_for_a_member_with_nothing_else(self, db_session, rep):
+        """Indexed under this year (a member seated this year) — the index
+        read for new-filer reports alone."""
+        index = {
+            2025: [_house_filing("ELSE", last="Somebody")],
+            2026: [{**_house_filing("NF", year=2026, filing_date="2026-05-19"), "filing_type": "H"}],
+        }
+        count, _ = await _ingest_house(db_session, index, {"NF": AnnualReport("Member", [_row()])})
+        assert count == 1
+        disclosure = db_session.query(FinancialDisclosure).one()
+        assert (disclosure.filing_id, disclosure.as_of_date) == ("NF", None)
+        assert disclosure.report_label == "new-filer report filed 2026-05-19"
+
+    async def test_only_new_filer_reports_are_read_from_this_years_index(self, db_session, rep):
+        # Read as an annual report, it would outrank last year's.
+        index = {2025: [_house_filing("CY25")], 2026: [_house_filing("CY26", year=2026)]}
+        reports = {"CY25": AnnualReport("Member", [_row()]), "CY26": AnnualReport("Member", [_row()])}
+        await _ingest_house(db_session, index, reports)
+        assert db_session.query(FinancialDisclosure).one().filing_id == "CY25"
+
+    async def test_an_annual_report_outranks_a_new_filer_report(self, db_session, rep):
+        index = {
+            2025: [_house_filing("CY25", year=2025, filing_date="2026-05-10"),
+                   {**_house_filing("NF", year=2025, filing_date="2026-02-01"), "filing_type": "H"}],
+        }
+        reports = {"CY25": AnnualReport("Member", [_row()]), "NF": AnnualReport("Member", [_row()])}
+        await _ingest_house(db_session, index, reports)
+        assert db_session.query(FinancialDisclosure).one().filing_id == "CY25"
+
+    async def test_this_years_index_failing_costs_only_its_new_filer_reports(self, db_session, rep):
+        index = {2025: [_house_filing("CY25")], 2026: None}
+        count, _ = await _ingest_house(db_session, index, {"CY25": AnnualReport("Member", [_row()])})
+        assert count == 1
 
 
 class TestPaperAmendments:
@@ -1008,7 +1068,7 @@ class TestParserFailuresAreNotExcused:
             assert (disclosure.parsed, db_session.query(FinancialHolding).count()) == (True, 2)
             # Not stamped as read by v99: it is re-read (from the parse cache)
             # each night, so the regression keeps counting until it's fixed.
-            assert disclosure.parser_version == 1
+            assert disclosure.parser_version == HOUSE_PARSER_VERSION
             _, mock_fetch = await _ingest_house(db_session, index, {"SAME": re_read})
         assert mock_fetch.call_count == 1
 

@@ -50,17 +50,20 @@ from app.pipeline.fetch.ptr_common import owner_from_cell
 
 logger = logging.getLogger(__name__)
 
-# Annual report and its amendment. Candidate, termination and new-filer
-# reports list assets too, but a sitting member's current picture is the
-# annual report; the others either predate office or describe leaving it.
-ANNUAL_FILING_TYPES = {"O", "A"}
+# Annual report and its amendment, and the new-filer report a member files
+# on taking office — their only report until their first annual one (2026-10:
+# four sitting members, seated in special elections, had nothing else).
+# Candidate and termination reports list assets too, but predate office or
+# describe leaving it.
+NEW_FILER_TYPE = "H"
+ANNUAL_FILING_TYPES = {"O", "A", NEW_FILER_TYPE}
 
 _CACHE_TIER = "house_fd"
 # Bump whenever parse_schedule_a's output changes for the same PDF: it keys
 # the parse cache and is stored on each FinancialDisclosure, so a parser fix
 # re-reads reports already ingested instead of leaving them as the old
 # parser read them.
-PARSER_VERSION = 1
+PARSER_VERSION = 2
 _FILING_MAX_AGE_HOURS = 24 * 30
 
 # Rows start at the asset column; a new value bracket starts with a dollar
@@ -103,8 +106,11 @@ class _OpenRow:
         asset_text = " ".join(self.asset).strip()
         if not asset_text:
             return None
-        asset_text, code = strip_house_code(asset_text)
+        # The code belongs to the innermost asset: an account's own name can
+        # carry a bracketed number that looks like one ("Child savings
+        # account [10] ⇒"), and stripping that would merge distinct accounts.
         account, name = split_account(asset_text)
+        name, code = strip_house_code(name)
         if not name:
             return None
         value_text = " ".join(self.value).strip()
@@ -212,7 +218,13 @@ def parse_schedule_a(pages_words: Iterable[list[dict]]) -> list[HoldingRow] | No
             row.asset.extend(asset)
             row.owner.extend(owner)
             row.value.extend(value)
-            if any(_CODE_TOKEN_RE.search(t) for t in asset):
+            # Only a code after the line's last "⇒" names the asset: before
+            # it, a bracketed token is part of an account's name — filers
+            # number accounts "[1]" ... "[12]", and from "[10]" on that has
+            # the shape of a code (2025: 3 of one report's 529 accounts lost
+            # their value to it).
+            arrow = max((i for i, t in enumerate(asset) if "⇒" in t), default=-1)
+            if any(_CODE_TOKEN_RE.search(t) for t in asset[arrow + 1:]):
                 row.closed = True
         if done:
             break
@@ -262,11 +274,12 @@ def parse_annual_pdf(pdf_bytes: bytes) -> AnnualReport:
 
 
 async def fetch_annual_filing_index(
-    client: httpx.AsyncClient, db: Session, year: int,
+    client: httpx.AsyncClient, db: Session, year: int, filing_types: set[str] = ANNUAL_FILING_TYPES,
 ) -> list[dict] | None:
-    """Annual reports (and amendments) for calendar year `year`; None when
-    the index couldn't be loaded."""
-    return await fetch_filing_index(client, db, year, filing_types=ANNUAL_FILING_TYPES, pdf_dir="financial-pdfs")
+    """Annual reports, their amendments and new-filer reports in the index
+    for `year` (or just `filing_types` of them); None when the index
+    couldn't be loaded."""
+    return await fetch_filing_index(client, db, year, filing_types=filing_types, pdf_dir="financial-pdfs")
 
 
 async def report_still_loads(client: httpx.AsyncClient, pdf_url: str) -> bool:
