@@ -36,6 +36,8 @@ const PARTY: Record<string, { label: string; text: string; border: string }> = {
   W: { label: "Whig", text: "text-signal-amber", border: "border-signal-amber/40" },
 };
 const NO_PARTY = { label: "No party", text: "text-ink", border: "border-white/30" };
+// "U": a president who belonged to no party (George Washington).
+PARTY.U = NO_PARTY;
 
 /** A president's party label and colours (also the leaderboard's summary). */
 export function presidentParty(code: string) {

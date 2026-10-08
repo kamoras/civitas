@@ -256,6 +256,8 @@ const PRES_PARTY: Record<string, { label: string; color: string; bg: string }> =
   F: { label: "FED", color: "text-ind-purple", bg: "bg-ind-purple/10 border-ind-purple/40" },
   W: { label: "WHG", color: "text-signal-amber", bg: "bg-signal-amber/10 border-signal-amber/40" },
   I: { label: "IND", color: "text-ink", bg: "bg-white/10 border-white/30" },
+  // No party (George Washington).
+  U: { label: "NONE", color: "text-ink", bg: "bg-white/10 border-white/30" },
 };
 
 function presParty(party: string) {
