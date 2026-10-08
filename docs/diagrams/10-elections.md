@@ -88,9 +88,9 @@ because that decides what the page can honestly claim.
 
 | Source kind | What it can see | States (2026-09-28) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), MI and OK (`certified_table`: Michigan's Official Candidate Listing, Oklahoma's List of Elections); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY, HI, DE, KY, AK, MT, ND (`certified_table`: spreadsheets, PDF tables, an HTML table, a page's own CSV export), FL (`dos_canlist`), NJ (`nj_certification` official lists), IL (`grouped_list_pdf`: headed groups in a heading-less PDF) |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), MI and OK (`certified_table`: Michigan's Official Candidate Listing, Oklahoma's List of Elections); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY, HI, DE, KY, AK, MT, ND, ID, AR, NV (Clark County's list, NV-1/3/4) (`certified_table`: spreadsheets, PDF tables, an HTML table, a page's own CSV export, a portal's JSON search API), FL (`dos_canlist`), NJ (`nj_certification` official lists), IL (`grouped_list_pdf`: headed groups in a heading-less PDF) |
 | **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 40 configured states — `tabular` (14), `clarity` (3), `tally_enr` (2), `totalvote_enr` (2) and 19 single-state strategies (WI's `canvass_summary_pdf` and OH's `oh_canvass_xlsx` among them) |
-| **National fallback** | Nothing until Google publishes general-election contests, close to the election | NV, NY (`google_civic`); and as a `general_list` for the races it returns in AL, AR, CT, MI, OH, OK, UT (WI's `fallback`) |
+| **National fallback** | Nothing until Google publishes general-election contests, close to the election | NV, NY (`google_civic`); and as a `general_list` for the races it returns in AL, CT, MI, OH, OK, UT (WI's `fallback`; AR's `general_list.fallback`) |
 
 The first row is the states flagged `general_ballot_complete`. Transcribed
 from the JSON on the date shown; the JSON is authoritative.
@@ -124,13 +124,15 @@ first; when it answers it alone decides every federal race it covers
 and judicial nominees, federal nominees before the list is posted, and — non-
 authoritatively — federal nominees for any race the list does not cover (a
 national source like Google Civic knows only the districts it has a verified
-address for; AL, AR, CT and UT use it this way). Each pass prunes ballot-only
+address for; AL, CT and UT use it this way). Each pass prunes ballot-only
 rows only in its own races. The sync records which source answered
 (`_record_ballot_basis`, tier `ballot-basis`): `complete` when the list
 covered every federal race in the state, otherwise the `races` it did cover,
 and the API asks per race (`_race_complete`) — "confirmed" only for a race
 the certified source actually decided, never from config alone. `fallback` is different: a whole second source run
-only when the main one returns nothing (WI's canvass → Google Civic).
+only when the main one returns nothing (WI's canvass → Google Civic). A `general_list` can carry its own `fallback` the same way (AR's
+candidate search → Google Civic); the spare decides the races it answers for,
+while the state offices stay with the list itself once it has supplied them.
 
 `certified_table` reads a PDF as a table (IA, NE): the row holding every
 configured heading is the header, cells split at gaps wider than a space
