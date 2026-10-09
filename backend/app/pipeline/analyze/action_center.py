@@ -2782,12 +2782,25 @@ def _save_timeline_entry(today: str, db: Session) -> None:
 
 # Measured 2026-10-08 on the 453 updates the one monitor then held (each
 # labelled on- or off-topic by what it names): issue title against the
-# monitor's title and description on the retrieval model, the value that
+# monitor's title and description on the classification model (get_embedding_model, the model this gate
+# scores with; a replay on it reproduces the measured counts), the value that
 # misclassifies fewest. The floor it replaced (0.70, calibrated against the
 # LLM gate, which approved 81 of 88) sat below most off-topic updates, and
 # a title-only floor of 0.62 was below the off-topic median (0.78).
+#
+# This floor is the whole gate. Matches between it and 0.80 used to go to an
+# LLM yes/no verdict, removed 2026-10-09 because it rejected almost nothing.
+# Replayed offline on the production model, quantization, prompt and
+# decoding against the monitor's 330 hand-labelled updates, it said yes to
+# 323, and in the band let through 17 of 18 off-topic updates (1 of 9
+# rejected after 2026-07-15). Nothing tried in its place separated the two
+# without rejecting on-topic updates too: asking for the article's main
+# subject, the monitor's description and recent updates as context, a bare
+# constrained true/false, reason before verdict, a two-step subject check,
+# multiple choice, majority or unanimity over 5 samples, the true/false
+# log-probability margin, and the model's extracted subject phrase scored on
+# this model against the description and as kNN over earlier updates.
 _MONITOR_ISSUE_SIM = 0.71
-_MONITOR_ISSUE_SIM_HIGH = 0.80   # above this: skip LLM gate, auto-match
 # Merging deletes the absorbed monitor, so it needs certainty. On the
 # similarity model's title similarity no two updates about different topics
 # (Iran, Canada trade, Korea drills, Ukraine, Gaza, a Saudi deal) reached
@@ -2829,74 +2842,6 @@ def _slugify(text: str) -> str:
     slug = re.sub(r'[^a-z0-9\s-]', '', slug)
     slug = re.sub(r'[\s-]+', '-', slug)
     return slug[:200]
-
-
-# LFM2.5-1.2B-Instruct (production model as of 2026-07) frequently outputs a
-# positive verdict (matches/should_merge = true) whose own "reason" text plainly
-# says the two items are unrelated — confirmed live 2026-07 via direct sandbox
-# testing against the real model with real production prompts/data (e.g. reason:
-# "distinct from the U.S.-Iran conflict monitor's focus..." paired with
-# matches: true). Reordering the JSON schema (reason before verdict) and adding
-# few-shot examples were both tried and did NOT fix it — few-shot made it worse
-# via verbatim reasoning-text copying from the wrong example. This regex catches
-# the model contradicting its own stated reasoning and overrides the verdict to
-# False, the same "never trust the LLM's structured output over the evidence it
-# itself produced" principle as the bill-name verification guard in
-# _resolve_bills above.
-_CONTRADICTION_RE = re.compile(
-    r'distinct from|different from|not related|unrelated to|no connection'
-    r'|does not (?:directly )?(?:involve|relate|connect)|not directly (?:involve|related)'
-    r'|no direct (?:involvement|connection|relation)|separate from|not the same'
-    r'|superficial overlap|does not share',
-    re.IGNORECASE,
-)
-
-
-def _reason_contradicts_positive_verdict(reason: str) -> bool:
-    """True if an LLM's own explanation text undercuts the positive verdict it just gave."""
-    return bool(reason) and bool(_CONTRADICTION_RE.search(reason))
-
-
-def _should_match_monitor_llm(
-    issue_title: str,
-    issue_summary: str,
-    monitor: NationalMonitor,
-    db: Session,
-) -> bool:
-    """LLM gate for borderline embedding matches: does this issue genuinely belong to this monitor?"""
-
-    result = call_llm(
-        prompt_version="monitor-match-v1",
-        system_prompt="You are a civic data analyst. Respond in JSON.",
-        user_prompt=(
-            f'Monitor: "{monitor.title}"\n'
-            f'Monitor description: "{monitor.description[:300]}"\n\n'
-            f'Issue title: "{issue_title}"\n'
-            f'Issue summary: "{issue_summary[:300]}"\n\n'
-            "Does this issue genuinely belong to this monitor? The monitor and issue must "
-            "share the same specific subject (same country, same policy dispute, same named actors). "
-            "Superficial overlap (both involve government, both are international) is NOT enough.\n\n"
-            'Return JSON: {"matches": true/false, "reason": "one sentence"}'
-        ),
-        cache_key={"type": "monitor_match", "monitor": monitor.title, "issue": issue_title},
-        db_session=db,
-        max_tokens=128,
-    )
-    if not isinstance(result, dict):
-        return False
-    matched = bool(result.get("matches", False))
-    reason = result.get("reason", "")
-    if matched and _reason_contradicts_positive_verdict(reason):
-        logger.warning(
-            "LLM match verdict contradicts its own reasoning, overriding to False: "
-            "'%s' → '%s' — %s", issue_title[:50], monitor.title, reason,
-        )
-        return False
-    logger.debug(
-        "LLM monitor match '%s' → '%s': %s — %s",
-        issue_title[:50], monitor.title, matched, reason,
-    )
-    return matched
 
 
 def _reclassify_monitor_llm(
@@ -3128,7 +3073,6 @@ def _update_national_monitors(today: str, db: Session) -> None:
     the refresh lock's heartbeat included (see _record_generation_sample).
     """
     try:
-        from app.pipeline.vector_store import get_embedding_model
         model = get_embedding_model()
     except Exception:
         logger.warning("Could not load embedding model for monitors")
@@ -3180,11 +3124,6 @@ def _update_national_monitors(today: str, db: Session) -> None:
             for j, monitor in enumerate(existing_monitors):
                 full_sim = float(sims[i][j])
                 if full_sim < _MONITOR_ISSUE_SIM:
-                    continue
-                # LLM gate for borderline matches: require high confidence or LLM approval
-                if full_sim < _MONITOR_ISSUE_SIM_HIGH and not _should_match_monitor_llm(
-                    issue.title, issue.summary or "", monitor, db,
-                ):
                     continue
 
                 issue_monitor_slugs.setdefault(i, []).append(monitor.slug)

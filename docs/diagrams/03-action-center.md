@@ -54,7 +54,7 @@ flowchart TB
     MON{"<b>8. MONITORS</b><br/>topic recurs on ≥ 5 distinct days in 14,<br/>from ≥ 3 unique sources,<br/>title similarity ≥ 0.83?"}
     MON -->|yes| SIGGATE{"LLM significance gate"}
     MON -->|no| TIMELINE
-    SIGGATE -->|passes| MONREC["Create/update NationalMonitor<br/>re-merge duplicates at sim > 0.50"]
+    SIGGATE -->|passes| MONREC["Create/update NationalMonitor<br/>re-merge duplicates at similarity-model title ≥ 0.75<br/>today's issues join a monitor at title ≥ 0.71, no LLM"]
     SIGGATE -->|fails| TIMELINE
     MONREC --> TIMELINE
 
@@ -189,11 +189,12 @@ distinction between a quiet news cycle and new topics being dropped on the way i
 
 `GET /api/admin/action-metrics` returns the window with the three groups totalled.
 
-**Calibrated thresholds.** `cluster_title`, `near_identical`, `monitor_issue` and
-`monitor_merge` (`action_thresholds.py`) are refitted daily from labelled pairs
-these rows carry (`thr_*` counters). The labels are signature overlap for article
-and issue pairs and the LLM gate's verdict for monitor pairs, plus one probe per
-stage per run below the floor. A fit needs 30 pairs per class, otherwise the
+**Calibrated thresholds.** `cluster_title` (`action_thresholds.py`) is refitted
+daily from labelled pairs these rows carry (`thr_*` counters), labelled by
+signature overlap, plus one probe per run below the floor. `near_identical` and
+the monitor floors (`_MONITOR_ISSUE_SIM`, `_MONITOR_MERGE_TITLE_SIM`) are
+measured constants: their labels (the signature test, the LLM gates' verdicts)
+failed a check on 2026-10-08. A fit needs 30 pairs per class, otherwise the
 previous value stays. The bundled `app/data/action_thresholds.json` covers the
 time before the first fit.
 

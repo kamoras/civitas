@@ -154,8 +154,8 @@ of these approaches:
 - **Statistical formulas** with shrinkage toward neutral for scoring metrics
 - **LLM inference** for tasks that require natural language synthesis from
   unstructured input: Action Center claim location (verbatim-checked),
-  monitor significance, category and borderline-match decisions (merging is
-  title similarity alone), timeline period summaries, locating the actor and
+  monitor significance and category decisions (merging monitors and matching
+  an issue to one are title similarity alone), timeline period summaries, locating the actor and
   predicate in a race's coverage for its post (`election_bluesky.py`,
   verbatim spans), and on-request Explore document summaries
   (`POST /api/explore/{id}/summary`, a write). Spotlight, issue and
