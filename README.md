@@ -207,11 +207,20 @@ proclamations, memoranda), Supreme Court opinions, and Federal Register
 rulemaking documents (including ones still open for public comment).
 A Supreme Court case links to the Court's own slip opinion where one is
 posted (`supreme_court.parse_slip_opinions`, the term's slip-opinion table),
-leads with the holding the Court states there and names the author, decoded
-from the table's code against the sitting justices; until then it links to
-the docket page. A Federal Register correction or republication of another
-document (its `correction_of` field) is skipped, since it repeats that
-document's title:
+leads with the holding the Court states there, names the author, decoded
+from the table's code against the sitting justices, and takes its date from
+the table (Oyez's copy of the date read a month late for one case); until
+then it links to the docket page. A Federal Register correction or
+republication of another document (its `correction_of` field) is skipped,
+since it repeats that document's title. Each run re-reads the stored Federal
+Register documents of the last 90 days, and any still open for comment, by
+document number (`_refresh_federal_register`): comment periods the Register
+moved or set after the first night, placeholder titles it replaced, and a
+provisional number it no longer has (removed: the document is stored under
+its own number). A presidential document is credited to the presidency its
+date falls in. A speech GovInfo's overlapping granules hold twice (a
+section's heading granule and the statement's own) is kept once, from the
+statement's own granule:
 - Floor speeches are read a day of the Congressional Record at a time and split into each member's
   speeches by the Record's own layout; floor business is not indexed (see "Hybrid Search" below)
 - Embeds each document whole, in windows of the encoder's context length (`chunk_text`, `explore_chunks`), the title leading each window and the windows cut to fit beside it
