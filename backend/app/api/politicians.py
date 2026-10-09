@@ -22,7 +22,6 @@ whole grace period. Presidents are never removed by any of that.
 """
 import json
 import logging
-import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -37,6 +36,7 @@ from app.models import ActionIssue, ExploreDocument, Justice, President, Represe
 from app.ordinals import ordinal
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.score_display import displayed_rank
 from app.services.justice_service import justice_overall
 from app.services.senator_service import STATE_NAMES
 
@@ -56,7 +56,9 @@ def _cached_json(data, max_age: int = CACHE_TTL_DETAIL_S) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
-# Score helpers — mirrors frontend lib/representation.ts calculations
+# Score helpers — the shared scorers, at their own precision (the page rounds
+# once, for display; rounding here too turned 62.45 into 63 beside a
+# scorecard showing 62)
 # ---------------------------------------------------------------------------
 
 def _senator_overall(s) -> float | None:
@@ -74,7 +76,7 @@ def _senator_overall(s) -> float | None:
     # (each returns 50 for missing data, never 0).
     if all(v == 0.0 for v in scores):
         return None
-    return round(compute_overall_score(s), 1)
+    return compute_overall_score(s)
 
 
 def _president_overall(p: President) -> float | None:
@@ -91,12 +93,11 @@ def _president_overall(p: President) -> float | None:
     # wasn't even in the checked list at all.
     if all(v is None for v in scores):
         return None
-    return round(compute_president_overall_score(p), 1)
+    return compute_president_overall_score(p)
 
 
 def _justice_overall(j: Justice) -> float | None:
-    overall = justice_overall(j)
-    return round(overall, 1) if overall is not None else None
+    return justice_overall(j)
 
 
 # ---------------------------------------------------------------------------
@@ -371,27 +372,24 @@ def _chamber_rank(branch: str, entity, db: Session) -> dict | None:
     leaderboard doesn't rank: a member or justice no longer serving, a
     sitting president (only completed terms are ranked: get_president_leaderboard),
     or anyone not scored."""
-    shown = {}
+    scores: dict[str, float] = {}
     if branch == "president":
         if entity.is_current:
             return None
         for p in db.query(President).filter(President.is_current == False).all():  # noqa: E712
-            shown[p.id] = math.floor(compute_president_overall_score(p) + 0.5)
+            scores[p.id] = compute_president_overall_score(p)
     elif branch == "scotus" and entity.is_active:
         for j in db.query(Justice).filter(Justice.is_active == True).all():  # noqa: E712
             overall = justice_overall(j)
             if overall is not None:
-                shown[j.id] = math.floor(overall + 0.5)
+                scores[j.id] = overall
     elif branch in ("senate", "house") and getattr(entity, "is_current", False):
         model = Senator if branch == "senate" else Representative
         for m in db.query(model).filter(model.is_current == True).all():  # noqa: E712
-            overall = compute_overall_score(m)
-            if overall is not None:
-                shown[m.id] = math.floor(overall + 0.5)
-    if not shown or entity.id not in shown:
+            scores[m.id] = compute_overall_score(m)
+    if entity.id not in scores:
         return None
-    mine = shown[entity.id]
-    return {"rank": 1 + sum(1 for v in shown.values() if v > mine), "of": len(shown)}
+    return {"rank": displayed_rank(scores[entity.id], list(scores.values())), "of": len(scores)}
 
 
 def _get_active_issues(politician_id: str, db: Session) -> list[dict]:

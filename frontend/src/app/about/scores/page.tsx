@@ -53,8 +53,8 @@ export default function ScoresChapter() {
           seat.
         </Point>
         <Point>
-          A thin record is pulled toward the middle, so one vote or one bill can&apos;t produce an
-          extreme score. Missing data counts as neutral, never as zero.
+          A thin voting record is pulled toward the middle, so a handful of votes can&apos;t produce
+          an extreme score. Missing data counts as neutral, never as zero.
         </Point>
         <Point>
           Where a setting is a judgment call rather than a measurement, this page says so.
@@ -77,17 +77,19 @@ export default function ScoresChapter() {
         </P>
         <Sub title="Thin records and missing data">
           <P>
-            When there is little data, a score is pulled toward a neutral 50 in proportion to how
-            little there is. This borrows the idea of shrinkage estimation, which keeps small
-            samples from producing extreme results
-            <Cite id="efron1975" />, in a simpler form: the pull is set by a fixed count of
-            observations rather than estimated from the data. Three parts differ. Constituent
-            Alignment&apos;s voting part pulls a thin record toward what a typical member of the
-            same party scores, because 50 sits below nearly every member on that scale. Legislative
-            Effectiveness&apos;s bill part isn&apos;t pulled at all, because a member&apos;s bills
-            are their whole record, not a sample of it. And Constituent Alignment&apos;s position
-            part is pulled toward 50 by a measured amount, how well a position from that many votes
-            predicted a full record&apos;s, rather than by a fixed count.
+            Where a part of a score rests on few observations, it is pulled toward a reference in
+            proportion to how few there are. This borrows the idea of shrinkage estimation, which
+            keeps small samples from producing extreme results
+            <Cite id="efron1975" />, in a simpler form: the pull is set by a fixed count rather than
+            estimated from the data. Constituent Alignment&apos;s voting part pulls a thin record
+            toward what a typical member of the same party scores, because 50 sits below nearly
+            every member on that scale; its position part is pulled toward 50 by a measured amount,
+            how well a position from that many votes predicted a full record&apos;s. Legislative
+            Effectiveness&apos;s leadership part is pulled toward 50 for a short tenure. Two parts
+            aren&apos;t pulled at all. Legislative Effectiveness&apos;s bill part, because a
+            member&apos;s bills are their whole record, not a sample of it. And Funding
+            Independence, where a part that can&apos;t be measured is left out and the others carry
+            its weight; with no funding data at all the dimension is a neutral 50.
           </P>
         </Sub>
         <Sub title="Why the current Congress, not a career">
@@ -167,9 +169,9 @@ export default function ScoresChapter() {
         <P>
           Shares are of contributions (money given by individuals, PACs, party committees or the
           candidate), not of total receipts, which also count transfers from joint fundraising
-          committees whose sources aren&apos;t broken out. Money that can&apos;t be attributed at
-          all (committee transfers, donations with no employer listed; a median of about a third of
-          senators&apos; funding) is scored as neutral, not as a sign of concentration.
+          committees whose sources aren&apos;t broken out. Money that can&apos;t be attributed to an
+          industry (committee transfers, donations with no employer listed) is left out of the
+          industry mix, so it counts neither for nor against concentration.
         </P>
         <P>
           Democrats and Republicans raise money differently on average (in July 2026 Senate data,
@@ -215,11 +217,11 @@ export default function ScoresChapter() {
             <Step n={1} title="Pick the party-line votes">
               Every roll call of the current Congress counts when the parties split on it: at least
               65% of one party voting yes and at most 35% of the other. Votes with no recorded roll
-              call don&apos;t count, and neither does housekeeping (quorum calls, adjourning, the
-              House&apos;s previous question, motions to table or to recommit, and the House&apos;s
-              motion to commit), which splits on party lines as a matter of course. Each bill or
-              nomination counts once, however many times it came to a vote: cloture and then
-              confirmation on one nominee is one decision.
+              call don&apos;t count, and neither does housekeeping (quorum calls, adjourning,
+              approving the Journal, the House&apos;s previous question, motions to table or to
+              recommit, and the House&apos;s motion to commit), which splits on party lines as a
+              matter of course. Each bill or nomination counts once, however many times it came to a
+              vote: cloture and then confirmation on one nominee is one decision.
             </Step>
             {/* The 200 below is prior_until_votes in backend/app/data/position_confidence.json,
                 pinned by test_position_confidence.py. */}
@@ -577,8 +579,8 @@ export default function ScoresChapter() {
           </P>
           <P>
             Network position takes years to build, so for members with under six years in office,
-            the part of Legislative Effectiveness built from it, and the leader or backbencher label
-            on their profile, is pulled toward neutral in proportion to tenure. A newcomer reads as
+            the part of Legislative Effectiveness built from it, and the leader or follower label on
+            their profile, is pulled toward neutral in proportion to tenure. A newcomer reads as
             &ldquo;not enough track record yet&rdquo;, not &ldquo;bad at leadership&rdquo;. The
             leaderboard shows the unadjusted network score.
           </P>
@@ -593,8 +595,8 @@ export default function ScoresChapter() {
           </P>
           <P>
             Partisan depth (how strongly a member leans within each policy area) comes mainly from
-            their votes: a Yea counts toward the party whose positions the bill matches in that
-            area, a Nay toward the other party (see{" "}
+            their votes: a Yea counts toward the party the bill leans to, a Nay toward the other, in
+            each policy area the bill touches (see{" "}
             <A href="#party-labels">how a bill gets a party label</A>
             ). The lean bar runs from every counted vote going the Democrats&apos; way to every one
             going the Republicans&apos; way. The ideology score only steadies it for members with
@@ -620,9 +622,11 @@ export default function ScoresChapter() {
           say); otherwise it comes from the bill&apos;s content.
         </P>
         <P>
-          The bill&apos;s content decides partisan depth (the lean bar and its policy-area
-          breakdown), and never a break. For it, each bill a member voted on is compared with each
-          party&apos;s positions in that policy area
+          Partisan depth (the lean bar and its policy-area breakdown) reads a bill&apos;s lean the
+          same way: from how the parties voted on its roll call, so a bill both parties passed leans
+          to neither and counts toward neither. The bill&apos;s content decides its lean only where
+          no roll call recorded how each party voted, and never decides a break. For that, the bill
+          is compared with each party&apos;s positions in that policy area
           <Cite id="manning2008" />, with its direction (does it strengthen or roll back?)
           separating cases where both parties have positions on the same topic
           <Cite id="laver2000" />. Each party&apos;s position in an area starts from its platform

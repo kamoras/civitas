@@ -461,9 +461,9 @@ function PresidentLeaderboard({
 
       <div className="mt-4 space-y-1 text-center">
         <p className="font-sans text-xs text-ink-lo">
-          Higher score = better presidential performance. Computed from: public mandate (25%) +
-          effectiveness (25%) + historical legacy (50%), shared among the scores a president has.
-          Click any row to view full profile.
+          Higher score = better presidential performance. Computed from: <PresidentWeightedFrom />;
+          a president missing a score is weighted over the scores they have, and each scorecard
+          shows the share each one carries. Click any row to view full profile.
         </p>
         <p className="font-sans text-xs text-ink-min">
           <span className="text-signal-amber border border-signal-amber/40 px-1 mr-1.5">HIST</span>=
@@ -675,6 +675,29 @@ function WeightedFrom() {
           return weights && total > 0
             ? `${label} (${Math.round(((weights[k] ?? 0) / total) * 100)}%)`
             : label;
+        })
+        .join(" + ")}
+    </>
+  );
+}
+
+const PRESIDENT_TERMS: Record<string, string> = {
+  publicMandate: "public mandate",
+  effectiveness: "effectiveness",
+  historicalLegacy: "historical legacy",
+};
+
+/** The presidential counterpart of WeightedFrom: the nominal weights
+ *  /api/config serves (config_definitions.PRESIDENT_SCORE_WEIGHTS). */
+function PresidentWeightedFrom() {
+  const weights = useConfig()?.presidentScoreWeights;
+  const keys = weights ? Object.keys(weights) : Object.keys(PRESIDENT_TERMS);
+  return (
+    <>
+      {keys
+        .map((k) => {
+          const label = PRESIDENT_TERMS[k] ?? k;
+          return weights ? `${label} (${Math.round((weights[k] ?? 0) * 100)}%)` : label;
         })
         .join(" + ")}
     </>

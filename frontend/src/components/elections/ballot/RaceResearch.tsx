@@ -6,6 +6,7 @@ import RaceFullDetail from "@/components/elections/RaceFullDetail";
 import CoverageFeed from "@/components/elections/CoverageFeed";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
 import { candidateName, isActiveCandidate } from "@/lib/elections";
+import { displayScore } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 import type { RaceCoverageItem, RaceWithCandidates } from "@/types/election";
 
@@ -51,8 +52,8 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
                 className="shrink-0 font-mono text-xs text-ink-lo hover:text-phos"
               >
                 score{" "}
-                <span className={getScoreColor(c.incumbentRecord.score)}>
-                  {c.incumbentRecord.score.toFixed(1)}
+                <span className={getScoreColor(displayScore(c.incumbentRecord.score))}>
+                  {displayScore(c.incumbentRecord.score)}
                 </span>{" "}
                 · scorecard →
               </Link>

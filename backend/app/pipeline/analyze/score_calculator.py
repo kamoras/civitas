@@ -1420,7 +1420,7 @@ def _funding_independence_core(
         reference_detail = "no chamber reference yet, neutral 50"
     pac_score = ratio_score
 
-    # Component 2: small-donor share (25% weight), state-relative for
+    # Component 2: small-donor share (10/53 of the weight), state-relative for
     # senators — see _small_donor_capacity_score.
     small_pct = funding.get("smallDonorPercentage", 0)
     if small_pct is None:
@@ -1429,7 +1429,7 @@ def _funding_independence_core(
     else:
         small_score, small_expected_pct = _small_donor_capacity_score(small_pct, state, district, ref)
 
-    # Component 3: relative top-donor concentration (25% weight)
+    # Component 3: relative top-donor concentration (10/53 of the weight)
     concentration, n_external, pool = _top_donor_concentration(funding)
     c_deciles, c_median = ref.get("top10_share_deciles"), ref.get("top10_share_median")
     if concentration is not None and c_deciles:
@@ -3010,7 +3010,7 @@ _LES_MAX_STAGE = 5
 
 
 def _les_bill_stage(bill: dict) -> int:
-    """This bill's cumulative-stage position (1-4), V&W-style.
+    """This bill's cumulative-stage position (1-5, _LES_MAX_STAGE), V&W-style.
 
     Prefers the real `stage` classification (classify_bill_stage_from_
     actions, bill_stage.py — built from Congress.gov's own structured

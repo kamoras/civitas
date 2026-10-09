@@ -389,7 +389,7 @@ def describe_senator_position(
     """Generate a GovTrack-style description of a senator's position.
 
     Uses the ideology × leadership grid to produce labels like
-    "progressive Democratic leader" or "conservative Republican follower"
+    "progressive Democrat leader" or "conservative Republican follower"
     (Tauberer 2012).
 
     ``ideology_bounds`` is this member's own party's (low, high) ideology
