@@ -5,7 +5,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, type ShareSubject } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
-import { JUSTICE_RESEARCH_URL, NOT_SCORED_REASON } from "@/lib/justices";
+import { appointerEstimate, JUSTICE_RESEARCH_URL, NOT_SCORED_REASON } from "@/lib/justices";
 import ScoreColumn from "./ScoreColumn";
 
 const PARTY: Record<string, { label: string; text: string; border: string }> = {
@@ -86,7 +86,7 @@ function EstimateScale({ loyalty }: { loyalty: JusticeLoyalty }) {
 }
 
 function LoyaltyColumn({ justice }: { justice: Justice }) {
-  const l = justice.loyalty;
+  const l = appointerEstimate(justice.loyalty);
   const appointer = justice.appointingPresident ?? "the appointing president";
   return (
     <ScoreColumn

@@ -29,7 +29,12 @@ import { asLabel, competitionRanks, displayScore, formatCurrency } from "@/lib/f
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry, JusticeLoyalty } from "@/types/justice";
-import { COURT_FINDING, JUSTICE_RESEARCH_URL, NOT_SCORED_REASON } from "@/lib/justices";
+import {
+  appointerEstimate,
+  COURT_FINDING,
+  JUSTICE_RESEARCH_URL,
+  NOT_SCORED_REASON,
+} from "@/lib/justices";
 import { houseSeatLabel } from "@/lib/elections";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
@@ -493,7 +498,9 @@ function apptParty(party: string | null) {
 
 // "+14.5 (−1.0 to +30.0)": the appointer estimate and its 95% confidence
 // interval, in points, as the API computes them.
-function loyaltyPoints(l: JusticeLoyalty) {
+function loyaltyPoints(entry: JusticeLoyalty | null): string | null {
+  const l = appointerEstimate(entry);
+  if (!l) return null;
   const p = (share: number) => {
     const v = share * 100;
     return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
@@ -591,7 +598,7 @@ function JusticeLeaderboard({
                       {entry.majorityPct.toFixed(0)}%
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums text-ink">
-                      {entry.loyalty ? loyaltyPoints(entry.loyalty) : "not yet measured"}
+                      {loyaltyPoints(entry.loyalty) ?? "not yet measured"}
                     </td>
                   </tr>
                 );
@@ -618,7 +625,7 @@ function JusticeLeaderboard({
                     </span>
                   </div>
                   <div className="mt-0.5 text-xs text-ink-lo">
-                    {entry.loyalty
+                    {loyaltyPoints(entry.loyalty) != null
                       ? `${loyaltyPoints(entry.loyalty)} points under the appointing president`
                       : "not yet measured"}
                   </div>
