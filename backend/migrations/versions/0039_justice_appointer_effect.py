@@ -6,16 +6,16 @@ shown and not scored (justice v3). The v2 score and shrunk estimate
 Nullable columns, so the previous image runs unchanged against the
 migrated schema.
 
-Revision ID: 0038
-Revises: 0037
+Revision ID: 0039
+Revises: 0038
 Create Date: 2026-10-09
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0038'
-down_revision = '0037'
+revision = '0039'
+down_revision = '0038'
 branch_labels = None
 depends_on = None
 
