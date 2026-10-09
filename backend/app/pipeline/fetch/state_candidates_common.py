@@ -130,6 +130,11 @@ _NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 # party-endorsement marker) or the word itself (Alaska's "Sullivan, Dan S.
 # Incumbent", Florida's "*Incumbent"). See surname().
 _ANNOTATION_RE = re.compile(r"\([^)]*\)|\*|(?i:\bincumbent\b)")
+# The same, for a name shown as printed: a parenthetical with more of the
+# name after it is the nickname the ballot prints ("Tobias (Toby) Doe" --
+# North Carolina's and Colorado's lists), not a marker beside the name, so
+# only a trailing one is an annotation. surname() still drops both.
+_DISPLAY_ANNOTATION_RE = re.compile(r"\([^)]*\)(?!\s*[^\W\d_])|\*|(?i:\bincumbent\b)")
 
 
 def parse_office(contest_name: str) -> tuple[str, int | None] | None:
@@ -1006,6 +1011,13 @@ _STATE_LEG_SEAT_RE = re.compile(
     r"\bSeat\s+([A-Za-z])\b|\bPos(?:ition|\.)?\s*(\d+)\b", re.IGNORECASE,
 )
 
+# A special election for the rest of a vacated term, held beside the
+# seat's regular contest on the same ballot (Arkansas, 2026: House District
+# 8's unexpired term and its next full term, two contests with different
+# candidates). Stored as the seat, so the two contests stay two rows.
+_STATE_LEG_UNEXPIRED_RE = re.compile(r"\b(?:unexpired|special)\b", re.IGNORECASE)
+UNEXPIRED_SEAT = "UNEX"  # fits StateLegNominee.seat (String(4))
+
 STATE_LEG_CHAMBER_LABELS = {"upper": "State Senate", "lower": "State House"}
 
 # ── judicial ─────────────────────────────────────────────────────
@@ -1160,7 +1172,9 @@ def parse_state_leg_office(contest_name: str) -> tuple[str, str, str | None] | N
     ("upper", "5", None) for Rhode Island's Senate District 5,
     ("lower", "10A", None) for one of Minnesota's two real districts,
     ("lower", "1", "A") for Idaho's Seat A of District 1, and
-    ("lower", "5", "2") for Washington's Position 2 of District 5.
+    ("lower", "5", "2") for Washington's Position 2 of District 5, and
+    ("lower", "8", UNEXPIRED_SEAT) for a special election to the rest of a
+    vacated term, held beside the district's regular contest.
 
     The seat is None wherever a district elects a single member, which
     is most of the country. Where it is set, the district still names
@@ -1204,6 +1218,8 @@ def parse_state_leg_office(contest_name: str) -> tuple[str, str, str | None] | N
             seat = None
             if seat_match:
                 seat = (seat_match.group(1) or seat_match.group(2) or "").upper() or None
+            elif _STATE_LEG_UNEXPIRED_RE.search(name):
+                seat = UNEXPIRED_SEAT
             return chamber, number, seat
     return None
 
@@ -1215,6 +1231,8 @@ def district_label(district: str, seat: str | None) -> str:
     obviously two seats of one district when both rows sit together."""
     if not seat:
         return district
+    if seat == UNEXPIRED_SEAT:
+        return f"{district} (unexpired term)"
     return f"{district}{seat}" if seat.isalpha() else f"{district}-{seat}"
 
 
@@ -1287,7 +1305,11 @@ _INDEPENDENT_RE = re.compile(
 # which renders the party as printed. The federal matcher keeps reading it
 # as "I", as it always has: its codes have no slot for a named minor
 # party, and None there would drop the candidate from the ballot outright.
-_INDEPENDENT_PARTY_RE = re.compile(r"\bindependent\s+(?:party|pty)\b", re.IGNORECASE)
+# California's American Independent Party and Nevada's Independent American
+# Party are parties too, named so: "Independent" as part of a party's name.
+_INDEPENDENT_PARTY_RE = re.compile(
+    r"\b(?:independent\s+(?:party|pty|american)|american\s+independent)\b", re.IGNORECASE,
+)
 _NONPARTISAN_RE = re.compile(r"\bnon[\s-]?partisan\b", re.IGNORECASE)
 
 
@@ -1473,7 +1495,8 @@ def federal_record(
 
 def clean_display_name(display_name: str) -> str:
     """A ballot name with its annotations removed, kept otherwise
-    verbatim — "Aaron C. Guckian*" -> "Aaron C. Guckian".
+    verbatim — "Aaron C. Guckian*" -> "Aaron C. Guckian". A nickname the
+    ballot prints inside the name is kept: "Jane (Jj) Doe" stays.
 
     The same annotations surname() strips, stripped for the same reason:
     they are markers the state prints beside a name, not part of it.
@@ -1483,7 +1506,7 @@ def clean_display_name(display_name: str) -> str:
     or worse as a footnote marker pointing at a footnote that does not
     exist on the page.
     """
-    return re.sub(r"\s+", " ", re.sub(_ANNOTATION_RE, " ", display_name or "")).strip()
+    return re.sub(r"\s+", " ", re.sub(_DISPLAY_ANNOTATION_RE, " ", display_name or "")).strip()
 
 
 def surname(display_name: str, last_first: bool = False) -> str | None:

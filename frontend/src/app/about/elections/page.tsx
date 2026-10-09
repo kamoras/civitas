@@ -216,6 +216,54 @@ export default async function ElectionsChapter() {
             and covers only the city&apos;s districts, so it isn&apos;t presented as the ballot.
           </P>
         </More>
+        <More label="Checked against twelve certified lists, 9 October 2026">
+          <P>
+            A second audit compared the pages for twelve states, across most of the systems Civitas
+            reads, with each state&apos;s own certified list. Federal contests matched in all of
+            them apart from how some names were written. What it found, and what changed:
+          </P>
+          <List>
+            <Item label="North Carolina’s legislature and courts">
+              Read from primary results, which in North Carolina list only contested primaries: the
+              page showed 59 legislative nominees in 55 of 170 districts (three since replaced by
+              their party), and nothing for the Supreme Court seat. Both now come from the State
+              Board of Elections&apos; candidate list for November.
+            </Item>
+            <Item label="Names">
+              Candidates who never filed with the FEC (60 of them in 17 states) were shown as
+              &ldquo;SURNAME, GIVEN&rdquo; rather than as printed, and a nickname the ballot prints
+              inside a name (&ldquo;Tobias (Toby)&rdquo;) was dropped. Both now read as the state
+              prints them.
+            </Item>
+            <Item label="Incumbents">
+              Nine sitting members running again were not marked as incumbents, because someone else
+              in the race carried the FEC&apos;s open-seat code. A member the state&apos;s ballot
+              lists is now trusted as running.
+            </Item>
+            <Item label="Parties">
+              Where a state prints a party Civitas has no code for (California&apos;s Peace and
+              Freedom, &ldquo;No Party Preference&rdquo;), it is now shown as printed rather than as
+              no party. A party named &ldquo;American Independent&rdquo; or &ldquo;Independent
+              American&rdquo; is a party, not an independent.
+            </Item>
+            <Item label="Special elections and runoffs">
+              A legislative seat with a special election for the rest of its term beside its regular
+              contest is shown as two contests. Louisiana&apos;s House contests on 3 November are an
+              all-party primary with a 12 December runoff, and Georgia requires a majority in
+              November with a 1 December runoff; both pages now say so above the ballot.
+            </Item>
+            <Item label="Finding your district">
+              The filter ignores accents and punctuation, so &ldquo;dona ana&rdquo;, &ldquo;st
+              louis&rdquo; and &ldquo;prince georges&rdquo; find their places.
+            </Item>
+          </List>
+          <P>
+            Ohio&apos;s and Utah&apos;s legislative nominees still come from primary results: Ohio
+            publishes no statewide list of November candidates (its counties certify their own), and
+            Utah&apos;s is a scanned image. New York&apos;s and northern Nevada&apos;s House races
+            still list FEC filers, for the reason above.
+          </P>
+        </More>
         <More label="How the candidate lists were checked, September 2026">
           <P>
             On 26 September 2026, 39 states had certified candidates and eleven were still showing
