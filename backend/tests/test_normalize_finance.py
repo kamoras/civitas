@@ -46,13 +46,14 @@ class TestCandidateAffiliation:
 
 
 class TestCleanDonorName:
-    """Title-case conversion preserving acronyms."""
+    """Capitals shown as written (more cases in test_donor_name_casing)."""
 
     def test_all_caps_to_title(self):
         assert _clean_donor_name("GOLDMAN SACHS") == "Goldman Sachs"
 
     def test_acronyms_preserved(self):
-        assert _clean_donor_name("SOME CORP LLC") == "Some CORP LLC"
+        # "LLC" is written in capitals; "Corp" is a word, not an acronym.
+        assert _clean_donor_name("SOME CORP LLC") == "Some Corp LLC"
 
     def test_already_mixed_case_unchanged(self):
         assert _clean_donor_name("Goldman Sachs") == "Goldman Sachs"
