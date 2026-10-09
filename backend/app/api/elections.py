@@ -185,6 +185,28 @@ def _statewide_district_towns() -> dict[str, list[str]]:
     return _statewide_towns_cache
 
 
+_ELECTION_RULES_PATH = pathlib.Path(__file__).resolve().parent.parent / "data" / "election_rules.json"
+_election_rules_cache: dict | None = None
+
+
+def _election_rules(state: str, cycle: int, key: str) -> list[dict]:
+    """`key` of `state`'s entry in data/election_rules.json for `cycle`: a
+    cited legal fact per state. "generalRunoffs" -- where November is not
+    decided by a plurality (Georgia's majority rule; Louisiana's House
+    contests held as an all-party open primary), with the runoff's date.
+    "otherPrimaries" -- contests whose primary was not the state's one
+    primary date (Alabama's postponed House districts). [] when the file
+    is missing: the page then says nothing rather than guessing."""
+    global _election_rules_cache
+    if _election_rules_cache is None:
+        try:
+            _election_rules_cache = json.loads(_ELECTION_RULES_PATH.read_text())["cycles"]
+        except Exception:
+            logger.exception("election_rules.json unavailable")
+            _election_rules_cache = {}
+    return list(((_election_rules_cache.get(str(cycle)) or {}).get(state) or {}).get(key) or [])
+
+
 def _seat_places(state: str, code: str, district: str | None, spec: dict) -> list[str]:
     """The places a district-elected seat covers, where they are known:
     the county crosswalk for a body whose districts are the congressional
@@ -541,10 +563,21 @@ def _stale_incumbent_ids(candidates: list[Candidate]) -> frozenset[str]:
     Race-scoped and conservative: an ordinary defended-seat race (one
     "I", nobody "O") never matches, so this can only ever REMOVE a
     trusted incumbent claim, never invent one.
+
+    A candidate a state lists on this cycle's ballot (its certified
+    November list, or its primary ballot) is running, so their "I" is
+    never the retired member's leftover record this guards against: the
+    mixed shape there comes from someone else's stale "O" -- a filer who
+    lost the primary, or one whose committee was opened for an earlier
+    open-seat race. Dropping it hid nine sitting members' incumbency on
+    2026-10-08, every one of them a confirmed nominee.
     """
     statuses = {c.incumbent_challenge for c in candidates}
     if "O" in statuses and "I" in statuses:
-        return frozenset(c.id for c in candidates if c.incumbent_challenge == "I")
+        return frozenset(
+            c.id for c in candidates
+            if c.incumbent_challenge == "I" and not (c.confirmed_general or c.on_primary_ballot)
+        )
     return frozenset()
 
 
@@ -1312,6 +1345,11 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # representative (house.gov, a member's name) can answer for the
         # old map.
         "newDistrictLines": state in redrawn_states(cycle),
+        "generalRunoffs": _election_rules(state, cycle, "generalRunoffs"),
+        # Contests whose primary was not primaryDate (Alabama's House
+        # districts 1, 2, 6 and 7; Louisiana's House, whose primary IS
+        # November 3), so the header doesn't give them the wrong one.
+        "otherPrimaries": _election_rules(state, cycle, "otherPrimaries"),
         "senateRaces": senate_races,
         # Only meaningful (and only computed) when this state's seat
         # genuinely ISN'T up this cycle — gated on the calendar

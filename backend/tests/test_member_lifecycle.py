@@ -86,6 +86,19 @@ def test_member_back_on_roster_is_restored(db_session):
     assert back.vacancy_reason is None
 
 
+def test_a_serving_member_left_with_a_departure_date_is_cleared(db_session):
+    """Production held four serving members with a stale departure date."""
+    _rep(db_session, "still-serving", "H00001", is_current=True, left="2026-08-02")
+    _rep(db_session, "clean", "H00002")
+    db_session.flush()
+
+    result = reconcile_roster(db_session, CHAMBER_HOUSE, _roster("H00001", "H00002"), today=TODAY)
+
+    assert result["restored"] == ["still-serving"]
+    row = db_session.query(Representative).filter_by(id="still-serving").one()
+    assert (row.is_current, row.left_office_date, row.vacancy_reason) == (True, None, None)
+
+
 def test_partial_roster_fetch_retires_nobody(db_session):
     for i in range(20):
         _senator(db_session, f"sen-{i}", f"S{i:05d}")

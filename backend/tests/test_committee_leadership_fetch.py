@@ -103,6 +103,11 @@ class TestRefresh:
         monkeypatch.setattr(cl, "_MEMBERSHIP_PATH", str(membership_path))
         monkeypatch.setattr(cl, "_LEADERSHIP_PATH", str(leadership_path))
         monkeypatch.setattr(cl, "_TENURES_PATH", str(tmp_path / "leadership_tenures.json"))
+
+        async def no_chamber_lists(client, url):
+            return None
+
+        monkeypatch.setattr(cl, "_fetch_bytes", no_chamber_lists)
         committee_data.clear_committee_data_cache()
         return membership_path, leadership_path
 
@@ -171,3 +176,61 @@ class TestRefresh:
         assert committee_data.load_leadership_tenures()["M000001"][0]["start"] == "2025-01-03"
         assert committee_data.leadership_tenures_on_volume() is True
         committee_data.clear_committee_data_cache()
+
+    async def test_a_member_the_source_does_not_list_is_read_from_the_chambers_lists(self, monkeypatch, tmp_path):
+        membership_path, _ = self._patch_paths(monkeypatch, tmp_path)
+        bodies = {cl.MEMBER_DATA_URL: _CLERK_XML, cl.SENATE_ROSTER_URL: _SENATE_ROSTER_XML,
+                  cl.SENATE_COMMITTEE_URL.format(code="SSFI"): _SENATE_COMMITTEE_XML}
+
+        async def chamber_lists(client, url):
+            return bodies.get(url)
+
+        async def fetch(filename, client):
+            source = await _fetch_synthetic(filename, client)
+            if filename == "committees-current.yaml":
+                return source + _CHAMBER_COMMITTEES
+            return source
+
+        monkeypatch.setattr(cl, "_fetch_bytes", chamber_lists)
+        monkeypatch.setattr(cl, "_fetch_yaml", fetch)
+        assert await cl.refresh_committee_leadership_data() is True
+        membership = json.loads(membership_path.read_text())["membership"]
+        assert membership["Z000002"] == [
+            {"committeeName": "House Committee on Financial Services", "chamber": "house", "title": None},
+        ]
+        assert membership["Z000003"] == [
+            {"committeeName": "Senate Committee on Finance", "chamber": "senate", "title": "Ranking Member"},
+        ]
+        # A member the source lists keeps the source's entry.
+        assert membership["M000000"] == [
+            {"committeeName": "Senate Committee on Finance", "chamber": "senate", "title": "Chairman"},
+        ]
+
+
+# Trimmed from the chambers' own lists as published 2026-10 (names and ids
+# replaced): the Clerk's MemberData.xml and senate.gov's roster and one
+# committee's membership file.
+_CHAMBER_COMMITTEES = [
+    {"thomas_id": "HSBA", "house_committee_id": "BA", "name": "House Committee on Financial Services", "type": "house"},
+    {"thomas_id": "SSFI", "senate_committee_id": "SSFI", "name": "Senate Committee on Finance", "type": "senate"},
+]
+_CLERK_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<MemberData publish-date="October 1, 2026"><members>
+<member><statedistrict>GA13</statedistrict><member-info><bioguideID>Z000002</bioguideID></member-info>
+<committee-assignments><committee comcode="BA00" rank="24" /><subcommittee subcomcode="BA01" rank="9" /></committee-assignments></member>
+<member><statedistrict>AK00</statedistrict><member-info><bioguideID>M000000</bioguideID></member-info>
+<committee-assignments><committee comcode="BA00" rank="2" leadership="Chair" /></committee-assignments></member>
+<member><statedistrict>TX23</statedistrict><member-info><bioguideID></bioguideID></member-info><committee-assignments /></member>
+</members><committees>
+<committee type="standing" comcode="BA00"><committee-fullname>Committee on Financial Services</committee-fullname></committee>
+</committees></MemberData>"""
+_SENATE_ROSTER_XML = b"""<?xml version="1.0" encoding="UTF-8"?><contact_information>
+<member><last_name>Quillon</last_name><first_name>Ada</first_name><party>R</party><state>SC</state><bioguide_id>Z000003</bioguide_id></member>
+<member><last_name>Marrow</last_name><first_name>Ben</first_name><party>R</party><state>SC</state><bioguide_id>M000000</bioguide_id></member>
+</contact_information>"""
+_SENATE_COMMITTEE_XML = b"""<?xml version="1.0" encoding="UTF-8"?><committee_membership><committees>
+<committee_name>Committee on Finance</committee_name><committee_code>SSFI00</committee_code><members>
+<member><name><first>Ben</first><last>Marrow</last></name><state>SC</state><party>R</party><position>Chairman</position></member>
+<member><name><first>Ada</first><last>Quill\xc3\xb3n</last></name><state>SC</state><party>R</party><position>Ranking</position></member>
+<member><name><first>Cal</first><last>Quillon</last></name><state>NC</state><party>D</party><position>Member</position></member>
+</members></committees></committee_membership>"""
