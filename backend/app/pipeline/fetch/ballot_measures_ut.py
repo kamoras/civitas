@@ -39,9 +39,20 @@ than storing a wrong letter.
 
 Discovery: vote.utah.gov/current-election-information/ ("<year> Election
 Cycle") links the certification as .../<year>-General-Election-
-Certification.pdf. A page for this cycle with no such link is
+Certification.pdf, and an amended one as .../<year>-General-Election-
+Certification-Amended-<MM>-<DD>.pdf (2026's, dated September 21, replaced
+the August 28 original on the page). Where several are linked the
+latest amendment is read: an amended one over the original, a later
+<MM>-<DD> over an earlier; two links that tie on that are ambiguous and
+refuse the page. A page for this cycle with no such link is
 NotYetPublished (the Lieutenant Governor certifies in late August); a
 page for another cycle, or a failed fetch, is None.
+
+Text extraction follows the PDF's own text order (use_text_flow): the
+amended certification's OCR layer overlaps neighbouring words, and
+pdfplumber's default left-to-right ordering interleaved their letters
+("PurstuoUa tnaCtho" for "Pursuant to Utah Code") so neither required
+statement was found.
 
 Fetching: from the development environment, vote.utah.gov answered
 curl with 200 but this codebase's httpx client with a Cloudflare
@@ -61,7 +72,7 @@ from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished
-from app.pipeline.fetch.ballot_measures_state_common import get_bytes, get_text, pdf_text
+from app.pipeline.fetch.ballot_measures_state_common import get_bytes, get_text, pdf_text_flow
 
 logger = logging.getLogger(__name__)
 
@@ -76,19 +87,29 @@ _SECTION_END = "REGISTERED POLITICAL PARTIES"
 
 
 def find_certification_url(page_html: str, year: int) -> tuple[str | None, bool]:
-    """(url, page_ok). page_ok False: not this cycle's page, or the
-    certification is linked more than once."""
+    """(url, page_ok): the latest certification linked (see module
+    docstring). page_ok False: not this cycle's page, or two different
+    links tie for latest."""
     tree = lxml_html.fromstring(page_html)
     if f"{year} Election Cycle" not in " ".join(tree.text_content().split()):
         return None, False
-    pattern = re.compile(rf"/{year}-General-Election-Certification\.pdf$", re.IGNORECASE)
-    hrefs = {
-        urljoin(CURRENT_URL, a.get("href")) for a in tree.xpath("//a[@href]")
-        if pattern.search(a.get("href").strip())
-    }
-    if len(hrefs) > 1:
+    pattern = re.compile(
+        rf"/{year}-General-Election-Certification(-Amended(?:-(\d{{2}})-(\d{{2}}))?)?\.pdf$", re.IGNORECASE,
+    )
+    ranked: dict[tuple, set[str]] = {}
+    for a in tree.xpath("//a[@href]"):
+        m = pattern.search(a.get("href").strip())
+        if m:
+            # (amended, month, day): any amendment outranks the original,
+            # a dated one an undated one, a later date an earlier one.
+            rank = (bool(m.group(1)), m.group(2) or "", m.group(3) or "")
+            ranked.setdefault(rank, set()).add(urljoin(CURRENT_URL, a.get("href").strip()))
+    if not ranked:
+        return None, True
+    latest = ranked[max(ranked)]
+    if len(latest) > 1:
         return None, False
-    return (hrefs.pop() if hrefs else None), True
+    return latest.pop(), True
 
 
 def parse_certification(text: str, year: int) -> list[dict] | None:
@@ -180,7 +201,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     if raw is None:
         return None
     try:
-        parsed = parse_certification(pdf_text(raw), year)
+        parsed = parse_certification(pdf_text_flow(raw), year)
     except Exception:
         logger.exception("UT general election certification was not parseable")
         return None

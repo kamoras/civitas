@@ -39,8 +39,10 @@ class TestBallotLanguage:
         assert m["official_summary"].startswith("This constitutional measure would amend and reenact section 9")
         assert "House Concurrent Resolution" not in m["official_summary"]
         assert m["fiscal_impact"] == "The estimated fiscal impact of this measure is none."
-        assert m["yes_means"] == "Means you approve the measure as summarized above."
-        assert m["no_means"] == "Means you reject the measure as summarized above."
+        assert m["yes_means"] == "Yes – Means you approve the measure as summarized above."
+        assert m["no_means"] == "No – Means you reject the measure as summarized above."
+        # NDCC 16.1-06-09(1) names who writes both.
+        assert m["title_authority"] == m["framing_authority"] == nd.DRAFTING_AUTHORITY
         assert m["fiscal_authority"] == "North Dakota Legislative Council"
 
     def test_initiated_measure_2_wrapped_heading(self):
@@ -67,8 +69,8 @@ class TestBallotLanguage:
                      "No – Means you reject the measure\nas summarized above.")
         )
         m = nd.parse_ballot_language(text)
-        assert m["yes_means"] == "Means you approve the measure as summarized above."
-        assert m["no_means"] == "Means you reject the measure as summarized above."
+        assert m["yes_means"] == "Yes – Means you approve the measure as summarized above."
+        assert m["no_means"] == "No – Means you reject the measure as summarized above."
 
     def test_a_sentence_that_never_finishes_refuses(self):
         text = FIXTURE["ballot_language_1"].replace(

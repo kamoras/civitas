@@ -222,6 +222,10 @@ def combine(number: str, title_summary: dict, quick: dict) -> dict | None:
         "yes_means": quick["yes"],
         "no_means": quick["no"],
         "title_authority": TITLE_AUTHORITY,
+        # The Attorney General writes the summary as well as the title
+        # ("Official Title and Summary"). The YES/NO sentences name no
+        # drafter on the page, so none is credited.
+        "summary_authority": TITLE_AUTHORITY,
         "fiscal_authority": FISCAL_AUTHORITY,
     }
 

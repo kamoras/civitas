@@ -1083,29 +1083,61 @@ class TestJudicialOmitShrinks:
               "party": party, "last_name": name}],
         )
 
-    def test_uncovered_state_names_contests_and_retention_together(self, db_session):
+    def test_uncovered_state_names_its_contests(self, db_session):
+        """Georgia elects judges and holds no retention votes, so the line
+        names contests alone (state_ballot_scope.json)."""
         _race(db_session, "2026-SEN-GA", "GA")
         db_session.commit()
         data = _body(elections.state_ballot("GA", db_session))
-        assert "Judicial contests and retention questions" in data["omits"]
+        assert "Judicial contests" in data["omits"]
+        assert not any("retention" in item for item in data["omits"])
         assert data["judicialRaces"] == []
         # Unchecked, not checked-and-empty (see TestJudicialConfirmedNone).
         assert data["judicialCoverage"]["status"] == "not_yet_covered"
 
-    def test_covered_state_still_declares_retention_questions(self, db_session):
-        """The line SHRINKS rather than disappearing: retention questions
-        are a separate yes/no ballot item, not a contest between
-        candidates, and nothing reads them yet. Claiming judicial is
-        covered while they are not would be the honest half-statement
-        this list exists to avoid."""
+    def test_uncovered_state_with_retention_names_both_together(self, db_session):
+        _race(db_session, "2026-SEN-MT", "MT")
+        db_session.commit()
+        data = _body(elections.state_ballot("MT", db_session))
+        assert "Judicial contests and retention questions" in data["omits"]
+
+    def test_covered_state_drops_the_line_when_it_holds_no_retention_votes(self, db_session):
+        """North Carolina's contests are covered and it has no retention
+        votes: nothing judicial is left out, so nothing is claimed."""
         _race(db_session, "2026-SEN-NC", "NC")
         db_session.commit()
         self._sync_judicial(db_session)
 
         data = _body(elections.state_ballot("NC", db_session))
         assert data["judicialRaces"], "the section should render"
-        assert "Judicial retention questions" in data["omits"]
-        assert "Judicial contests and retention questions" not in data["omits"]
+        assert not any(item.startswith("Judicial") for item in data["omits"])
+
+    def test_covered_state_still_declares_retention_questions(self):
+        """The line SHRINKS rather than disappearing where the state holds
+        retention votes: they are a separate yes/no ballot item, not a
+        contest between candidates, and nothing reads them yet."""
+        covered = elections.JudicialCoverageStatus.COVERED
+        assert elections._judicial_omits("MT", 2026, covered) == ["Judicial retention questions"]
+
+    def test_a_state_that_appoints_its_judges_omits_none(self, db_session):
+        _race(db_session, "2026-SEN-MA", "MA")
+        db_session.commit()
+        data = _body(elections.state_ballot("MA", db_session))
+        assert not any(item.startswith("Judicial") for item in data["omits"])
+
+    def test_judicial_elections_held_at_other_elections_are_not_claimed(self):
+        uncovered = elections.JudicialCoverageStatus.NOT_YET_COVERED
+        # Tennessee's are in August, Pennsylvania's in odd years.
+        assert elections._judicial_omits("TN", 2026, uncovered) == []
+        assert elections._judicial_omits("PA", 2026, uncovered) == []
+        assert elections._judicial_omits("PA", 2027, uncovered) == ["Judicial contests and retention questions"]
+
+    def test_legislative_line_only_in_a_year_the_state_elects_its_legislature(self, db_session):
+        _race(db_session, "2026-SEN-VA", "VA")
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.commit()
+        assert "State legislative districts" not in _body(elections.state_ballot("VA", db_session))["omits"]
+        assert "State legislative districts" in _body(elections.state_ballot("GA", db_session))["omits"]
 
     def test_the_other_omissions_are_untouched(self, db_session):
         _race(db_session, "2026-SEN-NC", "NC")
@@ -1147,12 +1179,12 @@ class TestJudicialConfirmedNone:
         assert data["judicialRaces"] == []
         assert data["judicialCoverage"]["status"] == "confirmed_none"
         assert data["judicialCoverage"]["sourceName"] == "Idaho Secretary of State"
-        # And the omission shrinks, because judicial contests ARE now
-        # accounted for — the answer is simply that none are on the ballot.
-        assert "Judicial retention questions" in data["omits"]
-        assert "Judicial contests and retention questions" not in data["omits"]
+        # And the omission goes, because judicial contests ARE now
+        # accounted for — the answer is simply that none are on the ballot
+        # — and Idaho holds no retention votes.
+        assert not any(item.startswith("Judicial") for item in data["omits"])
         # The unchecked counterpart (GA, full omission kept) is
-        # TestJudicialOmitShrinks.test_uncovered_state_names_contests_and_retention_together.
+        # TestJudicialOmitShrinks.test_uncovered_state_names_its_contests.
 
 
 def test_a_redrawn_states_house_race_takes_the_new_lines_lean(db_session):

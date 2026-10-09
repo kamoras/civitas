@@ -21,8 +21,9 @@ IP26-645 (income-tax repeal).
 
 From each measure, verbatim:
 - the Attorney General's BALLOT TITLE (Statement of Subject, Concise
-  Description, "Should this measure be enacted into law?") and BALLOT
-  MEASURE SUMMARY, from the ballot-title letter — the letter's own
+  Description, "Should this measure be enacted into law?") as the official
+  title and BALLOT MEASURE SUMMARY as the summary, from the ballot-title
+  letter — the letter's own
   "to the Legislature" / "to the People" names the initiative type;
 - the "Summary" paragraph of OFM's Fiscal Impact Statement.
 
@@ -144,8 +145,13 @@ def parse_ballot_title_letter(text: str, measure_id: str, heading: str) -> dict 
     return {
         "number": measure_id,
         "title": subject or heading,
+        # Two sections of the letter, two fields: the BALLOT TITLE as the
+        # official title and the BALLOT MEASURE SUMMARY as the summary. They
+        # were joined under a label of ours ("Ballot Measure Summary:"),
+        # words the letter doesn't contain in that form.
+        "official_title": title_block,
         "origin": origin,
-        "official_summary": f"{title_block} Ballot Measure Summary: {summary}",
+        "official_summary": summary,
         "fiscal_impact": None,
         "yes_means": None,
         "no_means": None,
