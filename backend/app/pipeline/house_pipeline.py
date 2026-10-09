@@ -725,10 +725,9 @@ async def run_house_pipeline() -> dict:
 
             success_count = 0
             fail_count = 0
-            # (member id, exception) for each rep that failed, and the ids
-            # stored: alert_member_failures after the scoring pass.
+            # (member id, exception) for each rep that failed: one ops
+            # alert after the scoring pass (alert_member_failures).
             member_failures: list[tuple[str, BaseException]] = []
-            member_stored: list[str] = []
 
             recent_only = recent_not_covered_by_key_bills(classified_recent, house_roll_calls)
 
@@ -995,7 +994,6 @@ async def run_house_pipeline() -> dict:
                     # Persist
                     upsert_representative(db, rep)
                     success_count += 1
-                    member_stored.append(rep.get("id") or rep.get("bioguideId") or rep.get("name", "?"))
 
                 except Exception as e:
                     # Roll back first, exactly as the Senate loop does
@@ -1012,7 +1010,7 @@ async def run_house_pipeline() -> dict:
                     member_failures.append((rep.get("id") or rep.get("bioguideId") or rep.get("name", "?"), e))
 
             progress.complete("fec_scoring", detail=f"{success_count} OK, {fail_count} failed")
-            alert_member_failures("house", member_failures, member_stored)
+            alert_member_failures("house", member_failures)
 
             # ── PHASE 6: SNAPSHOTS ──
             logger.info("--- House Phase 6: SNAPSHOTS ---")

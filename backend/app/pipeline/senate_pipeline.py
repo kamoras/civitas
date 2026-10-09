@@ -1692,10 +1692,9 @@ async def run_senate_pipeline(
         results: list[dict] = []
         success_count = 0
         fail_count = 0
-        # (member id, exception) for each senator that failed, and the ids
-        # stored: alert_member_failures after the scoring loop.
+        # (member id, exception) for each senator that failed: one ops
+        # alert after the scoring loop (alert_member_failures).
         member_failures: list[tuple[str, BaseException]] = []
-        member_stored: list[str] = []
 
         # A seat passed to someone of the same surname: the roll calls'
         # member id says which of them cast each vote.
@@ -2248,7 +2247,6 @@ async def run_senate_pipeline(
                 success_count += 1
 
                 upsert_senator(db, result)
-                member_stored.append(senator.get("id") or senator.get("bioguideId") or senator["name"])
                 pipeline_run.senators_processed = success_count
                 incremental_stats = get_llm_stats()
                 pipeline_run.llm_calls = incremental_stats["total_calls"]
@@ -2278,7 +2276,7 @@ async def run_senate_pipeline(
                 progress.update("analyze_senators", done=senator_idx + 1)
 
         alert_if_lda_down(lda_totals, "senate")
-        alert_member_failures("senate", member_failures, member_stored)
+        alert_member_failures("senate", member_failures, close_when_clean=not senator_filter)
 
         progress.complete(
             "analyze_senators",
