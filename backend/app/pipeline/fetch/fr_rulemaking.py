@@ -110,6 +110,51 @@ async def _fetch_body_text(client: httpx.AsyncClient, url: str) -> str:
         return ""
 
 
+# What a stored document's refresh reads (explore_pipeline.
+# _refresh_federal_register): the fields the Federal Register changes after
+# publication, never the body.
+REFRESH_FIELDS = [
+    "document_number", "title", "publication_date", "signing_date",
+    "comments_close_on", "comment_url", "executive_order_number",
+]
+REFRESH_BATCH = 20
+
+
+async def fetch_fr_metadata(
+    client: httpx.AsyncClient, numbers: list[str],
+) -> tuple[dict[str, dict], set[str]] | None:
+    """({document number: REFRESH_FIELDS}, the numbers the Federal Register
+    says it has no document for), or None when it could not be asked: a
+    failed request is never read as "not found"."""
+    found: dict[str, dict] = {}
+    missing: set[str] = set()
+    for i in range(0, len(numbers), REFRESH_BATCH):
+        batch = numbers[i : i + REFRESH_BATCH]
+        try:
+            resp = await client.get(
+                f"{FR_BASE}/documents/{','.join(batch)}.json",
+                params={"fields[]": REFRESH_FIELDS},
+                timeout=DEFAULT_FETCH_TIMEOUT_S,
+            )
+            data = resp.json()
+        except (httpx.HTTPError, ValueError) as e:
+            logger.warning("Federal Register refresh failed: %s", e)
+            return None
+        if resp.status_code == 404 and len(batch) == 1:
+            missing.add(batch[0])
+            continue
+        if resp.status_code != 200 or not isinstance(data, dict):
+            logger.warning("Federal Register refresh returned %d", resp.status_code)
+            return None
+        # One number answers with the document itself; several, with a list
+        # and the numbers it has no document for.
+        for doc in data.get("results", [data] if "document_number" in data else []):
+            found[doc["document_number"]] = doc
+        missing.update((data.get("errors") or {}).get("not_found") or [])
+        await asyncio.sleep(0.3)
+    return found, missing
+
+
 async def fetch_fr_rulemaking(
     client: httpx.AsyncClient,
     pages: int = 3,
