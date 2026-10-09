@@ -70,6 +70,12 @@ export default function DataChapter() {
               Roll-call votes with every member&apos;s position, and each chamber&apos;s live floor
               log.
             </Fact>
+            <Fact label="unitedstates/congress-legislators">
+              Committee seats and party leadership titles, an open dataset refreshed weekly. It
+              updates every month or two, so a member seated since then takes their committee seats
+              from the chamber&apos;s own list: the House Clerk&apos;s member data or
+              senate.gov&apos;s committee rosters.
+            </Fact>
             <Fact label="GovInfo">
               The Congressional Record, read in full each day, and its Daily Digest.
             </Fact>
@@ -109,7 +115,8 @@ export default function DataChapter() {
             </Fact>
             <Fact label="Lobbying Disclosure Act registry (lda.gov)">
               Registered lobbying spending by organizations that appear among donors, and the bills
-              their filings name.
+              their filings name. Each lobbying firm&apos;s report for a quarter counts once, the
+              latest filed, so an amendment replaces the report it amends.
             </Fact>
             <Fact label="Partisan lean">
               State and district Cook PVI, computed from official presidential returns (MIT Election
@@ -349,9 +356,10 @@ export default function DataChapter() {
             current day and is then deleted. Without the key, the scrambled value can&apos;t be
             turned back into an address. Raw IP addresses and browser identification strings are
             never stored, only a coarse browser, operating system and device type (for example
-            &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser opening a page counts: search
-            and AI crawlers, scripts and automated browsers aren&apos;t visitors and aren&apos;t
-            counted.
+            &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser opening a page counts, and the
+            page itself sends the count once it has loaded: search and AI crawlers, scripts and
+            automated browsers that never run the page aren&apos;t visitors and aren&apos;t counted.
+            Turning JavaScript off means you aren&apos;t counted either.
           </Item>
           <Item label="Page views">A count per page type, per day.</Item>
           <Item label="Load times">
