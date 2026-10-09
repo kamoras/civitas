@@ -284,10 +284,13 @@ export default function PresidentsAndJusticesChapter() {
           correlation with distance from the median), the same flaw that removed the old measures.
         </P>
         <P>
-          One question is still open: the era. The government wins less often than it used to, and a
-          justice&apos;s years under the appointing president are always their first, so part of the
-          gap may be that decline. Comparing a justice with colleagues on the same cases leaves
-          about two-thirds of it, but that estimate is noisier, so the score has not changed.
+          One question is still open: timing. A justice&apos;s years under the appointing president
+          are always their first. A placebo test moves a fake &ldquo;appointer&rdquo; window of the
+          same length to the years just after. It still finds about 4 of the 6.5 points, so part of
+          the gap seems to come from a justice&apos;s early years, whoever is president. Comparing
+          each vote with colleagues&apos; votes on the same case removed only a quarter of that
+          placebo effect and made the estimates much noisier, so it was not adopted. The score is
+          unchanged while a measure that passes the placebo is studied.
         </P>
         <More label="Measures we removed">
           <P>

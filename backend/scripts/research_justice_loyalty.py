@@ -293,37 +293,101 @@ def _split_half(P: pd.DataFrame, formula: str) -> tuple[int, float]:
     return len(rows), 2 * r / (1 + r)
 
 
-def era(P: pd.DataFrame, specs: dict[str, pd.DataFrame]) -> None:
+def _against_colleagues(P: pd.DataFrame) -> pd.DataFrame:
+    """Each vote minus the mean vote of the justice's colleagues on the same
+    case: rel_all over every colleague; rel_out over colleagues the sitting
+    president did not appoint (so co-appointees sharing one loyalty don't
+    cancel), missing where no such colleague voted."""
+    s, n = P.groupby("caseId").y.transform("sum"), P.groupby("caseId").y.transform("size")
+    out = (P.in_office == 0).astype(int)
+    os_, on = (P.y * out).groupby(P.caseId).transform("sum"), out.groupby(P.caseId).transform("sum")
+    return P.assign(rel_all=P.y - (s - P.y) / (n - 1).replace(0, np.nan),
+                    rel_out=P.y - (os_ - P.y * out) / (on - out).replace(0, np.nan))
+
+
+ERA_SPECS = (("A", "y", "{f} ~ {x} + pet"), ("E", "rel_all", "{f} ~ {x}"), ("E-excl", "rel_out", "{f} ~ {x}"))
+
+
+def era(P: pd.DataFrame) -> None:
     """Is the appointer's time in office standing in for the era? It is
     always the start of a justice's career, and the government's win rate
-    fell from the 1980s on (Epstein & Posner 2018), so the comparison with
-    later presidents could pick up the decline. Held fixed three ways:
-    a fixed effect per term, the justice's vote against their colleagues'
-    on the same case (E), and by era."""
+    fell from the 1980s on (Epstein & Posner 2018). Held fixed by term
+    fixed effects, by era, and by the justice's vote against their
+    colleagues' on the same case (E; E-excl leaves out colleagues the
+    sitting president appointed). Then the gate: a placebo window of the
+    appointer's length, k terms into the rest of the career (the real
+    appointer votes dropped), which a measure free of the career-timing
+    confound should put at zero for every k."""
     print("\n== 7. Loyalty or era ==")
     print("  government vote share by decade: " + ", ".join(
         f"{d}s {v:.2f}" for d, v in P.groupby(P.term // 10 * 10).y.mean().items()))
-    case_sum, case_n = P.groupby("caseId").y.transform("sum"), P.groupby("caseId").y.transform("size")
-    P = P.assign(rel=P.y - (case_sum - P.y) / (case_n - 1).replace(0, np.nan)).dropna(subset=["rel"])
+    P = _against_colleagues(P)
+    print(f"  votes with no colleague: {int(P.rel_all.isna().sum())}; with no colleague the sitting president "
+          f"did not appoint: {int(P.rel_out.isna().sum())}")
+
+    def pooled(d, formula, x):
+        f = smf.ols(formula + " + C(justiceName)", d).fit(cov_type="cluster", cov_kwds={"groups": pd.factorize(d.justiceName)[0]})
+        return f.params[x], f.tvalues[x]
+
     for label, d, formula in (
-        ("justice fixed effects (A)", P, "y ~ in_office + pet + C(justiceName)"),
-        ("+ term fixed effects", P, "y ~ in_office + pet + C(justiceName) + C(term)"),
-        ("against colleagues on the case (E)", P, "rel ~ in_office + C(justiceName)"),
-        *((f"{lo}-{hi}, + term fixed effects", P[P.term.between(lo, hi)], "y ~ in_office + pet + C(justiceName) + C(term)")
+        ("+ term fixed effects", P, "y ~ in_office + pet + C(term)"),
+        *((f"{lo}-{hi}, + term fixed effects", P[P.term.between(lo, hi)], "y ~ in_office + pet + C(term)")
           for lo, hi in ((1937, 1952), (1953, 1980), (1981, 2024))),
+        *((name, P.dropna(subset=[col]), tpl.format(f=col, x="in_office")) for name, col, tpl in ERA_SPECS),
     ):
-        f = smf.ols(formula, d).fit(cov_type="cluster", cov_kwds={"groups": pd.factorize(d.justiceName)[0]})
-        print(f"  pooled, {label}: {f.params['in_office']:+.3f} (t={f.tvalues['in_office']:.1f}), N={len(d)}")
-    A = specs["A"]
-    E = _per_justice(P, "rel ~ in_office", "in_office", lambda g: g.in_office == 1, lambda g: g.in_office == 0)
-    both = E.index.intersection(A.index)
-    print(f"  E per justice: {len(E)} measurable, mean {E.attrs['mu'] * 100:+.1f}, tau {E.attrs['tau'] * 100:.1f}, "
-          f"Spearman with A {spearmanr(E.loc[both, 'shrunk'], A.loc[both, 'shrunk']).statistic:.2f}; split-half "
-          f"reliability A {_split_half(P, 'y ~ in_office + pet')[1]:.2f}, E {_split_half(P, 'rel ~ in_office')[1]:.2f}")
-    for j in CURRENT:
-        a, e = A.loc[j], E.loc[j]
-        print(f"    {j:12} A {a.shrunk * 100:+5.1f} ± {a.shrunk_se * 100:.1f} score {a.score:5.1f} | "
-              f"E {e.shrunk * 100:+5.1f} ± {e.shrunk_se * 100:.1f} score {e.score:5.1f}")
+        b, t = pooled(d, formula, "in_office")
+        print(f"  pooled, justice fixed effects, {label}: {b:+.3f} (t={t:.1f}), N={len(d)}")
+    fits = {}
+    for name, col, tpl in ERA_SPECS:
+        d = P.dropna(subset=[col])
+        fits[name] = _per_justice(d, tpl.format(f=col, x="in_office"), "in_office",
+                                  lambda g: g.in_office == 1, lambda g: g.in_office == 0)
+        R, A = fits[name], fits["A"]
+        both = R.index.intersection(A.index)
+        n, rel = _split_half(d, tpl.format(f=col, x="in_office"))
+        print(f"  {name}: {len(R)} justices ({sum(j in R.index for j in CURRENT)} current), mean {R.attrs['mu'] * 100:+.1f}, "
+              f"tau {R.attrs['tau'] * 100:.1f}, Spearman with A {spearmanr(R.loc[both, 'shrunk'], A.loc[both, 'shrunk']).statistic:.2f}, "
+              f"split-half reliability {rel:.2f} ({n} justices)")
+    print("  per justice: shrunk ± se, score; for E-excl also the weight on the justice's own estimate, tau2 / (tau2 + se2)")
+    tau2 = fits["E-excl"].attrs["tau"] ** 2
+    for j in sorted(fits["A"].index, key=lambda j: (j not in CURRENT, j)):
+        cells = []
+        for name, R in fits.items():
+            if j not in R.index:
+                cells.append(f"{name} -")
+                continue
+            r = R.loc[j]
+            w = f" w {tau2 / (tau2 + r.se ** 2):.2f}" if name == "E-excl" else ""
+            cells.append(f"{name} {r.shrunk * 100:+5.1f} ± {r.shrunk_se * 100:.1f}, {r.score:5.1f}{w}")
+        print(f"    {j:13} " + " | ".join(cells))
+
+    print("  placebo: pooled effect of a fake window k terms after the appointer's (t); real effect for comparison")
+    Q = P[P.in_office == 0]
+    length = P[P.in_office == 1].groupby("justiceName").term.nunique()
+    rows = []
+    for k in range(25):
+        parts = []
+        for j, g in Q.groupby("justiceName"):
+            terms = sorted(g.term.unique())
+            if j in length.index and k + length[j] < len(terms):
+                parts.append(g.assign(fake=g.term.isin(terms[k:k + length[j]]).astype(int)))
+        if len(parts) < 3:
+            break
+        D = pd.concat(parts)
+        row = {"k": k, "justices": len(parts)}
+        for name, col, tpl in ERA_SPECS:
+            row[name], row[name + " t"] = pooled(D.dropna(subset=[col]), tpl.format(f=col, x="fake"), "fake")
+        rows.append(row)
+    T = pd.DataFrame(rows).set_index("k")
+    for k, r in T.iterrows():
+        print(f"    k={k:2} ({int(r.justices):2} justices) " + "  ".join(
+            f"{name} {r[name] * 100:+5.1f} ({r[name + ' t']:+.1f})" for name, _, _ in ERA_SPECS))
+    for name, col, tpl in ERA_SPECS:
+        real, _ = pooled(P.dropna(subset=[col]), tpl.format(f=col, x="in_office"), "in_office")
+        v = T[name]
+        print(f"    {name:6} real {real * 100:+.1f}; placebo k=0 {v.iloc[0] * 100:+.1f}, k=1 {v.iloc[1] * 100:+.1f}; over all "
+              f"{len(v)} shifts mean {v.mean() * 100:+.1f}, sd {v.std() * 100:.1f}, |t| > 1.96 in "
+              f"{(T[name + ' t'].abs() > 1.96).mean():.0%}")
 
 
 def against_ideology(sc: pd.DataFrame, mq: pd.DataFrame) -> None:
@@ -386,9 +450,9 @@ def main():
     P = panel(ep, scdb_votes(sc, gov))
     R = loyalty(P)
     validity(P, R, mq)
-    specs = same_party(P)
+    same_party(P)
     against_ideology(sc, mq)
-    era(P, specs)
+    era(P)
     if args.write_bundle:
         write_bundle(ep)
 

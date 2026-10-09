@@ -304,42 +304,114 @@ score. A justice near the median is pivotal in close cases by construction,
 so "voting both ways" there is where the median is, not evidence of
 impartiality.
 
-**Loyalty or era: an open question (found 2026-10-09).** The appointer's
-time in office is always the start of a justice's career. The government's
-share of votes has fallen: 0.66 in the 1980s, 0.63 in the 1990s, 0.57 in the
-2000s, 0.47 in the 2010s and 0.50 in the 2020s (Epstein & Posner 2018 report
-the same decline in win rates). So comparing a justice's early years with
-their later ones partly measures that decline. Three ways of holding the era
-fixed (research script, section 7), pooled with justice fixed effects:
+**Loyalty or era (2026-10-09): tested, and the score is not changed.** The
+appointer's time in office is always the start of a justice's career. The
+government's share of votes has fallen: 0.66 in the 1980s, 0.63 in the
+1990s, 0.57 in the 2000s, 0.47 in the 2010s and 0.50 in the 2020s (Epstein &
+Posner 2018 report the same decline in win rates). So comparing a justice's
+early years with their later ones could partly measure that decline. Every
+number here is printed by section 7 of the research script.
 
-| Specification | Points | t |
-|---|---|---|
-| A as scored | +6.5 | 3.0 |
-| + a fixed effect per term | +0.5 | 0.4 |
-| The justice's vote minus their colleagues' on the same case (E) | +4.1 | 2.3 |
-| 1953-1980, + term fixed effects | +4.1 | 2.7 |
-| 1981-2024, + term fixed effects | +4.3 | 3.2 |
-| 1937-1952, + term fixed effects | −9.2 | −5.4 |
+*Holding the era fixed.* Pooled, with justice fixed effects, clustered by
+justice:
+
+| Specification | Points | t | Votes |
+|---|---|---|---|
+| A as scored | +6.5 | 3.0 | 31,506 |
+| + a fixed effect per term | +0.5 | 0.4 | 31,506 |
+| 1937-1952, + term fixed effects | −9.2 | −5.4 | 7,556 |
+| 1953-1980, + term fixed effects | +4.1 | 2.7 | 11,825 |
+| 1981-2024, + term fixed effects | +4.3 | 3.2 | 12,125 |
+| E: the justice's vote minus every colleague's on the same case | +4.1 | 2.3 | 31,446 |
+| E-excl: minus the colleagues the sitting president did not appoint | +4.8 | 3.2 | 28,387 |
 
 The near-zero pooled term-fixed-effects estimate comes entirely from
-1937-1952. In those years nearly every justice was an FDR or Truman
-appointee, so the within-term comparison rests on a handful of holdovers.
-Since 1953, and in the same-case comparison, loyalty survives at roughly
-two-thirds of A's size (about +4 points against +6.5).
+1937-1952, when nearly every justice was an FDR or Truman appointee.
 
-Per justice, E keeps all 42 justices and the current nine and orders them
-much like A (Spearman 0.79). The same-case comparison lowers Roberts and
-Alito's effects (+8.4 and +10.1 against +11.7 and +14.5), and Thomas turns
-slightly negative (−4.7). But E's split-half reliability is 0.41, against A's
-0.68. Part of A's reliability may itself be the era: each half of a career
-has the same early-high, late-low timing. So the era-controlled estimate is
-noisier, and A's is steadier partly because it carries the confound.
+E-excl is E with one fix. When a president has several appointees on the
+Court, plain E compares each of them with the others, so a loyalty they share
+cancels out. E-excl compares a justice only with colleagues the sitting
+president did not appoint. Where no such colleague voted, the vote has no
+baseline: 3,119 votes, all from FDR's terms, because Epstein & Posner's data
+starts with FDR's appointees.
 
-This is not resolved here. Switching the score to E is a judgment between
-validity and reliability that changes several current scores by 15 to 25
-points (Roberts 32 to 45, Alito 16 to 34, Thomas 93 to 69, Gorsuch 93 to 75).
-It needs its own decision and its own pipeline input: the bundled votes carry
-no case identifier.
+*Per justice*, fitted, shrunk and scored as the pipeline does:
+
+| | Justices | Current | Mean | tau | Spearman with A | Split-half reliability |
+|---|---|---|---|---|---|---|
+| A | 42 | 9 | +4.9 | 8.6 | 1 | 0.68 (33 justices) |
+| E | 42 | 9 | +3.5 | 7.6 | 0.79 | 0.41 (33) |
+| E-excl | 34 | 9 | +4.7 | 6.0 | 0.69 | 0.32 (25) |
+
+E-excl loses eight FDR-era justices. Its split-half reliability is half of
+A's. DerSimonian-Laird compensates by shrinking harder: tau falls to 6.0,
+and the weight on a sitting justice's own estimate, tau² / (tau² + se²),
+runs from 0.22 (Jackson) to 0.68 (Kagan). The current Court, shrunk effect
+in points and score:
+
+| Justice | A | E | E-excl (weight on own estimate) |
+|---|---|---|---|
+| Alito | +14.5, 16 | +10.1, 34 | +10.4, 13 (0.56) |
+| Roberts | +11.7, 32 | +8.4, 45 | +9.8, 19 (0.61) |
+| Sotomayor | +7.2, 58 | +4.6, 70 | +5.3, 56 (0.66) |
+| Kagan | +5.4, 69 | +2.8, 81 | +3.8, 68 (0.68) |
+| Barrett | +4.6, 73 | +2.4, 84 | +2.1, 83 (0.42) |
+| Thomas | +1.3, 93 | −4.7, 69 | −2.6, 79 (0.52) |
+| Gorsuch | +1.2, 93 | +3.8, 75 | +4.6, 62 (0.50) |
+| Kavanaugh | −0.3, 98 | +0.2, 99 | +0.3, 98 (0.58) |
+| Jackson | −0.6, 96 | +0.6, 96 | +2.7, 78 (0.22) |
+
+*The gate: a placebo.* For each justice, the real appointer votes are dropped.
+A fake "appointer in office" window of the same number of terms is then
+placed k terms into the rest of the career, and each specification is
+refitted. A measure free of the career-timing confound should find nothing
+at every k. Pooled effect in points (t):
+
+| k | Justices | A | E | E-excl |
+|---|---|---|---|---|
+| 0 | 31 | +4.0 (2.5) | +2.8 (1.5) | +2.9 (1.5) |
+| 1 | 29 | +2.7 (1.6) | +1.5 (0.8) | +2.1 (1.0) |
+| 2 | 27 | +0.7 (0.4) | −0.3 (−0.2) | +0.4 (0.2) |
+| 3 | 26 | −0.5 (−0.3) | −0.8 (−0.5) | +0.1 (0.0) |
+| 5 | 24 | −2.5 (−1.5) | −1.8 (−1.0) | −1.2 (−0.7) |
+| 8 | 22 | −2.4 (−1.6) | −1.8 (−1.3) | −2.1 (−1.0) |
+| 11 | 17 | −5.6 (−4.0) | −2.8 (−1.9) | −2.7 (−1.3) |
+| 14 | 12 | −1.1 (−0.9) | −2.0 (−1.8) | −4.0 (−3.1) |
+| 17 | 10 | +2.5 (1.5) | +0.8 (0.6) | −0.4 (−0.3) |
+| 20 | 8 | +1.9 (0.9) | −0.2 (−0.1) | −1.3 (−0.7) |
+
+Over all 25 shifts (k = 0 to 24, printed in full by the script):
+
+| | Mean | sd | Shifts with \|t\| > 1.96 | Real effect |
+|---|---|---|---|---|
+| A | −1.2 | 2.8 | 16% | +6.5 |
+| E | −1.3 | 1.7 | 8% | +4.1 |
+| E-excl | −1.5 | 1.8 | 16% | +4.8 |
+
+**E fails the gate.** The confound is not a smooth trend over the decades,
+which a same-case baseline would cancel. A's placebo is not positive across
+shifts (mean −1.2). It is positive only in the window right after the
+appointer's, k = 0 and 1: the same position the real window holds against
+the rest of the career. There, E-excl's placebo is +2.9 points, three
+quarters of A's +4.0 and three fifths of its own real effect. The same-case
+comparison removes about a quarter of the early-window effect while halving
+reliability and losing eight justices. It does not measure loyalty more
+cleanly, so it is not shipped as justice v3.
+
+**What the placebo says about A itself.** A placebo window in the real
+window's position, k = 0, already shows +4.0 points against A's real +6.5.
+How often a justice sides with the government seems to fall over a career,
+whoever is president. So part of what A reads as loyalty is probably a
+justice's early years, not the appointer. On this evidence about +2.5
+points of the pooled +6.5 remain (A's real effect minus its k = 0 placebo;
++1.9 for E-excl). Epstein & Posner's footnote 7 found no acclimation effect
+within appointers' terms. They did not test the placebo above.
+
+This finding bears on the score as it stands, and it is not resolved here.
+A replacement has to pass this same placebo before it is shipped. One
+candidate is A with the k = 0 placebo, or a career-trend term, differenced
+out per justice. That needs its own study; this one is recorded rather than
+acted on.
 
 **Limits.**
 - Epstein & Posner's hand coding follows the Solicitor General; after 2014
