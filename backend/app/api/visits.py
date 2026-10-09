@@ -1,9 +1,9 @@
 """Privacy-respecting unique-visitor tracking.
 
-No raw IP or User-Agent is ever stored. `POST /api/track-visit` is fired by
-the frontend's middleware on a page load, and by the browser (through nginx,
-frontend NavigationBeacon) on a navigation inside the app — never on a
-prefetch (frontend lib/pageLoad.ts) — and records only an HMAC of
+No raw IP or User-Agent is ever stored. `POST /api/track-visit` is sent by
+the browser itself, through nginx (frontend NavigationBeacon), for the page
+it opened and each navigation after it — so a client that never runs the
+page is never counted — and records only an HMAC of
 the IP under a random salt that exists for the current UTC day and is then
 deleted — see SiteVisit in models.py for why that makes past hashes
 unrecoverable and why this table can't grow per-request.
@@ -525,17 +525,10 @@ def _extract_issue_public_id(raw: str) -> str | None:
 
 
 def _track_ip(request: Request) -> str:
-    # NOT app.api.rate_limit.client_ip(): that function only trusts
-    # X-Forwarded-For when the direct TCP peer is nginx (127.0.0.1), which
-    # is right for rate-limiting but wrong here. This endpoint is called
-    # by the frontend's own middleware directly over the internal Docker
-    # network (frontend -> backend:8000), bypassing nginx entirely, so the
-    # TCP peer is the frontend container, never 127.0.0.1. The frontend
-    # middleware already received a trustworthy X-Real-IP from nginx for
-    # the original browser request and relays it unchanged — trusting it
-    # here is reasonable because both hops (nginx->frontend, frontend-
-    # >backend) are on infra this deployment controls, not the public
-    # internet (backend:8000 isn't reachable outside the Docker network).
+    # The browser's beacon reaches this through nginx, which sets X-Real-IP
+    # for every request it proxies (nginx/civitas.conf) — the same header
+    # its rate limits are keyed by. backend:8000 isn't reachable outside
+    # the Docker network, so nothing else can supply it.
     forwarded = request.headers.get("X-Real-IP")
     if forwarded:
         return forwarded
