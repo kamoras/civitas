@@ -19,10 +19,10 @@ from pathlib import Path
 
 from app.pipeline.fetch.fec import (
     committee_id_of,
+    committee_industry,
     is_joint_fundraiser,
     is_political_committee,
     select_recent_elections,
-    structured_industry,
 )
 from app.pipeline.transform.candidate_names import is_candidate_self_donor
 from app.pipeline.transform.industry_classifier import classify_with_learning, primed_industry_lookups
@@ -375,8 +375,8 @@ def build_top_donors(
             ai_class = ai_classifications.get(key) or {}
             if ai_class.get("skip") or key in pac_skips:
                 continue
-            industry = structured_industry(meta) or (
-                ai_class.get("industry") or classify_with_learning(name, db_session)[0]
+            industry = committee_industry(
+                meta, lambda: ai_class.get("industry") or classify_with_learning(name, db_session)[0],
             )
             existing = donor_map.setdefault(key, {
                 "name": name, "total": 0, "type": committee_donor_type(meta), "industry": industry,
@@ -441,11 +441,8 @@ def build_top_donors(
             # Tier 1 (FEC and SEC records) outranks the name classifier:
             # the NRSC's name embeds near nothing political enough, and it
             # was headlining a senator's "gun industry" donor-vote match.
-            structured = structured_industry(meta)
-            if structured and existing.get("type") not in (
-                "Self-Funded", "CandidateAffiliated", "SKIP",
-            ):
-                existing["industry"] = structured
+            if existing.get("type") not in ("Self-Funded", "CandidateAffiliated", "SKIP"):
+                existing["industry"] = committee_industry(meta, lambda: existing.get("industry") or "OTHER")
         donor_map[name_upper] = existing
 
     # 2a. Employees, from the FEC's employer totals.
@@ -542,15 +539,21 @@ def build_top_donors(
 # cached for 654 committees (70,744 names): 829 names were another's
 # spelling but for punctuation; of 95,409 pairs one word apart, 168 sampled
 # across the similarity bands from 0.70 up were judged by hand (112 the same
-# employer). At 5 letters and 0.80 the merge is right on an estimated 95.5%
-# of the pairs it joins and finds 78.7% of the one-word misspellings (0.85:
+# employer). At 5 letters and 0.80 the merge is right on an estimated 94.1%
+# of the pairs it joins (95.5% on the sample alone, before three known wrong
+# joins were added) and finds 78.7% of the one-word misspellings (0.85:
 # 96.5% and 69%; 0.75 at 4 letters: 85% and 89%). The wrong joins are
 # near-namesakes: "Avalon Ventures" / "Avalon BioVentures", and two pairs of
 # universities whose names differ by a compass word ("Northeastern" /
 # "Northwestern"). Refusing a join when both words are in the bill-title
 # vocabulary was measured and not used: of the 198 joins the rule makes in
 # the cache it stops 9, two of them rightly, three of them real misspellings
-# ("Country" / "County", "Technologies" / "Technology").
+# ("Country" / "County", "Technologies" / "Technology"). So was a guard on
+# how often each spelling appears across the 654 committees' lists (a
+# misspelling should be rare beside its correct form): nearly every
+# spelling, right or wrong, is in one list, so true pairs have a ratio of
+# 1.0; capping it at a third kept precision at 95.6% and cut recall to 42%,
+# and by dollars a tenth gave 98.2% and 31.5%.
 EMPLOYER_TYPO_MIN_RATIO = 0.80
 _EMPLOYER_TYPO_MIN_LEN = 5
 _NOT_NAME_CHARS_RE = re.compile(r"[^A-Z0-9&]+")
@@ -733,7 +736,7 @@ def _build_industry_breakdown(
             key = name.upper().strip()
             if _should_skip_for_breakdown(key):
                 continue
-            _add(structured_industry(meta) or _get_industry(name, key), amount, committee_part)
+            _add(committee_industry(meta, lambda: _get_industry(name, key)), amount, committee_part)
             counted_donors.add(key)
 
     for r in pac_receipts if pacs is None else []:
@@ -757,7 +760,7 @@ def _build_industry_breakdown(
         # Same tier-1 rule as build_top_donors: the FEC's registration, not
         # the name, decides that a party/candidate/leadership committee's
         # money is political rather than an industry's.
-        industry = structured_industry(meta) or _get_industry(org, org_upper)
+        industry = committee_industry(meta, lambda: _get_industry(org, org_upper))
         _add(industry, amount, committee_part)
         counted_donors.add(org_upper)
 

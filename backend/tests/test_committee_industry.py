@@ -36,6 +36,21 @@ def test_structured_industry(meta, industry):
     assert fec.structured_industry(meta) == industry
 
 
+@pytest.mark.parametrize("meta,name_industry,industry", [
+    # A credit unions' trade association whose name reads as a union.
+    ({"type": "Q", "designation": "B", "orgType": "T", "connectedOrg": "A CREDIT UNION LEAGUE"}, "LABOR_UNIONS", "OTHER"),
+    ({"type": "Q", "designation": "B", "orgType": "C", "connectedOrg": "A RAILROAD"}, "LABOR_UNIONS", "OTHER"),
+    # Any other reading of a trade association's name stands.
+    ({"type": "Q", "designation": "B", "orgType": "T", "connectedOrg": "A BANKERS GROUP"}, "FINANCE", "FINANCE"),
+    # A labor organization is decided by its type; no type recorded, the name stands.
+    ({"type": "Q", "designation": "B", "orgType": "L", "connectedOrg": "A UNION"}, "OTHER", "LABOR_UNIONS"),
+    ({"type": "Q", "designation": None, "connectedOrg": None}, "LABOR_UNIONS", "LABOR_UNIONS"),
+    (None, "LABOR_UNIONS", "LABOR_UNIONS"),
+])
+def test_a_union_reading_needs_a_labor_organization(meta, name_industry, industry):
+    assert fec.committee_industry(meta, lambda: name_industry) == industry
+
+
 @pytest.mark.asyncio
 async def test_a_corporate_sponsor_takes_its_sec_industry(db_session):
     metas = {
