@@ -100,7 +100,10 @@ export default async function ElectionsChapter() {
           So each page covers what&apos;s uniform statewide and lists what it omits (county and city
           offices, local measures, primary ballots and so on), with a link to your own election
           office. Once a gap closes for a state, it comes off that state&apos;s list: a disclaimer
-          that outlives the gap stops describing the page.
+          that outlives the gap stops describing the page. And the list names only gaps a state
+          actually has: no judicial line where judges are appointed or elected at another election,
+          no &ldquo;retention questions&rdquo; where voters never decide whether to keep a judge, no
+          legislative line in a year the state elects no legislature.
         </P>
         <P>
           That link goes to the state&apos;s own voter lookup, where you can see your sample ballot
@@ -446,17 +449,22 @@ export default async function ElectionsChapter() {
             Ballot titles are among the most litigated documents in election law: courts have voided
             measures over a legislature&apos;s wording. So each quote names its author
             (&ldquo;Drafted by the Georgia General Assembly&rdquo;, &ldquo;Prepared by the
-            Legislative Analyst&rsquo;s Office&rdquo;): who wrote it tells you how to weigh it. We
-            don&apos;t reproduce the pro and con arguments in voter guides; campaigns write those,
-            some states sell the slots, and printing them as a matched pair would manufacture a
-            balance that may not exist.
+            Legislative Analyst&rsquo;s Office&rdquo;): who wrote it tells you how to weigh it.
+            Where the summary or the yes/no description has a different author from the title, as in
+            Alabama, where a Fair Ballot Commission writes them under the Legislature&apos;s
+            question, each names its own. Where the law leaves it open who wrote a text, we name
+            everyone it could be rather than guess one. Measures are listed in the order the state
+            lists them. We don&apos;t reproduce the pro and con arguments in voter guides; campaigns
+            write those, some states sell the slots, and printing them as a matched pair would
+            manufacture a balance that may not exist.
           </P>
         </Sub>
         <Sub title="“No measures” is different from “we don’t know yet”">
           <P>
             An empty section reads as &ldquo;nothing to research&rdquo;: a damaging thing to imply
             about a state with seventeen amendments pending. So a state is shown as having no
-            statewide measures only when its official source establishes it, and a state we
+            statewide measures only when its official source establishes it (or, as in Delaware, its
+            constitution allows none: amendments there take no popular vote), and a state we
             haven&apos;t covered, or whose ingest failed, says <em>that</em> and points to the
             official lookup. Measures removed from the ballot (courts have struck about 2.3% since
             1995) are marked removed and kept for a while, not silently deleted.

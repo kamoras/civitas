@@ -149,6 +149,35 @@ class TestUtah:
     def test_refuses_another_years_certification(self):
         assert ut.parse_certification(self.text, 2028) is None
 
+    def _page_linking(self, *hrefs):
+        links = "".join(f'<a href="{h}">certification</a>' for h in hrefs)
+        return f"<html><body><h2>2026 Election Cycle</h2>{links}</body></html>"
+
+    def test_the_amended_certification_is_found(self):
+        """2026's page links only the September 21 amendment, which the
+        exact-filename pattern this once had never matched — the state
+        read as not yet published for weeks."""
+        url, ok = ut.find_certification_url(self._page_linking(*self.fx["amended_current_page_links"]), 2026)
+        assert ok and url.endswith("/2026-General-Election-Certification-Amended-09-21.pdf")
+
+    def test_the_latest_amendment_wins_and_a_tie_refuses(self):
+        base = "https://vote.utah.gov/wp-content/uploads/2026/"
+        original = base + "08/2026-General-Election-Certification.pdf"
+        first = base + "09/2026-General-Election-Certification-Amended-09-21.pdf"
+        later = base + "10/2026-General-Election-Certification-Amended-10-02.pdf"
+        assert ut.find_certification_url(self._page_linking(original, later, first), 2026) == (later, True)
+        assert ut.find_certification_url(self._page_linking(original), 2026) == (original, True)
+        twin = base + "10/copy/2026-General-Election-Certification-Amended-10-02.pdf"
+        assert ut.find_certification_url(self._page_linking(later, twin), 2026) == (None, False)
+
+    def test_the_amended_certification_parses_in_text_flow_order(self):
+        amended = "\n".join(self.fx["amended_certification_pages"])
+        assert [m["number"] for m in ut.parse_certification(amended, 2026)] == ["A", "B"]
+        # The default left-to-right order interleaves the OCR layer's
+        # overlapping words, and neither required statement can be found.
+        default_order = "\n".join(self.fx["amended_certification_page1_default_order"])
+        assert "2026 GENERAL ELECTION CERTIFICATION" not in default_order
+
     @pytest.mark.asyncio
     async def test_fetch_paths(self, monkeypatch):
         page = {"html": self.fx["current_page"]}
@@ -162,7 +191,7 @@ class TestUtah:
 
         monkeypatch.setattr(ut, "get_text", get_text)
         monkeypatch.setattr(ut, "get_bytes", get_bytes)
-        monkeypatch.setattr(ut, "pdf_text", lambda raw: raw)
+        monkeypatch.setattr(ut, "pdf_text_flow", lambda raw: raw)
         assert [p["number"] for p, _ in await ut.fetch_measures(None, 2026)] == ["A", "B"]
 
         page["html"] = self.fx["current_page"].replace("2026-General-Election-Certification.pdf", "x.pdf")
@@ -194,7 +223,10 @@ class TestNevada:
         # A sentence broken by a page footer / stray line still reads whole.
         assert seven["yes_means"].endswith("provide certain information in order to cast a legal ballot.")
         assert seven["no_means"] == "A “No” vote would keep the Nevada Constitution in its current form."
-        assert six["fiscal_impact"].startswith("FINANCIAL IMPACT – CANNOT BE DETERMINED")
+        assert six["fiscal_impact"].startswith("FINANCIAL IMPACT – CANNOT BE DETERMINED\nOVERVIEW\nThe Statewide")
+        # Each of the note's own headings keeps its line, not run into prose.
+        assert "\nFINANCIAL IMPACT OF THE INITIATIVE\nPursuant to Article 19" in six["fiscal_impact"]
+        assert "\n• Section 1C would require" in seven["fiscal_impact"]
         assert six["fiscal_impact"].endswith("Legislative Counsel Bureau – August 1, 2024")
         assert "approximately $6,750" in seven["fiscal_impact"]
         assert seven["fiscal_authority"] == "Fiscal Analysis Division of the Legislative Counsel Bureau"
@@ -261,7 +293,11 @@ class TestGeorgia:
         assert three["title"] == (
             "Authorizes creation of Georgia Next Generation 9-1-1 Fund for 9-1-1 systems expansion, maintenance, and operation."
         )
-        assert three["official_summary"].startswith("Summary: This proposal authorizes the General Assembly")
+        # The summary alone: the booklet's "Summary" heading is not written
+        # into it. Its drafters are named in their own field.
+        assert three["official_summary"].startswith("This proposal authorizes the General Assembly")
+        assert three["summary_authority"] == ga.SUMMARY_AUTHORITY
+        assert "Constitutional Amendments Publication Board" in three["title_authority"]
         assert three["official_summary"].endswith("by adding a new subparagraph (s).")
         for m in (one, two, three):
             assert "( )" not in m["official_title"] and "YES" not in m["official_title"]

@@ -24,8 +24,10 @@ Each ballot-language PDF is one page (verified on both 2026 measures):
 
 — number and title from the heading, the explanation as the official
 summary, the fiscal sentence as the fiscal impact, and the state's own
-"Yes – Means ..." / "No – Means ..." lines as yes/no framing, all
-verbatim. The fiscal estimate is the Legislative Council's (the
+"Yes – Means ..." / "No – Means ..." lines, whole, as yes/no framing,
+all verbatim. The summary and the yes/no statement are drafted by the
+Secretary of State in consultation with the Attorney General (NDCC
+16.1-06-09(1)). The fiscal estimate is the Legislative Council's (the
 office's own "Analysis" PDF for each measure says so, citing NDCC
 16.1-01-17). Origin: a heading reading "Initiated ..." is a citizen
 initiative; one carrying a legislative resolution citation is
@@ -61,8 +63,15 @@ _rate_limiter = RateLimiter(rps=1.0)
 
 _HEADING_RE = re.compile(r"^((?:Initiated\s+)?(?:Constitutional|Statutory|Referred)?\s*Measure\s+No\.\s*(\d+))\s*$", re.I)
 _FISCAL_RE = re.compile(r"^The estimated fiscal impact of this measure is\b", re.I)
-_YES_RE = re.compile(r"^Yes\s*[–—-]\s*(Means .*)$", re.DOTALL)
-_NO_RE = re.compile(r"^No\s*[–—-]\s*(Means .*)$", re.DOTALL)
+# The whole printed line, "Yes – Means you approve ...": the state's
+# framing begins with the answer it explains, and "Means you approve ..."
+# alone is a fragment.
+_YES_RE = re.compile(r"^(Yes\s*[–—-]\s*Means .*)$", re.DOTALL)
+_NO_RE = re.compile(r"^(No\s*[–—-]\s*Means .*)$", re.DOTALL)
+# NDCC 16.1-06-09(1): the summary and the statement of the effect of a
+# yes or no vote are written by the Secretary of State in consultation
+# with the Attorney General.
+DRAFTING_AUTHORITY = "North Dakota Secretary of State, in consultation with the Attorney General (NDCC 16.1-06-09)"
 _LEG_CITATION_RE = re.compile(r"^\((?:House|Senate) Concurrent Resolution No\.", re.I)
 
 
@@ -152,7 +161,10 @@ def parse_ballot_language(text: str) -> dict | None:
         "fiscal_impact": fiscal,
         "yes_means": yes_means,
         "no_means": no_means,
-        "title_authority": None,
+        # No official title is printed, so this names the summary's
+        # drafter (see BallotMeasure.title_authority).
+        "title_authority": DRAFTING_AUTHORITY,
+        "framing_authority": DRAFTING_AUTHORITY,
         "fiscal_authority": FISCAL_AUTHORITY,
     }
 

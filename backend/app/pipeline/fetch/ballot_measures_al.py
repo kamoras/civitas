@@ -14,7 +14,9 @@ Read from each statement, verbatim:
 - title: the quoted ballot text from section (1) — what the Legislature
   wrote into the Act and what is printed on the ballot, so
   title_authority is the Alabama Legislature.
-- official_summary: section (4)'s summary paragraphs.
+- official_summary: section (4)'s summary paragraphs, drafted by the
+  Fair Ballot Commission (summary_authority, and framing_authority for
+  the yes/no sentences below).
 - yes_means / no_means: section (4)'s own "If the majority of voters
   vote “yes” on Amendment N, ..." sentences — the state's framing,
   lifted whole, never derived.
@@ -59,6 +61,9 @@ logger = logging.getLogger(__name__)
 LANDING_URL = "https://www.sos.alabama.gov/alabama-votes/voter/ballot-measures/statewide"
 TITLE_AUTHORITY = "Alabama Legislature"
 FISCAL_AUTHORITY = "Alabama Fair Ballot Commission"
+# Ala. Code §17-6-81: the Commission writes the plain-language summary,
+# including what a YES and a NO vote do, under the Legislature's question.
+SUMMARY_AUTHORITY = FRAMING_AUTHORITY = "Alabama Fair Ballot Commission (Ala. Code §17-6-81)"
 ORIGIN = "Alabama Legislature"
 
 _LINK_TEXT_RE = re.compile(r"Statewide\s+Amendment\s+(\d+)\s*$", re.IGNORECASE)
@@ -136,6 +141,8 @@ def parse_statement(text: str, number: str, year: int) -> dict | None:
         "yes_means": clean_text(yes.group(0)),
         "no_means": clean_text(no.group(0)),
         "title_authority": TITLE_AUTHORITY,
+        "summary_authority": SUMMARY_AUTHORITY,
+        "framing_authority": FRAMING_AUTHORITY,
         "fiscal_authority": FISCAL_AUTHORITY if fiscal else None,
     }
 

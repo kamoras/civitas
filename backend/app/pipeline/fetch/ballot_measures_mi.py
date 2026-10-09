@@ -175,6 +175,12 @@ def parse_lines(pages: list[list[tuple[str, bool]]], year: int) -> list[dict] | 
                 # Keep the document's own bullet list a list (the card renders
                 # official_summary with pre-line whitespace); no word changes.
                 question = re.sub(r"\s*•\s*", "\n• ", question)
+                if "•" in question:
+                    # The closing question ("Should this proposal be
+                    # adopted?") is its own sentence after the last bullet,
+                    # not part of it: the sentence after the last bullet's
+                    # full stop that ends the text with "?".
+                    question = re.sub(r"(?<=\.)\s+([A-Z][^.•]*\?)$", r"\n\n\1", question)
             if not title or not question:
                 logger.warning("MI Proposal %s didn't match the verified shape — refusing the document", number)
                 return None

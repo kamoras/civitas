@@ -244,6 +244,17 @@ everything below reads it.
   page's "Not on this page" list (the API's `omits`) names it instead. If
   that leaves the State column empty, a "State offices — not loaded yet"
   contest stands in, so the column never reads as a state electing nobody.
+  The judicial and legislative lines of `omits` name only gaps the state
+  has that year (`data/state_ballot_scope.json`, `app/state_ballot_scope.py`):
+  none where judges are appointed or elected at another election, no
+  "retention questions" where there are no retention votes, no legislative
+  line in a year with no legislative election.
+- Statewide measures are listed in the state's own order (`source_position`,
+  each measure's place in its reader's list), never by the printed number
+  sorted as text. Each quote carries its own drafter: `titleAuthority`
+  beside the official title, `summaryAuthority` (or, with no title,
+  `titleAuthority`) beside the summary, `framingAuthority` beside the yes/no
+  sentences.
 - Federal contests carry their term: 2-year (House), 6-year (Senate), or
   "fills the rest of the term" (special Senate). State offices, chambers and
   courts carry `termYears` from `data/office_terms.json` (`app/office_terms.py`),

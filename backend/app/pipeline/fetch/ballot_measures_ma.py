@@ -96,8 +96,10 @@ _TITLE_SIZE_MIN = 18.0
 _ZONE_MARKERS = ("SUMMARY", "WHAT", "STATEMENT", "ARGUMENTS")
 
 _QUESTION_RE = re.compile(r"^QUESTION\s+(\d+):\s*(.*)$")
-_YES_VOTE_RE = re.compile(r"^A YES VOTE\s+(.*)$", re.IGNORECASE)
-_NO_VOTE_RE = re.compile(r"^A NO VOTE\s+(.*)$", re.IGNORECASE)
+# The whole sentence, "A YES VOTE would ...": the guide's framing names
+# the answer it explains, and "would ..." alone is a fragment.
+_YES_VOTE_RE = re.compile(r"^(A YES VOTE\s+.*)$", re.IGNORECASE | re.DOTALL)
+_NO_VOTE_RE = re.compile(r"^(A NO VOTE\s+.*)$", re.IGNORECASE | re.DOTALL)
 
 
 def _page_markers(page_rows: dict, row_ids_sorted: list[int]) -> dict:

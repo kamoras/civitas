@@ -33,10 +33,12 @@ question — the words after the answer boxes, without the quotation marks
 that enclose boxes and question together — as official_title (it is the
 text the resolution requires on the ballot, as Idaho's reader stores its
 questions), with title_authority the General Assembly, whose resolution
-writes it; "Summary: <summary>" — under the booklet's own heading — as
+writes it; the summary under the booklet's "Summary" heading as
 official_summary, in its own field because it has other drafters (the
 Attorney General, Secretary of State and Legislative Counsel, as the
-booklet's introduction names them): one quote, one drafter.
+booklet's introduction names them), credited as summary_authority. The
+heading itself is not stored: it used to be written in as "Summary: ",
+words and a colon the summary doesn't contain.
 The booklet prints no yes/no explanation and no fiscal statement; those
 stay None. All amendments are General Assembly resolutions (Georgia has
 no initiative).
@@ -84,7 +86,16 @@ logger = logging.getLogger(__name__)
 
 LANDING_URL = "https://sos.ga.gov/page/proposed-georgia-constitution-amendments"
 ORIGIN = "Georgia General Assembly"
-TITLE_AUTHORITY = "Georgia General Assembly"
+# The ballot question is the General Assembly's (its resolution writes it);
+# the short caption above it is the Constitutional Amendments Publication
+# Board's, as the booklet says of its captions. Both named beside the
+# question, since the caption is the card's label line.
+TITLE_AUTHORITY = (
+    "Georgia General Assembly (ballot question); short caption adopted by the "
+    "Constitutional Amendments Publication Board"
+)
+# Ga. Const. art. X, §I, ¶II, as the booklet's introduction names them.
+SUMMARY_AUTHORITY = "Georgia Attorney General, Secretary of State and Legislative Counsel (Ga. Const. art. X, §I, ¶II)"
 
 # Georgia generals usually also carry statute-referred "Statewide
 # Referendum Question" items (2018-2024 all did). 2024's were printed in
@@ -295,11 +306,12 @@ def parse_booklet(pages: list[dict], year: int) -> list[dict] | None:
             "title": join_lines(r["caption"]),
             "official_title": r["question"],
             "origin": ORIGIN,
-            "official_summary": f"Summary: {join_lines(r['summary'])}",
+            "official_summary": join_lines(r["summary"]),
             "fiscal_impact": None,
             "yes_means": None,
             "no_means": None,
             "title_authority": TITLE_AUTHORITY,
+            "summary_authority": SUMMARY_AUTHORITY,
             "fiscal_authority": None,
         })
     if [m["number"] for m in measures] != [str(i) for i in range(1, expected + 1)]:

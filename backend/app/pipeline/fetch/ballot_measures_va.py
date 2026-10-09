@@ -20,11 +20,10 @@ reconstruct): "EXPLANATION FOR VOTERS" / "QUESTION N" followed by
 "Present Law" and "Proposed Amendment" paragraphs (joined as
 official_summary — verbatim, just the "Proposed Amendment" sub-heading
 label itself dropped from between them), then a page break to "BALLOT
-QUESTION" (the literal text put to voters — used only to validate the
-document's shape, never stored: it's a separate section of the source,
-and no field in the current BallotMeasure contract holds it, so
-concatenating it into official_summary with inserted text would blend
-sourced and authored wording) and "FULL TEXT OF AMENDMENT" (the legal
+QUESTION" (the literal text put to voters, "Should the Constitution of
+Virginia be amended to ...?" — stored as official_title, the field that
+holds the ballot question for every state that prints one, in its own
+field rather than joined to the explanation) and "FULL TEXT OF AMENDMENT" (the legal
 redline, not extracted — same "narrative summary only" scope as every
 other state here). No "A YES vote means.../A NO vote means..." framing
 is published (unlike CA/MA/CO) — same as Louisiana, yes_means/no_means
@@ -51,7 +50,12 @@ voting-rights restoration) — 3/3 parse cleanly with a real official
 Present-Law/Proposed-Amendment summary and the real ballot question
 text, English PDF correctly distinguished from the Spanish/Korean/
 Vietnamese versions the same page links (language versions are named
-with a "-ES"/"-KO"/"-VI" suffix; English has none).
+with a "-ES"/"-KO"/"-VI" suffix; English has none). The English file is
+the one whose name the translations extend: as of 2026-10-08 each
+question page also links a brochure and a poster ("...Brochure---EN.pdf"
+beside "---SP"/"---VI"/"---KO"), and "any name not ending in a two-letter
+code" would also have taken an English file whose name happened to end
+in two letters ("...-VA.pdf").
 """
 
 import io
@@ -83,14 +87,10 @@ _QUESTION_LINK_RE = re.compile(
     r'href="(/election-law/proposed-constitutional-amendment-question-(\d+)/)"',
 )
 _PDF_LINK_RE = re.compile(r'href="([^"]+\.pdf)"', re.IGNORECASE)
-# The four language versions share one filename with a trailing
-# "-XX.pdf" code; English is the one WITHOUT that suffix. Checked
-# against a 2-letter code specifically so a filename that legitimately
-# ends in two consonants (unlikely, but this is text from a real .gov
-# site, not a controlled vocabulary) doesn't accidentally match.
-# Case-insensitive: verified live as uppercase ("-ES.pdf"), but nothing
-# about a .gov CMS guarantees that casing survives a future republish.
-_LANGUAGE_SUFFIX_RE = re.compile(r"-[A-Za-z]{2}\.pdf$", re.IGNORECASE)
+# The language versions share the English file's name plus a trailing
+# "-XX" code. Case-insensitive: verified live as uppercase ("-ES.pdf"),
+# but nothing about a .gov CMS guarantees that casing survives.
+_LANGUAGE_SUFFIX = r"-[A-Za-z]{2}\.pdf$"
 
 # Cross-checked against the URL slug's own question number (see
 # fetch_measures) — the slug says which page linked here, this says what
@@ -105,26 +105,33 @@ _SECTION_TITLE_RE = re.compile(r"Section\s+\S+\.\s*([^.\n]+)\.")
 _SUMMARY_RE = re.compile(
     r"Present Law\s*(.*?)\s*Proposed Amendment\s*(.*?)\s*Word Count:", re.IGNORECASE | re.DOTALL,
 )
-# Validates the document actually carries a real "BALLOT QUESTION"
-# section (a structural shape check, same role summary_match plays) —
-# its captured text is deliberately NOT stored in official_summary: the
-# Present-Law/Proposed-Amendment explanation and the ballot question
-# are two different sections of the source document, and concatenating
-# them with inserted text ("Ballot question: ...") would blend sourced
-# text with wording this module authored — exactly what AGENTS.md's
-# "ballot content is quoted, never generated" principle rules out. No
-# field in the current BallotMeasure contract holds the literal ballot
-# question text; adding one is a real schema change, out of scope here.
+# The "BALLOT QUESTION" section — the question as printed on the ballot,
+# stored as official_title. Never joined to official_summary: the
+# explanation and the question are two sections of the source, and
+# concatenating them with inserted text ("Ballot question: ...") would
+# blend sourced text with wording this module authored.
 _BALLOT_QUESTION_RE = re.compile(
     r"BALLOT QUESTION\s*(.*?)\s*FULL TEXT OF AMENDMENT", re.IGNORECASE | re.DOTALL,
 )
+
+# Each explanation's first line says who approved it ("APPROVED BY JOINT
+# P&E COMMITTEE 6/22/2026" on all three 2026 documents): the General
+# Assembly's Privileges and Elections Committees, named as the explanation's
+# drafter only when the document says so.
+_APPROVED_BY_RE = re.compile(r"^\s*APPROVED BY JOINT P&E COMMITTEE\b", re.IGNORECASE)
+SUMMARY_AUTHORITY = "Virginia General Assembly's Privileges and Elections Committees (approved the explanation)"
 
 _rate_limiter = RateLimiter(rps=1.0)
 
 
 def _english_pdf_url(question_page_html: str, base_url: str) -> str | None:
-    candidates = [m.group(1) for m in _PDF_LINK_RE.finditer(question_page_html)]
-    english = [c for c in candidates if not _LANGUAGE_SUFFIX_RE.search(c)]
+    """The one linked PDF whose name the translations extend with a
+    language code ("X.pdf" beside "X-ES.pdf"), or None if not exactly one."""
+    candidates = list(dict.fromkeys(m.group(1) for m in _PDF_LINK_RE.finditer(question_page_html)))
+    english = [
+        c for c in candidates
+        if any(re.fullmatch(re.escape(c[:-4]) + _LANGUAGE_SUFFIX, o, re.IGNORECASE) for o in candidates if o != c)
+    ]
     if len(english) != 1:
         return None
     # urljoin, not a hardcoded domain: handles a relative href with no
@@ -154,7 +161,8 @@ def parse_document(full_text: str, number: str) -> dict | None:
         return None
     present_law = clean_text(summary_match.group(1))
     proposed_amendment = clean_text(summary_match.group(2))
-    if not present_law or not proposed_amendment or not clean_text(question_match.group(1)):
+    question = clean_text(question_match.group(1))
+    if not present_law or not proposed_amendment or not question:
         return None
 
     # The PDF's own "QUESTION N" heading, cross-checked against the
@@ -176,12 +184,16 @@ def parse_document(full_text: str, number: str) -> dict | None:
     return {
         "number": number,
         "title": title,
+        # The ballot question, verbatim ("Should the Constitution of
+        # Virginia be amended to ...?").
+        "official_title": question,
         "origin": ORIGIN,
         "official_summary": f"{present_law} {proposed_amendment}",
         "fiscal_impact": None,
         "yes_means": None,
         "no_means": None,
         "title_authority": TITLE_AUTHORITY,
+        "summary_authority": SUMMARY_AUTHORITY if _APPROVED_BY_RE.match(full_text) else None,
         "fiscal_authority": None,
     }
 

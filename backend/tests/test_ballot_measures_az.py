@@ -47,12 +47,12 @@ def test_ballot_format_is_quoted_without_the_ovals_or_the_side_tab():
         "MONITORING OR LIMITING VEHICLE MILES TRAVELED WITHOUT CONSENT."
     )
     assert p141["yes_means"] == (
-        "shall have the effect of amending the Arizona Constitution to prohibit: (1) taxes or fees based on "
+        "A “yes” vote shall have the effect of amending the Arizona Constitution to prohibit: (1) taxes or fees based on "
         "motor vehicle miles traveled; and (2) laws or rules that monitor or limit motor vehicle miles traveled "
         "without consent. These prohibitions do not apply in certain instances to interstate commercial "
         "vehicles or to vehicles owned by the state or local governments."
     )
-    assert p141["no_means"] == "shall have the effect of maintaining the current constitutional language related to taxation."
+    assert p141["no_means"] == "A “no” vote shall have the effect of maintaining the current constitutional language related to taxation."
     # A right-hand page whose tab number sits beside the NO statement.
     assert by_number["142"]["no_means"].endswith("based on race, ethnicity, or other classes.")
     # A left-hand page, whose designation line starts left of the body.

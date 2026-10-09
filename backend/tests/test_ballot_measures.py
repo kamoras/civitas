@@ -1593,7 +1593,7 @@ def test_every_unread_state_has_a_reason_and_no_read_state_claims_one():
     assert unread == expected
     assert not unread & sources.configured_states()
     for state, entry in registry["unread"].items():
-        assert set(entry) == {"reason", "dev_note"}, state
+        assert set(entry) in ({"reason", "dev_note"}, {"reason", "dev_note", "none_by_law"}), state
         assert len(entry["reason"]) > 20 and entry["dev_note"], state
 
 
@@ -1611,7 +1611,10 @@ def test_unread_reasons_make_no_claim_about_network_access():
     for state, entry in sources._load()["unread"].items():
         reason = entry["reason"].lower()
         assert not [w for w in network_words if w in reason], (state, reason)
-        assert ("does not read" in reason and "automatically yet" in reason) or "publish" in reason or "posted" in reason, state
+        assert (
+            ("does not read" in reason and "automatically yet" in reason) or "publish" in reason
+            or "posted" in reason or "none_by_law" in entry
+        ), state
 
 
 def test_unread_reasons_are_true_in_any_cycle():
@@ -1640,7 +1643,7 @@ def test_the_page_gives_an_unread_states_reason(db_session):
     assert ny["unreadReason"] == "Civitas does not read New York's official measure list automatically yet."
     assert "dev_note" not in json.dumps(ny) and "Cloudflare" not in json.dumps(ny)
     de = _body(elections.state_ballot("DE", db=db_session))["measureCoverage"]
-    assert de["unreadReason"].startswith("Delaware publishes no statewide list")
+    assert de["unreadReason"].startswith("Delaware's Constitution has the General Assembly adopt amendments")
     assert _body(elections.state_ballot("CA", db=db_session))["measureCoverage"]["unreadReason"] is None
 
 
@@ -1654,3 +1657,57 @@ async def test_an_unread_states_coverage_records_its_reason(monkeypatch, db_sess
     await election_pipeline._sync_ballot_measures(db_session, None, 2026)
     row = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "MS").one()
     assert row.error_detail == "no direct source: Mississippi publishes no list."
+
+
+@pytest.mark.asyncio
+async def test_a_state_whose_law_allows_no_measure_is_confirmed_none(monkeypatch, db_session):
+    """Delaware adopts amendments without a popular vote and has no
+    initiative or referendum: its page says none, citing that law, rather
+    than "not yet covered" forever. Only unread states with a registry
+    `none_by_law` get this; every other unread state is still not covered."""
+    _direct_source(monkeypatch, [["1"]])
+    monkeypatch.setattr(election_pipeline, "federal_states", lambda: frozenset({"CA", "DE", "NY"}))
+    await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    de = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "DE").one()
+    assert de.status == MeasureCoverage.CONFIRMED_NONE
+    assert de.source_name == "Delaware Constitution, art. XVI, §1"
+    assert de.error_detail.startswith("none by law: ")
+    assert de.last_success_at is not None
+    ny = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "NY").one()
+    assert ny.status == MeasureCoverage.NOT_YET_COVERED
+
+
+def test_measures_are_listed_in_the_states_own_order(db_session):
+    """`number` sorted as a string put Louisiana's 10 before its 2 and
+    Colorado's Propositions 132-137 before Amendments 81-87. The page uses
+    each measure's place in the state's own document, and a row written
+    before that existed sorts after, its number compared digit-run by
+    digit-run."""
+    election = _page_election()
+    for pos, number in enumerate(["Amendment 81", "Amendment 87", "Proposition 132"]):
+        _measure(db_session, f"CO-{election}-{pos}", state="CO", date=election, number=number, source_position=pos)
+    for number in ["10", "2", "1"]:
+        _measure(db_session, f"LA-{election}-{number}", state="LA", date=election, number=number)
+    db_session.commit()
+    co = [m["number"] for m in _body(elections.state_ballot("CO", db=db_session))["measures"]]
+    assert co == ["Amendment 81", "Amendment 87", "Proposition 132"]
+    la = [m["number"] for m in _body(elections.state_ballot("LA", db=db_session))["measures"]]
+    assert la == ["1", "2", "10"]
+
+
+def test_a_rekeyed_measure_keeps_its_title_and_is_superseded_not_removed(db_session):
+    """A record whose id and number both change (Wyoming's heading-as-number,
+    New Mexico's "HB 248 (1)" -> "Bond Question 1") is the same measure:
+    deleted as superseded, never shown "no longer on the ballot" beside
+    itself."""
+    election = _page_election()
+    _measure(db_session, f"NM-{election}-HB-248-1", state="NM", date=election, number="HB 248 (1)",
+             title="The bond act authorizes senior bonds.", source_name="NM")
+    _measure(db_session, f"NM-{election}-old", state="NM", date=election, number="9",
+             title="A measure the state dropped.", source_name="NM")
+    db_session.commit()
+    incoming = [{"id": f"NM-{election}-Bond-Question-1", "number": "Bond Question 1",
+                 "title": "The bond act authorizes senior bonds."}]
+    assert election_pipeline._supersede_rows(db_session, "NM", election, "NM", incoming) == 1
+    left = [m.id for m in db_session.query(BallotMeasure).filter(BallotMeasure.state == "NM")]
+    assert left == [f"NM-{election}-old"]

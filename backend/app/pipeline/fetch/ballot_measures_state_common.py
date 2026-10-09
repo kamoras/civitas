@@ -111,6 +111,23 @@ async def get_text_unless_missing(
     return text
 
 
+async def get_bytes_unless_missing(
+    client: httpx.AsyncClient, url: str, label: str, awaited: str, *, deadline_applies: bool = True,
+) -> bytes | None:
+    """get_bytes for a document at the state's own per-election address: a
+    404 raises NotYetPublished(`awaited`), any other failure is None —
+    the bytes counterpart of get_text_unless_missing."""
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS,
+        expected_statuses=(404,),
+    )
+    if resp is None:
+        return None
+    if resp.status_code == 404:
+        raise NotYetPublished(awaited, deadline_applies=deadline_applies)
+    return resp.content
+
+
 async def get_bytes(client: httpx.AsyncClient, url: str, label: str, **kwargs) -> bytes | None:
     return await fetch_bytes_with_retry(client, _rate_limiter, url, label, **kwargs)
 
@@ -136,6 +153,15 @@ def pdf_text(raw: bytes) -> str:
     plain text rather than binary PDFs."""
     with pdfplumber.open(io.BytesIO(raw)) as pdf:
         return "\n".join(page.extract_text() or "" for page in pdf.pages)
+
+
+def pdf_text_flow(raw: bytes) -> str:
+    """pdf_text in the PDF's own text order (use_text_flow) rather than
+    pdfplumber's left-to-right reading of each line: an OCR text layer
+    whose word boxes overlap (Utah's scanned certifications) otherwise
+    interleaves the letters of neighbouring words."""
+    with pdfplumber.open(io.BytesIO(raw)) as pdf:
+        return "\n".join(page.extract_text(use_text_flow=True) or "" for page in pdf.pages)
 
 
 def pdf_pages(raw: bytes) -> list[str]:
