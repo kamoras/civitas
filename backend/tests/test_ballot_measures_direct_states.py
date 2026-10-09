@@ -81,6 +81,10 @@ class TestAlabama:
         assert one["no_means"] == "If the majority of voters vote “no” on Amendment 1, the Alabama Constitution will not be changed."
         assert one["fiscal_impact"] == "There are no costs or taxes associated with Amendment 1."
         assert one["fiscal_authority"] == "Alabama Fair Ballot Commission"
+        # The Commission, not the Legislature, wrote the summary and the
+        # yes/no sentences (Ala. Code §17-6-81); the question is the Act's.
+        assert one["title_authority"] == "Alabama Legislature"
+        assert one["summary_authority"] == one["framing_authority"] == al.SUMMARY_AUTHORITY
         # The summary stops before the state's own yes/no sentences.
         assert "majority of voters" not in one["official_summary"]
 
@@ -117,18 +121,24 @@ class TestArkansas:
     def test_reads_only_the_general_assembly_section(self):
         links = ar.issue_links(self.fx["landing_html"], ar.LANDING_URL, 2026)
         assert sorted(links) == ["1", "2", "3", "4"]
+        # The page's own http:// links are followed, and stored, as https://.
+        assert all(u.startswith("https://www.sos.arkansas.gov/uploads/elections/") for u in links.values())
         assert ar.issue_links(self.fx["landing_html"], ar.LANDING_URL, 2028) is None
 
     def test_amendment_uses_popular_name_and_ballot_title(self):
         one = ar.parse_notice(self.fx["notices"]["1"], "1", 2026)
         assert one["title"].startswith('A Constitutional Amendment to be Known as "The Citizens Only Voting Amendment"')
-        assert one["official_summary"].startswith('AN AMENDMENT TO THE ARKANSAS CONSTITUTION TO CREATE "THE CITIZENS')
-        assert "BE IT RESOLVED" not in one["official_summary"]
+        # The notice's "Ballot Title" is the official ballot title — it was
+        # stored as the summary, with the Popular Name as the title.
+        assert one["official_title"].startswith('AN AMENDMENT TO THE ARKANSAS CONSTITUTION TO CREATE "THE CITIZENS')
+        assert "BE IT RESOLVED" not in one["official_title"]
+        assert one["official_summary"] is None
         assert one["yes_means"] is None and one["no_means"] is None
 
     def test_bond_referral_uses_ballot_title_and_question_not_the_choice_labels(self):
         four = ar.parse_notice(self.fx["notices"]["4"], "4", 2026)
         assert four["title"] == "Arkansas Water, Waste Disposal, and Pollution Abatement Facilities Financing Act of 2025."
+        assert four["official_title"] == four["title"]
         assert four["official_summary"].startswith("Shall the Arkansas Natural Resources Commission be authorized")
         assert four["official_summary"].endswith("full faith and credit of the State of Arkansas?")
         # "FOR Issuance ..." is a ballot choice, not an explanation.

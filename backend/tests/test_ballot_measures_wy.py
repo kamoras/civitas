@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.pipeline.fetch import ballot_measures_wy as wy
+from app.pipeline.fetch.ballot_measures_pdf import _to_measure
 
 PAGES = json.loads((Path(__file__).parent / "fixtures_wy_ballot_propositions_2026.json").read_text())
 
@@ -23,7 +24,12 @@ def _pages(texts):
 
 def test_the_one_real_proposition_parses():
     [m] = wy.parse_document(_pages(PAGES))
-    assert m["number"] == "PROPOSED INITIATIVE PROPOSITION NUMBER ONE"
+    assert m["number"] == "INITIATIVE PROPOSITION NUMBER ONE"
+    assert m["title"] == "PROPOSED INITIATIVE PROPOSITION NUMBER ONE"
+    # The record id is a slug, not the heading with its spaces.
+    assert _to_measure("WY", m, "2026-11-03", "https://x")["id"] == (
+        "WY-2026-11-03-PROPOSED-INITIATIVE-PROPOSITION-NUMBER-ONE"
+    )
     assert m["official_summary"].startswith("Shall a law be enacted: Establishing a property tax exemption")
     assert m["official_summary"].endswith("and specifying applicability?")
     assert m["fiscal_impact"].startswith("Anticipated Revenue / (decrease) Fiscal Year 2028 ($92,614,266)")

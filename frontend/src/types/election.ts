@@ -199,6 +199,12 @@ export interface BallotMeasure {
    * the author is more neutral than the bare quote. */
   titleAuthority: string | null;
   fiscalAuthority: string | null;
+  /** The summary's drafter, when the state names one other than the
+   * title's (Alabama's Fair Ballot Commission under the Legislature's
+   * question). Null: none named separately. */
+  summaryAuthority?: string | null;
+  /** The drafter of the yes/no sentences, when the state names one. */
+  framingAuthority?: string | null;
   sourceName: string;
   sourceUrl: string | null;
   /** The county election office whose copy of the state's document was read, when the
