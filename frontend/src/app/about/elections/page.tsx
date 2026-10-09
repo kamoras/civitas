@@ -136,6 +136,19 @@ export default async function ElectionsChapter() {
           the new Congress is sworn in), not the &ldquo;incumbent&rdquo;: no seat on the new map has
           a previous holder.
         </P>
+        <P>
+          State legislative districts are far smaller than a county, so each one lists the places it
+          covers: the towns themselves in the states where towns are the local government (New
+          England, New York, New Jersey, Pennsylvania, Michigan, Minnesota, Wisconsin), every city
+          and every unincorporated community Census names (Silver Spring, The Woodlands), and every
+          county it touches. Type any of them, or a candidate&apos;s name or the district number,
+          and the list narrows. The places come from the Census Bureau&apos;s 2026 state legislative
+          district files joined block by block to the 2020 census, so a place is listed for a
+          district only where people in it actually live inside that district; a sliver with fewer
+          than 50 residents (about one census block) is left off. A city split between districts is
+          listed under each, and your street decides which: the state&apos;s own voter lookup gives
+          the exact answer.
+        </P>
         <Sub title="The optional town selector">
           <P>
             For a small, hand-picked list of towns, a selector shows local races: city council,

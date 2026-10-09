@@ -130,13 +130,14 @@ _state_leg_towns_cache: dict[str, list[str]] | None = None
 
 
 def _state_leg_towns() -> dict[str, list[str]]:
-    """"{ST}-{chamber}-{n}" -> the towns that district covers, so a reader
+    """"{ST}-{chamber}-{n}" -> the towns, places and counties that
+    district covers (largest places first, counties last), so a reader
     can find their seat by a place they know instead of by a number
     nobody memorises. The state-legislative twin of _district_counties(),
     and static for the same reason: it changes only when a state
-    redistricts. Built by scripts/fetch_state_leg_crosswalk.py, which
-    documents why the obvious sources give wrong answers. Empty dict —
-    never a guess — if the file is missing."""
+    redistricts. Built by scripts/fetch_state_leg_crosswalk.py from the
+    Census Bureau's 2026 state legislative block equivalency files.
+    Empty dict — never a guess — if the file is missing."""
     global _state_leg_towns_cache
     if _state_leg_towns_cache is None:
         try:

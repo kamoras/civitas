@@ -64,9 +64,8 @@ export function raceBadgeLabel(race: { office: string; district: number | null }
  * Drops the generic " County" suffix (kept for Louisiana's
  * "Parish"/Alaska's "Borough"/Virginia's "city" etc., which carry real
  * information) — but ONLY where every entry is a county, which is why
- * `dropCountySuffix` exists. A state legislative row lists places, with
- * a county appearing only as the fallback for a district that contains
- * no incorporated place: there, stripping the suffix turns
+ * `dropCountySuffix` exists. A state legislative row lists places and
+ * then the counties they lie in: there, stripping the suffix turns
  * "Forsyth County" into "Forsyth", which is a different real Georgia
  * place (Forsyth city) sitting in the very same list.
  *
