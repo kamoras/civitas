@@ -1,0 +1,18 @@
+{
+  "_source": "Where a state's contests this cycle do not follow its own calendar's one primary and a plurality November: a hand-maintained record of legal facts (AGENTS.md 3a), one entry per state and cycle, each citing its law. Checked 2026-10-09. Georgia: O.C.G.A. 21-2-501(a)(1) requires a majority of the votes cast in a general election, else a runoff between the top two on the 28th day after (21-2-501(a)(5)): 2026-12-01. Louisiana: after Louisiana v. Callais the Legislature moved the 2026 U.S. House races to the fall open primary (Act 2 and HB 842, 2026 Regular Session; Secretary of State election calendar): every candidate, of every party, on one Nov 3 ballot, a majority winning the seat outright, else the top two in a Dec 12 runoff; its May 16 closed primary was the Senate's. Alabama: the Governor postponed the primaries for U.S. House districts 1, 2, 6 and 7 to a special primary on 2026-08-11 after the 2023 map was reinstated (proclamation; Secretary of State special primary election), the other districts and the Senate keeping May 19. Edit it when a rule or a date changes.",
+  "_use": "Read by app/api/elections.py (_election_rules) into the state ballot's generalRunoffs and otherPrimaries. offices: 'S', 'H', or '*' for every contest on the ballot; districts: the House districts it covers, omitted for all. openPrimary: the November contest is itself an all-party primary, so several candidates of one party is the normal shape, not an error.",
+  "cycles": {
+    "2026": {
+      "AL": {
+        "otherPrimaries": [{"offices": ["H"], "districts": [1, 2, 6, 7], "date": "2026-08-11"}]
+      },
+      "GA": {
+        "generalRunoffs": [{"offices": "*", "openPrimary": false, "runoffDate": "2026-12-01"}]
+      },
+      "LA": {
+        "generalRunoffs": [{"offices": ["H"], "openPrimary": true, "runoffDate": "2026-12-12"}],
+        "otherPrimaries": [{"offices": ["H"], "date": "2026-11-03"}]
+      }
+    }
+  }
+}
