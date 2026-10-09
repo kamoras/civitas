@@ -2782,7 +2782,8 @@ def _save_timeline_entry(today: str, db: Session) -> None:
 
 # Measured 2026-10-08 on the 453 updates the one monitor then held (each
 # labelled on- or off-topic by what it names): issue title against the
-# monitor's title and description on the retrieval model, the value that
+# monitor's title and description on the classification model (get_embedding_model, the model this gate
+# scores with; a replay on it reproduces the measured counts), the value that
 # misclassifies fewest. The floor it replaced (0.70, calibrated against the
 # LLM gate, which approved 81 of 88) sat below most off-topic updates, and
 # a title-only floor of 0.62 was below the off-topic median (0.78).
