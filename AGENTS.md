@@ -154,8 +154,9 @@ of these approaches:
 - **Statistical formulas** with shrinkage toward neutral for scoring metrics
 - **LLM inference** for tasks that require natural language synthesis from
   unstructured input: Action Center claim location (verbatim-checked),
-  monitor significance and category decisions (merging monitors and matching
-  an issue to one are title similarity alone), timeline period summaries, locating the actor and
+  national-monitor titles and descriptions (checked against the issues that
+  opened the monitor; whether one opens, joins or merges is similarity alone,
+  and its category is the issues' policy area), timeline period summaries, locating the actor and
   predicate in a race's coverage for its post (`election_bluesky.py`,
   verbatim spans), and on-request Explore document summaries
   (`POST /api/explore/{id}/summary`, a write). Spotlight, issue and
@@ -214,7 +215,7 @@ the residual.
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
-| 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor decisions and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
+| 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
 employee PAC or a purely political PAC), the system defers to tier 2
@@ -1021,8 +1022,19 @@ After issues are committed, the Action Center pipeline also:
   year-in-review tracking, stored in `timeline_entries` table)
 - **Updates national monitors** — recurring topics that appear across multiple
   days are auto-detected and tracked in `national_monitors` with sourced
-  timeline updates in `monitor_updates`. Existing monitors are deduplicated
-  by embedding similarity; dormant monitors are marked "watching"
+  timeline updates in `monitor_updates`. A monitor opens when today's issue
+  matches issues on four other days of the last 14 from three or more outlets
+  (`_MONITOR_HISTORY_SIM`, measured by replaying every stored issue). The LLM
+  only names it, and a title word its articles never use falls back to the
+  issue's own title: until 2026-10-09 it copied the prompt's example title
+  "U.S.-Iran Conflict" for most new topics, which then merged into the
+  existing monitor of that name, so the site showed one monitor for months.
+  Existing monitors are deduplicated by title similarity. A monitor with no
+  update for 7 days is marked "watching" (still listed; the next match makes
+  it active again) and after 30 days "closed" (off the Ongoing tab, still in
+  the Archive and at its link; deleted instead if it never gathered three
+  updates). Long-running stories went up to 28 days
+  between issues on that history. The lifecycle runs on every refresh
 
 **Election night and after** (`election_phase.py`, `live_results/sync.py`).
 The site's election is not simply the *next* one: from election day (Eastern

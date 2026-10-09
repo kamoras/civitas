@@ -328,8 +328,8 @@ removal.
 The LLM is still used where the output genuinely requires natural-language
 synthesis from unstructured input: Action Center claim location (it
 points at an attributable sentence in a clustered article; the text shown is
-the source's own, checked verbatim), national-monitor significance, category
-and borderline-match decisions, timeline period summaries, locating who did
+the source's own, checked verbatim), national-monitor titles and descriptions
+(checked against the issues that opened the monitor), timeline period summaries, locating who did
 what in a race's coverage for its post (verbatim spans), and on-request
 Explore document summaries.
 
@@ -542,12 +542,14 @@ Every hour at :15
        │         that bill (lobbying_records.names_bill); a member's bare
        │         surname only when no other member shares it
        ▼
-  8. MONITORS ── Detect cross-day recurring topics (title similarity ≥ 0.83)
-       │         Create/update NationalMonitor records (min 5 distinct
-       │         days in 14, ≥3 unique sources, LLM significance gate)
+  8. MONITORS ── Detect cross-day recurring topics (title similarity ≥ 0.85)
+       │         Create NationalMonitor records (matching issues on 5
+       │         distinct days in 14, ≥3 unique sources); the LLM only
+       │         names one, checked against its articles
        │         Add today's issues to monitors they match (title against
        │         the monitor's title and description ≥ 0.71, no LLM)
        │         Re-merge duplicate monitors (similarity-model title ≥ 0.75)
+       │         No update for 7 days: watching; for 30 days: closed
        ▼
   9. TIMELINE ── Record daily TimelineEntry
        │         At week/month/year boundaries: LLM generates period summary
@@ -565,7 +567,11 @@ Every hour at :15
 
 **Why filter at 0.20 cosine similarity?** The policy prototype filter is deliberately permissive. False negatives (dropping a real policy story) are worse than false positives. Borderline cases are handled downstream by extraction rather than by asking a model to be neutral: a cluster that yields no verbatim, adjacently-asserted claim simply produces no issue.
 
-**Why a 5-day monitor threshold?** A topic appearing in the top issues on 5+ distinct days within two weeks is structurally different from a one-day news spike — it indicates a developing situation citizens may need to track. Shorter thresholds created too many ephemeral monitors.
+**When does a story become a monitor?** When today's issue matches issues on four other days of the last fourteen (headline similarity ≥ 0.85 on the classification model) and those issues come from at least three outlets. An issue keeps one row while its story continues, so this counts separate stories on separate days, not days on the board; counting every day a matching issue was current let one story carried for a week open a monitor. The floor was measured on 2026-10-09 by replaying creation day by day over every stored issue since 2026-06-26, each assigned by hand to a story, against the seven that ran for weeks (Iran, the midterms, AI policy, federal funding, immigration enforcement, tariffs and trade, Russia-Ukraine). On the issues to August 31 the old 0.83 opened 5 monitors, 4 of them one of those stories, and back-filled 11 updates about other stories into them; 0.85 opened 3, all real, back-filling 4. On the issues after, 2 of 3 were real at both floors. With the existing Iran monitor in place, the replay over the whole period opens two: AI policy (July 25) and federal funding (July 30). The midterms, immigration, trade and Ukraine stories are missed: their issues are different events whose headlines rarely reach the floor, and nothing tried (other floors, the similarity model, headline and summary, more or fewer days) found them without also opening mixed monitors.
+
+**Why was there only one monitor?** Creation worked, but each new monitor vanished the same hour. The model that names a monitor was given "U.S.-Iran Conflict" as an example, and replayed on the production model it gave that name to 18 of 23 topics, AI policy and beef prices among them. Nothing checked the title against the articles, so the new monitor was created under the existing monitor's title and the duplicate check merged it into that monitor, back-filled updates and all. That, and before 2026-10-08 a merge floor that joined any two topics, is how the one monitor came to hold the Canada, Korea, Ukraine and Gaza stories. The prompt no longer has an example, a title word the articles never use falls back to the issue's own headline (on the replay that turned back 22 of the 23 old titles and kept the one real Iran title), and the model's "is it significant" verdict, which said yes to all 23 including the 13 that were not a long-running story, and its category, FOREIGN_POLICY for 16, are gone: the category is the issues' own policy area.
+
+**When does a monitor stop?** After 7 days without a matching issue it is marked watching and stays on the Ongoing tab; the next match makes it active again. After 30 it closes: it leaves the Ongoing tab and stays in the Archive and at its link (one that never gathered three updates is deleted). On the same history the long-running stories went up to 28 days between issues and came back, and none went longer.
 
 **Why topic-keyed matching instead of rank-slot matching?** The original design keyed issues by `(date, rank)`. When the same story briefly fell off the top slots and returned, a new row was created with `bsky_posted_at=None`, triggering a duplicate Bluesky post. Topic-keyed matching (2-day lookback by cosine similarity) ensures the same story always maps to the same row. New articles advance `primary_article_date`; more outlets covering the same event do not.
 

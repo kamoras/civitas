@@ -2808,32 +2808,85 @@ _MONITOR_ISSUE_SIM = 0.71
 # replaced merged every pair of different topics: the site had one monitor,
 # "U.S.-Iran Conflict", holding the Canada, Korea and Ukraine stories.
 _MONITOR_MERGE_TITLE_SIM = 0.75
-# Headline-to-headline floor is ~0.74; use 0.83 to distinguish same-topic from
-# any-two-news-headlines so Step 3 doesn't create monitors for unrelated topics.
-_MONITOR_HISTORY_SIM = 0.83
+# A new monitor needs today's issue to match earlier issues, title against
+# title on the classification model, at this floor. Measured 2026-10-09 by
+# replaying creation day by day over every stored issue (2026-06-26 to
+# 10-09), each hand-assigned to a story, with no monitor existing at the
+# start. A story counts as long-running when its issues span weeks: Iran,
+# the 2026 midterms, AI policy, federal funding, immigration enforcement,
+# tariffs and trade, Russia-Ukraine. Tuned on the issues to 2026-08-31:
+# 0.83 (inherited, never measured) created 5 monitors, 4 of them a real
+# long-running story, and back-filled 11 updates about other stories into
+# them; 0.85 created 3, all real, back-filling 4. Held out (2026-09-01 on):
+# 2 of 3 real at both floors, 4 off-topic back-fills against 6. A pair of
+# different stories reaches 0.85 1 time in 300; the same story's issues,
+# 1 in 4. Nothing tried found more of the long-running stories without
+# also admitting mixed ones (other floors, the similarity model, title and
+# summary, fewer or more days).
+_MONITOR_HISTORY_SIM = 0.85
+# Distinct days among the matching issues' `date`s, plus today. An issue
+# keeps one row while its story continues, and `date` moves to the latest
+# day, so this counts separate stories on separate days, not days on the
+# board: counting every day each matching row was current let one story
+# carried for a week open a monitor, and on the same replay took precision
+# from 4 in 5 to 6 in 16.
 _MONITOR_MIN_DAYS = 5
 _MONITOR_MIN_UNIQUE_SOURCES = 3
 _MONITOR_LOOKBACK_DAYS = 14
+# Over the same history the long-running stories went up to 28 days between
+# issues (8 to 28 days, 22 times across the seven) and then came back; none
+# went more than 30. So a week without one only marks a monitor "watching"
+# (still listed, and the next matching issue makes it active again), and
+# closing waits for 30 days.
 _MONITOR_DORMANT_DAYS = 7
 _MONITOR_CLOSE_DAYS = 30
 _MONITOR_MIN_UPDATES_FOR_ARCHIVE = 3
 
 
+# No example title, no verdict, no category. The version before 2026-10-09
+# gave "U.S.-Iran Conflict" as an example, and replayed on the production
+# model against the five monitors creation would have opened and 18
+# labelled story sets, it named 18 of the 23 "U.S.-Iran Conflict" (AI
+# policy, beef prices, a Senate contempt vote...). Nothing checked the
+# title against the articles, so each was created under the existing
+# monitor's title and merged into it the same run (_merge_similar_monitors:
+# identical titles), which is how the one monitor came to hold the Canada,
+# Korea, Ukraine and Gaza stories. Its "is_significant" verdict said yes to
+# all 23, the 13 that were not a long-running story included, and its category was
+# FOREIGN_POLICY for 16. This version named none of them after Iran, and
+# every title is still checked against the articles (_ungrounded_title_words).
 _MONITOR_METADATA_PROMPT = """\
-You are a senior civic data analyst. Below are recent news articles for a \
-potential National Monitor. A National Monitor tracks a SIGNIFICANT, \
-LONG-TERM national or international issue of high civic importance.
+Below are recent news articles that keep returning to one ongoing subject.
 
 Articles:
 {articles}
 
-Analyze these articles and provide a JSON object:
-- "title": A concise, broad, and neutral name for this ongoing monitor (e.g., "U.S.-Iran Conflict" or "Federal Housing Reform").
-- "description": A factual 2-3 sentence summary of the ongoing situation and its national significance.
-- "category": The most appropriate category from this list: {categories}.
-- "is_significant": Boolean. True if this is a recurring national issue with long-term implications. False if it is a transient news story, a niche event, or lacks broad civic relevance.
+Respond with a JSON object:
+- "title": a short, neutral name (three to six words) for the ongoing subject these articles share. Use only names of people, places and organizations that appear in the articles.
+- "description": a factual summary of the ongoing situation in two or three sentences, using only facts stated in the articles.
 
 Respond with ONLY the JSON object."""
+
+
+def _ungrounded_title_words(title: str, source: str) -> list[str]:
+    """Capitalized words of a generated monitor title that appear nowhere in
+    its source articles. On the 2026-10-09 replay it turned back 22 of the
+    old prompt's 23 titles (every copied "U.S.-Iran Conflict", and each
+    "National Monitor: ...") and kept the one real Iran title; on the
+    current prompt it turned back 3 of 23, each for a generic
+    word ("Debate", "Crisis", "Case"), which falls back to the issue's own
+    title. grounding_violations doesn't look at place or topic names. Kept
+    here, not in grounding.py, because grounding.py is part of the analysis
+    fingerprint and this module is not."""
+    words = set(re.findall(r"[a-z0-9]+", source.lower()))
+    tokens = {
+        _POSSESSIVE_SUFFIX_RE.sub("", m.group(0)).lower()
+        for m in re.finditer(r"\b[A-Z][a-zA-Z'’\-]{2,}\b", title.translate(_APOSTROPHES))
+    }
+    return sorted(
+        t for t in tokens
+        if not all(part in words for part in re.findall(r"[a-z0-9]+", t))
+    )
 
 
 def _slugify(text: str) -> str:
@@ -2842,54 +2895,6 @@ def _slugify(text: str) -> str:
     slug = re.sub(r'[^a-z0-9\s-]', '', slug)
     slug = re.sub(r'[\s-]+', '-', slug)
     return slug[:200]
-
-
-def _reclassify_monitor_llm(
-    monitor: NationalMonitor,
-    db: Session,
-) -> None:
-    """Use LLM to re-evaluate and potentially re-categorize an existing monitor."""
-    from app.config_definitions import POLICY_AREAS
-
-    # Only re-classify if it's currently a generic or suspicious category
-    # or if we just want a periodic sanity check.
-    
-    updates = monitor.updates[:5]
-    articles = "\n".join([f"- {u.article_title}: {u.summary[:150]}" for u in updates])
-    
-    user_prompt = f"""\
-Identify the best policy category for this National Monitor.
-Title: {monitor.title}
-Description: {monitor.description[:300]}
-Recent Updates:
-{articles}
-
-Categories: {", ".join(POLICY_AREAS)}
-
-Return JSON: {{"category": "CATEGORY_NAME", "reason": "why"}}
-"""
-
-    result = call_llm(
-        prompt_version="monitor-reclassify-v1",
-        system_prompt="You are a civic data analyst. Respond in JSON.",
-        user_prompt=user_prompt,
-        cache_key={"type": "monitor_reclassify", "id": monitor.id, "title": monitor.title},
-        db_session=db,
-        max_tokens=256,
-    )
-
-    if isinstance(result, str):
-        result = extract_json(result)
-    
-    if isinstance(result, dict) and result.get("category"):
-        new_cat = str(result["category"]).upper().replace(" ", "_")
-        if new_cat in POLICY_AREAS:
-            old_cat = monitor.category
-            monitor.category = new_cat.lower()
-            monitor.policy_areas = json.dumps([new_cat])
-            if old_cat != monitor.category:
-                logger.info("Re-categorized monitor '%s': %s -> %s (%s)",
-                            monitor.title, old_cat, monitor.category, result.get("reason"))
 
 
 def _merge_monitors(keep: NationalMonitor, absorb: NationalMonitor,
@@ -2982,10 +2987,17 @@ def _generate_monitor_metadata(
     issue: ActionIssue,
     past_issues: list[ActionIssue],
     db: Session,
-) -> dict | None:
-    """Use LLM to generate professional metadata for a new National Monitor."""
-    from app.config_definitions import POLICY_AREAS
+) -> dict:
+    """A new monitor's title and description, written by the LLM from the
+    issues that opened it, and its category.
 
+    The model only writes; it decides nothing. Whether a monitor opens is
+    settled before this is called (the day, source and similarity floors),
+    and the category is the commonest policy area of those issues, which
+    the embedding classifier already gave each one
+    (_classify_issue_policy_areas). The model's own verdict and category
+    were removed 2026-10-09: see _MONITOR_METADATA_PROMPT.
+    """
     all_issues = [issue] + past_issues
     # Gather unique articles to provide enough context for the LLM
     seen_titles: set[str] = set()
@@ -2995,39 +3007,28 @@ def _generate_monitor_metadata(
             seen_titles.add(i.title)
             sources = json.loads(i.source_names or "[]")
             source_str = f" [{sources[0]}]" if sources else ""
-            articles.append(f"{i.title}{source_str}\n  {i.summary[:200]}")
+            articles.append(f"{i.title}{source_str}\n  {(i.summary or '')[:200]}")
 
-    if not articles:
-        return None
-
-    user_prompt = _MONITOR_METADATA_PROMPT.format(
-        articles="\n\n".join(articles),
-        categories=", ".join(POLICY_AREAS),
-    )
+    areas = Counter(
+        a for i in all_issues for a in json.loads(i.policy_areas or "[]")
+    ).most_common(1)
+    category = areas[0][0].lower() if areas else "general"
 
     result = call_llm(
-        prompt_version="monitor-metadata-v1",
+        prompt_version="monitor-metadata-v2",
         system_prompt="You are a civic data analyst. Respond in JSON.",
-        user_prompt=user_prompt,
-        cache_key={"type": "monitor_metadata", "titles": sorted(list(seen_titles))[:5]},
+        user_prompt=_MONITOR_METADATA_PROMPT.format(articles="\n\n".join(articles)),
+        cache_key={"type": "monitor_metadata", "titles": sorted(seen_titles)[:5]},
         db_session=db,
         max_tokens=1024,
     )
-
     if isinstance(result, str):
         result = extract_json(result)
-    
-    if not isinstance(result, dict) or not result.get("is_significant"):
-        logger.info("Monitor metadata rejected or not significant for '%s'", issue.title[:50])
-        return None
-    
-    # Validation
-    category = str(result.get("category", "FOREIGN_POLICY")).upper().replace(" ", "_")
-    if category not in POLICY_AREAS:
-        category = "FOREIGN_POLICY"
-    
-    title = str(result.get("title", issue.title))[:500]
-    description = str(result.get("description", issue.summary))[:1000]
+    if not isinstance(result, dict):
+        result = {}
+
+    title = str(result.get("title") or issue.title)[:500]
+    description = str(result.get("description") or issue.summary or "")[:1000]
 
     # A National Monitor's title and description are published prose and
     # were, until 2026-09-23, generated with no mechanical check at all —
@@ -3036,13 +3037,17 @@ def _generate_monitor_metadata(
     # above are this generation's source material, so they are what it
     # gets checked against; falling back to the originating issue's own
     # already-checked title and summary keeps the monitor rather than
-    # dropping it.
+    # dropping it. A model that answered nothing gets the same fallback.
     source_material = "\n\n".join(articles)
     reasons = grounding_violations(f"{title} {description}", source_material)
     reasons += hedge_and_editorializing_violations(f"{title} {description}")
     reasons += [
         f"title states as done what the source only calls for: {', '.join(inverted)}"
         for inverted in [proposal_stated_as_fact(title, source_material)] if inverted
+    ]
+    reasons += [
+        f"title names what the articles don't: {', '.join(missing)}"
+        for missing in [_ungrounded_title_words(title, source_material)] if missing
     ]
     if reasons:
         logger.warning(
@@ -3055,7 +3060,7 @@ def _generate_monitor_metadata(
     return {
         "title": title[:500],
         "description": description[:1000],
-        "category": category.lower(),
+        "category": category,
     }
 
 
@@ -3091,6 +3096,8 @@ def _update_national_monitors(today: str, db: Session) -> None:
         .all()
     )
     if not today_issues:
+        # A quiet day still ages monitors toward watching and closed.
+        _cleanup_monitor_lifecycle(today, db)
         return
 
     existing_monitors = db.query(NationalMonitor).all()
@@ -3236,11 +3243,7 @@ def _update_national_monitors(today: str, db: Session) -> None:
                 if float(dup_sims.max()) >= _MONITOR_ISSUE_SIM:
                     continue
 
-            # --- LLM Metadata Generation ---
             metadata = _generate_monitor_metadata(issue, matched_past, db)
-            if not metadata:
-                continue
-
             slug = _slugify(metadata["title"])
 
             # Ensure unique slug. `int(time.time()) % 1000` (previous
@@ -3261,7 +3264,9 @@ def _update_national_monitors(today: str, db: Session) -> None:
                 description=metadata["description"],
                 category=metadata["category"],
                 status=MonitorStatus.ACTIVE,
-                policy_areas=json.dumps([metadata["category"].upper()]),
+                policy_areas=json.dumps(
+                    [] if metadata["category"] == "general" else [metadata["category"].upper()]
+                ),
                 last_article_date=today,
             )
             db.add(monitor)
@@ -3294,8 +3299,16 @@ def _update_national_monitors(today: str, db: Session) -> None:
                     source_name=source_names[0] if source_names else "",
                     article_title=issue.title,
                 ))
+            db.commit()
 
-            logger.info("New monitor created (LLM-vetted): '%s' (%d days)",
+            # A second issue on this topic later in the same run is a
+            # duplicate of the monitor just opened, not a new one.
+            new_emb = model.encode(
+                [f"{monitor.title} {monitor.description}"], normalize_embeddings=True,
+            )
+            mon_embs = new_emb if mon_embs is None else np.vstack([mon_embs, new_emb])
+
+            logger.info("New monitor created: '%s' (%d days)",
                         monitor.title, len(matched_dates))
 
     # Step 3b: Re-merge after creating new monitors.
@@ -3345,13 +3358,6 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
         elif m.status == MonitorStatus.ACTIVE and last_date < dormant_cutoff:
             m.status = MonitorStatus.WATCHING
             logger.info("Monitor set to watching: '%s'", m.title)
-
-        # 3. Periodically re-categorize active monitors to keep taxonomy accurate
-        elif m.status == MonitorStatus.ACTIVE:
-            # Probability-based or simple toggle to avoid too many LLM calls
-            # For now, let's just do it if it's currently 'general' or 'defense' (the most common mis-labels)
-            if m.category in ("general", "defense", "guns", "trade"):
-                _reclassify_monitor_llm(m, db)
 
     db.commit()
 
@@ -5134,8 +5140,10 @@ def _run_refresh(db: Session) -> int:
     # _save_timeline_entry so the top issue has related_monitor_slugs populated)
     _set_refresh_state(stage="monitors", stage_detail=None,
                        last_issues_created=issues_created, last_issues_retired=n_retired)
-    if issues_created > 0:
-        _update_national_monitors(today, db)
+    # Every run, not only when issues were created: the lifecycle step ages
+    # monitors toward watching and closed, and a run of quiet days used to
+    # leave a monitor active for as long as they lasted.
+    _update_national_monitors(today, db)
 
     # Preserve today's #1 issue in the permanent timeline
     _set_refresh_state(stage="timeline")

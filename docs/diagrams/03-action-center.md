@@ -51,12 +51,12 @@ flowchart TB
     ENRICH["<b>7. ENRICH</b><br/>sqlite-vec semantic search →<br/>related bills, senators, documents<br/>resolve bill IDs in article text"]
     ENRICH --> MON
 
-    MON{"<b>8. MONITORS</b><br/>topic recurs on ≥ 5 distinct days in 14,<br/>from ≥ 3 unique sources,<br/>title similarity ≥ 0.83?"}
-    MON -->|yes| SIGGATE{"LLM significance gate"}
-    MON -->|no| TIMELINE
-    SIGGATE -->|passes| MONREC["Create/update NationalMonitor<br/>re-merge duplicates at similarity-model title ≥ 0.75<br/>today's issues join a monitor at title ≥ 0.71, no LLM"]
-    SIGGATE -->|fails| TIMELINE
-    MONREC --> TIMELINE
+    MON{"<b>8. MONITORS</b><br/>matching issues on ≥ 5 distinct days in 14,<br/>from ≥ 3 unique sources,<br/>title similarity ≥ 0.85?"}
+    MON -->|yes| MONREC["Create NationalMonitor<br/>LLM writes title + description only,<br/>checked against its articles<br/>re-merge duplicates at similarity-model title ≥ 0.75<br/>today's issues join a monitor at title ≥ 0.71, no LLM"]
+    MON -->|no| LIFE
+    MONREC --> LIFE
+    LIFE["Lifecycle, every run<br/>7 days without an update: watching<br/>30 days: closed"]
+    LIFE --> TIMELINE
 
     TIMELINE["<b>9. TIMELINE</b><br/>record daily TimelineEntry<br/>at week/month/year boundaries,<br/>LLM writes the period summary"]
     TIMELINE --> POST
@@ -143,9 +143,23 @@ nor'easter. On that
 feed it gave 12 multi-article clusters, 10 of them one story each, where the old passes built a
 9-article weather cluster and an 8-article China/AI/Russia one.
 
-**5 days in 14 for a monitor.** A topic in the top issues on five separate days
-within a fortnight is structurally different from a one-day spike — it's a
-developing situation. Shorter thresholds produced too many ephemeral monitors.
+**5 days in 14 for a monitor.** Today's issue must match issues (headline
+similarity ≥ 0.85) whose dates cover five separate days in a fortnight. An issue
+keeps one row while its story continues, so that is five separate stories, not
+five days on the board. The floor was measured by replaying creation over every
+stored issue since 2026-06-26 against hand-assigned stories: 0.83 opened 5
+monitors to August 31, 4 of them real, with 11 off-topic back-filled updates;
+0.85 opened 3, all real, with 4 (2 of 3 real at both after August).
+
+**The model names a monitor; it decides nothing.** Until 2026-10-09 the naming
+prompt carried "U.S.-Iran Conflict" as an example, the production model copied
+it for 18 of 23 replayed topics, the real Iran one included, and the duplicate check then merged each new
+monitor into the existing one of that name. Its significance verdict said yes
+to all 23. Now there is no example and no verdict, a title word the articles
+never use falls back to the issue's own headline, and the category is the
+issues' own policy area. A monitor with no update for 7 days is watching, and
+closed after 30; long-running stories went up to 28 days between issues on the
+same history.
 
 **Topic-keyed persistence, not rank-slot.** The original design keyed issues by
 `(date, rank)`. When a story briefly fell out of the top slots and returned, it got
