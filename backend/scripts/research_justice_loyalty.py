@@ -39,6 +39,7 @@ from scipy.stats import spearmanr
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.pipeline.analyze.justice_loyalty import MIN_VOTES_EACH_SIDE, Estimate, shrink  # noqa: E402
 
 SOURCES = {
     "JusticePresident.zip": "https://epstein.wustl.edu/s/JusticePresident.zip",
@@ -60,12 +61,14 @@ APPOINTER = {
     "NMGorsuch": "Trump", "BMKavanaugh": "Trump", "ACBarrett": "Trump", "KBJackson": "Biden",
 }
 # Each president's party, for the same-party check on the post-2014 votes
-# (Epstein & Posner code it themselves before then).
+# (EP_PRESIDENT_DEMOCRAT before then).
 PARTY = {
     "FDR": "D", "Truman": "D", "Eisenhower": "R", "Kennedy": "D", "Johnson": "D", "Nixon": "R", "Ford": "R",
     "Carter": "D", "Reagan": "R", "Bush41": "R", "Clinton": "D", "Bush43": "R", "Obama": "D", "Trump": "R",
     "Biden": "D",
 }
+# Epstein & Posner's pres_inOfficeN, FDR (1) to Obama (13): 1 Democratic.
+EP_PRESIDENT_DEMOCRAT = {1: 1, 2: 1, 3: 0, 4: 1, 5: 1, 6: 0, 7: 0, 8: 1, 9: 0, 10: 0, 11: 1, 12: 0, 13: 1}
 CURRENT = ["JGRoberts", "CThomas", "SAAlito", "SSotomayor", "EKagan", "NMGorsuch", "BMKavanaugh", "ACBarrett", "KBJackson"]
 
 
@@ -147,16 +150,19 @@ def panel(ep: pd.DataFrame, sc: pd.DataFrame) -> pd.DataFrame:
     new = sc[(sc.term >= 2015) & sc.justiceName.isin(APPOINTER)].copy()
     new["pres"] = pd.to_datetime(new.dateDecision).dt.strftime("%Y-%m-%d").map(president_on)
     new["in_office"] = (new.pres == new.justiceName.map(APPOINTER)).astype(int)
-    new["same_party"] = (
-        (new.pres.map(PARTY) == new.justiceName.map(APPOINTER).map(PARTY)) & (new.in_office == 0)
-    ).astype(int)
+    # same_party: the sitting president is of the appointer's party (the
+    # appointer's own terms included).
+    new["same_party"] = (new.pres.map(PARTY) == new.justiceName.map(APPOINTER).map(PARTY)).astype(int)
     new = new.assign(pet=new.pet_gov.astype(int)).rename(columns={"vote_for_pres": "y"})
     old = ep.dropna(subset=["JVoteForPres"]).assign(term=lambda d: d.caseId.str[:4].astype(int))
-    old = old.rename(columns={
-        "JVoteForPres": "y", "pres_inOfficeApptJ": "in_office", "PresPet": "pet",
-        "same_partyExcludeInOffice": "same_party",
-    })
-    cols = ["justiceName", "term", "y", "in_office", "same_party", "pet"]
+    # Epstein & Posner's same_partyExcludeInOffice is not a same-party
+    # indicator: it is 1 under the appointer, 0 under other presidents of
+    # the appointer's party and missing under the other party's (the sample
+    # of their Tables 8-10). The party match is derived from their president
+    # index and j_party (the appointer's party, 1 Democratic) instead.
+    old["same_party"] = (old.pres_inOfficeN.map(EP_PRESIDENT_DEMOCRAT) == old.j_party).astype(int)
+    old = old.rename(columns={"JVoteForPres": "y", "pres_inOfficeApptJ": "in_office", "PresPet": "pet"})
+    cols = ["justiceName", "caseId", "term", "y", "in_office", "same_party", "pet"]
     return pd.concat([old[cols], new[cols]], ignore_index=True)
 
 
@@ -190,32 +196,134 @@ def loyalty(P: pd.DataFrame) -> pd.DataFrame:
     return R
 
 
-def same_party(P: pd.DataFrame) -> None:
-    """Does "under other presidents" hide a party effect? Splits the
-    comparison into other presidents of the appointer's party and
-    presidents of the other party (Epstein & Posner's own
-    same_partyExcludeInOffice coding through 2014)."""
-    print("\n== 5. Other presidents of the appointer's party ==")
-    P = P.dropna(subset=["same_party"])
-    fit = smf.ols("y ~ in_office + same_party + pet + C(justiceName)", P).fit(
-        cov_type="cluster", cov_kwds={"groups": pd.factorize(P.justiceName)[0]})
-    cov = fit.cov_params()
-    diff = fit.params["in_office"] - fit.params["same_party"]
-    se = np.sqrt(cov.loc["in_office", "in_office"] + cov.loc["same_party", "same_party"]
-                 - 2 * cov.loc["in_office", "same_party"])
-    print(f"  pooled, against presidents of the other party: appointing president {fit.params['in_office']:+.3f} "
-          f"(t={fit.tvalues['in_office']:.1f}), same-party others {fit.params['same_party']:+.3f} "
-          f"(t={fit.tvalues['same_party']:.1f}); appointing president against same-party others {diff:+.3f} "
-          f"(t={diff / se:.1f}); N={len(P)}")
-    print("  the current Court (same-party others against the other party; votes: appointer / same party / other):")
-    for j in CURRENT:
-        g = P[P.justiceName == j]
-        n = (int(g.in_office.sum()), int(g.same_party.sum()), int(((g.in_office == 0) & (g.same_party == 0)).sum()))
-        if min(n) < 10:
-            print(f"    {j:12} not measurable: {n}")
+def _per_justice(P: pd.DataFrame, formula: str, coef: str, side_in, side_out) -> pd.DataFrame:
+    """Each justice's `coef` from `formula` (OLS, HC1), shrunk and scored
+    with the pipeline's own code (justice_loyalty): measurable with
+    MIN_VOTES_EACH_SIDE votes on each side, the sides being the masks
+    side_in(g) and side_out(g)."""
+    est, n = {}, {}
+    for j, g in P.groupby("justiceName"):
+        n[j] = (int(side_in(g).sum()), int(side_out(g).sum()))
+        if min(n[j]) < MIN_VOTES_EACH_SIDE:
             continue
-        f = smf.ols("y ~ in_office + same_party + pet", g).fit(cov_type="HC1")
-        print(f"    {j:12} {f.params['same_party'] * 100:+5.1f} ± {f.bse['same_party'] * 100:.1f}  {n}")
+        f = smf.ols(formula, g).fit(cov_type="HC1")
+        est[j] = Estimate(raw=float(f.params[coef]), se=float(f.bse[coef]), votes_in=n[j][0], votes_out=n[j][1],
+                          rate_in=float(g.y[side_in(g)].mean()), rate_out=float(g.y[side_out(g)].mean()))
+    shrunk, mu, tau = shrink(est)
+    R = pd.DataFrame(
+        [(j, e.raw, e.se, shrunk[j].loyalty, shrunk[j].se, shrunk[j].score, e.votes_in, e.votes_out) for j, e in est.items()],
+        columns=["justice", "b", "se", "shrunk", "shrunk_se", "score", "n_in", "n_out"],
+    ).set_index("justice")
+    R.attrs.update(mu=mu, tau=tau, n=n)
+    return R
+
+
+def same_party(P: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """Personal or partisan? "Under other presidents" mixes presidents of
+    the appointer's party with the other party's, so a lean toward any
+    same-party administration could read as loyalty. Four specifications,
+    each justice fitted, shrunk and scored as the pipeline does:
+      A  appointer vs every other president (the score)
+      B  appointer vs other presidents of the appointer's party only
+         (Epstein & Posner's Section 4.2)
+      C  every vote, appointer and same-party indicators together: the
+         appointer's effect net of the party's (identified, like B, only
+         where another president of that party served)
+      D  same-party vs other-party presidents, the appointer's terms left
+         out: the party effect itself"""
+    print("\n== 5. Personal or partisan: four specifications ==")
+    P = P.assign(sp_other=((P.same_party == 1) & (P.in_office == 0)).astype(int))
+    f = smf.ols("y ~ in_office + sp_other + pet + C(justiceName)", P).fit(
+        cov_type="cluster", cov_kwds={"groups": pd.factorize(P.justiceName)[0]})
+    cov = f.cov_params()
+    diff = f.params["in_office"] - f.params["sp_other"]
+    se = np.sqrt(cov.loc["in_office", "in_office"] + cov.loc["sp_other", "sp_other"] - 2 * cov.loc["in_office", "sp_other"])
+    print(f"  pooled (justice fixed effects, clustered by justice), against the other party's presidents: appointer "
+          f"{f.params['in_office']:+.3f} (t={f.tvalues['in_office']:.1f}), other same-party "
+          f"{f.params['sp_other']:+.3f} (t={f.tvalues['sp_other']:.1f}); appointer against other same-party "
+          f"{diff:+.3f} (t={diff / se:.1f})")
+    print(f"  votes: appointer {int(P.in_office.sum())}, other same-party {int(P.sp_other.sum())}, "
+          f"other party {int((P.same_party == 0).sum())}")
+    specs = {
+        "A": _per_justice(P, "y ~ in_office + pet", "in_office", lambda g: g.in_office == 1, lambda g: g.in_office == 0),
+        "B": _per_justice(P[(P.in_office == 1) | (P.sp_other == 1)], "y ~ in_office + pet", "in_office",
+                          lambda g: g.in_office == 1, lambda g: g.in_office == 0),
+        "C": _per_justice(P, "y ~ in_office + same_party + pet", "in_office",
+                          lambda g: g.in_office == 1, lambda g: g.sp_other == 1),
+        "D": _per_justice(P[P.in_office == 0], "y ~ same_party + pet", "same_party",
+                          lambda g: g.same_party == 1, lambda g: g.same_party == 0),
+    }
+    A = specs["A"]
+    for name, R in specs.items():
+        both = R.index.intersection(A.index)
+        rho = spearmanr(R.loc[both, "shrunk"], A.loc[both, "shrunk"]).statistic
+        cur = sum(j in R.index for j in CURRENT)
+        print(f"  {name}: {len(R)} justices measurable ({cur} of the current nine), mean {R.attrs['mu'] * 100:+.1f}, "
+              f"tau {R.attrs['tau'] * 100:.1f} points, Spearman with A {rho:.2f} over {len(both)}")
+    print("  per justice: raw ± se -> shrunk, score (votes in/out); '-' not measurable")
+    names = sorted(A.attrs["n"], key=lambda j: (j not in CURRENT, j))
+    for j in names:
+        cells = []
+        for name, R in specs.items():
+            if j in R.index:
+                r = R.loc[j]
+                cells.append(f"{name} {r.b * 100:+5.1f}±{r.se * 100:4.1f} -> {r.shrunk * 100:+5.1f} {r.score:5.1f} "
+                             f"({int(r.n_in)}/{int(r.n_out)})")
+            else:
+                n = R.attrs["n"].get(j, (0, 0))
+                cells.append(f"{name} - ({n[0]}/{n[1]})".ljust(40))
+        print(f"    {j:13} " + " | ".join(cells))
+    return specs
+
+
+def _split_half(P: pd.DataFrame, formula: str) -> tuple[int, float]:
+    """(justices, Spearman-Brown reliability) of the per-justice in_office
+    estimate between odd and even terms."""
+    rows = []
+    for _, g in P.groupby("justiceName"):
+        est = []
+        for half in (0, 1):
+            h = g[g.term % 2 == half]
+            if h.in_office.nunique() < 2 or min(h.in_office.sum(), (1 - h.in_office).sum()) < 8:
+                break
+            est.append(smf.ols(formula, h).fit().params["in_office"])
+        if len(est) == 2:
+            rows.append(est)
+    r = np.corrcoef(np.array(rows).T)[0, 1]
+    return len(rows), 2 * r / (1 + r)
+
+
+def era(P: pd.DataFrame, specs: dict[str, pd.DataFrame]) -> None:
+    """Is the appointer's time in office standing in for the era? It is
+    always the start of a justice's career, and the government's win rate
+    fell from the 1980s on (Epstein & Posner 2018), so the comparison with
+    later presidents could pick up the decline. Held fixed three ways:
+    a fixed effect per term, the justice's vote against their colleagues'
+    on the same case (E), and by era."""
+    print("\n== 7. Loyalty or era ==")
+    print("  government vote share by decade: " + ", ".join(
+        f"{d}s {v:.2f}" for d, v in P.groupby(P.term // 10 * 10).y.mean().items()))
+    case_sum, case_n = P.groupby("caseId").y.transform("sum"), P.groupby("caseId").y.transform("size")
+    P = P.assign(rel=P.y - (case_sum - P.y) / (case_n - 1).replace(0, np.nan)).dropna(subset=["rel"])
+    for label, d, formula in (
+        ("justice fixed effects (A)", P, "y ~ in_office + pet + C(justiceName)"),
+        ("+ term fixed effects", P, "y ~ in_office + pet + C(justiceName) + C(term)"),
+        ("against colleagues on the case (E)", P, "rel ~ in_office + C(justiceName)"),
+        *((f"{lo}-{hi}, + term fixed effects", P[P.term.between(lo, hi)], "y ~ in_office + pet + C(justiceName) + C(term)")
+          for lo, hi in ((1937, 1952), (1953, 1980), (1981, 2024))),
+    ):
+        f = smf.ols(formula, d).fit(cov_type="cluster", cov_kwds={"groups": pd.factorize(d.justiceName)[0]})
+        print(f"  pooled, {label}: {f.params['in_office']:+.3f} (t={f.tvalues['in_office']:.1f}), N={len(d)}")
+    A = specs["A"]
+    E = _per_justice(P, "rel ~ in_office", "in_office", lambda g: g.in_office == 1, lambda g: g.in_office == 0)
+    both = E.index.intersection(A.index)
+    print(f"  E per justice: {len(E)} measurable, mean {E.attrs['mu'] * 100:+.1f}, tau {E.attrs['tau'] * 100:.1f}, "
+          f"Spearman with A {spearmanr(E.loc[both, 'shrunk'], A.loc[both, 'shrunk']).statistic:.2f}; split-half "
+          f"reliability A {_split_half(P, 'y ~ in_office + pet')[1]:.2f}, E {_split_half(P, 'rel ~ in_office')[1]:.2f}")
+    for j in CURRENT:
+        a, e = A.loc[j], E.loc[j]
+        print(f"    {j:12} A {a.shrunk * 100:+5.1f} ± {a.shrunk_se * 100:.1f} score {a.score:5.1f} | "
+              f"E {e.shrunk * 100:+5.1f} ± {e.shrunk_se * 100:.1f} score {e.score:5.1f}")
 
 
 def against_ideology(sc: pd.DataFrame, mq: pd.DataFrame) -> None:
@@ -278,8 +386,9 @@ def main():
     P = panel(ep, scdb_votes(sc, gov))
     R = loyalty(P)
     validity(P, R, mq)
-    same_party(P)
+    specs = same_party(P)
     against_ideology(sc, mq)
+    era(P, specs)
     if args.write_bundle:
         write_bundle(ep)
 
