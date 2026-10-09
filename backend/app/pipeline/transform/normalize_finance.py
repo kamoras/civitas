@@ -11,14 +11,18 @@ not in the AI results (edge cases), it falls back to the embedding-based
 industry classifier.
 """
 
+import json
 import logging
+import re
+from difflib import SequenceMatcher
+from pathlib import Path
 
 from app.pipeline.fetch.fec import (
     committee_id_of,
+    committee_industry,
     is_joint_fundraiser,
     is_political_committee,
     select_recent_elections,
-    structured_industry,
 )
 from app.pipeline.transform.candidate_names import is_candidate_self_donor
 from app.pipeline.transform.industry_classifier import classify_with_learning, primed_industry_lookups
@@ -371,8 +375,8 @@ def build_top_donors(
             ai_class = ai_classifications.get(key) or {}
             if ai_class.get("skip") or key in pac_skips:
                 continue
-            industry = structured_industry(meta) or (
-                ai_class.get("industry") or classify_with_learning(name, db_session)[0]
+            industry = committee_industry(
+                meta, lambda: ai_class.get("industry") or classify_with_learning(name, db_session)[0],
             )
             existing = donor_map.setdefault(key, {
                 "name": name, "total": 0, "type": committee_donor_type(meta), "industry": industry,
@@ -437,11 +441,8 @@ def build_top_donors(
             # Tier 1 (FEC and SEC records) outranks the name classifier:
             # the NRSC's name embeds near nothing political enough, and it
             # was headlining a senator's "gun industry" donor-vote match.
-            structured = structured_industry(meta)
-            if structured and existing.get("type") not in (
-                "Self-Funded", "CandidateAffiliated", "SKIP",
-            ):
-                existing["industry"] = structured
+            if existing.get("type") not in ("Self-Funded", "CandidateAffiliated", "SKIP"):
+                existing["industry"] = committee_industry(meta, lambda: existing.get("industry") or "OTHER")
         donor_map[name_upper] = existing
 
     # 2a. Employees, from the FEC's employer totals.
@@ -494,6 +495,9 @@ def build_top_donors(
             existing["type"] = donor_type
         donor_map[employer] = existing
 
+    merge_misspelled_employers(donor_map)
+
+
 
     # The candidate's own money (self-loans recorded as "Lastname,
     # Firstname") is frequently mistyped Org/Employees by the semantic
@@ -526,17 +530,116 @@ def build_top_donors(
     ][:100]
 
 
+# One employer written two ways (donors type it): the same once punctuation
+# is set aside ("ACME, INC." / "ACME INC"), or one word apart with that word
+# misspelled ("ASSCOIATES"). The word test: both spellings at least
+# _EMPLOYER_TYPO_MIN_LEN letters, no digit (a store or plan number tells
+# two things apart), Ratcliff/Obershelp ratio at least
+# EMPLOYER_TYPO_MIN_RATIO. Calibrated 2026-10-09 on the FEC employer totals
+# cached for 654 committees (70,744 names): 829 names were another's
+# spelling but for punctuation; of 95,409 pairs one word apart, 168 sampled
+# across the similarity bands from 0.70 up were judged by hand (112 the same
+# employer). At 5 letters and 0.80 the merge is right on an estimated 94.1%
+# of the pairs it joins (95.5% on the sample alone, before three known wrong
+# joins were added) and finds 78.7% of the one-word misspellings (0.85:
+# 96.5% and 69%; 0.75 at 4 letters: 85% and 89%). The wrong joins are
+# near-namesakes: "Avalon Ventures" / "Avalon BioVentures", and two pairs of
+# universities whose names differ by a compass word ("Northeastern" /
+# "Northwestern"). Refusing a join when both words are in the bill-title
+# vocabulary was measured and not used: of the 198 joins the rule makes in
+# the cache it stops 9, two of them rightly, three of them real misspellings
+# ("Country" / "County", "Technologies" / "Technology"). So was a guard on
+# how often each spelling appears across the 654 committees' lists (a
+# misspelling should be rare beside its correct form): nearly every
+# spelling, right or wrong, is in one list, so true pairs have a ratio of
+# 1.0; capping it at a third kept precision at 95.6% and cut recall to 42%,
+# and by dollars a tenth gave 98.2% and 31.5%.
+EMPLOYER_TYPO_MIN_RATIO = 0.80
+_EMPLOYER_TYPO_MIN_LEN = 5
+_NOT_NAME_CHARS_RE = re.compile(r"[^A-Z0-9&]+")
+
+
+def _employer_key(name: str) -> str:
+    return " ".join(_NOT_NAME_CHARS_RE.sub(" ", name.upper()).split())
+
+
+def _one_word_typo(a: str, b: str) -> bool:
+    wa, wb = a.split(), b.split()
+    if len(wa) != len(wb):
+        return False
+    diff = [(x, y) for x, y in zip(wa, wb) if x != y]
+    if len(diff) != 1:
+        return False
+    x, y = diff[0]
+    return (min(len(x), len(y)) >= _EMPLOYER_TYPO_MIN_LEN and not any(c.isdigit() for c in x + y)
+            and SequenceMatcher(None, x, y).ratio() >= EMPLOYER_TYPO_MIN_RATIO)
+
+
+def merge_misspelled_employers(donor_map: dict[str, dict]) -> None:
+    """Fold an employer written two ways into one donor, in place, keeping
+    the spelling with more money. Only money grouped by employer
+    (Org/Employees, not a committee) is merged."""
+    keys = sorted(
+        (k for k, d in donor_map.items() if d.get("type") == "Org/Employees" and not d.get("isCommittee")),
+        key=lambda k: -(donor_map[k].get("total") or 0),
+    )
+    kept: list[tuple[str, str]] = []  # (donor_map key, folded spelling), most money first
+    for key in keys:
+        folded = _employer_key(key)
+        into = next((k for k, f in kept if f == folded or _one_word_typo(f, folded)), None)
+        if into is None:
+            kept.append((key, folded))
+        else:
+            donor_map[into]["total"] += donor_map.pop(key).get("total") or 0
+
+
+_NAME_CASING_PATH = Path(__file__).resolve().parents[2] / "data" / "name_casing.json"
+_name_casing_cache: dict[str, str] | None = None
+
+
+def _name_casing() -> dict[str, str]:
+    """{lower-case word: its written form} for the words usage writes in
+    capitals or with an interior capital ("ucla": "UCLA"), from
+    app/data/name_casing.json (scripts/build_name_casing.py)."""
+    global _name_casing_cache
+    if _name_casing_cache is None:
+        try:
+            _name_casing_cache = json.loads(_NAME_CASING_PATH.read_text())["forms"]
+        except (OSError, ValueError, KeyError):
+            logger.warning("name_casing.json unreadable: donor names keep first-letter capitals only")
+            _name_casing_cache = {}
+    return _name_casing_cache
+
+
+# A run of letters, and what precedes it: a run after a digit or an
+# apostrophe is the rest of a word ("21ST", "AMERICA'S"), not a word.
+_LETTER_RUN_RE = re.compile(r"(?<![A-Za-z])[A-Za-z]+")
+_APOSTROPHES = ("'", "’")
+
+
 def _clean_donor_name(name: str) -> str:
-    """Convert FEC ALL CAPS names to title case, preserving acronyms."""
-    if name == name.upper():
-        acronyms = {"llc", "inc", "pac", "corp", "co", "ltd", "lp", "pllc"}
-        words = name.lower().split()
-        return " ".join(
-            word.upper() if word in acronyms else word[0].upper() + word[1:]
-            if word else word
-            for word in words
-        )
-    return name
+    """The FEC prints names in capitals; show each word as it is written.
+    A word usage writes in capitals or with an interior capital takes that
+    form ("UCLA", "AFL-CIO", "McDonnell"; _name_casing), any other its
+    first letter capitalized. Words were all first-letter capitalized
+    until 2026-10, which printed "Ucla" and "Cuny" — a guess where usage
+    is on record. A name not in capitals is left as filed."""
+    if name != name.upper():
+        return name
+    forms = _name_casing()
+
+    def word(m: re.Match) -> str:
+        run = m.group(0)
+        prev = name[m.start() - 1] if m.start() else " "
+        if prev.isdigit() or prev in _APOSTROPHES:
+            return run.lower()
+        if name[m.end():m.end() + 1] in _APOSTROPHES:
+            # Part of an elided or possessive word ("INT'L", "AMERICA'S"):
+            # not the word the table describes.
+            return run.capitalize()
+        return forms.get(run.lower()) or run.capitalize()
+
+    return " ".join(_LETTER_RUN_RE.sub(word, name).split())
 
 
 def _build_industry_breakdown(
@@ -633,7 +736,7 @@ def _build_industry_breakdown(
             key = name.upper().strip()
             if _should_skip_for_breakdown(key):
                 continue
-            _add(structured_industry(meta) or _get_industry(name, key), amount, committee_part)
+            _add(committee_industry(meta, lambda: _get_industry(name, key)), amount, committee_part)
             counted_donors.add(key)
 
     for r in pac_receipts if pacs is None else []:
@@ -657,7 +760,7 @@ def _build_industry_breakdown(
         # Same tier-1 rule as build_top_donors: the FEC's registration, not
         # the name, decides that a party/candidate/leadership committee's
         # money is political rather than an industry's.
-        industry = structured_industry(meta) or _get_industry(org, org_upper)
+        industry = committee_industry(meta, lambda: _get_industry(org, org_upper))
         _add(industry, amount, committee_part)
         counted_donors.add(org_upper)
 
