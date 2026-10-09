@@ -36,8 +36,10 @@ here, say so explicitly with the evidence, rather than filing it away.
 ## Project Overview
 
 Civitas is an AI/ML political transparency platform that scores U.S. senators,
-House representatives, presidents, and Supreme Court justices on how well they
-represent constituents. It aggregates voting records, campaign finance, floor
+House representatives and presidents on how well they represent constituents,
+and records Supreme Court justices' votes (justices are not scored: since
+justice v3, 2026-10, no measure separates loyalty to the appointing president
+from career timing for an individual justice — `docs/research/justice-scores.md`). It aggregates voting records, campaign finance, floor
 speeches, judicial opinions, and party platforms from official government
 sources, then analyzes them using embedding-based classification, roll-call
 party alignment (content-based where no roll call exists), and deterministic
@@ -79,7 +81,7 @@ civitas/
 │   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register,
 │   │   │   │                    #   per-state ballot-measure readers)
 │   │   │   ├── transform/       # Data normalization, embedding-based industry classification
-│   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, action center LLM synthesis, justice scoring
+│   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, action center LLM synthesis, justice appointer estimates
 │   │   │   ├── assemble/        # Scorecard builder + validator
 │   │   │   ├── senate_pipeline.py, house_pipeline.py  # FETCH→TRANSFORM→ANALYZE→ASSEMBLE+SAVE per chamber
 │   │   │   ├── member_lifecycle.py  # Roster reconciliation + removal of departed members (never presidents)
@@ -152,8 +154,8 @@ of these approaches:
 - **Statistical formulas** with shrinkage toward neutral for scoring metrics
 - **LLM inference** for tasks that require natural language synthesis from
   unstructured input: Action Center claim location (verbatim-checked),
-  monitor significance, category and borderline-match decisions (merging is
-  title similarity alone), timeline period summaries, locating the actor and
+  monitor significance and category decisions (merging monitors and matching
+  an issue to one are title similarity alone), timeline period summaries, locating the actor and
   predicate in a race's coverage for its post (`election_bluesky.py`,
   verbatim spans), and on-request Explore document summaries
   (`POST /api/explore/{id}/summary`, a write). Spotlight, issue and
@@ -937,9 +939,11 @@ Each member pipeline executes in 4 phases per chamber, defined in
    — no LLM call (campaign-promise analysis and per-senator narrative
    generation were both LLM-based here until removed in 2026-07 for
    unreliable output; see `cross_reference.py` and `policy_alignment.py`).
-   Justice scoring (separate phase) makes no LLM call either.
-4. **ASSEMBLE + SAVE** — Build scorecards for senators, presidents, and
-   justices; validate via `assemble/validator.py`; persist to SQLite
+   The justice phase (separate) makes no LLM call either, and scores no one:
+   it stores each justice's raw appointer estimate and its standard error
+   (justice v3).
+4. **ASSEMBLE + SAVE** — Build scorecards for senators and presidents, and
+   records for justices; validate via `assemble/validator.py`; persist to SQLite
 
 Between TRANSFORM and the rest, both chamber pipelines run
 `member_lifecycle.py` against the roster they just fetched:
@@ -1291,7 +1295,7 @@ the pending list).
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
-| Justice profile summary (LLM, from pre-computed statistics) | `backend/app/pipeline/justice_pipeline.py` |
+| Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |

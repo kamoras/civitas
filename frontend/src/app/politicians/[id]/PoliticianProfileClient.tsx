@@ -165,7 +165,6 @@ export default function PoliticianProfileClient({
                 <JusticeScorecard
                   key={(scorecard as unknown as Justice).id}
                   justice={scorecard as unknown as Justice}
-                  rank={profile.chamberRank}
                   titleAs="h1"
                 />
               )}

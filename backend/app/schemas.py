@@ -855,21 +855,25 @@ class PresidentLeaderboardEntry(CamelModel):
 # ── Supreme Court Justices ──────────────────────────────────────────
 
 class JusticeScoreSchema(CamelModel):
-    # Loyalty to the appointing president, 0-100 (justice_loyalty.score);
-    # None until the Supreme Court Database covers the justice.
+    # Always null since justice v3: no justice is scored, because no method
+    # yet separates loyalty to the appointing president from career timing
+    # for an individual justice (docs/research/justice-scores.md). Null
+    # means "not scored", never 0.
     loyalty: float | None = None
-    # Backend-computed overall (justice_service._build_score).
     overall: float | None = None
 
 
 class JusticeLoyaltySchema(CamelModel):
-    """The loyalty estimate behind the score: points more often for the
-    government while the appointing president is in office (a share), its
-    standard error, the votes under the appointing president and under
-    others with the share of each for the government, and the Supreme Court
-    Database term the record runs through."""
+    """The appointing president's estimated effect, shown and not scored:
+    points more often for the government while the appointing president is
+    in office (a share, the justice's own unshrunk estimate), its standard
+    error and 95% confidence interval, the votes under the appointing
+    president and under others with the share of each for the government,
+    and the Supreme Court Database term the record runs through."""
     estimate: float
     se: float
+    ci_low: float
+    ci_high: float
     votes_in: int
     votes_out: int
     rate_in: float
@@ -911,12 +915,14 @@ class JusticeSchema(CamelModel):
 
 
 class JusticeLeaderboardEntry(CamelModel):
+    """A sitting justice, listed by seniority and not ranked (justice v3)."""
     id: str
     name: str
     last_name: str
     role_title: str = "Associate Justice"
     appointing_president: str | None = None
     appointing_party: str | None = None
+    date_start: str | None = None
     is_active: bool = True
     thumbnail_url: str | None = None
     score: JusticeScoreSchema

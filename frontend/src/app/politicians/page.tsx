@@ -147,6 +147,9 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
             </span>
           ) : p.hasScorecard && p.overallScore != null ? (
             <ScoreBar score={p.overallScore} />
+          ) : p.branch === "scotus" ? (
+            // Justice v3: justices are not scored, not "pending".
+            <span className="font-mono text-xs text-ink-min tracking-widest">NOT SCORED</span>
           ) : (
             <span className="font-mono text-xs text-ink-min tracking-widest">
               SCORECARD PENDING

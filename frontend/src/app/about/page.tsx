@@ -10,7 +10,7 @@ import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
 export const metadata = pageMetadata({
   title: "About Civitas: How Members of Congress Are Scored",
   description:
-    "What Civitas is, how it scores senators, representatives, presidents and justices from public records, and the rules it holds itself to: in five minutes.",
+    "What Civitas is, how it scores senators, representatives and presidents from public records (and why not justices), and the rules it holds itself to: in five minutes.",
   path: "/about",
 });
 
@@ -123,8 +123,9 @@ export default function AboutOverview() {
       title="About Civitas"
       lede={
         <p>
-          Civitas scores the people who represent you (senators, representatives, presidents and
-          Supreme Court justices) using only public records and formulas anyone can check.
+          Civitas scores the people who represent you (senators, representatives and presidents)
+          using only public records and formulas anyone can check, and keeps the record of Supreme
+          Court justices, who are not scored.
         </p>
       }
     >
