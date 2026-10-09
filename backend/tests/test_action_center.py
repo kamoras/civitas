@@ -299,8 +299,12 @@ class TestNationalMonitorCreation:
         db.query.side_effect = query
         return db
 
+    # call_llm answers nothing, so only the gate under test can stop the
+    # monitor: an unanswered model call no longer drops one (it falls back
+    # to the issue's own text), and these tests used to pass on that alone.
+    @patch("app.pipeline.analyze.action_center.call_llm", return_value=None)
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
-    def test_insufficient_breadth_skips_monitor(self, mock_get_model):
+    def test_insufficient_breadth_skips_monitor(self, mock_get_model, _llm):
         """Monitor should NOT be created if only one source covers the topic over multiple days."""
         mock_model = MagicMock()
         mock_get_model.return_value = mock_model
@@ -367,8 +371,9 @@ class TestNationalMonitorCreation:
         assert len(monitors) == 1
         assert monitors[0].title == topic
 
+    @patch("app.pipeline.analyze.action_center.call_llm", return_value=None)
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
-    def test_insufficient_days_skips_monitor(self, mock_get_model):
+    def test_insufficient_days_skips_monitor(self, mock_get_model, _llm):
         """Monitor should NOT be created if it has only appeared for 4 days (min is now 5)."""
         mock_model = MagicMock()
         mock_get_model.return_value = mock_model
@@ -470,10 +475,9 @@ class TestNationalMonitorCreation:
         _update_national_monitors(today, db_session)
 
         assert [u.article_title for u in db_session.query(MonitorUpdate)] == ["In the band"]
-        # The only model call left in the stage is the category check.
-        assert {c.kwargs["prompt_version"] for c in mock_call_llm.call_args_list} <= {
-            "monitor-reclassify-v1",
-        }
+        # No model call in the stage unless a monitor is being named: the
+        # category check went too (the issues' own policy areas name it).
+        assert not mock_call_llm.called
 
     def test_lifecycle_closing_and_deletion(self):
         """Monitors should close after 30 days, and delete if they had few updates."""
@@ -492,48 +496,126 @@ class TestNationalMonitorCreation:
         # 3. Recent monitor (should stay active)
         m3 = NationalMonitor(title="Current war", status="active", last_article_date="2026-03-12")
         m3.updates = [MagicMock()] * 10
-        
-        mock_db.query.return_value.filter.return_value.all.return_value = [m1, m2, m3]
-        
+
+        # 4. A week and a day without an update (should be watching)
+        m4 = NationalMonitor(title="Quiet standoff", status="active", last_article_date="2026-03-05")
+        m4.updates = [MagicMock()] * 10
+
+        mock_db.query.return_value.filter.return_value.all.return_value = [m1, m2, m3, m4]
+
         _cleanup_monitor_lifecycle(today, mock_db)
-            
+
         assert m1.status == "closed"
         mock_db.delete.assert_any_call(m2)
         assert m3.status == "active"
+        assert m4.status == "watching"
 
     @patch("app.pipeline.analyze.action_center.call_llm")
     def test_generate_monitor_metadata_success(self, mock_call_llm):
-        """Metadata generation should parse LLM JSON and validate categories."""
-        mock_db = MagicMock()
-        issue = _make_issue("2026-03-13", "Attack on Iranian school", ["AP News"])
-        past = [_make_issue("2026-03-12", "Middle East tensions", ["Reuters"])]
-        
+        """The model writes the title and description; the category is the
+        issues' own commonest policy area, not the model's."""
+        issue = _make_issue("2026-03-13", "Strikes on Iran continue", ["AP News"])
+        issue.policy_areas = json.dumps(["DEFENSE"])
+        past = [_make_issue("2026-03-12", "Iran talks stall", ["Reuters"])]
+        past[0].policy_areas = json.dumps(["DEFENSE", "FOREIGN_POLICY"])
+
         mock_call_llm.return_value = json.dumps({
-            "title": "U.S.-Iran Conflict",
-            "description": "Ongoing tensions between the U.S. and Iran.",
-            "category": "FOREIGN_POLICY",
-            "is_significant": True
+            "title": "Iran Strikes and Talks",
+            "description": "Strikes on Iran continue while talks stall.",
+            "category": "TRADE",
         })
-        
-        result = _generate_monitor_metadata(issue, past, mock_db)
-        
-        assert result is not None
-        assert result["title"] == "U.S.-Iran Conflict"
-        assert result["category"] == "foreign_policy"
-        assert result["description"].startswith("Ongoing")
+
+        result = _generate_monitor_metadata(issue, past, MagicMock())
+
+        assert result["title"] == "Iran Strikes and Talks"
+        assert result["category"] == "defense"
+        assert result["description"].startswith("Strikes")
 
     @patch("app.pipeline.analyze.action_center.call_llm")
-    def test_generate_monitor_metadata_insignificant(self, mock_call_llm):
-        """If LLM deems issue not significant, should return None."""
-        mock_db = MagicMock()
-        issue = _make_issue("2026-03-13", "Local dog park opens", ["Local News"])
-        
+    def test_monitor_title_naming_what_the_articles_dont_falls_back(self, mock_call_llm):
+        """The model copied the example title from its prompt ("U.S.-Iran
+        Conflict") for 18 of 23 unrelated topics; each was then merged into
+        the existing monitor of that name. A title word the articles never
+        use sends the monitor to the issue's own title instead."""
+        issue = _make_issue("2026-03-13", "Beef import plan draws criticism", ["AP News"])
         mock_call_llm.return_value = json.dumps({
-            "is_significant": False
+            "title": "U.S.-Iran Conflict",
+            "description": "Beef import plan draws criticism.",
         })
-        
-        result = _generate_monitor_metadata(issue, [], mock_db)
-        assert result is None
+
+        result = _generate_monitor_metadata(issue, [], MagicMock())
+
+        assert result["title"] == "Beef import plan draws criticism"
+        assert result["description"] == "Summary for Beef import plan draws criticism"
+
+    @patch("app.pipeline.analyze.action_center.call_llm", return_value=None)
+    def test_unanswered_model_call_keeps_the_monitor(self, _llm):
+        """Whether a monitor opens is decided before the model is asked; no
+        answer means the issue's own (already checked) text, not no monitor."""
+        issue = _make_issue("2026-03-13", "Tariff talks stall", ["AP News"])
+
+        result = _generate_monitor_metadata(issue, [], MagicMock())
+
+        assert result["title"] == "Tariff talks stall"
+        assert result["category"] == "general"
+
+    @patch("app.pipeline.analyze.action_center.get_embedding_model")
+    def test_new_topic_gets_its_own_monitor_once(self, mock_get_model, db_session, monkeypatch):
+        """End to end on a real session: a recurring topic beside an existing
+        monitor opens one monitor of its own, even when the model names it
+        after the existing one, and a second issue on it the same run does
+        not open another."""
+        import app.pipeline.analyze.action_center as ac
+
+        topic = [1.0, 0.0, 0.0]
+        vectors = {
+            "Ongoing standoff Long-running coverage.": [0.0, 1.0, 0.0],
+            "Tariff talks stall": topic,
+            "Tariff dispute widens": topic,
+        }
+
+        def encode(texts, **_):
+            return np.array([vectors.get(t, topic) for t in texts], dtype=np.float32)
+
+        mock_model = MagicMock()
+        mock_model.encode.side_effect = encode
+        mock_get_model.return_value = mock_model
+        # Title similarity for the merge step: equal titles merge, others don't.
+        title_ids: dict[str, int] = {}
+        monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: [
+            np.eye(16)[title_ids.setdefault(t, len(title_ids))] for t in texts
+        ])
+        monkeypatch.setattr(ac, "call_llm", lambda **_: json.dumps({
+            "title": "Ongoing standoff", "description": "Tariff talks stall.",
+        }))
+
+        today = "2026-03-13"
+        db_session.add(NationalMonitor(
+            slug="ongoing-standoff", title="Ongoing standoff",
+            description="Long-running coverage.", status=MonitorStatus.ACTIVE,
+            last_article_date=today,
+        ))
+        for rank, title in enumerate(("Tariff talks stall", "Tariff dispute widens"), start=1):
+            row = _make_issue(today, title, ["AP News", "Reuters"])
+            row.rank, row.status = rank, ActionIssueStatus.CONFIRMED
+            row.source_urls = json.dumps([f"https://example.org/today-{rank}"])
+            db_session.add(row)
+        for back, source in zip(range(1, 5), ("NPR", "PBS", "AP News", "Reuters")):
+            day = (datetime(2026, 3, 13) - timedelta(days=back)).strftime("%Y-%m-%d")
+            row = _make_issue(day, "Tariff talks stall", [source])
+            row.status = ActionIssueStatus.CONFIRMED
+            row.source_urls = json.dumps([f"https://example.org/past-{back}"])
+            db_session.add(row)
+        db_session.commit()
+
+        _update_national_monitors(today, db_session)
+
+        monitors = {m.slug: m for m in db_session.query(NationalMonitor)}
+        assert len(monitors) == 2
+        new = next(m for slug, m in monitors.items() if slug != "ongoing-standoff")
+        assert new.title == "Tariff talks stall"
+        assert not monitors["ongoing-standoff"].updates
+        assert len(new.updates) == 5
 
 
 class TestFullStoryShouldInvalidate:

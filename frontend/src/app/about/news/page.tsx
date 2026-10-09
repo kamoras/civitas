@@ -164,13 +164,19 @@ export default function NewsChapter() {
             through, one at a time.
           </Item>
           <Item label="Ongoing">
-            When a story persists across several days, it becomes a national monitor with its own
-            sourced timeline. A day&apos;s story joins a monitor when its headline is close enough
+            When a story keeps coming back, on five separate days within two weeks and from at least
+            three outlets, it becomes a national monitor with its own sourced timeline. A language
+            model writes the monitor&apos;s name and description and decides nothing: a name using a
+            word its articles don&apos;t falls back to the story&apos;s own headline. Until October
+            2026 the model copied the example name in its instructions for most new topics, and each
+            new monitor was merged into the existing one of that name, so the site showed one
+            monitor for months. A day&apos;s story joins a monitor when its headline is close enough
             to the monitor&apos;s own description. A language-model check on borderline matches was
             removed after a replay showed it let 17 of 18 off-topic stories through. Two monitors
             are merged only when their titles are near-identical, since a merge can&apos;t be
-            undone; a monitor goes quiet (&ldquo;watching&rdquo;) when coverage fades and wakes when
-            it returns.
+            undone. A monitor goes quiet (&ldquo;watching&rdquo;) after a week without coverage and
+            wakes when it returns; after a month it closes and leaves this tab, staying in the
+            Archive.
           </Item>
           <Item label="Archive">
             Each day&apos;s top issue is kept permanently, building a month-by-month record with a

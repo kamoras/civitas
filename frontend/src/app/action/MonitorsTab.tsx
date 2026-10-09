@@ -256,7 +256,9 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
     <div>
       <p className="mb-6 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
         Concerns that keep coming back across days of coverage, detected automatically. Each one
-        gathers the dated updates that fed it, with a source for every entry.
+        gathers the dated updates that fed it, with a source for every entry. One with no new
+        coverage for a week is marked watching until coverage returns; after a month it closes and
+        moves to the Archive.
       </p>
 
       {offList && <OffListMonitor slug={offList} />}
@@ -270,8 +272,8 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
         </h2>
         {monitors.length === 0 ? (
           <p className="py-4 font-display text-base text-ink-lo">
-            Nothing is being tracked right now. A monitor opens when an issue persists across
-            several days of coverage.
+            Nothing is being tracked right now. A monitor opens when a story comes back on five
+            separate days within two weeks.
           </p>
         ) : (
           <ul>

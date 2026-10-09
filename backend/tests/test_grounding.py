@@ -784,10 +784,10 @@ class TestEveryPublishingPathIsChecked:
     # write, so "is this grounded" is answered by construction and the
     # combinator runs only as a backstop on the composed result.
     SPAN_VERIFIED = {"_locate", "locate_claim"}
-    # Functions whose LLM output is a DECISION, never published text.
-    # A wrong answer here mislabels a monitor's category —
-    # a correctness bug, not a hallucination reaching a reader.
-    JUDGMENT_ONLY = {"_reclassify_monitor_llm"}
+    # Functions whose LLM output is a DECISION, never published text. None
+    # left: the monitor category check was the last (removed 2026-10-09;
+    # a classification belongs to the embedding classifier).
+    JUDGMENT_ONLY: set[str] = set()
 
     def _generators(self, relative_path):
         import ast
