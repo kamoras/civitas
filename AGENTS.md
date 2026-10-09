@@ -152,11 +152,13 @@ of these approaches:
 - **Statistical formulas** with shrinkage toward neutral for scoring metrics
 - **LLM inference** for tasks that require natural language synthesis from
   unstructured input: Action Center claim location (verbatim-checked),
-  monitor significance and merge decisions, timeline period summaries,
-  Bluesky spotlight and weekly-summary text (issue posts are the verified
-  lede, verbatim), early-signal vote drafts, on-request Explore document
-  summaries (`POST /api/explore/{id}/summary`, a write), and justice profile
-  summaries. Never a score, and never ballot content (§7). (Per-senator/rep
+  monitor significance, category and borderline-match decisions (merging is
+  title similarity alone), timeline period summaries, locating the actor and
+  predicate in a race's coverage for its post (`election_bluesky.py`,
+  verbatim spans), and on-request Explore document summaries
+  (`POST /api/explore/{id}/summary`, a write). Spotlight, issue and
+  early-signal posts are fixed templates around stored figures or verified
+  ledes, and the justice profile carries no generated summary. Never a score, and never ballot content (§7). (Per-senator/rep
   narrative generation and promise evaluation used to be LLM-based; both
   were removed in 2026-07 after live audits found the output unreliable
   regardless of prompting approach — see `cross_reference.py`'s and
@@ -210,7 +212,7 @@ the residual.
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
-| 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims and summaries, Bluesky posts, Explore document summaries, justice profiles (full list in the bullet above) |
+| 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor decisions and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
 employee PAC or a purely political PAC), the system defers to tier 2
@@ -935,8 +937,7 @@ Each member pipeline executes in 4 phases per chamber, defined in
    — no LLM call (campaign-promise analysis and per-senator narrative
    generation were both LLM-based here until removed in 2026-07 for
    unreliable output; see `cross_reference.py` and `policy_alignment.py`).
-   Justice impartiality scoring (separate phase) still uses the LLM for a
-   9-justice profile summary.
+   Justice scoring (separate phase) makes no LLM call either.
 4. **ASSEMBLE + SAVE** — Build scorecards for senators, presidents, and
    justices; validate via `assemble/validator.py`; persist to SQLite
 

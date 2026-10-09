@@ -2,6 +2,7 @@
 
 import type { ScoreHistory, ScoreSnapshot } from "@/lib/api";
 import { shortDate } from "@/components/scorecard/format";
+import { displayScore } from "@/lib/formatting";
 
 interface ScoreTrendProps {
   snapshots: ScoreSnapshot[];
@@ -107,7 +108,7 @@ export default function ScoreTrend({ snapshots, change = null }: ScoreTrendProps
   return (
     <div
       className="mt-2"
-      aria-label={`Score trend from ${snapshots[0].date} to ${snapshots[snapshots.length - 1].date}: ${first} to ${last}`}
+      aria-label={`Score trend from ${snapshots[0].date} to ${snapshots[snapshots.length - 1].date}: ${displayScore(first)} to ${displayScore(last)}`}
     >
       <div className="flex items-center justify-between mb-1">
         <span className="font-mono text-xs text-ink-lo tracking-widest">SCORE HISTORY</span>

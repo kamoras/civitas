@@ -276,7 +276,7 @@ export default function VotingRecord({
           {Math.round(partyLoyaltyPct)}%
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
-          <MetricTooltip text="The share of this Congress's party-line votes (most of one party on each side) on which the member voted with most of their own party. Each bill or nomination counts once, however many times it came to a vote, and a vote against the party from its own flank isn't counted against it: the same count Constituent Alignment scores.">
+          <MetricTooltip text="The share of this Congress's party-line votes (at least 65% of one party voting yes and at most 35% of the other) on which the member voted with most of their own party. Each bill or nomination counts once, however many times it came to a vote, and a vote against the party from its own flank isn't counted against it: the same count Constituent Alignment scores.">
             PARTY LOYALTY
           </MetricTooltip>
         </div>

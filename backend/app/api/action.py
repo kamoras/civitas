@@ -18,13 +18,14 @@ from app.api.admin import require_admin
 from app.database import get_db, get_visits_db
 from app.election_calendar import next_election_day, previous_election_day, seats_up_for_year
 from app.election_phase import election_today
-from app.pipeline.analyze.score_calculator import get_district_pvi_map
+from app.pipeline.analyze.score_calculator import compute_overall_score, get_district_pvi_map
 from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
 from app.pipeline.fetch.congress import expected_current_congress
 from app.services.bill_record import parse_bill_id
 from app.time_utils import comment_period_today, utcnow
+from app.timeline_entries import without_repeat_leads
 from app.trending import compute_trending_issue_ids
 from app.models import (
     ActionIssue, ActionIssueStatus, ApiCache, ExploreDocument, IssueView, MonitorStatus,
@@ -241,11 +242,39 @@ def _internal_bill_congresses(db: Session, bill_ids: set[str]) -> dict[str, set[
     return found
 
 
+def _issue_member_ids(issue: ActionIssue) -> set[str]:
+    """Member ids named in an issue's related_senators JSON."""
+    return {
+        s["id"] for s in _parse_json_field(getattr(issue, "related_senators", "[]"))
+        if isinstance(s, dict) and s.get("id")
+    }
+
+
+def _current_member_facts(db: Session, member_ids: set[str]) -> dict[str, dict]:
+    """{member_id: name/state/party/overall_score as the scorecard shows them
+    now}. related_senators is written once, when the issue is built, and
+    issues stay readable for good; serving its stored score showed an
+    archived issue's members at whatever they scored that day — a
+    different whole number from the scorecard the entry links to for 195
+    of 203 entries (2026-10-09)."""
+    if not member_ids:
+        return {}
+    facts: dict[str, dict] = {}
+    for model in (Senator, Representative):
+        for m in db.query(model).filter(model.id.in_(member_ids)).all():
+            facts[m.id] = {
+                "name": m.name, "state": m.state, "party": m.party,
+                "overall_score": compute_overall_score(m),
+            }
+    return facts
+
+
 def _build_issue_response(
     issue: ActionIssue, db: Session,
     explore_docs_map: dict[int, ExploreDocument] | None = None,
     internal_bills: dict[str, set[int]] | None = None,
     is_trending: bool = False,
+    member_facts: dict[str, dict] | None = None,
 ) -> dict:
     explore_ids = _parse_json_field(issue.related_explore_ids)
     related_docs: list[dict] = []
@@ -269,8 +298,10 @@ def _build_issue_response(
         ]
 
     senator_data = _parse_json_field(getattr(issue, "related_senators", "[]"))
+    if member_facts is None:
+        member_facts = _current_member_facts(db, _issue_member_ids(issue))
     related_senators = [
-        RelatedSenator(**s).model_dump(by_alias=True)
+        RelatedSenator(**{**s, **member_facts.get(s["id"], {})}).model_dump(by_alias=True)
         for s in senator_data if isinstance(s, dict) and s.get("id")
     ]
 
@@ -483,6 +514,9 @@ async def get_action_issues(
     for i in issues:
         all_bill_ids |= _issue_bill_ids(i)
     internal_bills = _internal_bill_congresses(db, all_bill_ids)
+    member_facts = _current_member_facts(
+        db, set().union(*(_issue_member_ids(i) for i in issues)),
+    )
 
     trending_ids = _trending_ids_for(issues, db_visits)
 
@@ -492,6 +526,7 @@ async def get_action_issues(
             _build_issue_response(
                 i, db, explore_docs_map, internal_bills,
                 is_trending=to_public_id(i.id) in trending_ids,
+                member_facts=member_facts,
             )
             for i in issues
         ],
@@ -547,7 +582,10 @@ async def get_recent_action_issues(
     )
     by_id = {p.id: p for p in pool}
     issues = [i for i in pool if not _hidden_as_duplicate(i, by_id)][:limit]
-    return {"issues": [_build_issue_response(i, db) for i in issues]}
+    member_facts = _current_member_facts(
+        db, set().union(*(_issue_member_ids(i) for i in issues)),
+    )
+    return {"issues": [_build_issue_response(i, db, member_facts=member_facts) for i in issues]}
 
 
 # ActionIssue.source_type of an election-night seat-flip issue
@@ -853,6 +891,7 @@ async def get_timeline(
         .order_by(TimelineEntry.date.desc())
         .all()
     )
+    entries = without_repeat_leads(entries)
 
     # Week summaries for the year
     week_summaries = {

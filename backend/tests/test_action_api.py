@@ -1039,3 +1039,82 @@ async def test_every_kept_day_is_openable_whatever_day_is_shown(db_session):
     for shown in (None, days[10], days[0]):
         resp = await get_action_issues(Response(), date=shown, db=db_session, db_visits=db_session)
         assert resp["availableDates"] == sorted(days, reverse=True), shown
+
+
+
+class TestRelatedMembersAreCurrent:
+    """An issue's related_senators blob is written once, when the issue is
+    built; issues stay readable for good. Its stored score was served as
+    is, so an archived issue showed each member's score from that day,
+    beside a link to a scorecard showing another (195 of 203 entries
+    differed, 2026-10-09)."""
+
+    def _issue(self, db_session, member_id="sen-a"):
+        from app.models import Senator
+        db_session.add(Senator(
+            id="sen-a", name="Pat Doe", state="IA", party="R", is_current=True,
+            score_funding_independence=80.0, score_constituent_alignment=67.0,
+            score_legislative_effectiveness=41.0,
+        ))
+        issue = ActionIssue(
+            date="2026-06-29", rank=1, title="Archived story", is_current=False,
+            related_senators=json.dumps([{
+                "id": member_id, "name": "Pat Doe", "state": "IA", "party": "R",
+                "overall_score": 46.2, "chamber": "senate",
+            }]),
+        )
+        db_session.add(issue)
+        db_session.commit()
+        return issue
+
+    def test_single_issue_reads_the_members_score_now(self, db_session):
+        from app.api.action import _build_issue_response
+        data = _build_issue_response(self._issue(db_session), db_session)
+        assert data["relatedSenators"][0]["overallScore"] == 62.45
+
+    async def test_recent_list_reads_it_too(self, db_session):
+        from fastapi import Response
+
+        from app.api.action import get_recent_action_issues
+        self._issue(db_session)
+        result = await get_recent_action_issues(Response(), limit=10, db=db_session)
+        assert result["issues"][0]["relatedSenators"][0]["overallScore"] == 62.45
+
+    def test_a_member_no_longer_held_keeps_the_stored_entry(self, db_session):
+        from app.api.action import _build_issue_response
+        data = _build_issue_response(self._issue(db_session, member_id="gone"), db_session)
+        assert data["relatedSenators"][0]["overallScore"] == 46.2
+
+
+class TestTimelineRepeatLeads:
+    """A story that led two days running is one entry, on the day it first
+    led. The writer applies that to new days only; rows from before it
+    listed one story twice in a row (two pairs in 2026-10)."""
+
+    async def test_a_repeated_lead_is_listed_once_on_its_first_day(self, db_session):
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_timeline
+        from app.models import TimelineEntry
+        for day, url in (("2026-10-01", "https://a.example/1"), ("2026-10-02", "https://a.example/1"),
+                         ("2026-10-03", "https://b.example/2"), ("2026-10-04", "https://a.example/1")):
+            db_session.add(TimelineEntry(date=day, title=url, summary="s", policy_areas="[]", source_url=url))
+        db_session.commit()
+        with patch("app.api.action.utcnow", return_value=datetime(2026, 10, 9, 15)):
+            result = await get_timeline(Response(), year=2026, db=db_session)
+        days = sorted(e["date"] for m in result["months"] for e in m["entries"])
+        # The same source again after another day's lead is a new day's lead.
+        assert days == ["2026-10-01", "2026-10-03", "2026-10-04"]
+        assert result["totalDays"] == 3
+
+
+def test_without_repeat_leads_keeps_either_order():
+    from types import SimpleNamespace
+
+    from app.timeline_entries import without_repeat_leads
+    rows = [SimpleNamespace(date=d, source_url=u) for d, u in
+            (("2026-10-01", "x"), ("2026-10-02", "x"), ("2026-10-03", None), ("2026-10-04", None))]
+    assert [r.date for r in without_repeat_leads(rows)] == ["2026-10-01", "2026-10-03", "2026-10-04"]
+    assert [r.date for r in without_repeat_leads(rows[::-1])] == ["2026-10-04", "2026-10-03", "2026-10-01"]
