@@ -150,6 +150,7 @@ from app.pipeline.fetch.state_candidates_common import (
     office_from_columns,
     parse_office,
     JUDICIAL_COURT_LABELS,
+    OTHER_PARTY,
     parse_judicial_office,
     parse_state_leg_office,
     parse_statewide_office,
@@ -1071,7 +1072,9 @@ def _collect(
 
         records = []
         for name, _pct in won:
-            party = contest_party or normalize_party(entry["party"].get(name, ""))
+            printed_party = " ".join(str(entry["party"].get(name, "") or "").split())
+            party = contest_party or normalize_party(printed_party)
+            printed_label = None
             if party is None:
                 # In a one-nominee party primary an unattributable contest
                 # is a label we don't understand, so it's skipped. Under
@@ -1081,6 +1084,16 @@ def _collect(
                 if effective_advance == 1:
                     continue
                 party = ""
+                # What the state printed is still what the ballot says
+                # ("Peace and Freedom", "No Party Preference"): kept as the
+                # label, rather than the page showing no party at all for a
+                # state office or the FEC filing's code for a federal one
+                # (California, 2026-10-09: three Assembly nominees with no
+                # party, a House nominee shown as "Other Party").
+                if re.search(r"[A-Za-z]{2}", printed_party):
+                    printed_label = printed_party[:80]
+                    if not federal:
+                        party = OTHER_PARTY
             # A federal nominee is matched against an FEC row, which
             # files surnames. A state-office nominee has no FEC row to
             # match or to render from, so the printed name is kept whole
@@ -1110,6 +1123,8 @@ def _collect(
                 # resolved uniquely; see _match_candidate.
                 record["display_name"] = name
 
+            if printed_label:
+                record["party_label"] = printed_label
             if seat is not None:
                 record["seat"] = seat
             records.append(record)

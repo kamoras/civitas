@@ -9,6 +9,7 @@ import CoverageFeed from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
+import GeneralRunoffNotice, { otherPrimaryLabel } from "@/components/elections/GeneralRunoffNotice";
 import DistrictFinder from "@/components/elections/DistrictFinder";
 import DistrictMap from "@/components/elections/DistrictMap";
 import TownContestCard from "@/components/elections/TownContestCard";
@@ -1778,6 +1779,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 {ballot.primaryDate && (
                   <p className="mt-0.5 font-mono text-xs text-ink-min">
                     PRIMARY: {ballot.primaryDate}
+                    {(ballot.otherPrimaries ?? []).map((o) => (
+                      <span key={`${String(o.offices)}-${o.date}`}>
+                        {" · "}
+                        {otherPrimaryLabel(o)}: {o.date}
+                      </span>
+                    ))}
                   </p>
                 )}
                 {/* From election day the page is about the count; a lean
@@ -1835,6 +1842,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               ballot, not under it: in a state still on FEC filers after its
               primary, a reader who only sees a footnote has been misled. */}
             <BallotBasisNotice basis={ballot.ballotBasis} />
+            <GeneralRunoffNotice runoffs={ballot.generalRunoffs} />
 
             {federalRaces.length === 0 && (
               <p className="mb-4 text-base text-ink-min">
