@@ -196,6 +196,15 @@ overlap measured in tokens would be a number someone picked. A short
 document is still exactly one window, so the index grows with the corpus's
 real length rather than uniformly.
 
+The title leads every window, so a passage from the middle of a rule still
+has its subject — and the windows are cut in the room the title leaves
+(less the encoder's own `[CLS]`/`[SEP]`), never filled first and prefixed
+after (`explore_chunks`). Until 2026-10 title *and* summary, a median 83
+tokens, were prefixed to windows that were already full: the encoder's
+truncation cut the end off 79% of windows, a quarter of each on average, and
+with one sentence of overlap that text was in no window at all. The summary
+is now embedded once, as the start of the text.
+
 At query time the index is searched at chunk level and folded back to
 documents by each document's best-matching chunk — max pooling, not
 averaging, because a long rule with one passage squarely on the query is a
@@ -203,6 +212,17 @@ good answer and averaging over its other pages would bury it under
 something vaguely on-topic throughout. The number of chunk slots requested
 for a given number of documents comes from the index's own measured mean
 chunks per document, written at embed time.
+
+**An identifier lookup skips the encoder.** Rank fusion rewards agreement:
+a document both channels place 30th and 8th outscores one only keyword
+placed 1st. That is right when both channels carry evidence and wrong when
+one carries none, which is the case for a query that is nothing but
+publisher identifiers, in any case ("89 FR 52508", "rin 1615-ad22", a docket id) — the
+semantic channel found 2–3% of such targets in its top 20, and fused R@1 on
+them was 0.25 against keyword's 0.65. `is_identifier_query` (built on the
+identifier formats `document_authority` already parses for the citation
+graph) sends those to the keyword channel alone; a query with any words
+beside the identifier still goes to both.
 
 **Half the engine can be down and search still works — and says so.** The
 vector index records which model built it, and a mismatch at startup drops the
@@ -314,10 +334,19 @@ style:
 
 | Style | Query built from | What it probes |
 |---|---|---|
-| `title` | the document's own title | the easy case |
-| `paraphrase` | body content words, title words removed | where dense retrieval should win |
+| `title` | the document's own title words, in order | the easy case |
+| `paraphrase` | the body's eight most frequent content words, title words removed | despite the name, an exact-term bag of words — keyword's home ground |
 | `identifier` | serial numbers and citations in the document | where dense retrieval cannot compete |
 | `rare` | the document's least common terms corpus-wide | the long tail, where IDF earns its keep |
+| `passage` | one verbatim body sentence, from anywhere in the body | whether a specific passage, deep text included, is reachable |
+
+Every style is built from the document's own words, so the protocol measures
+lexical findability and the keyword channel leads by construction. Read the
+semantic channel against itself across a change to the index, never against
+keyword: on the 2026-10 corpus it found 53% of targets in its top 20 overall,
+and 1.6% of identifier probes, which no encoder can do better on. The probes
+are also deterministic for a given `--seed` (they used to depend on Python's
+per-process string-hash order, so two runs never measured the same queries).
 
 Relevance judgments are derived, not hand-labelled: this is known-item
 retrieval, where a document is pulled from the corpus, a query a person

@@ -71,10 +71,13 @@ SIMILARITY_DIMENSIONS = 384
 # hash began to be kept with its vectors (vec_explore_text): an index built
 # before then may hold documents a killed embed left partial (before each
 # document's write was one transaction), which no hash can vouch for, so it
-# is rebuilt once rather than trusted. `ensure_explore_index` compares the
-# pair, so a deployed index rebuilds itself on either change without anyone
-# remembering to clear it.
-INDEX_SCHEMA_VERSION = "3-text-hashes"
+# is rebuilt once rather than trusted. Bumped again (4) when the windows
+# began to fit the encoder beside the title that leads them (explore_chunks):
+# what each chunk embeds changed, so every vector built before is the old
+# text. `ensure_explore_index`
+# compares the pair, so a deployed index rebuilds itself on either change
+# without anyone remembering to clear it.
+INDEX_SCHEMA_VERSION = "4-windows-fit"
 
 
 def index_identity() -> str:
@@ -821,6 +824,28 @@ def chunk_text(text: str, max_tokens: int, count_tokens) -> list[str]:
     return windows
 
 
+def explore_chunks(doc: dict, max_tokens: int, count_tokens) -> list[str]:
+    """The texts embedded for one explore document: its title followed by
+    one window of its summary and body, each fitting `max_tokens`.
+
+    The title leads every window. Without it a window drawn from the middle
+    of a rule is a paragraph with no subject. The summary is text like the
+    body — embedded once, at the start — not a prefix: until 2026-10 title
+    and summary (a median 83 tokens) were prefixed to windows that were
+    already full, so the encoder's truncation cut the end off 79% of
+    windows, a quarter of each on average, and with one sentence of overlap
+    that text was in no window at all. The windows are cut in what the
+    title leaves, and the title is held to half the budget so a long one
+    can't leave the text no room.
+    """
+    title = (chunk_text(doc.get("title") or "", max_tokens // 2, count_tokens) or [""])[0]
+    rest = f"{doc.get('summary') or ''}\n\n{doc.get('body') or ''}"
+    pieces = chunk_text(rest, max_tokens - (count_tokens(title) if title else 0), count_tokens)
+    if not pieces:
+        return [title] if title else []
+    return [f"{title} {piece}".strip() for piece in pieces]
+
+
 def _delete_ids(conn: sqlite3.Connection, table: str, doc_ids: list[int]) -> int:
     """Delete `table`'s rows for these documents, inside the caller's
     transaction: one statement per 500 ids (SQLite caps host parameters
@@ -860,26 +885,22 @@ def embed_explore_documents(docs: list[dict], *, record_chunks_per_doc: bool = T
 
     conn = get_vec_conn()
     model = get_similarity_model()
-    max_tokens = int(model.max_seq_length)
+    # What the encoder reads of one input: its max_seq_length less the
+    # special tokens ([CLS], [SEP]) it adds around every input, which
+    # tokenize() does not count.
+    max_tokens = int(model.max_seq_length) - int(model.tokenizer.num_special_tokens_to_add())
 
     def _count(text: str) -> int:
         return len(model.tokenizer.tokenize(text))
 
-    # Title and summary lead every window. They are the strongest statement
-    # of what a document is about, and without them a window drawn from the
-    # middle of a rule is a paragraph with no subject.
     units: list[tuple[int, str, dict]] = []
     textless: list[dict] = []
     for doc in docs:
-        head = f"{doc.get('title', '')} {doc.get('summary', '')}".strip()
-        body = (doc.get("body") or "").strip()
-        pieces = chunk_text(f"{head}\n\n{body}".strip(), max_tokens, _count)
-        if not pieces:
+        chunks = explore_chunks(doc, max_tokens, _count)
+        if not chunks:
             textless.append(doc)
             continue
-        for piece in pieces:
-            text = piece if piece.startswith(head[:40]) else f"{head} {piece}".strip()
-            units.append((int(doc["id"]), text, doc))
+        units.extend((int(doc["id"]), text, doc) for text in chunks)
 
     if textless:
         # No text left to embed: its old chunks go (search would keep
