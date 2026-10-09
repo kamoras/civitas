@@ -6,6 +6,7 @@ this namespace is the only elections API."""
 import json
 import logging
 import pathlib
+import re
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,6 +17,7 @@ from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json, retry_soon_json
 from app.database import get_db
 from app.office_terms import term_years
+from app.state_ballot_scope import on_november_ballot
 from app.election_calendar import (
     federal_states,
     next_senate_election_year,
@@ -130,13 +132,14 @@ _state_leg_towns_cache: dict[str, list[str]] | None = None
 
 
 def _state_leg_towns() -> dict[str, list[str]]:
-    """"{ST}-{chamber}-{n}" -> the towns that district covers, so a reader
+    """"{ST}-{chamber}-{n}" -> the towns, places and counties that
+    district covers (largest places first, counties last), so a reader
     can find their seat by a place they know instead of by a number
     nobody memorises. The state-legislative twin of _district_counties(),
     and static for the same reason: it changes only when a state
-    redistricts. Built by scripts/fetch_state_leg_crosswalk.py, which
-    documents why the obvious sources give wrong answers. Empty dict —
-    never a guess — if the file is missing."""
+    redistricts. Built by scripts/fetch_state_leg_crosswalk.py from the
+    Census Bureau's 2026 state legislative block equivalency files.
+    Empty dict — never a guess — if the file is missing."""
     global _state_leg_towns_cache
     if _state_leg_towns_cache is None:
         try:
@@ -1292,11 +1295,13 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     # (or a primary) stay in the table until pruned and must never render
     # under this election's heading. Removed measures for THIS election
     # are still returned, and render as removed for their grace window.
-    measures = (
+    # In the state's own order (source_position); a row from before that
+    # column existed sorts after, by its number read as text and digits.
+    measures = sorted(
         db.query(BallotMeasure)
         .filter(BallotMeasure.state == state, BallotMeasure.election_date == election_day)
-        .order_by(BallotMeasure.number)
-        .all()
+        .all(),
+        key=_measure_order,
     )
     coverage = (
         db.query(MeasureCoverage)
@@ -1405,18 +1410,13 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             # the line above already says it.
             str(o) for o in ((source_for_state(state) or {}).get("statewide_omits") or [])
         ]) + ([
+            # Only in a year the state elects its legislature at all
+            # (state_ballot_scope.json): Louisiana, New Jersey and Virginia
+            # elect theirs in odd years, and "omits State legislative
+            # districts" implied seats being withheld.
             "State legislative districts",
-        ] if not state_leg_races else []) + (
-            # Same rule as the two above: the line shrinks the moment this
-            # state's judgeships are genuinely covered. It shrinks rather
-            # than disappearing, because retention questions are a
-            # separate yes/no ballot item — not a contest between
-            # candidates — and nothing here reads them yet. Saying
-            # "judicial contests" is covered while retention questions
-            # are not is the honest half-statement.
-            ["Judicial retention questions"]
-            if judicial_coverage["status"] != JudicialCoverageStatus.NOT_YET_COVERED
-            else ["Judicial contests and retention questions"]
+        ] if not state_leg_races and on_november_ballot(state, "legislature", cycle) else []) + (
+            _judicial_omits(state, cycle, judicial_coverage["status"])
         ) + [
             "County and municipal offices",
             "Local ballot measures",
@@ -1679,6 +1679,41 @@ def pvi_map(db: Session = Depends(get_db)):
     )
 
 
+def _judicial_omits(state: str, year: int, coverage_status: str) -> list[str]:
+    """The judicial line of `omits`, true for this state and year. Judicial
+    contests are omitted while this state's judgeships are not covered;
+    retention questions — a yes/no item, not a contest — always, since
+    nothing here reads them. Each half only where the state has that kind
+    on its November ballot this year (state_ballot_scope.json): a state
+    that appoints its judges has neither, most electing states hold no
+    retention votes, and Pennsylvania, Tennessee, West Virginia and
+    Wisconsin elect judges at other elections."""
+    contests = (
+        on_november_ballot(state, "judicial_contests", year)
+        and coverage_status == JudicialCoverageStatus.NOT_YET_COVERED
+    )
+    retention = on_november_ballot(state, "judicial_retention", year)
+    if contests and retention:
+        return ["Judicial contests and retention questions"]
+    if contests:
+        return ["Judicial contests"]
+    if retention:
+        return ["Judicial retention questions"]
+    return []
+
+
+def _measure_order(measure) -> tuple:
+    """Sort key: the measure's place in the state's own document, then (a
+    row written before source_position existed) its printed number with
+    digit runs compared as numbers, so "2" comes before "10"."""
+    natural = tuple(
+        (0, int(part), "") if part.isdigit() else (1, 0, part.lower())
+        for part in re.split(r"(\d+)", measure.number or "") if part
+    )
+    position = measure.source_position
+    return (position is None, position if position is not None else 0, natural)
+
+
 def _measure_json(measure) -> dict:
     """One measure, with everything needed to read it honestly.
 
@@ -1705,6 +1740,10 @@ def _measure_json(measure) -> dict:
         "noMeans": measure.no_means,
         "titleAuthority": measure.title_authority,
         "fiscalAuthority": measure.fiscal_authority,
+        # Null unless the state names a drafter of the summary / the yes-no
+        # sentences other than the title's (see BallotMeasure).
+        "summaryAuthority": measure.summary_authority,
+        "framingAuthority": measure.framing_authority,
         "sourceName": measure.source_name,
         "sourceUrl": measure.source_url,
         "republishedBy": measure.republished_by,

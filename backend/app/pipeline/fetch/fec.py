@@ -1236,6 +1236,31 @@ def structured_industry(meta: dict | None) -> str | None:
     return meta.get("sponsorIndustry")
 
 
+def committee_industry(meta: dict | None, read_name) -> str:
+    """A giving committee's industry: the records' (structured_industry),
+    else what its name reads as (`read_name()`, called only when the
+    records say nothing, as it may run the classifier) — except LABOR_UNIONS
+    when the FEC records the sponsor as another kind of organization
+    (corporation, membership group, trade association, cooperative): a
+    labor organization's PAC is registered as one ("L"), so a name read as
+    a union under any other type is the name, not the sponsor. It is then
+    unclassified (OTHER).
+
+    Measured 2026-10-09 on the learning store: of its 727 LABOR_UNIONS
+    labels, 177 belong to a committee with an organization type, 101 of
+    them "L"; the other 75 (trade associations of brewers or credit unions,
+    corporations' employee PACs, a farmers' membership group) were judged
+    by hand in a random 50, and none was a labor organization."""
+    structured = structured_industry(meta)
+    if structured:
+        return structured
+    name_industry = read_name()
+    org_type = (meta or {}).get("orgType")
+    if name_industry == "LABOR_UNIONS" and org_type and org_type != "L":
+        return "OTHER"
+    return name_industry
+
+
 # Schedule A entity types whose contributor is itself a committee: "COM"
 # (committee), "PAC", "PTY" (party organization) and "CCM" (candidate
 # committee). Only "COM" used to be looked up, and live Senate top-donor

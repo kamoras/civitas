@@ -48,6 +48,15 @@ class TestParseDocument:
         assert "Proposed Amendment" not in parsed["official_summary"]
         assert "The proposed amendment would add to the Virginia Constitution" in parsed["official_summary"]
         assert "Ballot question:" not in parsed["official_summary"]
+        # The question put to voters is stored, in its own field.
+        assert parsed["official_title"].startswith("Should the Constitution of Virginia be amended to (i) protect")
+        assert parsed["official_title"].endswith("the pregnancy cannot survive?")
+        assert "Should the Constitution" not in parsed["official_summary"]
+        # The explanation names who approved it; the question is the
+        # General Assembly's.
+        assert parsed["summary_authority"] == va.SUMMARY_AUTHORITY
+        unapproved = FIXTURE["1"].replace("APPROVED BY JOINT P&E COMMITTEE 6/22/2026", "DRAFT")
+        assert va.parse_document(unapproved, "1")["summary_authority"] is None
         # No framing or fiscal data is published in this document — never
         # inferred from the question's own phrasing.
         assert parsed["yes_means"] is None
@@ -81,6 +90,23 @@ class TestEnglishPdfUrl:
             "https://www.elections.virginia.gov/media/electionadministration/"
             "electionlaw/11-3-26-Special-Explanation-for-Q1-Topic.pdf"
         )
+
+    def test_brochure_and_poster_links_do_not_confuse_it(self):
+        """Each question page also links a brochure and a poster in four
+        languages, the English one suffixed "---EN" (live 2026-10-08)."""
+        art = "/media/formswarehouse/print-ready-materials-artwork/november-2026-proposed-constitutional-amendments/"
+        extra = "".join(
+            f'<a href="{art}2026-Nov-Proposed-Constitution-Amendments-{kind}---{code}.pdf">x</a>'
+            for kind in ("Brochure", "Poster") for code in ("EN", "SP", "VI", "KO")
+        )
+        url = va._english_pdf_url(_QUESTION_PAGE_HTML.format(n=2) + extra, "https://www.elections.virginia.gov/x")
+        assert url.endswith("/11-3-26-Special-Explanation-for-Q2-Topic.pdf")
+
+    def test_an_english_name_ending_in_two_letters_is_still_english(self):
+        html = "".join(
+            f'<a href="/m/Explanation-Q1-VA{s}.pdf">x</a>' for s in ("", "-ES", "-KO", "-VI")
+        )
+        assert va._english_pdf_url(html, "https://example.com") == "https://example.com/m/Explanation-Q1-VA.pdf"
 
     def test_no_english_link_returns_none(self):
         html = """<a href="/x-ES.pdf">ES</a><a href="/x-KO.pdf">KO</a>"""

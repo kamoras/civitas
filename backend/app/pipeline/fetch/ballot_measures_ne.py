@@ -67,6 +67,8 @@ logger = logging.getLogger(__name__)
 
 ELECTIONS_URL = "https://sos.nebraska.gov/elections"
 LEGISLATURE = "Nebraska Legislature"
+PETITION_TITLE_AUTHORITY = "Nebraska Attorney General (ballot title, Neb. Rev. Stat. §32-1410)"
+PETITION_FRAMING_AUTHORITY = "Nebraska Attorney General (statement of effect, Neb. Rev. Stat. §32-1410)"
 
 _rate_limiter = RateLimiter(rps=1.0)
 
@@ -194,7 +196,11 @@ def parse_pamphlet(page_texts: list[str]) -> dict[str, dict] | None:
             "fiscal_impact": None,
             "yes_means": join_lines(body[for_idx:against_idx]),
             "no_means": join_lines(body[against_idx:question_idx]),
-            "title_authority": None,
+            # Neb. Rev. Stat. §32-1410: the Attorney General writes a
+            # petition measure's ballot title and the statement of the
+            # effect of a vote for and against it.
+            "title_authority": PETITION_TITLE_AUTHORITY,
+            "framing_authority": PETITION_FRAMING_AUTHORITY,
             "fiscal_authority": None,
         }
     return found

@@ -50,6 +50,24 @@ class TestBillMentions:
         assert before.strip() == "Issues related to prescription drug value, including"
         assert "Inflation" not in after
 
+    def test_slash_joined_companions_share_their_title(self):
+        # A 2025 filing's list, as written.
+        text = ("HR 4016/ S 2572 Department of Defense Appropriations Act, 2026 HR 4553Energy, Water "
+                "Appropriations Act, 2026 HR 5304/ S 2587 Labor, Health and Human Services, and "
+                "Education Appropriations Act, 2026")
+        m = {bid: (before, after) for bid, before, after in bill_mentions(text)}
+        assert list(m) == ["HR.4016", "S.2572", "HR.4553", "HR.5304", "S.2587"]
+        assert "Department of Defense" in m["HR.4016"][1] and "Energy" not in m["HR.4016"][1]
+        # A title run straight onto the number still ends the neighbour's side.
+        assert "Energy, Water" in m["HR.4553"][1]
+        assert "Defense" not in m["S.2587"][0] and "Labor, Health" in m["S.2587"][1]
+        # Written before the pair.
+        (_, b1, _), (_, b2, _) = bill_mentions("Neighborhood Homes Investment Act (H.R.2854/S.1686)")
+        assert "Neighborhood Homes" in b1 and "Neighborhood Homes" in b2
+        # A list separated by anything else keeps each number to its own words.
+        (_, _, a1), _ = bill_mentions("S 526 Pharmacy Benefit Act, S 527 Prescription Pricing Act")
+        assert "Prescription" not in a1
+
     def test_an_initial_does_not_end_a_clause(self):
         (_, before, _), = bill_mentions("Richard L. Trumka Protecting the Right to Organize Act (H.R. 20)")
         assert "Richard L. Trumka" in before

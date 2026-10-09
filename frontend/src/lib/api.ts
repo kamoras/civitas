@@ -1813,7 +1813,6 @@ export interface OpenCommentItem {
   agencyName: string | null;
   commentsCloseOn: string;
   commentUrl: string;
-  policyAreas: string[];
   docType: string;
   date: string;
   summary: string;

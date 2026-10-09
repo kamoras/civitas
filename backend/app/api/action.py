@@ -670,18 +670,15 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
         .all()
     )
     result = []
+    # No policyAreas: nothing writes ExploreDocument.policy_areas (empty on
+    # all 10,589 documents, 2026-10-09) and no page read it.
     for d in docs:
-        try:
-            areas = json.loads(d.policy_areas) if d.policy_areas else []
-        except Exception:
-            areas = []
         result.append({
             "id": d.id,
             "title": d.title,
             "agencyName": d.agency_name,
             "commentsCloseOn": d.comments_close_on,
             "commentUrl": d.comment_url,
-            "policyAreas": areas,
             "docType": d.doc_type,
             "date": d.date,
             "summary": (d.summary or "")[:200],

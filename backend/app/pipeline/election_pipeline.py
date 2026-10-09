@@ -619,6 +619,9 @@ def _upsert_measure(db: Session, raw: dict, detail: dict | None, source_name: st
     # drafter never reached a reader.
     measure.title_authority = detail.get("title_authority")
     measure.fiscal_authority = detail.get("fiscal_authority")
+    measure.summary_authority = detail.get("summary_authority")
+    measure.framing_authority = detail.get("framing_authority")
+    measure.source_position = detail.get("source_position")
     measure.source_url = detail.get("source_url")
     measure.republished_by = detail.get("republished_by")
     measure.source_name = source_name
@@ -729,6 +732,11 @@ def _supersede_rows(db: Session, state: str, election_date: str, source_name: st
 
     ids = {i["id"] for i in items}
     numbers = {i["number"] for i in items if i.get("number")}
+    # A re-keyed record can change its number too (Wyoming's heading-as-
+    # number became a short label, New Mexico's "HB 248 (1)" the state's
+    # "Bond Question 1"); its printed title is what stays. Reconciling it
+    # would show the same measure "no longer on the ballot" beside itself.
+    titles = {i["title"] for i in items if i.get("title")}
     rows = (
         db.query(BallotMeasure)
         .filter(BallotMeasure.state == state, BallotMeasure.election_date == election_date)
@@ -737,7 +745,9 @@ def _supersede_rows(db: Session, state: str, election_date: str, source_name: st
     deleted = 0
     for row in rows:
         other_source = row.source_name != source_name
-        rekeyed = row.number and row.number in numbers and row.id not in ids
+        rekeyed = row.id not in ids and (
+            (row.number and row.number in numbers) or (row.title and row.title in titles)
+        )
         if other_source or rekeyed:
             db.delete(row)
             deleted += 1
@@ -1316,7 +1326,9 @@ def _purge_retired_source(db: Session) -> int:
 
 
 def _record_unread_state(db: Session, state: str, election_day: str) -> None:
-    """Record a state no reader covers as NOT_YET_COVERED.
+    """Record a state no reader covers as NOT_YET_COVERED — or, where its
+    own law allows no statewide measure (registry `none_by_law`),
+    CONFIRMED_NONE citing that law.
 
     Anything the row carried from an earlier source's read is cleared: no
     reader is running, so a shrink streak can't continue and an operator's
@@ -1328,6 +1340,17 @@ def _record_unread_state(db: Session, state: str, election_day: str) -> None:
     """
 
 
+    law = ballot_measure_pdf_sources.none_by_law(state)
+    if law is not None:
+        # The state's own constitution rules out any statewide measure
+        # (registry `none_by_law`): a checked answer, cited to that law.
+        _set_coverage(
+            db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
+            source_name=law["source_name"], error=f"none by law: {law['basis']}",
+        )
+        row = _coverage_row(db, state, election_day)
+        row.pending_shrink, row.shrink_streak, row.operator_note = None, 0, None
+        return
     reason = ballot_measure_pdf_sources.unread_reason(state) or "Civitas does not read this state's official measure list automatically yet."
     prior = _coverage_row(db, state, election_day)
     prior_source = prior.source_name if prior is not None else None
@@ -1367,7 +1390,9 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
     read its official list automatically yet, or it publishes no list of
     what is certified — is recorded NOT_YET_COVERED, never CONFIRMED_NONE (nothing
     was checked), and raises no alert (nothing broke): its page says so and
-    links the official lookup.
+    links the official lookup. The one exception is a state whose own law
+    allows no statewide measure (registry `none_by_law`, Delaware), recorded
+    CONFIRMED_NONE citing that law (_record_unread_state).
     """
 
     election_day = active_election(db).election_day.isoformat()

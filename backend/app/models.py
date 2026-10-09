@@ -1831,6 +1831,21 @@ class BallotMeasure(Base):
     # author is MORE neutral than the bare quote.
     title_authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
     fiscal_authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # The drafters of the summary and of the yes/no framing, where the
+    # state names one different from the title's: Alabama's Fair Ballot
+    # Commission writes the summary and the YES/NO sentences under a
+    # ballot question the Legislature wrote, and a single "Drafted by"
+    # credited the Commission's words to the Legislature. Null means the
+    # source names no separate drafter for that text (with no official
+    # title, title_authority names the summary's drafter, as before).
+    summary_authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    framing_authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Where the measure sits in the state's own document (0 first), so the
+    # page lists measures in the state's order. Sorting `number` as a
+    # string put Louisiana's 10 before its 2 and Colorado's
+    # Propositions 132-137 before Amendments 81-87. Null for a row written
+    # before the column existed; those sort after, by number.
+    source_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     source_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     source_url: Mapped[str | None] = mapped_column(String, nullable=True)

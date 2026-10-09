@@ -35,6 +35,7 @@ from lxml import etree
 from app.atomic_write import write_text_atomic
 from app.http_client import make_async_client
 from app.pipeline.fetch.house_clerk import MEMBER_DATA_URL
+from app.pipeline.fetch.house_leadership import clerk_house_leadership
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_members import strip_accents
@@ -331,6 +332,7 @@ async def refresh_committee_leadership_data(client: httpx.AsyncClient | None = N
             logger.warning("committee-leadership: the chambers' own lists could not be read", exc_info=True)
         leadership_roles = build_leadership_roles(legislators_raw)
         leadership_tenures = build_leadership_tenures(legislators_raw)
+        leadership_roles = await clerk_house_leadership(client, leadership_roles)
         failures = ingestion_gates(committee_membership, leadership_roles)
         if failures:
             for f in failures:

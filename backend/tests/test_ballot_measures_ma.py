@@ -53,11 +53,11 @@ def test_single_page_question_parses_cleanly():
         "for state and municipal government finances."
     )
     assert q1["yes_means"] == (
-        "would specify that the State Auditor has the authority to audit "
+        "A YES VOTE would specify that the State Auditor has the authority to audit "
         "the Legislature."
     )
     assert q1["no_means"] == (
-        "would make no change in the law relative to the State Auditor’s "
+        "A NO VOTE would make no change in the law relative to the State Auditor’s "
         "authority."
     )
 
@@ -79,13 +79,13 @@ def test_question_spanning_two_pages_reunites_its_fields():
     )
     assert q3["official_summary"].endswith("would stay in effect.")
     assert q3["yes_means"] == (
-        "would provide transportation network drivers the option to form "
+        "A YES VOTE would provide transportation network drivers the option to form "
         "unions to collectively bargain with transportation network "
         "companies regarding wages, benefits, and terms and conditions of "
         "work."
     )
     assert q3["no_means"] == (
-        "would make no change in the law relative to the ability of "
+        "A NO VOTE would make no change in the law relative to the ability of "
         "transportation network drivers to form unions."
     )
 
@@ -153,20 +153,20 @@ def test_a_one_line_no_statement_is_still_read():
     assert q9["number"] == "9"
     assert q9["origin"] == "Referendum on an Existing Law"
     assert q9["yes_means"] == (
-        "would keep in place the law, which increases the regulation of "
+        "A YES VOTE would keep in place the law, which increases the regulation of "
         "firearms, including ghost guns, machine guns, and assault-style weapons."
     )
-    assert q9["no_means"] == "would repeal this law."
+    assert q9["no_means"] == "A NO VOTE would repeal this law."
 
 
 def test_a_no_column_off_the_yes_baselines_is_still_read():
     (q1,) = ma.parse_information_for_voters([_fake_page("2026_q1_page6")])
     assert q1["title"] == "Expanding the Public Records Law"
     assert q1["yes_means"] == (
-        "would make most records held by the Legislature and the Office of "
+        "A YES VOTE would make most records held by the Legislature and the Office of "
         "the Governor public records under the Massachusetts Public Records Law."
     )
-    assert q1["no_means"] == "would make no change to the Massachusetts Public Records Law."
+    assert q1["no_means"] == "A NO VOTE would make no change to the Massachusetts Public Records Law."
 
 
 def test_no_anchor_without_the_guides_own_phrase():

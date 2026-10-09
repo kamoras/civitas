@@ -256,6 +256,12 @@ guards), ensuring the current run's classifications take precedence. Within
 a single pipeline run, this is harmless because learning store lookups
 short-circuit re-classification of already-seen entities.
 
+A donor's industry is taken from kNN only when all seven neighbours agree
+(`donor_classifier_ai._KNN_K`, `min_agreement`): measured 2026-10-09 on
+record-labelled PAC sponsors the prototype tier abstains on, a plurality
+vote was right 29% of the time at every similarity floor, and a wrong
+industry is worse than an unclassified one.
+
 kNN's own outputs (`source == KNN_SOURCE`) are stored for lookup but are
 **never used as kNN reference examples** — only labels from an upstream tier
 (FEC metadata, rules, prototype similarity) vote. Otherwise one run's guess
@@ -799,11 +805,11 @@ What this rules in and out:
   picker); linking out to the official lookup for a reader who wants a
   precinct-exact answer. Where a district needs to be findable, give it
   place names a person already knows and let them filter: counties for a
-  U.S. House seat (`county_district_crosswalk.json`), towns for a state
-  legislative one (`state_leg_district_crosswalk.json`). Building that
-  crosswalk is real work — `scripts/fetch_state_leg_crosswalk.py`
-  documents why three obvious sources give wrong answers — and doing it
-  is the price of not asking.
+  U.S. House seat (`county_district_crosswalk.json`), towns, communities
+  (incorporated places and Census Designated Places) and counties for a
+  state legislative one (`state_leg_district_crosswalk.json`, a block-level
+  join documented in `scripts/fetch_state_leg_crosswalk.py`). Building
+  those crosswalks is real work, and doing it is the price of not asking.
 - **In:** following Civitas without an account. The Atom feeds (`/feeds`)
   are pulled, and a topic or state is chosen by which URL a reader
   subscribes to, so there is no subscriber list to keep. A push channel
@@ -1268,7 +1274,9 @@ the pending list).
 | Bill policy area + stance derivation (embedding-based) | `backend/app/pipeline/analyze/bill_analyzer.py` |
 | Commemorative bill detection (LES 1x tier; calibrated threshold) | `backend/app/pipeline/analyze/commemorative.py` + `backend/scripts/calibrate_commemorative.py` |
 | Party alignment (content-based) + partisan depth | `backend/app/pipeline/analyze/party_platform.py` |
-| Caucus inference (votes + cosponsorship) | `backend/app/pipeline/transform/normalize_votes.py` |
+| Caucus: the House Clerk's recorded caucus, else inference (votes + cosponsorship) | `backend/app/pipeline/fetch/house_clerk.py` (`parse_caucuses`), `backend/app/pipeline/transform/normalize_votes.py` |
+| Committee seats and leadership titles (congress-legislators; the Clerk's list decides the House posts it names) | `backend/app/pipeline/fetch/committee_leadership.py`, `backend/app/pipeline/fetch/house_leadership.py` |
+| Donor name casing (learned from Federal Register prose) | `backend/app/pipeline/transform/normalize_finance.py` (`_clean_donor_name`), `backend/scripts/build_name_casing.py`, `backend/app/data/name_casing.json` |
 | kNN classifier + inverse-freq balancing | `backend/app/pipeline/analyze/nn_classifier.py` |
 | Sponsorship analysis (PageRank leadership + SVD ideology) | `backend/app/pipeline/analyze/sponsorship_analysis.py` |
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |

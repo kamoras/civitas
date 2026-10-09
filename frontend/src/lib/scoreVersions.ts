@@ -32,6 +32,18 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.34",
+    date: "2026-10-09",
+    title: "Donor industries only where the evidence agrees; one employer, one donor",
+    tldr: "A donor whose industry couldn't be read from its name took the most common industry among similar names, a guess that was right 29% of the time; it now gets one only when all seven similar names agree, and otherwise counts toward no industry. An employer typed two ways by donors is now one donor, and an independent representative is read with the caucus the House Clerk records.",
+    changes: [
+      "Funding Diversity: 344 of 533 members move, almost all down by one to three points (223 by -1, 67 by -2, 32 by -3; at most -6; 3 up by one), because industry money that was a guess is no longer counted as classified, and a committee whose FEC record names a trade association, corporation or other non-labor sponsor is no longer read as a union from its name (none of a hand-judged 50 such labels was a labor organization). Re-scored on a copy of production; the before scores reproduce every stored score.",
+      "Funding Independence: merging an employer's two spellings changes the top-ten donors' share for 58 members and the score for 21 (19 by -1, one by -2, one by -3). The merge was calibrated on 168 hand-judged spelling pairs: right on an estimated 94.1% of the pairs it joins, finding 78.7% of one-word misspellings.",
+      "Constituent Alignment: one independent representative, whom the Clerk records in the Republican caucus, now has a party-line record (295 votes, 29 breaks) and moves from 50 to 30; with one more member in the Republican expectation fit, 56 other representatives move by one to four points.",
+      "No score effect: House leadership posts from the Clerk's list, lobbying filings' companion bill numbers linked (817 to 932 links, none lost), and donor names cased as written. docs/methodology/member-score/v6.34.md has the measurements.",
+    ],
+  },
+  {
     version: "v6.33",
     date: "2026-10-08",
     title: "State partisan lean matches Cook's published figures",
