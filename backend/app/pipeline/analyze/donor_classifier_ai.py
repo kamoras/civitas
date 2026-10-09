@@ -850,9 +850,19 @@ def _classify_remaining_via_nn(
         prototype_descriptions=INDUSTRY_DESCRIPTIONS, k=_KNN_K, min_agreement=_KNN_K,
     )
 
+    # The donor type is the plurality of five neighbours, at the documented
+    # similarity floor (this call passed 0.25 over it until 2026-10).
+    # Measured 2026-10-09 on 300 record-labelled names (candidate, party and
+    # sponsored committees from the FEC's committee file; lobbying-registry
+    # clients as organizations), against 379 references mixed like the
+    # learning store: the plurality is right on 76%, identically at every
+    # floor from 0.25 to 0.75 (the nearest reference's cosine has p10 0.81).
+    # Unlike industry, a stricter rule doesn't help: a type kNN can't settle
+    # falls back to Org/Employees, a guess, and requiring 4 of 5 to agree
+    # cut the right answers from 76% to 57%.
     type_results = classify_batch_nn(
         query_names, db_session, entity_type="donor_type",
-        prototype_descriptions=DONOR_TYPE_PROTOTYPES, k=5, min_similarity=0.25,
+        prototype_descriptions=DONOR_TYPE_PROTOTYPES, k=5,
     )
 
     all_results: dict[str, dict] = {}
