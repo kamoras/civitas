@@ -215,6 +215,17 @@ Optional, each because a live state needed it:
                                      qualified name is published, independents
                                      included, rather than one winner per
                                      party (Wyoming, New Mexico, Tennessee)
+  judicial_offices                   with statewide_offices and office_parse,
+                                     also read the state's elected
+                                     judgeships through parse_judicial_office
+                                     -- the same separate claim the flag
+                                     makes on a results adapter, that the
+                                     state's judicial contests are partisan
+                                     (North Carolina's candidate list: its
+                                     results export names only the winners
+                                     of contested primaries, so an unopposed
+                                     nominee and a party's later replacement
+                                     were missing or stale)
 
 An HTML page is read from its table whose header row carries every
 configured heading (New Mexico). A PDF is read as a table too (Iowa, Nebraska): the row whose cells include
@@ -258,6 +269,7 @@ from app.pipeline.fetch.state_candidates_common import (
     in_ballot_window,
     not_yet,
     normalize_party,
+    parse_judicial_office,
     parse_office,
     parse_state_leg_office,
     parse_statewide_office,
@@ -601,9 +613,14 @@ def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
         return None
 
 
-def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = False) -> list[dict]:
+def parse_certified_rows(
+    rows: list[dict], fmt: dict, state_offices: bool = False, judicial: bool = False,
+) -> list[dict]:
     """Federal candidate records from the list's rows — and, with
-    `state_offices`, the state's executive and legislative ones too.
+    `state_offices`, the state's executive and legislative ones too; with
+    `judicial`, its elected judgeships (read only from a label the other
+    gates refuse, and only for a state whose entry opts in with
+    judicial_offices -- see parse_judicial_office).
 
     A state-office record keeps the whole printed name in `last_name`
     (there is no FEC surname to match it against; see
@@ -686,6 +703,8 @@ def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = Fals
             if parsed is None:
                 if state_offices and display:
                     state_record = _state_office_record(label, party_label, _with_mate(display, row, mate_columns))
+                    if state_record is None and judicial:
+                        state_record = _judicial_record(label, party_label, display)
                     if state_record is not None:
                         records[(state_record["office"], state_record["district"],
                                  state_record.get("seat"), display.lower())] = state_record
@@ -727,6 +746,20 @@ def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = Fals
             "party_label": party_label,
         }
     return list(records.values())
+
+
+def _judicial_record(label: str, party_label: str, display: str) -> dict | None:
+    """A judgeship's record for one list row, or None for anything the
+    judicial gate refuses (a clerk of court, a district attorney)."""
+    parsed = parse_judicial_office(label)
+    if parsed is None:
+        return None
+    court, district, seat = parsed
+    party, printed = ballot_list_party(party_label) or ("", None)
+    record = {"office": court, "district": district, "seat": seat, "party": party, "last_name": display}
+    if printed:
+        record["party_label"] = printed
+    return record
 
 
 def _with_mate(display: str, row: dict, columns: list[str]) -> str:
@@ -799,7 +832,7 @@ async def fetch_confirmed_candidates(
             return not_yet(year, state, "the page does not name this year's election")
         return _records(
             state, [row for p in payloads for row in (_rows(p, url, fmt) or [])], fmt,
-            bool(source.get("statewide_offices")), year,
+            bool(source.get("statewide_offices")), year, bool(source.get("judicial_offices")),
         )
 
     page_url = discovery.get("page_url")
@@ -843,7 +876,9 @@ async def fetch_confirmed_candidates(
                 logger.warning("%s certified list %s did not parse", state, url)
                 return None
             rows += part
-    return _records(state, rows, fmt, bool(source.get("statewide_offices")), year)
+    return _records(
+        state, rows, fmt, bool(source.get("statewide_offices")), year, bool(source.get("judicial_offices")),
+    )
 
 
 def _json_path(data, path: str):
@@ -1053,6 +1088,7 @@ async def _pages(
 
 def _records(
     state: str, rows: list[dict], fmt: dict, state_offices: bool = False, year: int | None = None,
+    judicial: bool = False,
 ) -> list[dict] | None:
     over = _overfilled(rows, fmt)
     if over == _NO_SEAT_COUNT:
@@ -1064,7 +1100,7 @@ def _records(
         # the filings before a primary settles them. Not yet, not broken --
         # until the ballot must be final (not_yet).
         return not_yet(year, state, over) if year is not None else []
-    records = parse_certified_rows(rows, fmt, state_offices)
+    records = parse_certified_rows(rows, fmt, state_offices, judicial)
     federal = [r for r in records if r["office"] in ("S", "H")]
     if not federal:
         logger.warning("%s certified list has no federal candidate — columns or codes changed?", state)

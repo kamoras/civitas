@@ -885,6 +885,26 @@ class TestStaleIncumbentFlag:
         assert by_id["BRENNAN"]["incumbentRecord"]["id"] == "SEN-BRENNAN"
         assert by_id["CHALLENGER"]["incumbentChallenge"] == "C"
 
+    def test_a_listed_nominee_keeps_the_flag_beside_someone_elses_stale_open(self, db_session):
+        """The 2026-10-08 House shape (nine districts): the state's list
+        confirms the sitting member, and a filer who lost the primary is
+        still FEC-coded "O" from an earlier open-seat run. The member is
+        running -- the ballot says so -- so the mix is not the retired
+        member's leftover record."""
+        _race(db_session, "2026-HOUSE-GA-2", "GA", office="H", district=2)
+        _candidate(db_session, "MEMBER", "2026-HOUSE-GA-2", "SEATHOLDER, PAT",
+                   incumbent_challenge="I", confirmed_general=True)
+        _candidate(db_session, "NOMINEE", "2026-HOUSE-GA-2", "NOMINEE, SAM", party="REP",
+                   incumbent_challenge="O", confirmed_general=True)
+        _candidate(db_session, "LOSER", "2026-HOUSE-GA-2", "LOSER, LEE", incumbent_challenge="O")
+        _representative(db_session, "REP-SEATHOLDER", "Pat Seatholder", "GA", 2)
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        by_id = {c["id"]: c for c in data["houseRaces"][0]["candidates"]}
+        assert by_id["MEMBER"]["incumbentChallenge"] == "I"
+        assert by_id["MEMBER"]["incumbentRecord"]["id"] == "REP-SEATHOLDER"
+
 
 class TestStateCoverage:
     """Front-and-center top-of-page coverage teaser (2026-08 review: news
@@ -1178,3 +1198,35 @@ def test_redrawn_maps_and_pinned_pvi_sources_name_the_same_states():
 
     pinned = load_sources()["congresses"][str(congress_for_election(2026))]
     assert redrawn_states(2026) == set(pinned["redrawn_states"])
+
+
+def test_a_state_whose_november_needs_a_majority_says_so(db_session):
+    """Louisiana's 2026 House contests are an all-party open primary on
+    Nov 3 (a Dec 12 runoff unless someone wins a majority); Georgia needs
+    a majority in every contest (Dec 1 runoff). A plurality state says
+    nothing."""
+    _race(db_session, "2026-HOUSE-LA-5", "LA", office="H", district=5)
+    _race(db_session, "2026-SEN-GA", "GA")
+    _race(db_session, "2026-SEN-CO", "CO")
+    db_session.commit()
+
+    assert _body(elections.state_ballot("LA", db_session))["generalRunoffs"] == [
+        {"offices": ["H"], "openPrimary": True, "runoffDate": "2026-12-12"},
+    ]
+    assert _body(elections.state_ballot("GA", db_session))["generalRunoffs"] == [
+        {"offices": "*", "openPrimary": False, "runoffDate": "2026-12-01"},
+    ]
+    assert _body(elections.state_ballot("CO", db_session))["generalRunoffs"] == []
+
+
+def test_contests_with_their_own_primary_date_are_named(db_session):
+    """Alabama postponed four House districts' primaries to Aug 11; the
+    header's one primary date (May 19) is not theirs."""
+    _race(db_session, "2026-HOUSE-AL-2", "AL", office="H", district=2)
+    _race(db_session, "2026-SEN-CO", "CO")
+    db_session.commit()
+
+    assert _body(elections.state_ballot("AL", db_session))["otherPrimaries"] == [
+        {"offices": ["H"], "districts": [1, 2, 6, 7], "date": "2026-08-11"},
+    ]
+    assert _body(elections.state_ballot("CO", db_session))["otherPrimaries"] == []
