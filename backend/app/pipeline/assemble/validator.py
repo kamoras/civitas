@@ -133,7 +133,12 @@ def validate_senator(senator: dict) -> dict:
             max(0, round(f["totalContributions"])) if f.get("totalContributions") is not None else None
         ),
         "totalFromPACs": max(0, round(f.get("totalFromPACs", 0))),
-        "smallDonorPercentage": clamp(f.get("smallDonorPercentage", 0)),
+        # None is "not measured" (the campaign itemizes every gift, v6.31),
+        # kept as None: clamping it raised, and the one senator it applies
+        # to failed every run and kept a stale record (2026-10-09).
+        "smallDonorPercentage": (
+            None if f.get("smallDonorPercentage", 0) is None else clamp(f.get("smallDonorPercentage", 0))
+        ),
         "topDonors": [
             {
                 "name": d.get("name", "Unknown"),
