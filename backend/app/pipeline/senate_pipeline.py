@@ -79,7 +79,7 @@ from app.pipeline.member_lifecycle import (
     purge_departed_members,
     reconcile_roster,
 )
-from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
+from app.pipeline.run_checks import alert_member_failures, persist_ground_truth_failures, run_calibration_check
 from app.pipeline.bill_refresh import keep_newer_latest_actions
 from app.pipeline.progress_tracker import ProgressTracker
 # Transform modules
@@ -1692,6 +1692,9 @@ async def run_senate_pipeline(
         results: list[dict] = []
         success_count = 0
         fail_count = 0
+        # (member id, exception) for each senator that failed: one ops
+        # alert after the scoring loop (alert_member_failures).
+        member_failures: list[tuple[str, BaseException]] = []
 
         # A seat passed to someone of the same surname: the roll calls'
         # member id says which of them cast each vote.
@@ -1846,6 +1849,7 @@ async def run_senate_pipeline(
                     "  Prep failed for %s: %s", senator["name"], str(e)
                 )
                 fail_count += 1
+                member_failures.append((senator.get("id") or senator.get("bioguideId") or senator["name"], e))
                 results.append(senator)
                 progress.update("prepare_senators", done=prep_idx + 1)
 
@@ -2259,10 +2263,11 @@ async def run_senate_pipeline(
                 ))
                 logger.info("    score %d/100", weighted_score)
                 progress.update("analyze_senators", done=senator_idx + 1)
-            except Exception:
+            except Exception as e:
                 logger.exception("  Failed for %s", senator["name"])
                 db.rollback()
                 fail_count += 1
+                member_failures.append((senator.get("id") or senator.get("bioguideId") or senator["name"], e))
                 results.append(senator)
                 pipeline_run.senators_failed = fail_count
                 pipeline_run.senators_processed = success_count
@@ -2271,6 +2276,7 @@ async def run_senate_pipeline(
                 progress.update("analyze_senators", done=senator_idx + 1)
 
         alert_if_lda_down(lda_totals, "senate")
+        alert_member_failures("senate", member_failures, close_when_clean=not senator_filter)
 
         progress.complete(
             "analyze_senators",

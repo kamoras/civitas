@@ -1161,7 +1161,16 @@ category comes only from what the form states, and every other security is
 `UNSTATED` ("Type not stated"), never typed from its name.
 
 Each senator is processed independently. The pipeline uses `PipelineRun`
-records to track progress and supports resumption.
+records to track progress and supports resumption. A member (either
+chamber) whose prepare or score step raises keeps the scorecard of the
+last run it passed, so `run_checks.alert_member_failures` sends one ops
+alert per chamber per run (condition `member-failed-<chamber>`) naming
+every failed member id with the exception, identical exceptions grouped
+so an outage is one alert. It is deduped on the set of (member id,
+exception type): the same set the next night says nothing new, a changed
+set re-alerts and replaces it, and a run with no failures closes it
+(2026-10-09: one senator failed every night from v6.31 on, with only the
+run's failure count to show for it).
 
 The ANALYZE phase runs members one at a time: `precompute_senator_analysis()`
 (`cross_reference.py`) does the member's embedding work, then
