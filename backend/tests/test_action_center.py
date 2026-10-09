@@ -327,7 +327,6 @@ class TestNationalMonitorCreation:
         added_objects = [call.args[0] for call in mock_db.add.call_args_list]
         assert not any(isinstance(obj, NationalMonitor) for obj in added_objects)
 
-    @pytest.mark.slow
     @patch("app.pipeline.analyze.action_center._generate_monitor_metadata")
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
     def test_sufficient_breadth_creates_monitor(self, mock_get_model, mock_gen_meta):
@@ -401,8 +400,8 @@ class TestNationalMonitorCreation:
         surface publicly via a MonitorUpdate before press corroborates it
         — same reasoning as excluding it from Bluesky/full-story. Uses a
         real DB session and an EXISTING monitor the issue would otherwise
-        auto-match (identical embeddings, well above _MONITOR_ISSUE_SIM_
-        HIGH) — a single unmatched issue alone can't create/update
+        match (identical embeddings, well above _MONITOR_ISSUE_SIM) —
+        a single unmatched issue alone can't create/update
         anything regardless of status, so that alone wouldn't have caught
         a missing status filter here."""
         mock_model = MagicMock()
@@ -427,6 +426,54 @@ class TestNationalMonitorCreation:
         _update_national_monitors(today, db_session)
 
         assert db_session.query(MonitorUpdate).count() == 0
+
+    @patch("app.pipeline.analyze.action_center.call_llm", return_value=None)
+    @patch("app.pipeline.analyze.action_center.get_embedding_model")
+    def test_issue_monitor_gate_is_the_similarity_floor_alone(
+        self, mock_get_model, mock_call_llm, db_session,
+    ):
+        """An issue at or above _MONITOR_ISSUE_SIM joins the monitor and one
+        below it does not, with no model call deciding either: the LLM
+        verdict that used to decide the band up to 0.80 approved 17 of 18
+        off-topic updates when replayed, so it was removed."""
+        from app.pipeline.analyze.action_center import _MONITOR_ISSUE_SIM
+
+        def unit(sim):
+            return [sim, float(np.sqrt(1 - sim * sim))]
+
+        vectors = {
+            "Ongoing standoff Long-running coverage.": [1.0, 0.0],
+            "In the band": unit(_MONITOR_ISSUE_SIM + 0.04),
+            "Below the floor": unit(_MONITOR_ISSUE_SIM - 0.01),
+        }
+        mock_model = MagicMock()
+        mock_model.encode.side_effect = lambda texts, **_: np.array(
+            [vectors[t] for t in texts], dtype=np.float32,
+        )
+        mock_get_model.return_value = mock_model
+
+        today = "2026-03-13"
+        db_session.add(NationalMonitor(
+            slug="ongoing-standoff", title="Ongoing standoff",
+            description="Long-running coverage.", status=MonitorStatus.ACTIVE,
+            last_article_date="2026-03-12",
+        ))
+        for rank, title in enumerate(("In the band", "Below the floor"), start=1):
+            db_session.add(ActionIssue(
+                date=today, rank=rank, title=title, summary="s", is_current=True,
+                status=ActionIssueStatus.CONFIRMED,
+                source_urls=json.dumps([f"https://example.org/{rank}"]),
+                source_names=json.dumps(["Example"]),
+            ))
+        db_session.flush()
+
+        _update_national_monitors(today, db_session)
+
+        assert [u.article_title for u in db_session.query(MonitorUpdate)] == ["In the band"]
+        # The only model call left in the stage is the category check.
+        assert {c.kwargs["prompt_version"] for c in mock_call_llm.call_args_list} <= {
+            "monitor-reclassify-v1",
+        }
 
     def test_lifecycle_closing_and_deletion(self):
         """Monitors should close after 30 days, and delete if they had few updates."""
