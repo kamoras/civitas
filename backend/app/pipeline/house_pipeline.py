@@ -74,7 +74,7 @@ from app.pipeline.fetch.fec import (
 from app.pipeline.fetch.floor_logs import bill_id_from_number
 from app.pipeline.analyze.bill_learning import stamp_motion_type
 from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
-from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
+from app.pipeline.run_checks import alert_member_failures, persist_ground_truth_failures, run_calibration_check
 from app.pipeline.transform.normalize_finance import normalize_finance
 from app.pipeline.transform.normalize_members import normalize_house_members
 from app.pipeline.transform.committee_data import load_leadership_tenures
@@ -725,6 +725,10 @@ async def run_house_pipeline() -> dict:
 
             success_count = 0
             fail_count = 0
+            # (member id, exception) for each rep that failed, and the ids
+            # stored: alert_member_failures after the scoring pass.
+            member_failures: list[tuple[str, BaseException]] = []
+            member_stored: list[str] = []
 
             recent_only = recent_not_covered_by_key_bills(classified_recent, house_roll_calls)
 
@@ -926,6 +930,7 @@ async def run_house_pipeline() -> dict:
                     db.rollback()
                     logger.error("Failed to prepare rep %s: %s", rep.get("name", "?"), e)
                     fail_count += 1
+                    member_failures.append((rep.get("id") or rep.get("bioguideId") or rep.get("name", "?"), e))
 
             alert_if_lda_down(lda_totals, "house")
 
@@ -990,6 +995,7 @@ async def run_house_pipeline() -> dict:
                     # Persist
                     upsert_representative(db, rep)
                     success_count += 1
+                    member_stored.append(rep.get("id") or rep.get("bioguideId") or rep.get("name", "?"))
 
                 except Exception as e:
                     # Roll back first, exactly as the Senate loop does
@@ -1003,8 +1009,10 @@ async def run_house_pipeline() -> dict:
                     db.rollback()
                     logger.error("Failed to process rep %s: %s", rep.get("name", "?"), e)
                     fail_count += 1
+                    member_failures.append((rep.get("id") or rep.get("bioguideId") or rep.get("name", "?"), e))
 
             progress.complete("fec_scoring", detail=f"{success_count} OK, {fail_count} failed")
+            alert_member_failures("house", member_failures, member_stored)
 
             # ── PHASE 6: SNAPSHOTS ──
             logger.info("--- House Phase 6: SNAPSHOTS ---")
