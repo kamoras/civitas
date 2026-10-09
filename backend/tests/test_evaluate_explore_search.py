@@ -221,6 +221,23 @@ class TestMeasurementLoop:
         assert len(by_style["title"]["keyword"]) == 1
         assert len(by_style["rare"]["keyword"]) == 1
 
+    def test_probes_are_the_same_on_every_run(self, harness):
+        # The title probe used to be built from a set, whose order follows
+        # the per-process string-hash seed: the same --seed gave different
+        # queries in every process.
+        doc = [{"id": 1, "title": "Zebra Mussel Containment Rangeland Grazing",
+                "body": "Grazing permits rangeland containment. " * 10}]
+        assert harness.build_probes(doc, {}, 1)[0]["query"] == \
+            "zebra mussel containment rangeland grazing"
+
+    def test_passage_probe_is_a_verbatim_sentence_from_anywhere_in_the_body(self, harness):
+        deep = ("Perfluorooctanoic contamination thresholds govern municipal "
+                "wellfields across every county in the regulated watershed.")
+        body = "Short. " * 2000 + deep + " Short."
+        [probe] = harness.build_passage_probes([{"id": 7, "title": "T", "body": body}])
+        assert probe == {"style": "passage", "doc_id": 7, "query": deep}
+        assert harness.build_passage_probes([{"id": 8, "title": "T", "body": "Too short."}]) == []
+
     def test_no_probes_is_not_a_crash(self, harness, corpus):
         db, _docs = corpus
         assert harness.measure(db, []) == {}

@@ -214,7 +214,7 @@ document (its `correction_of` field) is skipped, since it repeats that
 document's title:
 - Floor speeches are read a day of the Congressional Record at a time and split into each member's
   speeches by the Record's own layout; floor business is not indexed (see "Hybrid Search" below)
-- Embeds each document whole, in windows of the encoder's context length (`chunk_text`), title and summary leading each window
+- Embeds each document whole, in windows of the encoder's context length (`chunk_text`, `explore_chunks`), the title leading each window and the windows cut to fit beside it
 - Encodes with the **index** sentence-transformer (384-dim, all-MiniLM-L6-v2)
 - Upserts into the `vec_explore` sqlite-vec table with metadata: doc type, source, date, politician name/ID, chamber
 - Rebuilds the `explore_fts` FTS5 keyword index (BM25F over title/summary/body)
@@ -1134,7 +1134,7 @@ Every document feeds three structures, all rebuilt from the
 
 | Structure | Where | What it holds |
 |---|---|---|
-| `vec_explore` | `/data/vectors.db` (sqlite-vec) | 384-dim embeddings of each document's whole text, in windows of the encoder's context length led by title and summary, with doc type / chamber / politician as filterable metadata |
+| `vec_explore` | `/data/vectors.db` (sqlite-vec) | 384-dim embeddings of each document's whole text, in windows of the encoder's context length each led by the title, with doc type / chamber / politician as filterable metadata |
 | `explore_fts` | app DB (SQLite FTS5) | A BM25F inverted index over title, summary and body. External-content, so the text is not duplicated; triggers keep it live between runs |
 | `authority` / `cited_by_count` | `explore_documents` columns | PageRank over the citation graph between these documents |
 
@@ -1168,6 +1168,14 @@ exactly the queries where the user knows precisely what they want. Classical
 inverted-index retrieval is best at those and weakest where the embedding is
 strong (paraphrase, synonymy, topical queries). Running both and fusing them
 is why this is a hybrid engine rather than a bigger embedding model.
+
+A query that is *only* publisher identifiers, in any case (`89 FR 52508`, `rin 1615-ad22`,
+an executive order or proclamation number, a regulations.gov docket id — the
+formats `document_authority` already parses for the citation graph) goes to
+the keyword channel alone. The encoder's ranking for it is noise, and fused,
+a document both channels ranked middling outscored the keyword channel's
+exact hit: measured on 124 identifier probes, fused R@1 was 0.25 against
+keyword's 0.65 (2026-10).
 
 **Why rank fusion rather than score blending.** Cosine distance and BM25 live
 on unrelated scales; min-max normalising each makes the blend depend on
@@ -1208,10 +1216,12 @@ cross-references the ranking is empty and the prior does nothing.
 **Ranking weights are measured, not asserted.** They live in
 `config_definitions.py` under "Explore search ranking".
 `backend/scripts/evaluate_explore_search.py` measures MRR and Recall@k for
-semantic, keyword and hybrid separately, using known-item retrieval over four
-query styles (title, paraphrase, identifier, rare-term) with relevance
+semantic, keyword and hybrid separately, using known-item retrieval over five
+query styles (title, paraphrase, identifier, rare-term, passage) with relevance
 judgments derived from the corpus rather than hand-labelled. Change a weight,
-re-run it.
+re-run it. Every probe is built from the document's own words, so the
+keyword channel leads by construction; compare the semantic channel with
+itself across a change, not with keyword.
 
 Bill text itself is not indexed here; it's used separately, title-only, for
 the tier-3 kNN bill-classification step in the scoring pipeline (see Phase 3
