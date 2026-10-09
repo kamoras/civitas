@@ -818,12 +818,15 @@ then deleted (`api/visits.py`, `VisitSalt`). A permanent key would not do:
 the IPv4 space is small enough to enumerate, so anyone holding the key could
 recover every stored IP. With the salt gone, nobody can.
 
-A visit is a browser opening a page: the middleware counts a request only
-with `Sec-Fetch-Dest: document` (`lib/pageLoad.ts`), which every current
-browser sends and crawlers and scripts don't, and `track_visit` drops
-headless Chrome (`HeadlessChrome`, the default for Playwright-driven
-agents). Counting clients that sent no fetch metadata made crawlers two
-thirds of the unique visitors on 2026-10-01.
+A visit is a browser running a page: the page's own script reports it once
+mounted (`NavigationBeacon`, the first path and each navigation after it),
+and `track_visit` drops headless Chrome (`HeadlessChrome`, the default for
+Playwright-driven agents). Never count from the request a server sees:
+headers prove nothing. Counting requests without fetch metadata made
+crawlers two thirds of the unique visitors on 2026-10-01; the
+`Sec-Fetch-Dest: document` check that replaced it was beaten within a
+week by a crawler that sent it from thousands of rotating addresses and
+never ran a script (~7,000 of 7,357 visitors on 2026-10-08).
 
 Page-load timings (`POST /api/track-timing`, `PageLoadTiming`) are counted too,
 and deliberately carry even less: the browser reports one cold load's Navigation
@@ -932,7 +935,8 @@ Between TRANSFORM and the rest, both chamber pipelines run
 
 - Anyone in the database but absent from the roster is marked
   `is_current=False` with a `left_office_date`. Reversible — reappearing on
-  the roster restores them and clears the clock. Skipped (with an ops alert)
+  the roster restores them and clears the clock, and a serving member on the
+  roster who still carries a departure date has it cleared. Skipped (with an ops alert)
   when the roster comes back implausibly small, so a truncated Congress.gov
   response can't retire a chamber, and skipped for single-member
   `senator_filter` runs.
@@ -1115,7 +1119,9 @@ annual report outranks it. Filers are matched in `filer_matching.py`: the
 last-name field up to its first comma ("Doe, Jr."), and a House filer listed
 under a district no member of that surname holds — the Clerk keeps a member's
 pre-redistricting district — is matched across the state only when the first
-names agree (a shared token, or a measured similarity ratio). Each fetch module's
+names agree (a shared token, or a measured similarity ratio); failing that, a
+filer whose given names hold a member's whole name ("Roe, Jane Doe": a married
+name) is matched to that member of the listed district. Each fetch module's
 `PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
 parser's output changes, and already-ingested reports are re-read (a re-read
 that can't read the report at all keeps the earlier holdings; one that reads
