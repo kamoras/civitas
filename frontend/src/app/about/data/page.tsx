@@ -131,7 +131,7 @@ export default function DataChapter() {
               (UC Santa Barbara).
             </Fact>
             <Fact label="Federal Register">Executive orders, memoranda and proclamations.</Fact>
-            <Fact label="BLS · BEA · MeasuringWorth">
+            <Fact label="BLS · MeasuringWorth">
               Payroll jobs from 1939, and real GDP back to 1790.
             </Fact>
             <Fact label="FRED (St. Louis Fed)">
