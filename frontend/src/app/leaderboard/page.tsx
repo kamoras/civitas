@@ -29,6 +29,13 @@ import { asLabel, competitionRanks, displayScore, formatCurrency } from "@/lib/f
 import type { LeaderboardEntry, ScoreTrend } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry, JusticeLoyalty } from "@/types/justice";
+import {
+  appointerEstimate,
+  COURT_FINDING,
+  JUSTICE_RESEARCH_URL,
+  NOT_SCORED_REASON,
+} from "@/lib/justices";
+import { houseSeatLabel } from "@/lib/elections";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
 type SortKey = "score" | "pac_dollars" | "pac_pct" | "ideology" | "leadership";
@@ -256,6 +263,8 @@ const PRES_PARTY: Record<string, { label: string; color: string; bg: string }> =
   F: { label: "FED", color: "text-ind-purple", bg: "bg-ind-purple/10 border-ind-purple/40" },
   W: { label: "WHG", color: "text-signal-amber", bg: "bg-signal-amber/10 border-signal-amber/40" },
   I: { label: "IND", color: "text-ink", bg: "bg-white/10 border-white/30" },
+  // No party (George Washington).
+  U: { label: "NONE", color: "text-ink", bg: "bg-white/10 border-white/30" },
 };
 
 function presParty(party: string) {
@@ -458,9 +467,9 @@ function PresidentLeaderboard({
 
       <div className="mt-4 space-y-1 text-center">
         <p className="font-sans text-xs text-ink-lo">
-          Higher score = better presidential performance. Computed from: public mandate (21.67%) +
-          effectiveness (21.67%) + agency alignment (21.67%) + historical legacy (35%). Click any
-          row to view full profile.
+          Higher score = better presidential performance. Computed from: <PresidentWeightedFrom />;
+          a president missing a score is weighted over the scores they have, and each scorecard
+          shows the share each one carries. Click any row to view full profile.
         </p>
         <p className="font-sans text-xs text-ink-min">
           <span className="text-signal-amber border border-signal-amber/40 px-1 mr-1.5">HIST</span>=
@@ -487,12 +496,21 @@ function apptParty(party: string | null) {
   );
 }
 
-// "+14.5 ± 5.0": the loyalty estimate and its standard error, in points.
-function loyaltyPoints(l: JusticeLoyalty) {
-  const est = l.estimate * 100;
-  return `${est >= 0 ? "+" : "−"}${Math.abs(est).toFixed(1)} ± ${(l.se * 100).toFixed(1)}`;
+// "+14.5 (−1.0 to +30.0)": the appointer estimate and its 95% confidence
+// interval, in points, as the API computes them.
+function loyaltyPoints(entry: JusticeLoyalty | null): string | null {
+  const l = appointerEstimate(entry);
+  if (!l) return null;
+  const p = (share: number) => {
+    const v = share * 100;
+    return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
+  };
+  return `${p(l.estimate)} (${p(l.ciLow)} to ${p(l.ciHigh)})`;
 }
 
+/** The sitting justices by seniority, not ranked or scored (justice v3):
+ *  each one's appointer estimate is shown with its interval, as
+ *  information. */
 function JusticeLeaderboard({
   entries,
   loading,
@@ -505,32 +523,36 @@ function JusticeLeaderboard({
   const router = useRouter();
   if (loading) return <LeaderboardLoading label="LOADING SCOTUS DATA..." />;
   if (error) return <LeaderboardError message={error} />;
-  const ranks = competitionRanks(entries, (e) =>
-    e.score.overall == null ? null : displayScore(e.score.overall)
-  );
 
   return (
     <>
+      <div className="mb-4 border border-white/25 bg-surface px-5 py-4 font-sans text-sm leading-relaxed text-ink">
+        <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+          Not ranked · not scored
+        </p>
+        <p className="mt-2">
+          {NOT_SCORED_REASON} {COURT_FINDING}{" "}
+          <a href={JUSTICE_RESEARCH_URL} className="underline underline-offset-2 hover:text-phos">
+            The research
+          </a>
+        </p>
+      </div>
       <div className="panel overflow-hidden">
-        <TerminalTitlebar title={`${entries.length} justices`} />
+        <TerminalTitlebar title={`${entries.length} justices · by seniority`} />
 
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm font-mono">
-            <caption className="sr-only">Supreme Court justices ranked by score</caption>
+            <caption className="sr-only">
+              Supreme Court justices by seniority, not ranked or scored
+            </caption>
             <thead>
               <tr className="border-b border-white/[0.07] text-ink-lo text-xs uppercase tracking-widest">
-                <th scope="col" className="px-4 py-3 text-left w-14">
-                  RANK
-                </th>
                 <th scope="col" className="px-4 py-3 text-left">
                   JUSTICE
                 </th>
                 <th scope="col" className="px-3 py-3 text-center w-20">
                   APPT
-                </th>
-                <th scope="col" className="px-3 py-3 text-left w-36">
-                  SCORE
                 </th>
                 <th scope="col" className="px-3 py-3 text-right w-20">
                   CASES
@@ -538,33 +560,22 @@ function JusticeLeaderboard({
                 <th scope="col" className="px-3 py-3 text-right w-24">
                   MAJORITY
                 </th>
-                <th scope="col" className="px-3 py-3 text-right w-36">
-                  POINTS TOWARD APPOINTER
+                <th scope="col" className="px-3 py-3 text-right w-56">
+                  UNDER APPOINTER, POINTS (95% CI)
                 </th>
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry, idx) => {
-                const rank = ranks[idx];
-                const score = entry.score.overall;
+              {entries.map((entry) => {
                 const pp = apptParty(entry.appointingParty);
                 return (
                   <tr
                     key={entry.id}
-                    className={`border-b border-white/[0.07] hover:bg-white/[0.03] transition-colors cursor-pointer group ${
-                      rank <= 3 ? "border-l-2 border-l-signal-amber/40" : ""
-                    }`}
+                    className="border-b border-white/[0.07] hover:bg-white/[0.03] transition-colors cursor-pointer group"
                     tabIndex={0}
-                    aria-label={`View profile for ${entry.name}, rank ${rank}`}
+                    aria-label={`View profile for ${entry.name}`}
                     {...rowNavProps(router, `/politicians/${entry.id}`)}
                   >
-                    <td className="px-4 py-3">
-                      {score == null ? (
-                        <span className="text-ink-min">—</span>
-                      ) : (
-                        <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
-                      )}
-                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="text-ink-hi group-hover:text-phos transition-colors">
@@ -580,13 +591,6 @@ function JusticeLeaderboard({
                         {pp.label}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
-                      {score == null ? (
-                        <span className="text-xs text-ink-min">not yet measured</span>
-                      ) : (
-                        <ScoreBar score={score} />
-                      )}
-                    </td>
                     <td className="px-3 py-3 text-right tabular-nums text-ink">
                       {entry.casesDecided}
                     </td>
@@ -594,7 +598,7 @@ function JusticeLeaderboard({
                       {entry.majorityPct.toFixed(0)}%
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums text-ink">
-                      {entry.loyalty ? loyaltyPoints(entry.loyalty) : "—"}
+                      {loyaltyPoints(entry.loyalty) ?? "not yet measured"}
                     </td>
                   </tr>
                 );
@@ -605,9 +609,7 @@ function JusticeLeaderboard({
 
         {/* Mobile cards */}
         <div className="md:hidden divide-y divide-white/[0.07]">
-          {entries.map((entry, idx) => {
-            const rank = ranks[idx];
-            const score = entry.score.overall;
+          {entries.map((entry) => {
             const pp = apptParty(entry.appointingParty);
             return (
               <Link
@@ -615,9 +617,6 @@ function JusticeLeaderboard({
                 href={`/politicians/${entry.id}`}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
               >
-                <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>
-                  {score == null ? "—" : `#${rank}`}
-                </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-ink-hi text-sm truncate">{entry.name}</span>
@@ -625,17 +624,10 @@ function JusticeLeaderboard({
                       {pp.label}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    {score == null ? (
-                      <span className="text-xs text-ink-min">not yet measured</span>
-                    ) : (
-                      <ScoreBar score={score} />
-                    )}
-                    {entry.loyalty && (
-                      <span className="text-xs text-ink-lo">
-                        {loyaltyPoints(entry.loyalty)} points toward appointer
-                      </span>
-                    )}
+                  <div className="mt-0.5 text-xs text-ink-lo">
+                    {loyaltyPoints(entry.loyalty) != null
+                      ? `${loyaltyPoints(entry.loyalty)} points under the appointing president`
+                      : "not yet measured"}
                   </div>
                 </div>
               </Link>
@@ -646,10 +638,9 @@ function JusticeLeaderboard({
 
       <div className="mt-4 space-y-1 text-center">
         <p className="font-sans text-xs text-ink-lo">
-          Higher score = more independent of the president who made the appointment: siding with the
-          federal government about as often under that president as under any other (Epstein and
-          Posner, 2016). Points toward appointer is how much more often, give or take one standard
-          error. Click any row to view full profile.
+          Points under the appointing president: how much more often the justice sided with the
+          federal government while that president was in office (Epstein and Posner, 2016), with its
+          95% confidence interval. Information, not a ranking. Click any row to view full profile.
         </p>
       </div>
     </>
@@ -672,6 +663,29 @@ function WeightedFrom() {
           return weights && total > 0
             ? `${label} (${Math.round(((weights[k] ?? 0) / total) * 100)}%)`
             : label;
+        })
+        .join(" + ")}
+    </>
+  );
+}
+
+const PRESIDENT_TERMS: Record<string, string> = {
+  publicMandate: "public mandate",
+  effectiveness: "effectiveness",
+  historicalLegacy: "historical legacy",
+};
+
+/** The presidential counterpart of WeightedFrom: the nominal weights
+ *  /api/config serves (config_definitions.PRESIDENT_SCORE_WEIGHTS). */
+function PresidentWeightedFrom() {
+  const weights = useConfig()?.presidentScoreWeights;
+  const keys = weights ? Object.keys(weights) : Object.keys(PRESIDENT_TERMS);
+  return (
+    <>
+      {keys
+        .map((k) => {
+          const label = PRESIDENT_TERMS[k] ?? k;
+          return weights ? `${label} (${Math.round((weights[k] ?? 0) * 100)}%)` : label;
         })
         .join(" + ")}
     </>
@@ -875,7 +889,9 @@ function LeaderboardContent() {
                 : branch === "scotus"
                   ? "Justices"
                   : "Senators"}{" "}
-            ranked by constituent representation score.
+            {branch === "scotus"
+              ? "by seniority: not ranked or scored."
+              : "ranked by constituent representation score."}
           </p>
         </PageMasthead>
 
@@ -1072,7 +1088,7 @@ function LeaderboardContent() {
                                   className={`text-xs px-2 py-0.5 border ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
                                 >
                                   {branch === "house" && entry.district != null
-                                    ? `${entry.state}-${entry.district}`
+                                    ? houseSeatLabel(entry.state, entry.district)
                                     : `${entry.state}-${entry.party}`}
                                 </span>
                               </td>
@@ -1141,7 +1157,7 @@ function LeaderboardContent() {
                                 className={`text-xs px-1 border shrink-0 ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
                               >
                                 {branch === "house" && entry.district != null
-                                  ? `${entry.state}-${entry.district}`
+                                  ? houseSeatLabel(entry.state, entry.district)
                                   : `${entry.state}-${entry.party}`}
                               </span>
                             </div>

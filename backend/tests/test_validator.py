@@ -158,6 +158,19 @@ class TestValidateSenator:
         assert result["funding"]["totalFromPACs"] == 0
         assert result["funding"]["smallDonorPercentage"] == 0
 
+    def test_unmeasured_small_donor_share_stays_none(self):
+        # A campaign that itemizes every gift has no small-donor share to
+        # read (normalize_finance returns None); validating it must not
+        # raise or turn it into 0%.
+        senator = _make_senator(funding={
+            "totalRaised": 1_000_000,
+            "totalFromPACs": 0,
+            "smallDonorPercentage": None,
+            "topDonors": [],
+            "industryBreakdown": [],
+        })
+        assert validate_senator(senator)["funding"]["smallDonorPercentage"] is None
+
     def test_invalid_donor_type_defaults_to_org_employees(self):
         senator = _make_senator(funding={
             "totalRaised": 100_000,
@@ -209,7 +222,7 @@ class TestValidateSenator:
             "policyBreakdown": [],
             "keyVotes": [
                 {"billName": "Bill", "billId": "HR.1", "date": "2025-01-01",
-                 "vote": "Present", "policyArea": "HEALTHCARE", "stance": "reform",
+                 "vote": "Abstain", "policyArea": "HEALTHCARE", "stance": "reform",
                  "stanceVote": "Yea"},
             ],
         })

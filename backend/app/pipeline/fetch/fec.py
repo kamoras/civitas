@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.sec_tickers import SecUnavailable, issuer_industries
 from app.pipeline.fetch.congress_legislators import (
     fetch_bioguide_to_fec_ids,
     select_all_fec_ids_for_office,
@@ -27,20 +28,6 @@ MAX_RETRIES = 3
 RETRY_BACKOFF_S = 2.0
 
 _rate_limiter = RateLimiter(settings.FEC_RPS)
-
-# Set to True once we detect the by_contributor endpoint is broken for this run,
-# so we skip all 3 URL variants for every remaining senator instead of retrying.
-# Reset at the start of each pipeline run via reset_run_state() — otherwise a
-# single transient outage would latch this on for the life of the (long-lived)
-# server process and permanently skip the endpoint until restart.
-_by_contributor_broken = False
-
-
-def reset_run_state() -> None:
-    """Clear per-run FEC circuit-breaker state. Call at pipeline start."""
-    global _by_contributor_broken
-    _by_contributor_broken = False
-
 
 async def _fetch_with_retry(
     client: httpx.AsyncClient, url: str, retries: int = MAX_RETRIES
@@ -65,6 +52,20 @@ async def _fetch_with_retry(
         request_url=full_url,
     )
     return resp.json() if resp is not None else None
+
+
+class FecUnavailable(RuntimeError):
+    """The FEC API could not be read (retries exhausted, 5xx, a 4xx). Raised
+    rather than returning [] so an outage is never cached or saved as a
+    member who raised nothing: the caller skips that member and the stored
+    funding stays."""
+
+
+async def _fetch_or_raise(client: httpx.AsyncClient, url: str) -> dict:
+    data = await _fetch_with_retry(client, url)
+    if data is None:
+        raise FecUnavailable(url)
+    return data
 
 
 async def _candidate_latest_election(
@@ -152,10 +153,11 @@ async def find_candidate(
         # A member can hold several valid ids for the same chamber — one per
         # campaign registration — and the crosswalk's order is not recency.
         # One member has an id for a 2022 run in another district they lost
-        # and H0VA07133 for the 2024 win and his 2026 race (FEC bulk cn22/cn26,
-        # checked 2026-09); taking the first id that resolves scored him on
-        # the 2022 committee. Among ids that resolve, the one with the latest
-        # election is the current campaign; ties keep crosswalk order.
+        # and another for the current campaigns (FEC bulk cn22/cn26, checked
+        # 2026-09); taking the first id that resolves scored the 2022
+        # committee. Among ids that resolve, the one with the latest
+        # election is the current campaign; ties keep crosswalk order. (FEC
+        # may link that id to no seat-winning election: with_seat_election.)
         resolved: list[tuple[int, str]] = []
         for fec_id in select_all_fec_ids_for_office(fec_ids, office) if fec_ids else []:
             latest = await _candidate_latest_election(client, db, fec_id)
@@ -177,8 +179,8 @@ async def find_candidate(
     base_query = f"{FEC_API_BASE}/candidates/search/?name={quote(last_name)}&state={state}&office={office}&per_page=20"
     query = base_query + (f"&district={district}" if district else "")
 
-    data = await _fetch_with_retry(client, query)
-    results = (data or {}).get("results") or []
+    data = await _fetch_or_raise(client, query)
+    results = data.get("results") or []
 
     # FEC's `district` on a candidate record can lag a member's current
     # Congress.gov district after redistricting — the candidate ID keeps
@@ -193,8 +195,8 @@ async def find_candidate(
     # name match on this pass (no falling back to the first hit) since
     # nothing here disambiguates candidates the way district normally does.
     if not results and district:
-        data = await _fetch_with_retry(client, base_query)
-        fallback_results = (data or {}).get("results") or []
+        data = await _fetch_or_raise(client, base_query)
+        fallback_results = data.get("results") or []
         results = [
             c for c in fallback_results
             if all(part.upper() in (c.get("name") or "").upper() for part in name_parts)
@@ -516,12 +518,24 @@ def compute_recent_election_cycles(financials: list[dict], office: str) -> list[
     so the detail window is bounded exactly like the totals
     (normalize_finance) — otherwise an old losing run would supply the
     donor detail for a member whose totals come from the current campaign.
+
+    The cycles are the ones the FEC's own totals for that election cover
+    (its per-cycle rows), and the full period only when no such row is
+    held: a senator first elected in a special election has a regular
+    election whose totals start after it, and the six-year period read the
+    special's committee money into the regular election's detail (one
+    breakdown summed to 1.5 times the campaign's contributions).
     """
     cycles: list[int] = []
     for c in select_recent_elections(financials, office=office):
         election_year = financials_election_year(c)
-        if election_year:
-            cycles.extend(election_period_cycles(int(election_year), office))
+        if not election_year:
+            continue
+        covered = sorted({
+            int(r["cycle"]) for r in financials
+            if r.get("cycle") and financials_election_year(r) == election_year
+        }, reverse=True)
+        cycles.extend(covered or election_period_cycles(int(election_year), office))
     return cycles
 
 
@@ -556,11 +570,11 @@ async def fetch_candidate_financials(
         # stored in whatever order the API returned.
         return _sort_financials_recent_first(cached)
 
-    data = await _fetch_with_retry(
+    data = await _fetch_or_raise(
         client,
         f"{FEC_API_BASE}/candidate/{candidate_id}/totals/?sort=-cycle&per_page={FINANCIALS_PER_PAGE}",
     )
-    results = _sort_financials_recent_first((data or {}).get("results", []))
+    results = _sort_financials_recent_first(data.get("results", []))
     api_cache_set(db, "fec", cache_key, results)
     return results
 
@@ -574,13 +588,71 @@ async def fetch_candidate_committees(
     if cached is not None:
         return cached
 
-    data = await _fetch_with_retry(
+    data = await _fetch_or_raise(
         client,
         f"{FEC_API_BASE}/candidate/{candidate_id}/committees/?designation=P&per_page=5",
     )
-    results = (data or {}).get("results", [])
+    results = data.get("results", [])
     api_cache_set(db, "fec", cache_key, results)
     return results
+
+
+# The fields summarize_election_totals reads, which a committee's cycle
+# totals report under the same names as a candidate's.
+_ELECTION_TOTAL_FIELDS = (
+    "receipts", "contributions", "loans_made_by_candidate",
+    "other_political_committee_contributions",
+    "individual_unitemized_contributions", "individual_itemized_contributions",
+)
+
+
+async def with_seat_election(
+    client: httpx.AsyncClient, db: Session, financials: list[dict],
+    committees: list[dict], election_year: int,
+) -> list[dict]:
+    """`financials` with a row for the House general of `election_year` —
+    the one that seated a member sworn in when the Congress convened —
+    built from the candidate's principal committees' cycle totals when the
+    candidate totals carry none.
+
+    FEC's candidate totals attribute money to an election only through the
+    candidate's election-year link, and for some members the race that won
+    the seat has none: live on 2026-10-08, ten sitting members' candidate
+    totals listed their 2026 campaign and an older run but not 2024, while
+    the committee that ran the 2024 race reported its money for that
+    cycle (one: $1.84M, against $0.76M from a 2020 run the window fell back
+    to). The committee totals are FEC's own figures for that committee and
+    cycle; nothing is estimated."""
+    if any(
+        financials_election_year(r) == election_year and (r.get("receipts") or 0) > 0
+        for r in financials
+    ):
+        return financials
+    row: dict = {f: 0.0 for f in _ELECTION_TOTAL_FIELDS}
+    found = False
+    for committee in committees:
+        cid = committee.get("committee_id")
+        if not cid:
+            continue
+        # Every cycle in one page: asked for a cycle it has no row for, the
+        # endpoint answers 404, which can't be told from a dead link.
+        cache_key = f"committee-totals-{cid}"
+        rows = api_cache_get(db, "fec", cache_key)
+        if rows is None:
+            data = await _fetch_or_raise(client, f"{FEC_API_BASE}/committee/{cid}/totals/?per_page=100")
+            rows = data.get("results") or []
+            api_cache_set(db, "fec", cache_key, rows)
+        totals = next((r for r in rows if r.get("cycle") == election_year), {})
+        if (totals.get("receipts") or 0) <= 0:
+            continue
+        found = True
+        for f in _ELECTION_TOTAL_FIELDS:
+            row[f] += totals.get(f) or 0
+    if not found:
+        return financials
+    row.update(candidate_election_year=election_year, cycle=None, election_full=True,
+               source="committee totals")
+    return [*financials, row]
 
 
 def _cycle_query(cycles: list[int] | None) -> str:
@@ -615,13 +687,13 @@ async def fetch_committee_receipts(
         return cached
 
     # Get individual contributions only (for employer grouping)
-    data = await _fetch_with_retry(
+    data = await _fetch_or_raise(
         client,
         f"{FEC_API_BASE}/schedules/schedule_a/?committee_id={committee_id}"
         f"&sort=-contribution_receipt_amount&per_page=100&is_individual=true"
         f"{_cycle_query(cycles)}",
     )
-    results = (data or {}).get("results", [])
+    results = data.get("results", [])
     api_cache_set(db, "fec", cache_key, results)
     return results
 
@@ -643,13 +715,13 @@ async def fetch_pac_receipts(
         return cached
 
     # is_individual=false returns committee-to-committee contributions (PACs)
-    data = await _fetch_with_retry(
+    data = await _fetch_or_raise(
         client,
         f"{FEC_API_BASE}/schedules/schedule_a/?committee_id={committee_id}"
         f"&sort=-contribution_receipt_amount&per_page=100&is_individual=false"
         f"{_cycle_query(cycles)}",
     )
-    results = (data or {}).get("results", [])
+    results = data.get("results", [])
     api_cache_set(db, "fec", cache_key, results)
     return results
 
@@ -852,7 +924,7 @@ async def fetch_committee_meta(
     lobbying lookup would rather search the donor's own name than a wrong one.
     Returns None if the committee isn't found.
     """
-    cache_key = f"committee-meta-v1-{committee_id}"
+    cache_key = f"committee-meta-v2-{committee_id}"
     cached = api_cache_get(db, "fec", cache_key, max_age_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS)
     if cached is not None:
         return cached.get("meta")
@@ -873,6 +945,7 @@ async def fetch_committee_meta(
     meta = {
         "type": results[0].get("committee_type"),
         "designation": results[0].get("designation"),
+        "orgType": results[0].get("organization_type"),
         "connectedOrg": None,
     } if results else None
     if data is not None:
@@ -940,6 +1013,7 @@ def parse_committee_rows(text: str) -> dict[str, dict]:
             "name": cols[_CM_NAME].strip(),
             "type": cols[_CM_TYPE] or None,
             "designation": cols[_CM_DESIGNATION] or None,
+            "orgType": cols[_CM_ORG_TYPE].strip() or None,
             "sponsor": org if sponsored else None,
         }
     return out
@@ -1014,7 +1088,7 @@ def resolve_connected_orgs(
     return {
         cid: {
             "name": row["name"], "type": row["type"], "designation": row["designation"],
-            "connectedOrg": resolve(cid),
+            "orgType": row.get("orgType"), "connectedOrg": resolve(cid),
         }
         for cid, row in rows.items()
     }
@@ -1039,7 +1113,7 @@ async def fetch_committee_master(
     for cycle in sorted(set(cycles)):
         # The file as registered is cached, not the resolution: bump the
         # version whenever parse_committee_rows' output changes.
-        cache_key = f"committee-master-rows-v1-{cycle}"
+        cache_key = f"committee-master-rows-v2-{cycle}"
         cached = api_cache_get(
             db, "fec", cache_key, max_age_hours=COMMITTEE_MASTER_CACHE_TTL_HOURS,
         )
@@ -1105,8 +1179,86 @@ async def resolve_committee_meta(
     for cid in committee_ids:
         meta = master.get(cid) or await fetch_committee_meta(client, db, cid)
         if meta:
-            metas[cid] = meta
+            metas[cid] = dict(meta)
+    await _add_sponsor_industries(client, db, metas)
     return metas
+
+
+async def _add_sponsor_industries(client: httpx.AsyncClient, db: Session, metas: dict[str, dict]) -> None:
+    """Each corporate PAC's sponsor's industry from the SIC code the SEC
+    assigned it (meta["sponsorIndustry"]), for a sponsor whose name is an
+    SEC-registered issuer's (sec_tickers.issuer_industries). The SEC being
+    unreachable leaves it unset, so the name classifier answers as before."""
+    names = {m["connectedOrg"] for m in metas.values() if m.get("orgType") == "C" and m.get("connectedOrg")}
+    if not names:
+        return
+    try:
+        _, by_name = await issuer_industries(client, db, [], sorted(names))
+    except SecUnavailable as e:
+        logger.warning("SEC unreachable; PAC sponsors' industries left to the name classifier: %s", e)
+        return
+    for meta in metas.values():
+        industry = by_name.get(meta.get("connectedOrg") or "")
+        if industry:
+            meta["sponsorIndustry"] = industry
+
+
+def structured_industry(meta: dict | None) -> str | None:
+    """A committee's industry from FEC and SEC records, ahead of any reading
+    of its name (tier 1): POLITICAL for a party, candidate, joint-fundraising
+    or leadership committee; LABOR_UNIONS for one a labor organization
+    sponsors (FEC organization type "L"); else its corporate sponsor's SEC
+    industry. None when the records say nothing about it.
+
+    Measured 2026-10-08 on the donors stored then: 21% of the rows from
+    labor organizations' PACs carried another industry (one union's PAC,
+    203 rows, as GUNS), and on corporate PACs whose sponsor the SEC lists,
+    the name classifier agreed with the SEC's code on 59.5% of rows.
+
+    A PAC the FEC records with no sponsoring organization at all (a
+    nonconnected committee: no organization type, no connected
+    organization) is POLITICAL too. Measured 2026-10-08 on a random 80 of
+    the 142 such PACs among stored donors, judged by hand: 55 were
+    ideological or issue committees, which the name classifier filed under
+    an industry two times in three (one as real estate on 125 rows, an
+    environmental-justice PAC as firearms); the rest were partnership
+    (law and accounting firm) and physician-group PACs, which lose their
+    industry and drop out of the industry mix rather than land in a wrong
+    one. 69% correct against the classifier's 35% on the same names
+    (McNemar p < 0.001). A source that doesn't record the organization
+    type (no "orgType" key) says nothing either way."""
+    if not meta:
+        return None
+    if is_political_committee(meta) or _is_nonconnected_pac(meta):
+        return "POLITICAL"
+    if meta.get("orgType") == "L":
+        return "LABOR_UNIONS"
+    return meta.get("sponsorIndustry")
+
+
+def committee_industry(meta: dict | None, read_name) -> str:
+    """A giving committee's industry: the records' (structured_industry),
+    else what its name reads as (`read_name()`, called only when the
+    records say nothing, as it may run the classifier) — except LABOR_UNIONS
+    when the FEC records the sponsor as another kind of organization
+    (corporation, membership group, trade association, cooperative): a
+    labor organization's PAC is registered as one ("L"), so a name read as
+    a union under any other type is the name, not the sponsor. It is then
+    unclassified (OTHER).
+
+    Measured 2026-10-09 on the learning store: of its 727 LABOR_UNIONS
+    labels, 177 belong to a committee with an organization type, 101 of
+    them "L"; the other 75 (trade associations of brewers or credit unions,
+    corporations' employee PACs, a farmers' membership group) were judged
+    by hand in a random 50, and none was a labor organization."""
+    structured = structured_industry(meta)
+    if structured:
+        return structured
+    name_industry = read_name()
+    org_type = (meta or {}).get("orgType")
+    if name_industry == "LABOR_UNIONS" and org_type and org_type != "L":
+        return "OTHER"
+    return name_industry
 
 
 # Schedule A entity types whose contributor is itself a committee: "COM"
@@ -1124,6 +1276,27 @@ def committee_id_of(receipt: dict) -> str | None:
     return None
 
 
+def is_joint_fundraiser(meta: dict | None) -> bool:
+    """Whether the FEC registers this committee as a joint fundraising
+    representative (designation "J"). What it sends a participant is the
+    participant's share of individual donors' gifts, which the candidate
+    reports as a transfer and the FEC's totals leave out of contributions:
+    listed as a donor it was the candidate's own fundraising counted again
+    (2026-10-08: "... Victory" committees among senators' top donors)."""
+    return bool(meta) and meta.get("designation") == "J"
+
+
+# PAC committee types: N (not qualified) and Q (qualified).
+_PAC_TYPES = frozenset({"N", "Q"})
+
+
+def _is_nonconnected_pac(meta: dict) -> bool:
+    return (
+        meta.get("type") in _PAC_TYPES and "orgType" in meta
+        and not meta.get("orgType") and not meta.get("connectedOrg")
+    )
+
+
 def is_political_committee(meta: dict | None) -> bool:
     """Whether the FEC's own registration says this committee is a party,
     candidate, joint-fundraising or leadership committee — money from it is
@@ -1134,58 +1307,3 @@ def is_political_committee(meta: dict | None) -> bool:
         meta.get("type") in POLITICAL_COMMITTEE_TYPES
         or meta.get("designation") in POLITICAL_COMMITTEE_DESIGNATIONS
     )
-
-
-async def fetch_aggregated_contributors(
-    client: httpx.AsyncClient, db: Session, committee_id: str,
-    cycles: list[int] | None = None,
-) -> list[dict]:
-    """Fetch aggregated totals by contributor for a committee.
-
-    Uses best-effort fallbacks for FEC endpoints that don't support the
-    preferred `-total` sort field (some committees return 422). The
-    function will try a small set of alternative queries before giving up
-    and returning an empty list — the pipeline will continue. See
-    fetch_committee_receipts for why `cycles` should match the window
-    used for receipt totals.
-    """
-    global _by_contributor_broken
-
-    cache_key = f"aggregated-contributors-v2-{committee_id}-{_cycle_tag(cycles)}"
-    cached = api_cache_get(db, "fec", cache_key)
-    if cached is not None:
-        return cached
-
-    # If a previous senator already proved the endpoint is down, skip entirely.
-    if _by_contributor_broken:
-        logger.debug("Skipping by_contributor for %s (endpoint known broken)", committee_id)
-        api_cache_set(db, "fec", cache_key, [])
-        return []
-
-    cq = _cycle_query(cycles)
-    # Try preferred query first, then fall back to alternatives when a
-    # 422/other failures are encountered.
-    urls = [
-        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&sort=-total&per_page=20{cq}",
-        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&sort=-contribution_receipt_amount&per_page=20{cq}",
-        f"{FEC_API_BASE}/schedules/schedule_a/by_contributor/?committee_id={committee_id}&per_page=20{cq}",
-    ]
-
-    data = None
-    for idx, url in enumerate(urls):
-        data = await _fetch_with_retry(client, url)
-        if data is not None:
-            if idx > 0:
-                logger.info("FEC fallback used for %s: %s", committee_id, url)
-            break
-
-    if data is None:
-        logger.warning(
-            "FEC aggregated contributors failed for %s — continuing with empty result",
-            committee_id,
-        )
-        _by_contributor_broken = True
-
-    results = (data or {}).get("results", [])
-    api_cache_set(db, "fec", cache_key, results)
-    return results

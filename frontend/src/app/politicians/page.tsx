@@ -1,6 +1,7 @@
 "use client";
 
 import { displayScore } from "@/lib/formatting";
+import { districtName } from "@/lib/elections";
 import { Suspense, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -95,7 +96,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
   const subtitle = [
     p.role,
     p.stateName ?? null,
-    p.district != null ? `District ${p.district}` : null,
+    p.district != null ? districtName(p.district) : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -146,6 +147,9 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
             </span>
           ) : p.hasScorecard && p.overallScore != null ? (
             <ScoreBar score={p.overallScore} />
+          ) : p.branch === "scotus" ? (
+            // Justice v3: justices are not scored, not "pending".
+            <span className="font-mono text-xs text-ink-min tracking-widest">NOT SCORED</span>
           ) : (
             <span className="font-mono text-xs text-ink-min tracking-widest">
               SCORECARD PENDING

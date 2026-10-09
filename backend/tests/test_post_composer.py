@@ -320,3 +320,61 @@ class TestLiveCompositionDefects:
     def test_a_number_still_does_not_end_the_clause(self):
         src = "The Senate cuts $1.5 billion from the program."
         assert compose("The Senate", "cuts $1", src) == "The Senate cuts $1.5 billion from the program."
+
+
+def test_a_quotation_the_span_opens_is_closed_from_the_source():
+    source = ('Doe said Tuesday that he has seen one of the ads and that it '
+              '"looked like a public service announcement." Others disagreed.')
+    got = compose("Doe", 'said Tuesday that he has seen one of the ads and that it "looked like a public service announcement', source)
+    assert got is not None and got.endswith('announcement."')
+
+
+class TestBracketsAndQuotesTheSpanCuts:
+    """Composed 2026-10-07/08 from real feed text: an actor named inside a
+    parenthetical, a completion stopped inside one, and a quotation closed
+    on the source's comma (published as an election post)."""
+
+    FDA = ("The Food and Drug Administration (FDA) won’t publish its safety review "
+           "of the abortion drug mifepristone until March.")
+
+    def test_an_actor_inside_a_parenthetical_is_refused(self):
+        # Was: "FDA) won’t publish its safety review ... until March."
+        predicate = "won’t publish its safety review of the abortion drug mifepristone until March"
+        assert compose("FDA", predicate, self.FDA) is None
+        assert compose("FDA)", predicate, self.FDA) is None
+
+    def test_the_whole_name_before_the_bracket_still_composes(self):
+        assert compose("Food and Drug Administration (FDA)", "won’t publish its safety review", self.FDA) == (
+            "Food and Drug Administration (FDA) won't publish its safety review "
+            "of the abortion drug mifepristone until March."
+        )
+
+    BERATED = "President Lee repeatedly berated Kim Park (R-Ark.) over the vote on Tuesday."
+
+    def test_a_completion_runs_past_a_period_inside_brackets(self):
+        # Was: "President ... repeatedly berated Sen. ... (R-Ark." — the
+        # "." before ")" read as the clause's end.
+        assert compose("President Lee", "repeatedly berated", self.BERATED) == self.BERATED
+
+    def test_a_span_cut_inside_brackets_is_refused(self):
+        assert compose("President Lee", "repeatedly berated Kim Park (R-Ark", self.BERATED) is None
+
+    def test_a_quotation_closed_on_a_comma_ends_the_sentence(self):
+        # Published 2026-10-08: '... called Michigan Senate candidate
+        # ... (D) "terrible,"' — no end.
+        src = ('Lee on Wednesday called Michigan Senate candidate Dana Park (D) "terrible," '
+               'adding that the race was not close.')
+        want = 'Lee on Wednesday called Michigan Senate candidate Dana Park (D) "terrible."'
+        assert compose("Lee", 'called Michigan Senate candidate Dana Park (D) "terrible', src) == want
+
+    @pytest.mark.parametrize("actor,predicate,source,want", [
+        # Both published as facts, 2026-09-29 and 2026-10-01.
+        ("the Senate", "passes the Protect College Sports Act",
+         "The bill's future is unclear, but the Senate passes the Protect College Sports Act.",
+         "The Senate passes the Protect College Sports Act."),
+        ("a D.C. judge", "has ruled that the federal government cannot refile its charges",
+         "In a filing, a D.C. judge has ruled that the federal government cannot refile its charges.",
+         "A D.C. judge has ruled that the federal government cannot refile its charges."),
+    ])
+    def test_a_span_from_mid_sentence_starts_with_a_capital(self, actor, predicate, source, want):
+        assert compose(actor, predicate, source) == want

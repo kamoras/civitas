@@ -1292,3 +1292,38 @@ class TestThresholdBoundary:
         threshold = common.runoff_threshold(self._SOURCES["GA"])
         assert common.pick_nominees(votes, threshold) == []
         assert tb._owed_a_runoff(votes, None, 1) is True
+
+
+class TestAuditFindings20261009:
+    """Shapes from the 2026-10-09 audit of the elections pages against
+    each state's certified candidate list."""
+
+    def test_a_printed_nickname_is_kept_but_a_trailing_marker_is_not(self):
+        from app.pipeline.fetch.state_candidates_common import clean_display_name, surname
+
+        # North Carolina, Colorado and California print nicknames inside
+        # the name; Georgia's "(I)" and Rhode Island's "*" sit after it.
+        assert clean_display_name("Tobias (Toby) Placeholder") == "Tobias (Toby) Placeholder"
+        assert clean_display_name("W. A. (Bill) Placeholder") == "W. A. (Bill) Placeholder"
+        assert clean_display_name("Jane L. Placeholder (I)") == "Jane L. Placeholder"
+        assert clean_display_name("Aaron C. Placeholder*") == "Aaron C. Placeholder"
+        assert surname("Tobias (Toby) Placeholder") == "Placeholder"
+
+    def test_a_party_named_independent_is_a_party(self):
+        from app.pipeline.fetch.state_candidates_common import OTHER_PARTY, ballot_list_party
+
+        assert ballot_list_party("American Independent") == (OTHER_PARTY, "American Independent")
+        assert ballot_list_party("Independent American") == (OTHER_PARTY, "Independent American")
+        assert ballot_list_party("Independent")[0] == "I"
+
+    def test_a_special_for_the_unexpired_term_is_its_own_contest(self):
+        from app.pipeline.fetch.state_candidates_common import (
+            UNEXPIRED_SEAT,
+            district_label,
+            parse_state_leg_office,
+        )
+
+        assert parse_state_leg_office("State Representative District 08 - Unexpired Term") == (
+            "lower", "8", UNEXPIRED_SEAT)
+        assert parse_state_leg_office("State Representative District 08") == ("lower", "8", None)
+        assert district_label("8", UNEXPIRED_SEAT) == "8 (unexpired term)"

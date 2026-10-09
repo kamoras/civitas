@@ -28,24 +28,25 @@ presidency.ucsb.edu during development (2026-07). A president sworn in
 after that list is found in UCSB's own index of approval pages, by name
 (approval_slugs), so the list never needs a new entry. Only presidents with
 real polling-era coverage are included (Truman #33 onward, matching this
-platform's existing "modern presidents" framing) — pre-Truman presidents
-have no live source; their Public Mandate uses the election-margin
-historical proxy instead (see presidential_elections.py), never a seed
-value.
+platform's existing "modern presidents" framing). UCSB has a Franklin
+Roosevelt page too, but it holds 20 polls from 1941 to 1943, two years of
+twelve, without the by-party figures president v9 reads, so pre-Truman
+Public Mandate uses the election-margin historical proxy instead (see
+presidential_elections.py), never a seed value.
 
-Some newer pages (Trump's 2nd term onward) also publish a by-party
-approval breakdown (Republicans/Independents/Democrats Approving).
-Deliberately not parsed or used anywhere in this pipeline (2026-07): a
-"partisan approval gap" computed from it can't be attributed to the
-president's own conduct — the same gap could reflect a stand one party
-was always going to oppose regardless of merit, or be driven almost
-entirely by opposition messaging/media coverage having nothing to do
-with what the president actually did. Placing a number like that on a
-president's own profile page implies an attribution the data can't
-support, no matter how the label is worded — the same standard that
-kept Independence/Follow-Through out of this pipeline as hand-set
-scores. recent_polls below (a plain rolling time window, no party
-crosstabs) is the only piece of that exploration that survived.
+The pages also publish Gallup's by-party breakdown (Democrats,
+Independents and Republicans approving) for every president from Truman.
+It is parsed for one use (president v9): telling a president's approval
+apart from the polarization of the era they served in. Approval among the
+other party fell from about 49% under Eisenhower to 5% under Biden while
+approval among the president's own party rose, so raw approval ranked
+presidents partly by era (r = -0.40 with the parties' distance in
+Congress, 14 completed presidencies). Each party group's approval is
+compared with what that group gave presidents under the same polarization
+(president_scorer.partisan_reference). A partisan *gap* is never scored or
+shown as the president's doing: the 2026-07 objection to that (a gap can
+reflect opposition that was coming regardless of merit) stands, and this
+use removes that environment rather than attributing it.
 """
 
 import logging
@@ -110,6 +111,11 @@ class ApprovalPoll:
     disapproving: float | None
     unsure: float | None
     source: str | None
+    # Approval among Democrats, independents and Republicans (Gallup's
+    # breakdown); None where the page gives none for the poll.
+    dem: float | None = None
+    ind: float | None = None
+    rep: float | None = None
 
 
 def _cell_text(td) -> str:
@@ -131,20 +137,31 @@ def _parse_approval_table(html: str) -> list[ApprovalPoll]:
 
     Column order (verified against several live pages, 2026-07): Start
     date, End Date, Approving, Disapproving, Unsure/NoData, [blank
-    spacer], then either Source directly (older single-president pages)
-    or a by-party breakdown (Republicans/Independents/Democrats
-    Approving, not parsed — see this module's docstring) + Source (newer
-    multi-term pages). Only the first 5 columns + a best-effort Source
-    (last non-blank cell) are extracted.
+    spacer], then the by-party breakdown and/or Source. The breakdown's
+    order differs between pages (Democrats first on most, Republicans
+    first on the 2nd-term Trump page, whose header also spells
+    "Opproving") and so do its labels ("Democrats Approving",
+    "Democratic Approval", "DemocraticApproval"), so its columns are found
+    by the label's party stem, never by position.
     """
     doc = lxml_html.fromstring(html)
     tables = doc.cssselect("table")
     if not tables:
         return []
-    rows = tables[0].cssselect("tbody tr")
+    rows = tables[0].cssselect("tr")
 
+    party_cols: dict[str, int] = {}
     polls: list[ApprovalPoll] = []
     for row in rows:
+        labels = [_cell_text(c) for c in row.cssselect("th, td")]
+        if any(label.startswith("Democrat") for label in labels):
+            # "Democrats Approving", "Democratic Approval", "DemocraticApproval"
+            party_cols = {
+                key: i for i, label in enumerate(labels)
+                for key, prefix in (("dem", "Democrat"), ("ind", "Independent"), ("rep", "Republican"))
+                if label.startswith(prefix)
+            }
+            continue
         cells = row.cssselect("td")
         if len(cells) < 5:
             continue
@@ -159,10 +176,14 @@ def _parse_approval_table(html: str) -> list[ApprovalPoll]:
             continue  # header-ish or otherwise unusable row
         source_text = _cell_text(cells[-1])
         source = source_text if source_text and _cell_float(source_text) is None else None
+        by_party = {
+            key: _cell_float(_cell_text(cells[i])) if i < len(cells) else None
+            for key, i in party_cols.items()
+        }
         polls.append(ApprovalPoll(
             start_date=start, end_date=end,
             approving=approving, disapproving=disapproving, unsure=unsure,
-            source=source,
+            source=source, **by_party,
         ))
 
     # Row order is NOT consistent across UCSB's pages — verified live,
@@ -195,7 +216,8 @@ async def fetch_president_approval_history(
     if slug is None:
         return None
 
-    cache_key = f"approval-{president_id}"
+    # v2: the cached rows carry the by-party columns.
+    cache_key = f"approval-v2-{president_id}"
     cached = api_cache_get(db, _CACHE_TIER, cache_key, max_age_hours=_CACHE_MAX_AGE_HOURS)
     if cached is not None:
         return [ApprovalPoll(**p) for p in cached["polls"]]
@@ -231,6 +253,7 @@ async def fetch_president_approval_history(
                 "start_date": p.start_date, "end_date": p.end_date,
                 "approving": p.approving, "disapproving": p.disapproving,
                 "unsure": p.unsure, "source": p.source,
+                "dem": p.dem, "ind": p.ind, "rep": p.rep,
             }
             for p in polls
         ],
@@ -251,6 +274,21 @@ def dated_approvals(polls: list[ApprovalPoll]) -> list[tuple[date, float]]:
         except ValueError:
             continue
     return sorted(out)
+
+
+def dated_by_party(polls: list[ApprovalPoll]) -> list[tuple[date, dict[str, float]]]:
+    """(start date, {"D", "I", "R": approve %}) for every poll with all
+    three groups, in date order; polls without the breakdown are left out."""
+    out = []
+    for p in polls:
+        if p.dem is None or p.ind is None or p.rep is None:
+            continue
+        try:
+            day = datetime.strptime(p.start_date, "%m/%d/%Y").date()
+        except ValueError:
+            continue
+        out.append((day, {"D": p.dem, "I": p.ind, "R": p.rep}))
+    return sorted(out, key=lambda pair: pair[0])
 
 
 def recent_polls(polls: list[ApprovalPoll], days: int = 90, as_of: datetime | None = None) -> list[ApprovalPoll]:

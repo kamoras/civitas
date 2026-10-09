@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from app.api import public
 from app.api.router import api_router
 from app.database import get_db
-from app.models import ExploreDocument, Representative, ScoreSnapshot, Senator
+from app.models import ExploreDocument, MemberIdAlias, Representative, ScoreSnapshot, Senator
 from app.pipeline.lexical_index import ensure_lexical_index
 from app.schemas import (
     PublicApiIndexSchema,
@@ -88,11 +88,42 @@ def test_every_response_matches_its_documented_schema(client, path, params, sche
     assert body.get("entries") or body.get("snapshots") or body.get("results") or "entries" not in body
 
 
+@pytest.mark.parametrize("path,member,schema", [
+    ("/senators/old-s", "S000001", PublicSenatorProfileSchema),
+    ("/senators/old-s/history", "S000001", PublicHistorySchema),
+    ("/representatives/old-r", "R000001", PublicRepresentativeProfileSchema),
+    ("/representatives/old-r/history", "R000001", PublicHistorySchema),
+])
+def test_a_renamed_id_answers_under_the_current_one(client, db_session, path, member, schema):
+    """As documented on the id parameter: an id a member had before a
+    rename (app/member_ids.py) still works, and the body names the current id."""
+    db_session.add_all([MemberIdAlias(old_id="old-s", new_id="S000001"),
+                        MemberIdAlias(old_id="old-r", new_id="R000001")])
+    db_session.commit()
+    body = _body(client, path)
+    schema.model_validate(body)
+    assert body["id"] == member
+    assert body.get("siteUrl", f"/politicians/{member}").endswith(f"/politicians/{member}")
+
+
 def test_states_match_their_documented_schema(client):
     states = _body(client, "/states")
     assert states
     for state in states:
         PublicStateSchema.model_validate(state)
+
+
+def test_state_counts_are_serving_members_only(client, db_session):
+    """A departed member's row stays through the retirement grace period;
+    counted, it gave a state with a newly seated successor three senators
+    (live, 2026-10-08) while /senators listed two."""
+    db_session.add_all([
+        Senator(id="S000009", name="Old Doe", state="GA", party="D", is_current=False, **SCORES),
+        Representative(id="R000009", name="Old Roe", state="GA", district=6, party="R", is_current=False, **SCORES),
+    ])
+    db_session.commit()
+    ga = next(s for s in _body(client, "/states") if s["code"] == "GA")
+    assert (ga["senatorCount"], ga["representativeCount"]) == (1, 1)
 
 
 @pytest.mark.parametrize("chamber,member,state", [("senators", "S000001", "GA"), ("representatives", "R000001", "GA")])
@@ -161,3 +192,39 @@ def test_promise_persistence_is_published_as_not_measured(client, chamber, membe
     assert _body(client, f"/{chamber}/{member}")["representationScore"]["promisePersistence"] is None
     (snap,) = _body(client, f"/{chamber}/{member}/history")["snapshots"]
     assert snap["promisePersistence"] is None
+
+
+class TestCallerMistakes:
+    """A filter the endpoint doesn't take is refused, not ignored; a choice
+    written another way than the documented one is read as it; an unknown
+    member id is a 404, not an empty search; and every 422 records which
+    parameter broke which rule (ApiRejectionCount)."""
+
+    def test_an_unknown_parameter_is_refused(self, client):
+        r = client.get("/api/public/v1/search", params={"q": "tax", "type": "speech"})
+        assert r.status_code == 422
+        assert r.json()["detail"][0]["loc"] == ["query", "type"]
+        assert "doc_type" in r.json()["detail"][0]["msg"]
+
+    def test_choices_are_read_whatever_their_case_or_separators(self):
+        from app.api.public import _canonical
+
+        types = ("Senate Floor Speech", "Executive Order")
+        assert _canonical("doc_type", "senate-floor-speech", types) == "Senate Floor Speech"
+        assert _canonical("doc_type", "executive_order", types) == "Executive Order"
+        assert _canonical("chamber", "Senate", ("senate", "house")) == "senate"
+        assert _canonical("party", "Republican", ("D", "R", "I")) == "R"
+        assert _canonical("state", "georgia", ()) == "GA"
+        assert _canonical("doc_type", "speech", types) == "speech"  # left for validation to refuse
+
+    def test_an_unknown_politician_is_a_404(self, client):
+        r = client.get("/api/public/v1/search", params={"q": "tax", "politician_id": "nobody-here"})
+        assert r.status_code == 404
+
+    def test_a_422_records_the_parameter_and_rule(self, client, monkeypatch):
+        from app.api import public
+
+        recorded = []
+        monkeypatch.setattr(public, "record_api_request", lambda *a, **k: recorded.append((a, k)))
+        client.get("/api/public/v1/search", params={"q": "x"})
+        assert recorded[-1] == (("search_documents", "http", 422), {"rejection": ("q", "string_too_short")})

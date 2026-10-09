@@ -235,3 +235,15 @@ def test_callers_cannot_claim_the_mcp_channel():
     for path in ("/api/public/v1/senators", "/api/public/v1/mcp"):
         body = _match(_locations(public_server), path)[3]
         assert re.search(r'proxy_set_header\s+X-Civitas-Channel\s+"";', body), path
+
+
+def test_the_pipeline_restarting_is_an_answer_not_a_bad_gateway():
+    # A deploy stops the pipeline before starting the new one; for that half
+    # minute every location proxied to it answers 503 with Retry-After
+    # (@pipeline_restarting, or the summary route's own wait), not a 502.
+    public, _ = _servers()
+    to_pipeline = [(p, body) for _, p, upstream, body in _locations(public) if upstream == "pipeline_upstream"]
+    assert to_pipeline
+    for pattern, body in to_pipeline:
+        assert re.search(r"error_page[^;]*\b502\b[^;]*\b504\b[^;]*= @(pipeline_restarting|summary_wait);", body), pattern
+    assert "return 503" in public[public.index("location @pipeline_restarting"):]

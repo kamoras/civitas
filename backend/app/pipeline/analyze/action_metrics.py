@@ -14,9 +14,8 @@ Kept in its own module (not action_center.py) because bluesky_poster.py
 also increments counters, and it is imported BY action_center — counters
 living in either file would be a circular import.
 
-Same module-level-state-with-reset pattern as fec.py's run circuit
-breaker (reset_run_state): the pipeline is single-flight per process, so
-a plain dict with no locking is sufficient.
+Module-level state reset per run: the pipeline is single-flight per
+process, so a plain dict with no locking is sufficient.
 """
 
 import logging

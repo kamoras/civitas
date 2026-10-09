@@ -70,8 +70,25 @@ export default function DataChapter() {
               Roll-call votes with every member&apos;s position, and each chamber&apos;s live floor
               log.
             </Fact>
+            <Fact label="unitedstates/congress-legislators">
+              Committee seats and party leadership titles, an open dataset refreshed weekly. It
+              updates every month or two, so a member seated since then takes their committee seats
+              from the chamber&apos;s own list: the House Clerk&apos;s member data or
+              senate.gov&apos;s committee rosters.
+            </Fact>
             <Fact label="GovInfo">
               The Congressional Record, read in full each day, and its Daily Digest.
+            </Fact>
+            <Fact label="Party leadership and caucus">
+              House leadership posts come from the House Clerk&apos;s member list: Speaker, both
+              leaders and whips, both conference chairs, the Democratic caucus vice chair and the
+              Republican Policy Committee chair. Other party posts, such as conference vice chairs
+              and secretaries or campaign committee chairs, appear only where the volunteer-kept
+              congress-legislators dataset records them, since no official list publishes them, so a
+              member holding one may show no title. Senate posts come from that dataset and match
+              senate.gov&apos;s leadership page. An independent representative is read with the
+              caucus the Clerk records for them; an independent senator with the party they vote and
+              cosponsor with, since the Senate records no caucus.
             </Fact>
             <Fact label="Voteview">
               Congress-by-congress roll-call positions (Nokken-Poole), for Constituent Alignment.
@@ -90,12 +107,16 @@ export default function DataChapter() {
               presidential report is printed at half size), the trade is listed with the date marked
               not legible, for members&apos; paper filings as for the president&apos;s. A
               trade&apos;s industry is the SEC&apos;s own industry code for the company behind it,
-              found by ticker or exact company name; bonds, funds and anything else the SEC
-              doesn&apos;t cover carry none rather than a guess.
+              found by ticker or by company name, exactly or in a brokerage statement&apos;s short
+              form when that fits one company only (&ldquo;HONEYWELL INTL INC&rdquo;); bonds, funds
+              and anything else the SEC doesn&apos;t cover carry none rather than a guess. A trade
+              two of a filer&apos;s reports both list counts once, at the earlier report&apos;s
+              date.
             </Fact>
             <Fact label="Lobbying Disclosure Act registry (lda.gov)">
               Registered lobbying spending by organizations that appear among donors, and the bills
-              their filings name.
+              their filings name. Each lobbying firm&apos;s report for a quarter counts once, the
+              latest filed, so an amendment replaces the report it amends.
             </Fact>
             <Fact label="Partisan lean">
               State and district Cook PVI, computed from official presidential returns (MIT Election
@@ -109,11 +130,15 @@ export default function DataChapter() {
               The presidential roster, approval polling from Truman on, and earlier election margins
               (UC Santa Barbara).
             </Fact>
-            <Fact label="Federal Register">
-              Rulemaking documents (Clinton on), executive orders, memoranda and proclamations.
-            </Fact>
-            <Fact label="BLS · BEA · MeasuringWorth">
+            <Fact label="Federal Register">Executive orders, memoranda and proclamations.</Fact>
+            <Fact label="BLS · MeasuringWorth">
               Payroll jobs from 1939, and real GDP back to 1790.
+            </Fact>
+            <Fact label="FRED (St. Louis Fed)">
+              The BLS unemployment rate (from 1948) and consumer price index (from 1947).
+            </Fact>
+            <Fact label="Maddison Project · World Bank">
+              GDP per person for the US and 13 peer economies from 1946, to compare postwar growth.
             </Fact>
             <Fact label="C-SPAN Historians Survey">The 2021 survey, for Historical Legacy.</Fact>
           </Facts>
@@ -121,12 +146,13 @@ export default function DataChapter() {
         <Sub title="Courts, elections and documents">
           <Facts>
             <Fact label="Oyez · supremecourt.gov">
-              Cases, justices&apos; votes, and official slip opinions.
+              Cases, justices&apos; votes in a term the Supreme Court Database doesn&apos;t cover
+              yet, and official slip opinions.
             </Fact>
             <Fact label="Supreme Court Database · Federal Judicial Center · Martin-Quinn">
-              Every justice&apos;s votes in cases the federal government argued, with Epstein and
-              Posner&apos;s coding through 2014; nomination dates; each justice&apos;s position per
-              term.
+              Every justice&apos;s votes in orally argued cases (the voting record, and the cases
+              the federal government argued for the score, with Epstein and Posner&apos;s coding
+              through 2014); nomination dates; each justice&apos;s position per term.
             </Fact>
             <Fact label="State election offices">
               Certified candidate lists and primary results, from each state&apos;s own site. And
@@ -140,9 +166,9 @@ export default function DataChapter() {
               town selector, a fixed public building per district to fill in candidate lists), never
               a visitor&apos;s.
             </Fact>
-            <Fact label="USAGov">
-              Each state&apos;s election office, linked only after a check that the link still
-              works.
+            <Fact label="State election offices · USAGov">
+              Each state&apos;s own voter lookup, linked only after a nightly check that it still
+              opens; otherwise USAGov&apos;s directory of election offices.
             </Fact>
             <Fact label="News & trends">
               RSS feeds from seven newsrooms, Google Trends and Bluesky, for the Action Center.
@@ -289,7 +315,10 @@ export default function DataChapter() {
       <Section id="explore" title="How Explore search ranks results">
         <P>
           Explore searches floor speeches, presidential actions, Federal Register rules and Supreme
-          Court opinions. Four rankings are combined
+          Court opinions. A floor speech is one member&apos;s own words, whole, under the heading
+          the Congressional Record printed over them, or as remarks on the debate they joined; floor
+          business such as quorum calls and requests to schedule a vote is left out. Four rankings
+          are combined
           <Cite id="cormack2009" />:
         </P>
         <List>
@@ -308,9 +337,10 @@ export default function DataChapter() {
           </Item>
         </List>
         <P>
-          Near-duplicates are collapsed, and no single member or agency can crowd the top results:
-          the rest are moved down, never dropped. Ranking weights are changed only when a
-          measurement of search quality says to, never because one set of results looks better.
+          Copies of the same document are collapsed (a recurring notice that only opens the same way
+          is not a copy), and no single member or agency can crowd the top results: the rest are
+          moved down, never dropped. Ranking weights are changed only when a measurement of search
+          quality says to, never because one set of results looks better.
         </P>
       </Section>
 
@@ -326,9 +356,10 @@ export default function DataChapter() {
             current day and is then deleted. Without the key, the scrambled value can&apos;t be
             turned back into an address. Raw IP addresses and browser identification strings are
             never stored, only a coarse browser, operating system and device type (for example
-            &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser opening a page counts: search
-            and AI crawlers, scripts and automated browsers aren&apos;t visitors and aren&apos;t
-            counted.
+            &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser opening a page counts, and the
+            page itself sends the count once it has loaded: search and AI crawlers, scripts and
+            automated browsers that never run the page aren&apos;t visitors and aren&apos;t counted.
+            Turning JavaScript off means you aren&apos;t counted either.
           </Item>
           <Item label="Page views">A count per page type, per day.</Item>
           <Item label="Load times">

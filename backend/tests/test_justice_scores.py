@@ -1,7 +1,8 @@
-"""Justice v2: the score is loyalty to the appointing president (Epstein &
-Posner 2016), fit per justice, shrunk across justices, scored against the
-between-justice spread. See justice_loyalty's module docstring and
-docs/research/justice-scores.md.
+"""Justice v3: no justice is scored. Each justice's own estimate of the
+appointing president's effect (Epstein & Posner 2016) is stored and shown
+with its confidence interval, unranked, because no method yet separates
+loyalty from career timing for an individual justice. See justice_loyalty's
+module docstring and docs/research/justice-scores.md.
 """
 
 import asyncio
@@ -10,18 +11,18 @@ from unittest.mock import AsyncMock, patch
 import numpy as np
 import pytest
 
-from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.models import Justice
-from app.pipeline.analyze.justice_loyalty import Vote, fit, label, loyalty_by_justice, president_on, score
+from app.pipeline.analyze.justice_loyalty import Vote, estimates_by_justice, fit, label, president_on
 from app.pipeline.fetch.justice_records import fetch_scdb, fjc_appointments, scdb_president_votes
 from app.pipeline.justice_pipeline import (
     _appointers,
     _bundled_rows,
     _database_name,
+    _loyalty_fields,
     _measure_loyalty,
     run_justice_pipeline,
 )
-from app.services.justice_service import get_justice
+from app.services.justice_service import get_justice, get_justice_leaderboard
 
 TERMS = [("P1", "2000-01-20", "2008-01-20"), ("P2", "2008-01-20", None)]
 
@@ -33,10 +34,6 @@ def simulate(rng, effect, n=400, base=0.5):
     pet = rng.random(n) < 0.5
     p = base + effect * x_in + 0.1 * pet
     return [(int(rng.random() < q), int(i), int(t)) for q, i, t in zip(p, x_in, pet)]
-
-
-def test_loyalty_is_the_only_scored_measure():
-    assert JUSTICE_SCORE_WEIGHTS == {"loyalty": 1.0}
 
 
 def test_fit_recovers_the_effect_holding_the_side_fixed():
@@ -51,27 +48,45 @@ def test_too_few_votes_on_either_side_is_not_estimated():
     assert fit(votes) is None
 
 
-def test_shrinkage_pulls_noisy_estimates_toward_the_mean_and_scores_them():
+def test_each_justice_keeps_their_own_unshrunk_estimate():
+    # Nothing is pulled toward other justices or scored: one justice alone
+    # is estimated, and a thin record has no estimate rather than a guess.
     rng = np.random.default_rng(3)
-    rows = {f"j{i}": simulate(rng, e) for i, e in enumerate([0.0, 0.05, 0.1, 0.15, 0.3])}
-    rows["tiny"] = simulate(rng, 0.6, n=40)
-    result, mean, tau = loyalty_by_justice(rows)
-    assert tau > 0
-    raw, shrunk = result["tiny"].estimate.raw, result["tiny"].loyalty
-    assert abs(shrunk - mean) < abs(raw - mean)
-    assert all(0.0 <= r.score <= 100.0 for r in result.values())
+    est = estimates_by_justice({"alone": simulate(rng, 0.3, n=2000), "thin": [(1, 1, 0)] * 5 + [(0, 0, 0)] * 100})
+    assert set(est) == {"alone"}
+    assert est["alone"].raw == pytest.approx(0.3, abs=0.06)
 
 
-def test_fewer_than_three_estimable_justices_scores_no_one():
-    rng = np.random.default_rng(4)
-    assert loyalty_by_justice({"a": simulate(rng, 0.1), "b": simulate(rng, 0.1)}) == ({}, 0.0, 0.0)
+def test_the_stored_fields_never_carry_a_score():
+    e = fit(simulate(np.random.default_rng(5), 0.12, n=1000))
+    fields = _loyalty_fields(e, 2025, None)
+    assert fields["score_loyalty"] is None and fields["loyalty"] is None and fields["loyalty_se"] is None
+    assert fields["appointer_effect"] == round(e.raw, 4) and fields["appointer_effect_se"] == round(e.se, 4)
+    uncovered = _loyalty_fields(None, 2025, None)
+    assert uncovered["score_loyalty"] is None and uncovered["appointer_effect"] is None
 
 
-def test_score_is_symmetric_and_bounded():
-    assert score(0.0, 0.1) == 100.0
-    assert score(0.1, 0.1) == score(-0.1, 0.1) == 50.0
-    assert score(0.5, 0.1) == 0.0
-    assert score(0.3, 0.0) == 100.0  # no spread between justices: none stands out
+def test_no_justice_is_scored_or_ranked_even_with_a_v2_score_stored(db_session):
+    """A v2 score left in the database is never served; null is "not
+    scored", never 0; the list is by seniority, not by any number."""
+    db_session.add_all([
+        Justice(id="junior", name="Junior Justice", last_name="Junior", is_active=True, date_start="2020-10-27",
+                score_loyalty=99.0, appointer_effect=-0.02, appointer_effect_se=0.05,
+                loyalty_votes_in=40, loyalty_votes_out=90, loyalty_rate_in=0.5, loyalty_rate_out=0.52),
+        Justice(id="senior", name="Senior Justice", last_name="Senior", is_active=True, date_start="1991-10-23",
+                score_loyalty=10.0, appointer_effect=0.2, appointer_effect_se=0.05),
+        Justice(id="chief", name="Chief Justice", last_name="Chief", role_title="Chief Justice", is_active=True,
+                date_start="2005-09-29", score_loyalty=50.0),
+    ])
+    db_session.commit()
+    board = get_justice_leaderboard(db_session)
+    assert [e.id for e in board] == ["chief", "senior", "junior"]
+    assert all(e.score.loyalty is None and e.score.overall is None for e in board)
+    junior = get_justice(db_session, "junior").model_dump(by_alias=True)
+    assert junior["score"] == {"loyalty": None, "overall": None}
+    assert junior["loyalty"]["estimate"] == -0.02
+    assert (junior["loyalty"]["ciLow"], junior["loyalty"]["ciHigh"]) == (-0.118, 0.078)
+    assert get_justice(db_session, "chief").loyalty is None  # never measured: no estimate, no zero
 
 
 def test_president_on_uses_half_open_terms():
@@ -186,7 +201,8 @@ class TestResolveAppointment:
         from types import SimpleNamespace as P
 
         return [
-            P(id="bush-41", name="George H. W. Bush", party="R", term_start="1989-01-20", term_end="1993-01-20"),
+            # The roster's (UCSB's) own spelling of the 41st president.
+            P(id="bush-41", name="George Bush", party="R", term_start="1989-01-20", term_end="1993-01-20"),
             P(id="bush-43", name="George W. Bush", party="R", term_start="2001-01-20", term_end="2009-01-20"),
             P(id="obama-44", name="Barack Obama", party="D", term_start="2009-01-20", term_end="2017-01-20"),
             P(id="trump-45", name="Donald J. Trump", party="R", term_start="2017-01-20", term_end="2021-01-20"),
@@ -196,7 +212,10 @@ class TestResolveAppointment:
 
     @pytest.mark.parametrize("name, confirmed, expected", [
         pytest.param("Barack Obama", "2010-08-07", ("Barack Obama", "D"), id="oyez_names_the_president"),
-        pytest.param("George H. W. Bush", "1991-10-23", ("George H. W. Bush", "R"), id="oyez_names_the_elder_bush"),
+        # Oyez's "George H. W. Bush" is nearer "George W. Bush" than the
+        # roster's "George Bush"; the date decides (2026-10-08: every Bush
+        # appointee had read as the 43rd president's).
+        pytest.param("George H. W. Bush", "1991-10-23", ("George Bush", "R"), id="oyez_names_the_elder_bush"),
         # Oyez leaves Ketanji Brown Jackson's appointing president empty;
         # the old table then gave no party, and the Action Center filled "R".
         pytest.param("", "2022-06-30", ("Joseph R. Biden", "D"), id="no_name_resolves_by_who_was_in_office"),
@@ -211,3 +230,42 @@ class TestResolveAppointment:
         from app.pipeline.justice_pipeline import resolve_appointment
 
         assert resolve_appointment(name, confirmed, self._presidents()) == expected
+
+
+def test_an_unreadable_martin_quinn_file_keeps_the_stored_positions():
+    from app.pipeline.justice_pipeline import _loyalty_fields
+
+    assert "ideal_points" not in _loyalty_fields(None, 2024, None, ideal_read=False)
+    assert _loyalty_fields(None, 2024, [[2024, 1.0]])["ideal_points"] == "[[2024, 1.0]]"
+    assert _loyalty_fields(None, 2024, None)["ideal_points"] is None  # read, and not in it
+
+
+def test_scdb_case_votes_read_side_and_opinion():
+    from app.pipeline.fetch.justice_records import scdb_case_votes
+    case = dict(caseId="2024-001", docket="23-621", caseName="A v. B", term="2024", dateDecision="6/20/2025",
+                decisionType="1", majOpinWriter="111", majVotes="6", minVotes="3", vote="1", opinion="1")
+    rows = [
+        {**case, "justice": "111", "justiceName": "JGRoberts", "majority": "2", "opinion": "2"},
+        {**case, "justice": "108", "justiceName": "CThomas", "majority": "2", "vote": "3", "opinion": "2"},
+        {**case, "justice": "114", "justiceName": "SSotomayor", "majority": "1", "vote": "2", "opinion": "2"},
+        {**case, "justice": "115", "justiceName": "EKagan", "majority": "1", "vote": "2"},
+        {**case, "justice": "116", "justiceName": "NMGorsuch", "majority": ""},  # did not take part
+        {**case, "justiceName": "OldTerm", "term": "2019", "majority": "2"},
+        {**case, "justiceName": "PerCuriamUnargued", "decisionType": "2", "majority": "2"},
+    ]
+    got = {r[5]: (r[6], r[7]) for r in scdb_case_votes(rows, 2022)}
+    assert got == {
+        "JGRoberts": ("majority", "majority"), "CThomas": ("majority", "concurrence"),
+        "SSotomayor": ("minority", "dissent"), "EKagan": ("minority", "none"),
+    }
+
+
+def test_the_record_reads_the_database_for_the_terms_it_covers():
+    from app.pipeline.justice_pipeline import scdb_vote_records
+    cases = [["2024-001", "23-621", "A v. B", 2024, "2025-06-20", "CThomas", "majority", "none", 6, 3],
+             ["2024-001", "23-621", "A v. B", 2024, "2025-06-20", "RRetired", "minority", "none", 6, 3],
+             ["2021-001", "20-1", "C v. D", 2021, "2022-06-20", "CThomas", "majority", "none", 9, 0]]
+    justices = [{"id": "clarence_thomas", "name": "Clarence Thomas", "last_name": "Thomas"}]
+    [vote] = scdb_vote_records(cases, justices, {2024})
+    assert vote["case_id"] == "scotus-2024-23-621" and vote["justice_id"] == "clarence_thomas"
+    assert vote["is_close"] is False and vote["is_unanimous"] is False

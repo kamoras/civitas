@@ -13,7 +13,7 @@ computed deterministically and don't need LLM calls.
 
 import logging
 import time
-from datetime import timedelta
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,7 @@ from app.pipeline.analyze.score_calculator import (
     calculate_scores,
     compute_overall_score,
 )
+from app.member_ids import assign_member_ids
 from app.pipeline.member_lifecycle import (
     CHAMBER_HOUSE,
     purge_departed_members,
@@ -59,7 +60,6 @@ from app.pipeline.fetch.fec import (
     committee_id_of,
     committee_master_cycles,
     compute_recent_election_cycles,
-    fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
     fetch_committee_contributions,
@@ -68,34 +68,39 @@ from app.pipeline.fetch.fec import (
     fetch_contribution_detail,
     fetch_pac_receipts,
     find_candidate,
-    reset_run_state as reset_fec_run_state,
     resolve_committee_meta,
+    with_seat_election,
 )
 from app.pipeline.fetch.floor_logs import bill_id_from_number
 from app.pipeline.analyze.bill_learning import stamp_motion_type
 from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
-from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
+from app.pipeline.run_checks import alert_member_failures, persist_ground_truth_failures, run_calibration_check
 from app.pipeline.transform.normalize_finance import normalize_finance
 from app.pipeline.transform.normalize_members import normalize_house_members
 from app.pipeline.transform.committee_data import load_leadership_tenures
 from app.pipeline.transform.normalize_votes import (
     extract_representative_vote,
     find_house_roll_call,
-    is_reconsider_switch,
     majority_leader_spans,
     normalize_votes,
-    reconsider_switch_applied,
+    member_vote_entry,
     stamp_roll_call_outcome,
     compute_party_split,
     compute_party_vote_split,
-    _determine_party_alignment,
     house_roll_call_id,
+    is_housekeeping,
 )
 from app.time_utils import utcnow
 from app.pipeline.senate_pipeline import invalidate_stale_analysis
-from app.pipeline.fetch.house_clerk import fetch_house_sworn_dates
+from app.pipeline.fetch.house_clerk import fetch_house_caucuses, fetch_house_sworn_dates
 from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_policy_areas_multi
-from app.pipeline.analyze.party_platform import analyze_partisan_depth, classify_party_alignment_multi, refine_with_vote_data
+from app.pipeline.analyze.party_platform import (
+    analyze_partisan_depth,
+    classify_party_alignment_multi,
+    clear_platform_cache,
+    initialize_platform_embeddings,
+    refine_with_vote_data,
+)
 from app.pipeline.analyze.sponsorship_analysis import (
     compute_bipartisanship_scores,
     compute_ideology_scores,
@@ -171,6 +176,17 @@ def roll_call_year(congress: int, now) -> tuple[int, bool]:
     return year, year == now.year and now.month <= 6
 
 
+def seated_at_convening(sworn_date: str | None, congress: int) -> bool:
+    """Sworn in when `congress` convened (January 3 of its first year), so
+    the general election before it is the one that seated the member. A
+    special-election winner, or a member whose date isn't known, is not."""
+    try:
+        sworn = date.fromisoformat((sworn_date or "")[:10])
+    except ValueError:
+        return False
+    return sworn <= date(congress_first_year(congress), 1, 3)
+
+
 def in_congress(roll_calls: list[dict], congress: int) -> list[dict]:
     """The roll calls of `congress`: any whose Clerk XML names another
     Congress is dropped, whichever year's folder it was read from. One with
@@ -194,7 +210,6 @@ async def run_house_pipeline() -> dict:
         return {"status": "skipped", "reason": refused}
 
     start_time = time.time()
-    reset_fec_run_state()  # clear the by_contributor circuit breaker from any prior run
 
     progress = ProgressTracker(house_run, HOUSE_PIPELINE_STEPS, db, start_time)
 
@@ -202,6 +217,13 @@ async def run_house_pipeline() -> dict:
         logger.info("=== HOUSE PIPELINE START ===")
 
         invalidate_stale_analysis(db)
+
+        # Party positions from seeds plus the bills earlier runs labelled,
+        # as the Senate run does. Without this the House classified against
+        # whatever this process last cached: the Senate's centroids in the
+        # nightly chain, the seeds alone for a House trigger after a restart.
+        clear_platform_cache()
+        initialize_platform_embeddings(db)
 
         async with make_async_client() as client:
             # FEC committee master, loaded on first use (see the FEC step).
@@ -243,6 +265,10 @@ async def run_house_pipeline() -> dict:
             progress.begin("normalize")
             reps = normalize_house_members(raw_members, member_details)
             logger.info("Normalized %d representatives", len(reps))
+            # Settle ids against the stored members by bioguide id, renaming
+            # any whose id changed, before anything below writes by id.
+            assign_member_ids(db, CHAMBER_HOUSE, reps)
+            db.commit()
             progress.complete("normalize", detail=f"{len(reps)} representatives")
 
             # Reconcile the roster: anyone in the database but not in
@@ -271,6 +297,12 @@ async def run_house_pipeline() -> dict:
                 for r in reps:
                     if r.get("bioguideId") in stored:
                         r["swornDate"] = stored[r["bioguideId"]]
+
+            # The caucus the Clerk records, which decides an independent's
+            # party-line reading (normalize_votes' declared_caucus).
+            caucuses = await fetch_house_caucuses(client, db)
+            for r in reps:
+                r["declaredCaucus"] = caucuses.get(r.get("bioguideId", ""))
 
             # Build bioguide -> rep mapping
             bio_to_rep: dict[str, dict] = {}
@@ -335,10 +367,16 @@ async def run_house_pipeline() -> dict:
             current_year, year_is_young = roll_call_year(scored, utcnow())
             recent_rcs = await fetch_recent_house_roll_calls(client, db, year=current_year, count=120)
             same_congress_prior_year = current_year > congress_first_year(scored)
-            if len(recent_rcs) < 60 and year_is_young and same_congress_prior_year:
-                recent_rcs += await fetch_recent_house_roll_calls(
+            if recent_rcs is not None and len(recent_rcs) < 60 and year_is_young and same_congress_prior_year:
+                earlier = await fetch_recent_house_roll_calls(
                     client, db, year=current_year - 1, count=120 - len(recent_rcs),
                 )
+                recent_rcs = None if earlier is None else recent_rcs + earlier
+            if recent_rcs is None:
+                # The Clerk could not be read. Saving now would replace
+                # every member's stored votes with none, so the run fails
+                # here, before any member is written.
+                raise RuntimeError("House roll calls could not be read from clerk.house.gov")
             recent_rcs = in_congress(recent_rcs, scored)
             logger.info("Fetched %d recent House roll calls", len(recent_rcs))
 
@@ -411,6 +449,8 @@ async def run_house_pipeline() -> dict:
                 if rc:
                     stamp_roll_call_outcome(bill, rc)
                     stamp_motion_type(bill, rc)
+                    if bill.get("housekeeping"):
+                        continue
                     vote_split = compute_party_vote_split(rc)
                     split = vote_split["label"] if vote_split else None
                     bill["partyLeaning"] = refine_with_vote_data(
@@ -423,6 +463,8 @@ async def run_house_pipeline() -> dict:
                 if rc:
                     stamp_roll_call_outcome(bill, rc)
                     stamp_motion_type(bill, rc)
+                    if bill.get("housekeeping"):
+                        continue
                     vote_split = compute_party_vote_split(rc)
                     split = vote_split["label"] if vote_split else None
                     bill["partyLeaning"] = refine_with_vote_data(
@@ -514,15 +556,22 @@ async def run_house_pipeline() -> dict:
                             # vote-refined elsewhere on the same scorecard.
                             policy_areas_raw: list[dict] = []
                             party_leaning = None
-                            if sp_title and len(sp_title) > 10:
-                                policy_areas_raw = classify_policy_areas_multi(sp_title, db_session=db)
+                            # The CRS policy area Congress.gov assigns, as the
+                            # Senate reads it: shown as the bill's area, and in
+                            # the classified text beside the title. The short
+                            # title alone filed about half of a sample wrong
+                            # (2,072 House bills under LABOR, 2026-10-08).
+                            crs_area = (sp.get("policyArea") or {}).get("name", "")
+                            classify_text = " ".join(t for t in (sp_title, crs_area) if t)
+                            if classify_text and len(classify_text) > 10:
+                                policy_areas_raw = classify_policy_areas_multi(classify_text, db_session=db)
                                 if policy_areas_raw:
                                     alignment = classify_party_alignment_multi(
-                                        sp_title, policy_areas_raw, "pro",
+                                        classify_text, policy_areas_raw, "pro",
                                     )
                                     party_leaning = alignment.get("overall", "bipartisan")
                                     rc = house_roll_calls.get(sp_key)
-                                    if rc:
+                                    if rc and not is_housekeeping(rc.get("question"), rc.get("chamber")):
                                         split = compute_party_split(rc)
                                         party_leaning = refine_with_vote_data(party_leaning, split)
                             sp_list.append({
@@ -531,7 +580,10 @@ async def run_house_pipeline() -> dict:
                                 "introducedDate": sp.get("introducedDate", ""),
                                 "latestAction": latest_action_text,
                                 "latestActionDate": (sp.get("latestAction") or {}).get("actionDate", ""),
-                                "policyArea": policy_areas_raw[0]["area"] if policy_areas_raw else "",
+                                "policyArea": (
+                                    crs_area.upper().replace(" ", "_") if crs_area
+                                    else policy_areas_raw[0]["area"] if policy_areas_raw else ""
+                                ),
                                 "policyAreas": [
                                     {
                                         "area": a["area"],
@@ -547,7 +599,7 @@ async def run_house_pipeline() -> dict:
                                 "congress": sp_congress,
                                 "billType": sp.get("type", ""),
                                 "isLaw": is_law,
-                                "stage": classify_bill_stage_from_actions(bill_actions, is_law),
+                                "stage": classify_bill_stage_from_actions(bill_actions, is_law, sp.get("type")),
                             })
                     # sp_list is already bounded to the current + previous
                     # congress (min_congress filter above), so this is a
@@ -560,7 +612,14 @@ async def run_house_pipeline() -> dict:
                     # positions_from_sponsored_bills is cheap (no LLM), so
                     # there's no real cost to a generous cap.
                     r["sponsoredBills"] = sp_list[:500]
-                    for sp_data in sp_list[:5]:
+                    # Every current-Congress sponsored bill feeds ideology
+                    # (SVD) and leadership (PageRank), as in the Senate: the
+                    # first five per member were 18% of the House's 12,287
+                    # (2026-10-08), so a prolific sponsor was read from a
+                    # sliver of their own record.
+                    for sp_data in sp_list:
+                        if sp_data.get("congress", settings.CURRENT_CONGRESS) != settings.CURRENT_CONGRESS:
+                            continue
                         sp_bill_id = sp_data["billId"]
                         if sp_bill_id in cosponsors_map:
                             continue
@@ -666,6 +725,9 @@ async def run_house_pipeline() -> dict:
 
             success_count = 0
             fail_count = 0
+            # (member id, exception) for each rep that failed: one ops
+            # alert after the scoring pass (alert_member_failures).
+            member_failures: list[tuple[str, BaseException]] = []
 
             recent_only = recent_not_covered_by_key_bills(classified_recent, house_roll_calls)
 
@@ -735,54 +797,25 @@ async def run_house_pipeline() -> dict:
                         rep_votes,
                         rep.get("party", "I"),
                         leader_spans=leader_spans,
+                        declared_caucus=rep.get("declaredCaucus"),
                     )
 
                     # Add recent votes
                     rep_party = rep.get("party", "I")
                     effective_party = voting_data.get("effectiveParty", rep_party)
                     for rv in recent_votes_list:
-                        vote_direction = rv["vote"].upper()
-                        normalized = "Not Voting"
-                        if vote_direction in ("YEA", "AYE", "YES"):
-                            normalized = "Yea"
-                        elif vote_direction in ("NAY", "NO"):
-                            normalized = "Nay"
-
-                        party_leaning = rv.get("partyLeaning")
-                        # Same rule as every other vote (normalize_votes); this
-                        # used to be an inline copy that could drift from it.
-                        reconsider_switch = is_reconsider_switch(rv, leader_spans)
-                        voted_with_party = _determine_party_alignment(
-                            effective_party, normalized, party_leaning,
-                            reconsider_switch=reconsider_switch,
+                        entry = member_vote_entry(
+                            rv, rv["vote"], effective_party, leader_spans,
                         )
-
-                        voting_data["recentVotes"].append({
-                            "billName": rv.get("billName", ""),
-                            "billId": rv.get("billId", ""),
-                            "date": rv.get("date", ""),
-                            "vote": normalized,
-                            "policyArea": rv.get("policyArea", "PROCEDURAL"),
-                            "policyAreas": rv.get("policyAreas", []),
-                            "partyAlignmentWeight": rv.get("partyAlignmentWeight", 0.0),
-                            "stance": rv.get("stance", "neutral"),
-                            "description": rv.get("description", ""),
-                            "partyLeaning": party_leaning,
-                            "votedWithParty": voted_with_party,
-                            "reconsiderSwitch": reconsider_switch_applied(
-                                effective_party, normalized, party_leaning,
-                                reconsider_switch,
-                            ),
-                            "voteCategory": "recent",
-                            "rcKey": rv.get("billId", ""),
-                            # The measure the roll call was on ("H R 1492"
-                            # -> "HR.1492"): billId here is synthetic, and
-                            # the LDA bill links match on the measure.
-                            "measureId": bill_id_from_number(
-                                (recent_rc_map.get(rv.get("billId", "")) or {}).get("documentName"),
-                            ),
-                            "motionType": rv.get("motionType"),
-                        })
+                        # House recent roll calls are keyed by billId.
+                        entry["rcKey"] = rv.get("billId", "")
+                        # The measure the roll call was on ("H R 1492"
+                        # -> "HR.1492"): billId here is synthetic, and
+                        # the LDA bill links match on the measure.
+                        entry["measureId"] = bill_id_from_number(
+                            (recent_rc_map.get(rv.get("billId", "")) or {}).get("documentName"),
+                        )
+                        voting_data["recentVotes"].append(entry)
 
                     rep["votingRecord"] = voting_data
 
@@ -797,19 +830,21 @@ async def run_house_pipeline() -> dict:
                         cand_id = fec_candidate.get("candidate_id", "")
                         financials = await fetch_candidate_financials(client, db, cand_id)
                         committees = await fetch_candidate_committees(client, db, cand_id)
+                        if seated_at_convening(rep.get("swornDate"), scored):
+                            financials = await with_seat_election(
+                                client, db, financials, committees, congress_first_year(scored) - 1,
+                            )
 
                         recent_cycles = compute_recent_election_cycles(financials, "H")
 
                         raw_receipts = []
                         raw_pac_receipts = []
-                        aggregated = []
 
                         for comm in committees:
                             comm_id = comm.get("committee_id", "")
                             if comm_id:
                                 raw_receipts.extend(await fetch_committee_receipts(client, db, comm_id, cycles=recent_cycles))
                                 raw_pac_receipts.extend(await fetch_pac_receipts(client, db, comm_id, cycles=recent_cycles))
-                                aggregated.extend(await fetch_aggregated_contributors(client, db, comm_id, cycles=recent_cycles))
 
                         # Resolve PAC committee type, designation and
                         # connected organization: the tier-1
@@ -839,9 +874,12 @@ async def run_house_pipeline() -> dict:
                             recent_cycles, committee_contributions, committee_master,
                         )
 
+                        # The chamber bounds the election window
+                        # (seat_winning_floor); a crosswalk match carries
+                        # only the id.
                         finance_data = normalize_finance(
-                            fec_candidate, financials, raw_receipts, raw_pac_receipts,
-                            aggregated, db_session=db,
+                            {**fec_candidate, "office": "H"}, financials, raw_receipts, raw_pac_receipts,
+                            db_session=db,
                             committee_meta_map=committee_meta_map,
                             detail=detail,
                         )
@@ -868,11 +906,10 @@ async def run_house_pipeline() -> dict:
                     # policy_alignment.py's module docstring.
                     rep["campaignPromises"] = []
 
-                    # Detect donor-industry-vs-vote connections (embeddings
-                    # only, zero LLM — see cross_reference.detect_lobbying_matches).
-                    # Without this, Constituent Alignment's donor-independence
-                    # component would default to a flat, fundraising-size-
-                    # based score regardless of actual donor-vote behavior.
+                    # Donor-industry-vs-vote connections for the scorecard
+                    # (embeddings only, zero LLM — see
+                    # cross_reference.detect_lobbying_matches). Display only:
+                    # no score reads them.
                     lobbying_matches = detect_lobbying_matches(
                         rep["funding"].get("topDonors", []),
                         all_votes,
@@ -892,6 +929,7 @@ async def run_house_pipeline() -> dict:
                     db.rollback()
                     logger.error("Failed to prepare rep %s: %s", rep.get("name", "?"), e)
                     fail_count += 1
+                    member_failures.append((rep.get("id") or rep.get("bioguideId") or rep.get("name", "?"), e))
 
             alert_if_lda_down(lda_totals, "house")
 
@@ -969,8 +1007,10 @@ async def run_house_pipeline() -> dict:
                     db.rollback()
                     logger.error("Failed to process rep %s: %s", rep.get("name", "?"), e)
                     fail_count += 1
+                    member_failures.append((rep.get("id") or rep.get("bioguideId") or rep.get("name", "?"), e))
 
             progress.complete("fec_scoring", detail=f"{success_count} OK, {fail_count} failed")
+            alert_member_failures("house", member_failures)
 
             # ── PHASE 6: SNAPSHOTS ──
             logger.info("--- House Phase 6: SNAPSHOTS ---")

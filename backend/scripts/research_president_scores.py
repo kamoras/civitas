@@ -153,9 +153,7 @@ def main():
             "the annual series can't separate them); jobs_per_year: BLS household-survey "
             "employment (datasets/employment-us), presidencies since 1945. Both are proxies "
             "for the pipeline's own MeasuringWorth / BLS payroll series, which replace them "
-            "on the first run; written by backend/scripts/research_president_scores.py. "
-            "rulemaking_finalized_pct has no fallback: Agency Alignment is omitted until "
-            "the first run measures it."
+            "on the first run; written by backend/scripts/research_president_scores.py."
         )
         REFERENCE.write_text(json.dumps(ref, indent=1, sort_keys=True) + "\n")
         print(f"\nwrote {REFERENCE}")

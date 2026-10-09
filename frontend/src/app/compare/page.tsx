@@ -476,7 +476,7 @@ function ComparePageInner() {
           >
             <p>
               Select two legislators to compare their representation scores, funding sources, and
-              voting independence side by side. Presidents compare on the{" "}
+              constituent alignment side by side. Presidents compare on the{" "}
               <Link
                 href="/compare/presidents"
                 className="underline decoration-white/30 underline-offset-4 hover:text-phos"

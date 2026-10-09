@@ -10,7 +10,7 @@ import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
 export const metadata = pageMetadata({
   title: "About Civitas: How Members of Congress Are Scored",
   description:
-    "What Civitas is, how it scores senators, representatives, presidents and justices from public records, and the rules it holds itself to: in five minutes.",
+    "What Civitas is, how it scores senators, representatives and presidents from public records (and why not justices), and the rules it holds itself to: in five minutes.",
   path: "/about",
 });
 
@@ -77,7 +77,11 @@ const SCORE_PARTS: readonly {
 ];
 
 const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
-  { what: "Senate & House", detail: "All 535 members, scored and ranked", href: "/politicians" },
+  {
+    what: "Senate & House",
+    detail: "Every sitting member, scored and ranked",
+    href: "/politicians",
+  },
   {
     what: "Presidents",
     detail: "Every president, on economic, public and historical records",
@@ -119,8 +123,9 @@ export default function AboutOverview() {
       title="About Civitas"
       lede={
         <p>
-          Civitas scores the people who represent you (senators, representatives, presidents and
-          Supreme Court justices) using only public records and formulas anyone can check.
+          Civitas scores the people who represent you (senators, representatives and presidents)
+          using only public records and formulas anyone can check, and keeps the record of Supreme
+          Court justices, who are not scored.
         </p>
       }
     >
@@ -174,9 +179,10 @@ export default function AboutOverview() {
         </div>
         <P>
           Scores cover the current Congress (two years of votes and bills), not a whole career,
-          except funding, which covers the election that won the member their seat. Every number on
-          a scorecard has a <span className="font-mono text-ink-hi">[?]</span> beside it explaining
-          what it measures. <A href="/about/scores">Read how each part is calculated</A>.
+          except funding, which covers the election that won the member their seat. The
+          Representation Score, each of its three parts and each of their components has a{" "}
+          <span className="font-mono text-ink-hi">[?]</span> beside it explaining what it measures.{" "}
+          <A href="/about/scores">Read how each part is calculated</A>.
         </P>
       </Section>
 

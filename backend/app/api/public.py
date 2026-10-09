@@ -19,7 +19,10 @@ Conventions every route keeps, so a caller learns them once:
 - `siteUrl` links each record to its page on Civitas.
 """
 
+import re
+import typing
 from typing import Literal
+from urllib.parse import parse_qsl, urlencode
 
 from collections.abc import Awaitable, Callable
 
@@ -44,7 +47,8 @@ from app.api.visits import record_api_request
 from app.broadcast import SITE_URL
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db, off_loop
-from app.models import Representative, ScoreSnapshot, Senator
+from app.member_ids import resolve_member_id
+from app.models import President, Representative, ScoreSnapshot, Senator
 from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
 from app.schemas import (
     PublicApiIndexSchema,
@@ -57,6 +61,7 @@ from app.schemas import (
     PublicStateSchema,
 )
 from app.services.explore_search import hybrid_search
+from app.state_names import STATE_NAMES
 from app.services.pagination import paginate_bounds
 from app.services.representative_service import (
     get_rep_leaderboard,
@@ -74,28 +79,96 @@ PREFIX = "/api/public/v1"
 CHANNEL_HEADER = "X-Civitas-Channel"
 
 
+# Words a caller may use for a party (case aside): "Democrat", "republican".
+_PARTY_WORDS = {"democrat": "D", "democratic": "D", "republican": "R", "independent": "I"}
+
+
+def _choice_key(value: str) -> str:
+    """A choice as compared: case, spacing, hyphens and underscores aside, so
+    "senate_floor_speech" and "Senate Floor Speech" are one choice."""
+    return re.sub(r"[\s_-]+", " ", value).strip().casefold()
+
+
+def _query_fields(dependant) -> list:
+    """Every query parameter a route takes, its dependencies' included."""
+    return [*dependant.query_params, *(f for dep in dependant.dependencies for f in _query_fields(dep))]
+
+
+def _literal_values(annotation) -> tuple[str, ...]:
+    """The allowed values of a Literal (or optional Literal) annotation."""
+    if typing.get_origin(annotation) is Literal:
+        return tuple(str(v) for v in typing.get_args(annotation))
+    return tuple(v for arg in typing.get_args(annotation) for v in _literal_values(arg))
+
+
+def _canonical(name: str, value: str, choices: tuple[str, ...]) -> str:
+    """The documented spelling of a query value written another way: a
+    choice in any case or with hyphens or underscores for its spaces, a
+    party by name, a state by name. Anything else is left for the
+    route's validation to refuse."""
+    key = _choice_key(value)
+    for choice in choices:
+        if _choice_key(choice) == key:
+            return choice
+    if name == "party" and key in _PARTY_WORDS:
+        return _PARTY_WORDS[key]
+    if name == "state":
+        for code, state_name in STATE_NAMES.items():
+            if _choice_key(state_name) == key:
+                return code
+    return value
+
+
 class _CountedRoute(APIRoute):
     """Counts each documented endpoint's requests by outcome
     (visits.record_api_request -> ApiRequestCount), including the 404s,
-    422s and 429s raised before the handler returns. Undocumented routes
+    422s and 429s raised before the handler returns, and for a 422 which
+    parameter broke which rule (ApiRejectionCount). Undocumented routes
     (the CORS preflight, the spec itself) are not API use and aren't
-    counted."""
+    counted.
+
+    Before the route runs, a query parameter the endpoint doesn't take is
+    refused (422): ignored, a misspelt or invented filter ("type",
+    "query") returned unfiltered results that looked like an answer. A
+    choice written another way than the documented one ("Senate",
+    "senate-floor-speech", "Republican", "Georgia") is read as the
+    documented one rather than refused (_canonical)."""
 
     def get_route_handler(self) -> Callable[[Request], Awaitable[Response]]:
         handler = super().get_route_handler()
         if not self.include_in_schema:
             return handler
         endpoint = self.name
+        params = {f.alias: f for f in _query_fields(self.dependant)}
+        choices = {name: _literal_values(f.field_info.annotation) for name, f in params.items()}
+
+        def checked_query(request: Request) -> None:
+            pairs = parse_qsl(request.scope.get("query_string", b"").decode("latin-1"), keep_blank_values=True)
+            unknown = sorted({k for k, _ in pairs} - params.keys())
+            if unknown:
+                raise RequestValidationError([{
+                    "type": "unknown_parameter",
+                    "loc": ("query", unknown[0]),
+                    "msg": f"Unknown parameter. This endpoint takes: {', '.join(sorted(params)) or 'none'}",
+                    "input": dict(pairs)[unknown[0]],
+                }])
+            normalized = [(k, _canonical(k, v, choices.get(k, ()))) for k, v in pairs]
+            if normalized != pairs:
+                request.scope["query_string"] = urlencode(normalized).encode("latin-1")
+                request.__dict__.pop("_query_params", None)
 
         async def counted(request: Request) -> Response:
             channel = "mcp" if request.headers.get(CHANNEL_HEADER) == "mcp" else "http"
             try:
+                checked_query(request)
                 response = await handler(request)
             except HTTPException as exc:
                 record_api_request(endpoint, channel, exc.status_code)
                 raise
-            except RequestValidationError:
-                record_api_request(endpoint, channel, 422)
+            except RequestValidationError as exc:
+                first = (exc.errors() or [{}])[0]
+                parameter = str((first.get("loc") or ("", ""))[-1])
+                record_api_request(endpoint, channel, 422, rejection=(parameter, str(first.get("type", ""))))
                 raise
             except Exception:
                 record_api_request(endpoint, channel, 500)
@@ -176,7 +249,14 @@ def _page(rows: list[dict], party: str | None, state: str | None, page: int, per
     }
 
 
+# Ids are renamed when the way they are derived changes, or a member's name
+# does (app/member_ids.py); a client holding the old one keeps working.
+_RENAMED_ID = (" An id the member had before a rename still works: the record comes back under the"
+               " current id (`id`, `siteUrl`).")
+
+
 def _history(db: Session, entity_type: str, model, member_id: str, request: Request) -> JSONResponse:
+    member_id = resolve_member_id(db, member_id)
     if db.get(model, member_id) is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     snapshots = (
@@ -209,15 +289,27 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
 
 _PREFLIGHT_HEADERS = {**_CORS_HEADERS, "Access-Control-Max-Age": "3600"}
 
-
-@router.options("/{path:path}", include_in_schema=False)
-def preflight(path: str) -> Response:
-    return Response(status_code=204, headers=_PREFLIGHT_HEADERS)
+# Added to every response under PREFIX that doesn't carry its own. Errors
+# included: a 404 or 422 raised before a route returns went out with no
+# Access-Control-Allow-Origin (live, 2026-10-08), so a page on another
+# origin saw a network error where the API had answered "no such member".
+# Expose-Headers, because without it a browser hides from the page the
+# rate-limit headers the spec says report the caller's quota.
+_RESPONSE_CORS = [
+    (b"access-control-allow-origin", b"*"),
+    (b"access-control-expose-headers", b"X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After"),
+]
 
 
 class PublicApiPreflight:
-    """Answers CORS preflights for this API before the site's CORSMiddleware
-    sees them (main.py adds this outside it).
+    """CORS for this API, outside the site's CORSMiddleware (main.py adds
+    this after it, so it runs first): answers preflights, and opens every
+    response (_RESPONSE_CORS).
+
+    Preflights are answered here only. A catch-all OPTIONS route used to
+    sit on the router too, and made every unknown path under the API (a
+    misspelt endpoint, an id with a slash in it) answer 405 Method Not
+    Allowed instead of 404.
 
     The site's CORSMiddleware allows the site's own origins only, and it
     answers every preflight itself, before routing: one from any other
@@ -244,7 +336,19 @@ class PublicApiPreflight:
             })
             await send({"type": "http.response.body", "body": b""})
             return
-        await self.app(scope, receive, send)
+        if scope["type"] != "http" or not scope["path"].startswith(PREFIX + "/"):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_open(message) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                present = {k.lower() for k, _ in headers}
+                headers += [(k, v) for k, v in _RESPONSE_CORS if k not in present]
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_open)
 
 
 # ---------------------------------------------------------------------------
@@ -279,9 +383,12 @@ def openapi_spec_dict() -> dict:
             summary="Open, read-only access to Civitas's scores, member records and document search.",
             description=(
                 f"No key or account. {PUBLIC_READ_LIMIT} requests per minute per IP, reported in the "
-                "X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset headers; over it, "
+                "X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset (a Unix time) headers; over it, "
                 "429 with Retry-After. CORS is open to every origin. Scores run 0-100, higher is a "
-                f"better representative; how each is computed: {SITE_URL}/about/scores."
+                f"better representative; how each is computed: {SITE_URL}/about/scores. A parameter an "
+                "endpoint doesn't take is refused (422) rather than ignored, and a choice is read in "
+                "any case and with hyphens or underscores for its spaces (Senate, senate-floor-speech); "
+                "a party may be named (Republican) and a state written out (Georgia)."
             ),
         )
         spec_app.include_router(router, prefix=PREFIX)
@@ -383,16 +490,16 @@ def list_senators(
 def get_senator(
     _rl: PublicReadLimit,
     request: Request,
-    senator_id: str = Path(description="The senator's id, as in their Civitas URL (e.g. jon-ossoff)"),
+    senator_id: str = Path(description="The senator's id, as in their Civitas URL (first-last, e.g. jane-doe)." + _RENAMED_ID),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Scores, funding and top donors, voting record, lobbying matches,
     sponsored bills and contact details."""
-    senator = get_senator_by_id(db, senator_id)
+    senator = get_senator_by_id(db, resolve_member_id(db, senator_id))
     if senator is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     return _pub_json(
-        {**senator.model_dump(by_alias=True), "siteUrl": _member_url(senator_id)},
+        {**senator.model_dump(by_alias=True), "siteUrl": _member_url(senator.id)},
         request, max_age=CACHE_TTL_DETAIL_S,
     )
 
@@ -402,7 +509,7 @@ def get_senator(
 def get_senator_history(
     _rl: PublicReadLimit,
     request: Request,
-    senator_id: str = Path(description="The senator's id"),
+    senator_id: str = Path(description="The senator's id." + _RENAMED_ID),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """One snapshot per scoring run, oldest first."""
@@ -438,16 +545,16 @@ def list_representatives(
 def get_representative(
     _rl: PublicReadLimit,
     request: Request,
-    rep_id: str = Path(description="The representative's id, as in their Civitas URL (e.g. joe-neguse)"),
+    rep_id: str = Path(description="The representative's id, as in their Civitas URL (first-last, e.g. john-roe)." + _RENAMED_ID),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Scores, funding and top donors, voting record, lobbying matches,
     sponsored bills and contact details."""
-    rep = get_representative_by_id(db, rep_id)
+    rep = get_representative_by_id(db, resolve_member_id(db, rep_id))
     if rep is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     return _pub_json(
-        {**rep.model_dump(by_alias=True), "siteUrl": _member_url(rep_id)},
+        {**rep.model_dump(by_alias=True), "siteUrl": _member_url(rep.id)},
         request, max_age=CACHE_TTL_DETAIL_S,
     )
 
@@ -457,7 +564,7 @@ def get_representative(
 def get_representative_history(
     _rl: PublicReadLimit,
     request: Request,
-    rep_id: str = Path(description="The representative's id"),
+    rep_id: str = Path(description="The representative's id." + _RENAMED_ID),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """One snapshot per scoring run, oldest first."""
@@ -468,7 +575,25 @@ def get_representative_history(
 # Search
 # ---------------------------------------------------------------------------
 
+def _politician_id(db: Session, given: str) -> str:
+    """The Civitas id a search's politician filter names: the id itself, or
+    a senator's or representative's bioguide id. An id that is neither is
+    refused (404) rather than searched: a filter matching no one returned
+    an empty result set that read as "they never said anything about it"."""
+    for model in (Senator, Representative, President):
+        if db.get(model, given) is not None:
+            return given
+    for model in (Senator, Representative):
+        row = db.query(model.id).filter(model.bioguide_id == given.upper()).first()
+        if row:
+            return row[0]
+    if (renamed := resolve_member_id(db, given)) != given:
+        return renamed
+    raise HTTPException(status_code=404, detail="No member or president with that id")
+
+
 @router.get("/search", response_model=PublicSearchResponseSchema, tags=["Search"],
+            responses={404: {"description": "No member or president with that id"}},
             summary="Search floor speeches, presidential actions, opinions and rules")
 async def search_documents(
     _rl: PublicReadLimit,
@@ -477,7 +602,9 @@ async def search_documents(
                    "identifier such as \"Executive Order 14110\""),
     chamber: Chamber | None = Query(None, description="Only documents from this branch"),
     doc_type: DocType | None = Query(None, description="Only this kind of document"),
-    politician_id: str | None = Query(None, description="Only documents by this member (their id)"),
+    politician_id: str | None = Query(None, description="Only documents by this member or president: their "
+                                      "Civitas id (as in their URL, e.g. jane-doe) or their bioguide id "
+                                      "(e.g. D000123)"),
     limit: int = Query(20, ge=1, le=50, description="How many results"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
@@ -488,6 +615,9 @@ async def search_documents(
     The same engine as the site's Explore page: meaning and exact words
     together, weighed with recency and how often other documents cite
     each one — so an identifier or docket number is found too."""
+    if politician_id:
+        given = politician_id
+        politician_id = await off_loop(db, lambda session: _politician_id(session, given))
     # Off the loop on a session of its own (database.off_loop).
     outcome = await off_loop(db, lambda session: hybrid_search(
         session, q, limit=limit, doc_type=doc_type,

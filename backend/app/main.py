@@ -76,7 +76,7 @@ async def _bootstrap_explore() -> None:
             with writing("Explore bootstrap"):
                 async with lease.job_async(lease.EXPLORE) as held:
                     if held:
-                        await run_explore_pipeline(days_back=60)
+                        await run_explore_pipeline()
     except WritesHeld as held:
         logger.info("%s", held)
     except Exception as e:

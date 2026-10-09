@@ -62,6 +62,22 @@ class TestPickPolitician:
 
         assert (entity.id, rank, total, chamber) == ("rep-a", 1, 1, "house")
 
+    def test_rank_is_the_leaderboards_with_ties_sharing(self, db_session):
+        # 70.4 and 69.6 both show as 70: the leaderboard ranks them 1 and
+        # 1, and 60 third. A position in the sorted list numbered the tie
+        # apart.
+        db_session.add_all([
+            _senator("sen-a", score=70.4), _senator("sen-b", score=69.6), _senator("sen-c", score=60.0),
+        ])
+        db_session.commit()
+        ranks = {}
+        for pick in ("sen-a", "sen-b", "sen-c"):
+            with patch("app.pipeline.analyze.bluesky_spotlight.random.choice",
+                       side_effect=lambda pool, p=pick: next(x for x in pool if x[0].id == p)):
+                entity, rank, total, _ = _pick_politician(db_session)
+            ranks[entity.id] = (rank, total)
+        assert ranks == {"sen-a": (1, 3), "sen-b": (1, 3), "sen-c": (3, 3)}
+
     def test_cycle_resets_once_the_combined_pool_is_exhausted(self, db_session):
         db_session.add(_senator("senator-a"))
         db_session.add(_representative("rep-a"))
@@ -99,8 +115,16 @@ class TestComposeSpotlight:
         text = compose_spotlight(s, 12, 100, "senate")
         assert text.startswith("Chuck Grantham (R-IA): Representation Score ")
         assert ", #12 of 100 senators. " in text
+        # Whole numbers, as the scorecard shows them: one decimal posted
+        # 59.5 for a member whose scorecard read 60.
         assert text.endswith(
-            "Funding Independence 43.0, Constituent Alignment 71.2, Legislative Effectiveness 94.0.")
+            "Funding Independence 43, Constituent Alignment 71, Legislative Effectiveness 94.")
+
+    def test_the_overall_is_the_scorecards_whole_number(self):
+        # 0.33*80 + 0.33*67 + 0.34*41 = 62.45: the scorecard shows 62.
+        s = _senator("Chuck Grantham", score_funding_independence=80.0,
+                     score_constituent_alignment=67.0, score_legislative_effectiveness=41.0)
+        assert "Representation Score 62, " in compose_spotlight(s, 1, 100, "senate")
 
     def test_a_representative_names_their_district(self):
         text = compose_spotlight(_representative("Jane Doe", district=12), 3, 435, "house")

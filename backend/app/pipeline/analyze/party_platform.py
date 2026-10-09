@@ -80,12 +80,11 @@ import logging
 import numpy as np
 from sqlalchemy.orm import Session
 
-from app.models import LearnedClassification
-from app.time_utils import utcnow
+from app.models import KeyVote, RepKeyVote, RollCall
+from app.pipeline.transform.normalize_votes import is_housekeeping
 
 logger = logging.getLogger(__name__)
 
-ENTITY_PARTY_ALIGNMENT = "party_alignment"
 
 # Seed descriptions: Bayesian prior for each party's positions per policy area.
 # These initialize the classifier before bill data is available.  As the pipeline
@@ -99,8 +98,9 @@ ENTITY_PARTY_ALIGNMENT = "party_alignment"
 # inverted-by-now positions), and an ABORTION area was added — the most
 # party-predictive issue domain of this era was previously absent from
 # the entire construct space. Seeds remain the Bayesian PRIOR only:
-# sponsor-party supervised refinement and vote-tally blending still
-# correct residual content errors as real bill data accumulates, and the
+# the centroids built from bills earlier runs labelled for each party
+# (_build_data_centroids; the roll-call split where there was one) correct
+# residual content errors as real bill data accumulates, and the
 # pipeline's analysis-code fingerprint clears cached classifications so
 # these take effect cleanly. Validated downstream by ground_truth.py's
 # reference ranges + population-stdev floors on the next full run.
@@ -342,26 +342,44 @@ def _build_data_centroids(db: Session) -> tuple[
 ]:
     """Build party platform centroids from actual congressional bill data.
 
-    Queries bills with known party_leaning from previous pipeline runs
-    and computes per-(party, policy_area) embedding centroids.
+    Queries bills with known party_leaning from previous pipeline runs, in
+    both chambers (KeyVote and RepKeyVote: a party's positions on a policy
+    area don't depend on which chamber voted), and computes
+    per-(party, policy_area) embedding centroids.
 
     Returns:
         (r_centroids, d_centroids) where each maps
         policy_area -> (centroid_embedding, n_bills).
     """
-    from app.models import KeyVote
     from app.pipeline.vector_store import get_embedding_model
     from collections import defaultdict
 
-    bills = (
-        db.query(KeyVote.bill_name, KeyVote.description, KeyVote.policy_area, KeyVote.party_leaning)
-        .filter(
-            KeyVote.party_leaning.in_(["R", "D"]),
-            KeyVote.policy_area != "",
-            KeyVote.policy_area != "PROCEDURAL",
-        )
-        .all()
-    )
+    # A housekeeping roll call carries its bill's title under the label of
+    # its own split, the opposite of the bill's. Rows stored since v6.28 are
+    # marked PROCEDURAL; earlier ones are recognized by their roll call's
+    # question, so the first run after the change doesn't learn from them.
+    housekeeping = {
+        f"{rc.chamber}-{rc.congress}-{rc.session}-{rc.number}"
+        for rc in db.query(RollCall.chamber, RollCall.congress, RollCall.session, RollCall.number, RollCall.question)
+        if is_housekeeping(rc.question, rc.chamber)
+    }
+
+    bills = []
+    for model_cls in (KeyVote, RepKeyVote):
+        bills += [
+            row[:4]
+            for row in db.query(
+                model_cls.bill_name, model_cls.description, model_cls.policy_area, model_cls.party_leaning,
+                model_cls.roll_call,
+            )
+            .filter(
+                model_cls.party_leaning.in_(["R", "D"]),
+                model_cls.policy_area != "",
+                model_cls.policy_area != "PROCEDURAL",
+            )
+            .all()
+            if row[4] not in housekeeping
+        ]
 
     groups: dict[tuple[str, str], list[str]] = defaultdict(list)
     seen: set[tuple[str, str, str]] = set()
@@ -781,47 +799,6 @@ def refine_with_vote_data(
     return vote_alignment
 
 
-def record_sponsor_alignment(
-    db: Session,
-    bill_id: str,
-    bill_text: str,
-    sponsor_party: str,
-    confidence: float = 0.85,
-) -> None:
-    """Record a bill's party alignment based on its sponsor's party.
-
-    This is training data for the adaptive system — bills sponsored by
-    R senators are examples of R-aligned legislation, and vice versa.
-    """
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-    import json
-
-    meta = json.dumps({
-        "text_prefix": bill_text[:200],
-        "source": "sponsor",
-    })
-
-    stmt = sqlite_insert(LearnedClassification).values(
-        entity_name=bill_id,
-        entity_type=ENTITY_PARTY_ALIGNMENT,
-        value=sponsor_party,
-        confidence=confidence,
-        source="sponsor",
-        match_metadata=meta,
-        learned_at=utcnow(),
-    ).on_conflict_do_update(
-        index_elements=["entity_name", "entity_type"],
-        set_={
-            "value": sponsor_party,
-            "confidence": confidence,
-            "source": "sponsor",
-            "match_metadata": meta,
-            "learned_at": utcnow(),
-        },
-    )
-    db.execute(stmt)
-
-
 def analyze_partisan_depth(
     promises: list[dict],
     senator_party: str,
@@ -1043,11 +1020,12 @@ def _alignments_from_votes(voting_record: dict) -> list[dict]:
     """Derive per-policy-area partisan alignments from actual votes.
 
     Uses multi-area bill data when available: each bill may span multiple
-    policy areas (e.g. a bill touching HEALTHCARE and TAXES), each with
-    its own per-area party alignment.  A senator's Yea/Nay on the bill
-    registers as a signal in each area separately, weighted by the area's
+    policy areas (e.g. a bill touching HEALTHCARE and TAXES). A senator's
+    Yea/Nay on the bill registers the bill's own lean (how the parties
+    voted on it) in each area separately, weighted by the area's
     confidence.  This follows Adler & Wilkerson (2012) in treating
-    legislation as multi-dimensional.
+    legislation as multi-dimensional, and Poole & Rosenthal (1985) in
+    reading lean from roll-call behaviour.
 
     Fallback: when `policyAreas` is absent, uses the single `policyArea`
     with the bill's overall `partyLeaning`.
@@ -1083,15 +1061,22 @@ def _alignments_from_votes(voting_record: dict) -> list[dict]:
 
         multi_areas = v.get("policyAreas") or []
         if multi_areas and isinstance(multi_areas, list):
+            # The bill's lean is how the parties voted on it (partyLeaning,
+            # refine_with_vote_data; its content only where the roll call
+            # gave no split), credited to each policy area it touches by
+            # the area's confidence. Each area's content label decided it
+            # before, so a Yea on a bill both parties passed counted as a
+            # Democratic or Republican vote in an area (AGENTS.md §4).
+            bill_party = v.get("partyLeaning") or v.get("party_leaning", "")
+            if bill_party not in ("D", "R"):
+                continue
             for pa in multi_areas:
                 if not isinstance(pa, dict):
                     continue
                 area = pa.get("area", "")
                 if not area or area == "PROCEDURAL":
                     continue
-                area_party = pa.get("party", "")
-                if area_party not in ("D", "R"):
-                    continue
+                area_party = bill_party
                 conf = pa.get("confidence", 0.5)
 
                 if vote == "Yea":

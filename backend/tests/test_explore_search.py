@@ -109,6 +109,21 @@ class TestFusion:
         outcome = hybrid_search(indexed_db, "wildfire", limit=10)
         assert [r["id"] for r in outcome["results"]] == [both.id, semantic_only.id]
 
+    def test_an_identifier_query_is_left_to_the_keyword_channel(
+        self, indexed_db, stub_semantic
+    ):
+        # The semantic ranking of "89 FR 52508" is noise, and fused it put a
+        # document both channels ranked middling above the exact hit.
+        exact = _add(indexed_db, title="Air plan approval", body="Published at 89 FR 52508.")
+        noise = _add(indexed_db, title="Rangeland grazing permits", body="Livestock.")
+        stub_semantic([noise.id])
+        # Typed lowercase too, as people do in a search box.
+        for query in ("89 FR 52508", "89 fr 52508"):
+            outcome = hybrid_search(indexed_db, query, limit=10)
+            assert [r["id"] for r in outcome["results"]] == [exact.id]
+            assert outcome["results"][0]["matchedBy"] == ["keyword"]
+            assert outcome["semanticUnavailable"] is False
+
     def test_a_vector_hit_with_no_surviving_row_is_dropped(
         self, indexed_db, stub_semantic
     ):
@@ -220,6 +235,22 @@ class TestDeduplication:
         outcome = hybrid_search(indexed_db, "wildfire", limit=10)
         assert [r["id"] for r in outcome["results"]] == [first.id]
         assert outcome["results"][0]["duplicateCount"] == 2
+
+    def test_a_recurring_notice_that_opens_the_same_way_is_not_a_copy(self, indexed_db, stub_semantic):
+        """A monthly or weekly Federal Register notice repeats its title and
+        opening boilerplate well past the fingerprint's prefix; each issue
+        is its own document. Only identical text collapses."""
+        opening = "The Board of Governors received the notices listed below for wildfire review. " * 20
+        a = _add(indexed_db, title="Formations of Holding Companies", body=opening + "Applicant A, Ohio.")
+        b = _add(indexed_db, title="Formations of Holding Companies", body=opening + "Applicant B, Iowa.")
+        c = _add(indexed_db, title="Formations of Holding Companies", body=opening + "Applicant A, Ohio.")
+        stub_semantic([])
+        outcome = hybrid_search(indexed_db, "wildfire", limit=10)
+        by_id = {r["id"]: r for r in outcome["results"]}
+        assert set(by_id) == {a.id, b.id}
+        assert by_id[a.id]["duplicateCount"] == 1 and by_id[b.id]["duplicateCount"] == 0
+        assert c.id not in by_id
+        assert not any(key.startswith("_") for r in outcome["results"] for key in r)
 
     def test_short_documents_are_never_treated_as_duplicates(
         self, indexed_db, stub_semantic

@@ -10,7 +10,7 @@ dimensions this platform removed (below), so it was dropped rather than
 kept as unscored "informational" text (2026-07).
 
 Every SCORED dimension
-(Public Mandate, Effectiveness, Agency Alignment) is computed entirely by
+(Public Mandate, Effectiveness, Historical Legacy) is computed entirely by
 run_president_pipeline (president_pipeline.py) from real fetched data,
 never seeded:
   - Public Mandate: live approval polling (Truman-33 onward, UCSB
@@ -22,9 +22,9 @@ never seeded:
     MeasuringWorth's 1790-present historical series (earlier
     presidents) + BLS jobs data (1939 onward) — see
     app.pipeline.fetch.economic_data/historical_gdp.
-  - Agency Alignment: Federal Register rulemaking data, Clinton onward
-    only — the regulatory record-keeping mechanism this dimension
-    measures didn't exist before Federal Register itself (1936).
+  - Agency Alignment (Federal Register rulemaking, Clinton onward) was
+    removed in president v7: administrations since 1994 finalize 59.6-61.8%
+    of the rulemakings they start, too little difference to score.
   - Historical Legacy (2026-07): C-SPAN's Presidential Historians
     Survey — a real, external, periodically-run expert-consensus survey
     (~142 professional historians in the 2021 cycle, the most recent;
@@ -63,7 +63,11 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.models import President, PresidentTrade
-from app.pipeline.analyze.president_scorer import compute_president_overall_score, dimensions_available
+from app.pipeline.analyze.president_scorer import (
+    compute_president_overall_score,
+    dimensions_available,
+    president_effective_weights,
+)
 from app.schemas import (
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
     PaginatedStockTradesSchema,
@@ -75,6 +79,12 @@ from app.schemas import (
 from app.services.pagination import paginate_bounds
 
 logger = logging.getLogger(__name__)
+
+
+def effective_weights(p: President) -> dict[str, float]:
+    """Each scored dimension's actual share of this president's overall,
+    rounded for display (president_scorer.president_effective_weights)."""
+    return {k: round(w, 4) for k, w in president_effective_weights(p).items()}
 
 
 def _build_response(p: President) -> PresidentSchema:
@@ -89,10 +99,10 @@ def _build_response(p: President) -> PresidentSchema:
         score=PresidentialScoreSchema(
             public_mandate=p.score_public_mandate,
             effectiveness=p.score_effectiveness,
-            agency_alignment=p.score_agency_alignment,
             historical_legacy=p.score_historical_legacy,
             overall=compute_president_overall_score(p),
             dimensions_available=dimensions_available(p),
+            effective_weights=effective_weights(p),
         ),
         avg_approval=p.avg_approval,
         gdp_growth_avg=p.gdp_growth_avg,
@@ -114,7 +124,7 @@ def get_president(db: Session, president_id: str) -> PresidentSchema | None:
 def get_president_score_breakdown(db: Session, president_id: str) -> dict | None:
     """Recompute a president's full score-derivation breakdown on-demand,
     directly from whatever live/historical data is currently stored
-    (gdp_growth_avg, rulemaking_finalized_pct, election_margin, etc. —
+    (gdp_growth_avg, election_margin, etc. —
     persisted by president_pipeline.py specifically so this recompute is
     possible without a live re-fetch).
 
@@ -129,10 +139,11 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
     seed-fallback state left to accidentally present as live.
     """
     from app.pipeline.analyze.president_scorer import (
-        _agency_alignment_core,
         _effectiveness_core,
         _historical_legacy_core,
         _public_mandate_core,
+        stored_approval_groups,
+        stored_macro,
     )
     from app.pipeline.president_pipeline import _term_years
 
@@ -148,26 +159,29 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
             election_margin=p.election_margin,
             approval_start=p.approval_start,
             is_current=bool(p.is_current),
+            president_id=p.id,
+            approval_groups=stored_approval_groups(p),
+            polarization=p.term_polarization,
         ),
         "effectiveness": _effectiveness_core(
             jobs_created_millions=p.jobs_created_millions,
             gdp_growth_avg=p.gdp_growth_avg,
             term_years=term_years,
             term_start_year=int(p.term_start[:4]) if p.term_start else None,
-        ),
-        "agencyAlignment": _agency_alignment_core(
-            rulemaking_finalized_pct=p.rulemaking_finalized_pct,
+            gdp_per_person=p.gdp_growth_per_person,
+            gdp_peer_median=p.gdp_growth_peer_median,
+            gdp_relative=p.gdp_growth_relative,
+            macro=stored_macro(p),
+            president_id=p.id,
         ),
         "historicalLegacy": _historical_legacy_core(
             historical_legacy_score=p.historical_legacy_score,
         ),
     }
     # What the scorecard states beside each score that isn't scored: the
-    # last 90 days' approval, how many rulemakings the rate is over, and
-    # the historians' rating of the same person's other presidency (a
+    # last 90 days' approval and the historians' rating of the same person's other presidency (a
     # sitting president's is unrated until the term ends).
     breakdown["publicMandate"]["facts"]["recentApproval"] = p.recent_avg_approval
-    breakdown["agencyAlignment"]["facts"]["rulemakings"] = p.rulemaking_count
     breakdown["historicalLegacy"]["facts"]["otherTerms"] = [
         {"id": o.id, "number": o.number, "points": o.historical_legacy_score, "score": o.score_historical_legacy}
         for o in db.query(President).filter(President.name == p.name, President.id != p.id).order_by(President.number)
@@ -217,10 +231,10 @@ def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:
         score = PresidentialScoreSchema(
             public_mandate=p.score_public_mandate,
             effectiveness=p.score_effectiveness,
-            agency_alignment=p.score_agency_alignment,
             historical_legacy=p.score_historical_legacy,
             overall=compute_president_overall_score(p),
             dimensions_available=dimensions_available(p),
+            effective_weights=effective_weights(p),
         )
         entries.append(PresidentLeaderboardEntry(
             id=p.id,
@@ -302,6 +316,7 @@ def get_president_trades(
                 source_url=t.source_url,
                 parse_confidence=t.parse_confidence,
                 report_kind=t.report_kind,
+                before_term_start=bool(t.transaction_date and t.transaction_date < president.term_start),
             )
             for t in trades_db
         ],

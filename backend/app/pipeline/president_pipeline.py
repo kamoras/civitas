@@ -12,10 +12,8 @@ cohorts. Both the seed fallback and the narrow cohorts are gone:
   - Public Mandate now covers every president who ever won a
     presidential election (presidential_approval.py for Truman-33
     onward, presidential_elections.py's historical margins before that).
-  - Jobs data (BLS, 1939 onward) and Agency Alignment (Federal Register
-    rulemaking, 1994 onward — the regulatory record-keeping mechanism it
-    measures didn't exist before Clinton's era in this platform's data)
-    remain genuinely limited to their real windows — not stale caps, real
+  - Jobs data (BLS, 1939 onward) remains genuinely limited to its real
+    window — not stale caps, real
     data-availability walls. A dimension or component missing for a given
     president is never defaulted; see president_scorer.py's
     _blend_live_components and compute_president_overall_score.
@@ -42,22 +40,41 @@ from app.models import President, ScoreSnapshot
 from app.pipeline.analyze.president_scorer import (
     PRESIDENT_ALGORITHM_VERSION,
     compute_president_overall_score,
+    approval_by_group,
     compute_president_reference,
+    congress_of_year,
+    macro_reference,
+    macro_window,
+    peer_comparable,
     recalculate_president_scores,
-    sitting_window_reference,
+    stored_approval_groups,
+    stored_macro,
+    FULL_TERM_DAYS,
+    term_days,
+    term_polarization,
+    window_reference,
 )
 from app.pipeline.fetch.cspan_historians_survey import fetch_cspan_historians_survey
 from app.pipeline.fetch.economic_data import fetch_jobs_for_president
-from app.pipeline.fetch.federal_register import fetch_all_rulemaking_stats
 from app.pipeline.fetch.historical_executive_orders import eo_entry, fetch_historical_eo_counts
 from app.pipeline.fetch.historical_gdp import compute_term_gdp_growth, fetch_historical_real_gdp
+from app.pipeline.fetch.peer_gdp import (
+    bundled_last_year,
+    bundled_per_capita,
+    convergence_rate,
+    fetch_world_bank_per_capita,
+    peer_relative_growth,
+)
 from app.pipeline.fetch.presidential_approval import (
     approval_slugs,
     dated_approvals,
+    dated_by_party,
     fetch_president_approval_history,
     recent_polls,
 )
+from app.pipeline.fetch.macro_series import CONSUMER_PRICES, UNEMPLOYMENT, fetch_annual_series, inflation_by_year
 from app.pipeline.fetch.presidential_elections import fetch_election_margins
+from app.pipeline.fetch.voteview import fetch_house_party_distance
 from app.pipeline.fetch.presidential_roster import fetch_presidential_roster
 from app.time_utils import utcnow
 
@@ -79,6 +96,16 @@ def _term_years(start: str, end: str | None) -> float:
     else:
         e = utcnow()
     return max((e - s).days / 365.25, 0.1)
+
+
+# Party labels the roster's source gets wrong, each corrected from a cited
+# primary source. "U" is no party. The American Presidency Project's tables
+# tag George Washington "(F)", Federalist; he never joined a party and is the
+# only president who represented none (George Washington's Mount Vernon,
+# "Political Parties", mountvernon.org/george-washington/the-first-president/
+# political-parties). Voteview codes him "Pro-Administration" for the 1st to
+# 3rd Congresses, a faction label, then Federalist.
+PARTY_CORRECTIONS = {"washington-1": "U"}
 
 
 def _sync_roster(db: Session, roster, eo_data: dict) -> int:
@@ -112,7 +139,7 @@ def _sync_roster(db: Session, roster, eo_data: dict) -> int:
     for entry in roster:
         try:
             p = db.query(President).filter(President.id == entry.id).first()
-            party = eo_entry(eo_data, entry.id, entry.name).get("party")
+            party = PARTY_CORRECTIONS.get(entry.id) or eo_entry(eo_data, entry.id, entry.name).get("party")
             is_current = entry.term_end is None
             if p is None:
                 if not party:
@@ -165,14 +192,25 @@ async def run_president_pipeline(db: Session) -> dict:
             logger.warning("No presidents in database and roster fetch found none — nothing to do")
             return {"updated": 0}
 
-        logger.info("Fetching agency rulemaking data from Federal Register...")
-        rulemaking_data = await fetch_all_rulemaking_stats(client)
-        logger.info("Rulemaking data fetched for %d presidents", len(rulemaking_data))
-
         logger.info("Fetching real GDP series 1790-present (MeasuringWorth)...")
         current_year = utcnow().year
         gdp_by_year = await fetch_historical_real_gdp(client, db, 1790, current_year)
         logger.info("GDP data fetched for %d years", len(gdp_by_year))
+
+        logger.info("Fetching unemployment and consumer prices (FRED/BLS)...")
+        unemployment_by_year = await fetch_annual_series(client, db, UNEMPLOYMENT)
+        cpi_by_year = await fetch_annual_series(client, db, CONSUMER_PRICES)
+        inflation_series = inflation_by_year(cpi_by_year) if cpi_by_year else None
+
+        logger.info("Fetching real GDP per person, US and peer economies (World Bank)...")
+        peer_bundled = bundled_per_capita()
+        world_bank_gdp = await fetch_world_bank_per_capita(
+            client, db, bundled_last_year(peer_bundled), current_year,
+        )
+        convergence = (
+            convergence_rate(world_bank_gdp, peer_bundled, current_year) if world_bank_gdp is not None else None
+        )
+        logger.info("Peer catch-up growth: %s points per log income gap", convergence)
 
         logger.info("Fetching BLS employment data (1939 onward)...")
         jobs_data: dict[str, float] = {}
@@ -180,13 +218,16 @@ async def run_president_pipeline(db: Session) -> dict:
             term_start_year = int(p.term_start[:4])
             if term_start_year < _BLS_COVERAGE_START_YEAR:
                 continue
-            jobs = await fetch_jobs_for_president(client, p.id)
+            jobs = await fetch_jobs_for_president(client, p.term_start, p.term_end)
             if jobs is not None:
                 jobs_data[p.id] = jobs
 
         logger.info("Fetching approval-poll history from UCSB American Presidency Project...")
         approval_avg_data: dict[str, float] = {}
         approval_trend_data: dict[str, float] = {}
+        # (poll date, {"D", "I", "R"} approve %) per presidency: Public
+        # Mandate's by-party comparison within an era (president v9).
+        party_series: dict[str, list] = {}
         approval_start_data: dict[str, float] = {}
         # (poll date, approve %) in date order, per presidency: the sitting
         # president's elapsed-time comparison reads predecessors' polls.
@@ -208,12 +249,20 @@ async def run_president_pipeline(db: Session) -> dict:
                 approval_start_data[pid] = sum(values[:q]) / q
                 approval_trend_data[pid] = (sum(values[-q:]) / q) - approval_start_data[pid]
             approval_series[pid] = dated_approvals(polls)
+            party_series[pid] = dated_by_party(polls)
 
             recent = recent_polls(polls)
             recent_values = [poll.approving for poll in recent if poll.approving is not None]
             if recent_values:
                 recent_avg_approval_data[pid] = sum(recent_values) / len(recent_values)
         logger.info("Approval data fetched for %d presidents", len(approval_avg_data))
+
+        # Polarization over every polling-era Congress (Truman's first, the
+        # 79th, to the sitting one), for the by-party comparison.
+        logger.info("Fetching House party polarization per Congress (Voteview)...")
+        sitting = congress_of_year(current_year)
+        polarization_by_congress = await fetch_house_party_distance(db, list(range(79, sitting + 1)), sitting)
+        logger.info("Polarization read for %d Congresses", len(polarization_by_congress))
 
         logger.info("Fetching historical election-margin data (UCSB)...")
         election_margin_data = await fetch_election_margins(db)
@@ -256,17 +305,38 @@ async def run_president_pipeline(db: Session) -> dict:
             # real previously-computed score instead of just leaving it as
             # last night's value — "couldn't fetch this run" must mean "keep
             # what we had," never "score reads as inapplicable now."
-            if president.id in rulemaking_data:
-                president.rulemaking_count = rulemaking_data[president.id]["rulemaking_count"]
-                president.rulemaking_finalized_pct = rulemaking_data[president.id]["rulemaking_finalized_pct"]
-            if president.rulemaking_finalized_pct is not None:
-                live["rulemaking_finalized_pct"] = president.rulemaking_finalized_pct
-
             gdp_growth = compute_term_gdp_growth(gdp_by_year, term_start_year, term_end_year)
             if gdp_growth is not None:
                 president.gdp_growth_avg = gdp_growth
             if president.gdp_growth_avg is not None:
                 live["gdp_growth_avg"] = president.gdp_growth_avg
+
+            # Kept as stored when the World Bank couldn't be fetched this run.
+            peer = (
+                peer_relative_growth(term_start_year, term_end_year, world_bank_gdp, peer_bundled, convergence)
+                if convergence is not None and peer_comparable(term_start_year)
+                else None
+            )
+            if peer is not None:
+                president.gdp_growth_per_person = peer["us"]
+                president.gdp_growth_peer_median = peer["peers"]
+                president.gdp_growth_relative = peer["relative"]
+            live["gdp_growth_per_person"] = president.gdp_growth_per_person
+            live["gdp_growth_peer_median"] = president.gdp_growth_peer_median
+            live["gdp_growth_relative"] = president.gdp_growth_relative
+
+            # Unemployment and inflation over the credited years, for a term
+            # from 1947 on; kept as stored when this run couldn't read them.
+            if unemployment_by_year and inflation_series and peer_comparable(term_start_year):
+                last = term_end_year if president.term_end else min(max(unemployment_by_year), max(inflation_series))
+                window = macro_window(unemployment_by_year, inflation_series, term_start_year, last)
+                if window:
+                    president.unemployment_start = window["unemp_start"]
+                    president.unemployment_change = window["unemp_change"]
+                    president.inflation_start = window["infl_start"]
+                    president.inflation_average = window["infl_avg"]
+                    president.economy_years = window["years"]
+            live["macro"] = stored_macro(president)
 
             if president.id in jobs_data:
                 president.jobs_created_millions = jobs_data[president.id]
@@ -286,11 +356,26 @@ async def run_president_pipeline(db: Session) -> dict:
                 # night (#218 review B2).
                 president.election_margin = election_margin_data[president.id]
 
+            # Approval by party and the term's polarization; each kept as
+            # stored when this run couldn't read it.
+            groups = approval_by_group(party_series.get(president.id) or [], president.party)
+            if groups:
+                president.approval_own_party = groups["own"]
+                president.approval_other_party = groups["opp"]
+                president.approval_independents = groups["ind"]
+            polarization = term_polarization(
+                term_start_year, term_end_year if president.term_end else current_year + 1, polarization_by_congress,
+            )
+            if polarization is not None:
+                president.term_polarization = polarization
+
             if president.avg_approval is not None:
                 live["avg_approval"] = president.avg_approval
                 live["approval_trend"] = president.approval_trend
                 live["approval_start"] = president.approval_start
                 live["is_current"] = president.is_current
+                live["approval_groups"] = stored_approval_groups(president)
+                live["polarization"] = president.term_polarization
             elif president.election_margin is not None:
                 live["election_margin"] = president.election_margin
 
@@ -323,25 +408,67 @@ async def run_president_pipeline(db: Session) -> dict:
             "id": p.id, "name": p.name, "avg_approval": p.avg_approval,
             "approval_trend": p.approval_trend,
             "approval_start": p.approval_start,
+            "approval_groups": stored_approval_groups(p),
+            "macro": stored_macro(p),
+            "polarization": p.term_polarization,
             "is_current": p.is_current,
             "election_margin": election_margin_data.get(p.id),
             "historical_legacy_score": p.historical_legacy_score,
             "gdp_growth_avg": p.gdp_growth_avg,
+            "gdp_growth_per_person": p.gdp_growth_per_person,
+            "gdp_growth_peer_median": p.gdp_growth_peer_median,
+            "gdp_growth_relative": p.gdp_growth_relative,
             "term_start_year": int(p.term_start[:4]) if p.term_start else None,
             "jobs_created_millions": p.jobs_created_millions,
             "term_years": scored_inputs.get(p.id, ({}, 0.0))[1],
-            "rulemaking_finalized_pct": p.rulemaking_finalized_pct,
+            "term_days": term_days(p.term_start, p.term_end),
         }
         for p in presidents
     ])
-    sitting = [p.id for p in presidents if p.is_current and approval_series.get(p.id)]
-    if sitting:
-        window = sitting_window_reference(
-            approval_series[sitting[0]],
-            [approval_series[p.id] for p in presidents if not p.is_current and approval_series.get(p.id)],
-        )
-        if window:
-            measured["sitting_window"] = window
+    # A presidency shorter than a full term (the sitting one, or one cut
+    # short) is compared with every other completed presidency over its own
+    # number of days.
+    completed_series = {
+        p.id: approval_series[p.id] for p in presidents
+        if not p.is_current and approval_series.get(p.id)
+    }
+    measured["term_windows"] = {
+        p.id: window
+        for p in presidents
+        if approval_series.get(p.id)
+        and (p.is_current or (term_days(p.term_start, p.term_end) or FULL_TERM_DAYS) < FULL_TERM_DAYS)
+        and (window := window_reference(
+            approval_series[p.id], [s for pid, s in completed_series.items() if pid != p.id],
+            [
+                (party_series[q.id], q.party, q.term_polarization)
+                for q in presidents
+                if q.id != p.id and not q.is_current and party_series.get(q.id)
+                and q.term_polarization is not None
+            ],
+        ))
+    }
+    # A presidency shorter than a full term is judged on unemployment and
+    # inflation against other postwar presidencies over the same number of
+    # credited years.
+    if unemployment_by_year and inflation_series:
+        others = [
+            q for q in presidents
+            if not q.is_current and q.term_end and peer_comparable(int(q.term_start[:4]))
+        ]
+        measured["macro_windows"] = {
+            p.id: block
+            for p in presidents
+            if (macro := stored_macro(p))
+            and (p.is_current or (term_days(p.term_start, p.term_end) or FULL_TERM_DAYS) < FULL_TERM_DAYS)
+            and (block := macro_reference([
+                macro_window(
+                    unemployment_by_year, inflation_series, int(q.term_start[:4]), int(q.term_end[:4]),
+                    years=macro["years"],
+                )
+                for q in others
+                if q.id != p.id and int(q.term_end[:4]) - int(q.term_start[:4]) >= macro["years"]
+            ]))
+        }
     previous = PRESIDENT_REFERENCE.load().get("presidents") or {}
     reference = PRESIDENT_REFERENCE.with_live("presidents", {**previous, **measured}).get("presidents")
     logger.info("President reference: %s", reference)
@@ -351,18 +478,19 @@ async def run_president_pipeline(db: Session) -> dict:
             new_scores = recalculate_president_scores(president.id, live, term_years, reference)
             president.score_public_mandate = new_scores["score_public_mandate"]
             president.score_effectiveness = new_scores["score_effectiveness"]
-            president.score_agency_alignment = new_scores["score_agency_alignment"]
+            # Agency Alignment was removed in president v7; the column is
+            # dropped in a later release (expand, then contract).
+            president.score_agency_alignment = None
             president.score_historical_legacy = new_scores["score_historical_legacy"]
             president.updated_at = utcnow()
             db.commit()
             updated += 1
 
             logger.info(
-                "  %s: mandate=%s effectiveness=%s agency=%s legacy=%s",
+                "  %s: mandate=%s effectiveness=%s legacy=%s",
                 president.id,
                 new_scores["score_public_mandate"],
                 new_scores["score_effectiveness"],
-                new_scores["score_agency_alignment"],
                 new_scores["score_historical_legacy"],
             )
         except Exception:
@@ -385,7 +513,6 @@ async def run_president_pipeline(db: Session) -> dict:
         "updated": updated,
         "failed": failed,
         "eo_data_count": len(eo_data),
-        "rulemaking_data_count": len(rulemaking_data),
         "gdp_years_count": len(gdp_by_year),
         "jobs_data_count": len(jobs_data),
         "approval_data_count": len(approval_avg_data),
@@ -443,7 +570,7 @@ def _record_president_snapshots(db: Session) -> None:
             existing.score_1 = p.score_public_mandate or 0.0
             existing.score_2 = p.score_effectiveness or 0.0
             existing.score_3 = 0.0
-            existing.score_4 = p.score_agency_alignment or 0.0
+            existing.score_4 = 0.0
             existing.score_5 = p.score_historical_legacy or 0.0
         else:
             db.add(ScoreSnapshot(
@@ -454,7 +581,7 @@ def _record_president_snapshots(db: Session) -> None:
                 score_1=p.score_public_mandate or 0.0,
                 score_2=p.score_effectiveness or 0.0,
                 score_3=0.0,
-                score_4=p.score_agency_alignment or 0.0,
+                score_4=0.0,
                 score_5=p.score_historical_legacy or 0.0,
                 algorithm_version=PRESIDENT_ALGORITHM_VERSION,
             ))

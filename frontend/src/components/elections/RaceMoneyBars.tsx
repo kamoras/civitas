@@ -1,9 +1,9 @@
 import Link from "next/link";
 import type { BallotCandidate } from "@/types/election";
-import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
+import { cashOnHandDisplay, displayScore, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
-import { candidateName, incumbencyLabel } from "@/lib/elections";
+import { candidateName, incumbencyLabel, raisedLabel } from "@/lib/elections";
 
 /**
  * A race as a comparison, not a list.
@@ -76,11 +76,7 @@ export default function RaceMoneyBars({
                 )}
               </p>
               <p className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
-                {c.fecFiled === false
-                  ? "no FEC filing"
-                  : c.hasRaisedFunds
-                    ? formatCurrency(raised)
-                    : "no funds reported"}
+                {raisedLabel(c)}
               </p>
             </div>
 
@@ -89,7 +85,9 @@ export default function RaceMoneyBars({
               role="img"
               aria-label={
                 leader > 0
-                  ? `${formatCurrency(raised)} raised, ${pct}% of the leader in this race`
+                  ? raised > 0
+                    ? `${formatCurrency(raised)} raised, ${pct}% of the leader in this race`
+                    : raisedLabel(c)
                   : "no fundraising reported in this race"
               }
             >
@@ -108,8 +106,8 @@ export default function RaceMoneyBars({
                 className="mt-1.5 inline-block font-mono text-[11px] text-ink-lo hover:text-phos"
               >
                 representation score{" "}
-                <span className={getScoreColor(c.incumbentRecord.score)}>
-                  {c.incumbentRecord.score.toFixed(1)}
+                <span className={getScoreColor(displayScore(c.incumbentRecord.score))}>
+                  {displayScore(c.incumbentRecord.score)}
                 </span>{" "}
                 →
               </Link>

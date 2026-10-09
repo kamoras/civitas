@@ -87,20 +87,6 @@ class TestBuildDonorEntries:
         fec_data = {"sen-1": {"receipts": [{"contributor_employer": ""}]}}
         assert _build_donor_entries(senators, fec_data) == []
 
-    def test_aggregated_entries_have_no_fec_receipt(self):
-        """Aggregated (by_contributor) rows don't carry a raw receipt — this
-        is unchanged pre-existing behavior, not part of the employer-receipt
-        fix."""
-        senators = [{"id": "sen-1"}]
-        fec_data = {
-            "sen-1": {
-                "aggregated": [{"contributor_name": "Some Donor", "total": 2500}],
-            }
-        }
-        entries = _build_donor_entries(senators, fec_data)
-        assert len(entries) == 1
-        assert "fec_receipt" not in entries[0]
-
 
 class TestBuildCurrentTermSponsoredForCosponsor:
     """No per-senator cap — a prior 10-bill cap meant a prolific sponsor's
@@ -297,3 +283,35 @@ def test_house_representatives_are_backfilled_too(db_session):
     assert (leadership, ideology, bip, attracted) == (
         {"R001": 0.3}, {"R001": -0.4}, {"R001": 0.6}, {"R001": 0.55},
     )
+
+
+def test_party_line_records_read_the_whole_chamber_scored_first():
+    """The senators a run scores come first, in order (their records are
+    zipped back onto them), then every other roster senator, once: a
+    filtered run's unscored ones and any whose prep failed."""
+    from app.pipeline.senate_pipeline import party_line_members
+    roster = [{"id": f"S{i}"} for i in range(4)]
+    scored = [{"id": "S2", "votingRecord": {}}, {"id": "S0", "votingRecord": {}}]
+    out = party_line_members(scored, roster)
+    assert out[:2] == scored and [m["id"] for m in out[2:]] == ["S1", "S3"]
+    assert party_line_members(roster, roster) == roster
+
+
+def test_vote_dates_are_stored_iso_so_the_record_sorts_by_the_calendar(db_session):
+    """Senate.gov's "October 14, 2025, 05:34 PM" stored as text sorted the
+    voting record alphabetically: September ahead of October."""
+    from app.pipeline.senate_pipeline import upsert_senator
+    from app.services.senator_service import get_senator_votes
+
+    votes = [
+        {"billName": "A", "billId": "S.1", "date": "September 30, 2025,  02:00 PM", "vote": "Yea"},
+        {"billName": "B", "billId": "S.2", "date": "October 14, 2025,  05:34 PM", "vote": "Nay"},
+        {"billName": "C", "billId": "S.3", "date": "November 3, 2025,  11:00 AM", "vote": "Yea"},
+    ]
+    upsert_senator(db_session, {
+        "id": "s-test", "name": "Senator Test", "state": "SW", "party": "D",
+        "votingRecord": {"recentVotes": votes},
+    })
+    db_session.commit()
+    page = get_senator_votes(db_session, "s-test", category="recent")
+    assert [v.date for v in page.votes] == ["2025-11-03", "2025-10-14", "2025-09-30"]

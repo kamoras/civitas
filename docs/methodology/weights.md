@@ -160,3 +160,85 @@ real dataset under this new scheme: 35% still lands Lincoln/Eisenhower
 in the top 10 and Coolidge/Harding/McKinley out of it, so the number
 itself didn't need to change — only how it's applied.
 ```
+
+### President v10 (2026-10-07): unemployment and inflation in Effectiveness
+
+```text
+Weights unchanged. Effectiveness, for terms from 1947 on:
+  25% GDP growth vs peers, 25% jobs per year,
+  25% unemployment: (expected change - change), expected = a + b x rate
+      the year the term began, change from that year to the last credited,
+  25% inflation: (expected - average over the credited years), expected =
+      a + b x inflation the year the term began,
+each z-scored (residual SD of its fit over completed full-term postwar
+presidencies, refitted each run; a shorter presidency against others' same
+number of credited years). Before 1947: GDP 60%, jobs 40%, as before.
+Equal weights: nearly independent parts, no outside criterion (Dawes 1979).
+```
+
+### President v9 (2026-10-07): average approval by party, against the era
+
+```text
+Weights unchanged. Public Mandate's average-approval component (70%):
+
+  gap = mean over g in {own party, other party, independents} of
+        (approval_g - (a_g + b_g x polarization))
+
+scored against the completed full-term presidencies' mean and SD of gap
+(partisan_reference). polarization: the House's Republican minus
+Democratic mean DW-NOMINATE dim-1, averaged over the term's Congresses
+(Voteview). a_g, b_g: Theil-Sen fit of each group's approval on
+polarization, refitted each run. A shorter presidency is compared with
+predecessors over the same number of days, as before. Without the
+by-party figures: overall approval, as before.
+```
+
+### President v8 (2026-10-06): postwar GDP growth relative to peer economies
+
+```text
+Weights unchanged (25/25/50). Effectiveness's GDP component (60%), for
+terms starting 1947 or later:
+
+  relative = mean over credited years t of
+             (US growth per person_t - median peer growth_t
+              - rate x median peer log income gap with the US_(t-1))
+
+scored against the postwar population's mean and SD of `relative`
+(compute_president_reference, "gdp_growth_relative"). Credited years: the
+term's second to its last. Peers: 13 advanced economies. rate: Theil-Sen
+slope of (US - median peer growth) on the median gap, every year since
+1947, refitted each run (8.9 in October 2026). Before 1947 unchanged: total
+growth against prewar presidencies. docs/research/president-scores.md has
+the measurements.
+```
+
+### President v7 (2026-10-06): Historical Legacy 50%, Agency Alignment removed
+
+```text
+publicMandate 25%, effectiveness 25%, historicalLegacy 50%.
+
+Agency Alignment removed. Its finalization rate counted Federal Register
+rulemaking documents per term, and the documents API reports at most
+10,000 results: Clinton's, George W. Bush's and Obama's counts were capped
+for both document types and read exactly 50%. Counted in windows under the
+cap, every administration since 1994 finalized 59.6% to 61.8% of the
+rulemakings it began (Obama 59.6, Clinton 60.8, Biden 61.3, Trump 61.4,
+G. W. Bush 61.8, Trump second term 61.8 so far). Scored against those six
+administrations' spread, a two-point gap reads as nearly two standard
+deviations: the measure magnifies noise rather than separating
+administrations, so it is dropped rather than rescaled.
+
+Historical Legacy 35% -> 50%. Measured on the current scores (approval
+judged against the starting level and over a short term's own days;
+Agency Alignment gone), 45 rated presidents:
+  35%: Spearman 0.78 with C-SPAN alone, 0.83 with the other two dimensions
+  50%: Spearman 0.90 with C-SPAN alone, 0.69 with the other two
+At 35% historians carried no more weight than approval and the economy
+together. 50% is no longer the "contributes almost nothing" case it was
+when last tried (0.96): the other dimensions still move the ranking.
+
+Each president's page shows the weights their overall was actually
+computed with (president_effective_weights): with Historical Legacy and
+both others present, 50/25/25; with one other, two thirds and one third;
+a sitting president, unrated by historians, 50/50 on the other two.
+```

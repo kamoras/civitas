@@ -74,6 +74,8 @@ class TestHousePipelineRecentRollCallYearWindow:
 
         with (
             patch("app.pipeline.house_pipeline.SessionLocal", return_value=db_session),
+            # Party-platform seeds are embedded at run start; not under test.
+            patch("app.pipeline.house_pipeline.initialize_platform_embeddings"),
             patch("app.pipeline.house_pipeline.fetch_representatives", new_callable=AsyncMock, return_value=[{"bioguideId": "R000001"}]),
             patch("app.pipeline.house_pipeline.fetch_member_detail", new_callable=AsyncMock, return_value={}),
             patch("app.pipeline.house_pipeline.normalize_house_members", return_value=[{"bioguideId": "R000001"}]),
@@ -124,6 +126,8 @@ class TestRecentRollCallsFollowTheHeldCongress:
 
         with (
             patch("app.pipeline.house_pipeline.SessionLocal", return_value=db_session),
+            # Party-platform seeds are embedded at run start; not under test.
+            patch("app.pipeline.house_pipeline.initialize_platform_embeddings"),
             patch("app.pipeline.house_pipeline.fetch_representatives", new_callable=AsyncMock, return_value=[{"bioguideId": "R000001"}]),
             patch("app.pipeline.house_pipeline.fetch_member_detail", new_callable=AsyncMock, return_value={}),
             patch("app.pipeline.house_pipeline.normalize_house_members", return_value=[{"bioguideId": "R000001"}]),
@@ -154,6 +158,7 @@ def test_a_house_run_invalidates_stale_analysis_like_a_senate_one(db_session):
 
     order = []
     with patch("app.pipeline.house_pipeline.SessionLocal", return_value=db_session), \
+         patch("app.pipeline.house_pipeline.initialize_platform_embeddings"), \
          patch("app.pipeline.house_pipeline.invalidate_stale_analysis",
                side_effect=lambda db: order.append("invalidate")), \
          patch("app.pipeline.house_pipeline.fetch_representatives",

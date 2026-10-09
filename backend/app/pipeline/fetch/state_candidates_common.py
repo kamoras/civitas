@@ -18,7 +18,9 @@ invented:
   NCSBE/NC    "US SENATE (DEM)"
 """
 
+import json
 import logging
+import pathlib
 import re
 from collections.abc import Callable
 from datetime import date, timedelta
@@ -128,6 +130,11 @@ _NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 # party-endorsement marker) or the word itself (Alaska's "Sullivan, Dan S.
 # Incumbent", Florida's "*Incumbent"). See surname().
 _ANNOTATION_RE = re.compile(r"\([^)]*\)|\*|(?i:\bincumbent\b)")
+# The same, for a name shown as printed: a parenthetical with more of the
+# name after it is the nickname the ballot prints ("Tobias (Toby) Doe" --
+# North Carolina's and Colorado's lists), not a marker beside the name, so
+# only a trailing one is an annotation. surname() still drops both.
+_DISPLAY_ANNOTATION_RE = re.compile(r"\([^)]*\)(?!\s*[^\W\d_])|\*|(?i:\bincumbent\b)")
 
 
 def parse_office(contest_name: str) -> tuple[str, int | None] | None:
@@ -520,6 +527,30 @@ def fec_party(code: str | None) -> str | None:
     """An FEC party code as the party PARTY_CODE_MAP names — so a
     Minnesota DFL nominee reads as the Democrat the state's list says."""
     return FEC_PARTY_ALIASES.get(code or "", code) if code else code
+
+
+_FEC_PARTY_CODES_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "fec_party_codes.json"
+_fec_party_codes: dict[str, str] | None = None
+
+
+def fec_party_label(code: str | None) -> str | None:
+    """What an FEC party code names, from the FEC's own table
+    (app/data/fec_party_codes.json, scripts/fetch_fec_party_codes.py): "TX"
+    is the Taxpayers party. None for a code the table doesn't define —
+    one a filer typed ("08", "GOP"), shown as filed."""
+    global _fec_party_codes
+    if _fec_party_codes is None:
+        _fec_party_codes = json.loads(_FEC_PARTY_CODES_PATH.read_text())["codes"]
+    return _fec_party_codes.get(code or "")
+
+
+def ballot_party(record: dict) -> str | None:
+    """The party a state's list prints for a candidate: its FEC code when
+    the vocabulary names it, else the printed label (Vermont's "Freedom
+    and Unity"), None when the list prints none."""
+    code = PARTY_CODE_MAP.get(record.get("party") or "")
+    label = " ".join(str(record.get("party_label") or "").split()).upper()
+    return code or label[:80] or None
 
 # Where the pipeline records that it checked a state's statewide-executive
 # contests, and the API reads that back. Shared here rather than in
@@ -980,6 +1011,13 @@ _STATE_LEG_SEAT_RE = re.compile(
     r"\bSeat\s+([A-Za-z])\b|\bPos(?:ition|\.)?\s*(\d+)\b", re.IGNORECASE,
 )
 
+# A special election for the rest of a vacated term, held beside the
+# seat's regular contest on the same ballot (Arkansas, 2026: House District
+# 8's unexpired term and its next full term, two contests with different
+# candidates). Stored as the seat, so the two contests stay two rows.
+_STATE_LEG_UNEXPIRED_RE = re.compile(r"\b(?:unexpired|special)\b", re.IGNORECASE)
+UNEXPIRED_SEAT = "UNEX"  # fits StateLegNominee.seat (String(4))
+
 STATE_LEG_CHAMBER_LABELS = {"upper": "State Senate", "lower": "State House"}
 
 # ── judicial ─────────────────────────────────────────────────────
@@ -1134,7 +1172,9 @@ def parse_state_leg_office(contest_name: str) -> tuple[str, str, str | None] | N
     ("upper", "5", None) for Rhode Island's Senate District 5,
     ("lower", "10A", None) for one of Minnesota's two real districts,
     ("lower", "1", "A") for Idaho's Seat A of District 1, and
-    ("lower", "5", "2") for Washington's Position 2 of District 5.
+    ("lower", "5", "2") for Washington's Position 2 of District 5, and
+    ("lower", "8", UNEXPIRED_SEAT) for a special election to the rest of a
+    vacated term, held beside the district's regular contest.
 
     The seat is None wherever a district elects a single member, which
     is most of the country. Where it is set, the district still names
@@ -1178,6 +1218,8 @@ def parse_state_leg_office(contest_name: str) -> tuple[str, str, str | None] | N
             seat = None
             if seat_match:
                 seat = (seat_match.group(1) or seat_match.group(2) or "").upper() or None
+            elif _STATE_LEG_UNEXPIRED_RE.search(name):
+                seat = UNEXPIRED_SEAT
             return chamber, number, seat
     return None
 
@@ -1189,6 +1231,8 @@ def district_label(district: str, seat: str | None) -> str:
     obviously two seats of one district when both rows sit together."""
     if not seat:
         return district
+    if seat == UNEXPIRED_SEAT:
+        return f"{district} (unexpired term)"
     return f"{district}{seat}" if seat.isalpha() else f"{district}-{seat}"
 
 
@@ -1232,6 +1276,8 @@ def office_from_columns(row: dict, spec: dict | None) -> tuple[str, int | None] 
 # Nebraska writes the same thing out as "By Petition". DTS is New Mexico's
 # "Declined to Select". "Unenrolled" is Maine's word for a voter in no
 # party (its 2026 General Candidate List prints it beside "Independent").
+# NPP is Nevada's "No Political Party" (Clark County's candidate list
+# legend: "indicated for partisan offices only").
 # Minor parties with an FEC code of their own, recognised ONLY on a
 # certified general-election list (normalize_party's ballot_list). On
 # primary results the same word is refused, deliberately: Vermont's
@@ -1245,9 +1291,9 @@ _BALLOT_LIST_PARTY_PATTERNS = [
     (re.compile(r"\b(?:progressive|prog)\b", re.IGNORECASE), "P"),
 ]
 
-_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS"})
+_INDEPENDENT_ABBR = frozenset({"IND", "INDEPENDENT", "UNA", "NPA", "NOP", "NP", "NOPTY", "PETITION", "DTS", "NPP"})
 _INDEPENDENT_RE = re.compile(
-    r"\b(independent|unaffiliated|unenrolled|undeclared|no\s+party(\s+affiliation)?"
+    r"\b(independent|unaffiliated|unenrolled|undeclared|no\s+(?:political\s+)?party(\s+affiliation)?"
     r"|non[\s-]?partisan|by\s+petition)\b",
     re.IGNORECASE,
 )
@@ -1259,7 +1305,11 @@ _INDEPENDENT_RE = re.compile(
 # which renders the party as printed. The federal matcher keeps reading it
 # as "I", as it always has: its codes have no slot for a named minor
 # party, and None there would drop the candidate from the ballot outright.
-_INDEPENDENT_PARTY_RE = re.compile(r"\bindependent\s+(?:party|pty)\b", re.IGNORECASE)
+# California's American Independent Party and Nevada's Independent American
+# Party are parties too, named so: "Independent" as part of a party's name.
+_INDEPENDENT_PARTY_RE = re.compile(
+    r"\b(?:independent\s+(?:party|pty|american)|american\s+independent)\b", re.IGNORECASE,
+)
 _NONPARTISAN_RE = re.compile(r"\bnon[\s-]?partisan\b", re.IGNORECASE)
 
 
@@ -1445,7 +1495,8 @@ def federal_record(
 
 def clean_display_name(display_name: str) -> str:
     """A ballot name with its annotations removed, kept otherwise
-    verbatim — "Aaron C. Guckian*" -> "Aaron C. Guckian".
+    verbatim — "Aaron C. Guckian*" -> "Aaron C. Guckian". A nickname the
+    ballot prints inside the name is kept: "Jane (Jj) Doe" stays.
 
     The same annotations surname() strips, stripped for the same reason:
     they are markers the state prints beside a name, not part of it.
@@ -1455,7 +1506,7 @@ def clean_display_name(display_name: str) -> str:
     or worse as a footnote marker pointing at a footnote that does not
     exist on the page.
     """
-    return re.sub(r"\s+", " ", re.sub(_ANNOTATION_RE, " ", display_name or "")).strip()
+    return re.sub(r"\s+", " ", re.sub(_DISPLAY_ANNOTATION_RE, " ", display_name or "")).strip()
 
 
 def surname(display_name: str, last_first: bool = False) -> str | None:

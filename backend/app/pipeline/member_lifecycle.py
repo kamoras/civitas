@@ -29,26 +29,26 @@ president_service.get_president_leaderboard), and there is no roster feed
 to reconcile them against in the first place.
 """
 
-import json
 import logging
 from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.member_ids import (
+    CHAMBER_HOUSE,
+    CHAMBER_SENATE,
+    MODELS as _MODELS,
+    SNAPSHOT_ENTITY as _SNAPSHOT_ENTITY,
+    edit_issue_members,
+)
 from app.models import (
-    ActionIssue,
     BskySenatorSpotlight,
     ExploreDocument,
-    Representative,
     ScoreSnapshot,
-    Senator,
 )
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
-
-CHAMBER_SENATE = "senate"
-CHAMBER_HOUSE = "house"
 
 # How long a departed member stays on the site before removal. Sized to
 # outlast the seat being refilled: Senate vacancies are filled by
@@ -70,10 +70,6 @@ _MIN_ROSTER_FRACTION = 0.9
 # Departures above this in one night are legitimate at a turnover but odd
 # any other time, so they get logged at warning level for a human to eyeball.
 _UNUSUAL_DEPARTURE_COUNT = 10
-
-_MODELS = {CHAMBER_SENATE: Senator, CHAMBER_HOUSE: Representative}
-# ScoreSnapshot.entity_type as written by senate_pipeline/house_pipeline.
-_SNAPSHOT_ENTITY = {CHAMBER_SENATE: "senator", CHAMBER_HOUSE: "representative"}
 
 _AUTO_VACANCY_REASON = "left office"
 
@@ -206,6 +202,16 @@ def reconcile_roster(
             m.vacancy_reason = None
             m.left_office_date = None
             restored.append(m.id)
+        elif m.is_current and on_roster and (m.left_office_date or m.vacancy_reason):
+            # Serving, yet carrying a departure: four sitting House members
+            # held a left_office_date for two months (2026-08 to 2026-10)
+            # after being set serving by a path that left it behind. The API
+            # serves it as leftOfficeDate, and it would restart the purge
+            # clock from the old date if they ever left. On the roster
+            # tonight, so it is cleared.
+            m.vacancy_reason = None
+            m.left_office_date = None
+            restored.append(m.id)
 
     if unmatchable:
         logger.warning(
@@ -299,8 +305,8 @@ def _purge_member_traces(db: Session, member, chamber: str) -> None:
     an action issue renders a contact chip linking to a 404, and an orphan
     snapshot keeps feeding the trend series of an id nothing else knows.
 
-    Every one is scoped to this chamber. Both chambers' ids are the
-    member's "last-first" name, so a representative who went on to the
+    Every one is scoped to this chamber. One person has one id in both
+    chambers (app/member_ids.py), so a representative who went on to the
     Senate (five did in 2025) leaves a
     departed House row with the same id as a serving senator — and a purge
     by id alone unlinked the senator's floor speeches and struck them from
@@ -339,35 +345,8 @@ def _purge_member_traces(db: Session, member, chamber: str) -> None:
             ExploreDocument.chamber == chamber.title(),
         ).update({ExploreDocument.politician_id: None}, synchronize_session=False)
 
-    _strip_from_action_issues(db, member_id, chamber)
+    edit_issue_members(db, member_id, chamber, None)
 
 
 def _other_chamber(chamber: str) -> str:
     return CHAMBER_HOUSE if chamber == CHAMBER_SENATE else CHAMBER_SENATE
-
-
-def _strip_from_action_issues(db: Session, member_id: str, chamber: str) -> None:
-    """Remove a member from every action issue's related_senators blob.
-    An entry without a chamber is a senator's (the blob held only
-    senators before representatives were added)."""
-    # LIKE prefilter so this touches only the handful of issues that
-    # actually name the member, rather than rewriting the whole table.
-    issues = (
-        db.query(ActionIssue)
-        .filter(ActionIssue.related_senators.like(f'%"{member_id}"%'))
-        .all()
-    )
-    for issue in issues:
-        try:
-            entries = json.loads(issue.related_senators or "[]")
-        except (ValueError, TypeError):
-            continue
-        if not isinstance(entries, list):
-            continue
-        kept = [
-            e for e in entries
-            if not (isinstance(e, dict) and e.get("id") == member_id
-                    and (e.get("chamber") or CHAMBER_SENATE) == chamber)
-        ]
-        if len(kept) != len(entries):
-            issue.related_senators = json.dumps(kept)

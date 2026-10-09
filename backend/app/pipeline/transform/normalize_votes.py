@@ -109,12 +109,23 @@ _HOUSEKEEPING_QUESTION_RE = re.compile(
     r"quorum|call of the house|adjourn|journal|previous question|motion to table|to table the|recommit",
     re.IGNORECASE,
 )
+# The House's motion to commit (v6.28) is the motion to recommit's twin for
+# a bill no committee reported (House Rule XIX): the same minority motion,
+# and it splits on party lines the same way. The Senate's motion to commit
+# carries instructions that amend the bill, so it is a vote on substance
+# and stays counted there.
+_HOUSE_HOUSEKEEPING_QUESTION_RE = re.compile(r"motion to commit", re.IGNORECASE)
 
 
-def is_housekeeping(question: str | None) -> bool:
+def is_housekeeping(question: str | None, chamber: str | None = None) -> bool:
     """A roll call on running the chamber rather than on a bill, nominee or
-    rule (see _HOUSEKEEPING_QUESTION_RE)."""
-    return bool(question) and bool(_HOUSEKEEPING_QUESTION_RE.search(question))
+    rule (see _HOUSEKEEPING_QUESTION_RE). `chamber` ("house" or "senate",
+    either case) adds the House-only questions."""
+    if not question:
+        return False
+    if _HOUSEKEEPING_QUESTION_RE.search(question):
+        return True
+    return (chamber or "").lower() == "house" and bool(_HOUSE_HOUSEKEEPING_QUESTION_RE.search(question))
 
 
 def stamp_roll_call_outcome(bill: dict, roll_call: dict) -> None:
@@ -126,11 +137,25 @@ def stamp_roll_call_outcome(bill: dict, roll_call: dict) -> None:
     through partySplit: with no roll call there is no split, and a vote
     is never marked with or against the party from what the bill says.
     A housekeeping question (is_housekeeping) has no split for loyalty
-    either."""
+    either, and is marked procedural (`housekeeping`, policy area
+    PROCEDURAL, no per-area labels or party label): a motion to recommit
+    carries its bill's title, so classified as the bill it read as a vote
+    on it, and a Yea on the minority's motion counted toward the bill's
+    party in partisan depth and taught the party-position centroids the
+    bill under the other party's label (v6.28). Callers skip the split
+    refinement for it (refine_with_vote_data)."""
     bill["motionRejected"] = roll_call.get("rejected")
     bill["rollCallDate"] = vote_date_iso(roll_call.get("voteDate"))
     bill["rollCall"] = roll_call_ref(roll_call)
-    bill["partySplit"] = None if is_housekeeping(roll_call.get("question")) else compute_party_split(roll_call)
+    if is_housekeeping(roll_call.get("question"), roll_call.get("chamber")):
+        bill["housekeeping"] = True
+        bill["partySplit"] = None
+        bill["partyLeaning"] = None
+        bill["policyArea"] = "PROCEDURAL"
+        bill["policyAreas"] = []
+        bill["partyAlignmentWeight"] = 0.0
+    else:
+        bill["partySplit"] = compute_party_split(roll_call)
 
 
 def is_reconsider_switch(
@@ -249,13 +274,14 @@ def _determine_party_alignment(
 
     Args:
         senator_party: "R", "D", or "I" (Independents use inferred caucus)
-        vote: "Yea", "Nay", or "Not Voting"
+        vote: "Yea", "Nay", "Present" or "Not Voting"
         party_leaning: "R", "D", "bipartisan", or None
 
     Returns:
         True = voted with party, False = voted against party, None = N/A
     """
-    if vote == "Not Voting" or not party_leaning or party_leaning == "bipartisan":
+    # "Present" is a recorded answer but takes no side: no party signal.
+    if vote not in ("Yea", "Nay") or not party_leaning or party_leaning == "bipartisan":
         return None
 
     effective_party = senator_party
@@ -427,6 +453,7 @@ def normalize_votes(
     senator_party: str = "I",
     cosponsorship_profile: dict | None = None,
     leader_spans: list[tuple[str | None, str | None]] | None = None,
+    declared_caucus: str | None = None,
 ) -> dict:
     """Normalize voting data for a senator.
 
@@ -443,6 +470,11 @@ def normalize_votes(
             for caucus inference (optional).
         leader_spans: majority_leader_spans() for this member — when they
             were majority leader, for the reconsider-switch exemption.
+        declared_caucus: the caucus the chamber records for the member
+            ("D", "R", or "I" for none) — the House Clerk's member data
+            (house_clerk.parse_caucuses). For an Independent it decides,
+            and inference runs only without it (the Senate publishes no
+            such field).
 
     Returns:
         Normalized voting record.
@@ -452,9 +484,12 @@ def normalize_votes(
     voted_against_party = 0
     total_tracked = 0
 
-    # For Independents, infer their caucus party from voting + cosponsorship
+    # For Independents: the caucus the chamber records, else one inferred
+    # from voting + cosponsorship.
     effective_party = senator_party
-    if senator_party == "I":
+    if senator_party == "I" and declared_caucus in ("D", "R", "I"):
+        effective_party = declared_caucus
+    elif senator_party == "I":
         inferred = _infer_caucus_party(
             bill_classifications, senator_votes, cosponsorship_profile,
         )
@@ -473,54 +508,12 @@ def normalize_votes(
 
         total_tracked += 1
 
-        vote_direction = vote.upper()
-        is_yea = vote_direction in ("YEA", "AYE", "YES")
-        is_nay = vote_direction in ("NAY", "NO")
-
-        normalized_vote = "Not Voting"
-        if is_yea:
-            normalized_vote = "Yea"
-        elif is_nay:
-            normalized_vote = "Nay"
-
-        policy_area = bill.get("policyArea", "PROCEDURAL")
-
-        # Party alignment (uses effective_party for Independents), from how
-        # the parties actually voted on this roll call — never the bill's
-        # content lean (stamp_roll_call_outcome).
-        party_leaning = bill.get("partyLeaning")
-        party_split = bill.get("partySplit")
-        reconsider_switch = is_reconsider_switch(bill, leader_spans)
-        party_aligned = _determine_party_alignment(
-            effective_party, normalized_vote, party_split,
-            reconsider_switch=reconsider_switch,
-        )
-        if party_aligned is True:
+        entry = member_vote_entry(bill, vote, effective_party, leader_spans)
+        if entry["votedWithParty"] is True:
             voted_with_party += 1
-        elif party_aligned is False:
+        elif entry["votedWithParty"] is False:
             voted_against_party += 1
-
-        key_votes.append({
-            "billName": bill.get("billName", ""),
-            "billId": bill.get("billId", ""),
-            "date": bill.get("date") or bill.get("rollCallDate") or "",
-            "vote": normalized_vote,
-            "policyArea": policy_area,
-            "policyAreas": bill.get("policyAreas", []),
-            "partyAlignmentWeight": bill.get("partyAlignmentWeight", 0.0),
-            "stance": bill.get("stance", "neutral"),
-            "description": bill.get("description", ""),
-            "partyLeaning": party_leaning,
-            "votedWithParty": party_aligned,
-            "reconsiderSwitch": reconsider_switch_applied(
-                effective_party, normalized_vote, party_split, reconsider_switch,
-            ),
-            "voteCategory": "recent",
-            "rcKey": bill.get("rcKey"),
-            # What the roll call decided (bill_learning.stamp_motion_type).
-            "motionType": bill.get("motionType"),
-            "rollCall": bill.get("rollCall"),
-        })
+        key_votes.append(entry)
 
     party_total = voted_with_party + voted_against_party
     party_loyalty_pct = (
@@ -537,6 +530,62 @@ def normalize_votes(
         "effectiveParty": effective_party,
         "recentVotes": [],
         "keyVotes": key_votes,
+    }
+
+
+def member_vote_entry(
+    bill: dict,
+    member_vote: str,
+    party: str,
+    leader_spans: list[tuple[str | None, str | None]] | None,
+) -> dict:
+    """One member's vote on a classified roll call, in the stored shape:
+    key votes and recent votes, both chambers. The House used to build its
+    recent votes inline and drifted, counting loyalty from partyLeaning (the
+    split even on housekeeping questions, and the bill's content label
+    wherever the roll call gave no split) instead of partySplit
+    (stamp_roll_call_outcome).
+
+    `party` is the member's party for alignment (an Independent's caucus).
+    """
+    direction = member_vote.upper()
+    vote = "Not Voting"
+    if direction in ("YEA", "AYE", "YES"):
+        vote = "Yea"
+    elif direction in ("NAY", "NO"):
+        vote = "Nay"
+    elif direction.startswith("PRESENT"):
+        # Answered present (the Senate's "Present, Giving Live Pair" too):
+        # attended and declined to take a side, which is not a missed vote.
+        vote = "Present"
+
+    party_split = bill.get("partySplit")
+    reconsider_switch = is_reconsider_switch(bill, leader_spans)
+    return {
+        "billName": bill.get("billName", ""),
+        "billId": bill.get("billId", ""),
+        "date": bill.get("date") or bill.get("rollCallDate") or "",
+        "vote": vote,
+        "policyArea": bill.get("policyArea", "PROCEDURAL"),
+        "policyAreas": bill.get("policyAreas", []),
+        "partyAlignmentWeight": bill.get("partyAlignmentWeight", 0.0),
+        "stance": bill.get("stance", "neutral"),
+        "description": bill.get("description", ""),
+        "partyLeaning": bill.get("partyLeaning"),
+        # From how the parties actually voted on this roll call, never the
+        # bill's content (stamp_roll_call_outcome).
+        "votedWithParty": _determine_party_alignment(
+            party, vote, party_split, reconsider_switch=reconsider_switch,
+        ),
+        "reconsiderSwitch": reconsider_switch_applied(
+            party, vote, party_split, reconsider_switch,
+        ),
+        "voteCategory": "recent",
+        "rcKey": bill.get("rcKey"),
+        # What the roll call decided (passage, cloture, amendment ...;
+        # classify_recent_votes): lets a display say which vote it shows.
+        "motionType": bill.get("motionType"),
+        "rollCall": bill.get("rollCall"),
     }
 
 
@@ -582,46 +631,7 @@ def normalize_recent_votes(
         if not senator_vote:
             continue
 
-        # Normalize
-        vote_direction = senator_vote.upper()
-        is_yea = vote_direction in ("YEA", "AYE", "YES")
-        is_nay = vote_direction in ("NAY", "NO")
-        normalized_vote = "Not Voting"
-        if is_yea:
-            normalized_vote = "Yea"
-        elif is_nay:
-            normalized_vote = "Nay"
-
-        party_leaning = bill.get("partyLeaning")
-        party_split = bill.get("partySplit")
-        reconsider_switch = is_reconsider_switch(bill, leader_spans)
-        party_aligned = _determine_party_alignment(
-            party_for_alignment, normalized_vote, party_split,
-            reconsider_switch=reconsider_switch,
-        )
-
-        votes.append({
-            "billName": bill.get("billName", ""),
-            "billId": bill_id,
-            "date": bill.get("date") or bill.get("rollCallDate") or "",
-            "vote": normalized_vote,
-            "policyArea": bill.get("policyArea", "PROCEDURAL"),
-            "policyAreas": bill.get("policyAreas", []),
-            "partyAlignmentWeight": bill.get("partyAlignmentWeight", 0.0),
-            "stance": bill.get("stance", "neutral"),
-            "description": bill.get("description", ""),
-            "partyLeaning": party_leaning,
-            "votedWithParty": party_aligned,
-            "reconsiderSwitch": reconsider_switch_applied(
-                party_for_alignment, normalized_vote, party_split, reconsider_switch,
-            ),
-            "voteCategory": "recent",
-            "rcKey": bill.get("rcKey"),
-            # What the roll call decided (passage, cloture, amendment ...;
-            # classify_recent_votes): lets a display say which vote it shows.
-            "motionType": bill.get("motionType"),
-            "rollCall": bill.get("rollCall"),
-        })
+        votes.append(member_vote_entry(bill, senator_vote, party_for_alignment, leader_spans))
 
     return votes
 
@@ -635,23 +645,29 @@ def compute_party_vote_split(roll_call_data: dict) -> dict | None:
     Republican bill, Democratic bill, or bipartisan vote — without relying on
     LLM classification.
 
+    The shares are of the members who voted Yea or Nay, as in CQ's party
+    unity votes: an absent or "present" member took no side, and counting
+    them as not-Yea let a party's absences decide the label (a 143-73 vote
+    read bipartisan beside the other party's 0-212).
+
     Returns:
         {"label": "R"|"D"|"bipartisan", "r_yea_pct": float, "d_yea_pct": float},
-        or None if either party has fewer than 3 recorded votes.
+        or None if either party has fewer than 3 Yea/Nay votes.
     """
     members = roll_call_data.get("members", [])
     r_yea = r_total = d_yea = d_total = 0
     for m in members:
         party = m.get("party", "")
         vote = (m.get("voteCast") or "").upper()
+        yea = vote in ("YEA", "AYE", "YES")
+        if not yea and vote not in ("NAY", "NO"):
+            continue
         if party == "R":
             r_total += 1
-            if vote in ("YEA", "AYE", "YES"):
-                r_yea += 1
+            r_yea += yea
         elif party == "D":
             d_total += 1
-            if vote in ("YEA", "AYE", "YES"):
-                d_yea += 1
+            d_yea += yea
 
     if r_total < 3 or d_total < 3:
         return None  # Not enough party data
@@ -684,23 +700,38 @@ def compute_party_split(roll_call_data: dict) -> str | None:
     return result["label"] if result else None
 
 
+def first_name_matches(first: str, names: dict) -> list:
+    """The keys of `names` whose first name is `first`: the exact matches
+    (accents and case aside) when there are any, else the looser ones
+    (_same_first_name: a nickname, a dropped accent). An exact match wins,
+    so "Rob" and "Robert" each keep their own. An empty first name matches
+    nothing."""
+    if not _normalize_for_match(first or "").strip(" ."):
+        return []
+    exact = [k for k, name in names.items() if _normalize_for_match(name or "") == _normalize_for_match(first or "")]
+    return exact or [k for k, name in names.items() if _same_first_name(first, name)]
+
+
 def resolve_senate_lis_ids(members: list[dict], seen: list[dict]) -> dict[str, str]:
     """{member id: LIS id} for each member whose last name and state the
     roll calls give to more than one person, told apart by first name.
 
     Senate roll calls name a senator by last name and state, which is one
-    person until a seat passes to someone of the same surname. Darline
-    Graham was appointed to Lindsey Graham's seat after his death, and
-    every vote he cast in the Congress was credited to her (live,
-    2026-10-03: her first roll call on the site was 2025-12-01, cast by
-    LIS id S293, his). The roll call's own member id separates them.
+    person until a seat passes to someone of the same surname. When a
+    senator's seat went to an appointee of the same surname, every vote
+    the predecessor cast in the Congress was credited to the appointee
+    (live, 2026-10-03: the appointee's first roll call on the site predated
+    the appointment, cast under the predecessor's LIS id). The roll call's
+    own member id separates them.
 
     `members`: dicts with "id", "name", "lastNameForVoteMatch", "state".
     `seen`: roll-call members, dicts with "lisId", "firstName", "lastName",
     "state". A member whose key matches one LIS id is left out (matching
     by name is exact there and needs no first-name agreement, which a
-    nickname would break). A member with several and no single first-name
-    match maps to "": no vote is credited rather than someone else's.
+    nickname would break). A member with several takes the one whose first
+    name matches theirs, an exact match over a looser one
+    (first_name_matches); with no single match it maps to "": no vote is
+    credited rather than someone else's.
     """
     people: dict[tuple[str, str], dict[str, str]] = defaultdict(dict)
     for m in seen:
@@ -715,7 +746,7 @@ def resolve_senate_lis_ids(members: list[dict], seen: list[dict]) -> dict[str, s
         if len(candidates) < 2:
             continue
         first = (member.get("name") or "").split(" ")[0]
-        matched = [lis for lis, name in candidates.items() if _same_first_name(first, name)]
+        matched = first_name_matches(first, candidates)
         out[member["id"]] = matched[0] if len(matched) == 1 else ""
     return out
 
@@ -750,7 +781,8 @@ def extract_senator_vote(
             ("" matches nothing).
 
     Returns:
-        Vote position ("Yea", "Nay", "Not Voting") or None.
+        Vote position as recorded (e.g. "Yea", "Nay", "Present",
+        "Not Voting") or None.
     """
     if not roll_call_data or not roll_call_data.get("members"):
         return None

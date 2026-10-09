@@ -31,7 +31,8 @@ export type RepresentationScoreBreakdown = Record<string, ScoreBreakdownDimensio
 export interface FundingFacts {
   contributions: number;
   pacShare: number;
-  smallDonorShare: number;
+  /** Null: the campaign itemizes every gift, so the filings can't say. */
+  smallDonorShare: number | null;
   smallDonorExpectedShare: number | null;
   smallDonorComparison: "house-median" | "state-size";
 }
@@ -55,21 +56,32 @@ export interface AlignmentFacts {
   flankBreaks?: number | null;
   breakVotes?: BreakVote[];
   flankBreakVotes?: BreakVote[];
+  /** Senators: the approval groups the score reads (the state's other-party
+   *  voters and independents), against the typical senator; null where
+   *  approval isn't scored (the House) or not measured. */
+  approval?: {
+    groups: { group: "D" | "R" | "I"; approve: number; typical: number }[];
+    z: number;
+    survey: string;
+  } | null;
 }
 
-/** legislativeEffectiveness.facts: bills whose furthest stage is each of
- *  introduced, committee action, beyond committee, passed a chamber, law. */
+/** legislativeEffectiveness.facts: bills and joint resolutions whose
+ *  furthest stage is each of introduced, committee action, beyond
+ *  committee, passed a chamber, law; how many that is; and how many simple
+ *  and concurrent resolutions the member sponsored besides. */
 export interface EffectivenessFacts {
   billsByStage: number[];
+  bills: number;
+  resolutions: number;
 }
 
-/** President: the four dimensions, each with `facts` (the figures below).
+/** President: the three dimensions, each with `facts` (the figures below).
  *  A dimension that doesn't apply to a president has no components and a
  *  null score. */
 export interface PresidentScoreBreakdown {
   publicMandate: ScoreBreakdownDimension;
   effectiveness: ScoreBreakdownDimension;
-  agencyAlignment: ScoreBreakdownDimension;
   historicalLegacy: ScoreBreakdownDimension;
 }
 
@@ -116,11 +128,24 @@ export interface PublicMandateFacts {
   marginMean: number | null;
   /** Average approval over the last 90 days (not scored). */
   recentApproval: number | null;
+  /** Approval in the president's own party, the other party and among
+   *  independents, and what presidents typically got from each under the
+   *  same polarization in Congress (president v9). */
+  approvalGroups?: { own: number; opp: number; ind: number } | null;
+  approvalExpected?: { own: number; opp: number; ind: number } | null;
+  /** Points above (+) or below (-) the era's expectation, averaged over the
+   *  three groups: what average approval is scored on; and the typical
+   *  president's figure. */
+  approvalVsEra?: number | null;
+  approvalVsEraMean?: number | null;
 }
 
 /** President: effectiveness.facts. Jobs per attributed year (the first year
- *  set aside) against presidencies since 1939; GDP growth against those in
- *  the same data regime (gdpSince: since 1947, else before). */
+ *  set aside) against presidencies since 1939. GDP: since 1947, growth per
+ *  person against 13 peer economies' median over the same years, catch-up
+ *  set aside (gdpRelative, scored against gdpRelativeMean); before, total growth
+ *  against other prewar presidencies (gdpGrowth vs gdpMean). gdpSince:
+ *  since 1947, else before. */
 export interface PresidentEffectivenessFacts {
   jobsMillions: number | null;
   jobsPerYear: number | null;
@@ -128,13 +153,24 @@ export interface PresidentEffectivenessFacts {
   gdpGrowth: number | null;
   gdpMean: number | null;
   gdpSince: boolean | null;
-}
-
-/** President: agencyAlignment.facts. */
-export interface AgencyAlignmentFacts {
-  finalizedPct: number | null;
-  finalizedMean: number | null;
-  rulemakings: number | null;
+  gdpPerPerson: number | null;
+  gdpPeers: number | null;
+  /** Points of gdpPerPerson - gdpPeers the peers' catch-up accounts for. */
+  gdpCatchUp: number | null;
+  gdpRelative: number | null;
+  gdpRelativeMean: number | null;
+  /** Since 1947 (president v10): the unemployment rate the year the term
+   *  began, its change over the credited years, and the change presidents
+   *  starting at that rate saw; inflation the year the term began, its
+   *  average over the credited years, and what presidents starting there
+   *  averaged. */
+  unemploymentStart?: number | null;
+  unemploymentChange?: number | null;
+  unemploymentExpected?: number | null;
+  inflationStart?: number | null;
+  inflationAverage?: number | null;
+  inflationExpected?: number | null;
+  economyYears?: number | null;
 }
 
 /** President: historicalLegacy.facts. C-SPAN 2021 survey points; otherTerms

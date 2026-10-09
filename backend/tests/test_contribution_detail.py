@@ -8,6 +8,7 @@ committee contribution from the FEC's bulk file, itemized individual money
 by occupation, the employee side of donors by employer.
 """
 
+import contextlib
 import io
 import zipfile
 from unittest.mock import patch
@@ -52,12 +53,19 @@ def _detail(**overrides):
 def _no_model():
     # The employer-status filter is an embedding check; stub it as the one
     # FEC convention these fixtures use.
-    with patch.object(nf, "classify_employer_skips_batch", lambda names: {n for n in names if n == "RETIRED"}):
+    # The industry classifier and its batch priming are embedding checks
+    # too: the fixtures' ai_classifications answer the names that matter,
+    # and any other reads as OTHER. No fixture name is a payment processor.
+    with patch.object(nf, "classify_employer_skips_batch", lambda names: {n for n in names if n == "RETIRED"}), \
+         patch.object(nf, "primed_industry_lookups", lambda names, db=None: contextlib.nullcontext()), \
+         patch.object(nf, "classify_with_learning", lambda name, db=None: ("OTHER", "test")), \
+         patch.object(nf, "skip_entities_batch", lambda names: set()), \
+         patch.object(nf, "is_skip_entity", lambda name: False):
         yield
 
 
 def _breakdown(detail):
-    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, FINANCIALS, [], [], [],
+    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, FINANCIALS, [], [],
                              ai_classifications=AI, detail=detail)
     return {row["industry"]: row["total"] for row in f["industryBreakdown"]}, f
 
@@ -80,6 +88,15 @@ def test_occupation_money_never_exceeds_the_itemized_total():
     inflated = [{"occupation": "ATTORNEY", "total": 8_000_000}]  # twice the itemized total
     by, _ = _breakdown(_detail(occupations=inflated))
     assert by["LAWYERS"] == 4_000_000 and "LARGE_INDIVIDUAL" not in by
+
+
+def test_committee_money_never_exceeds_what_the_campaign_received():
+    # Givers reported $1.2M; the campaign's own totals record $600K from
+    # committees (the rest came through a joint fundraising committee, a
+    # transfer). Scaled to it, proportions kept.
+    by, f = _breakdown(_detail(pacs={"C1": 1_000_000, "C2": 200_000}))
+    assert by["FINANCE"] == 500_000 and by["POLITICAL"] == 100_000
+    assert sum(by.values()) <= f["totalContributions"]
 
 
 def test_top_donors_come_from_the_complete_detail():
@@ -128,7 +145,7 @@ def test_an_organization_also_written_as_an_occupation_is_kept():
 def test_a_missing_source_falls_back_to_the_samples_not_to_zero():
     # Occupations unreadable: the breakdown uses the sampled receipts.
     receipt = {"contributor_employer": "GOOGLE", "contribution_receipt_amount": 3_000, "memo_text": ""}
-    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, FINANCIALS, [receipt], [], [],
+    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, FINANCIALS, [receipt], [],
                              ai_classifications=AI, detail=_detail(occupations=None))
     by = {row["industry"]: row["total"] for row in f["industryBreakdown"]}
     assert by["TECH"] == 3_000
@@ -210,3 +227,27 @@ def test_occupations_are_read_against_the_census_and_onet_data(occupation, indus
 def test_titles_meet_in_the_singular():
     assert normalize_title("Registered Nurses") == normalize_title("REGISTERED NURSE") == "REGISTERED NURSE"
     assert normalize_title("Business") == "BUSINESS"  # -ss is not a plural
+
+
+def test_employer_money_is_employees_whatever_the_name_classifier_says():
+    """1,352 Senate employer rows read Party/Ideological (2026-10-08): the
+    name classifier's type for the name was applied to employees' money."""
+    ai = {**AI, "STANFORD UNIVERSITY": {"type": "Party/Ideological", "industry": "EDUCATION", "skip": False}}
+    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, FINANCIALS, [], [], ai_classifications=ai,
+                             detail=_detail(employers=[{"employer": "STANFORD UNIVERSITY", "total": 90_000}]))
+    (row,) = [d for d in f["topDonors"] if d["name"].upper() == "STANFORD UNIVERSITY"]
+    assert (row["type"], row["industry"]) == ("Org/Employees", "EDUCATION")
+
+
+def test_the_candidates_own_money_is_its_own_row_and_not_outside_money():
+    loaned = [{**FINANCIALS[0], "contributions": 10_000_000, "loans_made_by_candidate": 4_000_000,
+               "candidate_contribution": 50_000}]
+    f = nf.normalize_finance({"name": "DOE, JANE", "office": "S"}, loaned, [], [], ai_classifications=AI, detail=_detail())
+    by = {row["industry"]: row["total"] for row in f["industryBreakdown"]}
+    assert by["CANDIDATE_FUNDS"] == 4_050_000
+    # The base is contributions ($10M, the candidate's own $50K among
+    # them) plus the candidate's $4M of loans; outside money is $9.95M.
+    funding = {"totalContributions": f["totalContributions"], "industryBreakdown": f["industryBreakdown"],
+               "topDonors": [{"total": 100_000, "type": "PAC"}] * 10}
+    share, _, pool = _top_donor_concentration(funding)
+    assert pool == 9_950_000 and share == pytest.approx(1_000_000 / 9_950_000)

@@ -277,12 +277,12 @@ class TestTally:
         monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
         got = await tally.fetch_general_results(None, date(2024, 11, 5), "AR", {
             "base_url": "https://enr-results-api.totalresults.com", "cid": "arkansas",
-            "results_page": "https://results.sos.arkansas.gov/",
+            "results_page": "https://arkansas.tally-enr.com/",
         })
         assert any("electionID=1846" in u for u in urls)
         assert urls[-1].endswith("&contestType=FED")
         assert got.official is True
-        assert got.page_url == "https://results.sos.arkansas.gov/"
+        assert got.page_url == "https://arkansas.tally-enr.com/"
         assert len(got.contests) == 4
 
 
@@ -1010,6 +1010,9 @@ class TestPollCloseScript:
         on = script.election_day(data["year"])
         for code, entry in data["states"].items():
             derived = script.last_close(entry["hours"], script.STATE_ZONES[code], on)
+            if derived is None and code in script.STATUTORY_CLOSES:
+                assert entry["statute"] == script.STATUTORY_CLOSES[code]
+                derived = script.last_close(entry["statute"], script.STATE_ZONES[code], on)
             assert (entry["close"], entry["zone"]) == (derived or (None, script.STATE_ZONES[code][-1])), code
         assert data["states"]["AZ"]["zone"] == "America/Phoenix"
 
@@ -1020,6 +1023,17 @@ class TestPollCloseScript:
 
         assert poll_close.last_poll_close("AZ", date(2032, 11, 2)) == datetime(2032, 11, 3, 2, 0)
         assert poll_close.last_poll_close("AZ", date(2026, 11, 3)) == datetime(2026, 11, 4, 2, 0)  # unchanged
+
+    def test_a_county_set_opening_does_not_hide_a_statutory_close(self):
+        """Tennessee's row says its hours vary (counties set the opening),
+        but Tenn. Code Ann. 2-3-201(a) fixes the close: 8 p.m. Eastern,
+        7 p.m. Central -- the same instant. Null held it until Alaska's
+        close, five hours late."""
+        from datetime import datetime
+
+        from app.pipeline.fetch import poll_close
+
+        assert poll_close.last_poll_close("TN", date(2026, 11, 3)) == datetime(2026, 11, 4, 1, 0)
 
 
 def test_totalvote_keeps_a_named_write_ins_votes_in_a_general_count():

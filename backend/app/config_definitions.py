@@ -20,36 +20,23 @@ SCORE_WEIGHTS: dict[str, float] = {
     "legislativeEffectiveness": 0.34,
 }
 
-# Historical Legacy (C-SPAN Presidential Historians Survey) at 35%; the three
-# mechanical dimensions split the rest. compute_president_overall_score holds
-# Historical Legacy at exactly 35% whenever two or more mechanical dimensions
+# Historical Legacy (C-SPAN Presidential Historians Survey) at 50% (President
+# v7); the two mechanical dimensions split the rest. compute_president_overall_score
+# holds Historical Legacy at exactly 50% whenever both mechanical dimensions
 # are present. Independence, Follow-Through and Competence were removed for
-# having no defensible live signal. The measurements behind 35% and each
-# removal: docs/methodology/weights.md.
+# having no defensible live signal, and Agency Alignment (v7) for not telling
+# administrations apart. The measurements behind the weight and each removal:
+# docs/methodology/weights.md.
 PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
-    # The three mechanical dimensions split 0.65 three ways (0.65/3 =
-    # 0.21666...) — 0.2167 is that value rounded to 4 places, so the
-    # total is 1.0001, not exactly 1.0. Harmless: every consumer
-    # (compute_president_overall_score, _blend_live_components)
-    # renormalizes over whatever's actually present rather than assuming
-    # the nominal weights already sum to 1.
-    "publicMandate": 0.2167,
-    "effectiveness": 0.2167,
-    "agencyAlignment": 0.2167,
-    "historicalLegacy": 0.35,
+    "publicMandate": 0.25,
+    "effectiveness": 0.25,
+    "historicalLegacy": 0.5,
 }
 
-# Supreme Court score weights: the single source shared by the scorer
-# (services/justice_service.py), the directory's overall score
-# (api/politicians.py) and the public /justices/weights endpoint.
-#
-# Justice v2: loyalty to the appointing president
-# (pipeline/analyze/justice_loyalty.py), the one measure. Consistency and
-# Independence, the two bloc-agreement measures before it, ranked justices
-# by their distance from the Court's median (docs/research/justice-scores.md).
-JUSTICE_SCORE_WEIGHTS: dict[str, float] = {
-    "loyalty": 1.0,
-}
+# Supreme Court justices are not scored (justice v3): no method yet
+# separates loyalty to the appointing president from career timing for an
+# individual justice (docs/research/justice-scores.md), so there are no
+# justice score weights. The appointer's estimated effect is shown, unranked.
 
 INDUSTRIES: dict[str, dict] = {
     "PHARMA":          {"name": "Pharmaceuticals",          "color": "#ff4444"},
@@ -79,9 +66,16 @@ INDUSTRIES: dict[str, dict] = {
     "MANUFACTURING":   {"name": "Manufacturing",            "color": "#95a5a6"},
     "HEALTHCARE":      {"name": "Healthcare / Hospitals",   "color": "#ff6b81"},
     "OTHER":           {"name": "Other (Unclassified)",     "color": "#444444"},
-    "SMALL_DONORS":    {"name": "Small Donors (<$200)",     "color": "#00ff41"},
+    # The FEC's unitemized individual contributions: donors who gave $200
+    # or less in the cycle. Small gifts a conduit itemizes (ActBlue,
+    # WinRed itemize every gift) are not in it.
+    "SMALL_DONORS":    {"name": "Small Donors (unitemized)", "color": "#00ff41"},
     "LARGE_INDIVIDUAL":{"name": "Large Individual Donors",  "color": "#39ff14"},
     "UNCLASSIFIED":    {"name": "Other Sources",            "color": "#666666"},
+    # The candidate's own money: loans to and contributions from the
+    # candidate (FEC totals). In the shares' denominator by design, never an
+    # industry, never outside money (v6.32).
+    "CANDIDATE_FUNDS": {"name": "Candidate's Own Money",    "color": "#8a7f6e"},
 }
 
 PLATFORM_CATEGORIES: dict[str, str] = {
@@ -197,17 +191,18 @@ BillStage = StrEnum("BillStage", {stage: stage for stage in BILL_STAGES})
 # with no way to earn a citation is passed over rather than penalised
 # (see pipeline/analyze/document_authority.py).
 #
-# TWO published constants live here, with their citations. Everything else
-# about this ranking is generated data, loaded from
+# ONE published constant lives here. Everything else about this ranking —
+# K included — is generated data, loaded from
 # app/data/explore_ranking.json and produced by
 # scripts/calibrate_explore_ranking.py against the live corpus — the same
 # pattern as district_pvi.json and state_population.json (principle 3a).
 # Do not hand-edit the JSON; re-run the script.
 
-# K = 60 is the constant Cormack et al. published and the de-facto default.
-# It flattens the contribution curve so no single ranker's top hit can run
-# away with the result. A property of the algorithm, not of this corpus.
-EXPLORE_RRF_K: int = 60
+# K is not the K = 60 Cormack et al. published: that value was chosen for
+# TREC runs a thousand documents deep, and against this corpus it buried
+# one channel's top hit under documents both channels ranked middling —
+# on the known-item harness fusion missed 17% of targets, keyword alone 4-5%.
+# K is the retrievers' measured resolution instead (explore_ranking.rrf_k).
 
 # The two retrieval channels carry equal weight, which is unweighted RRF
 # exactly as published — there is no prior reason to trust the encoder over
@@ -216,8 +211,8 @@ EXPLORE_RRF_K: int = 60
 EXPLORE_RETRIEVAL_WEIGHT: float = 1.0
 
 # Everything else about this ranking — BM25F field weights, the two prior
-# weights, candidate pool depth, the diversity cap, fingerprint lengths,
-# snippet width — is generated data, not a constant. It is measured
+# weights, RRF's K, candidate pool depth, the diversity cap, fingerprint
+# lengths, snippet width — is generated data, not a constant. It is measured
 # against the live corpus by pipeline/calibrate_ranking.py on every
 # explore pipeline run and read through pipeline/explore_ranking.py.
 # There is deliberately nothing to hand-edit here.

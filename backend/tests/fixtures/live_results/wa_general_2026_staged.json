@@ -1,0 +1,851 @@
+{
+ "_source": "Washington's real Enhanced Voting /api/elections/washington/20261103/data, the staged 2026 general (nothing counted yet), fetched 2026-10-08: every federal ballot item plus two decoys (the statewide Supreme Court item and the first state legislative seat, labelled 'Legislative District N - ...'), trimmed to the fields the reader uses. Its House labels put the district first ('Congressional District 1 - U.S. Representative'), unlike the 2026 primary's.",
+ "payload": {
+  "election": {
+   "id": "01000000-a578-3971-654b-08defdf81b1d",
+   "electionDate": "2026-11-03",
+   "isProduction": true,
+   "isOfficialResults": false,
+   "lastUpdated": "2026-10-06T20:01:43.2841923Z",
+   "asOf": "2026-10-06T20:02:02.8812518Z"
+  },
+  "localityElections": [
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   }
+  ],
+  "ballotItems": [
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "Justice Position #01 - Supreme Court"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 37
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Colleen Melody"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Scott Edwards"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-In"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "Congressional District 1 - U.S. Representative"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 1
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Suzan DelBene"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Mary Silva"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "CONGRESSIONAL DISTRICT 2 - U.S. Representative"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 5
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Rick Larsen"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Edwin H. Feller"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "CONGRESSIONAL DISTRICT 3 - U.S. Representative"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 7
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "John Braun"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Marie Gluesenkamp Perez"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "Congressional District 4 - U.S. Representative"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 7
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Amanda McKinney"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "John Duresky"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "CONGRESSIONAL DISTRICT 5 - U.S. Representative"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 12
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Michael Baumgartner"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Carmela Conroy"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "Congressional District 6 - U.S. Representative"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 6
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Emily Randall"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Teresa Fox"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "Congressional District 7 - U.S. Representative"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 0
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Pramila Jayapal"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Nirav Sheth"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "Congressional District 8 - U.S. Representative"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 5
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Kim Schrier"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Spencer Meline"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "CONGRESSIONAL DISTRICT 9 - U.S. Representative"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 0
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Adam Smith"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Doug Basler"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "Congressional District 10 - U.S. Representative"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 2
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Marilyn Strickland"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Chris D. Chung"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "LEGISLATIVE DISTRICT 1 - State Representative Pos. 1"
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 0,
+    "reportingStatus": {
+     "reportingUnits": 0,
+     "totalUnits": 1
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Davina Duerr"
+        }
+       ],
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Maggie Wang"
+        }
+       ],
+       "party": {
+        "abbreviation": "REP"
+       },
+       "voteCount": 0,
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "Write-in"
+        }
+       ],
+       "party": {
+        "abbreviation": null
+       },
+       "voteCount": 0,
+       "isWriteIn": true,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

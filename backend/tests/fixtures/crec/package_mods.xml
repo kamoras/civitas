@@ -1,0 +1,113 @@
+<mods xmlns="http://www.loc.gov/mods/v3" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="3.3" xsi:schemaLocation="http://www.loc.gov/mods/v3 http://www.loc.gov/standards/mods/v3/mods-3-3.xsd" ID="P0b002ee1e8871fc1">
+  <relatedItem type="constituent" ID="id-CREC-2026-09-24-pt1-PgE965-2" xlink:href="https://www.govinfo.gov/metadata/granule/CREC-2026-09-24/CREC-2026-09-24-pt1-PgE965-2/mods.xml">
+    <titleInfo>
+      <title>RECOGNIZING NATIONAL DAY OF REMEMBRANCE FOR INDIAN BOARDING SCHOOL SURVIVORS</title>
+      <partName>Extensions of Remarks</partName>
+    </titleInfo>
+    <extension>
+      <granuleClass>EXTENSIONS</granuleClass>
+      <accessId>CREC-2026-09-24-pt1-PgE965-2</accessId>
+      <subGranuleClass>RECOGNIZING</subGranuleClass>
+      <chamber>HOUSE</chamber>
+      <granuleDate>2026-09-24</granuleDate>
+      <congMember bioGuideId="C001053" chamber="H" congress="119" party="R" role="SPEAKING" state="OK">
+        <name type="parsed">Mr. COLE</name>
+        <name type="authority-fnf">Tom Cole</name>
+        <name type="authority-lnf">Cole, Tom</name>
+      </congMember>
+    </extension>
+  </relatedItem>
+  <relatedItem type="constituent" ID="id-CREC-2026-09-24-pt1-PgH5997-3" xlink:href="https://www.govinfo.gov/metadata/granule/CREC-2026-09-24/CREC-2026-09-24-pt1-PgH5997-3/mods.xml">
+    <titleInfo>
+      <title>PRAYER</title>
+      <partName>House</partName>
+    </titleInfo>
+    <extension>
+      <granuleClass>HOUSE</granuleClass>
+      <accessId>CREC-2026-09-24-pt1-PgH5997-3</accessId>
+      <subGranuleClass>PRAYER</subGranuleClass>
+      <chamber>HOUSE</chamber>
+      <granuleDate>2026-09-24</granuleDate>
+    </extension>
+  </relatedItem>
+  <relatedItem type="constituent" ID="id-CREC-2026-09-24-pt1-PgH5998-3" xlink:href="https://www.govinfo.gov/metadata/granule/CREC-2026-09-24/CREC-2026-09-24-pt1-PgH5998-3/mods.xml">
+    <titleInfo>
+      <title>EXPENDITURE REPORTS CONCERNING OFFICIAL FOREIGN TRAVEL</title>
+      <partName>House</partName>
+    </titleInfo>
+    <extension>
+      <granuleClass>HOUSE</granuleClass>
+      <accessId>CREC-2026-09-24-pt1-PgH5998-3</accessId>
+      <subGranuleClass>HEXPENDITURE</subGranuleClass>
+      <chamber>HOUSE</chamber>
+      <granuleDate>2026-09-24</granuleDate>
+    </extension>
+  </relatedItem>
+  <relatedItem type="constituent" ID="id-CREC-2026-09-24-pt1-PgS4959-3" xlink:href="https://www.govinfo.gov/metadata/granule/CREC-2026-09-24/CREC-2026-09-24-pt1-PgS4959-3/mods.xml">
+    <titleInfo>
+      <title>PLEDGE OF ALLEGIANCE</title>
+      <partName>Senate</partName>
+    </titleInfo>
+    <extension>
+      <granuleClass>SENATE</granuleClass>
+      <accessId>CREC-2026-09-24-pt1-PgS4959-3</accessId>
+      <subGranuleClass>PLEDGE</subGranuleClass>
+      <chamber>SENATE</chamber>
+      <granuleDate>2026-09-24</granuleDate>
+    </extension>
+  </relatedItem>
+  <relatedItem type="constituent" ID="id-CREC-2026-09-24-pt1-PgS4959-6" xlink:href="https://www.govinfo.gov/metadata/granule/CREC-2026-09-24/CREC-2026-09-24-pt1-PgS4959-6/mods.xml">
+    <titleInfo>
+      <title>LEGISLATIVE SESSION</title>
+      <partName>Senate</partName>
+    </titleInfo>
+    <extension>
+      <granuleClass>SENATE</granuleClass>
+      <accessId>CREC-2026-09-24-pt1-PgS4959-6</accessId>
+      <subGranuleClass>SLEGISLATIVE</subGranuleClass>
+      <chamber>SENATE</chamber>
+      <granuleDate>2026-09-24</granuleDate>
+      <congMember bioGuideId="G000386" chamber="S" congress="119" party="R" role="SPEAKING" state="IA">
+        <name type="parsed">Mr. GRASSLEY</name>
+        <name type="authority-fnf">Chuck Grassley</name>
+        <name type="authority-lnf">Grassley, Chuck</name>
+        <name type="authority-other">Chuck E. Grassley</name>
+      </congMember>
+      <congMember bioGuideId="T000250" chamber="S" congress="119" party="R" role="SPEAKING" state="SD">
+        <name type="parsed">Mr. THUNE</name>
+        <name type="authority-fnf">John Thune</name>
+        <name type="authority-lnf">Thune, John</name>
+        <name type="authority-other">John R. Thune</name>
+      </congMember>
+      <congMember bioGuideId="S000148" chamber="S" congress="119" party="D" role="SPEAKING" state="NY">
+        <name type="parsed">Mr. SCHUMER</name>
+        <name type="authority-fnf">Charles E. Schumer</name>
+        <name type="authority-lnf">Schumer, Charles E.</name>
+        <name type="authority-other">Charles Schumer</name>
+      </congMember>
+      <congMember bioGuideId="B001261" chamber="S" congress="119" party="R" role="SPEAKING" state="WY">
+        <name type="parsed">Mr. BARRASSO</name>
+        <name type="authority-fnf">John Barrasso</name>
+        <name type="authority-lnf">Barrasso, John</name>
+      </congMember>
+    </extension>
+  </relatedItem>
+  <relatedItem type="constituent" ID="id-CREC-2026-09-24-pt1-PgS4974-2" xlink:href="https://www.govinfo.gov/metadata/granule/CREC-2026-09-24/CREC-2026-09-24-pt1-PgS4974-2/mods.xml">
+    <titleInfo>
+      <title>TRIBUTE TO MAJOR GENERAL GREGORY C. PORTER</title>
+      <partName>Senate</partName>
+    </titleInfo>
+    <extension>
+      <granuleClass>SENATE</granuleClass>
+      <accessId>CREC-2026-09-24-pt1-PgS4974-2</accessId>
+      <subGranuleClass>TRIBUTETO</subGranuleClass>
+      <chamber>SENATE</chamber>
+      <granuleDate>2026-09-24</granuleDate>
+      <congMember bioGuideId="B001261" chamber="S" congress="119" party="R" role="SPEAKING" state="WY">
+        <name type="parsed">Mr. BARRASSO</name>
+        <name type="authority-fnf">John Barrasso</name>
+        <name type="authority-lnf">Barrasso, John</name>
+      </congMember>
+    </extension>
+  </relatedItem>
+</mods>

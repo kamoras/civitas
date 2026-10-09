@@ -55,6 +55,7 @@ from app.pipeline.fetch.senate_fd import is_senator_filing
 from app.pipeline.fetch.senate_ptr import (
     accept_terms as senate_accept_terms,
     fetch_and_parse_ptr as fetch_senate_ptr,
+    report_version,
     search_ptr_filings,
     senate_filing_id,
 )
@@ -221,6 +222,40 @@ async def _reclassify_stored_trades(db: Session, client: httpx.AsyncClient) -> i
     return changed
 
 
+def collapse_refiled_trades(db: Session, model, owner_key: str) -> int:
+    """Keep each transaction once when several of a filer's filings list
+    it: the same owner, asset, date, type and amount bracket in two reports
+    is one trade disclosed twice, an amended or re-submitted report, not
+    two trades. The rows of the earliest-filed report are kept (its date is
+    when the trade was first disclosed); the repeats are deleted. Returns
+    the rows deleted.
+
+    Measured 2026-10-08: 31 Senate groups (two reports filed the same day
+    with the same rows, and one report filed twice) and 2 House groups.
+    Repeats within one report are left: those can be separate same-day lots.
+    An amendment that corrects a trade's details doesn't match the original
+    and both stay; the forms don't link an amendment to what it amends.
+    """
+    owner = getattr(model, owner_key)
+    rows = db.query(
+        model.id, owner, model.asset_name, model.transaction_date, model.transaction_type,
+        model.amount_low, model.owner, model.filing_id, model.disclosure_date,
+    ).filter(model.transaction_date.isnot(None)).all()
+    groups: dict[tuple, list] = {}
+    for r in rows:
+        groups.setdefault(tuple(r[1:7]), []).append(r)
+    doomed: list[int] = []
+    for group in groups.values():
+        if len({r.filing_id for r in group}) < 2:
+            continue
+        first = min(group, key=lambda r: (r.disclosure_date or "9999", r.id)).filing_id
+        doomed += [r.id for r in group if r.filing_id != first]
+    if doomed:
+        db.query(model).filter(model.id.in_(doomed)).delete(synchronize_session=False)
+        db.commit()
+    return len(doomed)
+
+
 def _trade(model, *, row: TradeRow, **owner):
     """A stored trade row of `model` (StockTrade, RepStockTrade or
     PresidentTrade) for one parsed transaction; `owner` names the filer
@@ -286,6 +321,83 @@ def _senate_search_since(db: Session) -> str:
     return (utcnow().date() - timedelta(days=COLD_START_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
 
 
+_SUPERSEDED_KEY = "ptr-superseded-{}"
+_SETTLED_KEY = "ptr-settled-{}"
+_FOREVER_H = 24 * 365 * 10
+
+
+def _marked(db: Session, key: str) -> bool:
+    return api_cache_get(db, "senate_ptr", key, max_age_hours=_FOREVER_H) is not None
+
+
+def _family(filing: dict) -> tuple | None:
+    """A filing's report: (filer, the report's date), shared by the
+    original and every amendment of it; None when the title names none."""
+    date, _n = report_version(filing.get("title", ""))
+    return (filing["last"].lower(), filing["first"].lower(), date) if date else None
+
+
+async def _with_missing_originals(db: Session, filings: list[dict]) -> list[dict]:
+    """`filings` plus the original of any amended report whose original is
+    older than the search: its rows say when each trade was first
+    disclosed. One wider search, only when an amendment's original is
+    missing."""
+    have = {(_family(f), report_version(f.get("title", ""))[1]) for f in filings}
+    wanted = {
+        fam for f in filings
+        if (fam := _family(f)) and (fam, 0) not in have
+        and not _marked(db, _SETTLED_KEY.format(senate_filing_id(f["report_url"])))
+    }
+    if not wanted:
+        return filings
+    older = await search_ptr_filings(min(fam[2] for fam in wanted))
+    return filings + [f for f in older if _family(f) in wanted and report_version(f.get("title", ""))[1] == 0]
+
+
+def settle_amended_reports(db: Session, filings: list[dict]) -> int:
+    """Keep one version of each amended report: the newest, whose rows the
+    filer last swore to. Each of its trades takes the date it was first
+    disclosed, the earliest filing of the report that lists the same
+    owner, asset, date and type, so a correction (an amount, say) keeps the
+    original's date and a trade first added in an amendment keeps the
+    amendment's. The older versions' rows are deleted and their ids
+    remembered, so they are not ingested again. Returns rows deleted.
+
+    Measured 2026-10-08: nine of one senator's reports filed one day were
+    amendments of reports filed from 2024 on, stored as if first disclosed
+    that day (up to 867 days late)."""
+    families: dict[tuple, list[tuple[int, str, str]]] = {}
+    for f in filings:
+        fam = _family(f)
+        if fam:
+            families.setdefault(fam, []).append(
+                (report_version(f["title"])[1], senate_filing_id(f["report_url"]), f.get("filed_date") or fam[2]))
+    deleted = 0
+    for versions in families.values():
+        stored = [v for v in sorted(versions) if db.query(StockTrade.id).filter_by(filing_id=v[1]).first()]
+        if len(stored) < 2:
+            continue
+        current = stored[-1][1]
+        first_seen: dict[tuple, str] = {}
+        for _n, fid, filed in stored:
+            for t in db.query(StockTrade).filter_by(filing_id=fid):
+                key = (t.owner, t.asset_name, t.transaction_date, t.transaction_type)
+                first_seen[key] = min(first_seen.get(key, filed), filed)
+        for t in db.query(StockTrade).filter_by(filing_id=current):
+            first = first_seen[(t.owner, t.asset_name, t.transaction_date, t.transaction_type)]
+            t.disclosure_date = first
+            t.days_to_disclose = _compute_days_to_disclose(t.transaction_date, first)
+        for _n, fid, _filed in stored[:-1]:
+            deleted += db.query(StockTrade).filter_by(filing_id=fid).delete(synchronize_session=False)
+            api_cache_set(db, "senate_ptr", _SUPERSEDED_KEY.format(fid), {"by": current},
+                          normal_ttl_hours=_FOREVER_H)
+        for _n, fid, _filed in versions:
+            api_cache_set(db, "senate_ptr", _SETTLED_KEY.format(fid), {"current": current},
+                          normal_ttl_hours=_FOREVER_H)
+    db.commit()
+    return deleted
+
+
 async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
     existing_filing_ids = {row[0] for row in db.query(StockTrade.filing_id).all()}
 
@@ -300,12 +412,12 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
         logger.error("Could not establish a Senate eFD session — skipping Senate PTR ingestion this run")
         return 0
 
-    filings = await search_ptr_filings(since_date)
+    filings = await _with_missing_originals(db, await search_ptr_filings(since_date))
     inserted = 0
     match = FilerMatcher(current_senators(db), _match_senator)
     for filing in filings:
         filing_id = senate_filing_id(filing["report_url"])
-        if filing_id in existing_filing_ids:
+        if filing_id in existing_filing_ids or _marked(db, _SUPERSEDED_KEY.format(filing_id)):
             continue
         if filing.get("office") and not is_senator_filing(filing):
             # A former senator's (or anyone else's) filing: never attributed
@@ -323,6 +435,7 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
             inserted += 1
         existing_filing_ids.add(filing_id)
     db.commit()
+    settle_amended_reports(db, filings)
     return inserted
 
 
@@ -335,6 +448,10 @@ class _StoredSource:
     model: type
     owner_key: str
     fetch: Callable[[str, str, str | None], Awaitable[list[TradeRow] | None]]
+    # Rows `fetch` can read: the president's annual-report (278e) rows are
+    # president_fd's, and the 278-T parser `fetch` runs would replace all
+    # 21,285 of them with whatever it made of that report.
+    readable: object = None
 
 
 # A filing that didn't read is not tried again for this long, so a few dead
@@ -355,6 +472,10 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
     """Read stored filings again when an older ptr_common.PARSER_VERSION
     read them, replacing their rows — the Senate's first (its owners were
     misread), newest first within each, until PTR_REREAD_BUDGET is spent.
+    The budget is shared: each source gets an equal part of what is left
+    when it starts, and whatever it doesn't use passes on — otherwise one
+    source's backlog (a scan's OCR can take minutes) keeps the next source's
+    filings waiting for weeks.
     Every stored row names its filing's URL, so this needs no search or
     index, whose windows reach back only weeks. A filing that doesn't read
     keeps its rows and waits _REREAD_RETRY_HOURS — or sits out a night, when
@@ -369,12 +490,14 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
         )),
         _StoredSource("President", PresidentTrade, "president_id", lambda fid, url, _filed: _read_president_filing(
             db, {"doc_id": fid, "pdf_url": url},
-        )),
+        ), readable=PresidentTrade.report_kind != "annual"),
     ]
     deadline = time.monotonic() + PTR_REREAD_BUDGET.total_seconds()
     reread = 0
-    for source in sources:
+    for index, source in enumerate(sources):
         model = source.model
+        share = (deadline - time.monotonic()) / (len(sources) - index)
+        source_deadline = time.monotonic() + share
         query = db.query(
             model.filing_id,
             func.min(model.source_url),
@@ -384,13 +507,15 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
             # the parser's fallback for its disclosure date is that same day.
             func.max(case((model.disclosure_date != model.transaction_date, model.disclosure_date))),
         ).filter(model.parser_version < PTR_PARSER_VERSION)
+        if source.readable is not None:
+            query = query.filter(source.readable)
         stale = query.group_by(model.filing_id).order_by(func.max(model.disclosure_date).desc()).all()
         if stale and source.label == "Senate" and await senate_accept_terms(client) is None:
             logger.warning("Senate PTR re-read skipped: no eFD session")
             continue
         read, failed = 0, []
         for position, (filing_id, url, filed) in enumerate(stale):
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= source_deadline:
                 logger.info("PTR re-read: time budget spent — %d %s filings wait", len(stale) - position, source.label)
                 break
             failed_key = f"failed-{source.label}-{filing_id}"
@@ -448,8 +573,6 @@ async def _reread_trades(db: Session, client: httpx.AsyncClient) -> int:
                 db, _REREAD_TIER, failed_key, {"url": url, "retry_after": (utcnow() + wait).isoformat()},
                 normal_ttl_hours=_REREAD_RETRY_HOURS,
             )
-        if time.monotonic() >= deadline:
-            break
     return reread
 
 
@@ -656,6 +779,17 @@ async def run_stock_trades_pipeline() -> dict:
                 logger.exception("PTR re-read failed")
                 db.rollback()
                 error_parts.append("Re-read of stored filings: failed — see server logs")
+            # A trade two reports list counts once, at its first disclosure.
+            # After the re-read, which rewrites a filing's rows in full.
+            try:
+                for model, key in ((StockTrade, "senator_id"), (RepStockTrade, "representative_id")):
+                    collapsed = collapse_refiled_trades(db, model, key)
+                    if collapsed:
+                        logger.info("%s: %d trades listed again in a later report removed", model.__tablename__, collapsed)
+            except Exception:
+                logger.exception("Collapsing re-filed trades failed")
+                db.rollback()
+                error_parts.append("Collapsing re-filed trades: failed — see server logs")
             # Every stored trade's industry, whatever parser read it: not a
             # trade phase either.
             try:

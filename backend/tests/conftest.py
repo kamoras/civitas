@@ -215,6 +215,9 @@ def throttle_store(_throttle_dir):
 TEST_RANKING_CALIBRATION = {
     "field_weights": {"title": 8.0, "summary": 3.0, "body": 1.0},
     "prior_weights": {"freshness": 0.4, "authority": 0.3},
+    # δ, and so RRF's K (explore_ranking.rrf_k): 60, the value the fusion tests
+    # below were written against.
+    "retriever_resolution_ranks": 60.0,
     "candidate_pool": {"default": 200, "max": 600},
     "source_diversity_cap": 3,
     "fingerprint": {"prefix_chars": 400, "min_chars": 80},
@@ -293,12 +296,12 @@ TEST_PRESIDENT_REFERENCE = {
         "approval_trend": {"mean": -13.72, "stdev": 14.65, "n": 15},
         "election_margin": {"mean": 8.39, "stdev": 7.51, "n": 42},
         "historical_legacy": {"mean": 549.14, "stdev": 157.61, "n": 44},
-        # president v5 (research_president_scores.py fallback values; the
-        # finalization rate has no fallback, so tests pin a round one).
+        # president v5 (research_president_scores.py fallback values).
         "gdp_growth_prewar": {"mean": 3.317, "stdev": 2.8748, "n": 25},
         "gdp_growth_postwar": {"mean": 2.8371, "stdev": 1.1273, "n": 9},
         "jobs_per_year": {"mean": 1.2351, "stdev": 0.978, "n": 12},
-        "rulemaking_finalized_pct": {"mean": 60.0, "stdev": 10.0, "n": 6},
+        # president v8: round numbers so test arithmetic is readable.
+        "gdp_growth_relative": {"mean": 0.0, "stdev": 1.0, "n": 12},
     },
 }
 

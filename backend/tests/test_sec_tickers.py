@@ -44,9 +44,12 @@ def test_industry_for_sic(sic, industry):
     assert industry_for_sic(sic) == industry
 
 
-def test_issuer_key_drops_punctuation_and_the_state_tag():
-    assert issuer_key("AMETEK INC/") == issuer_key("Ametek, Inc.") == "AMETEK INC"
-    assert issuer_key("EXXON MOBIL CORP /NJ/") == "EXXON MOBIL CORP"
+def test_issuer_key_drops_punctuation_the_state_tag_and_legal_forms():
+    assert issuer_key("AMETEK INC/") == issuer_key("Ametek, Inc.") == "AMETEK"
+    assert issuer_key("EXXON MOBIL CORP /NJ/") == "EXXON MOBIL"
+    assert issuer_key("The Home Depot Inc.") == issuer_key("HOME DEPOT, INC.") == "HOME DEPOT"
+    assert issuer_key("Deere & Company") == issuer_key("DEERE & CO") == "DEERE"
+    assert issuer_key("AT&T Inc.") == "AT&T"
 
 
 @pytest.fixture
@@ -67,12 +70,13 @@ def sec(monkeypatch):
 async def test_tickers_and_names_resolve_to_the_sec_industry(db_session, sec):
     client, _ = sec
     by_ticker, by_name = await issuer_industries(
-        client, db_session, ["AVGO", "COP", "GTLB", "CSGP", "ZZZZ"], ["Allstate Corp", "Allstate Corporation"],
+        client, db_session, ["AVGO", "COP", "GTLB", "CSGP", "ZZZZ"],
+        ["Allstate Corp", "Allstate Corporation", "Allstate Insurance"],
     )
     # CoStar's code has no category of ours; ZZZZ has no SEC record at all.
     assert by_ticker == {"AVGO": "TECH", "COP": "OIL_GAS", "GTLB": "TECH", "CSGP": None}
-    # Only the exact name, never a near one.
-    assert by_name == {"Allstate Corp": "INSURANCE"}
+    # The same name however its legal form is spelled, never a near one.
+    assert by_name == {"Allstate Corp": "INSURANCE", "Allstate Corporation": "INSURANCE"}
 
 
 async def test_a_share_class_written_with_a_dot_is_found(db_session, sec):
@@ -120,3 +124,22 @@ def _no_retry(fetch):
     async def once(*args, **kwargs):
         return await fetch(*args, **{**kwargs, "retries": 1, "backoff_s": 0})
     return once
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("UNION PAC CORP", 1),                         # an abbreviated word
+    ("HONEYWELL INTL INC COM", 2),                 # letters in order, then the security
+    ("PROCTER GAMBLE CO", 3),                      # "&" dropped
+    ("ADVANCED MICRO DEVIC", 4),                   # cut short
+    ("BERKSHIRE HATHAWAY INC DEL CL B", 5),        # state of incorporation and share class
+    ("UNION PACIFIC CORP 5% NOTES DUE 2030", None),  # a bond: words that aren't the security's
+    ("UNION PAC RESOURCES", None),                 # more words than the title
+    ("AMERICAN WTR WKS CO INC", None),             # two titles fit: left
+])
+def test_a_statements_short_form_matches_one_sec_title(name, expected):
+    titles = {issuer_key(t): cik for t, cik in [
+        ("Union Pacific Corp", 1), ("Honeywell International Inc", 2), ("Procter & Gamble Co", 3),
+        ("Advanced Micro Devices Inc", 4), ("Berkshire Hathaway Inc", 5),
+        ("American Water Works Co Inc", 6), ("American Western Works Co", 7),
+    ]}
+    assert sec_tickers.abbreviated_match(name, titles) == expected

@@ -1,11 +1,11 @@
 """Service layer for House representative data — mirrors senator_service.py."""
 
 import json
-import math
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
+from app.pipeline.bill_refresh import keep_newer_latest_actions
 from app.models import (
     PromiseAlignment,
     RepCampaignPromise,
@@ -17,7 +17,9 @@ from app.models import (
     RepStockTrade,
     Representative,
 )
-from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.pipeline.analyze.score_calculator import NON_INDUSTRY_CODES, compute_overall_score
+from app.score_display import displayed_score
+from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
@@ -29,7 +31,7 @@ from app.schemas import (
     StockTradeSchema,
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
 )
-from app.services._scorecard_common import pac_share_pct, score_breakdown
+from app.services._scorecard_common import pac_share_pct, party_line_counts, score_breakdown
 from app.services.constituent_survey import constituent_approval
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
@@ -83,18 +85,17 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
     recent_votes_db = [v for v in key_votes if v.vote_category == "recent"]
     key_votes_db = [v for v in key_votes if v.vote_category == "key"]
 
-    all_votes = key_votes
-    total_votes = len(all_votes)
-    voted_with = sum(1 for v in all_votes if v.voted_with_party is True)
-    voted_against = sum(1 for v in all_votes if v.voted_with_party is False)
-    party_total = voted_with + voted_against
-    party_loyalty_pct = round(voted_with / party_total * 100, 1) if party_total > 0 else 0.0
+    total_votes = len(key_votes)
+    # Party-line counts as Constituent Alignment scores them, not the
+    # stored sample's: the drawer and the column must agree.
+    voted_with, voted_against, party_loyalty_pct = party_line_counts(rep)
 
     initials = _compute_initials(rep.name) or rep.initials
 
     return RepresentativeSchema(
         id=rep.id,
         name=rep.name,
+        bioguide_id=rep.bioguide_id,
         state=rep.state,
         district=rep.district,
         party=rep.party,
@@ -277,9 +278,11 @@ def get_representative_score_breakdown(db: Session, rep_id: str) -> dict | None:
 
 
 def get_rep_states_with_counts(db: Session) -> list[dict]:
-    """Return a list of states that have representatives, with counts."""
+    """States with serving representatives, and how many each has (a
+    departed member's row is not counted: see get_states_with_counts)."""
     rows = (
         db.query(Representative.state, func.count(Representative.id).label("cnt"))
+        .filter(Representative.is_current == True)  # noqa: E712
         .group_by(Representative.state)
         .order_by(Representative.state)
         .all()
@@ -308,10 +311,8 @@ REP_LEADERBOARD_SORTS: dict[str, str] = {
 
 
 def _half_up(x: float) -> float:
-    """Math.round's rounding (half away from zero for these non-negative
-    values). Python's round() rounds half to even, so 56.5 would rank as 56
-    here while the page shows 57."""
-    return float(math.floor(x + 0.5))
+    """The value as the page shows it (score_calculator.displayed_score)."""
+    return float(displayed_score(x))
 
 
 def _rep_sort_value(r, sort: str) -> float | None:
@@ -355,6 +356,10 @@ def get_rep_leaderboard(
     top_industry_map: dict[str, str] = {}
     ind_rows = (
         db.query(RepIndustryDonation.representative_id, RepIndustryDonation.name)
+        # An industry, not small donors, unattributed individuals or
+        # unclassified money: the leaderboard and public API read this as
+        # the member's top industry.
+        .filter(RepIndustryDonation.industry.notin_(NON_INDUSTRY_CODES))
         .order_by(RepIndustryDonation.representative_id, RepIndustryDonation.total.desc())
         .all()
     )
@@ -491,7 +496,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     record = (rep_data.get("votingRecord") or {}).get("partyLineRecord")
     existing.party_line_record = json.dumps(record) if record else None
     existing.total_from_pacs = funding.get("totalFromPACs", 0)
-    existing.small_donor_percentage = funding.get("smallDonorPercentage", 0)
+    existing.small_donor_percentage = funding.get("smallDonorPercentage")
     voting_record = rep_data.get("votingRecord", {})
     existing.website_url = rep_data.get("officialWebsiteUrl") or ""
     existing.contact_form_url = rep_data.get("contactFormUrl") or ""
@@ -537,7 +542,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
             representative_id=rid,
             bill_name=v.get("billName", "Unknown Bill"),
             bill_id=v.get("billId", ""),
-            date=v.get("date", ""),
+            date=vote_date_iso(v.get("date")) or v.get("date", ""),  # ISO: sorts by the calendar
             vote=v.get("vote", "Not Voting"),
             policy_area=v.get("policyArea", "PROCEDURAL"),
             policy_areas=json.dumps(v.get("policyAreas") or []),
@@ -583,6 +588,9 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     # An unavailable list (the fetch failed, or Phase 4b never reached this
     # member) is not a record of zero bills: keep what is stored.
     if not rep_data.get("sponsoredBillsUnavailable"):
+        keep_newer_latest_actions(
+            db, RepSponsoredBill, RepSponsoredBill.representative_id == rid, rep_data.get("sponsoredBills", []),
+        )
         db.query(RepSponsoredBill).filter(RepSponsoredBill.representative_id == rid).delete()
     for sp_data in rep_data.get("sponsoredBills", []):
         db.add(RepSponsoredBill(

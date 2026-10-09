@@ -10,7 +10,7 @@ from app.api import public
 from app.api.public_mcp import PATH, McpEndpoint
 from app.api.router import api_router
 from app.database import get_db
-from app.models import ApiRequestCount, Senator
+from app.models import ApiRequestCount, MemberIdAlias, Senator
 from tests.visits_helpers import _drain_queue_and_write
 
 HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
@@ -81,6 +81,36 @@ async def test_a_tool_call_answers_what_the_http_route_does(db_session):
         assert [e["id"] for e in page["structuredContent"]["entries"]] == ["jon-brennan"]
 
 
+async def test_a_null_optional_argument_is_not_given(db_session):
+    """Each optional parameter's input schema allows null; sent on, it went
+    out as an empty query value and was refused with a 422."""
+    async with mcp_client(db_session) as mcp:
+        page = await mcp("tools/call", {"name": "list_senators",
+                                        "arguments": {"party": None, "state": None, "page": None}})
+        assert not page.get("isError"), page
+        assert [e["id"] for e in page["structuredContent"]["entries"]] == ["jon-brennan"]
+        missing = await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": None}})
+        assert missing["isError"] and "senator_id" in missing["content"][0]["text"]
+
+
+async def test_a_renamed_id_answers_under_the_current_one(db_session):
+    db_session.add(MemberIdAlias(old_id="brennan-old", new_id="jon-brennan"))
+    db_session.commit()
+    async with mcp_client(db_session) as mcp:
+        result = await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "brennan-old"}})
+        assert not result.get("isError")
+        assert result["structuredContent"]["id"] == "jon-brennan"
+        history = await mcp("tools/call", {"name": "get_senator_history", "arguments": {"senator_id": "brennan-old"}})
+        assert history["structuredContent"]["id"] == "jon-brennan"
+
+
+async def test_an_id_with_a_slash_is_no_such_member(db_session):
+    """Was 405 Method Not Allowed: a catch-all OPTIONS route matched the path."""
+    async with mcp_client(db_session) as mcp:
+        result = await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "../x"}})
+        assert result["isError"] and "404" in result["content"][0]["text"]
+
+
 async def test_errors_come_back_as_readable_tool_results(db_session):
     async with mcp_client(db_session) as mcp:
         missing = await mcp("tools/call", {"name": "get_senator", "arguments": {"senator_id": "nobody"}})
@@ -89,6 +119,23 @@ async def test_errors_come_back_as_readable_tool_results(db_session):
         assert invalid["isError"] and "422" in invalid["content"][0]["text"]
         unknown = await mcp("tools/call", {"name": "drop_tables", "arguments": {}})
         assert unknown["isError"]
+
+
+async def test_an_argument_outside_the_schema_is_refused_by_name(db_session):
+    """The schema says additionalProperties: false, but the route dropped an
+    unknown query parameter: `politician` for `politician_id` came back
+    unfiltered, looking filtered."""
+    async with mcp_client(db_session) as mcp:
+        wrong = await mcp("tools/call", {"name": "search_documents",
+                                         "arguments": {"q": "climate", "politician": "jon-brennan"}})
+        text = wrong["content"][0]["text"]
+        assert wrong["isError"] and "'politician'" in text and "politician_id" in text
+        limit = await mcp("tools/call", {"name": "list_senators", "arguments": {"limit": 3, "state": "GA"}})
+        assert limit["isError"] and "'limit'" in limit["content"][0]["text"]
+        assert "per_page" in limit["content"][0]["text"]
+        # A known name with a null value is still just "not given".
+        ok = await mcp("tools/call", {"name": "list_senators", "arguments": {"state": "GA", "party": None}})
+        assert not ok.get("isError"), ok
 
 
 async def test_tool_calls_and_connections_are_counted_on_the_mcp_channel(db_session):

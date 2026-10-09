@@ -46,7 +46,7 @@ blanks a page.
 ```mermaid
 flowchart TB
     ROSTER["<b>1. Roster</b><br/>bulk FEC candidate fetch, H and S<br/>→ Race + Candidate rows<br/>Senate only where the FEC calendar<br/>lists a Senate election"]
-    ROSTER --> FIN["<b>2. Financials</b><br/>FEC totals, 0.25 req/s<br/>FINANCIALS_BATCH_SIZE = 500 per night,<br/>incumbents first, watermarked"]
+    ROSTER --> FIN["<b>2. Financials</b><br/>FEC totals, 0.25 req/s<br/>FINANCIALS_BATCH_SIZE = 500 per night,<br/>overdue (14 days) first, then incumbents,<br/>watermarked; only the race's own election"]
     FIN --> CONF
     subgraph CONF["<b>3. Confirmed candidates</b> (state_candidates.py)"]
         direction TB
@@ -88,9 +88,9 @@ because that decides what the page can honestly claim.
 
 | Source kind | What it can see | States (2026-09-28) |
 |---|---|---|
-| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), MI and OK (`certified_table`: Michigan's Official Candidate Listing, Oklahoma's List of Elections); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY, HI, DE, KY, AK, MT, ND (`certified_table`: spreadsheets, PDF tables, an HTML table, a page's own CSV export), FL (`dos_canlist`), NJ (`nj_certification` official lists), IL (`grouped_list_pdf`: headed groups in a heading-less PDF) |
+| **Certified general ballot** | Everyone on the November ballot, third parties, independents and post-primary replacements included | TX (`tx_civix`), NC (`tabular` + filing list; its filing file is also a `general_list` for the state offices and judgeships), SD (`sd_vip`), LA (`voterportal`), SC (`vrems`), MO (`certified_pdf`), MI and OK (`certified_table`: Michigan's Official Candidate Listing, Oklahoma's List of Elections); and as a `general_list` beside a primary-results source: ME, CO, VA, TN, MD, IA, NE, NM, WY, HI, DE, KY, AK, MT, ND, ID, AR, NV (Clark County's list, NV-1/3/4) (`certified_table`: spreadsheets, PDF tables, an HTML table, a page's own CSV export, a portal's JSON search API), FL (`dos_canlist`), NJ (`nj_certification` official lists), IL (`grouped_list_pdf`: headed groups in a heading-less PDF) |
 | **Primary results** | Each party's nominee. Cannot see a Libertarian, Green or independent who never ran in a primary, or a nominee replaced after the primary | the other 40 configured states — `tabular` (14), `clarity` (3), `tally_enr` (2), `totalvote_enr` (2) and 19 single-state strategies (WI's `canvass_summary_pdf` and OH's `oh_canvass_xlsx` among them) |
-| **National fallback** | Nothing until Google publishes general-election contests, close to the election | NV, NY (`google_civic`); and as a `general_list` for the races it returns in AL, AR, CT, MI, OH, OK, UT (WI's `fallback`) |
+| **National fallback** | Nothing until Google publishes general-election contests, close to the election | NV, NY (`google_civic`); and as a `general_list` for the races it returns in AL, CT, MI, OH, OK, UT (WI's `fallback`; AR's `general_list.fallback`) |
 
 The first row is the states flagged `general_ballot_complete`. Transcribed
 from the JSON on the date shown; the JSON is authoritative.
@@ -124,13 +124,15 @@ first; when it answers it alone decides every federal race it covers
 and judicial nominees, federal nominees before the list is posted, and — non-
 authoritatively — federal nominees for any race the list does not cover (a
 national source like Google Civic knows only the districts it has a verified
-address for; AL, AR, CT and UT use it this way). Each pass prunes ballot-only
+address for; AL, CT and UT use it this way). Each pass prunes ballot-only
 rows only in its own races. The sync records which source answered
 (`_record_ballot_basis`, tier `ballot-basis`): `complete` when the list
 covered every federal race in the state, otherwise the `races` it did cover,
 and the API asks per race (`_race_complete`) — "confirmed" only for a race
 the certified source actually decided, never from config alone. `fallback` is different: a whole second source run
-only when the main one returns nothing (WI's canvass → Google Civic).
+only when the main one returns nothing (WI's canvass → Google Civic). A `general_list` can carry its own `fallback` the same way (AR's
+candidate search → Google Civic); the spare decides the races it answers for,
+while the state offices stay with the list itself once it has supplied them.
 
 `certified_table` reads a PDF as a table (IA, NE): the row holding every
 configured heading is the header, cells split at gaps wider than a space
@@ -242,6 +244,17 @@ everything below reads it.
   page's "Not on this page" list (the API's `omits`) names it instead. If
   that leaves the State column empty, a "State offices — not loaded yet"
   contest stands in, so the column never reads as a state electing nobody.
+  The judicial and legislative lines of `omits` name only gaps the state
+  has that year (`data/state_ballot_scope.json`, `app/state_ballot_scope.py`):
+  none where judges are appointed or elected at another election, no
+  "retention questions" where there are no retention votes, no legislative
+  line in a year with no legislative election.
+- Statewide measures are listed in the state's own order (`source_position`,
+  each measure's place in its reader's list), never by the printed number
+  sorted as text. Each quote carries its own drafter: `titleAuthority`
+  beside the official title, `summaryAuthority` (or, with no title,
+  `titleAuthority`) beside the summary, `framingAuthority` beside the yes/no
+  sentences.
 - Federal contests carry their term: 2-year (House), 6-year (Senate), or
   "fills the rest of the term" (special Senate). State offices, chambers and
   courts carry `termYears` from `data/office_terms.json` (`app/office_terms.py`),
@@ -291,6 +304,19 @@ none of which sends anything anywhere:
   (`live_results.sync.redrawn_states`) covers both — the page offers
   counties and numbers only, and drops the house.gov link: both answer by
   representative, i.e. for the old map.
+
+State legislative seats use the same text filter over
+`app/data/state_leg_district_crosswalk.json` (served as each seat's
+`towns` by `_state_leg_towns`), generated by
+`backend/scripts/fetch_state_leg_crosswalk.py`: the Census Bureau's 2026
+state legislative block equivalency files joined on the 2020 block to the
+P.L. 94-171 geographic header. Each district lists its towns (county
+subdivisions, in the twelve strong-MCD states only), its places
+(incorporated places and Census Designated Places, the latter without the
+" CDP" tag) by population inside the district, then every county it
+touches, so a county search finds every district in that county. A unit is
+listed once at least 50 of its 2020 residents (about one block) live in the
+district, or half the residents of a smaller place.
 
 On such a seat a member of Congress running is never called the new
 district's "incumbent" (`incumbencyLabel`): before election day they read
@@ -370,16 +396,28 @@ links to its election office, never as a state where nothing has happened.
   regenerate each cycle).
 - Test, preview or mismatched data raises `UntrustedCount` and stores
   nothing: Enhanced Voting `isProduction` and `_Demo` elections, Clarity
-  `istestmode`, Tally `previewElections`/`electionID` and a `versionID` that
-  changes mid-read. The election is found by its statutory date; a demo,
-  recount or runoff is never taken for the general (a runoff name that also
-  says "general" — "General Election and Nonpartisan Runoff" — is, when
-  nothing plainer is held that day), two candidates for the same day are
-  refused rather than guessed between, and so is a day holding only
-  recounts or runoffs.
+  `istestmode` / `showtestdatawatermark` (read as flags, not truthiness:
+  every real 2026 Clarity election carries the watermark as the string
+  `"0"`), Tally `previewElections`, `_Preview` ids and `electionID`, and a
+  `versionID` that changes mid-read. The election is found by its statutory
+  date; a demo, recount or runoff is never taken for the general (a runoff
+  name that also says "general" — "General Election and Nonpartisan
+  Runoff" — is, when nothing plainer is held that day), two candidates for
+  the same day are refused rather than guessed between, and so is a day
+  holding only recounts or runoffs. The one exception is two index entries
+  that are the same election: Enhanced Voting entries whose payloads carry
+  one election `id` (Virginia lists its 2026 general twice, once as a dated
+  copy) are read as one, from the copy updated last.
 - A feed that goes backwards in time or version (a version compared only
   with the same election id's), or is stamped in the future, is refused. An impossible count (more units reporting than exist)
   is dropped. A poll whose vote total fell is stored but announces nothing.
+- Failures page someone rather than reading as a quiet night: a refusal
+  seen on two reads in a row, a count with units out and no change for two
+  hours (`check_stalled_feeds`), and a covered state with no count stored
+  an hour after its polls close, whatever its reads said
+  (`check_missing_counts`: a bot wall's 403, a results host that now
+  redirects to a landing page, or every contest dropped). A walled feed is
+  never worked around.
 - Civitas never calls a race. A count is "leading" — "not final" until the
   source itself says official, and still "leading", never "wins", after. A
   flip needs half the reporting units in; where the units are places

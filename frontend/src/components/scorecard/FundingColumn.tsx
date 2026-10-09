@@ -25,6 +25,7 @@ const SEGMENT_COLOR: Record<string, string> = {
   LARGE_INDIVIDUAL: "#CDC7BC",
   OTHER: "#8A8378",
   UNCLASSIFIED: "#5A554D",
+  CANDIDATE_FUNDS: "#B08D57",
 };
 const FALLBACK_COLOR = "#8A8378";
 
@@ -32,13 +33,25 @@ const FALLBACK_COLOR = "#8A8378";
 const INDUSTRIES_NAMED = 6;
 const DONORS_SHOWN = 5;
 
+const TOOLTIP =
+  "Where the money for the member's most recent completed election came from: many small donors, or PACs, a few big donors or one industry. Four parts, weighted 20 : 10 : 10 : 13. The PAC share of contributions and the share from donors giving $200 or less, each against what is typical (for a senator, a state that size; for a representative, the House median); how much of the outside money came from the top ten donors, against the chamber; and how concentrated the money is across industries, against the member's own party. A part that can't be measured is left out and the others are weighed without it.";
+
 function Lede({ facts }: { facts: FundingFacts }) {
-  const small = percent(facts.smallDonorShare);
   const expected = facts.smallDonorExpectedShare;
+  if (facts.smallDonorShare == null) {
+    return (
+      <p className="text-base leading-relaxed text-ink">
+        {percent(facts.pacShare)} of {formatCurrency(facts.contributions)} in contributions came
+        from PACs. The campaign itemizes every gift, so its filings can&apos;t say how much came
+        from donors giving $200 or less.
+      </p>
+    );
+  }
+  const small = percent(facts.smallDonorShare);
   return (
     <p className="text-base leading-relaxed text-ink">
       {percent(facts.pacShare)} of {formatCurrency(facts.contributions)} in contributions came from
-      PACs. {small} came from donors giving under $200
+      PACs. {small} came from donors giving $200 or less
       {expected != null &&
         (facts.smallDonorComparison === "house-median"
           ? `; the House median is ${percent(expected)}.`
@@ -80,6 +93,7 @@ export default function FundingColumn({
     <ScoreColumn
       title="Funding Independence"
       shareId="funding-independence"
+      tooltip={TOOLTIP}
       weight={weight}
       score={score}
       more={{ label: "All donors and industries", onClick: onMore }}

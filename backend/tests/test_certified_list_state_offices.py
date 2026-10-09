@@ -396,6 +396,8 @@ async def test_north_carolinas_primary_results_are_not_called_the_ballot(db_sess
 
     assert _SOURCES["NC"].get("general_ballot_complete") and _SOURCES["NC"]["strategy"] == "tabular"
     _state_fixture(db_session, monkeypatch, "NC", "2026-HOUSE-NC-1", 1)
+    # Its candidate list for November has not been published yet.
+    monkeypatch.setitem(sc.STRATEGIES, "certified_table", AsyncMock(return_value=None))
     monkeypatch.setitem(sc.STRATEGIES, "tabular", AsyncMock(return_value=[
         _rec("H", 1, "D", "Davis", "Don Davis"),
         _rec("lower", "5", "R", "A Primary Winner"),

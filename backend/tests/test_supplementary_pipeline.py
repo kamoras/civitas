@@ -145,6 +145,24 @@ class TestSupplementaryPipelineRunTracking:
             result = _run(db_session, justice_result={"justices": 9})
         assert result["justices_scored"] == 9
 
+    def test_justices_run_off_cadence_once_after_the_v3_change(self, db_session):
+        # Measured before justice v3 (votes counted) but its own estimate
+        # never stored: refresh now rather than show nothing until Sunday.
+        # A justice the Database doesn't cover (no votes counted) doesn't
+        # keep re-running it.
+        db_session.add_all([
+            Justice(id="j1", name="Old Row", last_name="Row", loyalty_through_term=2025, loyalty_votes_in=50),
+            Justice(id="j2", name="New Justice", last_name="Justice", loyalty_through_term=2025),
+        ])
+        db_session.commit()
+        with patch("app.pipeline.supplementary_pipeline.utcnow", return_value=datetime(2026, 7, 15)):
+            assert _run(db_session, justice_result={"justices": 9})["justices_scored"] == 9
+        db_session.query(Justice).filter(Justice.id == "j1").update({"appointer_effect": 0.1, "appointer_effect_se": 0.05})
+        db_session.query(SupplementaryPipelineRun).delete()
+        db_session.commit()
+        with patch("app.pipeline.supplementary_pipeline.utcnow", return_value=datetime(2026, 7, 15)):
+            assert _run(db_session, justice_result={"justices": 9})["justices_scored"] == 0
+
     def test_justice_step_says_when_loyalty_was_not_measured(self, db_session):
         # The voting record refreshing is not the score being measured: a
         # bare "9 scored" hid the SCDB 403 of 2026-09-29.
@@ -153,7 +171,7 @@ class TestSupplementaryPipelineRunTracking:
             _run(db_session, justice_result={"justices": 9, "loyalty_unmeasured": why})
         steps = json.loads(db_session.query(SupplementaryPipelineRun).one().progress_detail)
         step = next(s for s in steps if s["key"] == "justice_scorecards")
-        assert step["detail"] == f"9 scored, loyalty not measured: {why}"
+        assert step["detail"] == f"9 refreshed, appointer estimate not measured: {why}"
         # The alert carries the reason: the logs that named it rotated away.
         alert.assert_called_once()
         assert why in alert.call_args.args[1]

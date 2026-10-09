@@ -6,6 +6,7 @@ this namespace is the only elections API."""
 import json
 import logging
 import pathlib
+import re
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,6 +17,7 @@ from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json, retry_soon_json
 from app.database import get_db
 from app.office_terms import term_years
+from app.state_ballot_scope import on_november_ballot
 from app.election_calendar import (
     federal_states,
     next_senate_election_year,
@@ -66,6 +68,7 @@ from app.pipeline.fetch.state_candidates_common import (
     judicial_marker_key,
     state_nominee_party,
     fec_party,
+    fec_party_label,
     STATE_LEG_CHAMBER_LABELS,
     district_label,
     district_sort_key,
@@ -129,13 +132,14 @@ _state_leg_towns_cache: dict[str, list[str]] | None = None
 
 
 def _state_leg_towns() -> dict[str, list[str]]:
-    """"{ST}-{chamber}-{n}" -> the towns that district covers, so a reader
+    """"{ST}-{chamber}-{n}" -> the towns, places and counties that
+    district covers (largest places first, counties last), so a reader
     can find their seat by a place they know instead of by a number
     nobody memorises. The state-legislative twin of _district_counties(),
     and static for the same reason: it changes only when a state
-    redistricts. Built by scripts/fetch_state_leg_crosswalk.py, which
-    documents why the obvious sources give wrong answers. Empty dict —
-    never a guess — if the file is missing."""
+    redistricts. Built by scripts/fetch_state_leg_crosswalk.py from the
+    Census Bureau's 2026 state legislative block equivalency files.
+    Empty dict — never a guess — if the file is missing."""
     global _state_leg_towns_cache
     if _state_leg_towns_cache is None:
         try:
@@ -180,6 +184,28 @@ def _statewide_district_towns() -> dict[str, list[str]]:
             logger.exception("statewide_district_towns.json unavailable")
             _statewide_towns_cache = {}
     return _statewide_towns_cache
+
+
+_ELECTION_RULES_PATH = pathlib.Path(__file__).resolve().parent.parent / "data" / "election_rules.json"
+_election_rules_cache: dict | None = None
+
+
+def _election_rules(state: str, cycle: int, key: str) -> list[dict]:
+    """`key` of `state`'s entry in data/election_rules.json for `cycle`: a
+    cited legal fact per state. "generalRunoffs" -- where November is not
+    decided by a plurality (Georgia's majority rule; Louisiana's House
+    contests held as an all-party open primary), with the runoff's date.
+    "otherPrimaries" -- contests whose primary was not the state's one
+    primary date (Alabama's postponed House districts). [] when the file
+    is missing: the page then says nothing rather than guessing."""
+    global _election_rules_cache
+    if _election_rules_cache is None:
+        try:
+            _election_rules_cache = json.loads(_ELECTION_RULES_PATH.read_text())["cycles"]
+        except Exception:
+            logger.exception("election_rules.json unavailable")
+            _election_rules_cache = {}
+    return list(((_election_rules_cache.get(str(cycle)) or {}).get(state) or {}).get(key) or [])
 
 
 def _seat_places(state: str, code: str, district: str | None, spec: dict) -> list[str]:
@@ -261,11 +287,17 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
         # The state's printed ballot name when a state source has named
         # this candidate; the page prefers it and falls back to `name`.
         "ballotName": cand.ballot_name,
-        "party": cand.party,
-        # The party that FEC code belongs to (fec_party: Minnesota's DFL is
+        # The party the state's list prints, once one has named them; the
+        # FEC filing's code until then.
+        "party": cand.ballot_party or cand.party,
+        # The party that code belongs to (fec_party: Minnesota's DFL is
         # DEM) — the one place the page learns which codes are the same
         # party, so it keeps no list of its own.
-        "partyGroup": fec_party(cand.party),
+        "partyGroup": fec_party(cand.ballot_party or cand.party),
+        # What the code names in the FEC's table ("TX": Taxpayers), for a
+        # party the page has no label of its own for; null for a printed
+        # label or a code the table doesn't define (shown as is).
+        "partyLabel": fec_party_label(cand.ballot_party or cand.party),
         # Per-CANDIDATE confidence, which `candidateSource` cannot carry:
         # a race's list can now mix a state-confirmed nominee with an
         # unopposed one the primary file never listed (see
@@ -285,6 +317,10 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
         # refresh turn hasn't come up must not read as "$0 raised"
         # (2026-07 review F10).
         "lastFinancialsSync": _iso_utc(cand.last_financials_sync),
+        # The last day the FEC figures cover ("YYYY-MM-DD") — what they
+        # are as of. Null with figures from before this field existed, and
+        # with no figures when the FEC holds no report for this election.
+        "financialsThrough": cand.financials_through,
     }
 
 
@@ -433,8 +469,11 @@ def _candidate_source(candidates: list[Candidate], complete: bool) -> str:
     "confirmed"  — the state has named its whole November ballot, minor
                    parties included.
     "nominees"   — the state has confirmed nominees, but only from PRIMARY
-                   results, which structurally cannot see a Libertarian,
-                   Green or independent candidate who never ran in one. The
+                   results, which structurally cannot see a nominee who
+                   never ran in one: a party convention's choice (Utah's
+                   2026 House Democratic and Republican nominees chosen at
+                   convention were missing), or a Libertarian, Green or
+                   independent candidate. The
                    list is real and incomplete, and saying so is the
                    difference between a short ballot and a wrong one.
     "primary"    — no nominee yet, but the state lists these as being on
@@ -525,10 +564,21 @@ def _stale_incumbent_ids(candidates: list[Candidate]) -> frozenset[str]:
     Race-scoped and conservative: an ordinary defended-seat race (one
     "I", nobody "O") never matches, so this can only ever REMOVE a
     trusted incumbent claim, never invent one.
+
+    A candidate a state lists on this cycle's ballot (its certified
+    November list, or its primary ballot) is running, so their "I" is
+    never the retired member's leftover record this guards against: the
+    mixed shape there comes from someone else's stale "O" -- a filer who
+    lost the primary, or one whose committee was opened for an earlier
+    open-seat race. Dropping it hid nine sitting members' incumbency on
+    2026-10-08, every one of them a confirmed nominee.
     """
     statuses = {c.incumbent_challenge for c in candidates}
     if "O" in statuses and "I" in statuses:
-        return frozenset(c.id for c in candidates if c.incumbent_challenge == "I")
+        return frozenset(
+            c.id for c in candidates
+            if c.incumbent_challenge == "I" and not (c.confirmed_general or c.on_primary_ballot)
+        )
     return frozenset()
 
 
@@ -626,6 +676,18 @@ def _incumbent_link(
     no `district`/`seat` is said, since the table no longer tells the seat
     held going in from the one held now.
     """
+    if cand.member_bioguide:
+        # The crosswalk says this FEC id is a member's own: their record,
+        # whatever the FEC's incumbency code says (it codes a sitting
+        # member a challenger after a special election: 12 members on
+        # 2026-10-08). Only for the seat's own chamber.
+        holders = reps_by_district.values() if race.office == "H" else senators
+        holder = next((m for m in holders if m.bioguide_id == cand.member_bioguide), None)
+        if holder is not None:
+            link = {"id": holder.id, "score": compute_overall_score(holder)}
+            if race.office == "H" and not elected_congress_sits(race.cycle_year):
+                link.update(district=holder.district, seat=_seat_label(race.state, holder.district))
+            return link
     if cand.incumbent_challenge != "I" or cand.id in stale_incumbent_ids:
         return None
     # Reuses candidate_dedup's surname extraction rather than a second
@@ -703,14 +765,30 @@ def _race_full(
         "counties": counties,
         "candidateSource": _candidate_source(race.candidates, complete),
         "candidates": [
-            {
-                **_candidate_summary(c, stale_incumbent_ids),
-                "incumbentRecord": _incumbent_link(
-                    c, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids),
-            }
+            _ballot_candidate(c, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids)
             for c in candidates
         ],
     }
+
+
+def _ballot_candidate(
+    cand: Candidate, race: Race, reps_by_district: dict[int, Representative], senators: list[Senator],
+    namesake_fields: list[list[Candidate]], stale_incumbent_ids: frozenset[str],
+) -> dict:
+    """A candidate on the ballot page with their record link. One the
+    crosswalk ties to this seat's own member is the incumbent, which the
+    page reads from incumbentChallenge, though the FEC codes them a
+    challenger (after a special election)."""
+    link = _incumbent_link(cand, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids)
+    summary = {**_candidate_summary(cand, stale_incumbent_ids), "incumbentRecord": link}
+    holds_this_seat = link is not None and cand.member_bioguide and (
+        race.office == "S"
+        or link.get("district") in (None, race.district)
+        or race.state in redrawn_states(race.cycle_year)
+    )
+    if holds_this_seat:
+        summary["incumbentChallenge"] = "I"
+    return summary
 
 
 # How many state-wide coverage items the ballot page's top-of-page teaser
@@ -1217,11 +1295,13 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     # (or a primary) stay in the table until pruned and must never render
     # under this election's heading. Removed measures for THIS election
     # are still returned, and render as removed for their grace window.
-    measures = (
+    # In the state's own order (source_position); a row from before that
+    # column existed sorts after, by its number read as text and digits.
+    measures = sorted(
         db.query(BallotMeasure)
         .filter(BallotMeasure.state == state, BallotMeasure.election_date == election_day)
-        .order_by(BallotMeasure.number)
-        .all()
+        .all(),
+        key=_measure_order,
     )
     coverage = (
         db.query(MeasureCoverage)
@@ -1266,6 +1346,11 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # representative (house.gov, a member's name) can answer for the
         # old map.
         "newDistrictLines": state in redrawn_states(cycle),
+        "generalRunoffs": _election_rules(state, cycle, "generalRunoffs"),
+        # Contests whose primary was not primaryDate (Alabama's House
+        # districts 1, 2, 6 and 7; Louisiana's House, whose primary IS
+        # November 3), so the header doesn't give them the wrong one.
+        "otherPrimaries": _election_rules(state, cycle, "otherPrimaries"),
         "senateRaces": senate_races,
         # Only meaningful (and only computed) when this state's seat
         # genuinely ISN'T up this cycle — gated on the calendar
@@ -1325,18 +1410,13 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             # the line above already says it.
             str(o) for o in ((source_for_state(state) or {}).get("statewide_omits") or [])
         ]) + ([
+            # Only in a year the state elects its legislature at all
+            # (state_ballot_scope.json): Louisiana, New Jersey and Virginia
+            # elect theirs in odd years, and "omits State legislative
+            # districts" implied seats being withheld.
             "State legislative districts",
-        ] if not state_leg_races else []) + (
-            # Same rule as the two above: the line shrinks the moment this
-            # state's judgeships are genuinely covered. It shrinks rather
-            # than disappearing, because retention questions are a
-            # separate yes/no ballot item — not a contest between
-            # candidates — and nothing here reads them yet. Saying
-            # "judicial contests" is covered while retention questions
-            # are not is the honest half-statement.
-            ["Judicial retention questions"]
-            if judicial_coverage["status"] != JudicialCoverageStatus.NOT_YET_COVERED
-            else ["Judicial contests and retention questions"]
+        ] if not state_leg_races and on_november_ballot(state, "legislature", cycle) else []) + (
+            _judicial_omits(state, cycle, judicial_coverage["status"])
         ) + [
             "County and municipal offices",
             "Local ballot measures",
@@ -1599,6 +1679,41 @@ def pvi_map(db: Session = Depends(get_db)):
     )
 
 
+def _judicial_omits(state: str, year: int, coverage_status: str) -> list[str]:
+    """The judicial line of `omits`, true for this state and year. Judicial
+    contests are omitted while this state's judgeships are not covered;
+    retention questions — a yes/no item, not a contest — always, since
+    nothing here reads them. Each half only where the state has that kind
+    on its November ballot this year (state_ballot_scope.json): a state
+    that appoints its judges has neither, most electing states hold no
+    retention votes, and Pennsylvania, Tennessee, West Virginia and
+    Wisconsin elect judges at other elections."""
+    contests = (
+        on_november_ballot(state, "judicial_contests", year)
+        and coverage_status == JudicialCoverageStatus.NOT_YET_COVERED
+    )
+    retention = on_november_ballot(state, "judicial_retention", year)
+    if contests and retention:
+        return ["Judicial contests and retention questions"]
+    if contests:
+        return ["Judicial contests"]
+    if retention:
+        return ["Judicial retention questions"]
+    return []
+
+
+def _measure_order(measure) -> tuple:
+    """Sort key: the measure's place in the state's own document, then (a
+    row written before source_position existed) its printed number with
+    digit runs compared as numbers, so "2" comes before "10"."""
+    natural = tuple(
+        (0, int(part), "") if part.isdigit() else (1, 0, part.lower())
+        for part in re.split(r"(\d+)", measure.number or "") if part
+    )
+    position = measure.source_position
+    return (position is None, position if position is not None else 0, natural)
+
+
 def _measure_json(measure) -> dict:
     """One measure, with everything needed to read it honestly.
 
@@ -1625,6 +1740,10 @@ def _measure_json(measure) -> dict:
         "noMeans": measure.no_means,
         "titleAuthority": measure.title_authority,
         "fiscalAuthority": measure.fiscal_authority,
+        # Null unless the state names a drafter of the summary / the yes-no
+        # sentences other than the title's (see BallotMeasure).
+        "summaryAuthority": measure.summary_authority,
+        "framingAuthority": measure.framing_authority,
         "sourceName": measure.source_name,
         "sourceUrl": measure.source_url,
         "republishedBy": measure.republished_by,

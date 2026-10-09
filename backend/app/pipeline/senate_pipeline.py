@@ -19,6 +19,7 @@ import json
 import logging
 import time
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -56,8 +57,8 @@ from app.pipeline.fetch.congress import (
     fetch_significant_bills,
 )
 from app.pipeline.fetch.fec import (
+    FecUnavailable,
     compute_recent_election_cycles,
-    fetch_aggregated_contributors,
     fetch_candidate_committees,
     fetch_candidate_financials,
     committee_id_of,
@@ -69,16 +70,17 @@ from app.pipeline.fetch.fec import (
     fetch_pac_receipts,
     find_candidate,
     resolve_committee_meta,
-    reset_run_state as reset_fec_run_state,
 )
 from app.pipeline.fetch.govinfo import fetch_bill_text
 from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
+from app.member_ids import assign_member_ids
 from app.pipeline.member_lifecycle import (
     CHAMBER_SENATE,
     purge_departed_members,
     reconcile_roster,
 )
-from app.pipeline.run_checks import persist_ground_truth_failures, run_calibration_check
+from app.pipeline.run_checks import alert_member_failures, persist_ground_truth_failures, run_calibration_check
+from app.pipeline.bill_refresh import keep_newer_latest_actions
 from app.pipeline.progress_tracker import ProgressTracker
 # Transform modules
 from app.pipeline.transform.normalize_finance import MISSING_VALUE_TEXT, committee_donor_name, normalize_finance
@@ -90,12 +92,14 @@ from app.pipeline.transform.normalize_votes import (
     dedupe_votes,
     extract_senator_vote,
     find_senate_roll_call,
+    is_housekeeping,
     majority_leader_spans,
     normalize_recent_votes,
     resolve_senate_lis_ids,
     normalize_votes,
     stamp_roll_call_outcome,
     vote_identity,
+    vote_date_iso,
 )
 
 # Analyze modules
@@ -106,7 +110,11 @@ from app.pipeline.analyze.bill_analyzer import (
     recent_roll_call_key,
 )
 from app.pipeline.analyze.bill_learning import clear_reference_cache, stamp_motion_type
-from app.pipeline.analyze.party_platform import clear_platform_cache, initialize_platform_embeddings
+from app.pipeline.analyze.party_platform import (
+    clear_platform_cache,
+    initialize_platform_embeddings,
+    refine_with_vote_data,
+)
 from app.pipeline.vector_store import (
     check_model_version,
     embed_bills,
@@ -164,6 +172,17 @@ RECENT_RC_SESSIONS = 2
 MIN_CONGRESS_FOR_BILL_TITLES = 116
 
 
+
+def party_line_members(scored: list[dict], roster: list[dict]) -> list[dict]:
+    """The members party_line_records reads: the senators this run scores,
+    first (their records come back in that order), then the rest of the
+    roster (a filtered run's unscored senators, or any whose prep failed),
+    without a voting record, whose positions the Senate's roll calls reach
+    only through the members passed."""
+    ids = {m.get("id") for m in scored}
+    return scored + [s for s in roster if s.get("id") not in ids]
+
+
 def _record_json(record: dict | None) -> str | None:
     return json.dumps(record) if record else None
 
@@ -207,7 +226,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         "caucus_party": (data.get("votingRecord") or {}).get("effectiveParty"),
         "party_line_record": _record_json((data.get("votingRecord") or {}).get("partyLineRecord")),
         "total_from_pacs": funding.get("totalFromPACs") or 0,
-        "small_donor_percentage": funding.get("smallDonorPercentage") or 0,
+        "small_donor_percentage": funding.get("smallDonorPercentage"),
         "website_url": data.get("officialWebsiteUrl") or "",
         "contact_form_url": data.get("contactFormUrl") or "",
         "office_phone": data.get("officePhone") or "",
@@ -283,7 +302,10 @@ def upsert_senator(db: Session, data: dict) -> None:
                 senator_id=senator_id,
                 bill_name=vote_data.get("billName") or "Unknown Bill",
                 bill_id=vote_data.get("billId") or "",
-                date=vote_data.get("date") or "",
+                # ISO, so the voting record's date order is the calendar's:
+                # Senate.gov's "October 14, 2025, 05:34 PM" sorted September
+                # ahead of October.
+                date=vote_date_iso(vote_data.get("date")) or vote_data.get("date") or "",
                 vote=vote_data.get("vote") or "Not Voting",
                 policy_area=vote_data.get("policyArea") or "PROCEDURAL",
                 policy_areas=json.dumps(vote_data.get("policyAreas") or []),
@@ -343,6 +365,9 @@ def upsert_senator(db: Session, data: dict) -> None:
     # Add sponsored bills — unless this run couldn't fetch them, in which
     # case the empty list is not a record and the stored bills stay.
     if not data.get("sponsoredBillsUnavailable"):
+        keep_newer_latest_actions(
+            db, SponsoredBill, SponsoredBill.senator_id == senator_id, data.get("sponsoredBills", []),
+        )
         db.query(SponsoredBill).filter(
             SponsoredBill.senator_id == senator_id
         ).delete()
@@ -690,6 +715,52 @@ def invalidate_stale_analysis(db: Session) -> None:
         _write_model_version()
 
 
+async def _fetch_senator_fec(
+    client: httpx.AsyncClient, db: Session, senator: dict,
+    committee_contributions, committee_master,
+) -> dict | None:
+    """One senator's FEC data for normalize_finance: None when no FEC
+    candidate matches, {"unavailable": True} when the FEC could not be read
+    — not "raised nothing": the senator is skipped at prepare and keeps the
+    stored record."""
+    try:
+        candidate = await find_candidate(
+            client, db, senator["name"], senator["state"],
+            bioguide_id=senator.get("bioguideId"),
+        )
+        if not candidate or not candidate.get("candidate_id"):
+            logger.warning("No FEC match for %s (%s)", senator["name"], senator["state"])
+            return None
+        candidate_id = candidate["candidate_id"]
+        financials = await fetch_candidate_financials(client, db, candidate_id)
+        committees = await fetch_candidate_committees(client, db, candidate_id)
+        committee_id = committees[0].get("committee_id") if committees else None
+
+        # Match the receipt-detail and outside-spending windows to the
+        # receipt-totals window (normalize_finance sums only the most recent
+        # election, one deduped totals row).
+        recent_cycles = compute_recent_election_cycles(financials, "S")
+        receipts: list = []
+        pac_receipts: list = []
+        if committee_id:
+            receipts = await fetch_committee_receipts(client, db, committee_id, cycles=recent_cycles)
+            pac_receipts = await fetch_pac_receipts(client, db, committee_id, cycles=recent_cycles)
+        detail = await fetch_contribution_detail(
+            client, db, candidate_id, [committee_id] if committee_id else [],
+            recent_cycles, committee_contributions, committee_master,
+        )
+    except FecUnavailable as e:
+        logger.warning("FEC unreachable for %s: %s", senator["name"], e)
+        return {"unavailable": True}
+    return {
+        "candidate": candidate,
+        "financials": financials,
+        "receipts": receipts,
+        "pacReceipts": pac_receipts,
+        "detail": detail,
+    }
+
+
 def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
     """Flatten every senator's FEC receipts into donor entries for
     classify_donors_hybrid.
@@ -726,14 +797,6 @@ def _build_donor_entries(senators: list[dict], fec_data: dict) -> list[dict]:
                     "name": employer,
                     "amount": r.get("contribution_receipt_amount", 0) or 0,
                     "fec_receipt": r,
-                })
-        for c in fec.get("aggregated") or []:
-            name = c.get("contributor_name") or "Unknown"
-            if name and name != "Unknown":
-                entries.append({
-                    "name": name,
-                    "amount": c.get("total", 0) or 0,
-                    "candidate_name": cand_name,
                 })
         # The complete detail's donors, under the names normalize_finance
         # looks them up by. A giving committee's type is already known from
@@ -842,7 +905,7 @@ async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], 
             try:
                 sp_actions = await _sponsored_bill_actions(client, db, sp)
                 sp["isLaw"] = sp.get("isLaw", False) or is_enacted(sp.get("latestAction"), sp_actions)
-                sp["stage"] = classify_bill_stage_from_actions(sp_actions, sp["isLaw"])
+                sp["stage"] = classify_bill_stage_from_actions(sp_actions, sp["isLaw"], sp.get("billType"))
             except Exception:
                 # Leave stage unset: _les_bill_stage falls back to
                 # isLaw/latestAction for this bill. One unreachable
@@ -1020,7 +1083,6 @@ async def run_senate_pipeline(
     try:
         reset_stats()
         reset_client()
-        reset_fec_run_state()
 
         # Clear in-memory caches from prior runs to bound memory usage.
         clear_alignment_cache()
@@ -1095,6 +1157,11 @@ async def run_senate_pipeline(
             logger.info("--- Phase 2: TRANSFORM (members) ---")
             progress.begin("normalize_members")
             senators = normalize_members(raw_members, member_details)
+            # Settle ids against the stored members by bioguide id, renaming
+            # any whose id changed, before anything below writes by id.
+            assign_member_ids(db, CHAMBER_SENATE, senators)
+            db.commit()
+            roster = list(senators)  # the whole chamber, for the party-line records
             logger.info("Normalized %d senators", len(senators))
             progress.complete("normalize_members", detail=f"{len(senators)} senators")
 
@@ -1255,6 +1322,13 @@ async def run_senate_pipeline(
                     session_number=session_num,
                     count=RECENT_RC_COUNT_PER_SESSION,
                 )
+                if session_rcs is None:
+                    # Senate.gov could not be read: fail before any senator
+                    # is saved with an empty recent-vote record.
+                    raise RuntimeError(
+                        f"Senate roll calls for congress {congress_num} session "
+                        f"{session_num} could not be read from senate.gov"
+                    )
                 added = 0
                 for rc in session_rcs:
                     # Dedupe by the unique roll-call identity, NOT by
@@ -1438,69 +1512,22 @@ async def run_senate_pipeline(
                 client, db, committee_master_cycles(),
             )
             for fec_idx, senator in enumerate(senators):
-                candidate = await find_candidate(
-                    client, db, senator["name"], senator["state"],
-                    bioguide_id=senator.get("bioguideId"),
+                fec = await _fetch_senator_fec(
+                    client, db, senator, committee_contributions, committee_master,
                 )
-                if not candidate or not candidate.get("candidate_id"):
-                    logger.warning(
-                        "No FEC match for %s (%s)",
-                        senator["name"],
-                        senator["state"],
-                    )
-                    continue
-
-                candidate_id = candidate["candidate_id"]
-                financials = await fetch_candidate_financials(
-                    client, db, candidate_id
-                )
-                committees = await fetch_candidate_committees(
-                    client, db, candidate_id
-                )
-                committee_id = (
-                    committees[0].get("committee_id")
-                    if committees
-                    else None
-                )
-
-                # Match the receipt-detail and outside-spending windows to
-                # the receipt-totals window (normalize_finance sums only the
-                # most recent election, one deduped totals row).
-                recent_cycles = compute_recent_election_cycles(financials, "S")
-
-                receipts: list = []
-                pac_receipts_data: list = []
-                aggregated: list = []
-                if committee_id:
-                    receipts = await fetch_committee_receipts(
-                        client, db, committee_id, cycles=recent_cycles
-                    )
-                    pac_receipts_data = await fetch_pac_receipts(
-                        client, db, committee_id, cycles=recent_cycles
-                    )
-                    aggregated = await fetch_aggregated_contributors(
-                        client, db, committee_id, cycles=recent_cycles
-                    )
-                detail = await fetch_contribution_detail(
-                    client, db, candidate_id, [committee_id] if committee_id else [],
-                    recent_cycles, committee_contributions, committee_master,
-                )
-
-                fec_data[senator["id"]] = {
-                    "candidate": candidate,
-                    "financials": financials,
-                    "receipts": receipts,
-                    "pacReceipts": pac_receipts_data,
-                    "aggregated": aggregated,
-                    "detail": detail,
-                }
+                if fec is not None:
+                    fec_data[senator["id"]] = fec
                 progress.update("fetch_fec", done=fec_idx + 1)
+            unreachable = sum(1 for f in fec_data.values() if f.get("unavailable"))
+            matched = len(fec_data) - unreachable
             logger.info(
-                "FEC data fetched for %d/%d senators",
-                len(fec_data),
-                len(senators),
+                "FEC data fetched for %d/%d senators (%d unreachable)",
+                matched, len(senators), unreachable,
             )
-            progress.complete("fetch_fec", detail=f"{len(fec_data)}/{len(senators)} matched")
+            progress.complete(
+                "fetch_fec",
+                detail=f"{matched}/{len(senators)} matched, {unreachable} unreachable",
+            )
 
             # 1e-2. Resolve contributing committees' FEC registrations (type,
             # designation, connected organization) once per unique committee
@@ -1569,36 +1596,20 @@ async def run_senate_pipeline(
             classified_bills = []
             progress.complete("classify_bills", detail="failed")
 
-        # Refine content-based party alignment with vote data as a secondary signal.
-        # Content analysis (what the bill does) is the primary signal.
-        # Vote tallies validate or adjust — they don't blindly override, because
-        # senators trade votes, face whip pressure, and make tactical compromises.
-        from app.pipeline.analyze.party_platform import (
-            refine_with_vote_data,
-            record_sponsor_alignment,
-        )
+        # The roll call's own party split wins over the bill's content label
+        # wherever a split exists (refine_with_vote_data; AGENTS.md §4).
         for bill in classified_bills:
             roll_call_data = roll_call_data_map.get(bill["billId"])
             if roll_call_data:
                 stamp_roll_call_outcome(bill, roll_call_data)
                 stamp_motion_type(bill, roll_call_data)
+                if bill.get("housekeeping"):
+                    continue
                 split = compute_party_vote_split(roll_call_data)
                 vote_split = split["label"] if split else None
                 bill["partyLeaning"] = refine_with_vote_data(
                     bill.get("partyLeaning", "bipartisan"), vote_split,
                 )
-
-        # Use bill sponsor party as ground truth for the learning store.
-        # Bills sponsored by R senators are examples of R-aligned legislation.
-        for bill_ref in bills_data:
-            sponsor_party = bill_ref.get("sponsorParty")
-            if sponsor_party in ("R", "D"):
-                bill_id = bill_ref["billId"]
-                bill_text = f"{bill_ref['billName']} {(bill_ref.get('summary') or '')[:200]}"
-                try:
-                    record_sponsor_alignment(db, bill_id, bill_text, sponsor_party)
-                except Exception:
-                    logger.debug("Sponsor alignment failed for %s", bill_id, exc_info=True)
 
         # 3a.2 Classify recent roll call votes (embedding-based, zero LLM)
         classified_recent: list[dict] = []
@@ -1627,7 +1638,7 @@ async def run_senate_pipeline(
                 stamp_motion_type(rc, roll_call_data)
                 split = compute_party_vote_split(roll_call_data)
                 computed_split = split["label"] if split else None
-                if computed_split:
+                if computed_split and not rc.get("housekeeping"):
                     rc["partyLeaning"] = refine_with_vote_data(
                         rc.get("partyLeaning", "bipartisan"), computed_split,
                     )
@@ -1681,6 +1692,9 @@ async def run_senate_pipeline(
         results: list[dict] = []
         success_count = 0
         fail_count = 0
+        # (member id, exception) for each senator that failed: one ops
+        # alert after the scoring loop (alert_member_failures).
+        member_failures: list[tuple[str, BaseException]] = []
 
         # A seat passed to someone of the same surname: the roll calls'
         # member id says which of them cast each vote.
@@ -1691,13 +1705,17 @@ async def run_senate_pipeline(
         for prep_idx, senator in enumerate(senators):
             try:
                 fec = fec_data.get(senator["id"])
+                if fec and fec.get("unavailable"):
+                    raise FecUnavailable(f"no FEC data read for {senator['name']}")
                 if fec:
                     funding = normalize_finance(
-                        fec["candidate"],
+                        # The chamber bounds the election window
+                        # (seat_winning_floor); a crosswalk match carries
+                        # only the id.
+                        {**fec["candidate"], "office": "S"},
                         fec.get("financials") or [],
                         fec.get("receipts") or [],
                         fec.get("pacReceipts") or [],
-                        fec.get("aggregated") or [],
                         ai_classifications=ai_classifications,
                         db_session=db,
                         committee_meta_map=committee_meta_map,
@@ -1831,6 +1849,7 @@ async def run_senate_pipeline(
                     "  Prep failed for %s: %s", senator["name"], str(e)
                 )
                 fail_count += 1
+                member_failures.append((senator.get("id") or senator.get("bioguideId") or senator["name"], e))
                 results.append(senator)
                 progress.update("prepare_senators", done=prep_idx + 1)
 
@@ -1996,9 +2015,13 @@ async def run_senate_pipeline(
 
         # Each senator's party-line record over the whole Congress (v6.20),
         # before the reference is measured on it.
-        for p, record in zip(senator_prepared, party_line_records(
-            db, "senate", [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared],
-        )):
+        # The rest of the chamber is passed too (a filtered run's unscored
+        # senators, or any whose prep failed): a break is read against the
+        # other defectors and the party, whose roll-call votes are tied to
+        # positions only through these members.
+        scored = [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared]
+        for p, record in zip(senator_prepared, party_line_records(db, "senate", party_line_members(scored, roster))
+                             if scored else []):
             p["votingRecord"]["partyLineRecord"] = record
 
         funding_reference = live_funding_reference(
@@ -2179,7 +2202,9 @@ async def run_senate_pipeline(
                             # producing a different label for the same
                             # bill in different parts of the scorecard).
                             roll_call_data = roll_call_data_map.get(bill_id)
-                            if roll_call_data:
+                            if roll_call_data and not is_housekeeping(
+                                roll_call_data.get("question"), roll_call_data.get("chamber"),
+                            ):
                                 vote_split = compute_party_split(roll_call_data)
                                 sp["partyLeaning"] = refine_with_vote_data(
                                     sp["partyLeaning"], vote_split,
@@ -2238,10 +2263,11 @@ async def run_senate_pipeline(
                 ))
                 logger.info("    score %d/100", weighted_score)
                 progress.update("analyze_senators", done=senator_idx + 1)
-            except Exception:
+            except Exception as e:
                 logger.exception("  Failed for %s", senator["name"])
                 db.rollback()
                 fail_count += 1
+                member_failures.append((senator.get("id") or senator.get("bioguideId") or senator["name"], e))
                 results.append(senator)
                 pipeline_run.senators_failed = fail_count
                 pipeline_run.senators_processed = success_count
@@ -2250,6 +2276,7 @@ async def run_senate_pipeline(
                 progress.update("analyze_senators", done=senator_idx + 1)
 
         alert_if_lda_down(lda_totals, "senate")
+        alert_member_failures("senate", member_failures, close_when_clean=not senator_filter)
 
         progress.complete(
             "analyze_senators",

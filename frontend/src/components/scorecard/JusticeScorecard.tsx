@@ -1,12 +1,11 @@
 import Link from "next/link";
 import type { Justice, JusticeLoyalty } from "@/types/justice";
-import { displayScore } from "@/lib/formatting";
-import { getJusticeLabel, getScoreBgColor, getScoreColor } from "@/lib/representation";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, type ShareSubject } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
+import { appointerEstimate, JUSTICE_RESEARCH_URL, NOT_SCORED_REASON } from "@/lib/justices";
 import ScoreColumn from "./ScoreColumn";
 
 const PARTY: Record<string, { label: string; text: string; border: string }> = {
@@ -17,10 +16,20 @@ const NO_PARTY = { label: "", text: "text-ink", border: "border-white/30" };
 
 const LINK = "font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos";
 
-// The estimate's axis, in points either way. Shrunk estimates on the
-// 1937-2025 Court fall within +-20 (docs/research/justice-scores.md); one
-// beyond is drawn at the edge.
-const AXIS_POINTS = 30;
+// The estimate's axis, in points either way. The sitting justices' own
+// estimates fall within +-20 and their 95% intervals mostly within +-35
+// (docs/research/justice-scores.md); one beyond is drawn at the edge.
+const AXIS_POINTS = 40;
+
+// What each column's figure measures (the [?] beside its title).
+const TOOLTIPS = {
+  loyalty:
+    "How much more often the justice sided with the federal government in the cases it argued while the appointing president's administration was arguing them than under other administrations, with the government's side of each case held fixed (Epstein and Posner 2016, from the Supreme Court Database), and its 95% confidence interval. Shown as information, not scored: a justice's years under the appointing president are always their first, and windows of the same length later in a career produce differences of about the same size.",
+  ideology:
+    "The Martin-Quinn score: a left-right position estimated each term from the justice's votes beside the other justices'. Negative is liberal, positive conservative. Shown for context, not scored.",
+  record:
+    "Orally argued cases decided in the last four terms: how often the justice was in the majority, in dissent, and in the majority of close cases (decided by one vote), how many cases were unanimous, and the opinions they wrote. Shown for context, not scored.",
+};
 
 function pts(share: number) {
   return (share * 100).toFixed(1);
@@ -43,13 +52,13 @@ function formatDate(iso: string | null) {
       });
 }
 
-/** The estimate and one standard error either side, on an axis centred on
- *  no favoritism. */
-function EstimateScale({ loyalty, score }: { loyalty: JusticeLoyalty; score: number }) {
+/** The estimate and its 95% confidence interval, on an axis centred on no
+ *  difference. One neutral colour: it is not a score. */
+function EstimateScale({ loyalty }: { loyalty: JusticeLoyalty }) {
   const at = (share: number) =>
     `${((Math.max(-AXIS_POINTS, Math.min(AXIS_POINTS, share * 100)) + AXIS_POINTS) / (2 * AXIS_POINTS)) * 100}%`;
-  const bg = getScoreBgColor(displayScore(score));
-  const label = `${pts(loyalty.estimate)} points, plus or minus ${pts(loyalty.se)}`;
+  const bg = "bg-ink-lo";
+  const label = `${pts(loyalty.estimate)} points, 95% interval ${pts(loyalty.ciLow)} to ${pts(loyalty.ciHigh)}`;
   return (
     <div role="img" aria-label={label}>
       <div className="relative h-8" aria-hidden="true">
@@ -58,8 +67,8 @@ function EstimateScale({ loyalty, score }: { loyalty: JusticeLoyalty; score: num
         <span
           className={`absolute top-[14px] h-1 opacity-60 ${bg}`}
           style={{
-            left: at(loyalty.estimate - loyalty.se),
-            right: `calc(100% - ${at(loyalty.estimate + loyalty.se)})`,
+            left: at(loyalty.ciLow),
+            right: `calc(100% - ${at(loyalty.ciHigh)})`,
           }}
         />
         <span
@@ -77,32 +86,38 @@ function EstimateScale({ loyalty, score }: { loyalty: JusticeLoyalty; score: num
 }
 
 function LoyaltyColumn({ justice }: { justice: Justice }) {
-  const l = justice.loyalty;
-  const score = justice.score.loyalty;
+  const l = appointerEstimate(justice.loyalty);
   const appointer = justice.appointingPresident ?? "the appointing president";
   return (
-    <ScoreColumn title="Independence from the appointing president" shareId="loyalty" score={score}>
-      {l && score != null ? (
+    <ScoreColumn
+      title="Votes under the appointing president"
+      shareId="loyalty"
+      tooltip={TOOLTIPS.loyalty}
+      score={null}
+      aside="Not scored"
+    >
+      {l ? (
         <>
           <p className="text-base leading-relaxed text-ink">
             Sided with the federal government in {pct(l.rateIn)} of {l.votesIn} votes while{" "}
             {appointer} was president, and in {pct(l.rateOut)} of {l.votesOut} under other
-            presidents. With the government&apos;s side of the case held fixed, and set against
-            every justice since 1937, that is {pts(Math.abs(l.estimate))} points{" "}
-            {l.estimate >= 0 ? "more" : "less"} often for the appointing president&apos;s
-            government, give or take {pts(l.se)}.
+            presidents. With the government&apos;s side of the case held fixed, that is{" "}
+            {pts(Math.abs(l.estimate))} points {l.estimate >= 0 ? "more" : "less"} often under the
+            appointing president (95% confidence interval {pts(l.ciLow)} to {pts(l.ciHigh)}).
           </p>
-          <EstimateScale loyalty={l} score={score} />
+          <EstimateScale loyalty={l} />
           <p className="text-sm leading-relaxed text-ink-lo">
-            100 is no favoritism either way; the score falls to 0 at twice the spread between
-            justices. Cases the federal government argued, from the Supreme Court Database
+            Shown as information, not as loyalty: a justice&apos;s years under the appointing
+            president are always their first, and windows of the same length later in a career
+            produce differences of about the same size. Cases the federal government argued, from
+            the Supreme Court Database
             {l.throughTerm ? ` through the ${l.throughTerm} term` : ""}, as Epstein and Posner
             (2016) measure it.
           </p>
         </>
       ) : (
         <p className="text-base leading-relaxed text-ink">
-          Not yet measured. The Supreme Court Database adds a term after it ends, and the measure
+          Not yet measured. The Supreme Court Database adds a term after it ends, and the estimate
           needs votes both under the appointing president and under others.
         </p>
       )}
@@ -114,7 +129,13 @@ function IdeologyColumn({ points }: { points: [number, number][] }) {
   const first = points[0];
   const last = points[points.length - 1];
   return (
-    <ScoreColumn title="Ideology" shareId="ideology" score={null} aside="Not scored">
+    <ScoreColumn
+      title="Ideology"
+      shareId="ideology"
+      tooltip={TOOLTIPS.ideology}
+      score={null}
+      aside="Not scored"
+    >
       {last ? (
         <p className="text-base leading-relaxed text-ink">
           Martin-Quinn position {last[1] > 0 ? "+" : ""}
@@ -130,7 +151,7 @@ function IdeologyColumn({ points }: { points: [number, number][] }) {
       )}
       <p className="text-sm leading-relaxed text-ink-lo">
         Shown for context. Where a justice sits says nothing about favoring the president who made
-        the appointment, which is what the score measures.
+        the appointment.
       </p>
     </ScoreColumn>
   );
@@ -147,9 +168,15 @@ function RecordColumn({ justice: j }: { justice: Justice }) {
     ["Concurrences written", `${j.authoredConcurrence}`],
   ];
   return (
-    <ScoreColumn title="Voting record" shareId="voting-record" score={null} aside="Not scored">
+    <ScoreColumn
+      title="Voting record"
+      shareId="voting-record"
+      tooltip={TOOLTIPS.record}
+      score={null}
+      aside="Not scored"
+    >
       <p className="text-base leading-relaxed text-ink">
-        {j.casesDecided} cases decided in the recent terms Oyez records.
+        {j.casesDecided} orally argued cases decided in the last four terms.
       </p>
       <dl className="flex flex-col gap-1.5 text-sm">
         {rows.map(([k, v]) => (
@@ -164,22 +191,19 @@ function RecordColumn({ justice: j }: { justice: Justice }) {
 }
 
 /**
- * A justice's scorecard, at a glance, laid out like a member's and a
- * president's: who and the Judicial Score, then the scored measure beside
- * what is on record and not scored, then agreement with each sitting
- * justice. Every number is the API's.
+ * A justice's scorecard, laid out like a member's and a president's: who,
+ * then why there is no score (justice v3), then what is on record and not
+ * scored, then agreement with each sitting justice. Every number is the
+ * API's.
  */
 export default function JusticeScorecard({
   justice: j,
-  rank,
   titleAs: Title = "h1",
 }: {
   justice: Justice;
-  rank?: { rank: number; of: number } | null;
   titleAs?: "h1" | "h2";
 }) {
   const party = (j.appointingParty && PARTY[j.appointingParty]) || NO_PARTY;
-  const overall = j.score.overall == null ? null : displayScore(j.score.overall);
   const since = formatDate(j.dateStart);
   // Named and ordered by the API (most agreement first). Absent from a
   // response cached before the field replaced agreementMatrix (nginx and the
@@ -192,10 +216,6 @@ export default function JusticeScorecard({
     subtitle: [j.roleTitle, j.appointingPresident && `appointed by ${j.appointingPresident}`]
       .filter(Boolean)
       .join(" · "),
-    badge:
-      overall == null
-        ? undefined
-        : { label: "Judicial score", value: String(overall), colorClass: getScoreColor(overall) },
     url: absoluteUrl(`/politicians/${encodeURIComponent(j.id)}`),
   };
 
@@ -251,35 +271,16 @@ export default function JusticeScorecard({
               <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
                 Judicial Score
               </p>
-              {overall == null ? (
-                <p className="font-display text-2xl font-extrabold text-ink-min">
-                  Not yet measured
-                </p>
-              ) : (
-                <div className="flex items-baseline gap-4">
-                  <span
-                    className={`font-display text-7xl font-extrabold leading-none ${getScoreColor(overall)}`}
-                  >
-                    {overall}
-                  </span>
-                  <div className="flex flex-col gap-1">
-                    <span
-                      className={`font-mono text-sm tracking-[0.1em] ${getScoreColor(overall)}`}
-                    >
-                      {getJusticeLabel(overall)}
-                    </span>
-                    {rank && (
-                      <Link href="/leaderboard?branch=scotus" className={LINK}>
-                        #{rank.rank} of {rank.of} justices
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              )}
+              <p className="font-display text-2xl font-extrabold text-ink-min">Not scored</p>
               <p className="text-sm leading-relaxed text-ink-lo">
-                Higher means the justice sided with the federal government about as often under the
-                president who made the appointment as under any other. It measures independence from
-                that president, not whether a ruling was right.
+                {NOT_SCORED_REASON}{" "}
+                <a href={JUSTICE_RESEARCH_URL} className={LINK}>
+                  The research
+                </a>
+                {" · "}
+                <Link href="/about/presidents-and-justices#justices" className={LINK}>
+                  How justices are covered
+                </Link>
               </p>
               {/* The header names the justice itself: no title strip. */}
               <div className="flex justify-end">

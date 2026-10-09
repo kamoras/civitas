@@ -18,15 +18,18 @@ logger = logging.getLogger(__name__)
 
 FR_BASE = "https://www.federalregister.gov/api/v1"
 
+# The Federal Register API's presidential_document_type values. It answers
+# an unknown one with a 400: "presidential_memorandum" was refused on every
+# run, so Explore held no memoranda at all (2026-10-09; the API lists 807).
 DOC_TYPES = [
     "executive_order",
-    "presidential_memorandum",
+    "memorandum",
     "proclamation",
 ]
 
 DOC_TYPE_LABELS = {
     "executive_order": "Executive Order",
-    "presidential_memorandum": "Presidential Memorandum",
+    "memorandum": "Presidential Memorandum",
     "proclamation": "Proclamation",
 }
 
@@ -106,6 +109,9 @@ async def fetch_recent_presidential_actions(
                 "order": "newest",
                 "fields[]": [
                     "document_number",
+                    # A republication or correction of another document
+                    # (fr_rulemaking.FIELDS): skipped.
+                    "correction_of",
                     "title",
                     "abstract",
                     "body_html_url",
@@ -128,6 +134,10 @@ async def fetch_recent_presidential_actions(
                     timeout=DEFAULT_FETCH_TIMEOUT_S,
                 )
                 if resp.status_code != 200:
+                    # Never quiet: a refused query reads exactly like a
+                    # document type with nothing new.
+                    logger.error("Federal Register refused %s page %d: %d %s",
+                                 doc_type, page, resp.status_code, resp.text[:200])
                     break
                 data = resp.json()
             except Exception as e:
@@ -143,7 +153,7 @@ async def fetch_recent_presidential_actions(
 
             for doc in docs:
                 doc_num = doc.get("document_number", "")
-                if not doc_num or doc_num in seen_ids:
+                if not doc_num or doc_num in seen_ids or doc.get("correction_of"):
                     continue
                 seen_ids.add(doc_num)
                 pending_docs.append(doc)

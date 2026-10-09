@@ -28,19 +28,20 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
           const topical = match.billsInfluenced;
           return (
             <div key={i} className="panel p-4 border-l-2 border-l-signal-cyan/40">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                {/* The top donor's name, which can be one unspaced token: wrap it
-                    rather than let the panel cut it off. */}
-                <span className="min-w-0 text-signal-cyan text-sm font-bold [overflow-wrap:anywhere]">
-                  {match.lobbyistOrg}
-                </span>
-                <span className="text-xs px-1.5 py-0.5 border border-white/[0.07] text-ink-min">
-                  {match.industry.replace(/_/g, " ")}
-                </span>
+              {/* The industry is the finding and its total is the industry's;
+                  the largest donor is named apart from that sum, which it
+                  only took part in. */}
+              <div className="mb-2 text-signal-cyan text-sm font-bold">
+                {match.industry.replace(/_/g, " ")}
               </div>
 
               <div className="text-xs font-mono text-ink-lo mb-3 space-y-1">
-                <div>ASSOCIATED CONTRIBUTIONS: {formatCurrency(match.donationToSenator)}</div>
+                <div>INDUSTRY CONTRIBUTIONS: {formatCurrency(match.donationToSenator)}</div>
+                {/* Can be one unspaced token: wrap it rather than let the
+                    panel cut it off. */}
+                <div className="[overflow-wrap:anywhere]">
+                  LARGEST DONOR IN THIS INDUSTRY: {match.lobbyistOrg}
+                </div>
                 {(match.lobbyingClients ?? []).length > 0 && (
                   <div>
                     <div>REGISTERED LOBBYING, BY CLIENT (see the total below):</div>

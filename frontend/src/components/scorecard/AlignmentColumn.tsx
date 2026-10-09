@@ -18,6 +18,9 @@ const OTHER_PARTY: Record<string, string> = { R: "Democrats", D: "Republicans" }
 const BREAKS_SHOWN = 6;
 const FLANK_SHOWN = 3;
 
+const TOOLTIP =
+  "Whether the member votes the way their seat elected them to. 70% is how often they break with their party on this Congress's party-line votes, against how often members of their own party in seats that lean the same way do: matching that rate scores 100, and breaking more often, or (at half the cost) less often, lowers it. 30% is where their overall voting record sits (Voteview's position for this Congress) against what a same-party member of a similar seat holds, left out until this Congress's positions pass our checks. For a senator, approval among the state's other-party voters and independents then moves the score up or down by as much as the position part can.";
+
 /** A break as the list shows it: the breakdown's (BreakVote) or, before the
  *  member's whole-Congress record is measured, a stored vote. */
 type ListedBreak = Omit<BreakVote, "rollCall"> & {
@@ -172,6 +175,10 @@ export default function AlignmentColumn({
   onMore: () => void;
 }) {
   const facts = dimension?.facts as AlignmentFacts | undefined;
+  // Early in a Congress, before its positions pass our checks, the position
+  // part is left out while breaks are still sorted on the last positions;
+  // with no positions at all, it is left out and every break counts.
+  const positionScored = !!dimension?.components?.some((c) => c.label === "Position congruence");
   // The breaks the score counts, served with it. Until the member's
   // whole-Congress record is measured, the stored votes against the party.
   const counted = facts?.breakVotes;
@@ -197,6 +204,7 @@ export default function AlignmentColumn({
     <ScoreColumn
       title="Constituent Alignment"
       shareId="constituent-alignment"
+      tooltip={TOOLTIP}
       weight={weight}
       score={score}
       more={{ label: "Every recorded vote", onClick: onMore }}
@@ -231,9 +239,10 @@ export default function AlignmentColumn({
           </>
         )}
         <p className="text-xs leading-relaxed text-ink-min">
-          A break: most of the member&apos;s party voted one way, most of the other party the other
-          way, and the member sided with the other party. Housekeeping votes (quorum calls,
-          adjourning, motions to table or to recommit) don&apos;t count.
+          A break: at least 65% of one party voted one way, at most 35% of the other did, and the
+          member sided with the other party. Housekeeping votes (quorum calls, adjourning, approving
+          the Journal, the House&apos;s previous question, motions to table or to recommit, the
+          House&apos;s motion to commit) don&apos;t count.
           {counted && " Each bill or nomination counts once, however many times it came to a vote."}
         </p>
       </Block>
@@ -245,7 +254,8 @@ export default function AlignmentColumn({
           <p className="text-xs leading-relaxed text-ink-min">
             On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further from
             the {OTHER_PARTY[facts.party] ?? "other party"} than the party does. How far toward the
-            flank the member sits is scored as position congruence below.
+            flank the member sits is measured by position congruence
+            {positionScored ? ", scored below." : ", which isn't scored for this Congress yet."}
           </p>
           <ul className="flex flex-col gap-2.5">
             {flank.slice(0, FLANK_SHOWN).map((v, i) => (
@@ -258,7 +268,10 @@ export default function AlignmentColumn({
         </Block>
       )}
 
-      <ConstituentApproval approval={approval} />
+      <ConstituentApproval
+        approval={approval}
+        scored={facts?.approval?.groups.map((g) => g.group) ?? []}
+      />
 
       {dimension && <ComponentBars components={dimension.components} />}
     </ScoreColumn>

@@ -102,9 +102,17 @@ def words_to_int(text: str) -> int | None:
 _PAGE_REF_RE = re.compile(r"^\s*Pages?\s+[SHDE]?\d[\w-]*(?:,\s*[SHDE]?\d[\w-]*)*\s*$")
 _PAGE_MARK_RE = re.compile(r"^\s*\[\[Page [A-Z]?\d+\]\]\s*$")
 _HEADING_START_RE = re.compile(r"^[A-Z][^:]{1,200}?:(?:\s|$)")
+# A measure's name as a heading, over up to five lines: it ends with the
+# chamber's own sentence about it.
+_HEADING_LINES = 5
+_LONG_HEADING_RE = re.compile(r"^[A-Z][^:]{1,500}?:\s+(?:The House|Senate|By \d)")
+# A line that ends a sentence, not an abbreviation ("... September 16th.",
+# not a name broken after "S." or "U.S.").
+_SENTENCE_END_RE = re.compile(r"(?:\d|[a-z]{2,}|\)|'')\.\s*$")
 # "Routine Proceedings, pages S4885-S4958" closes the line before the
-# first heading the way a page reference line closes an entry.
-_TRAILING_PAGES_RE = re.compile(r"\bpages?\s+[SHDE]\d[\w-]*\s*$", re.IGNORECASE)
+# first heading the way a page reference line closes an entry, and so
+# does a list of them ("pages S95-S119, S121-S122", 2026-01-08).
+_TRAILING_PAGES_RE = re.compile(r"\bpages?\s+[SHDE]\d[\w-]*(?:,\s*[SHDE]?\d[\w-]*)*\s*$", re.IGNORECASE)
 # A line ending one of these has finished its sentence or clause, so the
 # next line may open a new entry or item ("... as follows:", "...; and").
 _FINISHED_ENDINGS = (".", ";", ":", "; and", "; or")
@@ -132,7 +140,7 @@ def _entries(lines: list[str]) -> list[dict]:
     block: dict | None = None  # the entry or item being read
     boundary = True            # the previous line ended a block
     prev = ""
-    for raw in lines:
+    for i, raw in enumerate(lines):
         if _PAGE_MARK_RE.match(raw) or not raw.strip():
             continue
         if _PAGE_REF_RE.match(raw):
@@ -141,10 +149,32 @@ def _entries(lines: list[str]) -> list[dict]:
             boundary = True
             prev = raw
             continue
-        at_col0 = not raw.startswith(" ")
+        # One leading space is a typesetting slip, not an indent: the House's
+        # " Public Bills and Resolutions Introduced: ..." (2026-02-25,
+        # 2026-03-24) was otherwise read as nothing at all.
+        at_col0 = not raw.startswith("  ")
         indented_item = raw.startswith("  ") and not raw.startswith("   ")
-        finished = prev.rstrip().endswith(_FINISHED_ENDINGS)
-        if at_col0 and (boundary or (finished and _HEADING_START_RE.match(raw))):
+        in_item = block is not None and "items" not in block
+        # Inside an item only a full stop finishes it: an item's name can
+        # break after "; and" ("Commerce, Justice, Science; Energy and Water
+        # Development; and" / "Interior and Environment Appropriations Act:
+        # ... Senate passed H.R. 6938", 2026-01-15).
+        finished = prev.rstrip().endswith("." if in_item else _FINISHED_ENDINGS)
+        heading_shaped = _HEADING_START_RE.match(raw.strip())
+        if not heading_shaped and in_item and _SENTENCE_END_RE.search(prev):
+            # After an item a heading can run over several lines before its
+            # colon ("Guaranteeing Reliability through the Interconnection
+            # of Dispatchable" / "Power Act: The House passed H.R. 1047",
+            # 2025-09-18; a disapproval resolution's quoted rule title takes
+            # four lines, 2026-09-16).
+            ahead_lines: list[str] = []
+            for ln in lines[i:i + _HEADING_LINES]:
+                if ln.startswith("  ") or _PAGE_REF_RE.match(ln):
+                    break
+                ahead_lines.append(ln.strip())
+            ahead = " ".join(ahead_lines)
+            heading_shaped = _LONG_HEADING_RE.match(ahead)
+        if at_col0 and (boundary or (finished and heading_shaped)):
             block = {"text": raw.strip(), "pages": "", "items": []}
             entries.append(block)
         elif indented_item and entries:
@@ -183,9 +213,16 @@ def _split_name(text: str) -> tuple[str, str]:
 
 # ── Chamber action ────────────────────────────────────────────────
 
-_TIME = r"(\d{1,2}(?::\d{2})?\s[ap]\.m\.|12 noon|noon|midnight)"
+# Seconds too: the Senate's pro forma entries give them ("10:30:06 a.m.").
+_TIME = r"(\d{1,2}(?::\d{2}){0,2}\s[ap]\.m\.|12 noon|noon|midnight)"
+# A pro forma day is one sentence under Chamber Action, with no
+# "Adjournment:" heading: "The Senate met at 10:30:06 a.m. in pro forma
+# session, and adjourned at 10:33:29 a.m., until 11 a.m., on Monday, ...".
+_PRO_FORMA_RE = re.compile(r"\bThe (?:Senate|House) met at\b.*?\bpro forma session\b.*?(?:\d{4}\.|$)")
 _CONVENED_RE = re.compile(r"\b(?:convened|met)\b.*?\bat " + _TIME)
 _ADJOURNED_RE = re.compile(r"\badjourned\b.*?\bat " + _TIME)
+_RECESSED_RE = re.compile(r"\brecessed\b.*?\bat " + _TIME)
+_DAY_RECESS_RE = re.compile(r"^(?:The )?(?:Senate|House) convened at\b")
 _NOT_IN_SESSION_RE = re.compile(r"\bwas not in session\b")
 _INTRODUCED_RE = re.compile(
     r"^(?P<bills>[\w-]+(?: hundred(?: and)?(?: [\w-]+)?)?) (?:public )?bills?\b"
@@ -201,29 +238,124 @@ _INTRODUCED_HEADINGS = {
     "measures introduced", "public bills and resolutions introduced",
     "public bill and resolutions introduced", "public bills and resolution introduced",
 }
-_HOUSE_PASSED_RE = re.compile(r"\bThe House (?:passed|agreed to|concurred|cleared)\b")
-_HOUSE_FAILED_RE = re.compile(r"\b(?:failed of passage|The House (?:failed|rejected|did not agree))\b")
+# The Senate's "House Messages": concurring in the House's amendment to a
+# Senate measure (S. 1071, 2025-12-17) is the vote that sends it to the
+# President, and is a passage like any other.
+_HOUSE_MESSAGES_HEADINGS = {"house messages", "house message"}
+# Under a measure in a list, the Senate prints what became of each
+# amendment under a column-0 sub-heading of its own ("Adopted:",
+# "Rejected:" ...). The list goes on under it: the five resolutions after
+# H.R. 5371's amendments on 2025-11-10 were read as part of "Withdrawn:".
+_AMENDMENT_HEADINGS = {"adopted", "rejected", "withdrawn", "pending", "agreed to", "not agreed to"}
+_LIST_HEADINGS = (
+    _PASSED_HEADINGS | _FAILED_HEADINGS | _REPORTED_HEADINGS | _CONFIRMED_HEADINGS | _HOUSE_MESSAGES_HEADINGS
+)
+# The House's own sentence for each way a measure passes: passed; agreed
+# to a resolution; concurred in, or agreed to, the Senate's amendment;
+# discharged a measure, or took it from the Speaker's table, and passed
+# it. "The House agreed to the ... motion to table the resolution (H. Res.
+# 539)" disposes of a resolution without passing it, and was read as
+# passing it.
+_HOUSE_PASSED_RE = re.compile(
+    r"\bThe House (?:passed|cleared|concurred in"
+    r"|agreed to (?:the motion to concur in|the (?:Senate|House) amendments? to"
+    r"|(?:discharge from committee|take from the Speaker's table) and (?:pass|agree to)|(?=[HS]\.)))"
+)
+_HOUSE_FAILED_RE = re.compile(
+    r"\b(?:failed of passage|The House (?:failed to (?:pass|agree to)|rejected|did not agree to) (?=[HS]\.))"
+)
+# A list item that records a measure passing: "Senate passed S. 3257",
+# "Senate agreed to S. Res. 903", "... was discharged ... and the bill was
+# then passed", "Senate concurred in the amendment of the House to S.
+# 1071". Not "Senate agreed to the motion to close further debate on ...",
+# which names the measure without passing it.
+_PASSAGE_RE = re.compile(
+    r"\b(?:Senate|The House) (?:passed|agreed to (?!the motion)|concurred in)"
+    r"|\bwas then (?:passed|agreed to)\b"
+)
+# "H. Res. 566, amended, the rule providing for consideration of ... was
+# agreed to by a yea-and-nay vote ..." — the House adopting a rule, in the
+# Digest's passive form; "was agreed to yesterday" reports an earlier day.
+_RULE_RE = re.compile(
+    r"^(H\.\s?Res\.\s?\d+),(?: as)?(?: amended,)? the rule\b.*?\bwas (not )?agreed to"
+    r"(?! (?:yesterday|earlier|on |(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b))"
+)
+# A suspension's measures are listed under the motion, the first of them
+# often on the heading line itself ("... pass the following measure:
+# Epstein Files Transparency Act: H.R. 4405, ...", 2025-11-18).
+_FOLLOWING_RE = re.compile(r"\bthe following (?:measures?|bills?|resolutions?)\s*[:.]\s*(.*)$")
 
 
-def _events_from_items(kind: str, items: list[dict], merge_details: bool) -> list[dict]:
+def _events_from_items(kind: str, items: list[dict], merge_details: bool, needs_statement: bool = False) -> list[dict]:
     """One event per sub-item. With merge_details, an item naming no
     measure of its own ("Doe (for Roe/Poe) Amendment No. 6834, in the
     nature of a substitute.") is the previous item's detail and is
-    appended to it rather than standing as an event. An item that ended
-    without a page reference continues into the next one ("3 Coast Guard
-    nominations in the rank of admiral." / "A routine list in the Coast
-    Guard." is one entry with one page reference)."""
+    appended to it rather than standing as an event. With needs_statement,
+    an item stands as an event only when it says the measure passed
+    (_PASSAGE_RE): a cloture vote or an amendment listed under a measure
+    can name a bill too.
+
+    A confirmation item ending with a colon ("During consideration of this
+    nomination today, Senate also took the following action:") introduces
+    the next item, and both are the previous nomination's detail."""
     events: list[dict] = []
+    lead_in = False
     for it in items:
         name, text = _split_name(it["text"])
         bill_id = first_bill_id(text) or first_bill_id(name)
-        continues = events and not events[-1]["pages"] and kind == "confirmed"
-        if (merge_details and bill_id is None and events) or continues:
+        if kind == "confirmed":
+            detail = bool(events) and (lead_in or it["text"].rstrip().endswith(":"))
+            lead_in = it["text"].rstrip().endswith(":")
+            if detail:
+                events[-1]["text"] += " " + it["text"]
+                continue
+        elif needs_statement and not _PASSAGE_RE.search(it["text"]):
+            if merge_details and events:
+                events[-1]["text"] += " " + it["text"]
+            continue
+        elif merge_details and bill_id is None and events:
             events[-1]["text"] += " " + it["text"]
             events[-1]["pages"] = events[-1]["pages"] or it["pages"]
             continue
         events.append({"kind": kind, "name": name, "text": text, "bill_id": bill_id, "pages": it["pages"]})
     return events
+
+
+def _last_sentence(heading: str) -> str:
+    """A measure's name from a heading that a typesetting slip ran on from
+    the paragraph before ("... was agreed to yesterday, March 6th.
+    Censuring Representative Al Green of Texas", 2025-03-06)."""
+    return re.split(r"(?<=[a-z]{2}\.)\s+", heading)[-1]
+
+
+def _flatten(entries: list[dict]) -> list[dict]:
+    """The entries as the Digest means them. A list heading ("Measures
+    Passed:", "Suspensions:") keeps its items, and the items under an
+    amendment sub-heading after it go back to it (_AMENDMENT_HEADINGS).
+    Any other entry's indented paragraphs are entries of their own: the
+    House indents a measure's paragraph after a page reference ("  One Big
+    Beautiful Bill Act: The House agreed to the motion to concur in the
+    Senate amendment to H.R. 1 ...", 2025-07-02), and read as items of the
+    entry before them they were dropped."""
+    grouped: list[dict] = []
+    parent: dict | None = None
+    for e in entries:
+        heading, rest = _split_heading(e["text"])
+        if heading.lower() in _AMENDMENT_HEADINGS and not rest and parent is not None:
+            parent["items"] += [dict(it, under_heading=True) for it in e["items"]]
+            continue
+        parent = e
+        grouped.append(e)
+    flat: list[dict] = []
+    for e in grouped:
+        key = _split_heading(e["text"])[0].lower()
+        if key in _LIST_HEADINGS or key.startswith("suspension"):
+            flat.append(e)
+            continue
+        flat.append({**e, "items": []})
+        flat += [{"text": it["text"], "pages": it["pages"], "items": []}
+                 for it in e["items"] if not it.get("under_heading")]
+    return flat
 
 
 def parse_chamber_action(text: str) -> dict:
@@ -243,11 +375,18 @@ def parse_chamber_action(text: str) -> dict:
         out["adjournment_text"] = joined
         return out
 
-    for entry in _entries(body):
+    for entry in _flatten(_entries(body)):
         heading, rest = _split_heading(entry["text"])
         key = heading.lower()
         if key in _PASSED_HEADINGS:
-            out["events"] += _events_from_items("passed", entry["items"], merge_details=True)
+            out["events"] += _events_from_items("passed", entry["items"], merge_details=True, needs_statement=True)
+        elif key in _HOUSE_MESSAGES_HEADINGS:
+            # Only a concurrence passes anything; the other messages are
+            # requests for a conference, insistence, and the like.
+            out["events"] += [
+                e for e in _events_from_items("passed", entry["items"], merge_details=True, needs_statement=True)
+                if "concurred in" in e["text"]
+            ]
         elif key in _FAILED_HEADINGS:
             if rest:  # "Measures Failed: Name: By 49 yeas ..." on the heading line
                 name, t = _split_name(rest)
@@ -265,23 +404,61 @@ def parse_chamber_action(text: str) -> dict:
                 out["bills_introduced"] = words_to_int(m.group("bills"))
                 if m.group("res"):
                     out["resolutions_introduced"] = words_to_int(m.group("res"))
-        elif key == "adjournment":
+        elif key == "adjournment" or (key == "recess" and _DAY_RECESS_RE.search(rest)):
+            # The Senate ends some days in recess rather than adjournment
+            # ("Recess: Senate convened at 10 a.m. and recessed ... at 4:59
+            # p.m., until 8:30 a.m. on Friday", 2026-01-15, 4 of 69 Senate
+            # days sampled). The House's mid-day "Recess: The House
+            # recessed at 11:50 a.m. and reconvened ..." is not the day's end.
             out["adjournment_text"] = rest
             if m := _CONVENED_RE.search(rest):
                 out["convened_at"] = m.group(1)
-            if m := _ADJOURNED_RE.search(rest):
+            if m := (_ADJOURNED_RE.search(rest) or _RECESSED_RE.search(rest)):
                 out["adjourned_at"] = m.group(1)
-        elif key == "suspensions":
+        elif key.startswith("suspension"):
             # "The House agreed to suspend the rules and pass the following
-            # measures:" — each item is one of them.
-            if "pass" in rest:
-                out["events"] += _events_from_items("passed", entry["items"], merge_details=True)
+            # measures:" — each item is one of them, the first often on the
+            # heading line. "Suspension--Proceedings Resumed: The House
+            # failed to agree to suspend the rules and pass the following
+            # measure." lists one that failed; so does "agreed to failed to
+            # suspend" (sic, 2025-12-01: H.J. Res. 1, 212-206 on a 2/3
+            # vote, had been recorded as passed). "Proceedings Postponed"
+            # passes nothing yet.
+            kind = "failed" if "failed" in rest else ("passed" if re.search(r"\b(?:pass|agree to)\b", rest) else None)
+            if kind:
+                items = entry["items"]
+                # Only a measure: "... the following measures. Consideration
+                # began Monday, May 5th." is a note, not one of them.
+                if (m := _FOLLOWING_RE.search(rest)) and first_bill_id(m.group(1)):
+                    items = [{"text": m.group(1), "pages": entry["pages"]}] + items
+                out["events"] += _events_from_items(kind, items, merge_details=True)
+        elif (m := _RULE_RE.match(entry["text"])):
+            out["events"].append({"kind": "failed" if m.group(2) else "passed", "name": "", "text": entry["text"],
+                                  "bill_id": first_bill_id(m.group(1)), "pages": entry["pages"]})
         elif heading and _HOUSE_FAILED_RE.search(rest):
-            out["events"].append({"kind": "failed", "name": heading, "text": rest,
+            out["events"].append({"kind": "failed", "name": _last_sentence(heading), "text": rest,
                                   "bill_id": first_bill_id(rest), "pages": entry["pages"]})
         elif heading and _HOUSE_PASSED_RE.search(rest) and first_bill_id(rest):
-            out["events"].append({"kind": "passed", "name": heading, "text": rest,
+            out["events"].append({"kind": "passed", "name": _last_sentence(heading), "text": rest,
                                   "bill_id": first_bill_id(rest), "pages": entry["pages"]})
+    if not out["adjournment_text"] and (m := _PRO_FORMA_RE.search(joined)):
+        # Read as a session with no times, the day said "met and took no
+        # record votes" (2026-10-01, 10-05 and 10-06).
+        out["adjournment_text"] = m.group(0).strip()
+        if c := _CONVENED_RE.search(out["adjournment_text"]):
+            out["convened_at"] = c.group(1)
+        if a := _ADJOURNED_RE.search(out["adjournment_text"]):
+            out["adjourned_at"] = a.group(1)
+    # The House repeats a rule's paragraph under each measure it brought up
+    # (H. Res. 953 three times on 2025-12-17): the same entry is one event.
+    seen: set[tuple] = set()
+    unique = []
+    for e in out["events"]:
+        key = (e["kind"], e["bill_id"], e["text"]) if e["kind"] != "committee" else (id(e),)
+        if key not in seen:
+            seen.add(key)
+            unique.append(e)
+    out["events"] = unique
     return out
 
 
@@ -344,16 +521,20 @@ def parse_next_meetings(text: str) -> dict[str, dict]:
 def granule_role(title: str) -> tuple[str, str] | None:
     """What a DAILYDIGEST granule holds, from its GovInfo title:
     ("senate"|"house", "floor"|"committees"), ("both", "next"), or None
-    (tomorrow's committee schedule and end matter are not read)."""
+    (tomorrow's committee schedule and end matter are not read). A day's
+    first granule carries the Highlights with its chamber's floor section
+    ("Daily Digest/Highlights + Senate"), so the title's last segment is
+    read part by part."""
     t = title.lower()
     if "next meeting" in t:
         return ("both", "next")
-    if t.endswith("/senate"):
+    parts = {p.strip() for p in t.rsplit("/", 1)[-1].split("+")}
+    if "senate" in parts:
         return ("senate", "floor")
-    if t.endswith("/house of representatives"):
+    if "house of representatives" in parts:
         return ("house", "floor")
-    if t.endswith("/senate committee meetings"):
+    if "senate committee meetings" in parts:
         return ("senate", "committees")
-    if t.endswith("/house committee meetings"):
+    if "house committee meetings" in parts:
         return ("house", "committees")
     return None

@@ -33,6 +33,7 @@ def vec_env(tmp_path, monkeypatch):
 
     fake_model = MagicMock()
     fake_model.encode.side_effect = fake_encode
+    fake_model.tokenizer.num_special_tokens_to_add.return_value = 0
     with patch.object(vector_store, "get_similarity_model", return_value=fake_model):
         yield fake_encode
     conn, vector_store._vec_conn = vector_store._vec_conn, None
@@ -999,6 +1000,6 @@ def test_each_tables_width_is_its_models_own():
     # A vec0 table's width is fixed at creation from these constants: one
     # left behind by a model change recreates the table at the wrong width,
     # and every insert into it fails.
-    assert vector_store.get_similarity_model().get_sentence_embedding_dimension() == vector_store.SIMILARITY_DIMENSIONS
-    assert vector_store.get_embedding_model().get_sentence_embedding_dimension() == vector_store.EMBEDDING_DIMENSIONS
+    assert vector_store.get_similarity_model().get_embedding_dimension() == vector_store.SIMILARITY_DIMENSIONS
+    assert vector_store.get_embedding_model().get_embedding_dimension() == vector_store.EMBEDDING_DIMENSIONS
 

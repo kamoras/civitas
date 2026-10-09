@@ -14,7 +14,7 @@ function cand(over: Partial<BallotCandidate> = {}): BallotCandidate {
     candidateStatus: "C",
     contributions: 100_000,
     cashOnHand: 10_000,
-    lastFinancialsSync: null,
+    lastFinancialsSync: "2026-10-01T00:00:00Z",
     incumbentRecord: null,
     ...over,
   } as BallotCandidate;
@@ -67,6 +67,31 @@ describe("RaceMoneyBars", () => {
     expect(screen.getAllByText("no funds reported")).toHaveLength(2);
   });
 
+  it("never shows $0 for a candidate with no figure yet", () => {
+    // A null figure is "not synced" or "no report for this election",
+    // never $0 — the label used to read hasRaisedFunds and format null as $0.
+    render(
+      <RaceMoneyBars
+        candidates={[
+          cand({ id: "a", contributions: 50_000 }),
+          cand({ id: "b", contributions: null, cashOnHand: null, lastFinancialsSync: null }),
+          cand({ id: "c", contributions: null, cashOnHand: null }),
+        ]}
+      />
+    );
+    expect(screen.queryByText("$0")).not.toBeInTheDocument();
+    expect(screen.getByText("awaiting FEC sync")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "awaiting FEC sync" })).toBeInTheDocument();
+    expect(screen.getAllByText("no funds reported")).toHaveLength(1);
+  });
+
+  it("shows reported money even when the FEC's roster flag says none", () => {
+    render(
+      <RaceMoneyBars candidates={[cand({ contributions: 871_029, hasRaisedFunds: false })]} />
+    );
+    expect(screen.getByText("$871K")).toBeInTheDocument();
+  });
+
   it("marks the incumbent", () => {
     render(<RaceMoneyBars candidates={[cand({ incumbentChallenge: "I" })]} />);
     expect(screen.getByText("INCUMBENT")).toBeInTheDocument();
@@ -86,13 +111,14 @@ describe("RaceMoneyBars", () => {
     expect(screen.queryByText(/SITTING MEMBER|INCUMBENT/)).not.toBeInTheDocument();
   });
 
-  it("links an incumbent's representation score", () => {
+  it("links an incumbent's representation score, shown as the scorecard shows it", () => {
+    // 42.5 is 43 on the scorecard; one decimal here read 42.5.
     render(
-      <RaceMoneyBars candidates={[cand({ incumbentRecord: { id: "brian-jack", score: 42.42 } })]} />
+      <RaceMoneyBars candidates={[cand({ incumbentRecord: { id: "member-a", score: 42.5 } })]} />
     );
     const link = screen.getByRole("link");
-    expect(link).toHaveAttribute("href", "/politicians/brian-jack");
-    expect(screen.getByText("42.4")).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "/politicians/member-a");
+    expect(screen.getByText("43")).toBeInTheDocument();
   });
 
   it("badges unconfirmed entries only when the race asks for it", () => {

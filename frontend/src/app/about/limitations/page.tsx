@@ -61,18 +61,35 @@ export default async function LimitationsChapter() {
       </Summary>
 
       <Section id="money" title="Money">
+        <Limitation title="Small-donor money is undercounted">
+          <P>
+            The small-donor share is the money the FEC reports as unitemized: gifts from donors who
+            gave $200 or less in the cycle. Conduits such as ActBlue and WinRed itemize every gift
+            they pass on, whatever its size, so small gifts made through them count as itemized and
+            are left out. A campaign that raises small money that way shows a smaller small-donor
+            share than it has, and one that itemizes every gift reports no unitemized money at all:
+            its share is marked not measured and left out of its score rather than counted as 0%.
+            The FEC&apos;s contributions-by-size tables would count them, but they total more than
+            the campaigns&apos; own reported individual contributions (in one Senate race checked,
+            $72.7 million against $62.0 million) and are empty for some candidates, so they are not
+            used.
+          </P>
+        </Limitation>
         <Limitation title="Funding windows differ by chamber">
           <P>
             Funding covers a member&apos;s most recent completed election: six years of fundraising
-            for a senator, two for a representative. The PAC share and top-donor concentration are
-            each scored against the member&apos;s own chamber, but industry concentration is not,
-            and no adjustment makes six years and two years the same span. Within a chamber members
-            are measured over the same length of time, except a member with no completed election
-            yet (appointed, or seated by a special election), who is measured on the campaign still
-            in progress; across chambers the scores are best read side by side, not ranked, which is
-            why the compare page names no winner when a senator and a representative are compared.
-            The window itself is deliberate: a strict two-year window would leave most senators with
-            little or no fundraising to measure. FEC filings also lag donations by weeks or months.
+            for a senator, two for a representative. The PAC share, top-donor concentration and
+            industry concentration (within the member&apos;s party) are each scored against the
+            member&apos;s own chamber, but no adjustment makes six years and two years the same
+            span. Within a chamber members are measured over the same length of time, except a
+            member with no completed election yet (appointed, or seated by a special election), who
+            is measured on the campaign still in progress; across chambers the scores are best read
+            side by side, not ranked, which is why the compare page names no winner when a senator
+            and a representative are compared. Where FEC&apos;s candidate totals leave out the race
+            that won a House seat, that election is read from the campaign committee&apos;s own
+            totals for the cycle. The window itself is deliberate: a strict two-year window would
+            leave most senators with little or no fundraising to measure. FEC filings also lag
+            donations by weeks or months.
           </P>
         </Limitation>
       </Section>
@@ -92,7 +109,7 @@ export default async function LimitationsChapter() {
               mean building multilevel regression and poststratification over raw survey data
               in-house: a statistics pipeline, and a black box next to every other formula on these
               pages. We chose not to trade auditability for a partial fix. Issue-level opinion data
-              remains the named next step for the score itself. For the position half of the score,
+              remains the named next step for the score itself. For the position part of the score,
               voters&apos; own left-right self-placement by state was tested as the expectation and
               predicted senators&apos; positions no better than partisan lean.
             </P>
@@ -118,10 +135,13 @@ export default async function LimitationsChapter() {
             elections from 1990 to 2024, members who broke more than their seat&apos;s norm did
             somewhat better, and some heavy breakers keep winning by appealing to both sides. A
             roll-call record can&apos;t tell them apart from members whose breaks cost them their
-            base. That takes approval split by party, so each profile now shows it beside the score:
-            approval of the member among the Democrats, Republicans and independents they represent,
-            from the Cooperative Election Study. It is shown, not scored, until a second survey wave
-            shows it is stable.
+            base. That takes approval split by party: approval of the member among the Democrats,
+            Republicans and independents they represent, from the Cooperative Election Study, shown
+            on each profile. For senators the gap is closed: since v6.29 their approval among the
+            state&apos;s other-party voters and independents is part of Constituent Alignment, after
+            the 2022 and 2024 surveys gave the same senators closely agreeing figures. For House
+            members it stays open: it is shown, not scored, because a district&apos;s figure barely
+            agrees from one survey to the next.
           </P>
           <More label="How sharp the approval figures can be">
             <P>
@@ -130,20 +150,24 @@ export default async function LimitationsChapter() {
               who has since moved to another seat or district shows none. Small groups are pulled
               toward what a typical member of the same party gets from that group, by an amount
               estimated from how much members actually differ. The survey&apos;s size sets how sharp
-              the House figures can be: a district has about a hundred respondents, so most House
-              figures come mostly from what similar members get. Only Democrats&apos; ratings rest
-              mostly on the district&apos;s own respondents, for about three in five Democratic
-              members and two in five Republican ones, and the profile marks every figure that
-              doesn&apos;t. Senators&apos; figures mostly rest on their own state&apos;s respondents
-              (a median of 672).
+              the House figures can be: a district has about a hundred respondents with an opinion
+              (a median of 96), so most House figures come mostly from what similar members get.
+              Democrats&apos; ratings are nearly the only ones that rest mostly on the
+              district&apos;s own respondents, for about three in five Democratic members and two in
+              five Republican ones (another group&apos;s does for ten members in all), and the
+              profile marks every figure that doesn&apos;t. Senators&apos; figures mostly rest on
+              their own state&apos;s respondents (a median of 672).
             </P>
           </More>
         </Limitation>
         <Limitation title="Some bills are labelled by content">
           <P>
-            Where a bill had no roll call, its party lean comes from comparing it with party
-            platforms. Bipartisan or cross-cutting bills can be misread. This affects only the
-            policy-area breakdown of partisan depth, never whether a member broke with their party.
+            Where no roll call recorded how each party voted, a bill&apos;s lean comes from
+            comparing it with each party&apos;s positions in that area: for partisan depth (the lean
+            bar and its policy-area breakdown), and for the party badge on a sponsored bill with no
+            tracked roll call, or only a housekeeping one (a motion to table or recommit, say).
+            Bipartisan or cross-cutting bills can be misread. It never decides whether a member
+            broke with their party.
           </P>
         </Limitation>
       </Section>
@@ -151,17 +175,21 @@ export default async function LimitationsChapter() {
       <Section id="presidents" title="Presidents">
         <Limitation title="Historians’ judgment carries its biases in">
           <P>
-            Historical Legacy (35%) comes from C-SPAN&apos;s historians survey. Historians as a
+            Historical Legacy (50%) comes from C-SPAN&apos;s historians survey. Historians as a
             field tend to favor presidents who expanded federal power, and hold off rating recent
             presidents, so this ranking inherits those tendencies at roughly that weight.
           </P>
         </Limitation>
         <Limitation title="The economy isn’t only the president’s doing">
           <P>
-            Since 1946, 60% of the variation in a president&apos;s term growth is shared with 13
-            other advanced economies. Effectiveness mostly measures the economy a president presided
-            over. Agency Alignment has no machine-readable record before Clinton, so earlier
-            presidents are scored without it.
+            Effectiveness compares postwar growth with 13 peer economies, which takes out shocks the
+            whole rich world shared, and sets aside the peers&apos; catching up with US incomes. It
+            can&apos;t take out what hit the US alone without a president causing it. Jobs,
+            unemployment and inflation aren&apos;t compared with peers: jobs are counted in
+            millions, which has no counterpart abroad, and compared with peers, unemployment
+            can&apos;t be measured consistently before the 1980s and inflation took on a strong
+            trend with era. Unemployment and inflation are instead judged against where the term
+            started. Presidents before 1947 are compared on growth and, from 1939, jobs.
           </P>
         </Limitation>
       </Section>
@@ -229,7 +257,14 @@ export default async function LimitationsChapter() {
         <Limitation title="Classification lacks world knowledge">
           <P>
             Embedding-based classification is fast and consistent, but it knows only what the text
-            says. Shell companies and deliberately obscure names can land in the wrong industry.
+            says. Shell companies and deliberately obscure names can land in the wrong industry. For
+            PACs it is the last resort: a union&apos;s PAC, and a company&apos;s PAC the SEC lists,
+            take their industry from those records, and a PAC with no sponsoring organization counts
+            as political money. That last rule is right for about seven in ten of them; the rest are
+            law and accounting partnerships&apos; and physician groups&apos; PACs, whose money then
+            counts toward no industry. Trade associations and private companies have no such record,
+            and their names are still read; measured against the records, the name reading agreed
+            with them on about six PACs in ten.
           </P>
         </Limitation>
       </Section>

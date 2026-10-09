@@ -211,6 +211,10 @@ def get_related_policies(
 
 # ── Donor ↔ Vote connection detection ────────────────────────────
 
+# A bill's title in a connection's description is cut to about this many
+# characters; the bill itself is linked beside it.
+_BILL_NAME_CHARS = 80
+
 
 def detect_donor_vote_connections(
     donors: list[dict],
@@ -334,7 +338,12 @@ def detect_donor_vote_connections(
             best_sim = max(best_sim, sim)
 
             vote_cast = vote["vote"]
-            bill_name = vote.get("billName", bid)[:80]
+            bill_name = vote.get("billName") or bid
+            if len(bill_name) > _BILL_NAME_CHARS:
+                # At a word, marked as cut: a bare slice left "... under
+                # chapter 8 of ti" in five of the six stored descriptions
+                # (2026-10).
+                bill_name = bill_name[:_BILL_NAME_CHARS].rsplit(" ", 1)[0].rstrip(",;:") + "…"
             is_amendment = "amdt" in bid.lower() or "amendment" in bill_name.lower()
 
             yeas = vote.get("totalYeas") or vote.get("yeas", 0)

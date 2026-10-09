@@ -27,6 +27,7 @@ const counts = {
   failed: 0,
   reported: 0,
   confirmed: 0,
+  confirmedLists: 0,
   committeeMeetings: 0,
 };
 

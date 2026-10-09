@@ -13,8 +13,11 @@ referral such as 2026's Issue 4). Those are stored verbatim:
 
 - title: the Popular Name, or the Ballot Title where the notice has no
   Popular Name.
-- official_summary: the Ballot Title under a Popular Name, otherwise the
-  Ballot Question.
+- official_title: the Ballot Title, under the card's "Official ballot
+  title" heading. (The Popular Name was stored there, and the Ballot
+  Title under "Official summary", for every amendment.)
+- official_summary: the Ballot Question, where the notice has one (a bond
+  referral); an amendment's notice has none.
 
 Arkansas publishes no YES/NO explanation (Issue 4's "FOR Issuance ..."
 / "AGAINST Issuance ..." lines are the ballot's choice labels, not an
@@ -56,7 +59,7 @@ Verified live 2026-09-28: Issues 1-4 on the November 3, 2026 ballot,
 
 import logging
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from lxml import html as lxml_html
@@ -145,7 +148,13 @@ def issue_links(page_html: str, base_url: str, year: int) -> dict[str, str] | No
             m = _LINK_TEXT_RE.match(clean_text(a.text_content()) or "")
             href = a.get("href") or ""
             if m and ".pdf" in href.lower():
-                links.setdefault(m.group(1), urljoin(base_url, href))
+                # The page links its own files over http://; the same
+                # files are served over https://, which is what a reader
+                # following the card's link should get.
+                url = urljoin(base_url, href)
+                if urlparse(url).netloc == urlparse(base_url).netloc:
+                    url = url.replace("http://", "https://", 1)
+                links.setdefault(m.group(1), url)
             elif "issue" in (a.text_content() or "").lower():
                 # A measure link in a shape this reader doesn't know. An
                 # empty result here would read as "no measures" — refuse.
@@ -167,21 +176,24 @@ def parse_notice(text: str, number: str, year: int) -> dict | None:
     ballot_title = _BALLOT_TITLE_RE.search(text)
     if ballot_title is None:
         return None
+    official_title = clean_text(ballot_title.group(1))
     if popular is not None:
         title = clean_text(popular.group(1))
-        summary = clean_text(ballot_title.group(1))
+        summary = None
+        if not title or not official_title:
+            return None
     else:
         question = _QUESTION_RE.search(text)
-        title = clean_text(ballot_title.group(1))
+        title = official_title
         summary = clean_text(question.group(1)) if question else None
-    if not title or not summary:
-        return None
+        if not title or not summary:
+            return None
     return {
         "number": number,
         "title": title,
-        # The Popular Name (or Ballot Title) the General Assembly wrote,
-        # printed on the ballot.
-        "official_title": title,
+        # The Ballot Title the General Assembly wrote, as printed on the
+        # ballot — under its own label, never the Popular Name's.
+        "official_title": official_title,
         "origin": ORIGIN,
         "official_summary": summary,
         "fiscal_impact": None,

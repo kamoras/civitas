@@ -427,6 +427,31 @@ class TestIncumbentRecordLink:
         assert cand["incumbentRecord"]["id"] == "R-MCBRIDE"
         assert isinstance(cand["incumbentRecord"]["score"], float)
 
+    def test_a_member_the_fec_codes_a_challenger_is_linked_by_the_crosswalk(self, db_session):
+        """After a special election the FEC codes the sitting member's own
+        row a challenger (12 members on 2026-10-08); the crosswalk's id is
+        theirs, so they are the incumbent with their record."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H6GA06001", "2026-HOUSE-GA-6", "MCBRIDE, LUCY",
+                   incumbent_challenge="C", member_bioguide="M000001")
+        _representative(db_session, "R-MCBRIDE", "Lucy McBride", "GA", 6, bioguide_id="M000001")
+        db_session.commit()
+
+        cand = _body(elections.state_ballot("GA", db_session))["houseRaces"][0]["candidates"][0]
+        assert cand["incumbentRecord"]["id"] == "R-MCBRIDE"
+        assert cand["incumbentChallenge"] == "I"
+
+    def test_a_member_running_for_another_seat_is_linked_but_not_called_its_incumbent(self, db_session):
+        _race(db_session, "2026-HOUSE-GA-7", "GA", office="H", district=7)
+        _candidate(db_session, "H6GA07001", "2026-HOUSE-GA-7", "MCBRIDE, LUCY",
+                   incumbent_challenge="C", member_bioguide="M000001")
+        _representative(db_session, "R-MCBRIDE", "Lucy McBride", "GA", 6, bioguide_id="M000001")
+        db_session.commit()
+
+        cand = _body(elections.state_ballot("GA", db_session))["houseRaces"][0]["candidates"][0]
+        assert (cand["incumbentRecord"]["id"], cand["incumbentRecord"]["district"]) == ("R-MCBRIDE", 6)
+        assert cand["incumbentChallenge"] == "C"
+
     def test_house_incumbent_whose_own_surname_carries_a_generational_suffix_still_links(self, db_session):
         """Real Missouri data: FEC's "ONDREY JR, ROBERT FRANK" attaches
         the suffix to the surname segment itself. Before _incumbent_link
@@ -860,6 +885,26 @@ class TestStaleIncumbentFlag:
         assert by_id["BRENNAN"]["incumbentRecord"]["id"] == "SEN-BRENNAN"
         assert by_id["CHALLENGER"]["incumbentChallenge"] == "C"
 
+    def test_a_listed_nominee_keeps_the_flag_beside_someone_elses_stale_open(self, db_session):
+        """The 2026-10-08 House shape (nine districts): the state's list
+        confirms the sitting member, and a filer who lost the primary is
+        still FEC-coded "O" from an earlier open-seat run. The member is
+        running -- the ballot says so -- so the mix is not the retired
+        member's leftover record."""
+        _race(db_session, "2026-HOUSE-GA-2", "GA", office="H", district=2)
+        _candidate(db_session, "MEMBER", "2026-HOUSE-GA-2", "SEATHOLDER, PAT",
+                   incumbent_challenge="I", confirmed_general=True)
+        _candidate(db_session, "NOMINEE", "2026-HOUSE-GA-2", "NOMINEE, SAM", party="REP",
+                   incumbent_challenge="O", confirmed_general=True)
+        _candidate(db_session, "LOSER", "2026-HOUSE-GA-2", "LOSER, LEE", incumbent_challenge="O")
+        _representative(db_session, "REP-SEATHOLDER", "Pat Seatholder", "GA", 2)
+        db_session.commit()
+
+        data = _body(elections.state_ballot("GA", db_session))
+        by_id = {c["id"]: c for c in data["houseRaces"][0]["candidates"]}
+        assert by_id["MEMBER"]["incumbentChallenge"] == "I"
+        assert by_id["MEMBER"]["incumbentRecord"]["id"] == "REP-SEATHOLDER"
+
 
 class TestStateCoverage:
     """Front-and-center top-of-page coverage teaser (2026-08 review: news
@@ -1038,29 +1083,61 @@ class TestJudicialOmitShrinks:
               "party": party, "last_name": name}],
         )
 
-    def test_uncovered_state_names_contests_and_retention_together(self, db_session):
+    def test_uncovered_state_names_its_contests(self, db_session):
+        """Georgia elects judges and holds no retention votes, so the line
+        names contests alone (state_ballot_scope.json)."""
         _race(db_session, "2026-SEN-GA", "GA")
         db_session.commit()
         data = _body(elections.state_ballot("GA", db_session))
-        assert "Judicial contests and retention questions" in data["omits"]
+        assert "Judicial contests" in data["omits"]
+        assert not any("retention" in item for item in data["omits"])
         assert data["judicialRaces"] == []
         # Unchecked, not checked-and-empty (see TestJudicialConfirmedNone).
         assert data["judicialCoverage"]["status"] == "not_yet_covered"
 
-    def test_covered_state_still_declares_retention_questions(self, db_session):
-        """The line SHRINKS rather than disappearing: retention questions
-        are a separate yes/no ballot item, not a contest between
-        candidates, and nothing reads them yet. Claiming judicial is
-        covered while they are not would be the honest half-statement
-        this list exists to avoid."""
+    def test_uncovered_state_with_retention_names_both_together(self, db_session):
+        _race(db_session, "2026-SEN-MT", "MT")
+        db_session.commit()
+        data = _body(elections.state_ballot("MT", db_session))
+        assert "Judicial contests and retention questions" in data["omits"]
+
+    def test_covered_state_drops_the_line_when_it_holds_no_retention_votes(self, db_session):
+        """North Carolina's contests are covered and it has no retention
+        votes: nothing judicial is left out, so nothing is claimed."""
         _race(db_session, "2026-SEN-NC", "NC")
         db_session.commit()
         self._sync_judicial(db_session)
 
         data = _body(elections.state_ballot("NC", db_session))
         assert data["judicialRaces"], "the section should render"
-        assert "Judicial retention questions" in data["omits"]
-        assert "Judicial contests and retention questions" not in data["omits"]
+        assert not any(item.startswith("Judicial") for item in data["omits"])
+
+    def test_covered_state_still_declares_retention_questions(self):
+        """The line SHRINKS rather than disappearing where the state holds
+        retention votes: they are a separate yes/no ballot item, not a
+        contest between candidates, and nothing reads them yet."""
+        covered = elections.JudicialCoverageStatus.COVERED
+        assert elections._judicial_omits("MT", 2026, covered) == ["Judicial retention questions"]
+
+    def test_a_state_that_appoints_its_judges_omits_none(self, db_session):
+        _race(db_session, "2026-SEN-MA", "MA")
+        db_session.commit()
+        data = _body(elections.state_ballot("MA", db_session))
+        assert not any(item.startswith("Judicial") for item in data["omits"])
+
+    def test_judicial_elections_held_at_other_elections_are_not_claimed(self):
+        uncovered = elections.JudicialCoverageStatus.NOT_YET_COVERED
+        # Tennessee's are in August, Pennsylvania's in odd years.
+        assert elections._judicial_omits("TN", 2026, uncovered) == []
+        assert elections._judicial_omits("PA", 2026, uncovered) == []
+        assert elections._judicial_omits("PA", 2027, uncovered) == ["Judicial contests and retention questions"]
+
+    def test_legislative_line_only_in_a_year_the_state_elects_its_legislature(self, db_session):
+        _race(db_session, "2026-SEN-VA", "VA")
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.commit()
+        assert "State legislative districts" not in _body(elections.state_ballot("VA", db_session))["omits"]
+        assert "State legislative districts" in _body(elections.state_ballot("GA", db_session))["omits"]
 
     def test_the_other_omissions_are_untouched(self, db_session):
         _race(db_session, "2026-SEN-NC", "NC")
@@ -1102,12 +1179,12 @@ class TestJudicialConfirmedNone:
         assert data["judicialRaces"] == []
         assert data["judicialCoverage"]["status"] == "confirmed_none"
         assert data["judicialCoverage"]["sourceName"] == "Idaho Secretary of State"
-        # And the omission shrinks, because judicial contests ARE now
-        # accounted for — the answer is simply that none are on the ballot.
-        assert "Judicial retention questions" in data["omits"]
-        assert "Judicial contests and retention questions" not in data["omits"]
+        # And the omission goes, because judicial contests ARE now
+        # accounted for — the answer is simply that none are on the ballot
+        # — and Idaho holds no retention votes.
+        assert not any(item.startswith("Judicial") for item in data["omits"])
         # The unchecked counterpart (GA, full omission kept) is
-        # TestJudicialOmitShrinks.test_uncovered_state_names_contests_and_retention_together.
+        # TestJudicialOmitShrinks.test_uncovered_state_names_its_contests.
 
 
 def test_a_redrawn_states_house_race_takes_the_new_lines_lean(db_session):
@@ -1153,3 +1230,35 @@ def test_redrawn_maps_and_pinned_pvi_sources_name_the_same_states():
 
     pinned = load_sources()["congresses"][str(congress_for_election(2026))]
     assert redrawn_states(2026) == set(pinned["redrawn_states"])
+
+
+def test_a_state_whose_november_needs_a_majority_says_so(db_session):
+    """Louisiana's 2026 House contests are an all-party open primary on
+    Nov 3 (a Dec 12 runoff unless someone wins a majority); Georgia needs
+    a majority in every contest (Dec 1 runoff). A plurality state says
+    nothing."""
+    _race(db_session, "2026-HOUSE-LA-5", "LA", office="H", district=5)
+    _race(db_session, "2026-SEN-GA", "GA")
+    _race(db_session, "2026-SEN-CO", "CO")
+    db_session.commit()
+
+    assert _body(elections.state_ballot("LA", db_session))["generalRunoffs"] == [
+        {"offices": ["H"], "openPrimary": True, "runoffDate": "2026-12-12"},
+    ]
+    assert _body(elections.state_ballot("GA", db_session))["generalRunoffs"] == [
+        {"offices": "*", "openPrimary": False, "runoffDate": "2026-12-01"},
+    ]
+    assert _body(elections.state_ballot("CO", db_session))["generalRunoffs"] == []
+
+
+def test_contests_with_their_own_primary_date_are_named(db_session):
+    """Alabama postponed four House districts' primaries to Aug 11; the
+    header's one primary date (May 19) is not theirs."""
+    _race(db_session, "2026-HOUSE-AL-2", "AL", office="H", district=2)
+    _race(db_session, "2026-SEN-CO", "CO")
+    db_session.commit()
+
+    assert _body(elections.state_ballot("AL", db_session))["otherPrimaries"] == [
+        {"offices": ["H"], "districts": [1, 2, 6, 7], "date": "2026-08-11"},
+    ]
+    assert _body(elections.state_ballot("CO", db_session))["otherPrimaries"] == []

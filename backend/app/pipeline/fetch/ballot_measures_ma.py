@@ -96,8 +96,10 @@ _TITLE_SIZE_MIN = 18.0
 _ZONE_MARKERS = ("SUMMARY", "WHAT", "STATEMENT", "ARGUMENTS")
 
 _QUESTION_RE = re.compile(r"^QUESTION\s+(\d+):\s*(.*)$")
-_YES_VOTE_RE = re.compile(r"^A YES VOTE\s+(.*)$", re.IGNORECASE)
-_NO_VOTE_RE = re.compile(r"^A NO VOTE\s+(.*)$", re.IGNORECASE)
+# The whole sentence, "A YES VOTE would ...": the guide's framing names
+# the answer it explains, and "would ..." alone is a fragment.
+_YES_VOTE_RE = re.compile(r"^(A YES VOTE\s+.*)$", re.IGNORECASE | re.DOTALL)
+_NO_VOTE_RE = re.compile(r"^(A NO VOTE\s+.*)$", re.IGNORECASE | re.DOTALL)
 
 
 def _page_markers(page_rows: dict, row_ids_sorted: list[int]) -> dict:
@@ -155,11 +157,25 @@ def _yes_no(words: list[dict]) -> tuple[str | None, str | None]:
     prose, unlike _prose) — None, None if this block isn't really two
     columns (shouldn't happen for a real WHAT YOUR VOTE WILL DO zone,
     but never guess which side is which without one)."""
-    boundary = find_column_boundary(words)
+    boundary = find_column_boundary(words) or _no_vote_column_x(words)
     if boundary is None:
         return None, None
     left, right = split_by_fixed_boundary(words, boundary)
     return " ".join(lines_from_words(left)), " ".join(lines_from_words(right))
+
+
+def _no_vote_column_x(words: list[dict]) -> float | None:
+    """The NO column's left edge, read from where the guide's own "A NO
+    VOTE" opens it — the fallback when the gutter shows on fewer than two
+    rows. That happens whenever the NO statement is one printed line
+    (2026 Q9: "A NO VOTE would repeal this law.") or its second line sits
+    off the YES column's baselines (2026 Q1), so find_column_boundary's
+    two-row agreement never forms. Returns None without that phrase, so a
+    zone with no NO column still yields (None, None)."""
+    for i in range(len(words) - 2):
+        if [w["text"] for w in words[i:i + 3]] == ["A", "NO", "VOTE"]:
+            return words[i]["x0"] - 0.5
+    return None
 
 
 def parse_information_for_voters(pages) -> list[dict]:

@@ -75,24 +75,25 @@ preferences and score each member against the break rate same-party
 members of their chamber show at the same seat lean — a senator in a safe
 R+20 state voting with their party is representing constituents, not
 failing at independence, while the same loyalty in a swing state diverges
-from the median voter. Roll-call position is scored the same way against
-a seat-conditional norm (Canes-Wrone, Brady & Cogan 2002, "Out of Step,
-Out of Office," APSR 96:1). This is the delegate model of representation
-(Miller & Stokes 1963, "Constituency Influence in Congress," APSR 57:1),
-with seat partisan lean standing in for issue-level constituent opinion.
-Both studies validate their measures by the incumbent's vote share; v6.13
-used that same test to choose this dimension's design
-(docs/research/constituent-alignment.md). Because the member was elected
-under a party label as well as by a seat (Fenno 1978's concentric
-constituencies), the vote score is highest where a member breaks about as
-often as same-party members of similarly-leaning seats and falls both ways
-(v6.16) — the shape the member's own party's primary voters reward; the
-general electorate rewards breaking more, and the research note says so.
-Donor independence via lobbying
-matches follows Stratmann (2005) with the methodological caution from
-Ansolabehere, de Figueiredo & Snyder (2003, "Why Is There So Little
-Money in U.S. Politics?" JEP 17:1) that donation-vote correlations are
-not causal evidence of influence.
+from the median voter. Roll-call position is scored against a
+seat-conditional norm too (Canes-Wrone, Brady & Cogan 2002, "Out of Step,
+Out of Office," APSR 96:1), linearly: 50 at the norm, rising toward the
+seat's center, a shape tested in v6.27. This is the delegate model of
+representation (Miller & Stokes 1963, "Constituency Influence in
+Congress," APSR 57:1), with seat partisan lean standing in for issue-level
+constituent opinion. Both studies validate their measures by the
+incumbent's vote share; v6.13 used that same test to choose this
+dimension's design (docs/research/constituent-alignment.md). Because the
+member was elected under a party label as well as by a seat (Fenno 1978's
+concentric constituencies), the vote score is highest where a member
+breaks about as often as same-party members of similarly-leaning seats and
+falls both ways (v6.16) — the shape the member's own party's primary
+voters reward; the general electorate rewards breaking more, and the
+research note says so. Donor independence via lobbying matches follows
+Stratmann (2005) with the methodological caution from Ansolabehere, de
+Figueiredo & Snyder (2003, "Why Is There So Little Money in U.S.
+Politics?" JEP 17:1) that donation-vote correlations are not causal
+evidence of influence.
 
 Funding Diversity: the inverse Herfindahl-Hirschman Index (HHI) applied
 to industry-level donation shares — concentrated funding from a single
@@ -150,7 +151,7 @@ References
 - Harbridge, L. & Malhotra, N. (2011). AJPS, 55(3), 494-510.
 - Harbridge-Yong, L., Volden, C. & Wiseman, A.E. (2023). J. Politics, 85(3).
 - Lewis, J.B. et al. Voteview: Congressional Roll-Call Votes Database
-  (voteview.com) — DW-NOMINATE member estimates.
+  (voteview.com) — Nokken-Poole and DW-NOMINATE member estimates.
 
 Version history
 ---------------
@@ -160,12 +161,15 @@ summary is frontend/src/lib/scoreVersions.ts). This docstring and the code
 comments state the current rule only.
 """
 
+import json
 import logging
 import math
+import pathlib
 import statistics
 from datetime import date
 
 from app.atomic_write import update_json_file
+from app.config import settings
 from app.file_cache import Stamp, new_reload_lock
 from app.config_definitions import (
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
@@ -174,6 +178,7 @@ from app.config_definitions import (
     SATURATION_QUANTILE,
 )
 from app.models import PromiseAlignment
+from app.pipeline.analyze.constituent_approval import senate_approval
 from app.pipeline.analyze.population_reference import (
     CONSTITUENT_REFERENCE,
     FUNDING_REFERENCE,
@@ -190,7 +195,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.26"
+ALGORITHM_VERSION = "v6.34"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -230,7 +235,7 @@ def compute_overall_score(entity) -> float:
     return round(overall, 2)
 
 
-NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED"}
+NON_INDUSTRY_CODES = {"OTHER", "SMALL_DONORS", "LARGE_INDIVIDUAL", "POLITICAL", "UNCLASSIFIED", "CANDIDATE_FUNDS"}
 
 # Substantive legislation only — excludes simple/concurrent resolutions
 # (sres/hres/sconres/hconres), which are routinely ceremonial ("National
@@ -284,11 +289,12 @@ LEADERSHIP_TENURE_FULL_CREDIT_YEARS = 6.0
 # COMPUTED from real presidential returns, not a hand-typed table: the
 # checked-in app/data/state_pvi.json is generated by
 # scripts/fetch_state_pvi.py, which derives each state's PVI from MEDSL's
-# official 2016 & 2020 vote counts via Cook's published formula (the two-
-# election average of the state's two-party Democratic vote share minus
-# the national two-party Democratic share, negated so positive = R lean).
-# It reproduces Cook Political Report's 2022 published state PVIs within
-# +/-1 (the generator gates on this). Refresh it the same way
+# official 2020 & 2024 vote counts via Cook's formula (the state's two-
+# party Democratic vote share minus the national two-party Democratic
+# share, weighted 75% to the recent election and 25% to the earlier,
+# negated so positive = R lean). It reproduces all 51 of Cook Political
+# Report's 2025 published state PVIs (v6.33; the equal-weight mean before
+# it was a point off in 18). Refresh it the same way
 # district_pvi.json / state_population.json are refreshed — rerun the
 # script and commit the regenerated JSON — after a new presidential
 # election shifts the two-cycle window.
@@ -309,7 +315,6 @@ def _read_pvi_json(filename: str, *, report_unreadable: bool = False) -> dict:
     report_unreadable: a persistent copy that exists but can't be read right
     now raises file_cache.Uncached with the fallback, so a stamped cache
     retries instead of keeping the fallback until the file next changes."""
-    import pathlib
 
     from app.file_cache import Uncached, read_json_preferring
 
@@ -367,18 +372,25 @@ _MEMBER_IDEAL_POINTS_PATH = "/data/member_ideal_points.json"
 
 def _member_ideal_points(chamber: str) -> dict:
     """Roll-call ideal-point data for one chamber ("senate" or "house"):
-    {"members": {bioguideId: nominate_dim1}, "fit": {party: {"a", "b"}},
-    "extremity_p90": float}. Used by _constituent_alignment_core's
-    position-congruence component (v6.11) — the member's DW-NOMINATE
-    first-dimension position scored against a seat-conditional
-    expectation.
+    {"members": {bioguideId: dim1}, "votes": {bioguideId: scaled roll calls},
+    "fit": {party: {"a", "b"}}, "extremity_p90": float, "measure",
+    "congress", "seats", "seated", "reliability", "scale_congress", "prior",
+    "parties", "switched"} (votes, congress, seats, seated, reliability,
+    scale_congress, prior, parties and switched since v6.27; parties and
+    switched are read only by the flank rule; prior, the last Congress's
+    positions, is read only by party_line_record's flank rule, never
+    scored). Used by _constituent_alignment_core's position-congruence
+    component (v6.11): the member's congress-specific Nokken-Poole
+    first-dimension position (DW-NOMINATE only as a whole-chamber fallback)
+    scored against a seat-conditional expectation.
 
     Ingested from /data/member_ideal_points.json (the persistent
     writable volume — same one party_ideology_bounds.json lives on, and
     for the same reason: this is generated by the running app itself,
     not an offline artifact). Each chamber's pipeline refreshes its own
-    section EVERY RUN from Voteview's published DW-NOMINATE estimates
-    (Lewis et al., voteview.com) joined against the seat-lean tables
+    section EVERY RUN from Voteview's published Nokken-Poole estimates
+    (DW-NOMINATE only as a whole-chamber fallback; Lewis et al.,
+    voteview.com) joined against the seat-lean tables
     (fetch/voteview.py — fetch, per-party OLS fit, ingestion gates,
     then write_member_ideal_points below). Fully automated: no manual
     generation step exists. Every number the scoring formula consumes
@@ -387,15 +399,19 @@ def _member_ideal_points(chamber: str) -> dict:
 
     Falls back to an empty dict if the file or the chamber's key is
     missing — the position-congruence component is then skipped entirely
-    (never scored neutral, exactly like coalition breadth's old
-    missing-data handling), and constituent alignment runs on the
-    seat-relative vote component alone. So the component is inert only
-    until the FIRST successful ingest; a later fetch/gate failure keeps
-    the last good data (stale beats punitive, and DW-NOMINATE moves
-    slowly week to week). Missing data is never punitive — same
-    convention as every other loader in this file.
+    for every member (a whole chamber with no data is not scored neutral,
+    exactly like coalition breadth's old missing-data handling; one member
+    without a position in a current v6.27 section is, at 50), and
+    constituent alignment runs on the seat-relative vote component alone.
+    So the component is inert only until the FIRST successful ingest; a
+    later fetch/gate failure keeps the last good data (stale beats
+    punitive, and positions move slowly week to week). Since v6.27 that
+    holds within a Congress: a section records its Congress, and
+    _ideal_points_current reads it only for roll calls of that Congress, so
+    once the new Congress's roll calls are being scored the component is
+    left out until its Voteview export passes the gates. Missing data is never
+    punitive — same convention as every other loader in this file.
     """
-    import pathlib
 
     from app.file_cache import Uncached, read_json, reload_if_moved
 
@@ -429,6 +445,25 @@ def _member_ideal_points(chamber: str) -> dict:
     return chamber_data if isinstance(chamber_data, dict) else {}
 
 
+def _ideal_points_current(section: dict, congress: int | None = None) -> bool:
+    """Whether a member_ideal_points section describes `congress`: the
+    Congress of the roll calls being scored (a party-line record's own
+    "congress"), else the sitting one. A section records its Congress since
+    v6.27; one that predates that is taken as current, as it always was.
+    Another Congress's section (a refresh that failed its gates after Jan 3
+    keeps the last one on disk) is not read: its positions are not this
+    term's record (AGENTS.md principle 6). Matching the record's Congress
+    rather than the clock keeps a stored score's "show the math" on the
+    positions it was scored on across Jan 3, while that Congress's section
+    is on disk, until the next run rescores it. A member with no
+    party-line record (matched to no roll call) is judged against the
+    sitting Congress."""
+
+    have = section.get("congress")
+    want = congress if congress is not None else settings.CURRENT_CONGRESS
+    return have is None or int(have) == int(want)
+
+
 def write_member_ideal_points(chamber: str, data: dict) -> None:
     """Persist one chamber's gated ideal-point section (fetch/voteview.py's
     build output) to /data/member_ideal_points.json. Read-merge-write, not
@@ -442,7 +477,6 @@ def write_member_ideal_points(chamber: str, data: dict) -> None:
     abort an otherwise-successful pipeline run (the loader then serves
     the previous file, or skips the component).
     """
-    import pathlib
     global _member_ideal_points_cache
     path = pathlib.Path(_MEMBER_IDEAL_POINTS_PATH)
     try:
@@ -485,8 +519,6 @@ def _state_population() -> dict[str, float]:
     """
     global _state_population_cache
     if _state_population_cache is None:
-        import json
-        import pathlib
         path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "state_population.json"
         try:
             _state_population_cache = {
@@ -496,6 +528,51 @@ def _state_population() -> dict[str, float]:
             logger.warning("state_population.json unavailable — small-donor baseline will use the national mean for every state")
             _state_population_cache = {}
     return _state_population_cache
+
+
+_position_reliability_cache: dict | None = None
+
+
+def _position_reliability(chamber: str) -> dict:
+    """{"n0", "reference_votes", "half_weight_votes", "uncounted_weight",
+    "prior_until_votes"} (the last for party_line_record's flank rule): the
+    reliability weight a congress-specific (Nokken-Poole) position in
+    `chamber` gets (v6.27, position_confidence). Measured by
+    scripts/calibrate_position_confidence.py on Voteview's own positions:
+    members with a thin record in one Congress and a full one in the next
+    (or the reverse), against full records' drift over the same transition
+    (research note section 14). As calibrated now, one curve for both
+    chambers over every Congress: the calibration chooses among one curve,
+    one per chamber, the latest era's (since a fixed Congress) and a window
+    of recent transitions by how well each predicts the next Congress from
+    the earlier ones, keeping the simplest within one standard error of the
+    best (a party-line term was tested and found no support). Nothing in it
+    follows the sitting Congress.
+
+    Read from app/data/position_confidence.json, and stored in each
+    member_ideal_points section at ingest: the score reads the section's
+    copy. {} (no weighting, the pre-v6.27 behaviour) if the file or the
+    chamber is unavailable: missing data is never punitive.
+    """
+    global _position_reliability_cache
+    if _position_reliability_cache is None:
+        path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "position_confidence.json"
+        try:
+            raw = json.loads(path.read_text())
+            _position_reliability_cache = {
+                name: {"n0": float(c["n0"]), "half_weight_votes": float(c["half_weight_votes"]),
+                       "reference_votes": float(raw["reference_votes"]),
+                       "uncounted_weight": float(raw["uncounted_weight"]),
+                       "prior_until_votes": float(raw["prior_until_votes"])}
+                for name, c in raw["chambers"].items()
+            }
+        except Exception:
+            logger.warning(
+                "position_confidence.json unavailable: position congruence will not weight "
+                "thin records; regenerate with scripts/calibrate_position_confidence.py"
+            )
+            _position_reliability_cache = {}
+    return dict(_position_reliability_cache.get(chamber) or {})
 
 
 # A fetch/district_pvi.SeatLines (a dict of the sitting table that also
@@ -533,7 +610,6 @@ def _district_pvi() -> dict[str, int]:
     ~20% of the time, when the seat actually elected exactly that
     platform.
     """
-    import pathlib
 
     from app.file_cache import Uncached, reload_if_moved
     from app.pipeline.fetch.district_pvi import seat_lines
@@ -597,7 +673,6 @@ def get_pvi_meta() -> dict:
 
     Built once per version of the two files (file_cache.reload_if_moved);
     each call gets its own top-level dict, since callers replace entries."""
-    import pathlib
 
     from app.file_cache import reload_if_moved
 
@@ -669,6 +744,8 @@ def calculate_scores(senator: dict) -> dict:
             district=senator.get("district"),
             bioguide_id=senator.get("bioguideId"),
             reference=senator.get("constituentReference"),
+            name=senator.get("name") or "",
+            years_in_office=senator.get("yearsInOffice") or 0,
         ),
         "fundingDiversity": _calc_funding_diversity(funding),
         "legislativeEffectiveness": _calc_legislative_effectiveness(
@@ -711,6 +788,8 @@ def explain_scores(senator: dict) -> dict:
         district=senator.get("district"),
         bioguide_id=senator.get("bioguideId"),
         reference=senator.get("constituentReference"),
+        name=senator.get("name") or "",
+        years_in_office=senator.get("yearsInOffice") or 0,
     )
     # The vote-part status is served with the stored confidence grades
     # (calculate_confidence), not in the breakdown payload.
@@ -800,7 +879,8 @@ def _constituent_vote_part_status(senator: dict) -> str:
     CONSTITUENT_MIN_VOTES, scored at the party's measured typical score),
     "neutral:few-votes" (under CONSTITUENT_MIN_VOTES with no measured
     typical — the bundled prior, or no reference for the party: neutral
-    50), "neutral:no-expectation" (no usable reference
+    50), "neutral:no-party" (caucuses with neither party: no party line
+    to break from, neutral 50), "neutral:no-expectation" (no usable reference
     for the member's party), "shrunk:<share kept>" (under
     CONSTITUENT_FULL_CONFIDENCE_VOTES, pulled toward the party's typical
     score), "shrunk-neutral:<share kept>" (the same, pulled toward a neutral
@@ -813,6 +893,7 @@ def _constituent_vote_part_status(senator: dict) -> str:
         state=senator.get("state", ""), party=senator.get("party", "I"),
         district=senator.get("district"), bioguide_id=senator.get("bioguideId"),
         reference=senator.get("constituentReference"),
+        name=senator.get("name") or "", years_in_office=senator.get("yearsInOffice") or 0,
     )["vote_part_status"]
 
 
@@ -862,8 +943,6 @@ def _small_donor_baseline_fit() -> dict[str, float]:
     """
     global _small_donor_baseline_fit_cache
     if _small_donor_baseline_fit_cache is None:
-        import json
-        import pathlib
         path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "small_donor_baseline.json"
         try:
             data = json.loads(path.read_text())
@@ -1143,7 +1222,14 @@ def _top_donor_concentration(funding: dict) -> tuple[float | None, int, float]:
         key=lambda d: d.get("total", 0),
         reverse=True,
     )
-    own = sum(d.get("total", 0) for d in donors if d.get("type") == "Self-Funded")
+    # The candidate's own money: the FEC totals' loans and contributions
+    # from the candidate (the breakdown's CANDIDATE_FUNDS row), or failing
+    # that the itemized self-funded donor rows. Until v6.32 only the donor
+    # rows were taken out, so a campaign funded 85% by its candidate's loans
+    # had them counted as outside money and its top ten read as 1.3%.
+    listed = sum(d.get("total", 0) for d in donors if d.get("type") == "Self-Funded")
+    stated = sum(i.get("total", 0) for i in funding.get("industryBreakdown") or [] if i.get("industry") == "CANDIDATE_FUNDS")
+    own = max(listed, stated)
     pool = max(0.0, funding_share_base(funding) - own)
     if not external or pool <= 0:
         return None, len(external), pool
@@ -1242,10 +1328,13 @@ def compute_funding_reference(
         if base > 0:
             pac = f.get("totalFromPACs") or 0
             ratios.append(min(pac / base, 1.0))
-            small.append(f.get("smallDonorPercentage") or 0)
+            small_pct = f.get("smallDonorPercentage")  # None: not measurable, left out
+            if small_pct is not None:
+                small.append(small_pct)
             pop = population.get(states[i]) if states is not None and i < len(states) else None
             if pop:
-                by_population.append((pop, f.get("smallDonorPercentage") or 0))
+                if small_pct is not None:
+                    by_population.append((pop, small_pct))
                 pac_by_population.append((pop, min(pac / base, 1.0)))
         c, _, _ = _top_donor_concentration(f)
         if c is not None:
@@ -1263,10 +1352,15 @@ def compute_funding_reference(
         "pac_ratio_mean": round(statistics.mean(ratios), 6),
         "pac_ratio_p10": round(statistics.quantiles(ratios, n=10)[0], 6),
         "pac_ratio_p90": round(statistics.quantiles(ratios, n=10)[8], 6),
-        "small_donor_p10": round(statistics.quantiles(small, n=10)[0], 4),
-        "small_donor_median": round(statistics.median(small), 4),
-        "small_donor_p90": round(statistics.quantiles(small, n=10)[8], 4),
     }
+    # Over the campaigns whose share the filings can say (not those that
+    # itemize every gift).
+    if len(small) >= _MIN_FUNDING_REFERENCE_MEMBERS:
+        ref.update({
+            "small_donor_p10": round(statistics.quantiles(small, n=10)[0], 4),
+            "small_donor_median": round(statistics.median(small), 4),
+            "small_donor_p90": round(statistics.quantiles(small, n=10)[8], 4),
+        })
     if states is not None and (fit := small_donor_baseline_fit(by_population)):
         ref["small_donor_fit"] = fit
     if states is not None and (fit := pac_population_fit(pac_by_population)):
@@ -1326,12 +1420,16 @@ def _funding_independence_core(
         reference_detail = "no chamber reference yet, neutral 50"
     pac_score = ratio_score
 
-    # Component 2: small-donor share (25% weight), state-relative for
+    # Component 2: small-donor share (10/53 of the weight), state-relative for
     # senators — see _small_donor_capacity_score.
-    small_pct = funding.get("smallDonorPercentage", 0) or 0
-    small_score, small_expected_pct = _small_donor_capacity_score(small_pct, state, district, ref)
+    small_pct = funding.get("smallDonorPercentage", 0)
+    if small_pct is None:
+        # Every gift itemized: the filings can't say how much was small.
+        small_score, small_expected_pct = None, None
+    else:
+        small_score, small_expected_pct = _small_donor_capacity_score(small_pct, state, district, ref)
 
-    # Component 3: relative top-donor concentration (25% weight)
+    # Component 3: relative top-donor concentration (10/53 of the weight)
     concentration, n_external, pool = _top_donor_concentration(funding)
     c_deciles, c_median = ref.get("top10_share_deciles"), ref.get("top10_share_median")
     if concentration is not None and c_deciles:
@@ -1373,7 +1471,7 @@ def _funding_independence_core(
         "facts": {
             "contributions": round(total_raised),
             "pacShare": round(pac_ratio, 4),
-            "smallDonorShare": round(small_pct / 100, 4),
+            "smallDonorShare": None if small_pct is None else round(small_pct / 100, 4),
             "smallDonorExpectedShare": (
                 round(small_expected_pct / 100, 4) if small_expected_pct is not None else None
             ),
@@ -1394,9 +1492,12 @@ def _funding_independence_core(
             {
                 "label": "Small-donor share",
                 "weight": round(10 / 53, 4),
-                "score": round(small_score, 1),
+                "score": None if small_score is None else round(small_score, 1),
                 "detail": (
-                    f"{small_pct:.0f}% of contributions from small (<$200) donors"
+                    "the campaign itemizes every gift, so its filings report no unitemized "
+                    f"money to read a small-donor share from; {_NOT_MEASURED}"
+                ) if small_pct is None else (
+                    f"{small_pct:.0f}% of contributions unitemized (donors who gave $200 or less)"
                     + (
                         f" vs. an expected ~{small_expected_pct:.0f}% for a state this size"
                         if district is None
@@ -1654,23 +1755,32 @@ def party_break_rate(voting_record: dict) -> tuple[float | None, int]:
     Congress when the pipeline has measured it (partyLineRecord,
     party_line_record.py): breaks toward the other party only, each measure
     once. The stored votes are read only when it hasn't."""
+    breaks, n = party_line_tally(voting_record)
+    if n < CONSTITUENT_MIN_VOTES:
+        return None, n
+    return breaks / n, n
+
+
+def party_line_tally(voting_record: dict) -> tuple[int, int]:
+    """(breaks, party-line votes) that party_break_rate reads: the member's
+    party-line record over the whole Congress when it has been measured,
+    otherwise the stored votes, each roll call once. The profile's voting
+    record states these same counts, so its "broke party line" figure can't
+    disagree with the Constituent Alignment column beside it (it once read
+    the stored sample's every vote against the party instead, and showed no
+    breaks for 149 of 532 members whose score counted some)."""
     from app.pipeline.transform.normalize_votes import dedupe_votes
 
     record = voting_record.get("partyLineRecord")
     if isinstance(record, dict) and isinstance(record.get("votes"), int):
-        n = record["votes"]
-        if n < CONSTITUENT_MIN_VOTES:
-            return None, n
-        return len(record.get("breaks") or []) / n, n
+        return len(record.get("breaks") or []), record["votes"]
 
     votes = dedupe_votes([
         v for v in (voting_record.get("keyVotes") or []) + (voting_record.get("recentVotes") or [])
         if isinstance(v, dict)
     ])
     labeled = [v["votedWithParty"] for v in votes if v.get("votedWithParty") is not None]
-    if len(labeled) < CONSTITUENT_MIN_VOTES:
-        return None, len(labeled)
-    return sum(1 for wp in labeled if wp is not True) / len(labeled), len(labeled)
+    return sum(1 for wp in labeled if wp is not True), len(labeled)
 
 def _expected_break_rate(fit: dict, alignment: float) -> float:
     """The seat's expected break rate from a per-party fit. Measured fits
@@ -2005,8 +2115,9 @@ def seat_break_residual(
     return seat_residual(break_rate, expected, n_votes), scale, typical
 
 
-# Weight of position congruence when a roll-call ideal point exists; the
-# seat-relative vote component carries the rest. A design weight, not a
+# Weight of position congruence when the chamber has a current Voteview
+# section (a member with no position in it scores 50 on this part, v6.27);
+# the seat-relative vote component carries the rest. A design weight, not a
 # calibrated one — see the research note: the one election where both
 # could be tested (2004 House) gave the vote component the larger
 # independent association with re-election vote share, so the vote
@@ -2014,16 +2125,79 @@ def seat_break_residual(
 # the ratio exists to fit this from.
 POSITION_CONGRUENCE_WEIGHT = 0.30
 
+# A senator's approval among the state's other-party voters and independents
+# (constituent_approval.py, v6.29) moves the score as much as position
+# congruence does: its weight is POSITION_CONGRUENCE_WEIGHT, applied to its
+# distance from the typical senator (a score of 50), and added to the 70:30
+# vote and position parts. Equal to position because the two were measured
+# equally: each part's independent association with how far senators ran
+# ahead of their party (2022 and 2024, each measured before its election)
+# was +1.27 and +0.77 points per standard deviation, confidence intervals
+# +0.24 to +2.00 and +0.22 to +1.52, too close to tell apart. Added around
+# the typical senator rather than given a share of the score, because a
+# share would pull every rated senator toward 50 (the composite's typical
+# value is 85), scoring a rated senator about 8 points below an unrated one
+# or a House member for being rated at all; an unrated senator is read as
+# typical, as a member with no position yet sits at 50
+# (docs/methodology/member-score/v6.29.md).
+APPROVAL_WEIGHT = POSITION_CONGRUENCE_WEIGHT
+# Standard deviations of the approval index at which its score approaches
+# 0 or 100 (tanh), the same saturation the president scorer and Legislative
+# Effectiveness use for a population z-score.
+APPROVAL_SATURATION_SD = 1.5
 
-def position_congruence_score(extremity: float, saturation: float) -> float:
+
+def position_confidence(votes: int | None, reliability: dict | None) -> float:
+    """Reliability weight of a congress-specific position (v6.27), from the
+    section's `reliability` (written at ingest from
+    app/data/position_confidence.json): min(1, w(votes) /
+    w(reference_votes)), w(n) = n / (n + n0), for a position resting on
+    `votes` scaled roll calls. A full record (reference_votes or more)
+    counts in full; the calibration measures how much less a thin one says.
+    A position Voteview published with no count (None: a member it has
+    barely scaled who has a career DW-NOMINATE position; one with neither is
+    stored as 0 votes at ingest) gets the weight measured for such
+    positions, uncounted_weight. Always in [0, 1]; 1 without a usable
+    reliability (a section written before v6.27, or no calibration
+    available)."""
+    rel = reliability or {}
+    n0 = float(rel.get("n0") or 0)
+    if n0 <= 0:
+        return 1.0
+    if votes is None:
+        return min(max(float(rel.get("uncounted_weight") or 0.0), 0.0), 1.0)
+    votes = max(votes, 0)
+    reference = float(rel.get("reference_votes") or 0)
+    scale = reference / (reference + n0) if reference > 0 else 1.0
+    return min(max(votes / (votes + n0) / scale, 0.0), 1.0)
+
+
+def _shown_percent(weight: float) -> int:
+    """A weight below 1 as a whole percentage, rounded down so it never
+    reads 100% while still pulled toward 50 (the 1e-9 keeps float error
+    from reading 0.57 as 56%)."""
+    return math.floor(weight * 100 + 1e-9)
+
+
+def position_congruence_score(extremity: float, saturation: float, weight: float = 1.0) -> float:
     """Constituent Alignment's position-congruence component: 50 at the
-    position a same-party member of this seat is expected to hold, falling to
-    0 at `saturation` (the chamber's 90th-percentile extremity) toward the
+    position a same-party member of this seat is expected to hold, falling
+    to 0 at `saturation` (the 90th-percentile extremity of the chamber's
+    full records, or its last scale carried early in a Congress) toward the
     party flank and rising to 100 as far toward the seat's center —
-    symmetric, as the 2004 House test found (docstring below). `extremity` is
-    signed toward the flank. The one implementation the score and
-    scripts/benchmark_validation.py both call."""
-    return 50.0 - 50.0 * max(-1.0, min(extremity / saturation, 1.0))
+    symmetric, as the 2004 House test found (docstring below). `extremity`
+    is signed toward the flank. It is first scaled by the position's
+    reliability `weight` (position_confidence, v6.27): the measured slope of
+    a member's full-record position on one resting on that many votes,
+    relative to a full record, so the score is read at the best linear
+    estimate of where the member sits. The one implementation the score and
+    scripts/benchmark_validation.py both call.
+
+    Linear and 50 at the expectation, not 100 there like the vote part:
+    across House generals 1994-2010 and Senate generals 1990-2024 this
+    shape predicted the incumbent's vote share and the peaked one did not
+    (research note section 14)."""
+    return 50.0 - 50.0 * max(-1.0, min(weight * extremity / saturation, 1.0))
 
 
 def _calc_constituent_alignment(
@@ -2035,6 +2209,8 @@ def _calc_constituent_alignment(
     district: int | None = None,
     bioguide_id: str | None = None,
     reference: dict | None = None,
+    name: str = "",
+    years_in_office: int = 0,
 ) -> int:
     """
     Constituent Alignment Score (0-100, higher = better). Keyed
@@ -2052,14 +2228,14 @@ def _calc_constituent_alignment(
     (reproduce with scripts/research_constituent_alignment.py).
 
     Components:
-      1. Seat-relative vote alignment (70%, or 100% without ideal-point
-         data): how far the member's break rate on party-labeled votes sits
-         from the rate their chamber's same-party members show at the same
-         seat lean (compute_constituent_reference, measured each run), in
-         standard deviations per vote (seat_residual, v6.16). 100 at the
-         expectation, falling linearly to 0 at CROSSING_ZERO_GAPS times the
-         90th-percentile |residual| of the member's party in the chamber
-         above it and LOYAL_ZERO_GAPS times it below.
+      1. Seat-relative vote alignment (70%, or 100% without a current
+         Voteview section): how far the member's break rate on party-labeled
+         votes sits from the rate their chamber's same-party members show at
+         the same seat lean (compute_constituent_reference, measured each
+         run), in standard deviations per vote (seat_residual, v6.16). 100
+         at the expectation, falling linearly to 0 at CROSSING_ZERO_GAPS
+         times the 90th-percentile |residual| of the member's party in the
+         chamber above it and LOYAL_ZERO_GAPS times it below.
            - Measured in standard deviations, not percentage points (v6.16):
              four extra points on a seat whose members break 1.5% of the time
              is far more out of pattern than on one whose members break 7%.
@@ -2087,11 +2263,13 @@ def _calc_constituent_alignment(
              — research note section 8. The score represents both: the seat
              that elected the member and the party label it elected them
              under.
-      2. Position congruence (30%, when Voteview ideal points exist): the
+      2. Position congruence (30%, when the chamber has a current Voteview
+         section; 50 for a member without a position in it): the
          member's congress-specific Nokken-Poole first-dimension position
          minus what a same-party member of a seat with this lean holds
          (per-party OLS on seat PVI, fit each run by fetch/voteview.py).
-         Symmetric, saturating at the chamber's 90th-percentile extremity.
+         Symmetric, saturating at the 90th-percentile extremity of the
+         chamber's full records.
            - 1 SD toward the party flank cost 0.8-1.0 pts of vote share,
              robust to flexible partisanship controls; the center-ward side
              earned the same slope (equal-slopes p=0.92), so it is credited
@@ -2106,10 +2284,22 @@ def _calc_constituent_alignment(
              dominated it when both were entered — and "current term, not
              career" (AGENTS.md principle 6) wants the congress-specific one
              anyway.
+           - Weighted by reliability (v6.27): the extremity is scaled by
+             how well a position from n scaled roll calls this Congress
+             predicts a full record's (position_confidence, from the curve
+             scripts/calibrate_position_confidence.py measures and
+             _position_reliability reads; a full record counts in full). A
+             member with no position in a current v6.27 section sits at
+             50; a section from another Congress is not read (principle
+             6); a section written before v6.27 (no counts) is read as
+             before, unweighted, until the next ingest rewrites it.
+           - The shape, 50 at the expectation, and the scale, pooled across
+             both parties, were tested against the alternatives in section 14
+             and kept.
     """
     return _constituent_alignment_core(
         voting_record, lobbying_matches, funding, state, party,
-        district, bioguide_id, reference,
+        district, bioguide_id, reference, name, years_in_office,
     )["score"]
 
 
@@ -2122,6 +2312,8 @@ def _constituent_alignment_core(
     district: int | None = None,
     bioguide_id: str | None = None,
     reference: dict | None = None,
+    name: str = "",
+    years_in_office: int = 0,
 ) -> dict:
     """Same math as _calc_constituent_alignment, returning every intermediate
     value alongside the final score. Single implementation, same reuse
@@ -2134,24 +2326,67 @@ def _constituent_alignment_core(
     chamber = _chamber_of(district)
 
     ideal = _member_ideal_points(chamber)
+    # Judged against the Congress of the roll calls the vote part read, or
+    # the sitting one for a member matched to no roll call.
+    record_congress = (voting_record.get("partyLineRecord") or {}).get("congress")
+    if not _ideal_points_current(ideal, record_congress):
+        ideal = {}  # another Congress's positions: not this term's record (principle 6)
     dim1 = (ideal.get("members") or {}).get(bioguide_id) if bioguide_id else None
     position_fit = (ideal.get("fit") or {}).get(eval_party)
     congruence_sat = ideal.get("extremity_p90")
+    reliability = ideal.get("reliability") if isinstance(ideal.get("reliability"), dict) else None
     congruence_score = None
     congruence_detail = ""
     if dim1 is not None and position_fit is not None and congruence_sat:
         expected_dim1 = float(position_fit["a"]) + float(position_fit["b"]) * _seat_pvi(state, district)
         residual = float(dim1) - expected_dim1
         extremity = -residual if eval_party == "D" else residual
-        congruence_score = position_congruence_score(extremity, float(congruence_sat))
+        # None: Voteview reported no count of the roll calls behind the
+        # position (a member it has barely scaled, with a career position),
+        # weighted on its own; 0 when it had neither (voteview.py).
+        position_votes = (ideal.get("votes") or {}).get(bioguide_id)
+        weight = position_confidence(position_votes, reliability)
+        congruence_score = position_congruence_score(extremity, float(congruence_sat), weight)
         congruence_detail = (
             f"{ideal.get('measure', 'NOMINATE')} dim1 {float(dim1):+.2f} vs "
             f"{expected_dim1:+.2f} expected for a {eval_party} member of this seat, "
             + ("toward the party flank" if extremity > 0 else "toward the seat's center")
         )
+        if position_votes is None and weight < 1.0:
+            congruence_detail += (
+                f"; Voteview reports no count of the roll calls behind this position, so it counts "
+                f"at {_shown_percent(weight)}% strength, the measured weight of such positions, pulled toward 50"
+            )
+        elif position_votes == 0 and weight == 0.0:
+            congruence_detail += (
+                "; Voteview reports no count of the roll calls behind this position and the member "
+                "has no career position yet, so it doesn't count and this part sits at 50"
+            )
+        elif weight < 1.0:
+            half = (reliability or {}).get("half_weight_votes")
+            congruence_detail += (
+                f"; rests on {position_votes} roll calls, so it counts at {_shown_percent(weight)}% strength"
+                + (f" (half strength at about {half:.0f} roll calls)" if half else "")
+                + ", pulled toward 50"
+            )
+    elif reliability and position_fit is not None and congruence_sat and bioguide_id:
+        # A current section with no usable position for this member (Voteview
+        # hasn't placed them, or gave its 0, 0 placeholder): neutral, as a
+        # position resting on no votes would be, not a dropped component.
+        congruence_score = 50.0
+        congruence_detail = (
+            "Voteview has no position for this member this Congress yet, so this part sits at a neutral 50"
+        )
 
     break_rate, n_party = party_break_rate(voting_record)
-    if break_rate is None:
+    if eval_party not in ("D", "R"):
+        # A member who caucuses with neither party has no party line to
+        # break from. The record isn't thin; it measures nothing here. Said
+        # as "few votes" before, beside 676 recorded votes (2026-10-08).
+        party_score = 50.0
+        vote_part_status = "neutral:no-party"
+        party_alignment_detail = "caucuses with neither party, so there is no party line to break from: a neutral 50"
+    elif break_rate is None:
         if typical is not None:
             vote_part_status = "typical:few-votes"
             # No record to read: the party's typical score, not 50, which
@@ -2230,9 +2465,22 @@ def _constituent_alignment_core(
                 f"until {CONSTITUENT_FULL_CONFIDENCE_VOTES}"
             )
 
+    # Senators: approval among the state's other-party voters and
+    # independents (v6.29). The House is not scored on it (constituent_approval).
+    approval = (
+        senate_approval(state, name, eval_party, years_in_office, _state_pvi())
+        if chamber == "senate" else None
+    )
+    approval_score = (
+        50.0 + 50.0 * math.tanh(approval["z"] / APPROVAL_SATURATION_SD) if approval else None
+    )
     congruence_weight = POSITION_CONGRUENCE_WEIGHT if congruence_score is not None else 0.0
     party_weight = 1.0 - congruence_weight
-    score = clamp(party_score * party_weight + (congruence_score or 0.0) * congruence_weight)
+    # Points the approval part adds or takes away around the typical senator.
+    approval_points = APPROVAL_WEIGHT * (approval_score - 50.0) if approval_score is not None else 0.0
+    score = clamp(
+        party_score * party_weight + (congruence_score or 0.0) * congruence_weight + approval_points
+    )
 
     components = [
         {
@@ -2245,9 +2493,47 @@ def _constituent_alignment_core(
     if congruence_weight > 0:
         components.append({
             "label": "Position congruence",
-            "weight": congruence_weight,
+            "weight": round(congruence_weight, 2),
             "score": round(congruence_score, 1),
             "detail": congruence_detail,
+        })
+    approval_facts = None
+    if approval is not None:
+        names = {"D": "Democrats", "R": "Republicans", "I": "independents"}
+        approval_facts = {
+            "groups": [
+                {"group": g, "approve": round(a, 3), "typical": round(t, 3)} for g, a, t in approval["groups"]
+            ],
+            "z": round(approval["z"], 2),
+            "survey": approval["survey"],
+        }
+        components.append({
+            "label": "Constituent approval",
+            "weight": APPROVAL_WEIGHT,
+            "score": round(approval_score, 1),
+            "detail": (
+                "; ".join(
+                    f"{a:.0%} of the state's {names[g]} approve, against {t:.0%} for a typical "
+                    f"{eval_party} senator"
+                    for g, a, t in approval["groups"]
+                )
+                + f" ({approval['survey']}); {approval['z']:+.2f} standard deviations from the "
+                f"typical senator once the state's lean is allowed for, which "
+                f"{'adds' if approval_points >= 0 else 'takes'} {abs(approval_points):.1f} points "
+                f"{'to' if approval_points >= 0 else 'from'} the score (as much as position congruence "
+                "can move it; a typical senator's approval adds nothing)"
+            ),
+        })
+    elif chamber == "senate":
+        components.append({
+            "label": "Constituent approval",
+            "weight": 0.0,
+            "score": None,
+            "detail": (
+                "the Cooperative Election Study has no rating for this senator (first seated "
+                "after it was fielded), so this part is not measured and adds nothing either way, "
+                "as for a typical senator"
+            ),
         })
     record = voting_record.get("partyLineRecord")
     return {
@@ -2266,6 +2552,9 @@ def _constituent_alignment_core(
             # Votes against the party from its flank (party_line_record):
             # shown beside the breaks, not counted. None without a record.
             "flankBreaks": len(record.get("flankBreaks") or []) if record else None,
+            # Senators: the state's other-party and independent approval
+            # the approval component read, against the typical senator.
+            "approval": approval_facts,
         },
     }
 
@@ -2469,6 +2758,8 @@ def _funding_diversity_core(funding: dict) -> dict:
     value alongside the final score. Single implementation, same reuse
     contract as _funding_independence_core above."""
     industry_breakdown = funding.get("industryBreakdown", [])
+    # Not measurable (every gift itemized) counts as no small-donor money
+    # here; Funding Diversity is informational.
     small_donor_pct = funding.get("smallDonorPercentage", 0) or 0
     total_raised = funding_share_base(funding)
 
@@ -2719,7 +3010,7 @@ _LES_MAX_STAGE = 5
 
 
 def _les_bill_stage(bill: dict) -> int:
-    """This bill's cumulative-stage position (1-4), V&W-style.
+    """This bill's cumulative-stage position (1-5, _LES_MAX_STAGE), V&W-style.
 
     Prefers the real `stage` classification (classify_bill_stage_from_
     actions, bill_stage.py — built from Congress.gov's own structured
@@ -3251,15 +3542,28 @@ def _calc_legislative_effectiveness(
     )["score"]
 
 
-def _bills_by_stage(sponsored_bills: list[dict] | None) -> list[int]:
-    """How many of a member's sponsored bills got furthest to each of the
-    five V&W stages (introduced, action in committee, action beyond
-    committee, passed a chamber, became law), by the same stage mapping
-    the score uses (_les_bill_stage)."""
+def _bills_facts(sponsored_bills: list[dict] | None) -> dict:
+    """The Legislative Effectiveness column's figures: how many of a
+    member's bills and joint resolutions got furthest to each of the five
+    V&W stages (introduced, action in committee, action beyond committee,
+    passed a chamber, became law), by the same stage mapping the score uses
+    (_les_bill_stage), and how many simple and concurrent resolutions they
+    sponsored besides.
+
+    Bills only, the population the component's own sentence counts ("40
+    bills: 39 introduced only, ..."). Counting every resolution too made
+    the column say a member had "3 passed the House" beside "1 advanced
+    further", when two of the three were simple resolutions the House
+    agreed to (electing a member to a committee, say), which the score
+    weights as V&W do, a fifth of a bill."""
     counts = [0] * _LES_MAX_STAGE
+    resolutions = 0
     for bill in sponsored_bills or []:
-        counts[_les_bill_stage(bill) - 1] += 1
-    return counts
+        if (bill.get("billType") or "").lower() in SUBSTANTIVE_BILL_TYPES:
+            counts[_les_bill_stage(bill) - 1] += 1
+        else:
+            resolutions += 1
+    return {"billsByStage": counts, "bills": sum(counts), "resolutions": resolutions}
 
 
 def _legislative_effectiveness_core(
@@ -3367,4 +3671,4 @@ def _legislative_effectiveness_core(
                 "against the median member of the same party (that median scores 50)"
             ),
         })
-    return {"score": score, "components": components, "facts": {"billsByStage": _bills_by_stage(sponsored_bills)}}
+    return {"score": score, "components": components, "facts": _bills_facts(sponsored_bills)}

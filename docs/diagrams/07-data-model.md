@@ -89,13 +89,13 @@ erDiagram
         int number
         date term_start
         date term_end
-        float score_public_mandate "21.67%"
-        float score_effectiveness "21.67%"
-        float score_agency_alignment "21.67%, N/A pre-Clinton"
-        float score_historical_legacy "35%, C-SPAN 2021"
+        float score_public_mandate "25%"
+        float score_effectiveness "25%"
+        float score_agency_alignment "unscored since president v7, dropped later"
+        float score_historical_legacy "50%, C-SPAN 2021"
         float avg_approval
         float gdp_growth_avg
-        int rulemaking_count
+        int rulemaking_count "unused since president v7"
     }
 
     PRESIDENT_TRADES {
@@ -214,6 +214,7 @@ erDiagram
         string incumbent_challenge "I | C | O"
         float contributions "NULL = not yet synced, never 0"
         float cash_on_hand "NULL = not yet synced, never 0"
+        string financials_through "FEC report end the figures cover"
         datetime last_financials_sync "watermark for the rotating refresh"
     }
     RACE_COVERAGE_ITEMS {
@@ -339,7 +340,7 @@ different writers use this table and each maps the slots differently, so reading
 | `entity_type` | `overall_score` | `score_1` | `score_2` | `score_3` | `score_4` | `score_5` |
 |---|---|---|---|---|---|---|
 | `senator`, `representative` | weighted overall | funding independence | promise persistence | constituent alignment | funding diversity | legislative effectiveness |
-| `president` | weighted overall | public mandate | effectiveness | *retired* — always 0.0 | agency alignment | historical legacy |
+| `president` | weighted overall | public mandate | effectiveness | *retired* — always 0.0 | agency alignment (*retired in president v7* — always 0.0) | historical legacy |
 | `candidate` | cash on hand | contributions | disbursements | — | — | — |
 
 Three things worth knowing about that table:

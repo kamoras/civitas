@@ -37,13 +37,24 @@ const presidents = [
 ];
 
 const obamaBreakdown = {
-  publicMandate: { score: 50, components: [], facts: { approval: 47.97, approvalMean: 50.887 } },
+  publicMandate: {
+    score: 50,
+    components: [],
+    facts: { approval: 47.97, approvalMean: 50.887, approvalVsEra: 1.04, approvalVsEraMean: 0.02 },
+  },
   effectiveness: {
     score: 44,
     components: [],
-    facts: { jobsPerYear: 2.257, jobsMean: 1.4414, gdpGrowth: 2.3016, gdpMean: 3.0832 },
+    facts: {
+      jobsPerYear: 2.257,
+      jobsMean: 1.4414,
+      gdpGrowth: 2.3016,
+      gdpMean: 3.0832,
+      gdpSince: true,
+      gdpRelative: 1.8609,
+      gdpRelativeMean: 2.2333,
+    },
   },
-  agencyAlignment: { score: 26, components: [], facts: { finalizedPct: 50, finalizedMean: 53.7 } },
   historicalLegacy: { score: 72, components: [], facts: { points: 664, pointsMean: 549.4 } },
 };
 
@@ -85,7 +96,19 @@ describe("ComparePresidentsPage", () => {
     expect(row("Presidential Score")).toEqual(["51", "48"]);
     expect(row("Historical Legacy")).toEqual(["Not scored", "72"]);
     expect(row("Average approval (vs all presidents)")).toEqual(["—", "48.0% vs 50.9%"]);
+    expect(row("Approval against its era, points (vs the typical president)")).toEqual([
+      "—",
+      "+1.0 vs +0.0",
+    ]);
     expect(row("Jobs a year (vs presidencies since 1939)")).toEqual(["—", "2.26M vs 1.44M"]);
+    expect(
+      row("Growth per person vs 13 peer economies, points (vs presidencies since 1947)")
+    ).toEqual(["—", "+1.9 vs +2.2"]);
+    // A postwar term has no prewar figure.
+    expect(row("Real GDP growth a year, before 1947 (vs presidencies before 1947)")).toEqual([
+      "—",
+      "—",
+    ]);
     expect(row("Historians' points (vs all presidents)")).toEqual(["—", "664 vs 549"]);
     expect(screen.getByRole("link", { name: "Barack Obama" })).toHaveAttribute(
       "href",

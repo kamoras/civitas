@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { BallotCandidate } from "@/types/election";
 import { DEM_AFFILIATE_PARTIES, candidateName, incumbencyLabel } from "@/lib/elections";
-import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
+import { cashOnHandDisplay, displayScore, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 
 // FEC's party codes ("DEM"/"REP"/"IND"/...) don't match lib/partyStyles.ts's
@@ -38,11 +38,20 @@ export const PARTY_META: Record<string, { label: string; color: string; rule: st
 
 /** A candidate's party label and colours: their own FEC code's where
  * there is one, else their party group's (a U.S. Taxpayers filer reads as
- * CONSTITUTION), else the bare code. */
-export function getPartyMeta(c: { party: string; partyGroup?: string | null }) {
+ * CONSTITUTION), else what the FEC's table says the code names ("TX":
+ * TAXPAYERS), else the code or printed label as given. */
+export function getPartyMeta(c: {
+  party: string;
+  partyGroup?: string | null;
+  partyLabel?: string | null;
+}) {
   return (
     PARTY_META[c.party] ??
-    PARTY_META[c.partyGroup ?? ""] ?? { label: c.party, color: "text-ink-lo", rule: "bg-ink-min" }
+    PARTY_META[c.partyGroup ?? ""] ?? {
+      label: (c.partyLabel ?? c.party).toUpperCase(),
+      color: "text-ink-lo",
+      rule: "bg-ink-min",
+    }
   );
 }
 
@@ -124,10 +133,10 @@ export default function CandidateCard({
           {candidate.incumbentRecord && (
             <Link
               href={`/politicians/${candidate.incumbentRecord.id}`}
-              className={`font-mono text-xs hover:underline ${getScoreColor(candidate.incumbentRecord.score)}`}
+              className={`font-mono text-xs hover:underline ${getScoreColor(displayScore(candidate.incumbentRecord.score))}`}
               title="View this member's full Representation Scorecard"
             >
-              SCORE: {candidate.incumbentRecord.score.toFixed(0)} →
+              SCORE: {displayScore(candidate.incumbentRecord.score)} →
             </Link>
           )}
         </div>
@@ -156,7 +165,13 @@ export default function CandidateCard({
               <dd className="font-mono text-xl tabular-nums text-ink-hi">{cash?.amount ?? "—"}</dd>
             </div>
           </dl>
-          <p className="mt-2 font-mono text-xs tracking-[0.08em] text-ink-min">AS OF {syncedOn}</p>
+          <p className="mt-2 font-mono text-xs tracking-[0.08em] text-ink-min">
+            {candidate.financialsThrough
+              ? `FEC REPORTS THROUGH ${candidate.financialsThrough} · CHECKED ${syncedOn}`
+              : candidate.contributions == null && candidate.cashOnHand == null
+                ? `NO FEC REPORT FOR THIS ELECTION · CHECKED ${syncedOn}`
+                : `CHECKED ${syncedOn}`}
+          </p>
         </>
       )}
     </article>

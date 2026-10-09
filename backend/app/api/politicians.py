@@ -22,7 +22,6 @@ whole grace period. Presidents are never removed by any of that.
 """
 import json
 import logging
-import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -31,12 +30,13 @@ from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.database import get_db
+from app.member_ids import resolve_member_id
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
 from app.ordinals import ordinal
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
-from app.services.justice_service import justice_overall
+from app.score_display import displayed_rank
 from app.services.senator_service import STATE_NAMES
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,9 @@ def _cached_json(data, max_age: int = CACHE_TTL_DETAIL_S) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
-# Score helpers — mirrors frontend lib/representation.ts calculations
+# Score helpers — the shared scorers, at their own precision (the page rounds
+# once, for display; rounding here too turned 62.45 into 63 beside a
+# scorecard showing 62)
 # ---------------------------------------------------------------------------
 
 def _senator_overall(s) -> float | None:
@@ -73,13 +75,12 @@ def _senator_overall(s) -> float | None:
     # (each returns 50 for missing data, never 0).
     if all(v == 0.0 for v in scores):
         return None
-    return round(compute_overall_score(s), 1)
+    return compute_overall_score(s)
 
 
 def _president_overall(p: President) -> float | None:
     scores = [
-        p.score_public_mandate, p.score_effectiveness,
-        p.score_agency_alignment, p.score_historical_legacy,
+        p.score_public_mandate, p.score_effectiveness, p.score_historical_legacy,
     ]
     # 2026-07 (#218 review S4): these four columns are nullable — a
     # dimension that's genuinely inapplicable or not-yet-computed for
@@ -91,12 +92,7 @@ def _president_overall(p: President) -> float | None:
     # wasn't even in the checked list at all.
     if all(v is None for v in scores):
         return None
-    return round(compute_president_overall_score(p), 1)
-
-
-def _justice_overall(j: Justice) -> float | None:
-    overall = justice_overall(j)
-    return round(overall, 1) if overall is not None else None
+    return compute_president_overall_score(p)
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +225,6 @@ def list_politicians(
                 continue
             if party and (j.appointing_party or "R") != party:
                 continue
-            overall = _justice_overall(j)
             is_chief = "Chief" in (j.role_title or "")
             results.append({
                 "id": j.id,
@@ -241,8 +236,10 @@ def list_politicians(
                 "district": None,
                 "role": "Chief Justice" if is_chief else "Associate Justice",
                 "thumbnailUrl": j.thumbnail_url,
-                "hasScorecard": overall is not None,
-                "overallScore": overall,
+                # Justices have a scorecard and no score (justice v3):
+                # null is "not scored", never 0.
+                "hasScorecard": True,
+                "overallScore": None,
                 "activeIssueCount": len(issue_map.get(j.id, [])),
             })
 
@@ -254,8 +251,8 @@ def list_politicians(
 # ---------------------------------------------------------------------------
 
 def _detect_branch(pid: str, db: Session) -> tuple[str, object] | None:
-    # Both chambers' ids are the member's "last-first" name, so one id can be
-    # a departed row in one chamber and a serving member in the other (a
+    # One person has one id in both chambers (app/member_ids.py), so one id
+    # can be a departed row in one chamber and a serving member in the other (a
     # representative who went on to the Senate, or back): the serving one is
     # who the page is about.
     senator = db.query(Senator).filter(Senator.id == pid).first()
@@ -368,30 +365,22 @@ def _chamber_rank(branch: str, entity, db: Session) -> dict | None:
     leaderboard's order — the overall score as displayed (a whole number,
     rounded half up), ties sharing a standard competition rank — so the
     profile states the rank the leaderboard shows. None for whom the
-    leaderboard doesn't rank: a member or justice no longer serving, a
-    sitting president (only completed terms are ranked: get_president_leaderboard),
-    or anyone not scored."""
-    shown = {}
+    leaderboard doesn't rank: a member no longer serving, a sitting
+    president (only completed terms are ranked: get_president_leaderboard),
+    any justice (justice v3 scores and ranks none), or anyone not scored."""
+    scores: dict[str, float] = {}
     if branch == "president":
         if entity.is_current:
             return None
         for p in db.query(President).filter(President.is_current == False).all():  # noqa: E712
-            shown[p.id] = math.floor(compute_president_overall_score(p) + 0.5)
-    elif branch == "scotus" and entity.is_active:
-        for j in db.query(Justice).filter(Justice.is_active == True).all():  # noqa: E712
-            overall = justice_overall(j)
-            if overall is not None:
-                shown[j.id] = math.floor(overall + 0.5)
+            scores[p.id] = compute_president_overall_score(p)
     elif branch in ("senate", "house") and getattr(entity, "is_current", False):
         model = Senator if branch == "senate" else Representative
         for m in db.query(model).filter(model.is_current == True).all():  # noqa: E712
-            overall = compute_overall_score(m)
-            if overall is not None:
-                shown[m.id] = math.floor(overall + 0.5)
-    if not shown or entity.id not in shown:
+            scores[m.id] = compute_overall_score(m)
+    if entity.id not in scores:
         return None
-    mine = shown[entity.id]
-    return {"rank": 1 + sum(1 for v in shown.values() if v > mine), "of": len(shown)}
+    return {"rank": displayed_rank(scores[entity.id], list(scores.values())), "of": len(scores)}
 
 
 def _get_active_issues(politician_id: str, db: Session) -> list[dict]:
@@ -450,14 +439,19 @@ def _get_gov_record(politician_id: str, db: Session) -> dict:
 
 @router.get("/politicians/{politician_id}")
 def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONResponse:
-    """Return full profile for a single politician."""
+    """Return full profile for a single politician.
+
+    A renamed member's old id (app/member_ids.py) is answered with the
+    member, under their current id: the response's `id` is the one to
+    link to, and the page redirects an old URL to it."""
+    politician_id = resolve_member_id(db, politician_id)
     result = _detect_branch(politician_id, db)
     if result is None:
         raise HTTPException(status_code=404, detail="Politician not found")
 
     branch, entity = result
     overall = _senator_overall(entity) if branch in ("senate", "house") else (
-        _president_overall(entity) if branch == "president" else _justice_overall(entity)
+        _president_overall(entity) if branch == "president" else None  # justices: not scored
     )
     scorecard = _build_scorecard(branch, politician_id, db)
 
@@ -465,7 +459,7 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
         "id": politician_id,
         "branch": branch,
         "identity": _build_identity(branch, entity),
-        "hasScorecard": overall is not None,
+        "hasScorecard": overall is not None or branch == "scotus",
         "overallScore": overall,
         "scorecard": scorecard,
         "chamberRank": _chamber_rank(branch, entity, db),

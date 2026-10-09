@@ -14,9 +14,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.models import HousePipelineRun, PipelineRun, PipelineStatus, StockTradesPipelineRun
+from app.models import HousePipelineRun, PipelineRun, PipelineStatus, Senator, StockTrade, StockTradesPipelineRun
 from app.pipeline import stock_pipeline
 from app.pipeline.fetch.ptr_common import TradeRow
+from app.pipeline.fetch.senate_ptr import report_version
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
@@ -385,8 +386,6 @@ class TestRereadTrades:
     stored URLs; a filing that doesn't read keeps its rows and waits a week."""
 
     def _stored(self, db_session, filing_id, url, version=1, owner="self", confidence="text"):
-        from app.models import Senator, StockTrade
-
         if db_session.get(Senator, "S1") is None:
             db_session.add(Senator(id="S1", name="Jane Doe", state="TX", party="R"))
         db_session.add(StockTrade(
@@ -529,6 +528,39 @@ class TestRereadTrades:
         assert seen == [None]
 
 
+    async def test_a_backlog_in_one_source_leaves_the_next_its_share(self, db_session):
+        """Every source gets an equal part of what is left: a Senate backlog
+        whose filings each take 40% of the night stops after one, and the
+        president's filings, last in the order, are still read."""
+        from app.models import President, PresidentTrade
+
+        for fid in "abc":
+            self._stored(db_session, fid, f"https://efdsearch.senate.gov/search/view/ptr/{fid}/")
+        db_session.add(President(id="p-1", name="Test President", party="R", number=99,
+                                 term_start="2025-01-20", is_current=True))
+        db_session.add(PresidentTrade(
+            president_id="p-1", asset_name="Bitcoin", owner="self", transaction_type="purchase",
+            transaction_date="2025-11-01", disclosure_date="2025-12-30",
+            source_url="https://example.test/p.pdf", filing_id="p", parser_version=1,
+        ))
+        db_session.commit()
+        budget = stock_pipeline.PTR_REREAD_BUDGET.total_seconds()
+        clock = [0.0]
+
+        async def slow_fetch(_client, _db, filing):
+            clock[0] += 0.4 * budget
+            return [self._row(filing["report_url"].rstrip("/")[-1], filing["report_url"])]
+
+        president_read = AsyncMock(return_value=[self._row("p", "https://example.test/p.pdf")])
+        with patch.object(stock_pipeline.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(stock_pipeline, "_read_president_filing", president_read):
+            count, mock_fetch = await self._reread(db_session, slow_fetch)
+
+        assert mock_fetch.call_count == 1
+        president_read.assert_awaited_once()
+        assert count == 2
+
+
 class TestRereadHouseFiling:
     """A stored House filing is read again with its filing date from the
     Clerk's yearly index: a scan read before PTR PARSER_VERSION 5 stored each
@@ -555,3 +587,80 @@ class TestRereadHouseFiling:
             await stock_pipeline._reread_house_filing(None, None, "20012345", url)
 
         assert fetch.await_args.args[2]["filing_date"] is None
+
+
+def test_a_trade_two_reports_list_counts_once_at_its_first_disclosure(db_session):
+    db_session.add(Senator(id="S1", name="Sen One", state="CA", party="D"))
+    trade = dict(senator_id="S1", ticker="CVX", asset_name="Chevron", owner="self", transaction_type="purchase",
+                 transaction_date="2026-07-02", days_to_disclose=0, amount_low=1001.0, amount_high=15000.0,
+                 industry="OIL_GAS", source_url="https://example.com")
+    db_session.add_all([
+        StockTrade(**trade, filing_id="later", disclosure_date="2026-08-20"),
+        StockTrade(**trade, filing_id="first", disclosure_date="2026-08-17"),
+        # Two same-day lots in one report stay two.
+        StockTrade(**{**trade, "asset_name": "Ecolab"}, filing_id="first", disclosure_date="2026-08-17"),
+        StockTrade(**{**trade, "asset_name": "Ecolab"}, filing_id="first", disclosure_date="2026-08-17"),
+    ])
+    db_session.commit()
+    assert stock_pipeline.collapse_refiled_trades(db_session, StockTrade, "senator_id") == 1
+    assert sorted((t.asset_name, t.filing_id) for t in db_session.query(StockTrade)) == [
+        ("Chevron", "first"), ("Ecolab", "first"), ("Ecolab", "first")]
+    assert stock_pipeline.collapse_refiled_trades(db_session, StockTrade, "senator_id") == 0
+
+
+@pytest.mark.parametrize("title,version", [
+    ("Periodic Transaction Report for 11/15/2024 (Amendment 2)", ("2024-11-15", 2)),
+    ("Periodic Transaction Report for 09/11/2026", ("2026-09-11", 0)),
+    ("Something else", (None, 0)),
+])
+def test_an_efd_title_names_its_report_and_amendment(title, version):
+    assert report_version(title) == version
+
+
+def test_an_amended_report_keeps_its_newest_version_at_first_disclosure(db_session):
+    db_session.add(Senator(id="S1", name="Sen One", state="CA", party="D"))
+    base = dict(senator_id="S1", ticker=None, owner="self", transaction_type="purchase",
+                transaction_date="2024-10-29", days_to_disclose=0, amount_low=1001.0, amount_high=15000.0,
+                industry="TECH", source_url="https://example.com")
+    db_session.add_all([
+        StockTrade(**base, asset_name="Acme", filing_id="orig", disclosure_date="2024-11-15"),
+        StockTrade(**{**base, "amount_high": 50000.0}, asset_name="Acme", filing_id="amend", disclosure_date="2026-08-05"),
+        StockTrade(**base, asset_name="Added Later", filing_id="amend", disclosure_date="2026-08-05"),
+    ])
+    db_session.commit()
+    filings = [
+        {"last": "One", "first": "Sen", "title": "Periodic Transaction Report for 11/15/2024",
+         "report_url": "https://efd/view/ptr/orig/", "filed_date": "2024-11-15"},
+        {"last": "One", "first": "Sen", "title": "Periodic Transaction Report for 11/15/2024 (Amendment 1)",
+         "report_url": "https://efd/view/ptr/amend/", "filed_date": "2026-08-05"},
+    ]
+    assert stock_pipeline.settle_amended_reports(db_session, filings) == 1
+    rows = {t.asset_name: (t.filing_id, t.disclosure_date, t.amount_high) for t in db_session.query(StockTrade)}
+    # The corrected amount stands, at the date the trade was first disclosed;
+    # the trade the amendment added was first disclosed by the amendment.
+    assert rows == {"Acme": ("amend", "2024-11-15", 50000.0), "Added Later": ("amend", "2026-08-05", 15000.0)}
+    assert stock_pipeline._marked(db_session, stock_pipeline._SUPERSEDED_KEY.format("orig"))
+
+
+@pytest.mark.asyncio
+async def test_the_president_s_annual_report_rows_are_never_reread(db_session):
+    """They are president_fd's: the 278-T parser the re-read runs would
+    replace them with whatever it made of a 278e (21,285 rows at stake)."""
+    from app.models import President, PresidentTrade
+
+    db_session.add(President(id="p-1", name="Test President", party="R", number=99,
+                             term_start="2025-01-20", is_current=True))
+    common = dict(president_id="p-1", owner="self", transaction_type="purchase",
+                  transaction_date="2025-11-01", disclosure_date="2026-05-15", parser_version=1)
+    db_session.add_all([
+        PresidentTrade(asset_name="Annual holding", source_url="https://example.test/annual.pdf",
+                       filing_id="annual", report_kind="annual", **common),
+        PresidentTrade(asset_name="Periodic trade", source_url="https://example.test/p.pdf",
+                       filing_id="p", report_kind="periodic", **common),
+    ])
+    db_session.commit()
+    read = AsyncMock(return_value=[])
+    with patch.object(stock_pipeline, "_read_president_filing", read), \
+         patch.object(stock_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"):
+        await stock_pipeline._reread_trades(db_session, None)
+    assert [c.args[1]["doc_id"] for c in read.await_args_list] == ["p"]

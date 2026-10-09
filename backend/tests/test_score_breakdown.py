@@ -12,6 +12,9 @@ Two things are verified per entity type:
    SQLite db_session fixture.
 """
 
+import json
+
+from app.api.senators import get_config
 from app.models import (
     Donor,
     IndustryDonation,
@@ -27,10 +30,8 @@ from app.models import (
     SponsoredBill,
 )
 from app.pipeline.analyze.president_scorer import (
-    _agency_alignment_core,
     _effectiveness_core,
     _historical_legacy_core,
-    calc_agency_alignment,
     calc_effectiveness,
     calc_historical_legacy,
 )
@@ -84,7 +85,9 @@ class TestSenatorCoreConsistency:
         args = (voting_record, [], self.FUNDING, "CA", "D")
         breakdown = _constituent_alignment_core(*args)
         assert breakdown["score"] == _calc_constituent_alignment(*args)
-        assert len(breakdown["components"]) == 1
+        # A senator with no survey rating also lists the approval part, not
+        # measured (v6.29); only the vote part is scored.
+        assert [c["label"] for c in breakdown["components"] if c["weight"]] == ["Seat-relative vote alignment"]
 
     def test_funding_diversity_core_matches_calc(self):
         funding = {
@@ -175,6 +178,32 @@ class TestScorecardFacts:
         ]
         facts = _legislative_effectiveness_core(bills, leadership_score=0.5, party="D", years_in_office=6)["facts"]
         assert facts["billsByStage"] == [1, 1, 1, 1, 2]
+        assert facts["bills"] == 6 and facts["resolutions"] == 0
+
+    def test_effectiveness_facts_count_bills_as_its_sentence_does(self):
+        """A simple resolution the chamber agreed to (electing a member to a
+        committee) is not a bill that passed: the column's stage counts are
+        the bills the component's own sentence counts, and resolutions are
+        a separate figure."""
+        bills = [
+            {"billType": "hr", "congress": 119, "stage": "REFERRED"},
+            {"billType": "hr", "congress": 119, "stage": "PASSED_CHAMBER"},
+            {"billType": "hres", "congress": 119, "stage": "PASSED_CHAMBER",
+             "latestAction": "Motion to reconsider laid on the table Agreed to without objection."},
+            {"billType": "hconres", "congress": 119, "stage": "REFERRED"},
+        ]
+        core = _legislative_effectiveness_core(bills, leadership_score=0.5, party="D", years_in_office=6)
+        facts = core["facts"]
+        assert facts["billsByStage"] == [1, 0, 0, 1, 0]
+        assert facts["bills"] == 2 and facts["resolutions"] == 2
+        detail = core["components"][0]["detail"]
+        assert "2 bills: 1 introduced only, 1 advanced further" in detail
+
+
+    def test_config_names_the_bill_types_counted_as_bills(self):
+        """The column lists its furthest-along bills from the same types
+        its stage counts read (served, not typed into the frontend)."""
+        assert json.loads(get_config().body)["substantiveBillTypes"] == ["HJRES", "HR", "S", "SJRES"]
 
 
 class TestPresidentCoreConsistency:
@@ -182,11 +211,6 @@ class TestPresidentCoreConsistency:
         args = (5.0, 3.5, 4.0, 2010)
         breakdown = _effectiveness_core(*args)
         assert breakdown["score"] == calc_effectiveness(*args)
-
-    def test_agency_alignment_core_matches_calc(self):
-        args = (65.0,)
-        breakdown = _agency_alignment_core(*args)
-        assert breakdown["score"] == calc_agency_alignment(*args)
 
     def test_historical_legacy_core_matches_calc(self):
         breakdown = _historical_legacy_core(897)
@@ -273,7 +297,6 @@ class TestPresidentScoreBreakdownService:
             id="obama-44", name="Barack Obama", party="D", number=44,
             term_start="2009-01-20", term_end="2017-01-20",
             eo_count=276, gdp_growth_avg=2.1, jobs_created_millions=11.6,
-            rulemaking_count=1800, rulemaking_finalized_pct=68.0,
         )
         db_session.add(p)
         db_session.commit()
@@ -284,7 +307,7 @@ class TestPresidentScoreBreakdownService:
         assert "competence" not in breakdown  # removed dimension, no bar to explain
         assert breakdown["publicMandate"]["score"] is None  # no approval/election data stored
         assert breakdown["effectiveness"]["score"] is not None
-        assert breakdown["agencyAlignment"]["score"] is not None
+        assert "agencyAlignment" not in breakdown  # removed in president v7
         assert breakdown["historicalLegacy"]["score"] is None  # no C-SPAN score stored
 
     def test_president_with_no_stored_data_is_fully_none(self, db_session):
@@ -299,22 +322,24 @@ class TestPresidentScoreBreakdownService:
         assert "independence" not in breakdown
         assert "followThrough" not in breakdown
         assert "competence" not in breakdown  # removed dimension, no bar to explain
-        for dim in ("publicMandate", "effectiveness", "agencyAlignment", "historicalLegacy"):
+        for dim in ("publicMandate", "effectiveness", "historicalLegacy"):
             assert breakdown[dim]["score"] is None, f"{dim} should be None with no stored data"
 
 
 class TestJusticeScoreBreakdownService:
-    def test_returns_the_stored_loyalty_facts(self, db_session):
+    def test_returns_the_stored_estimate_and_no_score(self, db_session):
+        # A v2 score left in the database is never served (justice v3).
         db_session.add(Justice(
             id="j1", name="Justice One", last_name="One", appointing_party="R", is_active=True,
-            score_loyalty=72.5, loyalty=0.0412, loyalty_se=0.031, loyalty_votes_in=210,
-            loyalty_votes_out=380, loyalty_rate_in=0.55, loyalty_rate_out=0.49, loyalty_through_term=2025,
+            score_loyalty=72.5, loyalty=0.03, loyalty_se=0.02, appointer_effect=0.0412, appointer_effect_se=0.031,
+            loyalty_votes_in=210, loyalty_votes_out=380, loyalty_rate_in=0.55, loyalty_rate_out=0.49,
+            loyalty_through_term=2025,
         ))
         db_session.commit()
         breakdown = get_justice_score_breakdown(db_session, "j1")
-        assert breakdown["loyalty"]["score"] == 72.5
+        assert breakdown["loyalty"]["score"] is None
         assert breakdown["loyalty"]["facts"] == {
-            "estimate": 0.0412, "se": 0.031, "votesIn": 210, "votesOut": 380,
+            "estimate": 0.0412, "se": 0.031, "ciLow": -0.0196, "ciHigh": 0.1020, "votesIn": 210, "votesOut": 380,
             "rateIn": 0.55, "rateOut": 0.49, "throughTerm": 2025,
         }
 

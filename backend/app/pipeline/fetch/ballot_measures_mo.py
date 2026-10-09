@@ -78,9 +78,39 @@ _SECTION_HEADING_RE = re.compile(r"The following ballot measures", re.IGNORECASE
 _SUMMARY_HEADING_RE = re.compile(r"^Official Ballot Title:\s*$", re.IGNORECASE)
 _FAIR_LANGUAGE_HEADING_RE = re.compile(r"Fair Ballot Language:", re.IGNORECASE)
 _FISCAL_START_RE = re.compile(r"^State\b.*\bestimate", re.IGNORECASE)
+# Each group is the source's whole sentence, "A “yes” vote will ...": it
+# used to start after "will", storing a fragment that read "A YES VOTE
+# repeal Article I ..." under the page's heading (§7: verbatim).
 _YES_NO_RE = re.compile(
-    r'A\s*[“"]?yes[”"]?\s*vote will\s*(.*?)\s*A\s*[“"]?no[”"]?\s*vote will\s*(.*)$',
+    r'(A\s*[“"]?yes[”"]?\s*vote will\s*.*?)\s*(A\s*[“"]?no[”"]?\s*vote will\s*.*)$',
     re.IGNORECASE | re.DOTALL,
+)
+# The fair ballot language closes with the statement RSMo 116.025
+# requires of every measure, "whether the measure will increase, decrease,
+# or have no impact on taxes" — on every 2026 measure, "If passed, this
+# measure will ...". It is about the measure, not about a NO vote, and
+# was being stored as the end of no_means; it is split off and kept
+# with the fiscal statement, verbatim.
+_TAX_STATEMENT_RE = re.compile(r"^(.*?)\s*(If passed, this measure\b.*)$", re.DOTALL)
+
+# Who drafted each part (RSMo chapter 116), by how the measure reached the
+# ballot. Fair ballot language is always the Secretary of State's
+# (116.025, the Attorney General approving it). For a petition, the
+# summary statement is the Secretary's (116.334) and the fiscal note
+# summary the State Auditor's (116.175). For a General Assembly referral
+# the Assembly may write both itself (116.155) and otherwise the
+# Secretary (116.160) and the Auditor (116.170) do; the page does not say
+# which happened, so both are named as the statute allows, never one
+# guessed.
+FRAMING_AUTHORITY = "Missouri Secretary of State (fair ballot language, RSMo 116.025)"
+_PETITION_TITLE_AUTHORITY = "Missouri Secretary of State (RSMo 116.334)"
+_PETITION_FISCAL_AUTHORITY = "Missouri State Auditor (fiscal note summary, RSMo 116.175)"
+_TAX_AUTHORITY = "the Missouri Secretary of State (tax statement, RSMo 116.025)"
+_REFERRAL_TITLE_AUTHORITY = (
+    "Missouri General Assembly, or where it wrote none, the Secretary of State (RSMo 116.155, 116.160)"
+)
+_REFERRAL_FISCAL_AUTHORITY = (
+    "Missouri General Assembly, or where it wrote none, the State Auditor (fiscal note summary, RSMo 116.155, 116.170)"
 )
 
 
@@ -177,12 +207,29 @@ def _parse_measure(number: str, elements: list, kind: str = "Amendment") -> dict
         (i for i, e in enumerate(elements) if e.tag == "p" and _FAIR_LANGUAGE_HEADING_RE.search(e.text_content())),
         None,
     )
-    yes_means = no_means = None
+    yes_means = no_means = tax_statement = None
     if fair_idx is not None and fair_idx + 1 < len(elements) and elements[fair_idx + 1].tag == "blockquote":
         fair_text = clean_text(elements[fair_idx + 1].text_content()) or ""
         m = _YES_NO_RE.search(fair_text)
         if m:
             yes_means, no_means = clean_text(m.group(1)), clean_text(m.group(2))
+            tax = _TAX_STATEMENT_RE.match(no_means or "")
+            if tax:
+                no_means, tax_statement = clean_text(tax.group(1)), clean_text(tax.group(2))
+
+    referral = origin == "Missouri General Assembly"
+    petition = origin is not None and not referral
+    fiscal_authority = None
+    if fiscal_impact:
+        fiscal_authority = (
+            _REFERRAL_FISCAL_AUTHORITY if referral else _PETITION_FISCAL_AUTHORITY if petition else None
+        )
+    if tax_statement:
+        # Two drafters' sentences in one section, each named.
+        fiscal_impact = f"{fiscal_impact}\n\n{tax_statement}" if fiscal_impact else tax_statement
+        fiscal_authority = (
+            f"{fiscal_authority} and {_TAX_AUTHORITY}" if fiscal_authority else _TAX_AUTHORITY[4:]
+        )
 
     return {
         "number": number,
@@ -192,8 +239,11 @@ def _parse_measure(number: str, elements: list, kind: str = "Amendment") -> dict
         "fiscal_impact": fiscal_impact,
         "yes_means": yes_means,
         "no_means": no_means,
-        "title_authority": "Missouri Secretary of State",
-        "fiscal_authority": "Missouri Secretary of State" if fiscal_impact else None,
+        "title_authority": (
+            _REFERRAL_TITLE_AUTHORITY if referral else _PETITION_TITLE_AUTHORITY if petition else None
+        ),
+        "framing_authority": FRAMING_AUTHORITY if (yes_means or no_means) else None,
+        "fiscal_authority": fiscal_authority,
     }
 
 

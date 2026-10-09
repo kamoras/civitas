@@ -82,10 +82,12 @@ const president = {
   score: {
     publicMandate: 29,
     effectiveness: 33,
-    agencyAlignment: 91,
     historicalLegacy: null,
-    overall: 51,
-    dimensionsAvailable: 3,
+    overall: 31,
+    dimensionsAvailable: 2,
+    // A sitting president has no Historical Legacy: the two scored parts
+    // share the whole, and the card says so.
+    effectiveWeights: { publicMandate: 0.5, effectiveness: 0.5 },
   },
   avgApproval: 37.3,
   gdpGrowthAvg: null,
@@ -123,12 +125,12 @@ const breakdown: PresidentScoreBreakdown = {
       gdpGrowth: null,
       gdpMean: null,
       gdpSince: null,
+      gdpPerPerson: null,
+      gdpPeers: null,
+      gdpCatchUp: null,
+      gdpRelative: null,
+      gdpRelativeMean: null,
     },
-  },
-  agencyAlignment: {
-    score: 91,
-    components: [{ label: "Finalization rate", weight: 1, score: 90.7, detail: "…" }],
-    facts: { finalizedPct: 62, finalizedMean: 54, rulemakings: 1400 },
   },
   historicalLegacy: {
     score: null as unknown as number,
@@ -152,16 +154,16 @@ describe("PresidentScorecard", () => {
     expect(screen.getByText("Ranked once the term ends")).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Averaged 37\.3% approval so far; presidents averaged 50\.9% over their first 20 months\. Approval fell 5\.6 points from a start of 41\.0%; presidents who started there rose about 4\.8\./
+        /Approval has averaged 37\.3% so far, below the 50\.9% past presidents averaged over their first 20 months\. Averaged over the first quarter of its polls and then the last, it fell 5\.6 points from 41\.0%\. Presidents who started there typically rose 4\.8 points, so this is worse than usual\./
       )
     ).toBeInTheDocument();
+    // Each score shows its actual share of this president's overall, not
+    // the nominal weight (Historical Legacy is unscored for a sitting one).
+    expect(screen.getAllByText("50% of the score")).toHaveLength(2);
     expect(
       screen.getByText(
-        /62% of the 1,400 rulemakings federal agencies began reached a final rule\. Administrations since 1994 average 54%\./
+        /Growth is counted from the term's second full year, so there's no figure yet\./
       )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/GDP growth is measured from the second full year of a term\./)
     ).toBeInTheDocument();
     // The other presidency's historians' rating, linked.
     expect(screen.getByRole("link", { name: /312 points, scored 12/ })).toHaveAttribute(
@@ -173,6 +175,87 @@ describe("PresidentScorecard", () => {
     expect(await screen.findByRole("heading", { name: "Holdings" })).toBeInTheDocument();
     expect(screen.getByText("40 Wall Street LLC")).toBeInTheDocument();
     expect(screen.getByText("285 signed")).toBeInTheDocument();
+  });
+
+  it("states postwar growth against the peer economies, catch-up allowed for", async () => {
+    const peers = {
+      ...breakdown,
+      effectiveness: {
+        ...breakdown.effectiveness,
+        facts: {
+          ...breakdown.effectiveness.facts,
+          gdpGrowth: 2.3,
+          gdpMean: 2.8,
+          gdpSince: true,
+          gdpPerPerson: 1.4,
+          gdpPeers: 1.12,
+          gdpCatchUp: -1.58,
+          gdpRelative: 1.86,
+          gdpRelativeMean: 2.23,
+        },
+      },
+    };
+    render(<PresidentScorecard president={president} breakdown={peers} rank={null} />);
+    expect(
+      screen.getByText(
+        /Growth: 1\.4% a year per person, against 1\.1% in 13 other wealthy countries over the same years, which shared the same oil shocks, recessions and pandemic\. Those countries were poorer and still catching up with US incomes, which alone would have had them growing 1\.6 points a year faster\. Allowing for that, the US came out 1\.9 points a year ahead; under the typical president since 1947 it came out 2\.2 points a year ahead\./
+      )
+    ).toBeInTheDocument();
+    expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
+  });
+
+  it("states approval by party against the era's polarization", async () => {
+    const era = {
+      ...breakdown,
+      publicMandate: {
+        ...breakdown.publicMandate,
+        facts: {
+          ...breakdown.publicMandate.facts,
+          approvalGroups: { own: 87.2, opp: 3.9, ind: 30.4 },
+          approvalExpected: { own: 86.6, opp: 6.1, ind: 36.0 },
+          approvalVsEra: -2.7,
+          approvalVsEraMean: 0.1,
+        },
+      },
+    };
+    render(<PresidentScorecard president={president} breakdown={era} rank={null} />);
+    expect(
+      screen.getByText(
+        /Approval has averaged 37\.3% so far: 87% in the president's party, 4% in the other party and 30% among independents\. Under the same polarization, presidents typically got 87%, 6% and 36% over their first 20 months\. That puts this term 2\.7 points below the era; the typical president comes out 0\.1 points above\./
+      )
+    ).toBeInTheDocument();
+    expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
+  });
+
+  it("states unemployment and inflation against where the term started", async () => {
+    const economy = {
+      ...breakdown,
+      effectiveness: {
+        ...breakdown.effectiveness,
+        facts: {
+          ...breakdown.effectiveness.facts,
+          unemploymentStart: 9.3,
+          unemploymentChange: -4.9,
+          unemploymentExpected: -4.5,
+          inflationStart: 4.7,
+          inflationAverage: 5.0,
+          inflationExpected: 4.4,
+          economyYears: 4,
+        },
+      },
+    };
+    render(<PresidentScorecard president={president} breakdown={economy} rank={null} />);
+    expect(
+      screen.getByText(
+        /Unemployment: fell 4\.9 points from 9\.3% over the credited years; for presidents starting at that rate it typically fell 4\.5 points, so this is better than usual\./
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Inflation: prices rose 5\.0% a year, from 4\.7% the year the term began; presidents starting there averaged 4\.4%, so this is worse than usual\./
+      )
+    ).toBeInTheDocument();
+    expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
   });
 
   it("never calls a scored dimension unrated when the breakdown is missing", async () => {
@@ -206,7 +289,7 @@ describe("PresidentScorecard", () => {
     await screen.findByText("40 Wall Street LLC");
     // The share buttons are part of what axe checks here: the summary, the
     // four score columns and the holdings.
-    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(6);
+    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(5);
     const result = await axe.run(document.body, {
       rules: { "color-contrast": { enabled: false } },
     });
@@ -216,7 +299,7 @@ describe("PresidentScorecard", () => {
   it("the leaderboard's summary states the scores and links to the full scorecard", () => {
     render(<PresidentSummary president={president} />);
     expect(screen.getByRole("heading", { level: 2, name: "Donald J. Trump" })).toBeInTheDocument();
-    expect(screen.getByText("51")).toBeInTheDocument();
+    expect(screen.getByText("31")).toBeInTheDocument();
     expect(screen.getByText("Not rated yet")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open the full scorecard/ })).toHaveAttribute(
       "href",

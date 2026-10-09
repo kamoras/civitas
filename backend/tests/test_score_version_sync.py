@@ -17,9 +17,12 @@ _VERSIONS_TS = (
 )
 
 
-def test_latest_changelog_entry_matches_algorithm_version():
+def test_latest_member_changelog_entry_matches_algorithm_version():
+    # The newest member-score entry ("v6.33"), not simply the first: the
+    # changelog is newest first by release date, so a president or justice
+    # version released after the latest member version comes above it.
     if not _VERSIONS_TS.exists():
         pytest.skip("frontend tree not available")
-    first = re.search(r'version:\s*"([^"]+)"', _VERSIONS_TS.read_text())
+    first = re.search(r'version:\s*"(v[^"]+)"', _VERSIONS_TS.read_text())
     assert first is not None
     assert first.group(1) == ALGORITHM_VERSION

@@ -20,6 +20,8 @@ export interface SponsoredBill {
 export interface Senator {
   id: string;
   name: string;
+  /** Biographical Directory id, which Congress.gov's member pages are keyed by. */
+  bioguideId?: string | null;
   state: string;
   party: "D" | "R" | "I";
   yearsInOffice: number;
@@ -46,7 +48,7 @@ export interface Senator {
         "high" | "medium" | "low"
       >
     > & {
-      /** "neutral:few-votes" | "neutral:no-expectation" | "shrunk:<share kept>" | "full" */
+      /** "neutral:few-votes" | "neutral:no-party" | "neutral:no-expectation" | "shrunk:<share kept>" | "full" */
       constituentAlignmentVotePart?: string;
     };
   };
@@ -57,7 +59,7 @@ export interface Senator {
     totalFromPacs: number;
     /** Backend-computed PAC share of contributions, 0-100 unrounded — never re-derive. */
     pacSharePct: number;
-    smallDonorPercentage: number;
+    smallDonorPercentage: number | null;
     topDonors: Donor[];
     industryBreakdown: IndustryDonation[];
   };
@@ -160,6 +162,7 @@ export interface StockTrade {
   parseConfidence: "text" | "ocr";
   /** "annual": from a president's annual report (OGE Form 278e). */
   reportKind: "periodic" | "annual";
+  beforeTermStart?: boolean;
 }
 
 export interface PaginatedStockTrades {
@@ -175,7 +178,7 @@ export interface KeyVote {
   billName: string;
   billId: string;
   date: string;
-  vote: "Yea" | "Nay" | "Not Voting";
+  vote: "Yea" | "Nay" | "Present" | "Not Voting";
   policyArea: string;
   policyAreas: PolicyAreaDetail[];
   partyAlignmentWeight: number;
@@ -304,7 +307,7 @@ export interface LeaderboardEntry {
   totalFromPacs: number;
   /** Backend-computed PAC share of contributions, 0-100 unrounded — never re-derive. */
   pacSharePct: number;
-  smallDonorPercentage: number;
+  smallDonorPercentage: number | null;
   topIndustry: string | null;
   trend?: ScoreTrend;
   /** 0 = most-left, 1 = most-right; null if too little cosponsorship data. */

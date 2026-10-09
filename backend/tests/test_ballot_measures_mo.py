@@ -42,12 +42,28 @@ class TestFetchMeasuresParsing:
         measures = self._measures()
         three = measures["3"]
         assert three["origin"] == "Missouri General Assembly"
-        assert three["yes_means"].startswith("repeal Article I, Section 36")
-        assert three["no_means"].startswith("leave Article I, Section 36")
+        assert three["yes_means"].startswith("A “yes” vote will repeal Article I, Section 36")
+        assert three["no_means"].startswith("A “no” vote will leave Article I, Section 36")
         assert three["fiscal_impact"].startswith("State governmental entities estimate")
         # The fiscal sentence must not leak into the summary, and vice versa.
         assert "estimate no costs" not in three["official_summary"]
         assert "Repeal the 2024" not in three["fiscal_impact"]
+        # The fair ballot language's closing tax statement (RSMo 116.025)
+        # is about the measure, not a NO vote: it was being glued onto
+        # no_means. It is kept, verbatim, with the fiscal statement.
+        assert "If passed" not in three["no_means"]
+        assert three["no_means"].endswith("will not prohibit gender transition procedures for minors.")
+        assert three["fiscal_impact"].endswith(
+            "estimate no costs or savings.\n\nIf passed, this measure will not increase or decrease taxes."
+        )
+        # Drafters per RSMo chapter 116: a General Assembly referral's
+        # summary and fiscal note summary are the Assembly's or, failing
+        # that, the Secretary's and the Auditor's; the page doesn't say
+        # which, so neither is credited to the Secretary alone.
+        assert three["title_authority"] == mo._REFERRAL_TITLE_AUTHORITY
+        assert three["fiscal_authority"].startswith(mo._REFERRAL_FISCAL_AUTHORITY)
+        assert three["fiscal_authority"].endswith("Missouri Secretary of State (tax statement, RSMo 116.025)")
+        assert three["framing_authority"] == mo.FRAMING_AUTHORITY
 
     def test_single_paragraph_measure_still_splits_summary_from_fiscal(self):
         # Amendment 7's "Official Ballot Title" blockquote is ONE
@@ -55,7 +71,7 @@ class TestFetchMeasuresParsing:
         # ahead of it, unlike Amendment 3) — a different shape the
         # last-child split must still handle correctly.
         seven = self._measures()["7"]
-        assert seven["fiscal_impact"] == "State and local governmental entities estimate no costs or savings."
+        assert seven["fiscal_impact"].startswith("State and local governmental entities estimate no costs or savings.\n\n")
         assert "permanent public endowment fund" in seven["official_summary"]
         assert "estimate no costs" not in seven["official_summary"]
         # The name "Show-Me Prosperity Fund" only appears in the Fair
@@ -169,5 +185,9 @@ class TestFetchMeasures:
         assert prop["origin"] == "Missouri voters (referendum petition)"
         assert prop["official_summary"].startswith("Do the people of the state of Missouri approve the act")
         # A veto referendum: the state's own framing says what YES does.
-        assert prop["yes_means"].startswith("approve the act of the General Assembly")
-        assert prop["fiscal_impact"] == "State and local governmental entities estimate no costs or savings."
+        assert prop["yes_means"].startswith("A “yes” vote will approve the act of the General Assembly")
+        assert prop["fiscal_impact"].startswith("State and local governmental entities estimate no costs or savings.")
+        # A petition's summary is the Secretary's, its fiscal note summary
+        # the Auditor's.
+        assert prop["title_authority"] == mo._PETITION_TITLE_AUTHORITY
+        assert prop["fiscal_authority"].startswith(mo._PETITION_FISCAL_AUTHORITY)

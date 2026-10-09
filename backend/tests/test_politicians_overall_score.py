@@ -2,14 +2,18 @@
 score_calculator.compute_overall_score instead of carrying a fourth copy
 of the same SCORE_WEIGHTS formula (senate_pipeline.py, house_pipeline.py,
 and the senator/representative leaderboards were the other three, deduped
-in #82/#83). This locks in its two remaining local behaviors: the
-all-zero "not yet scored" guard and rounding to 1 decimal place."""
+in #82/#83). This locks in its remaining local behavior, the
+all-zero "not yet scored" guard, and that it adds no rounding of its own:
+the page rounds once, for display."""
+
+import json
 
 import pytest
 
-from app.api.politicians import _president_overall, _senator_overall
+from app.api.politicians import _chamber_rank, _president_overall, _senator_overall, list_politicians
 from app.models import Justice, President, Representative, Senator
 from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.score_display import displayed_score
 
 
 def test_all_zero_scores_means_not_yet_scored():
@@ -26,14 +30,28 @@ def test_all_zero_scores_means_not_yet_scored():
     assert _senator_overall(s) is None
 
 
-def test_matches_compute_overall_score_rounded_to_one_decimal():
+def test_matches_compute_overall_score():
     s = Senator(
         id="S001", name="Test Senator", state="CA", party="D",
         score_funding_independence=61, score_promise_persistence=72,
         score_constituent_alignment=48, score_funding_diversity=55,
         score_legislative_effectiveness=80,
     )
-    assert _senator_overall(s) == round(compute_overall_score(s), 1)
+    assert _senator_overall(s) == compute_overall_score(s)
+
+
+def test_the_directory_shows_the_scorecards_whole_number():
+    # Sub-scores of a real senator (2026-10-09): overall 62.45, which the
+    # scorecard shows as 62. Rounded to one decimal here first, it became
+    # 62.5 and the directory and the share card showed 63.
+    s = Senator(
+        id="S001", name="Test Senator", state="VT", party="I",
+        score_funding_independence=80.0, score_promise_persistence=0.0,
+        score_constituent_alignment=67.0, score_funding_diversity=81.0,
+        score_legislative_effectiveness=41.0,
+    )
+    assert _senator_overall(s) == 62.45
+    assert displayed_score(_senator_overall(s)) == displayed_score(compute_overall_score(s)) == 62
 
 
 def test_works_for_representatives_too_via_duck_typing():
@@ -43,7 +61,7 @@ def test_works_for_representatives_too_via_duck_typing():
         score_constituent_alignment=48, score_funding_diversity=55,
         score_legislative_effectiveness=80,
     )
-    assert _senator_overall(r) == round(compute_overall_score(r), 1)
+    assert _senator_overall(r) == compute_overall_score(r)
 
 
 class TestPresidentOverall:
@@ -176,17 +194,12 @@ class TestChamberRank:
         assert _chamber_rank("president", db_session.get(President, "b-2"), db_session) == {"rank": 2, "of": 2}
         assert _chamber_rank("president", db_session.get(President, "c-3"), db_session) is None
 
-    def test_justices_rank_by_loyalty_and_the_unmeasured_are_unranked(self, db_session):
-        from app.api.politicians import _chamber_rank
-        for jid, score in (("a", 90.0), ("b", 40.0), ("new", None)):
+    def test_no_justice_is_ranked_or_scored(self, db_session):
+        # Justice v3: a v2 score left in the database ranks no one, and the
+        # directory says "not scored" (null), never 0.
+        for jid, score in (("a", 90.0), ("b", 40.0)):
             db_session.add(Justice(id=jid, name=jid, last_name=jid, is_active=True, score_loyalty=score))
-        db_session.add(Justice(id="retired", name="r", last_name="r", is_active=False, score_loyalty=99.0))
         db_session.commit()
-
-        def rank(jid):
-            return _chamber_rank("scotus", db_session.get(Justice, jid), db_session)
-
-        assert rank("a") == {"rank": 1, "of": 2}
-        assert rank("b") == {"rank": 2, "of": 2}
-        assert rank("new") is None
-        assert rank("retired") is None
+        assert _chamber_rank("scotus", db_session.get(Justice, "a"), db_session) is None
+        rows = json.loads(list_politicians(branch="scotus", state=None, party=None, q=None, db=db_session).body)
+        assert {(r["id"], r["hasScorecard"], r["overallScore"]) for r in rows} == {("a", True, None), ("b", True, None)}

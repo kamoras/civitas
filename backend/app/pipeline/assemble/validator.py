@@ -12,7 +12,7 @@ from app.pipeline.analyze.score_bounds import clamp
 logger = logging.getLogger(__name__)
 
 VALID_PARTIES = {"D", "R", "I"}
-VALID_VOTES = {"Yea", "Nay", "Not Voting"}
+VALID_VOTES = {"Yea", "Nay", "Present", "Not Voting"}
 
 # Neutral prior for a score dimension we have no computed value for. Matches
 # the scoring engine's own standard (score_calculator's module docstring:
@@ -133,7 +133,12 @@ def validate_senator(senator: dict) -> dict:
             max(0, round(f["totalContributions"])) if f.get("totalContributions") is not None else None
         ),
         "totalFromPACs": max(0, round(f.get("totalFromPACs", 0))),
-        "smallDonorPercentage": clamp(f.get("smallDonorPercentage", 0)),
+        # None is "not measured" (the campaign itemizes every gift, v6.31),
+        # kept as None: clamping it raised, and the one senator it applies
+        # to failed every run and kept a stale record (2026-10-09).
+        "smallDonorPercentage": (
+            None if f.get("smallDonorPercentage", 0) is None else clamp(f.get("smallDonorPercentage", 0))
+        ),
         "topDonors": [
             {
                 "name": d.get("name", "Unknown"),

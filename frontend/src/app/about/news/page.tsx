@@ -66,7 +66,9 @@ export default function NewsChapter() {
           the government documents we index), 35% breadth (how many independent newsrooms cover it)
           and 25% whether people are talking about it on Google Trends and Bluesky. Trending counts
           least because it is the most volatile. At most two issues publish per hourly run, in rank
-          order; if a top story fails the checks below, the next one is tried.
+          order; if a top story fails the checks below, the next one is tried. A story is passed
+          over as a repeat only of one that actually published in that run: a briefing that named
+          two stories once crowded both out and then published nothing itself.
         </P>
         <More label="How stories are grouped, and why it errs toward keeping them apart">
           <P>
@@ -80,13 +82,15 @@ export default function NewsChapter() {
             smaller error than one built from unrelated stories.
           </P>
           <P>
-            How alike two headlines must be, when a new issue is the same story as an existing one,
-            and when an issue belongs to a long-running topic are learned from the pipeline&apos;s
-            own record: each run records pairs it compared with an independent verdict (do they name
-            the same people, places and numbers), and once a day each cut-off moves to where those
-            verdicts say it belongs, once there are enough to trust. Multi-story briefings
-            (&ldquo;Up First&rdquo;, &ldquo;Morning news brief&rdquo;) are dropped at the door,
-            because once several stories share one article they can&apos;t be separated later.
+            How alike two headlines must be to group them is learned from the pipeline&apos;s own
+            record: each run records pairs it compared with an independent verdict (do they name the
+            same people, places and numbers), and once a day the cut-off moves to where those
+            verdicts say it belongs, once there are enough to trust. A new issue is treated as an
+            existing one only when they share a source article, say the same thing, or carry
+            near-identical headlines: naming the same people turned out to be wrong three times in
+            four, and merging two stories hides one. Multi-story briefings (&ldquo;Up First&rdquo;,
+            &ldquo;Morning news brief&rdquo;) are dropped at the door, because once several stories
+            share one article they can&apos;t be separated later.
           </P>
           <P>
             Reddit was a trending source until September 2026, when it began requiring a login this
@@ -103,11 +107,12 @@ export default function NewsChapter() {
           the article asserts one of the other rather than merely containing both, and that the span
           runs to the end of its clause. Where the model stops short (&ldquo;Senator sues&rdquo;),
           the site reads on in the article to the end of that clause, and drops the claim if it
-          can&apos;t tell where the clause ends. Only then is the sentence shown, in the
-          source&apos;s own words, naming the outlet and linking the article it came from. The
-          summary at the top of an issue is one of these lines, and names its outlet the same way.
-          The headline is the top article&apos;s real headline, and an issue&apos;s full story is
-          every checked sentence, listed under the outlet that reported it.
+          can&apos;t tell where the clause ends, and a line with a bracket it opens or closes but
+          doesn&apos;t match is dropped too. Only then is the sentence shown, in the source&apos;s
+          own words, naming the outlet and linking the article it came from. The summary at the top
+          of an issue is one of these lines, and names its outlet the same way. The headline is the
+          top article&apos;s real headline, and an issue&apos;s full story is every checked
+          sentence, listed under the outlet that reported it.
         </P>
         <P>
           This replaced asking a model to write neutrally and checking whether it had. That approach
@@ -160,8 +165,12 @@ export default function NewsChapter() {
           </Item>
           <Item label="Ongoing">
             When a story persists across several days, it becomes a national monitor with its own
-            sourced timeline. Separate stories about the same underlying event are merged; a monitor
-            goes quiet (&ldquo;watching&rdquo;) when coverage fades and wakes when it returns.
+            sourced timeline. A day&apos;s story joins a monitor when its headline is close enough
+            to the monitor&apos;s own description. A language-model check on borderline matches was
+            removed after a replay showed it let 17 of 18 off-topic stories through. Two monitors
+            are merged only when their titles are near-identical, since a merge can&apos;t be
+            undone; a monitor goes quiet (&ldquo;watching&rdquo;) when coverage fades and wakes when
+            it returns.
           </Item>
           <Item label="Archive">
             Each day&apos;s top issue is kept permanently, building a month-by-month record with a
@@ -170,8 +179,10 @@ export default function NewsChapter() {
         </List>
         <P>
           When a scored politician is part of a story, it links to their scorecard; related
-          government documents are matched from the Explore index. Elections, with the countdown to
-          the next Election Day, have their own page.
+          government documents are matched from the Explore index, and only when their titles
+          closely match the story&apos;s: a looser bar once linked boating safety zones in Miami to
+          a story about a Florida golf club. Elections, with the countdown to the next Election Day,
+          have their own page.
         </P>
       </Section>
 

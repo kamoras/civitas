@@ -25,8 +25,8 @@ flowchart LR
 
     subgraph CA["Constituent Alignment — 33%"]
         CA1["Seat-relative vote alignment — 70%<br/>break rate minus the same-party<br/>expectation at that seat lean, both ways<br/>(measured each run, v6.13)"]
-        CA2["Position congruence — 30%<br/>Nokken-Poole vs seat-conditional<br/>per-party expectation"]
-        CA3["Fallback when no ideal points:<br/>100% vote alignment"]
+        CA2["Position congruence — 30%<br/>Nokken-Poole vs seat-conditional<br/>per-party expectation,<br/>weighted by its votes (v6.27)"]
+        CA3["Fallback when the chamber has no current<br/>ideal points: 100% vote alignment<br/>(a member with no position: 50)"]
     end
 
     subgraph LE["Legislative Effectiveness — 34%"]
@@ -72,19 +72,19 @@ sum changed.
 
 ```mermaid
 flowchart LR
-    PM["Public Mandate — 21.67%<br/>70% average approval + 30% trend<br/>UCSB polling, Truman onward<br/>pre-Truman: election margin"]
-    EFF["Effectiveness — 21.67%<br/>60% GDP growth + 40% job creation<br/>BEA/FRED modern, MeasuringWorth pre-1929<br/>payrolls exist only from 1939"]
-    AA["Agency Alignment — 21.67%<br/>Federal Register rulemaking counts<br/>+ finalized fraction<br/>N/A before Clinton"]
-    HL["Historical Legacy — 35%<br/>C-SPAN Presidential Historians Survey<br/>2021 cycle, ~142 historians"]
+    PM["Public Mandate — 25%<br/>70% average approval (by party, vs the era's polarization) + 30% trend<br/>UCSB polling, Truman onward<br/>a term under four years: vs predecessors' same days<br/>pre-Truman: election margin"]
+    EFF["Effectiveness — 25%<br/>from 1947: 25% each growth per person vs 13 peer economies (catch-up set aside),<br/>jobs, unemployment change and inflation (each vs where the term started)<br/>before: 60% MeasuringWorth total growth + 40% jobs<br/>payrolls exist only from 1939"]
+    HL["Historical Legacy — 50%<br/>C-SPAN Presidential Historians Survey<br/>2021 cycle, ~142 historians"]
 
     PM --> OVR["<b>Presidential score</b>"]
     EFF --> OVR
-    AA --> OVR
     HL --> OVR
 
-    OVR --> RENORM{"≥ 2 mechanical<br/>dimensions present?"}
-    RENORM -->|yes| HOLD["Historical Legacy held at exactly 35%<br/>mechanical dimensions renormalize<br/>among themselves"]
-    RENORM -->|"no — only 1"| FLAT["Flat renormalization<br/>one number can't carry 65%"]
+    OVR --> RENORM{"both mechanical<br/>dimensions present?"}
+    RENORM -->|yes| HOLD["Historical Legacy held at exactly 50%<br/>the other two share the rest"]
+    RENORM -->|"no — only 1"| FLAT["Flat renormalization<br/>one number can't carry half"]
+    HOLD --> SHOWN["Each score shows its actual share<br/>(president_effective_weights)"]
+    FLAT --> SHOWN
 ```
 
 **Removed rather than left hand-set:** Independence, Follow-Through (both
@@ -94,22 +94,29 @@ signal, executive-order activity rate, correlated 0.097 (p=0.53) with C-SPAN's
 own Administrative Skill category across 44 rated presidents — statistically
 indistinguishable from noise.
 
-**Why Historical Legacy is 35%.** At equal fifths the four mechanical
-dimensions — which individually correlate 0.17 with historian judgment —
+**Why Historical Legacy is 50%.** At equal fifths the then four mechanical
+dimensions, which individually correlate 0.17 with historian judgment,
 outvoted the one dimension that tracks it, putting Coolidge, McKinley and
-Harding in the top 10 while Lincoln and Eisenhower fell out. At 50% the overall
-ranking correlated 0.96 with simply using C-SPAN's ranking directly, meaning the
-mechanical dimensions contributed nothing. 35% is where the top of the ranking
-is recognizable while the mechanical dimensions still move the rest
-(correlation to pure C-SPAN: 0.89).
+Harding in the top 10 while Lincoln and Eisenhower fell out. It was raised to
+50%, then lowered to 35% when the overall correlated 0.96 with C-SPAN's ranking
+alone. Re-measured for president v7 (2026-10) on the current scores, the other
+dimensions move the ranking more than they did: at 35% the overall correlated
+0.78 with C-SPAN's ranking and 0.83 with the other two dimensions; at 50%, 0.90
+and 0.69. Historians lead and the record still moves the ranking.
+
+**Removed in president v7: Agency Alignment.** The Federal Register's search
+reports at most 10,000 results, so the two-term administrations' rulemaking
+counts were capped and read exactly 50% finalized. Counted in full,
+administrations since 1994 finalized 59.6% to 61.8%: too little difference to
+score.
 
 **Why the renormalization branch exists.** Flat renormalization let Historical
-Legacy's *effective* weight rise to ~44.7% for the ~36 presidents predating
-Agency Alignment data, and ~61.8% for the four non-elected successors — so 35%
-was the true weight for only 4 of 47 presidents. The floor at "one mechanical
-dimension" exists because Fillmore's Effectiveness is 100/100 from a Gold-Rush
-GDP boom, which under a flat 65% share would have swapped his near-bottom
-historian rating for a top-10 placement.
+Legacy's *effective* weight rise (when it was 35%) to ~44.7% for the ~36
+presidents predating the since-removed Agency Alignment data, and ~61.8% for
+the four non-elected successors. The floor exists because Fillmore's
+Effectiveness is 100/100 from a Gold-Rush GDP boom, which under a fixed share
+would have swapped his near-bottom historian rating for a top-10 placement;
+below it, Historical Legacy carries two thirds.
 
 ## Supreme Court justices
 

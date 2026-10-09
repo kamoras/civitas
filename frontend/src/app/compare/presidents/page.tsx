@@ -9,7 +9,6 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import { ordinal } from "@/components/scorecard/format";
 import type { President } from "@/types/president";
 import type {
-  AgencyAlignmentFacts,
   HistoricalLegacyFacts,
   PresidentEffectivenessFacts,
   PresidentScoreBreakdown,
@@ -78,7 +77,6 @@ const SCORE_ROWS: Row[] = [
     [
       ["Public Mandate", "publicMandate"],
       ["Effectiveness", "effectiveness"],
-      ["Agency Alignment", "agencyAlignment"],
       ["Historical Legacy", "historicalLegacy"],
     ] as const
   ).map(([label, key]) => ({
@@ -99,6 +97,13 @@ const FACT_ROWS: Row[] = [
     },
   },
   {
+    label: "Approval against its era, points (vs the typical president)",
+    value: ({ breakdown: b }) => {
+      const f = b?.publicMandate.facts as PublicMandateFacts | undefined;
+      return versus(f?.approvalVsEra, f?.approvalVsEraMean, (n) => `${n > 0 ? "+" : ""}${one(n)}`);
+    },
+  },
+  {
     label: "Jobs a year (vs presidencies since 1939)",
     value: ({ breakdown: b }) => {
       const f = b?.effectiveness.facts as PresidentEffectivenessFacts | undefined;
@@ -106,17 +111,35 @@ const FACT_ROWS: Row[] = [
     },
   },
   {
-    label: "Real GDP growth a year (vs the same era)",
+    label: "Growth per person vs 13 peer economies, points (vs presidencies since 1947)",
     value: ({ breakdown: b }) => {
       const f = b?.effectiveness.facts as PresidentEffectivenessFacts | undefined;
-      return versus(f?.gdpGrowth, f?.gdpMean, (n) => `${one(n)}%`);
+      return versus(f?.gdpRelative, f?.gdpRelativeMean, (n) => `${n > 0 ? "+" : ""}${one(n)}`);
     },
   },
   {
-    label: "Rulemakings finalized (vs since 1994)",
+    label: "Real GDP growth a year, before 1947 (vs presidencies before 1947)",
     value: ({ breakdown: b }) => {
-      const f = b?.agencyAlignment.facts as AgencyAlignmentFacts | undefined;
-      return versus(f?.finalizedPct, f?.finalizedMean, (n) => `${Math.round(n)}%`);
+      const f = b?.effectiveness.facts as PresidentEffectivenessFacts | undefined;
+      return f?.gdpSince ? NONE : versus(f?.gdpGrowth, f?.gdpMean, (n) => `${one(n)}%`);
+    },
+  },
+  {
+    label: "Change in unemployment, points (vs presidents starting at the same rate)",
+    value: ({ breakdown: b }) => {
+      const f = b?.effectiveness.facts as PresidentEffectivenessFacts | undefined;
+      return versus(
+        f?.unemploymentChange,
+        f?.unemploymentExpected,
+        (n) => `${n > 0 ? "+" : ""}${one(n)}`
+      );
+    },
+  },
+  {
+    label: "Inflation a year (vs presidents starting at the same rate)",
+    value: ({ breakdown: b }) => {
+      const f = b?.effectiveness.facts as PresidentEffectivenessFacts | undefined;
+      return versus(f?.inflationAverage, f?.inflationExpected, (n) => `${one(n)}%`);
     },
   },
   {

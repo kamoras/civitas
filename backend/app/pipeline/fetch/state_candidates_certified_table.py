@@ -156,6 +156,55 @@ Optional, each because a live state needed it:
                                      regex's first group is the name
                                      (Oklahoma prints "JOHN DOE,
                                      REPUBLICAN" in one cell)
+  discovery.form_select patterns     each choice is a pattern the option's
+                                     whole text must match ({year} filled),
+                                     so a label carrying a date is named by
+                                     its year (Montana's "FEDERAL GENERAL
+                                     2026 (11/03/2026) (General)")
+  discovery.form_select_postback     the dropdown reloads the page when it
+                                     changes (ASP.NET AutoPostBack), so the
+                                     choice is posted first and the button
+                                     pressed on the page that comes back,
+                                     which must show the choice (Montana's
+                                     election picker)
+  discovery.headers                  request headers added to the browser's
+                                     own (Arkansas's table API answers only
+                                     an XMLHttpRequest)
+  discovery.json_body                POST this JSON body to discovery.url
+                                     instead of a GET; "{election}" in it is
+                                     filled from discovery.election (Idaho)
+  discovery.election                 {url, json_body?, rows, name, value,
+                                     regex}: the portal's own election
+                                     list, read for the id of the one
+                                     election whose name matches regex
+                                     ({year} filled); none yet is "not yet",
+                                     two is a failure (Idaho)
+  discovery.final_path               a JSON path that must be true before
+                                     the list is the ballot (Idaho's
+                                     isFinalList)
+  discovery.year_url                 year_regex is checked on this page
+                                     instead of the list, for a feed that
+                                     names no year (Arkansas)
+  format.json_rows / json_total      the payload is JSON: rows are the list
+                                     at this path, each object read like a
+                                     spreadsheet row; json_total names the
+                                     count the API reports, which must equal
+                                     the rows read (a partial page is half a
+                                     ballot). An unparsable payload -- an
+                                     empty body is how Arkansas's API refuses
+                                     -- is a failed read, never no rows
+  format.ruled_columns               a PDF table drawn with rules, its
+                                     columns named left to right: the
+                                     vertical rules are the column edges and
+                                     a rule spanning the whole table closes
+                                     an office's group, its office printed
+                                     once beside its candidates (Clark
+                                     County, Nevada -- ruled_table_rows)
+  format.office_parts                [[column, prefix], ...]: the office is
+                                     spread over several fields, joined with
+                                     each non-blank one after its prefix
+                                     (Idaho: officeName, "District " +
+                                     district, "Seat " + seat)
   statewide_offices                  also read the state's own executive
                                      contests and legislative seats, through
                                      parse_statewide_office and
@@ -166,6 +215,17 @@ Optional, each because a live state needed it:
                                      qualified name is published, independents
                                      included, rather than one winner per
                                      party (Wyoming, New Mexico, Tennessee)
+  judicial_offices                   with statewide_offices and office_parse,
+                                     also read the state's elected
+                                     judgeships through parse_judicial_office
+                                     -- the same separate claim the flag
+                                     makes on a results adapter, that the
+                                     state's judicial contests are partisan
+                                     (North Carolina's candidate list: its
+                                     results export names only the winners
+                                     of contested primaries, so an unopposed
+                                     nominee and a party's later replacement
+                                     were missing or stale)
 
 An HTML page is read from its table whose header row carries every
 configured heading (New Mexico). A PDF is read as a table too (Iowa, Nebraska): the row whose cells include
@@ -184,6 +244,7 @@ are deduplicated.
 import csv
 import html
 import io
+import json
 import logging
 import re
 from urllib.parse import urljoin
@@ -208,6 +269,7 @@ from app.pipeline.fetch.state_candidates_common import (
     in_ballot_window,
     not_yet,
     normalize_party,
+    parse_judicial_office,
     parse_office,
     parse_state_leg_office,
     parse_statewide_office,
@@ -258,6 +320,71 @@ def _column_starts(header: list[dict], rows: list[list[dict]]) -> list[tuple[flo
             if len(hits) == 1:
                 starts[hits[0]["text"]] = min(starts[hits[0]["text"]], cell["x0"])
     return sorted((x, text) for text, x in starts.items())
+
+
+# Points. A ruling is a filled rectangle this thin; words whose tops are
+# this close are one printed line (rows on Clark County's list are 19pt
+# apart, and a row's words share their top to within 1pt).
+_RULE = 2.0
+_SAME_LINE = 4.0
+
+
+def ruled_table_rows(pages: list[tuple[list[dict], list[dict]]], names: list[str]) -> list[dict] | None:
+    """Rows of a PDF table drawn with rules, one row per candidate, keyed by
+    `names` (the columns left to right) -- for a list whose office cell is
+    printed once, centred beside its candidates, rather than on their first
+    row (Clark County, Nevada's "Candidates and Contests").
+
+    The table's own drawing decides everything: the thin vertical rules
+    are the column edges, and a horizontal rule spanning the whole table
+    closes one office's group (a rule between two candidates of one
+    office spans only the candidate columns). The first column's words in
+    a group are its office, joined in reading order; every other printed
+    line in the group is a row carrying that office.
+
+    None when a page's rules do not divide it into exactly len(names)
+    columns, or a group lists candidates with no office beside them (an
+    office split across a page break): a row placed under a guessed office
+    is worse than no list. `pages` is (words, rects) per page."""
+    rows: list[dict] = []
+    for words, rects in pages:
+        thin_v = sorted({round((r["x0"] + r["x1"]) / 2) for r in rects
+                         if r["x1"] - r["x0"] < _RULE and r["bottom"] - r["top"] > _RULE})
+        edges: list[float] = []
+        for x in thin_v:
+            if not edges or x - edges[-1] > _RULE:
+                edges.append(x)
+        if not edges:
+            continue  # a page with no table on it
+        if len(edges) != len(names) + 1:
+            logger.warning("ruled table has %d columns, expected %d", len(edges) - 1, len(names))
+            return None
+        left, right = edges[0], edges[-1]
+        closes = sorted({round(r["top"]) for r in rects
+                         if r["bottom"] - r["top"] < _RULE and r["x0"] <= left + _RULE and r["x1"] >= right - _RULE})
+        for top, bottom in zip(closes, closes[1:]):
+            inside = [w for w in words if top <= (w["top"] + w["bottom"]) / 2 < bottom
+                      and left <= (w["x0"] + w["x1"]) / 2 <= right]
+            column = {id(w): sum(1 for x in edges[1:-1] if (w["x0"] + w["x1"]) / 2 > x) for w in inside}
+            office = " ".join(w["text"] for w in sorted(
+                (w for w in inside if column[id(w)] == 0), key=lambda w: (round(w["top"]), w["x0"])))
+            lines: list[list[dict]] = []
+            for w in sorted((w for w in inside if column[id(w)] > 0), key=lambda w: w["top"]):
+                if lines and w["top"] - lines[-1][0]["top"] < _SAME_LINE:
+                    lines[-1].append(w)
+                else:
+                    lines.append([w])
+            if lines and not office:
+                logger.warning("ruled table lists candidates with no office beside them")
+                return None
+            for line in lines:
+                row = {name: "" for name in names}
+                row[names[0]] = office
+                for w in sorted(line, key=lambda w: w["x0"]):
+                    name = names[column[id(w)]]
+                    row[name] = f"{row[name]} {w['text']}".strip()
+                rows.append(row)
+    return rows
 
 
 def pdf_table_rows(pages: list[list[dict]], headings: list[str]) -> list[dict]:
@@ -433,6 +560,29 @@ def _headings(fmt: dict) -> list[str]:
 
 
 def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
+    if fmt.get("json_rows"):
+        # A portal's search API: the rows are the list at this path, each
+        # an object read like a spreadsheet row (true/false and numbers as
+        # their text, null as blank). Anything else -- an empty body is how
+        # Arkansas's refuses a request -- is a failed read, never an empty
+        # list.
+        try:
+            data = json.loads(payload)
+        except ValueError:
+            return None
+        found = _json_path(data, fmt["json_rows"])
+        if not isinstance(found, list):
+            return None
+        if fmt.get("json_total") and _json_path(data, fmt["json_total"]) != len(found):
+            # The API pages, and one page did not hold the whole list: half
+            # a ballot would publish its unread offices as absent.
+            logger.warning("certified list %s returned %d of %s rows", url, len(found),
+                           _json_path(data, fmt["json_total"]))
+            return None
+        return [
+            {k: "" if v is None else str(v) for k, v in row.items()}
+            for row in found if isinstance(row, dict)
+        ]
     if payload.lstrip()[:1] == b"<" or payload.lstrip()[:4] == b"\xef\xbb\xbf<":
         if fmt.get("outline_rows"):
             return outline_rows(payload)
@@ -445,6 +595,10 @@ def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
         headings = _headings(fmt)
         try:
             with pdfplumber.open(io.BytesIO(payload)) as pdf:
+                if fmt.get("ruled_columns"):
+                    return ruled_table_rows(
+                        [(page.extract_words(), page.rects) for page in pdf.pages], fmt["ruled_columns"],
+                    )
                 return pdf_table_rows([page.extract_words() for page in pdf.pages], headings)
         except Exception:
             logger.exception("certified list PDF %s failed to parse", url)
@@ -459,9 +613,14 @@ def _rows(payload: bytes, url: str, fmt: dict) -> list[dict] | None:
         return None
 
 
-def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = False) -> list[dict]:
+def parse_certified_rows(
+    rows: list[dict], fmt: dict, state_offices: bool = False, judicial: bool = False,
+) -> list[dict]:
     """Federal candidate records from the list's rows — and, with
-    `state_offices`, the state's executive and legislative ones too.
+    `state_offices`, the state's executive and legislative ones too; with
+    `judicial`, its elected judgeships (read only from a label the other
+    gates refuse, and only for a state whose entry opts in with
+    judicial_offices -- see parse_judicial_office).
 
     A state-office record keeps the whole printed name in `last_name`
     (there is no FEC surname to match it against; see
@@ -494,6 +653,14 @@ def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = Fals
         if any(rx.search(str(row.get(col) or "")) for col, rx in exclude_re.items()):
             continue
         label = " ".join(str(row.get(fmt["office_column"]) or "").split())
+        if fmt.get("office_parts"):
+            # [[column, prefix], ...]: the office spread over several
+            # fields, each printed after its prefix when it has a value
+            # (Idaho: "State Representative" + "District 1" + "Seat A").
+            label = " ".join(
+                f"{prefix}{' '.join(str(row.get(col) or '').split())}"
+                for col, prefix in fmt["office_parts"] if str(row.get(col) or "").strip()
+            )
         if fmt.get("office_regex"):
             found = re.search(fmt["office_regex"], label)
             label = found.group(1).strip() if found else label
@@ -536,6 +703,8 @@ def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = Fals
             if parsed is None:
                 if state_offices and display:
                     state_record = _state_office_record(label, party_label, _with_mate(display, row, mate_columns))
+                    if state_record is None and judicial:
+                        state_record = _judicial_record(label, party_label, display)
                     if state_record is not None:
                         records[(state_record["office"], state_record["district"],
                                  state_record.get("seat"), display.lower())] = state_record
@@ -579,6 +748,20 @@ def parse_certified_rows(rows: list[dict], fmt: dict, state_offices: bool = Fals
     return list(records.values())
 
 
+def _judicial_record(label: str, party_label: str, display: str) -> dict | None:
+    """A judgeship's record for one list row, or None for anything the
+    judicial gate refuses (a clerk of court, a district attorney)."""
+    parsed = parse_judicial_office(label)
+    if parsed is None:
+        return None
+    court, district, seat = parsed
+    party, printed = ballot_list_party(party_label) or ("", None)
+    record = {"office": court, "district": district, "seat": seat, "party": party, "last_name": display}
+    if printed:
+        record["party_label"] = printed
+    return record
+
+
 def _with_mate(display: str, row: dict, columns: list[str]) -> str:
     """`display` with the row's running mate appended, when it names one."""
     mate = clean_display_name(" ".join(str(row.get(col) or "").strip() for col in columns))
@@ -613,8 +796,8 @@ async def fetch_confirmed_candidates(
     discovery = source.get("discovery") or {}
     fmt = source.get("format") or {}
     link_regexes = discovery.get("link_regexes") or ([discovery["link_regex"]] if discovery.get("link_regex") else [])
-    if discovery.get("url") and not discovery.get("year_regex"):
-        logger.warning("%s certified_table discovery.url needs year_regex", state)
+    if discovery.get("url") and not (discovery.get("year_regex") or discovery.get("election")):
+        logger.warning("%s certified_table discovery.url needs year_regex or election", state)
         return None
     if not discovery.get("url") and (not (discovery.get("page_url") or discovery.get("index_url")) or not link_regexes):
         logger.warning("%s certified_table source needs discovery.page_url and link_regex", state)
@@ -635,14 +818,21 @@ async def fetch_confirmed_candidates(
 
     if discovery.get("url"):
         url = discovery["url"].replace("{year}", str(year))
-        payloads = await _download(client, url, discovery, year, state)
+        election = None
+        if discovery.get("election"):
+            election = await _election_id(client, discovery["election"], year, state)
+            if election is None:
+                return None
+            if not election:
+                return not_yet(year, state, "the portal lists no election for this year's general")
+        payloads = await _download(client, url, discovery, year, state, election)
         if payloads is None:
             return None
         if not payloads:
             return not_yet(year, state, "the page does not name this year's election")
         return _records(
             state, [row for p in payloads for row in (_rows(p, url, fmt) or [])], fmt,
-            bool(source.get("statewide_offices")), year,
+            bool(source.get("statewide_offices")), year, bool(source.get("judicial_offices")),
         )
 
     page_url = discovery.get("page_url")
@@ -686,36 +876,79 @@ async def fetch_confirmed_candidates(
                 logger.warning("%s certified list %s did not parse", state, url)
                 return None
             rows += part
-    return _records(state, rows, fmt, bool(source.get("statewide_offices")), year)
+    return _records(
+        state, rows, fmt, bool(source.get("statewide_offices")), year, bool(source.get("judicial_offices")),
+    )
 
 
-async def _download(
-    client: httpx.AsyncClient, url: str, discovery: dict, year: int, state: str,
-) -> list[bytes] | None:
-    """The list's bytes: the file itself, or — with form_button — what the
-    page's own button returns, once per `form_select` choice. None when any
-    fetch fails or no choice is on offer; [] when the page does not name
-    this year's election yet -- a list not published, which is the normal
-    state for most of a cycle and not a failed fetch."""
-    payload = await fetch_bytes_with_retry(client, _rate_limiter, url, f"{state} certified list {year}")
+def _json_path(data, path: str):
+    """The value at a dotted `path` ("data.candidates") in parsed JSON, or
+    None where any step is missing."""
+    for key in path.split("."):
+        data = data.get(key) if isinstance(data, dict) else None
+    return data
+
+
+def _filled(value, election: str | None):
+    """`value` (a JSON body from the config) with "{election}" replaced by
+    the election id the portal's own election list gave this run."""
+    if isinstance(value, dict):
+        return {k: _filled(v, election) for k, v in value.items()}
+    if isinstance(value, str) and election is not None:
+        return value.replace("{election}", election)
+    return value
+
+
+async def _request(
+    client: httpx.AsyncClient, url: str, conf: dict, election: str | None, label: str,
+) -> bytes | None:
+    """GET `url`, or POST conf["json_body"] to it as JSON when one is
+    configured (a portal's search API) -- with conf["headers"] added to the
+    browser's own."""
+    headers = {**BROWSER_HEADERS, **(conf.get("headers") or {})}
+    if conf.get("json_body") is None:
+        return await fetch_bytes_with_retry(client, _rate_limiter, url, label, headers=headers)
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "POST", url, json=_filled(conf["json_body"], election),
+        headers=headers, log_label=label,
+    )
+    return resp.content if resp is not None else None
+
+
+async def _election_id(client: httpx.AsyncClient, conf: dict, year: int, state: str) -> str | None:
+    """The portal's id for this year's general election, read from its own
+    election list (Idaho's candidate portal keys every search by an id
+    that changes each election). None when the list could not be read or
+    names more than one match; "" when it names none -- not created yet,
+    which is not a failed fetch."""
+    payload = await _request(client, conf["url"], conf, None, f"{state} candidate portal elections {year}")
     if payload is None:
         return None
-    year_regex = discovery.get("year_regex")
-    if year_regex and not re.search(year_regex.replace("{year}", str(year)), payload.decode("utf-8", "replace")):
-        logger.info("%s candidate list does not show the %d election yet", state, year)
-        return []
-    if discovery.get("next_page_regex"):
-        return await _pages(client, url, payload, discovery["next_page_regex"], year, state)
-    button = discovery.get("form_button")
-    if not button:
-        return [payload]
-    forms = lxml_html.fromstring(payload).xpath("//form")
+    try:
+        rows = _json_path(json.loads(payload), conf["rows"])
+    except ValueError:
+        rows = None
+    if not isinstance(rows, list):
+        logger.warning("%s candidate portal's election list did not parse", state)
+        return None
+    pattern = re.compile(conf["regex"].replace("{year}", str(year)))
+    ids = {str(row.get(conf["value"])) for row in rows
+           if isinstance(row, dict) and pattern.search(str(row.get(conf["name"]) or ""))}
+    if len(ids) > 1:
+        # Guessing which of two is this year's ballot is the one wrong answer.
+        logger.warning("%s candidate portal lists %d elections matching %s", state, len(ids), conf["regex"])
+        return None
+    return ids.pop() if ids else ""
+
+
+def _form_fields(page: bytes, button: str | None) -> dict | None:
+    """The page's form as a browser posts it back: every hidden and text
+    input, every dropdown at its current choice, and the button (when one
+    is pressed) with its own value. None when the page has no form."""
+    forms = lxml_html.fromstring(page).xpath("//form")
     if not forms:
-        logger.warning("%s candidate list page has no form to post", state)
         return None
     form = forms[0]
-    # Posted back as a browser would: every hidden and text input, every
-    # dropdown at its current choice, and the button with its own value.
     base = {
         field.get("name"): field.get("value") or ""
         for field in form.xpath(".//input[@name]")
@@ -725,23 +958,99 @@ async def _download(
         current = select.xpath("./option[@selected]") or select.xpath("./option")
         if current:
             base[select.get("name")] = current[0].get("value") or ""
-    pressed = form.xpath(f'.//input[@name="{button}"]')
-    base[button] = (pressed[0].get("value") or "") if pressed else ""
+    if button:
+        pressed = form.xpath(f'.//input[@name="{button}"]')
+        base[button] = (pressed[0].get("value") or "") if pressed else ""
+    return base
 
-    posts = []
+
+async def _download(
+    client: httpx.AsyncClient, url: str, discovery: dict, year: int, state: str,
+    election: str | None = None,
+) -> list[bytes] | None:
+    """The list's bytes: the file itself, or — with form_button — what the
+    page's own button returns, once per `form_select` choice. None when any
+    fetch fails or no choice is on offer; [] when the page does not name
+    this year's election yet -- a list not published, which is the normal
+    state for most of a cycle and not a failed fetch."""
+    label = f"{state} certified list {year}"
+    payload = await _request(client, url, discovery, election, label)
+    if payload is None:
+        return None
+    year_regex = discovery.get("year_regex")
+    if year_regex:
+        # year_url: the list itself never names its election (a bare JSON
+        # feed -- Arkansas's candidate search), so the page that publishes
+        # it must.
+        page = payload
+        if discovery.get("year_url"):
+            page = await fetch_bytes_with_retry(client, _rate_limiter, discovery["year_url"], f"{label} page")
+            if page is None:
+                return None
+        if not re.search(year_regex.replace("{year}", str(year)), page.decode("utf-8", "replace")):
+            logger.info("%s candidate list does not show the %d election yet", state, year)
+            return []
+    if discovery.get("final_path"):
+        # The portal says itself whether this is the final list (Idaho's
+        # isFinalList). Until it does, the list is not the ballot.
+        try:
+            final = _json_path(json.loads(payload), discovery["final_path"])
+        except ValueError:
+            logger.warning("%s candidate list did not parse", state)
+            return None
+        if final is not True:
+            logger.info("%s candidate list is not final yet", state)
+            return []
+    if discovery.get("next_page_regex"):
+        return await _pages(client, url, payload, discovery["next_page_regex"], year, state)
+    button = discovery.get("form_button")
+    if not button:
+        return [payload]
+    base = _form_fields(payload, button)
+    if base is None:
+        logger.warning("%s candidate list page has no form to post", state)
+        return None
+    form = lxml_html.fromstring(payload).xpath("//form")[0]
+
+    posts: list[tuple[str | None, dict]] = []
     for field, texts in (discovery.get("form_select") or {}).items():
         offered = {
             " ".join(option.text_content().split()): option.get("value") or ""
             for option in form.xpath(f'.//select[@name="{field}"]/option')
         }
-        posts += [{**base, field: offered[text]} for text in texts if text in offered]
+        # Each choice is a pattern the option's whole text must match, so
+        # a label carrying the election's date can be named by its year
+        # (Montana's "FEDERAL GENERAL 2026 (11/03/2026) (General)").
+        for pattern in texts:
+            rx = re.compile(pattern.replace("{year}", str(year)))
+            posts += [(field, {**base, field: value}) for text, value in offered.items() if rx.fullmatch(text)]
     if discovery.get("form_select") and not posts:
         logger.warning("%s candidate list offers none of the configured choices", state)
         return None
     payloads = []
-    for data in posts or [base]:
+    for field, data in posts or [(None, base)]:
+        post_url = url
+        if field and discovery.get("form_select_postback"):
+            # The dropdown posts the page back the moment it changes
+            # (ASP.NET AutoPostBack -- Montana's election picker), and the
+            # button on a page loaded with the old choice still exports the
+            # old list. So choose first, as the dropdown does, then press
+            # the button on the page that comes back.
+            choose = {k: v for k, v in data.items() if k != button}
+            choose["__EVENTTARGET"] = field
+            resp = await fetch_with_retry(
+                client, _rate_limiter, "POST", url, data=choose, headers=BROWSER_HEADERS,
+                log_label=f"{label} choice",
+            )
+            if resp is None:
+                return None
+            chosen = _form_fields(resp.content, button)
+            if chosen is None or chosen.get(field) != data[field]:
+                logger.warning("%s candidate list did not switch to the chosen %s", state, field)
+                return None
+            data, post_url = chosen, str(resp.url)
         resp = await fetch_with_retry(
-            client, _rate_limiter, "POST", url, data=data, headers=BROWSER_HEADERS,
+            client, _rate_limiter, "POST", post_url, data=data, headers=BROWSER_HEADERS,
             log_label=f"{state} candidate list {year}",
         )
         if resp is None:
@@ -779,6 +1088,7 @@ async def _pages(
 
 def _records(
     state: str, rows: list[dict], fmt: dict, state_offices: bool = False, year: int | None = None,
+    judicial: bool = False,
 ) -> list[dict] | None:
     over = _overfilled(rows, fmt)
     if over == _NO_SEAT_COUNT:
@@ -790,7 +1100,7 @@ def _records(
         # the filings before a primary settles them. Not yet, not broken --
         # until the ballot must be final (not_yet).
         return not_yet(year, state, over) if year is not None else []
-    records = parse_certified_rows(rows, fmt, state_offices)
+    records = parse_certified_rows(rows, fmt, state_offices, judicial)
     federal = [r for r in records if r["office"] in ("S", "H")]
     if not federal:
         logger.warning("%s certified list has no federal candidate — columns or codes changed?", state)

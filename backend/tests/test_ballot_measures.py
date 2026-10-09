@@ -10,7 +10,6 @@ import json
 import logging
 import threading
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -378,26 +377,141 @@ def test_lookup_uses_verified_state_entry(monkeypatch):
     assert result["isStateSpecific"] is True
 
 
-@pytest.mark.asyncio
-async def test_link_verification_clears_a_link_that_stops_resolving(monkeypatch, tmp_path):
-    """A link that rots between runs must stop being shown, not keep
-    riding a check that passed weeks ago."""
+def _link_files(monkeypatch, tmp_path, states, volume_states=None):
+    """Point the link check at a bundled file holding `states` (and, when
+    given, a volume copy from an earlier run holding `volume_states`)."""
     from app.pipeline.fetch import ballot_lookup
 
-    monkeypatch.setattr(ballot_lookup, "_VOLUME_PATH", str(tmp_path / "lookup.json"))
-    monkeypatch.setattr(ballot_lookup, "_cache", {
-        "national_fallback": {"url": "https://nat.example"},
-        "states": {"GA": {"url": "https://ga.example", "verified_at": "2026-01-01T00:00:00"}},
-    })
+    bundled, volume = tmp_path / "bundled.json", tmp_path / "volume.json"
+    fallback = {"url": "https://nat.example", "label": "N", "source_name": "S"}
+    bundled.write_text(json.dumps({"national_fallback": fallback, "states": states}))
+    if volume_states is not None:
+        volume.write_text(json.dumps({"national_fallback": fallback, "states": volume_states}))
+    monkeypatch.setattr(ballot_lookup, "_BUNDLED_PATH", str(bundled))
+    monkeypatch.setattr(ballot_lookup, "_VOLUME_PATH", str(volume))
+    monkeypatch.setattr(ballot_lookup, "_cache", None)
+    monkeypatch.setattr(ballot_lookup, "_cache_stamp", None)
+    return ballot_lookup, volume
+
+
+def _answering(**by_url):
+    """A client whose GET of each URL answers `by_url[url]` (status, final
+    URL, headers, body)."""
+    import httpx
 
     class _Client:
         async def get(self, url, **kwargs):
-            return SimpleNamespace(status_code=404)
+            status, final, headers, body = by_url[url]
+            return httpx.Response(
+                status, headers=headers, content=body,
+                request=httpx.Request("GET", final or url),
+            )
 
-    result = await ballot_lookup.refresh_link_verification(_Client())
+    return _Client()
+
+
+@pytest.mark.asyncio
+async def test_link_verification_clears_a_link_that_stops_resolving(monkeypatch, tmp_path):
+    """A link that rots between runs must stop being shown, not keep
+    riding a check that passed weeks ago — and the state's page falls back
+    to the national directory."""
+    ballot_lookup, volume = _link_files(
+        monkeypatch, tmp_path,
+        {"GA": {"url": "https://ga.example/lookup", "verified_at": None}},
+        volume_states={"GA": {"url": "https://ga.example/lookup", "verified_at": "2026-01-01T00:00:00"}},
+    )
+    assert ballot_lookup.lookup_for_state("GA")["isStateSpecific"] is True
+
+    client = _answering(**{"https://ga.example/lookup": (404, None, {}, b"")})
+    result = await ballot_lookup.refresh_link_verification(client)
     assert result["failed"] == 1
-    saved = json.loads((tmp_path / "lookup.json").read_text())
-    assert saved["states"]["GA"]["verified_at"] is None
+    assert json.loads(volume.read_text())["states"]["GA"]["verified_at"] is None
+    shown = ballot_lookup.lookup_for_state("GA")
+    assert shown["isStateSpecific"] is False
+    assert shown["url"] == "https://nat.example"
+
+
+@pytest.mark.asyncio
+async def test_link_verification_shows_a_link_that_resolves(monkeypatch, tmp_path):
+    ballot_lookup, _ = _link_files(
+        monkeypatch, tmp_path, {"GA": {"url": "https://ga.example/lookup", "label": "GA lookup"}},
+    )
+    client = _answering(**{"https://ga.example/lookup": (200, None, {}, b"<title>Lookup</title>")})
+    assert (await ballot_lookup.refresh_link_verification(client))["verified"] == 1
+    shown = ballot_lookup.lookup_for_state("GA")
+    assert shown["isStateSpecific"] is True
+    assert shown["url"] == "https://ga.example/lookup"
+
+
+@pytest.mark.asyncio
+async def test_link_verification_does_not_pass_a_bot_challenge(monkeypatch, tmp_path):
+    """Imperva serves its challenge with a 200. A wall that refuses the
+    check leaves the state unverified (AGENTS.md section 7), not shown."""
+    ballot_lookup, _ = _link_files(
+        monkeypatch, tmp_path, {"MA": {"url": "https://ma.example/lookup"}},
+    )
+    challenge = (200, None, {"x-iinfo": "1-2-3"}, b"<script src='/_Incapsula_Resource?x'></script>")
+    client = _answering(**{"https://ma.example/lookup": challenge})
+    assert (await ballot_lookup.refresh_link_verification(client))["failed"] == 1
+    assert ballot_lookup.lookup_for_state("MA")["isStateSpecific"] is False
+
+
+@pytest.mark.asyncio
+async def test_link_verification_does_not_pass_a_redirect_to_the_homepage(monkeypatch, tmp_path):
+    """A retired lookup redirected to its site's homepage resolves, but is
+    no longer the lookup. A redirect to the lookup's new address (another
+    host, or a deeper page) is fine."""
+    ballot_lookup, _ = _link_files(monkeypatch, tmp_path, {
+        "OH": {"url": "https://oh.example/voterlookup.aspx"},
+        "MS": {"url": "https://ms.example/elections/locator"},
+        "WA": {"url": "https://wa.example/WhereToVote.aspx"},
+    })
+    client = _answering(**{
+        "https://oh.example/voterlookup.aspx": (200, "https://oh.example/", {}, b""),
+        "https://ms.example/elections/locator": (200, "https://myelectionday.ms.example/", {}, b""),
+        "https://wa.example/WhereToVote.aspx": (200, "https://wa.example/portal/login.aspx", {}, b""),
+    })
+    result = await ballot_lookup.refresh_link_verification(client)
+    assert (result["verified"], result["failed"]) == (2, 1)
+    assert ballot_lookup.lookup_for_state("OH")["isStateSpecific"] is False
+    assert ballot_lookup.lookup_for_state("MS")["isStateSpecific"] is True
+    assert ballot_lookup.lookup_for_state("WA")["isStateSpecific"] is True
+
+
+@pytest.mark.asyncio
+async def test_link_verification_checks_the_bundled_urls_not_last_runs(monkeypatch, tmp_path):
+    """The volume copy is the check's own output; reading candidates from
+    it would keep checking a URL app/data has since corrected."""
+    ballot_lookup, volume = _link_files(
+        monkeypatch, tmp_path,
+        {"GA": {"url": "https://ga.example/new"}},
+        volume_states={"GA": {"url": "https://ga.example/old", "verified_at": "2026-01-01T00:00:00"}},
+    )
+    client = _answering(**{"https://ga.example/new": (200, None, {}, b"")})
+    await ballot_lookup.refresh_link_verification(client)
+    assert json.loads(volume.read_text())["states"]["GA"]["url"] == "https://ga.example/new"
+    assert ballot_lookup.lookup_for_state("GA")["url"] == "https://ga.example/new"
+
+
+def test_bundled_ballot_lookups_cover_every_state_from_its_own_authority():
+    """Every state and D.C. has an official lookup, none of them shown
+    before the link check has passed it, none from an aggregator."""
+    from urllib.parse import urlsplit
+
+    from app.pipeline.fetch import ballot_lookup
+    from app.state_names import STATE_NAMES
+
+    data = json.loads(open(ballot_lookup._BUNDLED_PATH, encoding="utf-8").read())
+    states = data["states"]
+    assert set(states) == set(STATE_NAMES)
+    for code, entry in states.items():
+        assert entry["verified_at"] is None, code  # only the link check sets it
+        assert urlsplit(entry["url"]).scheme == "https", code
+        host = urlsplit(entry["url"]).hostname
+        assert not any(host == d or host.endswith("." + d) for d in (
+            "vote.org", "ballotpedia.org", "usa.gov", "vote.gov",
+        )), code
+        assert entry["label"] and entry["source_name"] and entry["_checked"], code
 
 
 # ── direct path: each registered state read from its own office ────
@@ -1479,7 +1593,7 @@ def test_every_unread_state_has_a_reason_and_no_read_state_claims_one():
     assert unread == expected
     assert not unread & sources.configured_states()
     for state, entry in registry["unread"].items():
-        assert set(entry) == {"reason", "dev_note"}, state
+        assert set(entry) in ({"reason", "dev_note"}, {"reason", "dev_note", "none_by_law"}), state
         assert len(entry["reason"]) > 20 and entry["dev_note"], state
 
 
@@ -1497,7 +1611,10 @@ def test_unread_reasons_make_no_claim_about_network_access():
     for state, entry in sources._load()["unread"].items():
         reason = entry["reason"].lower()
         assert not [w for w in network_words if w in reason], (state, reason)
-        assert ("does not read" in reason and "automatically yet" in reason) or "publish" in reason or "posted" in reason, state
+        assert (
+            ("does not read" in reason and "automatically yet" in reason) or "publish" in reason
+            or "posted" in reason or "none_by_law" in entry
+        ), state
 
 
 def test_unread_reasons_are_true_in_any_cycle():
@@ -1526,7 +1643,7 @@ def test_the_page_gives_an_unread_states_reason(db_session):
     assert ny["unreadReason"] == "Civitas does not read New York's official measure list automatically yet."
     assert "dev_note" not in json.dumps(ny) and "Cloudflare" not in json.dumps(ny)
     de = _body(elections.state_ballot("DE", db=db_session))["measureCoverage"]
-    assert de["unreadReason"].startswith("Delaware publishes no statewide list")
+    assert de["unreadReason"].startswith("Delaware's Constitution has the General Assembly adopt amendments")
     assert _body(elections.state_ballot("CA", db=db_session))["measureCoverage"]["unreadReason"] is None
 
 
@@ -1540,3 +1657,57 @@ async def test_an_unread_states_coverage_records_its_reason(monkeypatch, db_sess
     await election_pipeline._sync_ballot_measures(db_session, None, 2026)
     row = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "MS").one()
     assert row.error_detail == "no direct source: Mississippi publishes no list."
+
+
+@pytest.mark.asyncio
+async def test_a_state_whose_law_allows_no_measure_is_confirmed_none(monkeypatch, db_session):
+    """Delaware adopts amendments without a popular vote and has no
+    initiative or referendum: its page says none, citing that law, rather
+    than "not yet covered" forever. Only unread states with a registry
+    `none_by_law` get this; every other unread state is still not covered."""
+    _direct_source(monkeypatch, [["1"]])
+    monkeypatch.setattr(election_pipeline, "federal_states", lambda: frozenset({"CA", "DE", "NY"}))
+    await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    de = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "DE").one()
+    assert de.status == MeasureCoverage.CONFIRMED_NONE
+    assert de.source_name == "Delaware Constitution, art. XVI, §1"
+    assert de.error_detail.startswith("none by law: ")
+    assert de.last_success_at is not None
+    ny = db_session.query(MeasureCoverage).filter(MeasureCoverage.state == "NY").one()
+    assert ny.status == MeasureCoverage.NOT_YET_COVERED
+
+
+def test_measures_are_listed_in_the_states_own_order(db_session):
+    """`number` sorted as a string put Louisiana's 10 before its 2 and
+    Colorado's Propositions 132-137 before Amendments 81-87. The page uses
+    each measure's place in the state's own document, and a row written
+    before that existed sorts after, its number compared digit-run by
+    digit-run."""
+    election = _page_election()
+    for pos, number in enumerate(["Amendment 81", "Amendment 87", "Proposition 132"]):
+        _measure(db_session, f"CO-{election}-{pos}", state="CO", date=election, number=number, source_position=pos)
+    for number in ["10", "2", "1"]:
+        _measure(db_session, f"LA-{election}-{number}", state="LA", date=election, number=number)
+    db_session.commit()
+    co = [m["number"] for m in _body(elections.state_ballot("CO", db=db_session))["measures"]]
+    assert co == ["Amendment 81", "Amendment 87", "Proposition 132"]
+    la = [m["number"] for m in _body(elections.state_ballot("LA", db=db_session))["measures"]]
+    assert la == ["1", "2", "10"]
+
+
+def test_a_rekeyed_measure_keeps_its_title_and_is_superseded_not_removed(db_session):
+    """A record whose id and number both change (Wyoming's heading-as-number,
+    New Mexico's "HB 248 (1)" -> "Bond Question 1") is the same measure:
+    deleted as superseded, never shown "no longer on the ballot" beside
+    itself."""
+    election = _page_election()
+    _measure(db_session, f"NM-{election}-HB-248-1", state="NM", date=election, number="HB 248 (1)",
+             title="The bond act authorizes senior bonds.", source_name="NM")
+    _measure(db_session, f"NM-{election}-old", state="NM", date=election, number="9",
+             title="A measure the state dropped.", source_name="NM")
+    db_session.commit()
+    incoming = [{"id": f"NM-{election}-Bond-Question-1", "number": "Bond Question 1",
+                 "title": "The bond act authorizes senior bonds."}]
+    assert election_pipeline._supersede_rows(db_session, "NM", election, "NM", incoming) == 1
+    left = [m.id for m in db_session.query(BallotMeasure).filter(BallotMeasure.state == "NM")]
+    assert left == [f"NM-{election}-old"]

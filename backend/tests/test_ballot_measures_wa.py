@@ -37,16 +37,20 @@ def test_section_without_certification_link_is_not_a_list():
 def test_ballot_title_and_summary_are_verbatim():
     m = wa.parse_ballot_title_letter(DOCS["IP26-645"]["ballot_title_letter"], "IP26-645", "Initiative No. IP26-645")
     assert m["title"] == "Initiative Measure No. IP26-645 concerns state and local taxes."
-    assert m["official_summary"].startswith("Statement of Subject: Initiative Measure No. IP26-645")
-    assert "Should this measure be enacted into law? Ballot Measure Summary: This measure would repeal" in m["official_summary"]
-    assert "[ ]" not in m["official_summary"]
+    assert m["official_title"].startswith("Statement of Subject: Initiative Measure No. IP26-645")
+    assert m["official_title"].endswith("Should this measure be enacted into law?")
+    assert "[ ]" not in m["official_title"]
+    # The summary is the letter's BALLOT MEASURE SUMMARY alone, with no
+    # label of ours written in.
+    assert m["official_summary"].startswith("This measure would repeal")
+    assert "Ballot Measure Summary" not in m["official_summary"]
     assert m["origin"] == "Washington voters (initiative to the people)"
     assert m["yes_means"] is None and m["no_means"] is None
 
 
 def test_line_break_hyphen_is_rejoined():
     m = wa.parse_ballot_title_letter(DOCS["IL26-001"]["ballot_title_letter"], "IL26-001", "h")
-    assert "public-school children, including" in m["official_summary"]
+    assert "public-school children, including" in m["official_summary"] + m["official_title"]
     assert m["origin"] == "Washington voters (initiative to the Legislature)"
 
 

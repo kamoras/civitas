@@ -141,7 +141,9 @@ class Senator(Base):
     # to the stored votes.
     party_line_record: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
-    small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    # NULL: the filings report no unitemized money (every gift itemized), so
+    # the small-donor share can't be read from them (normalize_finance).
+    small_donor_percentage: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
 
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -416,7 +418,9 @@ class Representative(Base):
     # to the stored votes.
     party_line_record: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_from_pacs: Mapped[float] = mapped_column(Float, default=0.0)
-    small_donor_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    # NULL: the filings report no unitemized money (every gift itemized), so
+    # the small-donor share can't be read from them (normalize_finance).
+    small_donor_percentage: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
 
     partisan_depth: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -696,7 +700,7 @@ class President(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)  # e.g. "obama-44"
     name: Mapped[str] = mapped_column(String, nullable=False)
-    party: Mapped[str] = mapped_column(String, nullable=False)  # D, R, W(hig), F(ederalist), DR
+    party: Mapped[str] = mapped_column(String, nullable=False)  # D, R, W(hig), F(ederalist), DR, U (no party)
     number: Mapped[int] = mapped_column(Integer, nullable=False)  # 44th, 45th, etc.
     term_start: Mapped[str] = mapped_column(String, nullable=False)  # "2009-01-20"
     term_end: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -719,6 +723,8 @@ class President(Base):
     # completed yet — never as a stand-in for a real number.
     score_public_mandate: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_effectiveness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Agency Alignment, removed in president v7: no longer scored and
+    # cleared each run; dropped in a later release (migrations/README.md).
     score_agency_alignment: Mapped[float | None] = mapped_column(Float, nullable=True)
     # NULL for any currently-serving or just-departed president — C-SPAN's
     # Presidential Historians Survey only rates a completed term, and its
@@ -727,22 +733,51 @@ class President(Base):
     score_historical_legacy: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     avg_approval: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Average approval among the president's own party, the other party and
+    # independents (Gallup, via the American Presidency Project), and the
+    # House party distance averaged over the term (Voteview): what Public
+    # Mandate compares within an era since president v9
+    # (president_scorer.approval_vs_era). NULL without the breakdown.
+    approval_own_party: Mapped[float | None] = mapped_column(Float, nullable=True)
+    approval_other_party: Mapped[float | None] = mapped_column(Float, nullable=True)
+    approval_independents: Mapped[float | None] = mapped_column(Float, nullable=True)
+    term_polarization: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Average election-margin percentage across a president's own election
     # win(s) — the pre-polling-era (pre-Truman) Public Mandate proxy, see
     # app.pipeline.fetch.presidential_elections. NULL for the five
     # presidents who never won a presidential election in their own right.
     election_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
     gdp_growth_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Average annual real GDP growth per person over the years Effectiveness
+    # credits, the 13 peer economies' median over the same years, and US
+    # minus peers with the peers' catch-up growth set aside
+    # (app.pipeline.fetch.peer_gdp.peer_relative_growth) — what a postwar
+    # term's GDP component scores since president v8. NULL before 1947 (no
+    # peer series covers those terms) and until the first run that fetches
+    # them.
+    gdp_growth_per_person: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gdp_growth_peer_median: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gdp_growth_relative: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The unemployment rate the year the term began and its change to the
+    # last credited year, consumer-price inflation that year and its average
+    # over the credited years, and how many credited years they cover
+    # (president_scorer.macro_window; FRED/BLS). Since president v10 a term
+    # from 1947 on is judged on each against what its starting rate
+    # predicts. NULL before 1947 and until measured.
+    unemployment_start: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unemployment_change: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inflation_start: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inflation_average: Mapped[float | None] = mapped_column(Float, nullable=True)
+    economy_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
     jobs_created_millions: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Informational only (2026-07): no longer a scoring input — Competence
     # (the dimension EO count used to feed) was removed entirely, see
     # PRESIDENT_SCORE_WEIGHTS's comment in config_definitions.py. Still
     # shown on a president's profile as a raw stat.
     eo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Persisted so the on-demand score-breakdown endpoint can recompute
-    # calc_agency_alignment's exact input without a live re-fetch from the
-    # Federal Register. rulemaking_count is informational since president
-    # v5 (volume is no longer scored — see _agency_alignment_core).
+    # Agency Alignment's inputs (Federal Register rulemaking counts), no
+    # longer fetched or read since president v7; dropped in a later release
+    # (migrations/README.md).
     rulemaking_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rulemaking_finalized_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Last-quartile-minus-first-quartile average approval across the term
@@ -943,6 +978,16 @@ class Candidate(Base):
     # them, and never set from a "Last, First" printing (see
     # state_candidates._note_ballot_name).
     ballot_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The party that state's list prints for them (an FEC code, or the
+    # printed label for a party FEC has no code for), set beside
+    # ballot_name. The page shows it over `party`, the FEC filing's code,
+    # which can be a typo ("08") or a code nothing labels.
+    ballot_party: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The member of Congress this FEC candidate id belongs to, by the
+    # congress-legislators bioguide->FEC crosswalk (the election run sets
+    # it). Ties a sitting member to their scorecard when the FEC codes
+    # their own row a challenger, as it does after a special election.
+    member_bioguide: Mapped[str | None] = mapped_column(String, nullable=True)
     # last_coverage_search (the removed Bluesky candidate search's watermark)
     # is no longer mapped; the next release drops it (migrations/README.md).
 
@@ -955,6 +1000,12 @@ class Candidate(Base):
     disbursements: Mapped[float | None] = mapped_column(Float, nullable=True)
     cash_on_hand: Mapped[float | None] = mapped_column(Float, nullable=True)
     individual_itemized_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The last day the FEC figures above cover ("YYYY-MM-DD", the totals
+    # row's coverage_end_date) — what the figures are as of. The sync date
+    # below is only when we last asked: on 2026-10-08 a Senate nominee
+    # checked that day had reported through 2026-06-30. NULL with the
+    # figures when the FEC holds no report for this race's election.
+    financials_through: Mapped[str | None] = mapped_column(String(10), nullable=True)
     last_financials_sync: Mapped[datetime | None] = mapped_column(nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
@@ -1143,8 +1194,9 @@ class LiveResultRead(Base):
 
 
 class Justice(Base):
-    """Supreme Court justice: the voting record from Oyez, and loyalty to
-    the appointing president, the score (pipeline/analyze/justice_loyalty)."""
+    """Supreme Court justice: the voting record, and the appointing
+    president's effect on their votes, shown and not scored
+    (pipeline/analyze/justice_loyalty)."""
     __tablename__ = "justices"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)  # oyez identifier
@@ -1163,15 +1215,22 @@ class Justice(Base):
     # longer mapped; 0020 made them nullable and the next release drops them
     # (migrations/README.md).
 
-    # Loyalty to the appointing president (justice_loyalty): the score, the
-    # shrunk effect (a share: 0.145 is 14.5 points) and its standard error,
-    # the votes under the appointing president and under others with the
-    # share of each for the government, and the Supreme Court Database term
-    # the record runs through. NULL until measured, or for a justice the
-    # Database doesn't cover yet.
+    # Justice v2's loyalty score and shrunk effect. Justice v3 scores no
+    # justice: the pipeline writes NULL here and nothing reads them; they
+    # stay mapped this release so the image before can still read them, then
+    # are unmapped and dropped (migrations/README.md, pending contract).
     score_loyalty: Mapped[float | None] = mapped_column(Float, nullable=True)
     loyalty: Mapped[float | None] = mapped_column(Float, nullable=True)
     loyalty_se: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The appointing president's effect on the justice's votes (justice
+    # v3, justice_loyalty.fit), shown with its confidence interval and not
+    # scored: the justice's own estimate (a share: 0.145 is 14.5 points) and
+    # its standard error, the votes under the appointing president and under
+    # others with the share of each for the government, and the Supreme
+    # Court Database term the record runs through. NULL until measured, or
+    # for a justice the Database doesn't cover yet.
+    appointer_effect: Mapped[float | None] = mapped_column(Float, nullable=True)
+    appointer_effect_se: Mapped[float | None] = mapped_column(Float, nullable=True)
     loyalty_votes_in: Mapped[int | None] = mapped_column(Integer, nullable=True)
     loyalty_votes_out: Mapped[int | None] = mapped_column(Integer, nullable=True)
     loyalty_rate_in: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -1780,6 +1839,21 @@ class BallotMeasure(Base):
     # author is MORE neutral than the bare quote.
     title_authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
     fiscal_authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # The drafters of the summary and of the yes/no framing, where the
+    # state names one different from the title's: Alabama's Fair Ballot
+    # Commission writes the summary and the YES/NO sentences under a
+    # ballot question the Legislature wrote, and a single "Drafted by"
+    # credited the Commission's words to the Legislature. Null means the
+    # source names no separate drafter for that text (with no official
+    # title, title_authority names the summary's drafter, as before).
+    summary_authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    framing_authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Where the measure sits in the state's own document (0 first), so the
+    # page lists measures in the state's order. Sorting `number` as a
+    # string put Louisiana's 10 before its 2 and Colorado's
+    # Propositions 132-137 before Amendments 81-87. Null for a row written
+    # before the column existed; those sort after, by number.
+    source_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     source_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     source_url: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -1944,6 +2018,21 @@ class PipelineRateLimitStat(Base):
             name="uq_rate_limit_stat_run_step_source",
         ),
     )
+
+
+class MemberIdAlias(Base):
+    """A member id that was renamed (app/member_ids.py), and the id it
+    became: posts and search engines still hold URLs under the old one, so
+    /politicians/<old_id> and the API answer it with the member it now
+    names. One row per old id; a later rename repoints every alias of the
+    person to the newest id. A live member's own id always wins over an
+    alias of the same string."""
+    __tablename__ = "member_id_aliases"
+
+    old_id: Mapped[str] = mapped_column(String, primary_key=True)
+    new_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    bioguide_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    renamed_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class BskySenatorSpotlight(Base):
@@ -2139,6 +2228,22 @@ class PageLoadTiming(VisitsBase):
     metric: Mapped[str] = mapped_column(String(8), primary_key=True)  # ttfb | fcp | load
     # Upper bound of the bucket, in ms (a member of LOAD_TIMING_BUCKETS_MS).
     bucket_ms: Mapped[int] = mapped_column(Integer, primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ApiRejectionCount(VisitsBase):
+    """Why public API requests were refused as invalid (422), as daily
+    counters: the parameter and the rule it broke ("doc_type",
+    "literal_error"), never the value sent and nothing about the caller.
+    Without it a run of 422s says only that callers got something wrong,
+    not what to fix in the API or its documentation."""
+    __tablename__ = "api_rejection_counts"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD, UTC
+    endpoint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    channel: Mapped[str] = mapped_column(String(8), primary_key=True)  # http | mcp
+    parameter: Mapped[str] = mapped_column(String(64), primary_key=True)
+    reason: Mapped[str] = mapped_column(String(64), primary_key=True)  # the validation error type
     count: Mapped[int] = mapped_column(Integer, default=0)
 
 

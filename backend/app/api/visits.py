@@ -1,9 +1,9 @@
 """Privacy-respecting unique-visitor tracking.
 
-No raw IP or User-Agent is ever stored. `POST /api/track-visit` is fired by
-the frontend's middleware on a page load, and by the browser (through nginx,
-frontend NavigationBeacon) on a navigation inside the app — never on a
-prefetch (frontend lib/pageLoad.ts) — and records only an HMAC of
+No raw IP or User-Agent is ever stored. `POST /api/track-visit` is sent by
+the browser itself, through nginx (frontend NavigationBeacon), for the page
+it opened and each navigation after it — so a client that never runs the
+page is never counted — and records only an HMAC of
 the IP under a random salt that exists for the current UTC day and is then
 deleted — see SiteVisit in models.py for why that makes past hashes
 unrecoverable and why this table can't grow per-request.
@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.database import VisitsSessionLocal
 from app.issue_ids import from_public_id
-from app.models import ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
+from app.models import ApiRejectionCount, ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
 
 logger = logging.getLogger(__name__)
 
@@ -115,15 +115,21 @@ class _ApiEvent:
     endpoint: str
     channel: str
     status: int
+    # For a 422: (parameter, validation error type), see ApiRejectionCount.
+    rejection: tuple[str, str] | None = None
 
 
-def record_api_request(endpoint: str, channel: str, status: int) -> None:
+def record_api_request(
+    endpoint: str, channel: str, status: int, rejection: tuple[str, str] | None = None,
+) -> None:
     """Count one public API or MCP request (ApiRequestCount). Takes nothing
     about the caller. Queued for the same consumer as visits, so it never
     writes on the request path; must be called on the event loop (the
     queue is an asyncio one)."""
     try:
-        _visit_queue.put_nowait(_ApiEvent(date=_today(), endpoint=endpoint, channel=channel, status=status))
+        _visit_queue.put_nowait(_ApiEvent(
+            date=_today(), endpoint=endpoint, channel=channel, status=status, rejection=rejection,
+        ))
     except asyncio.QueueFull:
         logger.warning("Visit queue full (%d) — dropping API request count", _VISIT_QUEUE_MAXSIZE)
 
@@ -172,6 +178,16 @@ def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent | _ApiEvent"], db
                         set_={"count": ApiRequestCount.count + 1},
                     )
                 )
+                if event.rejection:
+                    db.execute(
+                        sqlite_insert(ApiRejectionCount).values(
+                            date=event.date, endpoint=event.endpoint, channel=event.channel,
+                            parameter=event.rejection[0][:64], reason=event.rejection[1][:64], count=1,
+                        ).on_conflict_do_update(
+                            index_elements=["date", "endpoint", "channel", "parameter", "reason"],
+                            set_={"count": ApiRejectionCount.count + 1},
+                        )
+                    )
                 continue
 
             stmt = sqlite_insert(SiteVisit).values(
@@ -509,17 +525,10 @@ def _extract_issue_public_id(raw: str) -> str | None:
 
 
 def _track_ip(request: Request) -> str:
-    # NOT app.api.rate_limit.client_ip(): that function only trusts
-    # X-Forwarded-For when the direct TCP peer is nginx (127.0.0.1), which
-    # is right for rate-limiting but wrong here. This endpoint is called
-    # by the frontend's own middleware directly over the internal Docker
-    # network (frontend -> backend:8000), bypassing nginx entirely, so the
-    # TCP peer is the frontend container, never 127.0.0.1. The frontend
-    # middleware already received a trustworthy X-Real-IP from nginx for
-    # the original browser request and relays it unchanged — trusting it
-    # here is reasonable because both hops (nginx->frontend, frontend-
-    # >backend) are on infra this deployment controls, not the public
-    # internet (backend:8000 isn't reachable outside the Docker network).
+    # The browser's beacon reaches this through nginx, which sets X-Real-IP
+    # for every request it proxies (nginx/civitas.conf) — the same header
+    # its rate limits are keyed by. backend:8000 isn't reachable outside
+    # the Docker network, so nothing else can supply it.
     forwarded = request.headers.get("X-Real-IP")
     if forwarded:
         return forwarded

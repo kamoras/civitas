@@ -65,9 +65,9 @@ def refresh(monkeypatch):
     monkeypatch.setattr(ac, "_rank_clusters", lambda cl, tr, db: (cl, [1.0 - i / 10 for i in range(len(cl))]))
     pool = {}
 
-    def dedupe(ranked, scores, n):
+    def dedupe(ranked, scores, n, published):
         pool["n"] = n
-        return ranked[:n]
+        return iter(list(enumerate(ranked))[:n])
 
     monkeypatch.setattr(ac, "_deduplicate_top_clusters", dedupe)
     rng = np.random.default_rng(7)
@@ -92,7 +92,7 @@ def refresh(monkeypatch):
     monkeypatch.setattr(ac, "grounding_violations", lambda text, source: [])
     monkeypatch.setattr(ac, "hedge_and_editorializing_violations", lambda text: [])
     monkeypatch.setattr(ac, "_classify_issue_policy_areas", lambda t, s: [])
-    monkeypatch.setattr(ac, "_resolve_bills", lambda raw, texts, titles=None: [{"id": "hr1-119", "title": "A bill"}])
+    monkeypatch.setattr(ac, "_resolve_bills", lambda texts, titles=None, bill_titles=None: [{"id": "hr1-119", "title": "A bill"}])
     monkeypatch.setattr(ac, "_find_related_explore_docs", lambda *a: [])
     monkeypatch.setattr(ac, "_find_related_senators", lambda *a: [])
     monkeypatch.setattr(ac, "_find_related_officials", lambda *a: [])

@@ -79,7 +79,7 @@ async def run_supplementary_pipeline() -> dict:
                     progress.skip("explore_documents", detail=f"skipped: {held.why}")
                 else:
                     from app.pipeline.explore_pipeline import run_explore_pipeline
-                    explore_result = await run_explore_pipeline(days_back=60)
+                    explore_result = await run_explore_pipeline()
                     # Count NEW documents per source — the old sum over all int
                     # values picked up total_embedded (historically the whole
                     # corpus), reporting "N ingested" when nothing new arrived.
@@ -107,11 +107,15 @@ async def run_supplementary_pipeline() -> dict:
         # SCOTUS data changes a few times per term, but the Oyez fetch is
         # uncached per-case crawling (5h+ in run 69). Refresh weekly
         # (Sunday UTC), or whenever the justices table is empty or a sitting
-        # justice's loyalty has never been measured (a new install, or a
-        # source that was down: the fields stay unset until a run reads them).
+        # justice's appointer estimate has never been measured (a new
+        # install, a source that was down: the fields stay unset until a run
+        # reads them; or a justice measured only before justice v3, whose
+        # own estimate was never stored).
         justices_missing = db.query(Justice.id).first() is None
         unmeasured = db.query(Justice.id).filter(
-            Justice.is_active.is_(True), Justice.loyalty_through_term.is_(None),
+            Justice.is_active.is_(True),
+            Justice.loyalty_through_term.is_(None)
+            | (Justice.appointer_effect.is_(None) & Justice.loyalty_votes_in.is_not(None)),
         ).first() is not None
         run_justices = justices_missing or unmeasured or utcnow().weekday() == 6
         if not run_justices:
@@ -127,19 +131,19 @@ async def run_supplementary_pipeline() -> dict:
                         from app.pipeline.justice_pipeline import run_justice_pipeline
                         justice_result = await run_justice_pipeline(db)
                         run.justices_scored = justice_result.get("justices", 0)
-                        logger.info("Justice pipeline scored %d justices", run.justices_scored)
-                        # The voting record can refresh while loyalty (the score)
-                        # can't be measured. A bare "9 scored" hid the SCDB 403
+                        logger.info("Justice pipeline refreshed %d justices", run.justices_scored)
+                        # The voting record can refresh while the appointer
+                        # estimate can't be measured. A bare "9 scored" hid the SCDB 403
                         # that left every justice unscored on 2026-09-29, and
                         # the logs naming the source rotated away within the
                         # day, so the alert carries the reason.
-                        detail = f"{run.justices_scored} scored"
+                        detail = f"{run.justices_scored} refreshed"
                         if why := justice_result.get("loyalty_unmeasured"):
-                            detail += f", loyalty not measured: {why}"
+                            detail += f", appointer estimate not measured: {why}"
                             send_ops_alert(
-                                "Justice loyalty not measured",
-                                f"The justice step refreshed the voting record but not the score: {why}. "
-                                "The stored scores stand until a later run can read it.",
+                                "Justice appointer estimate not measured",
+                                f"The justice step refreshed the voting record but not the appointer estimate: {why}. "
+                                "The stored estimates stand until a later run can read it.",
                                 dedupe_key=f"justice-loyalty-unmeasured-{utcnow():%Y-%m-%d}",
                                 condition="justice-loyalty-unmeasured",
                             )

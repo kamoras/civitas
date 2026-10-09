@@ -49,39 +49,58 @@ async def _find_highest_roll_call(
     client: httpx.AsyncClient,
     url_for_roll: Callable[[int], str],
     probe_candidates: list[int],
-) -> int:
+    root_tag: str,
+) -> int | None:
     """Binary-ish search for the highest valid roll-call number on a
     legislative chamber's site: probe a scattered list of candidates to
     find any valid upper bound, then walk forward one at a time from
     there to find the true highest. `url_for_roll` builds the
     chamber-specific URL for a given roll number.
+
+    A roll exists only when its body is the vote document (`root_tag`, the
+    chamber's XML root element), not merely when the status is 200: the
+    House Clerk answers a roll that doesn't exist yet with 200 and
+    `<xml>Error sanitizing file ...</xml>`, which once walked the search
+    past the real last roll, so every roll fetched was a non-vote and the
+    House's recent votes were saved empty.
+
+    None when no probe got an answer at all (every request raised or the
+    server erred) — the site could not be read, which is not the same as
+    a session with no votes yet (0).
     """
+    marker = f"<{root_tag}"
+
+    def _is_vote(resp: httpx.Response) -> bool:
+        return resp.status_code == 200 and marker in resp.text
+
     highest_valid = 0
+    answered = False
     for probe in probe_candidates:
         await _rate_limiter.acquire()
         try:
             resp = await client.get(url_for_roll(probe), timeout=_ROLL_CALL_PROBE_TIMEOUT_S)
-            if resp.status_code == 200:
-                highest_valid = max(highest_valid, probe)
-                break  # Found a valid upper bound
         except Exception:
             continue
+        if resp.status_code < 500:
+            answered = True
+        if _is_vote(resp):
+            highest_valid = probe
+            break  # Found a valid upper bound
 
     if highest_valid == 0:
-        return 0
+        return 0 if answered else None
 
     check = highest_valid + 1
     while check <= highest_valid + _ROLL_CALL_NARROW_SEARCH_WINDOW:
         await _rate_limiter.acquire()
         try:
             resp = await client.get(url_for_roll(check), timeout=_ROLL_CALL_NARROW_SEARCH_TIMEOUT_S)
-            if resp.status_code == 200:
-                highest_valid = check
-                check += 1
-            else:
-                break
         except Exception:
             break
+        if not _is_vote(resp):
+            break
+        highest_valid = check
+        check += 1
 
     return highest_valid
 
@@ -442,6 +461,13 @@ async def fetch_bill(
     return None
 
 
+class CongressUnavailable(RuntimeError):
+    """Congress.gov could not be read for something a score depends on (a
+    bill's actions decide its stage and whether it became law). Raised, not
+    cached as [], so the run keeps the stored record instead of saving a
+    bill as never acted on."""
+
+
 async def fetch_bill_actions(
     client: httpx.AsyncClient,
     db: Session,
@@ -459,11 +485,20 @@ async def fetch_bill_actions(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/actions?limit=100",
     )
-    raw = (data or {}).get("actions", [])
+    if data is None:
+        raise CongressUnavailable(f"actions of {bill_type.upper()}.{bill_number} ({congress})")
+    raw = data.get("actions", [])
     # Congress.gov v3 may return {"count": N, "item": [...]} instead of a list
     results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
     return results
+
+
+# A bill's cosponsor list changes slowly once it is a few weeks old, and
+# both chambers now read every current-Congress sponsored bill's (about
+# 19,000 in the 119th): at a week, a night refreshes about 2,700 of them,
+# where the 72-hour default would refresh about 6,400.
+COSPONSORS_CACHE_HOURS = 24 * 7
 
 
 async def fetch_bill_cosponsors(
@@ -475,7 +510,7 @@ async def fetch_bill_cosponsors(
 ) -> list[dict]:
     """Fetch cosponsors for a bill (includes bioguideId, party, state)."""
     cache_key = f"bill-cosponsors-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = api_cache_get(db, "congress", cache_key, max_age_hours=COSPONSORS_CACHE_HOURS)
     if cached is not None:
         return cached
 
@@ -483,9 +518,11 @@ async def fetch_bill_cosponsors(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/cosponsors?limit=250",
     )
-    raw = (data or {}).get("cosponsors", [])
+    if data is None:
+        return []  # not cached: this run goes without, the next asks again
+    raw = data.get("cosponsors", [])
     results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
-    api_cache_set(db, "congress", cache_key, results)
+    api_cache_set(db, "congress", cache_key, results, normal_ttl_hours=COSPONSORS_CACHE_HOURS)
     return results
 
 
@@ -506,7 +543,9 @@ async def fetch_bill_summaries(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/summaries",
     )
-    raw = (data or {}).get("summaries", [])
+    if data is None:
+        return []  # not cached: this run classifies from the title, the next asks again
+    raw = data.get("summaries", [])
     results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
     return results
@@ -866,13 +905,15 @@ async def fetch_recent_roll_calls(
     session_number: int = 1,
     count: int = 15,
     max_age_hours: int | None = None,
-) -> list[dict]:
+) -> list[dict] | None:
     """Fetch the last `count` Senate roll calls from the current session.
 
     Probes Senate.gov starting from a high roll number, working backward
     until we find valid votes, then fetches `count` of them.
 
-    Returns list of parsed roll call dicts (newest first).
+    Returns list of parsed roll call dicts (newest first): [] when the
+    session has no votes, None when Senate.gov could not be read (the
+    caller must not take that for an empty record). Neither is cached.
 
     `max_age_hours` overrides the default cache TTL — see fetch_roll_call_
     vote's docstring for why the near-real-time early-signal poller needs
@@ -899,8 +940,12 @@ async def fetch_recent_roll_calls(
 
     highest_valid = await _find_highest_roll_call(
         client, _senate_roll_url, [500, 300, 200, 150, 100, 75, 50, 25, 10],
+        "roll_call_vote",
     )
 
+    if highest_valid is None:
+        logger.warning("Senate.gov unreachable for congress %d session %d", congress, session_number)
+        return None
     if highest_valid == 0:
         logger.warning("No recent roll calls found for congress %d session %d", congress, session_number)
         return []
@@ -920,6 +965,8 @@ async def fetch_recent_roll_calls(
             results.append(roll_data)
 
     logger.info("Fetched %d recent roll calls", len(results))
+    if not results:
+        return None  # rolls exist but none could be read
     api_cache_set(db, "congress", cache_key, results, normal_ttl_hours=max_age_hours)
     return results
 
@@ -1023,7 +1070,11 @@ def parse_house_vote_xml(
         members.append({
             "bioguideId": legislator.get("name-id", ""),
             "lastName": legislator.get("sort-field", ""),
-            "firstName": legislator.text or "",
+            # The Clerk's XML names a member only by surname (the element's
+            # text is the surname, with the state where two share it:
+            # "Johnson (LA)"). It was stored as the first name, and the vote
+            # page showed "Aderholt Aderholt".
+            "firstName": "",
             "party": legislator.get("party", ""),
             "state": legislator.get("state", ""),
             "voteCast": (vote_el.text or "").strip(),
@@ -1056,11 +1107,12 @@ async def fetch_recent_house_roll_calls(
     year: int = 2025,
     count: int = 15,
     max_age_hours: int | None = None,
-) -> list[dict]:
+) -> list[dict] | None:
     """Fetch the last `count` House roll calls for a given year.
 
     Probes clerk.house.gov starting from a high roll number, working
-    backward until valid votes are found.
+    backward until valid votes are found. [] when the year has no votes,
+    None when the Clerk could not be read — see fetch_recent_roll_calls.
 
     `max_age_hours` overrides the default cache TTL — see
     fetch_recent_roll_calls's (Senate) docstring for why the near-real-time
@@ -1079,8 +1131,12 @@ async def fetch_recent_house_roll_calls(
 
     highest_valid = await _find_highest_roll_call(
         client, _house_roll_url, [700, 500, 400, 300, 200, 100, 50, 25, 10],
+        "rollcall-vote",
     )
 
+    if highest_valid is None:
+        logger.warning("clerk.house.gov unreachable for year %d", year)
+        return None
     if highest_valid == 0:
         logger.warning("No recent House roll calls found for year %d", year)
         return []
@@ -1098,5 +1154,7 @@ async def fetch_recent_house_roll_calls(
             results.append(roll_data)
 
     logger.info("Fetched %d recent House roll calls", len(results))
+    if not results:
+        return None  # rolls exist but none could be read
     api_cache_set(db, "congress", cache_key, results, normal_ttl_hours=max_age_hours)
     return results

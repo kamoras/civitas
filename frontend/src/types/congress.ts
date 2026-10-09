@@ -48,7 +48,10 @@ export interface DayCounts {
   resolutionsPassed: number;
   failed: number;
   reported: number;
+  /** Nominees counted from the Digest; routine promotion lists, whose size
+   * it doesn't give, are counted apart in confirmedLists. */
   confirmed: number;
+  confirmedLists: number;
   committeeMeetings: number;
 }
 
@@ -138,8 +141,9 @@ export interface PeriodReport {
   votes: RollCallSummary[];
   becameLaw: BecameLaw[];
   syncedAt: string | null;
-  previous: string;
-  next: string;
+  /** The neighbouring week or month, null past either end of the record. */
+  previous: string | null;
+  next: string | null;
 }
 
 export interface MonthReport extends PeriodReport {

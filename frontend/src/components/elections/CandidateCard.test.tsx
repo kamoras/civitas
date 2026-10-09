@@ -27,19 +27,47 @@ describe("CandidateCard", () => {
     expect(screen.getByText("$100")).toBeInTheDocument();
   });
 
-  it("relabels a negative cash on hand as debt, shown as a positive amount", () => {
-    // Real Maine 2026 Senate data: -$3,500 cash on hand (FEC debt
-    // exceeding receipts), live-verified 2026-09-04.
-    render(<CandidateCard candidate={candidate({ cashOnHand: -3500 })} />);
-    expect(screen.getByText("Debt")).toBeInTheDocument();
-    expect(screen.queryByText("Cash on hand")).not.toBeInTheDocument();
-    expect(screen.getByText("$4K")).toBeInTheDocument();
-    expect(screen.queryByText(/-\$/)).not.toBeInTheDocument();
+  it("shows a negative cash on hand as the FEC reports it, never as debt", () => {
+    // The FEC reports a committee's debts as a separate figure, so a
+    // negative balance labelled "Debt" named a number it wasn't showing;
+    // and -$0.04 used to read "Debt $0".
+    render(<CandidateCard candidate={candidate({ cashOnHand: -0.04 })} />);
+    expect(screen.getByText("Cash on hand")).toBeInTheDocument();
+    expect(screen.getByText("-$0.04")).toBeInTheDocument();
+    expect(screen.queryByText(/debt/i)).not.toBeInTheDocument();
   });
 
   it("shows an em dash rather than $0 for a never-synced figure", () => {
     render(<CandidateCard candidate={candidate({ cashOnHand: null, lastFinancialsSync: null })} />);
     expect(screen.getByText("AWAITING FEC SYNC")).toBeInTheDocument();
+  });
+});
+
+describe("what the figures are as of", () => {
+  it("dates the figures by the FEC report's end, not by when they were checked", () => {
+    render(
+      <CandidateCard
+        candidate={candidate({
+          lastFinancialsSync: "2026-10-08T12:00:00Z",
+          financialsThrough: "2026-06-30",
+        })}
+      />
+    );
+    expect(
+      screen.getByText("FEC REPORTS THROUGH 2026-06-30 · CHECKED 2026-10-08")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/AS OF/)).not.toBeInTheDocument();
+  });
+
+  it("says when the FEC holds no report for this election", () => {
+    render(
+      <CandidateCard
+        candidate={candidate({ contributions: null, cashOnHand: null, financialsThrough: null })}
+      />
+    );
+    expect(
+      screen.getByText("NO FEC REPORT FOR THIS ELECTION · CHECKED 2026-08-25")
+    ).toBeInTheDocument();
   });
 });
 

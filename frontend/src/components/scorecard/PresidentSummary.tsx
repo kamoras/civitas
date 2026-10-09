@@ -8,12 +8,11 @@ import { ordinal } from "./format";
 const DIMENSIONS = [
   ["publicMandate", "Public Mandate"],
   ["effectiveness", "Effectiveness"],
-  ["agencyAlignment", "Agency Alignment"],
   ["historicalLegacy", "Historical Legacy"],
 ] as const;
 
 /** The sitting president at a glance, above the leaderboard: the
- *  Presidential Score and its four parts, as stored, with the way into the
+ *  Presidential Score and its three parts, as stored, with the way into the
  *  full scorecard. */
 export default function PresidentSummary({ president }: { president: President }) {
   const s = president.score;

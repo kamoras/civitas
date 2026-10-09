@@ -25,6 +25,16 @@ export const REFERENCES = {
       </>
     ),
   },
+  ansolabehere2022: {
+    short: "Ansolabehere & Kuriwaki 2022",
+    entry: (
+      <>
+        Ansolabehere, S. &amp; Kuriwaki, S. (2022). Congressional Representation: Accountability
+        from the Constituent&apos;s Perspective. <J>American Journal of Political Science</J>,
+        66(1), 123–139.
+      </>
+    ),
+  },
   bafumi2010: {
     short: "Bafumi & Herron 2010",
     entry: (
@@ -32,6 +42,24 @@ export const REFERENCES = {
         Bafumi, J. &amp; Herron, M. C. (2010). Leapfrog Representation and Extremism: A Study of
         American Voters and Their Members in Congress. <J>American Political Science Review</J>,
         104(3), 519–542.
+      </>
+    ),
+  },
+  barro1992: {
+    short: "Barro & Sala-i-Martin 1992",
+    entry: (
+      <>
+        Barro, R. J. &amp; Sala-i-Martin, X. (1992). Convergence.{" "}
+        <J>Journal of Political Economy</J>, 100(2), 223–251.
+      </>
+    ),
+  },
+  baumol1986: {
+    short: "Baumol 1986",
+    entry: (
+      <>
+        Baumol, W. J. (1986). Productivity Growth, Convergence, and Welfare: What the Long-Run Data
+        Show. <J>American Economic Review</J>, 76(5), 1072–1085.
       </>
     ),
   },
@@ -50,6 +78,24 @@ export const REFERENCES = {
       <>
         Bengio, Y., Ducharme, R., Vincent, P., &amp; Jauvin, C. (2003). A Neural Probabilistic
         Language Model. <J>Journal of Machine Learning Research</J>, 3, 1137–1155.
+      </>
+    ),
+  },
+  blinder2016: {
+    short: "Blinder & Watson 2016",
+    entry: (
+      <>
+        Blinder, A. S. &amp; Watson, M. W. (2016). Presidents and the U.S. Economy: An Econometric
+        Exploration. <J>American Economic Review</J>, 106(4), 1015–1045.
+      </>
+    ),
+  },
+  bolt2024: {
+    short: "Bolt & van Zanden 2024",
+    entry: (
+      <>
+        Bolt, J. &amp; van Zanden, J. L. (2024). Maddison-style estimates of the evolution of the
+        world economy: A new 2023 update. <J>Journal of Economic Surveys</J>.
       </>
     ),
   },
@@ -129,6 +175,24 @@ export const REFERENCES = {
       </>
     ),
   },
+  dawes1979: {
+    short: "Dawes 1979",
+    entry: (
+      <>
+        Dawes, R. M. (1979). The Robust Beauty of Improper Linear Models in Decision Making.{" "}
+        <J>American Psychologist</J>, 34(7), 571–582.
+      </>
+    ),
+  },
+  donovan2020: {
+    short: "Donovan et al. 2020",
+    entry: (
+      <>
+        Donovan, K., Kellstedt, P. M., Key, E. M. &amp; Lebo, M. J. (2020). Motivated Reasoning,
+        Public Opinion, and Presidential Approval. <J>Political Behavior</J>, 42(4), 1201–1221.
+      </>
+    ),
+  },
   efron1975: {
     short: "Efron & Morris 1975",
     entry: (
@@ -182,6 +246,15 @@ export const REFERENCES = {
       <>
         Harbridge-Yong, L., Volden, C., &amp; Wiseman, A. E. (2023). The Bipartisan Path to
         Effective Lawmaking. <J>Journal of Politics</J>, 85(3).
+      </>
+    ),
+  },
+  jacobson2019: {
+    short: "Jacobson 2019",
+    entry: (
+      <>
+        Jacobson, G. C. (2019). <J>Presidents and Parties in the Public Mind</J>. University of
+        Chicago Press.
       </>
     ),
   },
@@ -249,6 +322,15 @@ export const REFERENCES = {
         Manning, C. D., Raghavan, P., &amp; Schütze, H. (2008).{" "}
         <J>Introduction to Information Retrieval</J>. Cambridge University Press. Ch. 14: Vector
         Space Classification.
+      </>
+    ),
+  },
+  mccarty2006: {
+    short: "McCarty, Poole & Rosenthal 2006",
+    entry: (
+      <>
+        McCarty, N., Poole, K. T. &amp; Rosenthal, H. (2006).{" "}
+        <J>Polarized America: The Dance of Ideology and Unequal Riches</J>. MIT Press.
       </>
     ),
   },
@@ -323,6 +405,15 @@ export const REFERENCES = {
       <>
         Romer, C. D. (1989). The Prewar Business Cycle Reconsidered: New Estimates of Gross National
         Product, 1869–1908. <J>Journal of Political Economy</J>, 97(1), 1–37.
+      </>
+    ),
+  },
+  sen1968: {
+    short: "Sen 1968",
+    entry: (
+      <>
+        Sen, P. K. (1968). Estimates of the Regression Coefficient Based on Kendall&apos;s Tau.{" "}
+        <J>Journal of the American Statistical Association</J>, 63(324), 1379–1389.
       </>
     ),
   },

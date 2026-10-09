@@ -174,3 +174,40 @@ class TestModuleLevelWrappers:
 
         assert party_platform._platform_cache.is_loaded is True
         party_platform.clear_platform_cache()
+
+
+def test_data_centroids_read_both_chambers_and_skip_housekeeping(db_session):
+    """Party positions learn from both chambers' labelled votes (v6.28),
+    never from a housekeeping roll call: it carries its bill's title under
+    the label of its own split, the opposite of the bill's. Rows stored
+    before v6.28 still hold the bill's area, so they are recognized by their
+    roll call's question."""
+    from app.models import KeyVote, Representative, RepKeyVote, RollCall, Senator
+    from app.pipeline.analyze.party_platform import _build_data_centroids
+
+    db_session.add(Senator(id="s1", bioguide_id="S1", name="A Senator", state="KY", party="R"))
+    db_session.add(Representative(id="r1", bioguide_id="R1", name="A Rep", state="TN", district=2, party="R"))
+    db_session.add(RollCall(chamber="house", congress=119, session=2, number=278, date="2026-07-22",
+                            question="On Passage"))
+    db_session.add(RollCall(chamber="house", congress=119, session=2, number=277, date="2026-07-22",
+                            question="On Motion to Recommit"))
+    text = "A bill to cut taxes on small business owners and their employees"
+    common = {"bill_id": "HR.1", "date": "2026-07-22", "vote": "Yea", "policy_area": "TAXES",
+              "description": text}
+    db_session.add(KeyVote(senator_id="s1", bill_name="S senate bill", party_leaning="R",
+                           **{**common, "description": "A Senate bill to cut taxes on farms and family ranches"}))
+    db_session.add(RepKeyVote(representative_id="r1", bill_name=text, party_leaning="R",
+                              roll_call="house-119-2-278", **common))
+    # Stored before v6.28: the recommit vote on the same bill, labelled by its own split.
+    db_session.add(RepKeyVote(representative_id="r1", bill_name=text, party_leaning="D",
+                              roll_call="house-119-2-277", **common))
+    # Stored since: marked procedural.
+    db_session.add(RepKeyVote(representative_id="r1", bill_name=text, party_leaning=None,
+                              roll_call="house-119-2-277", **{**common, "policy_area": "PROCEDURAL"}))
+    db_session.commit()
+
+    with patch("app.pipeline.vector_store.get_embedding_model", return_value=_fake_model()):
+        r_centroids, d_centroids = _build_data_centroids(db_session)
+
+    assert r_centroids["TAXES"][1] == 2  # the Senate bill and the House passage vote
+    assert "TAXES" not in d_centroids

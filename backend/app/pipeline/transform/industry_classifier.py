@@ -73,6 +73,13 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
         "Lockheed Raytheon Boeing Northrop Grumman General Dynamics BAE L3Harris Leidos "
         "naval army air force Pentagon"
     ),
+    # Measured and not changed (2026-10-09): adding "credit union league
+    # association of credit unions" here moved a credit-union trade group off
+    # LABOR_UNIONS (5 of the FEC file's 25 credit-union PACs read as unions,
+    # 1 after) and lifted the record-labelled committees from 250 to 253
+    # right, but it relabelled 434 of the learning store's 25,403 names, and
+    # of 60 of those judged by hand 19 improved and 19 got worse. Any edit
+    # to a prototype moves every name near it; this one is a wash.
     "FINANCE": (
         "banking investment securities hedge private equity venture capital. "
         "Wall Street asset management brokerage wealth management credit lending mortgage. "
@@ -81,9 +88,18 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
         "Fidelity Vanguard Raymond James BB&T Truist PNC Capital One TD Bank "
         "financial services fiduciary trading derivatives bonds equities"
     ),
+    # No organization's name in REAL_ESTATE or GUNS (v6.30): a name like
+    # "National Association of Realtors" or "National Rifle Association"
+    # matched every "National ... Association" by its generic words. Measured
+    # on the 1,861 PAC donor names stored 2026-10-08: GUNS fell from 97 names
+    # to 6 and 91 of the 160 changed labels left GUNS, nearly all for a
+    # better or no label; the Realtors' PAC stays REAL_ESTATE. The cost: the
+    # NRA's political fund and two gun-safety PACs now read POLITICAL or
+    # LOBBYISTS (one side each). Adding any of those names back brought 81
+    # to 119 names into GUNS, mostly wrong (scripts/evaluate_industry_classifier.py
+    # and docs/methodology/member-score/v6.30.md).
     "REAL_ESTATE": (
-        "real estate property housing mortgage realty homebuilder REIT commercial property development. "
-        "National Association of Realtors"
+        "real estate property housing mortgage realty realtors homebuilder REIT commercial property development"
     ),
     "TECH": (
         "technology software internet cloud computing artificial intelligence data silicon valley. "
@@ -119,16 +135,13 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
         "Akin Gump Squire Patton Boggs BGR Group Invariant LLC Holland Knight lobbying firm"
     ),
     "GAMBLING": "casino gambling gaming sports betting lottery wagering Las Vegas Sands MGM Wynn Caesars",
-    # Both sides of firearms-issue advocacy are anchored (2026-07 fix):
-    # anchoring only the gun-rights orgs made the donor-vote influence
-    # penalty reachable for one side's donor base on gun votes and
-    # structurally unreachable for the other's (gun-safety org money fell
-    # to POLITICAL/OTHER and never matched the GUNS policy area).
+    # Both sides of firearms-issue advocacy stay in the description (2026-07):
+    # "gun safety gun violence prevention" beside "second amendment", so
+    # neither side's donor base is structurally unable to match the GUNS
+    # policy area. Organization names are out (see REAL_ESTATE above).
     "GUNS": (
         "firearm gun rifle ammunition weapons manufacturer second amendment "
-        "gun safety gun violence prevention. "
-        "NRA National Rifle Association Gun Owners of America Smith & Wesson "
-        "Remington Everytown for Gun Safety Giffords Brady Campaign"
+        "gun safety gun violence prevention shooting sports"
     ),
     "TOBACCO": "tobacco cigarette vaping e-cigarette nicotine smoking Altria Philip Morris Reynolds JUUL",
     "CRYPTO": (

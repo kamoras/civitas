@@ -246,10 +246,11 @@ export default async function DevelopersPage() {
               <List>
                 <Item label="Ids">
                   A member&apos;s id is the one in their Civitas address:{" "}
-                  <code className={CODE}>jon-ossoff</code> in{" "}
-                  <code className={CODE}>/politicians/jon-ossoff</code>. The lists give each one,
-                  and every record carries <code className={CODE}>siteUrl</code>, its page here, to
-                  link or cite.
+                  <code className={CODE}>jane-doe</code> in{" "}
+                  <code className={CODE}>/politicians/jane-doe</code>. The lists give each one, and
+                  every record carries <code className={CODE}>siteUrl</code>, its page here, to link
+                  or cite. An id changes when the member&apos;s name does; the old one keeps
+                  working, and the record comes back under the new one.
                 </Item>
                 <Item label="Lists">
                   Pages of <code className={CODE}>entries</code> with{" "}
@@ -294,6 +295,8 @@ export default async function DevelopersPage() {
                 The same API is an MCP server, so an assistant such as Claude can look up members,
                 scores and documents itself. Every endpoint below is a tool of the same name,
                 answering exactly what the API does. It uses streamable HTTP and needs no sign-in.
+                An argument a tool doesn&apos;t take is refused by name rather than ignored, so a
+                misnamed filter can&apos;t come back looking applied.
               </P>
               <CopyText text={MCP_URL} label="MCP server address" />
               <List>

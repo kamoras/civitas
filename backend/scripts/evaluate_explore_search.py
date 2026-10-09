@@ -19,18 +19,30 @@ broad topical query returns a *good* set. That question needs real
 labels, and a synthetic harness that pretended otherwise would be worse
 than no harness.
 
-Four query styles are probed, because the whole argument for a hybrid
+Five query styles are probed, because the whole argument for a hybrid
 engine is that different query shapes fail on different channels:
 
-  title       the document's title, near-verbatim — the easy case
-  paraphrase  content words from the body, title words removed — the case
-              dense retrieval should win and BM25 should struggle
+  title       the document's title words in order — the easy case
+  paraphrase  the body's eight most frequent content words, title words
+              removed. Despite the name, a bag of the document's own words,
+              not a rewording: an exact-term query, and BM25's home ground
   identifier  serial numbers and citations lifted from the document
               (executive order numbers, RINs, FR citations, docket ids) —
               the case dense retrieval cannot do at all, and the reason
               the keyword channel exists
   rare        the document's least common terms measured against the rest
               of the corpus — the long tail, where IDF earns its keep
+  passage     one sentence of the body, verbatim, from anywhere in it —
+              whether a specific passage is reachable, deep text included.
+              Measured here only (`build_passage_probes`), not in the
+              nightly field-weight fit, which reads `build_probes`
+
+Every style is built from the document's own words, so the protocol
+measures lexical findability and favours the keyword channel by
+construction: semantic below keyword on ALL is expected, and identifier
+near zero is a property of encoders, not a defect. Compare the semantic
+channel with itself across a change to the index; synonymy, the case it
+exists for, needs real queries.
 
 Reported per configuration: MRR (mean reciprocal rank of the target),
 Recall@1 / @5 / @20, and how often the target was missed entirely.
@@ -93,12 +105,17 @@ def build_probes(docs: list[dict], corpus_df: dict[str, int], total: int) -> lis
     probes: list[dict] = []
     for doc in docs:
         body = (doc["body"] or "")[:6000]
-        title_terms = set(_terms(doc["title"]))
+        # In title order, not a set's: a set iterates in an order that
+        # changes with every process's hash seed, so the same --seed built
+        # different title and rare queries run to run, and two runs of an
+        # unchanged engine disagreed by up to 0.04 MRR on those styles.
+        ordered_title = list(dict.fromkeys(_terms(doc["title"])))
+        title_terms = set(ordered_title)
 
         if len(title_terms) >= 2:
             probes.append({
                 "style": "title", "doc_id": doc["id"],
-                "query": " ".join(list(title_terms)[:8]),
+                "query": " ".join(ordered_title[:8]),
             })
 
         body_terms = [t for t in _terms(body) if t not in title_terms]
@@ -110,10 +127,11 @@ def build_probes(docs: list[dict], corpus_df: dict[str, int], total: int) -> lis
             })
 
             # Rarest terms by inverse document frequency across this corpus.
+            # Ties (common: many terms occur once) broken by the term
+            # itself, for the same reason as the title order above.
             scored = sorted(
                 set(body_terms),
-                key=lambda t: math.log(total / max(corpus_df.get(t, 1), 1)),
-                reverse=True,
+                key=lambda t: (-math.log(total / max(corpus_df.get(t, 1), 1)), t),
             )
             probes.append({
                 "style": "rare", "doc_id": doc["id"],
@@ -127,6 +145,30 @@ def build_probes(docs: list[dict], corpus_df: dict[str, int], total: int) -> lis
                 "query": identifiers[0],
             })
 
+    return probes
+
+
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+")
+PASSAGE_WORDS = (12, 40)  # a full sentence, not a heading or a citation block
+
+
+def build_passage_probes(docs: list[dict]) -> list[dict]:
+    """One verbatim body sentence per document, the middle one of those
+    PASSAGE_WORDS long, from the whole body (not the first 6,000
+    characters the other styles read): deep text is where the embedding
+    window used to be truncated, and a probe that never looks there can't
+    see it."""
+    probes: list[dict] = []
+    for doc in docs:
+        sentences = [
+            s for s in (p.strip() for p in _SENTENCE_BREAK.split(doc["body"] or ""))
+            if PASSAGE_WORDS[0] <= len(s.split()) <= PASSAGE_WORDS[1]
+        ]
+        if sentences:
+            probes.append({
+                "style": "passage", "doc_id": doc["id"],
+                "query": sentences[len(sentences) // 2],
+            })
     return probes
 
 
@@ -265,7 +307,7 @@ def main() -> int:
         random.seed(args.seed)
         rows = db.query(
             ExploreDocument.id, ExploreDocument.title, ExploreDocument.body,
-        ).all()
+        ).order_by(ExploreDocument.id).all()
         sample = random.sample(rows, min(args.samples, len(rows)))
 
         # Document frequency over the sample, which is what the "rare" style
@@ -276,10 +318,8 @@ def main() -> int:
             for term in set(_terms(f"{row.title} {(row.body or '')[:6000]}")):
                 corpus_df[term] += 1
 
-        probes = build_probes(
-            [{"id": r.id, "title": r.title, "body": r.body} for r in sample],
-            corpus_df, len(sample),
-        )
+        docs = [{"id": r.id, "title": r.title, "body": r.body} for r in sample]
+        probes = build_probes(docs, corpus_df, len(sample)) + build_passage_probes(docs)
         print(f"Corpus: {total} documents | sampled {len(sample)} | "
               f"{len(probes)} probes\n")
 
@@ -288,7 +328,7 @@ def main() -> int:
         header = f"{'style':<12}{'config':<10}{'n':>6}{'MRR':>8}{'R@1':>8}{'R@5':>8}{'R@20':>8}{'missed':>9}"
         print(header)
         print("-" * len(header))
-        for style in ("title", "paraphrase", "identifier", "rare", "ALL"):
+        for style in ("title", "paraphrase", "identifier", "rare", "passage", "ALL"):
             if style not in by_style:
                 continue
             for config in CONFIGS:

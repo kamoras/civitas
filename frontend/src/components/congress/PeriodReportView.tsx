@@ -117,14 +117,16 @@ export default function PeriodReportView({
       ? `Week of ${longDate(report.start).replace(/^\w+, /, "")}`
       : monthLabel(report.start.slice(0, 7));
   const pending = senate.daysPending + house.daysPending;
-  const previous =
-    kind === "week"
-      ? { href: weekHref(report.previous), label: `Week of ${shortDate(report.previous).slice(5)}` }
-      : { href: monthHref(`${report.previous}-01`), label: monthLabel(report.previous) };
-  const next =
-    kind === "week"
-      ? { href: weekHref(report.next), label: `Week of ${shortDate(report.next).slice(5)}` }
-      : { href: monthHref(`${report.next}-01`), label: monthLabel(report.next) };
+  // A neighbour only when it has a record to show (the API says null past
+  // either end of the record).
+  const step = (period: string | null) =>
+    period == null
+      ? null
+      : kind === "week"
+        ? { href: weekHref(period), label: `Week of ${shortDate(period).slice(5)}` }
+        : { href: monthHref(`${period}-01`), label: monthLabel(period) };
+  const previous = step(report.previous);
+  const next = step(report.next);
   return (
     <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
       <Navbar />

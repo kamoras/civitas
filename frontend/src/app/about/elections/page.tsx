@@ -100,7 +100,17 @@ export default async function ElectionsChapter() {
           So each page covers what&apos;s uniform statewide and lists what it omits (county and city
           offices, local measures, primary ballots and so on), with a link to your own election
           office. Once a gap closes for a state, it comes off that state&apos;s list: a disclaimer
-          that outlives the gap stops describing the page.
+          that outlives the gap stops describing the page. And the list names only gaps a state
+          actually has: no judicial line where judges are appointed or elected at another election,
+          no &ldquo;retention questions&rdquo; where voters never decide whether to keep a judge, no
+          legislative line in a year the state elects no legislature.
+        </P>
+        <P>
+          That link goes to the state&apos;s own voter lookup, where you can see your sample ballot
+          or polling place on the state&apos;s site (or its polling-place page, where the lookup
+          itself refuses automated checks). Each night Civitas checks that the link still opens that
+          page; when it doesn&apos;t, or when a state&apos;s site turns away the check, the page
+          links USAGov&apos;s directory of election offices instead.
         </P>
       </Section>
 
@@ -123,11 +133,24 @@ export default async function ElectionsChapter() {
           election, or those sitting now), a lookup by representative (house.gov&apos;s, or your
           current member&apos;s name) answers for the district your current member was elected in,
           which on the new map can be a different place under the same number. Those pages point to
-          the map, the counties and the state&apos;s own ballot lookup instead. For the same reason
-          a member of Congress running there is marked a &ldquo;sitting member&rdquo; (from election
+          the map, the counties and the state&apos;s own voter lookup instead. For the same reason a
+          member of Congress running there is marked a &ldquo;sitting member&rdquo; (from election
           day on, a &ldquo;member before this election&rdquo;, since the results can stay up until
           the new Congress is sworn in), not the &ldquo;incumbent&rdquo;: no seat on the new map has
           a previous holder.
+        </P>
+        <P>
+          State legislative districts are far smaller than a county, so each one lists the places it
+          covers: the towns themselves in the states where towns are the local government (New
+          England, New York, New Jersey, Pennsylvania, Michigan, Minnesota, Wisconsin), every city
+          and every unincorporated community Census names (Silver Spring, The Woodlands), and every
+          county it touches. Type any of them, or a candidate&apos;s name or the district number,
+          and the list narrows. The places come from the Census Bureau&apos;s 2026 state legislative
+          district files joined block by block to the 2020 census, so a place is listed for a
+          district only where people in it actually live inside that district; a sliver with fewer
+          than 50 residents (about one census block) is left off. A city split between districts is
+          listed under each, and your street decides which: the state&apos;s own voter lookup gives
+          the exact answer.
         </P>
         <Sub title="The optional town selector">
           <P>
@@ -155,9 +178,9 @@ export default async function ElectionsChapter() {
             word: anyone not on it comes off the page.
           </Item>
           <Item label="Nominees from primary results">
-            Stands in until a state certifies. It can&apos;t see a Libertarian, Green or independent
-            who never ran in a primary, so the page says &ldquo;nominees&rdquo;, not &ldquo;the
-            ballot&rdquo;.
+            Stands in until a state certifies. It can&apos;t see a nominee who never ran in a
+            primary (one a party convention chose, or a Libertarian, Green or independent
+            candidate), so the page says &ldquo;nominees&rdquo;, not &ldquo;the ballot&rdquo;.
           </Item>
           <Item label="A primary ballot">Before the primary, the people running in it.</Item>
           <Item label="Campaign filings">
@@ -175,6 +198,88 @@ export default async function ElectionsChapter() {
           nominee off the page), and we don&apos;t work around bot challenges or logins on state
           election sites.
         </P>
+        <P>
+          Fundraising figures are the FEC&apos;s totals for this race&apos;s election only, dated by
+          the last day the candidate&apos;s reports cover (&ldquo;FEC reports through&rdquo;), not
+          by when we last checked. A candidate with no report for this election yet says so; their
+          money from an earlier race is never shown in its place.
+        </P>
+        <More label="Three lists corrected, October 2026">
+          <P>
+            An audit on 8 October 2026 found three pages built from primary results that missed
+            people a primary can&apos;t show. Idaho&apos;s Senate race still listed a Democratic
+            nominee who had withdrawn, and left out two independents on the ballot by petition.
+            Montana&apos;s Senate race, marked a complete ballot, left out an independent whose
+            petition the state certified: it was read from the primary&apos;s candidate list, which
+            never moves a petition candidate to &ldquo;nominated&rdquo;. Arkansas&apos;s statewide
+            races showed only the Democrat for Governor and none of the other offices, because their
+            nominees were unopposed in the primary.
+          </P>
+          <P>
+            Each is now read from the state&apos;s own list for the general election: Montana&apos;s
+            general-election candidate list, Idaho&apos;s final candidates list and Arkansas&apos;s
+            candidate search, which the state trims to the November field after the primary.
+            Arkansas&apos;s search has no status column, so a withdrawal shows only once the state
+            removes the name. Where one of these lists can&apos;t be read, the page goes back to
+            saying its names come from primary results and may be incomplete.
+          </P>
+          <P>
+            The same audit found every House race in Nevada and New York still listing everyone who
+            filed with the FEC. Both states&apos; election sites answer with a bot challenge. Clark
+            County, Nevada publishes its own list of November contests, which now settles three of
+            the state&apos;s four House races. New York City&apos;s Board of Elections posts a
+            contest list too, but it is marked tentative, predates the state&apos;s certification
+            and covers only the city&apos;s districts, so it isn&apos;t presented as the ballot.
+          </P>
+        </More>
+        <More label="Checked against twelve certified lists, 9 October 2026">
+          <P>
+            A second audit compared the pages for twelve states, across most of the systems Civitas
+            reads, with each state&apos;s own certified list. Federal contests matched in all of
+            them apart from how some names were written. What it found, and what changed:
+          </P>
+          <List>
+            <Item label="North Carolina’s legislature and courts">
+              Read from primary results, which in North Carolina list only contested primaries: the
+              page showed 59 legislative nominees in 55 of 170 districts (three since replaced by
+              their party), and nothing for the Supreme Court seat. Both now come from the State
+              Board of Elections&apos; candidate list for November.
+            </Item>
+            <Item label="Names">
+              Candidates who never filed with the FEC (60 of them in 17 states) were shown as
+              &ldquo;SURNAME, GIVEN&rdquo; rather than as printed, and a nickname the ballot prints
+              inside a name (&ldquo;Tobias (Toby)&rdquo;) was dropped. Both now read as the state
+              prints them.
+            </Item>
+            <Item label="Incumbents">
+              Nine sitting members running again were not marked as incumbents, because someone else
+              in the race carried the FEC&apos;s open-seat code. A member the state&apos;s ballot
+              lists is now trusted as running.
+            </Item>
+            <Item label="Parties">
+              Where a state prints a party Civitas has no code for (California&apos;s Peace and
+              Freedom, &ldquo;No Party Preference&rdquo;), it is now shown as printed rather than as
+              no party. A party named &ldquo;American Independent&rdquo; or &ldquo;Independent
+              American&rdquo; is a party, not an independent.
+            </Item>
+            <Item label="Special elections and runoffs">
+              A legislative seat with a special election for the rest of its term beside its regular
+              contest is shown as two contests. Louisiana&apos;s House contests on 3 November are an
+              all-party primary with a 12 December runoff, and Georgia requires a majority in
+              November with a 1 December runoff; both pages now say so above the ballot.
+            </Item>
+            <Item label="Finding your district">
+              The filter ignores accents and punctuation, so &ldquo;dona ana&rdquo;, &ldquo;st
+              louis&rdquo; and &ldquo;prince georges&rdquo; find their places.
+            </Item>
+          </List>
+          <P>
+            Ohio&apos;s and Utah&apos;s legislative nominees still come from primary results: Ohio
+            publishes no statewide list of November candidates (its counties certify their own), and
+            Utah&apos;s is a scanned image. New York&apos;s and northern Nevada&apos;s House races
+            still list FEC filers, for the reason above.
+          </P>
+        </More>
         <More label="How the candidate lists were checked, September 2026">
           <P>
             On 26 September 2026, 39 states had certified candidates and eleven were still showing
@@ -198,19 +303,21 @@ export default async function ElectionsChapter() {
             primary: in Maine, the winner of the Democratic Senate primary withdrew in July and the
             party nominated a replacement; in South Carolina a special primary replaced the June
             Senate winner. Colorado, Virginia, Tennessee, Florida, New Jersey, Maryland, Iowa,
-            Nebraska, New Mexico, Wyoming, Hawaii, Delaware, Kentucky, Alaska, Montana, Illinois and
-            North Dakota are read from their certified lists (Tennessee&apos;s federal races alone
-            list 36 independents), and Wisconsin from its official primary canvass.
+            Nebraska, New Mexico, Wyoming, Hawaii, Delaware, Kentucky, Alaska, Montana, Illinois,
+            North Dakota, Idaho and Arkansas are read from their certified lists (Tennessee&apos;s
+            federal races alone list 36 independents), and Wisconsin from its official primary
+            canvass.
           </P>
           <P>
-            Utah and Alabama publish certified lists only as scanned images. For races those states,
-            Arkansas and Connecticut leave unseen (districts whose primary was uncontested),
-            Google&apos;s election index fills in once it publishes the general election, and only
-            for those races. Michigan, Ohio and Oklahoma are read from lists the states publish
-            themselves (Oklahoma&apos;s results API requires a login, so its State Election
-            Board&apos;s published list of November ballots is read instead). Nevada and New York
-            answer every request with a bot challenge, so Google&apos;s election index is their only
-            source until that changes.
+            Utah and Alabama publish certified lists only as scanned images. For races those states
+            and Connecticut leave unseen (districts whose primary was uncontested), Google&apos;s
+            election index fills in once it publishes the general election, and only for those
+            races. Michigan, Ohio and Oklahoma are read from lists the states publish themselves
+            (Oklahoma&apos;s results API requires a login, so its State Election Board&apos;s
+            published list of November ballots is read instead). Nevada and New York answer every
+            request with a bot challenge. Three of Nevada&apos;s four House races are read from
+            Clark County&apos;s own list of November contests; for the rest, and for New York,
+            Google&apos;s election index is the only source until that changes.
           </P>
           <P>
             Where a state&apos;s results are reached through a link on its own site, each linked
@@ -355,17 +462,22 @@ export default async function ElectionsChapter() {
             Ballot titles are among the most litigated documents in election law: courts have voided
             measures over a legislature&apos;s wording. So each quote names its author
             (&ldquo;Drafted by the Georgia General Assembly&rdquo;, &ldquo;Prepared by the
-            Legislative Analyst&rsquo;s Office&rdquo;): who wrote it tells you how to weigh it. We
-            don&apos;t reproduce the pro and con arguments in voter guides; campaigns write those,
-            some states sell the slots, and printing them as a matched pair would manufacture a
-            balance that may not exist.
+            Legislative Analyst&rsquo;s Office&rdquo;): who wrote it tells you how to weigh it.
+            Where the summary or the yes/no description has a different author from the title, as in
+            Alabama, where a Fair Ballot Commission writes them under the Legislature&apos;s
+            question, each names its own. Where the law leaves it open who wrote a text, we name
+            everyone it could be rather than guess one. Measures are listed in the order the state
+            lists them. We don&apos;t reproduce the pro and con arguments in voter guides; campaigns
+            write those, some states sell the slots, and printing them as a matched pair would
+            manufacture a balance that may not exist.
           </P>
         </Sub>
         <Sub title="“No measures” is different from “we don’t know yet”">
           <P>
             An empty section reads as &ldquo;nothing to research&rdquo;: a damaging thing to imply
             about a state with seventeen amendments pending. So a state is shown as having no
-            statewide measures only when its official source establishes it, and a state we
+            statewide measures only when its official source establishes it (or, as in Delaware, its
+            constitution allows none: amendments there take no popular vote), and a state we
             haven&apos;t covered, or whose ingest failed, says <em>that</em> and points to the
             official lookup. Measures removed from the ballot (courts have struck about 2.3% since
             1995) are marked removed and kept for a while, not silently deleted.
@@ -384,11 +496,16 @@ export default async function ElectionsChapter() {
         </Sub>
         <P>
           Every measure is read directly from the state itself (its Secretary of State, elections
-          board or legislature) through its certified list, voter guide or ballot notice. We use no
-          third-party source for measures. A state we don&apos;t read automatically yet, or which
-          publishes no official list, says it isn&apos;t covered and which of the two it is; a guide
-          not yet published reads the same way, never as &ldquo;none&rdquo;. The state&apos;s
-          official source is linked from every measure. See{" "}
+          board or legislature) through its certified list, voter guide or ballot notice. Where a
+          state&apos;s whole site refuses automated requests (Arizona, Georgia and Nevada put theirs
+          behind bot checks), we don&apos;t try to get past it: the state&apos;s own document is
+          read from another public office&apos;s copy of it (a county election office, or for
+          Arizona the state&apos;s Citizens Clean Elections Commission), with every check the
+          state&apos;s own copy would get, and each measure names that office. We use no third-party
+          source for measures. A state we don&apos;t read automatically yet, or which publishes no
+          official list, says it isn&apos;t covered and which of the two it is; a guide not yet
+          published reads the same way, never as &ldquo;none&rdquo;. The state&apos;s official
+          source is linked from every measure. See{" "}
           <A href="/about/limitations#ballot-coverage">known limitations</A> for where coverage is
           still incomplete.
         </P>

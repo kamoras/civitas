@@ -8,7 +8,6 @@ export interface PresidentialScore {
    * comment in the backend's config_definitions.py for the full account. */
   publicMandate: number | null;
   effectiveness: number | null;
-  agencyAlignment: number | null;
   /** C-SPAN Presidential Historians Survey, z-scored. Null for any
    * currently-serving or just-departed president — the survey only rates
    * a completed term, and its 2025 cycle was postponed entirely. */
@@ -16,11 +15,16 @@ export interface PresidentialScore {
   /** Backend-computed weighted total, renormalized over whichever
    * dimensions are non-null — never recompute this client-side. */
   overall: number;
-  /** How many of the 4 possible dimensions actually have a score (0-4).
+  /** How many of the 3 possible dimensions actually have a score (0-3).
    * A composite built from fewer signals (a short-tenure or currently-
    * serving president) shouldn't be read with the same confidence as one
-   * built from all 4 — surfaced so that's never implied silently. */
+   * built from all 3 — surfaced so that's never implied silently. */
   dimensionsAvailable: number;
+  /** Each scored dimension's actual share of `overall`, summing to 1
+   * (president_scorer.president_effective_weights). Shown beside each
+   * score, so a president missing a dimension sees the weights their score
+   * was really computed with. Absent dimensions have no entry. */
+  effectiveWeights?: Record<string, number>;
 }
 
 export interface President {

@@ -1075,7 +1075,7 @@ class TestCalculateConfidence:
 
     def test_empty_data_is_low_everywhere(self):
         from app.pipeline.analyze.score_calculator import calculate_confidence
-        conf = calculate_confidence({})
+        conf = calculate_confidence({"party": "D"})
         status = conf.pop("constituentAlignmentVotePart")
         assert set(conf.values()) == {"low"}
         assert status == "neutral:few-votes"
@@ -1101,8 +1101,8 @@ class TestCalculateConfidence:
         }
         conf = calculate_confidence(senator)
         # The vote-part status rides along; this member has no party, so no
-        # party norm to score the vote part against.
-        assert conf.pop("constituentAlignmentVotePart") == "neutral:no-expectation"
+        # party line to score the vote part against.
+        assert conf.pop("constituentAlignmentVotePart") == "neutral:no-party"
         assert set(conf.values()) == {"high"}
 
     def test_unlabeled_votes_do_not_count(self):
@@ -1302,18 +1302,15 @@ class TestStatePviData:
     baseline, sign flip) fails here instead of silently skewing every
     senator's seat expectation."""
 
-    # Hand-computed anchors for the 2020+2024 window (the same window
-    # Cook's current 2025 PVIs use — the 2026-07 regeneration moved the
-    # shipped data off the old 2016+2020 window): mean deviation of the
-    # state's two-party D share from the national two-party D share
-    # (52.27% in 2020, 49.25% in 2024), from official statewide returns —
-    # worked by hand from the published vote totals, independent of the
-    # generator script. Shipped values must land within +/-1 (Cook's own
-    # published numbers may differ by a point via their undisclosed
-    # recency weighting, which we deliberately don't replicate).
+    # Cook's published 2025 state PVIs, as the state table of the Wikipedia
+    # revision pinned in district_pvi_sources.json prints them. Exact: the
+    # generator weights 2024 at 75% and 2020 at 25% as Cook does, and that
+    # reproduces all 51 published values. The equal-weight mean it used
+    # until 2026-10 put 18 of them a point off (OR, OH, WI and NJ among the
+    # anchors here), when this test allowed +/-1.
     COOK_ANCHORS = {
-        "WY": 24, "WV": 21, "MA": -14, "CA": -12, "MI": 0, "PA": 1,
-        "GA": 1, "TX": 6, "DC": -43,
+        "WY": 23, "WV": 21, "MA": -14, "CA": -12, "MI": 0, "PA": 1,
+        "GA": 1, "TX": 6, "DC": -44, "OR": -8, "OH": 5, "WI": 0, "NJ": -4,
     }
 
     def test_shipped_json_is_sane(self):
@@ -1324,13 +1321,11 @@ class TestStatePviData:
         d_lean = sum(1 for v in pvi.values() if v < 0)
         assert 18 <= r_lean <= 32 and 18 <= d_lean <= 32
 
-    def test_shipped_json_matches_cook_within_one(self):
+    def test_shipped_json_matches_cook(self):
         pvi = score_calculator._state_pvi()
         for st, expected in self.COOK_ANCHORS.items():
             assert st in pvi, f"{st} missing from state_pvi.json"
-            assert abs(pvi[st] - expected) <= 1, (
-                f"{st}: shipped {pvi[st]:+d} vs Cook {expected:+d} (>1 off)"
-            )
+            assert pvi[st] == expected, f"{st}: shipped {pvi[st]:+d} vs Cook {expected:+d}"
 
     def test_generator_compute_pvi_formula(self):
         """The generator's compute_pvi implements Cook's formula: a state
@@ -1361,6 +1356,14 @@ class TestStatePviData:
         out = mod.compute_pvi(counts)
         assert out["XX"] == 0
         assert out["YY"] == 10  # positive = R lean
+
+        # The recent election weighs three times the earlier: 8 points
+        # more R in 2024 and none in 2020 is R+6, where a plain mean
+        # would say R+4.
+        first, last = mod.CYCLES
+        counts[first]["WW"] = {"D": 50, "R": 50}
+        counts[last]["WW"] = {"D": 42, "R": 58}
+        assert mod.compute_pvi(counts)["WW"] == 6
 
 
 class TestLeadershipZeroIsAScore:

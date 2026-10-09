@@ -36,8 +36,10 @@ here, say so explicitly with the evidence, rather than filing it away.
 ## Project Overview
 
 Civitas is an AI/ML political transparency platform that scores U.S. senators,
-House representatives, presidents, and Supreme Court justices on how well they
-represent constituents. It aggregates voting records, campaign finance, floor
+House representatives and presidents on how well they represent constituents,
+and records Supreme Court justices' votes (justices are not scored: since
+justice v3, 2026-10, no measure separates loyalty to the appointing president
+from career timing for an individual justice — `docs/research/justice-scores.md`). It aggregates voting records, campaign finance, floor
 speeches, judicial opinions, and party platforms from official government
 sources, then analyzes them using embedding-based classification, roll-call
 party alignment (content-based where no roll call exists), and deterministic
@@ -79,7 +81,7 @@ civitas/
 │   │   │   ├── fetch/           # API clients (Congress.gov, FEC, GovInfo, Senate.gov, Oyez, BLS, Federal Register,
 │   │   │   │                    #   per-state ballot-measure readers)
 │   │   │   ├── transform/       # Data normalization, embedding-based industry classification
-│   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, action center LLM synthesis, justice scoring
+│   │   │   ├── analyze/         # Bill analysis, scoring, cross-referencing, action center LLM synthesis, justice appointer estimates
 │   │   │   ├── assemble/        # Scorecard builder + validator
 │   │   │   ├── senate_pipeline.py, house_pipeline.py  # FETCH→TRANSFORM→ANALYZE→ASSEMBLE+SAVE per chamber
 │   │   │   ├── member_lifecycle.py  # Roster reconciliation + removal of departed members (never presidents)
@@ -152,11 +154,13 @@ of these approaches:
 - **Statistical formulas** with shrinkage toward neutral for scoring metrics
 - **LLM inference** for tasks that require natural language synthesis from
   unstructured input: Action Center claim location (verbatim-checked),
-  monitor significance and merge decisions, timeline period summaries,
-  Bluesky spotlight and weekly-summary text (issue posts are the verified
-  lede, verbatim), early-signal vote drafts, on-request Explore document
-  summaries (`POST /api/explore/{id}/summary`, a write), and justice profile
-  summaries. Never a score, and never ballot content (§7). (Per-senator/rep
+  monitor significance and category decisions (merging monitors and matching
+  an issue to one are title similarity alone), timeline period summaries, locating the actor and
+  predicate in a race's coverage for its post (`election_bluesky.py`,
+  verbatim spans), and on-request Explore document summaries
+  (`POST /api/explore/{id}/summary`, a write). Spotlight, issue and
+  early-signal posts are fixed templates around stored figures or verified
+  ledes, and the justice profile carries no generated summary. Never a score, and never ballot content (§7). (Per-senator/rep
   narrative generation and promise evaluation used to be LLM-based; both
   were removed in 2026-07 after live audits found the output unreliable
   regardless of prompting approach — see `cross_reference.py`'s and
@@ -206,11 +210,11 @@ the residual.
 
 | Tier | Technique | Used For |
 |------|-----------|----------|
-| 1 | FEC structured metadata / learning store | Unambiguous entity types, previously classified entities |
+| 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
-| 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims and summaries, Bluesky posts, Explore document summaries, justice profiles (full list in the bullet above) |
+| 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor decisions and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
 employee PAC or a purely political PAC), the system defers to tier 2
@@ -254,6 +258,12 @@ guards), ensuring the current run's classifications take precedence. Within
 a single pipeline run, this is harmless because learning store lookups
 short-circuit re-classification of already-seen entities.
 
+A donor's industry is taken from kNN only when all seven neighbours agree
+(`donor_classifier_ai._KNN_K`, `min_agreement`): measured 2026-10-09 on
+record-labelled PAC sponsors the prototype tier abstains on, a plurality
+vote was right 29% of the time at every similarity floor, and a wrong
+industry is worse than an unclassified one.
+
 kNN's own outputs (`source == KNN_SOURCE`) are stored for lookup but are
 **never used as kNN reference examples** — only labels from an upstream tier
 (FEC metadata, rules, prototype similarity) vote. Otherwise one run's guess
@@ -276,15 +286,40 @@ inline academic citations.
 
 Key mathematical properties:
 - **Linear shrinkage**: Scores regress toward 50 when data is sparse (e.g.,
-  a senator with 1 campaign promise gets a score near 50, not 0 or 100).
-  Two exceptions: Constituent Alignment's vote part shrinks toward the
-  party's measured typical score (its scale tops out at the seat's norm, so
-  50 is below average), and Legislative Effectiveness's bill component
-  doesn't shrink by bill count (a member's bills are the whole record, not
-  a sample) — its leadership component is still pulled toward 50 for short
-  tenure.
-  The rate is the count confidence below — fixed, not estimated from the
-  population's variance, so do not call it Bayesian or empirical Bayes
+  a senator with 1 campaign promise gets a score near 50, not 0 or 100). Two
+  exceptions: Constituent Alignment's vote part shrinks toward the party's
+  measured typical score (its scale tops out at the seat's norm, so 50 is
+  below average); Legislative Effectiveness's bill component doesn't shrink
+  by bill count (a member's bills are the whole record, not a sample) — its
+  leadership component is still pulled toward 50 for short tenure. The rate
+  is the count confidence below — fixed, not estimated from the population's
+  variance, so do not call it Bayesian or empirical Bayes — except in
+  Constituent Alignment's position part (v6.27), which shrinks toward 50 at
+  a measured rate: it scales a roll-call position's distance from the seat's
+  expected position, when the position rests on n votes, by min(1, w(n) /
+  w(200)) (a full record at 200 votes, a convention), w(n) = n / (n + n0):
+  the measured slope of a member's full-record position on their thin one, a
+  full record counting 1. n0 is fitted on Voteview's own adjacent-Congress
+  records with drift per transition
+  (`scripts/calibrate_position_confidence.py`), one curve for both chambers
+  over every Congress since 1989. The structure is chosen by predicting
+  forward, each transition's n0 from the earlier ones only (its drift,
+  shared by every structure, from its own full pairs), as the weight is
+  used, by the one-standard-error rule (Hastie, Tibshirani & Friedman 2009;
+  a convention, adopted in review after four other rules had been tried, two
+  leaving one member out, then two forward): the simplest structure within
+  one standard error of the best's error. The latest era's curve, since the
+  110th Congress (a split by convention), has lower error than one curve by
+  0.066 (standard error of the paired difference 0.034, under two standard
+  errors; over the last three transitions alone about one standard error,
+  computed from `last_three`), and a window of the last six transitions
+  predicts about as well (0.011 lower error than the era curve, standard
+  error 0.012), but both are well within the best's own standard error
+  (0.229), a curve per chamber predicts no better, and with the split or the
+  window's width chosen from earlier Congresses alone each has lower error
+  than one curve only within the noise. A rerun decides again. Nothing in it
+  follows the sitting Congress. It is a reliability weight, not a count
+  threshold.
 - **Count confidence**: `min(n / threshold, 1.0)` ensures minimum sample
   sizes before trusting extreme scores
 - **State-adjusted baselines**: Constituent Alignment scores account for Cook
@@ -483,8 +518,12 @@ here: **do not change a ranking weight because a result set looks better.**
 
 `backend/scripts/evaluate_explore_search.py` is the instrument. It reports
 MRR and Recall@k for each channel and for the fusion, broken out by query
-style (title / paraphrase / identifier / rare-term), against the live index.
-Run it before and after, and say what moved.
+style (title / paraphrase / identifier / rare-term / passage), against the
+live index. Run it before and after, and say what moved. Every probe is built
+from the document's own words (the "paraphrase" style is a bag of its most
+frequent words, not a rewording), so keyword leads semantic by construction
+and identifier probes are near zero for any encoder: compare the semantic
+channel with itself across a change, not with keyword.
 
 Relevance judgments there are derived by known-item retrieval, not
 hand-labelled — a document is pulled from the corpus, a plausible query for
@@ -512,8 +551,11 @@ their party" is defined by the parties' real split: a bill whose content
 reads partisan but passed with both party majorities must not count as a
 party-line vote. (Content used to win over a bipartisan split; a 2026-06
 audit found that pinned every House member's score near 87–89.) Content
-alignment still drives bills with no roll call and the per-area partisan
-depth breakdown.
+alignment still drives bills with no roll call. Partisan depth (the lean and
+its per-area breakdown) credits each policy area a bill touches with the bill's
+own lean, from the roll call where there is one, housekeeping motions aside:
+reading each area's content label instead counted a Yea on a bill both parties
+passed as a partisan vote.
 
 One procedural exception, read from the chamber's own result field and
 never from vote counts: a **majority leader's** Nay on a motion the chamber
@@ -553,6 +595,35 @@ name from the Congress.gov "LastName, FirstName" format during member
 normalization and stores it as `lastNameForVoteMatch`.  Unicode accents are
 stripped (NFD decomposition) so "Núñez" matches "Nunez" in the XML.
 
+### 4b. Member ids are slugs, renamed in place
+
+A member's id (the `senators` / `representatives` primary key and the URL
+`/politicians/<id>`) is `first-last` from Congress.gov's "Last, First Middle"
+name, ASCII-folded (`app/member_ids.member_slug`) — the name the member
+goes by where the source marks it: the quoted nickname when the name string
+has one (`Doe, Henry C. "Hank"` → `hank-doe`), else the first given name
+(initials and Jr./Sr./II–IV passed over); and the whole surname before the
+comma, or the member detail's `lastName` when that is a longer multi-word
+form ending with it. The detail's `firstName` is not used: it holds a
+familiar form for some members without the name string marking it, and
+would rename members whose ids are already right. One URL
+namespace covers both chambers: the same bioguide id keeps one id in both
+tables, and a second person with the same slug gets the state code
+appended (then the bioguide id); whoever holds an id keeps it.
+
+Ids are re-derived every run, so `assign_member_ids` runs on each chamber's
+roster before anything writes a member by id: it matches stored members by
+**bioguide id**, never by id, and renames a changed one in place — the row,
+every foreign-key child (found from the metadata, since SQLite has no ON
+UPDATE CASCADE), and the references no foreign key covers (the same ones
+`member_lifecycle._purge_member_traces` clears) — recording the old id in
+`member_id_aliases`. Never let an id change read as a member leaving: that
+retires the row and purges its history after `RETIREMENT_GRACE_DAYS`. A new
+table or JSON field that stores a member id must be added to
+`member_ids._move` and to the purge. The API resolves an old id
+(`resolve_member_id`) and serves the member under the current id; the
+profile page answers it with a permanent redirect (308).
+
 ### 5. Config as single source of truth
 
 All dynamic enums, category codes, industry definitions, score weights, and
@@ -581,14 +652,41 @@ congress" sidesteps that fragility entirely and is *stricter* than a literal
 6-year term (resets every 2 years, not 6) — it pushes harder on the "no
 resting on laurels" goal, not softer.
 
-**Funding is the one exception**: Funding Independence and Funding Diversity
+Besides funding (below), the flank-break rule (`party_line_record`, v6.27)
+is a narrower exception that never scores a past position. It reads the last
+Congress's positions only to tell which side of their party a defector sits
+on: for everyone until the new Congress's Voteview section passes its gates;
+after that, for a member whose new record has no count or fewer than
+`prior_until_votes` votes (`app/data/position_confidence.json`: 200, a full
+record) if their last record was full; and, whatever the last record, for a
+member the new section gives no usable position (a stated choice, not
+measured). Never, once the new section is in, for a member who switched
+parties during the new Congress (`switched` in the section) or whose party
+differs between the two sections (`parties`; sections written before this
+change record none, so that check starts with the next Congress's section):
+their last positions were cast in another party. A position recorded under
+the other major party is never read for the member, in any section, nor
+counted in that party's mean (a stated choice). The 200 and the bar for
+replacing it are conventions: the calibration would adopt a shorter switch
+only if it placed members on the right side better out of bag in 95% of
+resamples, and too few thin records have the rule's shape to measure one.
+Only the Congress just before is kept, and only by a section written since
+v6.27, so the prior is first read in the Congress after the one v6.27
+shipped in.
+
+**Funding is the main exception**: Funding Independence and Funding Diversity
 window to the member's **most recent completed election only**
 (`select_recent_elections` in `fetch/fec.py`, `n=1`: general election day
 has passed — a re-election campaign still in progress is the *next*
 mandate's, not the current one), not the current congress. Itemized donor
 detail covers that election's full period (six years Senate, two House —
 `election_period_cycles`), and every funding share is taken over
-contributions, not receipts (`normalize_finance.summarize_election_totals`). Senators legitimately raise little money in the 4 non-election
+contributions, not receipts (`normalize_finance.summarize_election_totals`).
+Both chamber runs pass the chamber with the candidate record, or the
+seat-winning bound (`seat_winning_floor`) is off and the window can reach an
+old losing run. FEC's candidate totals can omit the race that won a House
+seat; for a member sworn in when the Congress convened, the House run reads
+it from the principal committees' cycle totals (`fec.with_seat_election`). Senators legitimately raise little money in the 4 non-election
 years of a 6-year term — a strict 2-year funding window would go near-empty
 most of the time for reasons that have nothing to do with coasting. Tying it
 to their current mandate's campaign instead fixes the same staleness problem
@@ -657,7 +755,11 @@ Corollaries that follow from the same rule, all enforced in code:
   state's own would; a state page that was read and refused never falls
   back to one, since that would publish past the refusal; and the card
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
-  past the wall itself is not an option: it is the state saying no.
+  past the wall itself is not an option: it is the state saying no. That
+  is enforced in the HTTP layer for every source: the client forgets the
+  cookies a challenge response sets (`http_client.is_bot_challenge`), and
+  `fetch_with_retry` never retries a challenge. Until 2026-10 a retry sent
+  the challenge's cookie back and got through one state's wall unnoticed.
 - Scope is stated as content, not as a footnote: the API enumerates what a
   statewide page omits (`omits`) and the page renders it above the measures.
 - **`omits` is a live description, not a fixed disclaimer.** Each entry is
@@ -705,11 +807,11 @@ What this rules in and out:
   picker); linking out to the official lookup for a reader who wants a
   precinct-exact answer. Where a district needs to be findable, give it
   place names a person already knows and let them filter: counties for a
-  U.S. House seat (`county_district_crosswalk.json`), towns for a state
-  legislative one (`state_leg_district_crosswalk.json`). Building that
-  crosswalk is real work — `scripts/fetch_state_leg_crosswalk.py`
-  documents why three obvious sources give wrong answers — and doing it
-  is the price of not asking.
+  U.S. House seat (`county_district_crosswalk.json`), towns, communities
+  (incorporated places and Census Designated Places) and counties for a
+  state legislative one (`state_leg_district_crosswalk.json`, a block-level
+  join documented in `scripts/fetch_state_leg_crosswalk.py`). Building
+  those crosswalks is real work, and doing it is the price of not asking.
 - **In:** following Civitas without an account. The Atom feeds (`/feeds`)
   are pulled, and a topic or state is chosen by which URL a reader
   subscribes to, so there is no subscriber list to keep. A push channel
@@ -730,12 +832,15 @@ then deleted (`api/visits.py`, `VisitSalt`). A permanent key would not do:
 the IPv4 space is small enough to enumerate, so anyone holding the key could
 recover every stored IP. With the salt gone, nobody can.
 
-A visit is a browser opening a page: the middleware counts a request only
-with `Sec-Fetch-Dest: document` (`lib/pageLoad.ts`), which every current
-browser sends and crawlers and scripts don't, and `track_visit` drops
-headless Chrome (`HeadlessChrome`, the default for Playwright-driven
-agents). Counting clients that sent no fetch metadata made crawlers two
-thirds of the unique visitors on 2026-10-01.
+A visit is a browser running a page: the page's own script reports it once
+mounted (`NavigationBeacon`, the first path and each navigation after it),
+and `track_visit` drops headless Chrome (`HeadlessChrome`, the default for
+Playwright-driven agents). Never count from the request a server sees:
+headers prove nothing. Counting requests without fetch metadata made
+crawlers two thirds of the unique visitors on 2026-10-01; the
+`Sec-Fetch-Dest: document` check that replaced it was beaten within a
+week by a crawler that sent it from thousands of rotating addresses and
+never ran a script (~7,000 of 7,357 visitors on 2026-10-08).
 
 Page-load timings (`POST /api/track-timing`, `PageLoadTiming`) are counted too,
 and deliberately carry even less: the browser reports one cold load's Navigation
@@ -747,8 +852,11 @@ a `SiteVisit` would turn a performance histogram into a per-visitor log.
 Public API and MCP use (`ApiRequestCount`) is counted the same way: one
 counter per (day, endpoint, channel, status), recorded by the public
 router's route class (`api/public.py` `_CountedRoute`) and written by the
-visit consumer, with nothing about the caller. It is not a visit and never
-reaches the visitor figures; it has its own admin tab. The channel header
+visit consumer, with nothing about the caller. A request refused as invalid
+(422) also counts which parameter broke which rule (`ApiRejectionCount`:
+"doc_type", "literal_error"), never the value sent, so a run of rejections
+says what to fix. It is not a visit and never reaches the visitor figures;
+it has its own admin tab. The channel header
 that marks an MCP tool call is cleared by nginx on every outside request.
 
 The site is served through Cloudflare, which by default rewrites pages on the
@@ -831,17 +939,19 @@ Each member pipeline executes in 4 phases per chamber, defined in
    — no LLM call (campaign-promise analysis and per-senator narrative
    generation were both LLM-based here until removed in 2026-07 for
    unreliable output; see `cross_reference.py` and `policy_alignment.py`).
-   Justice impartiality scoring (separate phase) still uses the LLM for a
-   9-justice profile summary.
-4. **ASSEMBLE + SAVE** — Build scorecards for senators, presidents, and
-   justices; validate via `assemble/validator.py`; persist to SQLite
+   The justice phase (separate) makes no LLM call either, and scores no one:
+   it stores each justice's raw appointer estimate and its standard error
+   (justice v3).
+4. **ASSEMBLE + SAVE** — Build scorecards for senators and presidents, and
+   records for justices; validate via `assemble/validator.py`; persist to SQLite
 
 Between TRANSFORM and the rest, both chamber pipelines run
 `member_lifecycle.py` against the roster they just fetched:
 
 - Anyone in the database but absent from the roster is marked
   `is_current=False` with a `left_office_date`. Reversible — reappearing on
-  the roster restores them and clears the clock. Skipped (with an ops alert)
+  the roster restores them and clears the clock, and a serving member on the
+  roster who still carries a departure date has it cleared. Skipped (with an ops alert)
   when the roster comes back implausibly small, so a truncated Congress.gov
   response can't retire a chamber, and skipped for single-member
   `senator_filter` runs.
@@ -879,8 +989,13 @@ below. Block tags become `"; "` so item boundaries survive, and the
 Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
 outlet's recurring briefing ("Up First", "Morning news brief", "The week in
 politics") is a single RSS item covering three to five unrelated stories, and
-every stage downstream treats it as one story. Two mechanical signals:
+every stage downstream treats it as one story. Three mechanical signals:
 
+- **The outlet's newsletter section.** An item whose URL sits under a
+  `newsletter`/`newsletters` path segment is the outlet's own newsletter, a
+  multi-section product whose feed description runs its section headings
+  together (one became an issue "fact" of four headings in a row). Only the
+  path segment counts, not a slug that mentions a newsletter.
 - **A recurring-product title.** Matching is split by where the marker may
   appear, because most of these phrases are ordinary English somewhere else
   in a headline: product names count only title-initial ("Pentagon holds
@@ -931,12 +1046,20 @@ wrong number on election night is worse than none:
   (`fetch/poll_close.py`, `app/data/poll_close_times.json` from
   `scripts/fetch_poll_close_times.py` — regenerate each cycle).
 - Test, preview or mismatched data raises `UntrustedCount` and stores nothing
-  (Enhanced Voting `isProduction`, Clarity `istestmode`, Tally
-  `previewElections`/`electionID`; a general's date listing no general —
-  several unsingled entries, or only a runoff, recount or special —
-  `pick_general`); a feed that goes backwards in time or
+  (Enhanced Voting `isProduction`, Clarity `istestmode`/`showtestdatawatermark`
+  — read as flags: the watermark is the string `"0"` on real elections —
+  Tally `previewElections`, `_Preview` ids and `electionID`; a general's date
+  listing no general — several unsingled entries, or only a runoff, recount
+  or special — `pick_general`, unless the entries are copies of one election
+  by the vendor's own id); a feed that goes backwards in time or
   version is refused; an impossible count is dropped; a poll whose total fell
   is stored but announces nothing.
+- A covered state with no count stored an hour after its polls close sends
+  an ops alert whatever its reads said (`check_missing_counts`): a walled or
+  moved feed fails visibly, never as a quiet night and never worked around.
+  A primary's contest labels are not proof of the general's — check each
+  vendor's staged general feed before election night (Washington's House
+  labels changed between the two in 2026).
 - Civitas never calls a race. A count is "leading" — "not final" until the
   source itself says official, and still "leading", never "wins", after (an
   official count's leader can face a runoff: Georgia's general needs a
@@ -993,7 +1116,10 @@ up. Asset categories (`HOLDING_CATEGORIES` in `config_definitions.py`) come
 only from the asset type the *filer* declared (the House's two-letter codes,
 the Senate's type/subtype), mapped in `fd_common.py` — a form-vocabulary
 translation, never a guess from the asset's name. Values stay brackets
-(`low == high` is the same open-ended sentinel); the pie is drawn by bracket
+(`low == high` is the same open-ended sentinel — except an exact value a House
+filer states instead of a bracket, "$1,251.00", which is stored the same way
+and told apart by its printed text: `schemas.EXACT_VALUE_RE`, passed to
+`is_open_ended`); the pie is drawn by bracket
 midpoints and says so, and no net-worth figure is produced. Reports that can't
 be read are stored `parsed=False` with a reason (`scanned` paper filing,
 `unrecognized` layout) and linked, not OCR'd. A Senate paper filing states
@@ -1001,7 +1127,16 @@ no year anywhere eFD shows it (its page is page images), so no year is
 claimed or inferred for it: it ranks below every dated report, and an undated
 filing (paper, or a title with no year) filed on or after the shown report's
 date is named beside it ("also filed, on or after this report's filing date")
-rather than guessed to be newer. Each fetch module's
+rather than guessed to be newer. A House member's new-filer report (index type
+"H", read from this year's index too) is read for a member with nothing newer;
+it states no date its values describe, so it is labelled by filing date and any
+annual report outranks it. Filers are matched in `filer_matching.py`: the
+last-name field up to its first comma ("Doe, Jr."), and a House filer listed
+under a district no member of that surname holds — the Clerk keeps a member's
+pre-redistricting district — is matched across the state only when the first
+names agree (a shared token, or a measured similarity ratio); failing that, a
+filer whose given names hold a member's whole name ("Roe, Jane Doe": a married
+name) is matched to that member of the listed district. Each fetch module's
 `PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
 parser's output changes, and already-ingested reports are re-read (a re-read
 that can't read the report at all keeps the earlier holdings; one that reads
@@ -1026,7 +1161,16 @@ category comes only from what the form states, and every other security is
 `UNSTATED` ("Type not stated"), never typed from its name.
 
 Each senator is processed independently. The pipeline uses `PipelineRun`
-records to track progress and supports resumption.
+records to track progress and supports resumption. A member (either
+chamber) whose prepare or score step raises keeps the scorecard of the
+last run it passed, so `run_checks.alert_member_failures` sends one ops
+alert per chamber per run (condition `member-failed-<chamber>`) naming
+every failed member id with the exception, identical exceptions grouped
+so an outage is one alert. It is deduped on the set of (member id,
+exception type): the same set the next night says nothing new, a changed
+set re-alerts and replaces it, and a run with no failures closes it
+(2026-10-09: one senator failed every night from v6.31 on, with only the
+run's failure count to show for it).
 
 The ANALYZE phase runs members one at a time: `precompute_senator_analysis()`
 (`cross_reference.py`) does the member's embedding work, then
@@ -1088,6 +1232,7 @@ See `.env.example` for all options. Key variables:
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
+| `BLS_API_KEY` | No | Bureau of Labor Statistics v2 registration key: lifts the jobs API from 25 to 500 requests a day; works without it |
 | `CURRENT_CONGRESS` | **Never in production** | Leave unset — computed from the clock. Setting it pins the scored windows *and* House members' district lines to that Congress past the next Jan 3; only for re-running an archived database |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see
@@ -1133,6 +1278,7 @@ the pending list).
 |------|-------|
 | Pipeline orchestration | `backend/app/scheduler.py` (entrypoint), `backend/app/pipeline/senate_pipeline.py` / `house_pipeline.py` |
 | Departed-member detection + removal | `backend/app/pipeline/member_lifecycle.py` |
+| Member ids (slug, cross-chamber uniqueness, rename in place, old-id aliases) | `backend/app/member_ids.py` |
 | Stock trade disclosures | `backend/app/pipeline/stock_pipeline.py` |
 | Annual-report holdings (scorecard pie) | `backend/app/pipeline/holdings_pipeline.py`, `fetch/house_fd.py`, `fetch/senate_fd.py`, `fetch/fd_common.py`, `services/holdings_service.py`, `frontend/src/components/checker/Holdings.tsx` |
 | Scoring formulas | `backend/app/pipeline/analyze/score_calculator.py` |
@@ -1141,13 +1287,15 @@ the pending list).
 | Bill policy area + stance derivation (embedding-based) | `backend/app/pipeline/analyze/bill_analyzer.py` |
 | Commemorative bill detection (LES 1x tier; calibrated threshold) | `backend/app/pipeline/analyze/commemorative.py` + `backend/scripts/calibrate_commemorative.py` |
 | Party alignment (content-based) + partisan depth | `backend/app/pipeline/analyze/party_platform.py` |
-| Caucus inference (votes + cosponsorship) | `backend/app/pipeline/transform/normalize_votes.py` |
+| Caucus: the House Clerk's recorded caucus, else inference (votes + cosponsorship) | `backend/app/pipeline/fetch/house_clerk.py` (`parse_caucuses`), `backend/app/pipeline/transform/normalize_votes.py` |
+| Committee seats and leadership titles (congress-legislators; the Clerk's list decides the House posts it names) | `backend/app/pipeline/fetch/committee_leadership.py`, `backend/app/pipeline/fetch/house_leadership.py` |
+| Donor name casing (learned from Federal Register prose) | `backend/app/pipeline/transform/normalize_finance.py` (`_clean_donor_name`), `backend/scripts/build_name_casing.py`, `backend/app/data/name_casing.json` |
 | kNN classifier + inverse-freq balancing | `backend/app/pipeline/analyze/nn_classifier.py` |
 | Sponsorship analysis (PageRank leadership + SVD ideology) | `backend/app/pipeline/analyze/sponsorship_analysis.py` |
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
-| Justice profile summary (LLM, from pre-computed statistics) | `backend/app/pipeline/justice_pipeline.py` |
+| Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |

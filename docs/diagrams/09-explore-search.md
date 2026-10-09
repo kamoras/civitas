@@ -10,8 +10,8 @@ rebuilt from it at the end of every ingest run.
 flowchart TB
     subgraph INDEX["Indexing — during pipeline runs"]
         direction TB
-        S1["Senate floor speeches<br/>GovInfo CREC packages<br/>every granule page (nextPage)"]
-        S2["House floor speeches<br/>GovInfo CREC packages"]
+        S1["Senate floor speeches<br/>GovInfo CREC: MODS → sections with a speaking member<br/>split by the Record's designations and headings"]
+        S2["House floor speeches<br/>same reader<br/>floor business (quorum calls, yielding time) dropped"]
         S3["Presidential actions<br/>executive orders, proclamations, memoranda"]
         S4["Supreme Court opinions<br/>Oyez + supremecourt.gov"]
         S5["Federal Register rulemaking<br/>proposed + final rules"]
@@ -24,7 +24,7 @@ flowchart TB
 
         DOC["ExploreDocument row<br/>doc_type · source · title · summary · body<br/>date · politician_name/id · chamber<br/>agency_name · comment_url · comments_close_on<br/>identifiers"]
 
-        DOC --> EMB["Embed title + summary + body[:800]<br/><b>one embedding per document — no chunking</b>"]
+        DOC --> EMB["Embed title + summary + body<br/><b>in windows of the encoder's context length</b>"]
         DOC --> FTS["Tokenise title · summary · body<br/><b>external content — text not duplicated</b>"]
         DOC --> CITE["Parse canonical citations<br/>EO no. · volume FR page · RIN · FR doc no."]
 
@@ -49,7 +49,7 @@ flowchart TB
         AUTHR["Authority ranker<br/>cited documents only"] --> FUSE
 
         FUSE["Weighted reciprocal rank fusion<br/>score = Σ wᵣ / (60 + rankᵣ)"]
-        FUSE --> DEDUP["Collapse near-duplicate documents"]
+        FUSE --> DEDUP["Collapse identical documents"]
         DEDUP --> DIV["Cap results per member/agency<br/>(demoted, never dropped)"]
         DIV --> OUT["Return keyword-in-context excerpt with matched<br/>terms marked, source URL, doc type, citation count<br/>+ comment link and deadline for open rulemakings"]
         OUT -.->|"optional, streamed"| SUM["LLM summary of the document<br/>(POST, on request, cached)"]
@@ -82,7 +82,8 @@ comparable quantities, and the usual fix — min-max normalise each, then add �
 makes the blend depend on whatever the best and worst scores happened to be
 for that one query. Reciprocal rank fusion (Cormack, Clarke & Büttcher, SIGIR
 2009) discards the scores and fuses the *rankings*, `score(d) = Σ wᵣ / (K +
-rankᵣ(d))` with K = 60. A ranker that did not return a document contributes
+rankᵣ(d))`, with K the retrievers' measured resolution δ rather than the
+published 60 (below). A ranker that did not return a document contributes
 nothing for it — which is also what lets the two priors sit in the same sum as
 extra voters. The weights are in `config_definitions.py` under "Explore search
 ranking".
@@ -112,9 +113,23 @@ in both rows because known-item retrieval scores query-independent priors
 that way by construction — the 0.752 → 0.850 recovery is the signal, not
 the gap to 0.978.
 
-**Recency is a voter, not a sort.** At K = 60 a weight-`w` voter's whole swing
-is about `w/(K+1)`, so at 0.4 the entire freshness signal is worth roughly the
-distance between rank 1 and rank 40 of one retrieval channel. It can lift a
+**K is measured, not published.** Cormack et al.'s K = 60 was chosen for TREC
+runs a thousand documents deep. Here each channel returns at most 150, and the
+two channels disagree on a shared document by a median of δ = 10 ranks. At
+K = 60 a document both channels placed around 30th scored 2/90, above one
+channel's first hit at 1/61, so a document the keyword channel found first
+and the encoder never saw was buried: on the 2026-10-08 corpus the keyword
+channel alone found the known item first 66-68% of the time and the fusion
+36-40%. K is now δ (`explore_ranking.rrf_k`; the prior weights below use the
+same K), which on two harness samples (508 and 1,008 probes) raised fusion MRR
+from 0.491 to 0.565 and 0.514 to 0.580, and hybrid from 0.437 to 0.518 and
+0.482 to 0.538, on every query style. Smaller K scored higher still on these
+probes, which reward trusting a lone top hit; K is the measured δ, not the
+harness's best value.
+
+**Recency is a voter, not a sort.** A weight-`w` voter's whole swing is about
+`w/(K+1)`, which the prior weights' formula below sets equal to the score gap
+δ ranks buys, so recency reorders only what the retrievers cannot tell apart. It can lift a
 markedly newer document over a slightly more relevant one and cannot flip an
 adjacent pair — the division of labour `tests/test_explore_search.py` pins
 down in both directions.
@@ -140,17 +155,21 @@ demote every speech in the corpus on every query. On a corpus too new to have
 accumulated cross-references, nobody clears the bar and the prior does nothing
 at all — the correct failure mode for a signal like this.
 
-**Near-duplicates are collapsed, crowding is demoted.** This corpus is known
+**Duplicates are collapsed, crowding is demoted.** This corpus is known
 to accumulate byte-identical rows (a 2026-07 audit found 1,758 of them, 31% of
-the table), and the Congressional Record legitimately reprints text.
+the table), and the Congressional Record legitimately reprints text. Only an
+identical text counts: a prefix fingerprint alone hid 249 distinct documents
+on the 2026-10-08 corpus (recurring notices that repeat their title and
+boilerplate past any prefix up to 4,000 characters), so the fingerprint and
+the body's length only group candidates and the whole text decides.
 Duplicates collapse to their best-ranked copy *after* fusion, so the survivor
 is the one the rankers liked, and the result reports how many were folded in.
 Separately, no single member or agency may take more than three of the leading
 results before the rest are demoted below other sources — they are moved, not
 dropped, so a member-scoped search still returns everything it found.
 Deduplication keys on a normalised content fingerprint rather than the title:
-every one of a member's floor speeches shares the same generated title, so a
-title-based rule would return exactly one of them.
+many floor speeches share a title (every reply in a debate is "Remarks on"
+its heading), so a title-based rule would return one of them.
 
 **"Newest" means newest matching.** The date sort orders the whole filtered
 candidate pool, not the relevance page. The candidate pool is deliberately
@@ -177,6 +196,15 @@ overlap measured in tokens would be a number someone picked. A short
 document is still exactly one window, so the index grows with the corpus's
 real length rather than uniformly.
 
+The title leads every window, so a passage from the middle of a rule still
+has its subject — and the windows are cut in the room the title leaves
+(less the encoder's own `[CLS]`/`[SEP]`), never filled first and prefixed
+after (`explore_chunks`). Until 2026-10 title *and* summary, a median 83
+tokens, were prefixed to windows that were already full: the encoder's
+truncation cut the end off 79% of windows, a quarter of each on average, and
+with one sentence of overlap that text was in no window at all. The summary
+is now embedded once, as the start of the text.
+
 At query time the index is searched at chunk level and folded back to
 documents by each document's best-matching chunk — max pooling, not
 averaging, because a long rule with one passage squarely on the query is a
@@ -184,6 +212,17 @@ good answer and averaging over its other pages would bury it under
 something vaguely on-topic throughout. The number of chunk slots requested
 for a given number of documents comes from the index's own measured mean
 chunks per document, written at embed time.
+
+**An identifier lookup skips the encoder.** Rank fusion rewards agreement:
+a document both channels place 30th and 8th outscores one only keyword
+placed 1st. That is right when both channels carry evidence and wrong when
+one carries none, which is the case for a query that is nothing but
+publisher identifiers, in any case ("89 FR 52508", "rin 1615-ad22", a docket id) — the
+semantic channel found 2–3% of such targets in its top 20, and fused R@1 on
+them was 0.25 against keyword's 0.65. `is_identifier_query` (built on the
+identifier formats `document_authority` already parses for the citation
+graph) sends those to the keyword channel alone; a query with any words
+beside the identifier still goes to both.
 
 **Half the engine can be down and search still works — and says so.** The
 vector index records which model built it, and a mismatch at startup drops the
@@ -244,10 +283,10 @@ response is already on screen.
 
 ## Nothing here is a hand-set number
 
-Two constants in this feature are typed in, and both are published results
-rather than properties of this corpus: reciprocal rank fusion's K = 60
-(Cormack, Clarke & Büttcher 2009) and PageRank's damping 0.85 (Brin & Page
-1998). They live in code with their citations.
+One constant in this feature is typed in, a published result rather than a
+property of this corpus: PageRank's damping 0.85 (Brin & Page 1998). It lives
+in code with its citation. Reciprocal rank fusion's K used to be a second
+(Cormack, Clarke & Büttcher's 60); it is now the measured δ.
 
 Everything else — BM25F field weights, both prior weights, candidate pool
 depth, the source diversity cap, near-duplicate fingerprint lengths,
@@ -264,7 +303,8 @@ loaders raise rather than rank with invented numbers.
 | freshness / authority weights | the retrievers' measured resolution limit δ, times each prior's measured coverage of the corpus |
 | candidate pool | measured post-filter survival rate, so a filtered search still fills a page |
 | source diversity cap | the corpus's own median documents-per-source among repeat publishers |
-| fingerprint lengths | the corpus's prefix-collision curve |
+| RRF's K | δ, the retrievers' measured resolution limit |
+| fingerprint lengths | the corpus's prefix-collision curve (a grouping key only; an identical full text decides a duplicate) |
 | snippet width, minimum term length | the corpus's median sentence length; the shortest term length that is not near-universal |
 
 The prior weights deserve their formula written out, because they are the
@@ -294,10 +334,19 @@ style:
 
 | Style | Query built from | What it probes |
 |---|---|---|
-| `title` | the document's own title | the easy case |
-| `paraphrase` | body content words, title words removed | where dense retrieval should win |
+| `title` | the document's own title words, in order | the easy case |
+| `paraphrase` | the body's eight most frequent content words, title words removed | despite the name, an exact-term bag of words — keyword's home ground |
 | `identifier` | serial numbers and citations in the document | where dense retrieval cannot compete |
 | `rare` | the document's least common terms corpus-wide | the long tail, where IDF earns its keep |
+| `passage` | one verbatim body sentence, from anywhere in the body | whether a specific passage, deep text included, is reachable |
+
+Every style is built from the document's own words, so the protocol measures
+lexical findability and the keyword channel leads by construction. Read the
+semantic channel against itself across a change to the index, never against
+keyword: on the 2026-10 corpus it found 53% of targets in its top 20 overall,
+and 1.6% of identifier probes, which no encoder can do better on. The probes
+are also deterministic for a given `--seed` (they used to depend on Python's
+per-process string-hash order, so two runs never measured the same queries).
 
 Relevance judgments are derived, not hand-labelled: this is known-item
 retrieval, where a document is pulled from the corpus, a query a person

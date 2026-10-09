@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app import broadcast
 from app.models import BskySenatorSpotlight, Representative, Senator
 from app.pipeline.analyze.score_calculator import compute_overall_score
+from app.score_display import displayed_rank, displayed_score
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,11 @@ def _pick_politician(
     pick, chamber = random.choice(combined_unspotlighted)
 
     own_chamber = chambers[chamber]
-    rank = next(i + 1 for i, e in enumerate(own_chamber) if e.id == pick.id)
+    # The leaderboard's rank (and the profile's): by displayed score, ties
+    # sharing one. A position in this list numbered tied members apart, so
+    # the post's rank differed from the leaderboard's for 385 of 433
+    # representatives and 63 of 100 senators (2026-10-09).
+    rank = displayed_rank(compute_overall_score(pick), [compute_overall_score(e) for e in own_chamber])
     return pick, rank, len(own_chamber), chamber
 
 
@@ -101,13 +106,14 @@ def compose_spotlight(entity: "Senator | Representative", rank: int, total: int,
     chamber, and each dimension's score."""
     identity = _identity(entity, chamber)
     noun = "senators" if chamber == "senate" else "representatives"
-    # The same weighted composite the leaderboard shows.
-    overall = compute_overall_score(entity)
+    # The same weighted composite the leaderboard shows, as the site shows
+    # it: a whole number. One decimal stated 59.5 for a scorecard reading 60.
+    overall = displayed_score(compute_overall_score(entity))
     return (
-        f"{identity}: Representation Score {overall:.1f}, #{rank} of {total} {noun}. "
-        f"Funding Independence {entity.score_funding_independence:.1f}, "
-        f"Constituent Alignment {entity.score_constituent_alignment:.1f}, "
-        f"Legislative Effectiveness {entity.score_legislative_effectiveness:.1f}."
+        f"{identity}: Representation Score {overall}, #{rank} of {total} {noun}. "
+        f"Funding Independence {displayed_score(entity.score_funding_independence)}, "
+        f"Constituent Alignment {displayed_score(entity.score_constituent_alignment)}, "
+        f"Legislative Effectiveness {displayed_score(entity.score_legislative_effectiveness)}."
     )
 
 

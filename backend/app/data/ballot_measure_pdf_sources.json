@@ -4,41 +4,33 @@
   "_as_of": "2026-08-07",
   "_unread_as_of": "Each entry's `reason` is served to voters (measureCoverage.unreadReason) and must be true wherever and whenever Civitas runs — no dates, years or 'this election': either a fact about what the state publishes, or that Civitas does not read the state's list automatically yet. Never a claim about network access, which differs between servers. `dev_note` is for developers only (what was found, from where, when) and is never sent by the API.",
   "unread": {
-    "AZ": {
-      "reason": "Civitas does not read Arizona's official measure list automatically yet.",
-      "dev_note": "2026-09-28 dev container: azsos.gov answered with a Cloudflare challenge."
-    },
     "DC": {
       "reason": "Civitas does not read the District of Columbia's official measure list automatically yet.",
-      "dev_note": "2026-09-28: DCBOE had posted only the proposed wording of Initiative 86, not certified ballot wording for the 2026-11-03 election. Revisit once it posts; a reader can then be registered."
+      "dev_note": "2026-10-08: Initiative Measure No. 86 has qualified — dcboe.org/ballot-measures/current-measures lists its signature requirement, statistical summary and 'Petition Verification Results' — but DCBOE has posted no ballot document with its certified wording for the 2026-11-03 election (only the formulation-stage short title and summary notices). Register a reader once a sample ballot or certified-measure list is posted."
     },
     "DE": {
-      "reason": "Delaware publishes no statewide list of certified ballot measures.",
-      "dev_note": "2026-09-28: no statewide list of certified measures on elections.delaware.gov; sample ballots refused the dev container's requests."
+      "reason": "Delaware's Constitution has the General Assembly adopt amendments without a popular vote, and Delaware has no statewide initiative or referendum.",
+      "none_by_law": {
+        "source_name": "Delaware Constitution, art. XVI, §1",
+        "basis": "Amendments are adopted by two-thirds of each house in two successive General Assemblies with no popular vote (Del. Const. art. XVI, §1), and the Constitution provides no statewide initiative or referendum, so no statewide measure can be on a Delaware ballot."
+      },
+      "dev_note": "2026-10-08: recorded confirmed_none by law (none_by_law), not not_yet_covered. Re-check only if Delaware amends art. XVI or adopts an initiative/referendum process."
     },
     "IA": {
       "reason": "Civitas does not read Iowa's official measure list automatically yet.",
-      "dev_note": "2026-09-28: no Secretary of State list of certified measures; voterready.iowa.gov answered the dev container with a Cloudflare challenge."
+      "dev_note": "2026-10-08: no Secretary of State list of certified measures found (sos.iowa.gov/elections answers 404 since the site moved); voterready.iowa.gov answers with a Cloudflare challenge ('Just a moment...', 403) — not worked around. Needs a county republication of the state's own list to be read."
     },
     "NY": {
       "reason": "Civitas does not read New York's official measure list automatically yet.",
       "dev_note": "2026-09-28 dev container: elections.ny.gov answered with a Cloudflare challenge."
     },
-    "OR": {
-      "reason": "Civitas does not read Oregon's official measure list automatically yet.",
-      "dev_note": "2026-09-28 dev container: the measure database required a captcha; the state voters' pamphlet was due 2026-09-29."
-    },
     "PA": {
-      "reason": "Pennsylvania publishes no list of certified statewide ballot measures before the election.",
-      "dev_note": "2026-09-28: Pennsylvania publishes no list of certified statewide measures before the election."
-    },
-    "RI": {
-      "reason": "Civitas does not read Rhode Island's official measure list automatically yet.",
-      "dev_note": "2026-09-28 dev container: the elections site answered with a Cloudflare challenge."
+      "reason": "Civitas does not read Pennsylvania's official measure list automatically yet.",
+      "dev_note": "2026-10-08: the earlier reason ('publishes no list ... before the election') was false — Pa. Const. art. XI, §1 and 25 P.S. §2621.1 have the Secretary of the Commonwealth advertise every proposed amendment three months before the election, and pa.gov/agencies/vote lists none on its election pages. No official page confirming none for 2026-11-03 was found (pa.gov's upcoming-elections page carries only the calendar), so this stays not_yet_covered rather than confirmed_none. A reader of the Department of State's advertisement is the fix."
     },
     "WI": {
       "reason": "Civitas does not read Wisconsin's official measure list automatically yet.",
-      "dev_note": "2026-09-28 dev container: elections.wi.gov answered with a Cloudflare challenge."
+      "dev_note": "2026-10-08: elections.wi.gov answers with a Cloudflare challenge ('Just a moment...', 403) — not worked around. Needs a county republication of the state's own notice to be read."
     }
   },
   "states": {
@@ -50,10 +42,13 @@
       "expected_by_basis": "Cal. Elections Code §9094: the state voter information guide is mailed no later than 21 days before the election; its web edition is up well before that."
     },
     "MA": {
-      "url_pattern": "https://www.sec.state.ma.us/divisions/elections/download/research-and-statistics/IFV_{year}.pdf",
+      "url_pattern": [
+        "https://www.sec.state.ma.us/divisions/elections/download/information-for-voters/archive/IFV_{year}%20English.pdf",
+        "https://www.sec.state.ma.us/divisions/elections/download/research-and-statistics/IFV_{year}.pdf"
+      ],
       "source_name": "Massachusetts Secretary of the Commonwealth",
       "strategy": "ma_information_for_voters",
-      "description": "Official 'Information For Voters' guide. URL pattern verified stable across two real elections (2024 general, 5 real questions; 2022 general, 3 real questions) — same two-election bar CA's pattern was held to. All 8 real questions across both years parse with correct official_summary/fiscal_impact/yes_means/no_means. A 404 for the year's guide reads as not yet published (absent_until_published): IFV_2026.pdf still answered 404 on 2026-09-28.",
+      "description": "Official 'Information For Voters' guide. URL pattern verified stable across two real elections (2024 general, 5 real questions; 2022 general, 3 real questions) — same two-election bar CA's pattern was held to. All 8 real questions across both years parse with correct official_summary/fiscal_impact/yes_means/no_means. In 2026 the Secretary filed the guide at a new address, .../download/information-for-voters/archive/IFV_2026%20English.pdf (200, 88 pages, 9 questions, checked 2026-10-08), while .../research-and-statistics/IFV_2026.pdf answers 404 and IFV_2024.pdf is still served at the old one; the Information for Voters landing page that links it answers every plain request with an Incapsula challenge, so the address can't be discovered and both are tried in order (only a 404 moves on). A 404 at every address reads as not yet published (absent_until_published), which the expected-by cutoff turns into a failure.",
       "absent_until_published": true
     },
     "CO": {
@@ -83,7 +78,7 @@
     "VA": {
       "source_name": "Virginia Department of Elections",
       "strategy": "va_referenda",
-      "description": "Per-question 'Explanation for Proposed Constitutional Amendment' PDFs, one per question rather than one combined guide — discovered from the stable elections.virginia.gov/election-law/referenda/ index page, which links each question's own explanation page, which links that question's PDF in four languages (English has no language-code filename suffix). Verified live 2026-09-03 against all 3 real questions on the November 3, 2026 ballot (reproductive freedom, marriage, felony voting-rights restoration): 3/3 parse with a real Present-Law/Proposed-Amendment summary and the real ballot question text. No 'A YES vote means/A NO vote means' framing is published (same as Louisiana) and no fiscal-impact statement (constitutional amendments, not spending measures), so yes_means/no_means/fiscal_impact stay null. All Virginia amendments are General-Assembly-referred (no citizen-initiative process for amendments), so origin is fixed. Structurally different enough from every other state here (separate documents, not one combined guide) that it uses its own end-to-end fetch strategy (MULTI_DOCUMENT_STRATEGIES in ballot_measures_pdf.py, see ballot_measures_va.py) rather than the shared single-PDF pipeline."
+      "description": "Per-question 'Explanation for Proposed Constitutional Amendment' PDFs, one per question rather than one combined guide — discovered from the stable elections.virginia.gov/election-law/referenda/ index page, which links each question's own explanation page, which links that question's PDF in four languages (English is the file whose name the translations extend with a language code; the page also links brochures and posters, checked 2026-10-08). The ballot question is stored as the official title. Verified live 2026-09-03 against all 3 real questions on the November 3, 2026 ballot (reproductive freedom, marriage, felony voting-rights restoration): 3/3 parse with a real Present-Law/Proposed-Amendment summary and the real ballot question text. No 'A YES vote means/A NO vote means' framing is published (same as Louisiana) and no fiscal-impact statement (constitutional amendments, not spending measures), so yes_means/no_means/fiscal_impact stay null. All Virginia amendments are General-Assembly-referred (no citizen-initiative process for amendments), so origin is fixed. Structurally different enough from every other state here (separate documents, not one combined guide) that it uses its own end-to-end fetch strategy (MULTI_DOCUMENT_STRATEGIES in ballot_measures_pdf.py, see ballot_measures_va.py) rather than the shared single-PDF pipeline."
     },
     "MO": {
       "source_name": "Missouri Secretary of State",
@@ -205,7 +200,7 @@
     "OK": {
       "source_name": "Oklahoma Secretary of State",
       "strategy": "ok_state_questions",
-      "description": "The Secretary of State's State Questions register (sos.ok.gov/gov/questions.aspx), rows dated 'ELECTION DATE: November 3, 2026'. Verified live 2026-09-28: SQ 845 (Judicial Nominating Commission) and SQ 847 (Real Property Valuation), matching the State Election Board's 'Two state questions have qualified'. The ballot titles exist only in scanned PDFs (845 no text layer, 847 OCR with errors), so only the register's own SQ number and subject line are stored and each links its filed PDF — no OCR'd text is presented as ballot language."
+      "description": "The Secretary of State's State Questions register (sos.ok.gov/gov/questions.aspx), rows dated 'ELECTION DATE: November 3, 2026'. Verified live 2026-09-28: SQ 845 (Judicial Nominating Commission) and SQ 847 (Real Property Valuation), matching the State Election Board's 'Two state questions have qualified'. The Secretary's filed PDFs are scans (OCR with errors, and every superseded version of the title), so no OCR'd text is presented as ballot language. The final ballot title is quoted only from the State Election Board's accessible (text) copy, oklahoma.gov/content/dam/ok/en/elections/state-questions/sq{year}/sq{N}-final-ballot-title-accessible.pdf: SQ 845's answered 200 on 2026-10-08 (the August 13 corrected title); SQ 847 has none (404), so it keeps the register's SQ number and subject line and links its filed PDF. See ballot_measures_ok.py."
     },
     "SD": {
       "source_name": "South Dakota Secretary of State",
@@ -243,15 +238,9 @@
       "description": "sosmt.gov/elections/ballot_issues/proposed-{year}-ballot-issues/ (verified 2022, 2024, 2026): the 'Issues Qualified for the {year} General Election Ballot' section, each issue's text read from its linked 'BALLOT LANGUAGE FOR ...' PDF (the page's own subjects may be paraphrased, by its own footnote). Verified live 2026-09-28: CI-132, CI-133, I-194. See ballot_measures_mt.py."
     },
     "NM": {
-      "source_name": "New Mexico Legislature",
-      "strategy": "nm_amendments_and_bonds",
-      "bond_acts": {
-        "2026": {
-          "bill": "HB 248",
-          "url": "https://www.nmlegis.gov/Sessions/26%20Regular/final/HB0248.pdf"
-        }
-      },
-      "description": "Two official documents: the Legislative Council Service's constitutional-amendments publication (nmlegis.gov .../Constitutional_Amendments_{year}.pdf, verified 2024 and 2026) and the ballot language written into that year's General Obligation Bond Act (final version, configured per year in bond_acts because the bill number changes every session; a year without one reads as ingest_failed, never an amendments-only list). Verified live 2026-09-28: Constitutional Amendments 1-4 and HB 248's three bond questions. See ballot_measures_nm.py."
+      "source_name": "New Mexico Secretary of State",
+      "strategy": "nm_sos_statewide_questions",
+      "description": "The Secretary of State's '<year> General Election Statewide Constitutional Amendments and General Obligation Bonds', linked from sos.nm.gov's home page as '<year> Constitutional Amendments and Statewide Bond Questions' (English then Spanish; the Spanish half's counts are a cross-check). Its wording is the printed ballot's — Santa Fe County's 2026 sample ballots carry the same sentences under 'CONSTITUTIONAL AMENDMENT N' / 'BOND QUESTION N'. Replaced, 2026-10-08, the Legislative Council Service's amendments publication (the joint resolutions' titles in capitals) and the per-year GO bond act ('HB 248 (1)'). Verified live 2026-10-08: Constitutional Amendments 1-4 and Bond Questions 1-3. See ballot_measures_nm.py."
     },
     "WA": {
       "source_name": "Washington Secretary of State",
@@ -302,6 +291,17 @@
         }
       ]
     },
+    "AZ": {
+      "source_name": "Arizona Secretary of State",
+      "strategy": "az_publicity_pamphlet",
+      "description": "The Secretary's general-election Publicity Pamphlet, read from each proposition's 'Ballot Format' page: the designation, the DESCRIPTIVE TITLE (prepared by the Secretary, approved by the Attorney General, A.R.S. 19-125(D)) and the 'A “yes”/“no” vote shall have the effect of ...' statements; the table of contents' 'Ballot Format for Proposition N' entries must equal the pages read. Verified against the real 2026 pamphlet: Propositions 141, 142, 144, 316, 317, 318, 319 and 320. azsos.gov answers every request with a Cloudflare challenge (403, cf-mitigated: challenge, with or without a browser User-Agent, robots.txt included; checked 2026-10-08), so the reader raises SourceBlocked and reads the Secretary's pamphlet from its republication by the Arizona Citizens Clean Elections Commission ('republished_by'), whose Voter Education Guide page links it as 'SOS Publicity Pamphlet'. Not a county office: the county election sites checked (Maricopa, Yavapai, Coconino, Pinal, Yuma, Navajo, Santa Cruz, Apache, Graham) answered 403 too, and Pima County posts its own compilation of the ballot language rather than the Secretary's document. The copy must carry the pamphlet's verified cover and pass every other check, and the card says it was republished. See ballot_measures_az.py.",
+      "republished_by": [
+        {
+          "name": "Arizona Citizens Clean Elections Commission",
+          "url": "https://www.azcleanelections.gov/voter-education-guide"
+        }
+      ]
+    },
     "OH": {
       "source_name": "Ohio Secretary of State",
       "strategy": "oh_official_sample_ballot",
@@ -310,7 +310,21 @@
     "UT": {
       "source_name": "Utah Lieutenant Governor",
       "strategy": "ut_general_election_certification",
-      "description": "The Lieutenant Governor's '<year> General Election Certification' (vote.utah.gov/current-election-information/), which certifies both that no statewide ballot propositions qualified and the list of constitutional amendments. Verified 2026-09-28: Constitutional Amendments A and B. The certification is a scan with an OCR text layer, so only each amendment's letter and heading are stored (no OCR'd ballot text), linked to the certification. vote.utah.gov challenged the pipeline's httpx client from the dev environment (curl: 200); production reachability not verified. See ballot_measures_ut.py."
+      "description": "The Lieutenant Governor's '<year> General Election Certification' (vote.utah.gov/current-election-information/), which certifies both that no statewide ballot propositions qualified and the list of constitutional amendments; an amended certification ('...-Certification-Amended-<MM>-<DD>.pdf') is preferred over the original, the latest date first. Verified 2026-10-08 on the September 21 amendment: Constitutional Amendments A and B. The certification is a scan with an OCR text layer, read in the PDF's own text order (the default ordering interleaves the amended file's overlapping words), so only each amendment's letter and heading are stored (no OCR'd ballot text), linked to the certification. vote.utah.gov challenged the pipeline's httpx client from the dev environment (curl: 200); production reachability not verified. See ballot_measures_ut.py.",
+      "expected_by_days_before": 60,
+      "expected_by_basis": "The Lieutenant Governor certifies the general-election ballot in late August (Utah Code §20A-5a-209(2)); the certification itself directs county clerks to publish their notice by the 62nd day before the election (§20A-5a-210; 2026: no later than September 2), so it exists by then."
+    },
+    "RI": {
+      "source_name": "Rhode Island Department of State",
+      "strategy": "ri_voter_information_handbook",
+      "description": "The Voter Information Handbook, 'A Guide to State Referenda' (vote.sos.ri.gov/Forms/Elections/Guides/VoterRef<yy>.pdf; only 2026's is on file under that name — VoterRef24/22 answer 404 — so a 404 is not yet published, with no deadline). Each question's 'What it will look like on the ballot' box, read column by column: the printed heading and description, and the state's own 'Your vote to “Approve” / “Reject” means ...' sentences, verbatim. Verified live 2026-10-08 (200, text layer): Questions 1-5, the five bond referenda. The earlier dev note's Cloudflare challenge was on the elections site, not this file. See ballot_measures_ri.py."
+    },
+    "OR": {
+      "source_name": "Oregon Secretary of State",
+      "strategy": "or_voters_pamphlet_absence",
+      "description": "Proves absence only: the State Voters' Pamphlet for the general election (ORS 251.185 puts every state measure in it), the lowest-numbered county book linked from sos.oregon.gov/elections/Voters-Pamphlet/Pages/Voters-Pamphlet-English.aspx. [] only when its cover names the election, its contents list no measure, no page carries a 'Measure <n>' heading and the page links no other pamphlet document for the year (a separate measures volume); otherwise None — it never returns a measure. Verified live 2026-10-08: the November 3, 2026 pamphlet (VP_G26-Book1_web.pdf) has none. The measure database requires a captcha and is not used. See ballot_measures_or.py.",
+      "expected_by_days_before": 20,
+      "expected_by_basis": "The State Voters' Pamphlet is delivered to every residence by October (2026: October 7-9, per the Secretary's pamphlet page); 20 days out it has been posted for over a week."
     }
   }
 }

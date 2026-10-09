@@ -163,6 +163,19 @@ class TestRankClusters:
         assert len(ranked_scores) == len(ranked_clusters)
 
 
+def _tried(clusters, scores, n, publishes=lambda i: True):
+    """Drive _deduplicate_top_clusters as the refresh loop does: every
+    candidate it yields is tried, and those that `publishes` are reported
+    back through the shared list."""
+    published: list[int] = []
+    tried = []
+    for i, cluster in _deduplicate_top_clusters(clusters, scores, n, published):
+        tried.append(cluster)
+        if publishes(i):
+            published.append(i)
+    return tried
+
+
 class TestDeduplicateTopClusters:
     """Cross-cluster deduplication prevents two angles on the same story."""
 
@@ -172,7 +185,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        result = _deduplicate_top_clusters([c1, c2, c3], ranked_scores=[0.9, 0.8, 0.5], max_issues=4)
+        result = _tried([c1, c2, c3], [0.9, 0.8, 0.5], 4)
         assert len(result) == 2
         titles = [r[0].title for r in result]
         assert "Trade war tariffs increase on Chinese goods" in titles
@@ -192,7 +205,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        _deduplicate_top_clusters([c1, c2, c3], ranked_scores=[0.9, 0.8, 0.5], max_issues=4)
+        _tried([c1, c2, c3], [0.9, 0.8, 0.5], 4)
 
         counts = action_metrics.snapshot()
         merged = sum(v for k, v in counts.items() if k.startswith("cluster_dedup_merged_sim_bucket_"))
@@ -224,7 +237,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        result = _deduplicate_top_clusters([c1, c2, c3], ranked_scores=[0.9, 0.8, 0.5], max_issues=2)
+        result = _tried([c1, c2, c3], [0.9, 0.8, 0.5], 2)
 
         result_titles = {a.title for cluster in result for a in cluster}
         assert "Healthcare bill passes Senate committee" in result_titles
@@ -246,6 +259,24 @@ class TestDeduplicateTopClusters:
         assert counts.get(f"cluster_rank_score_rejected_{action_metrics.decile_bucket(0.8)}") == 1
         assert f"cluster_rank_score_selected_{action_metrics.decile_bucket(0.8)}" not in counts
         assert f"cluster_rank_score_rejected_{action_metrics.decile_bucket(0.5)}" not in counts
+
+    @patch("app.pipeline.analyze.action_center._embed_texts")
+    def test_a_duplicate_of_a_cluster_that_did_not_publish_is_still_tried(self, mock_embed):
+        # 2026-10-08: a live blog naming two stories ranked first, both
+        # stories were dropped as its duplicates, and the live blog then
+        # published nothing — in two consecutive runs. Only a published
+        # cluster carries its story; one that failed carries none.
+        mock_embed.return_value = np.array([[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+        live_blog = [_make_article("Live updates: work visa penalties; judge extends media ban block")]
+        story = [_make_article("Judge extends temporary block on media ban")]
+        other = [_make_article("Healthcare bill passes Senate committee")]
+
+        tried = _tried([live_blog, story, other], [0.9, 0.8, 0.5], 3, publishes=lambda i: i != 0)
+        assert tried == [live_blog, story, other]
+
+        # Once the story does publish, its duplicate is not tried after it.
+        tried = _tried([story, live_blog, other], [0.9, 0.8, 0.5], 3)
+        assert tried == [story, other]
 
 
 class TestNationalMonitorCreation:
@@ -296,7 +327,6 @@ class TestNationalMonitorCreation:
         added_objects = [call.args[0] for call in mock_db.add.call_args_list]
         assert not any(isinstance(obj, NationalMonitor) for obj in added_objects)
 
-    @pytest.mark.slow
     @patch("app.pipeline.analyze.action_center._generate_monitor_metadata")
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
     def test_sufficient_breadth_creates_monitor(self, mock_get_model, mock_gen_meta):
@@ -370,8 +400,8 @@ class TestNationalMonitorCreation:
         surface publicly via a MonitorUpdate before press corroborates it
         — same reasoning as excluding it from Bluesky/full-story. Uses a
         real DB session and an EXISTING monitor the issue would otherwise
-        auto-match (identical embeddings, well above _MONITOR_ISSUE_SIM_
-        HIGH) — a single unmatched issue alone can't create/update
+        match (identical embeddings, well above _MONITOR_ISSUE_SIM) —
+        a single unmatched issue alone can't create/update
         anything regardless of status, so that alone wouldn't have caught
         a missing status filter here."""
         mock_model = MagicMock()
@@ -396,6 +426,54 @@ class TestNationalMonitorCreation:
         _update_national_monitors(today, db_session)
 
         assert db_session.query(MonitorUpdate).count() == 0
+
+    @patch("app.pipeline.analyze.action_center.call_llm", return_value=None)
+    @patch("app.pipeline.analyze.action_center.get_embedding_model")
+    def test_issue_monitor_gate_is_the_similarity_floor_alone(
+        self, mock_get_model, mock_call_llm, db_session,
+    ):
+        """An issue at or above _MONITOR_ISSUE_SIM joins the monitor and one
+        below it does not, with no model call deciding either: the LLM
+        verdict that used to decide the band up to 0.80 approved 17 of 18
+        off-topic updates when replayed, so it was removed."""
+        from app.pipeline.analyze.action_center import _MONITOR_ISSUE_SIM
+
+        def unit(sim):
+            return [sim, float(np.sqrt(1 - sim * sim))]
+
+        vectors = {
+            "Ongoing standoff Long-running coverage.": [1.0, 0.0],
+            "In the band": unit(_MONITOR_ISSUE_SIM + 0.04),
+            "Below the floor": unit(_MONITOR_ISSUE_SIM - 0.01),
+        }
+        mock_model = MagicMock()
+        mock_model.encode.side_effect = lambda texts, **_: np.array(
+            [vectors[t] for t in texts], dtype=np.float32,
+        )
+        mock_get_model.return_value = mock_model
+
+        today = "2026-03-13"
+        db_session.add(NationalMonitor(
+            slug="ongoing-standoff", title="Ongoing standoff",
+            description="Long-running coverage.", status=MonitorStatus.ACTIVE,
+            last_article_date="2026-03-12",
+        ))
+        for rank, title in enumerate(("In the band", "Below the floor"), start=1):
+            db_session.add(ActionIssue(
+                date=today, rank=rank, title=title, summary="s", is_current=True,
+                status=ActionIssueStatus.CONFIRMED,
+                source_urls=json.dumps([f"https://example.org/{rank}"]),
+                source_names=json.dumps(["Example"]),
+            ))
+        db_session.flush()
+
+        _update_national_monitors(today, db_session)
+
+        assert [u.article_title for u in db_session.query(MonitorUpdate)] == ["In the band"]
+        # The only model call left in the stage is the category check.
+        assert {c.kwargs["prompt_version"] for c in mock_call_llm.call_args_list} <= {
+            "monitor-reclassify-v1",
+        }
 
     def test_lifecycle_closing_and_deletion(self):
         """Monitors should close after 30 days, and delete if they had few updates."""
@@ -456,22 +534,6 @@ class TestNationalMonitorCreation:
         
         result = _generate_monitor_metadata(issue, [], mock_db)
         assert result is None
-
-    @patch("app.pipeline.analyze.action_center.call_llm")
-    def test_llm_assisted_merge(self, mock_call_llm):
-        """Monitors with moderate similarity should merge if LLM approves."""
-        from app.pipeline.analyze.action_center import _should_merge_monitors_llm
-
-        mock_call_llm.return_value = json.dumps({
-            "should_merge": True,
-            "reason": "Both about Iran conflict"
-        })
-        m1 = NationalMonitor(id=1, title="Iran War", description="War in Iran")
-        m2 = NationalMonitor(id=2, title="Iranian School", description="Targeted school")
-
-        result = _should_merge_monitors_llm(m1, m2, MagicMock())
-        assert result is True
-        mock_call_llm.assert_called_once()
 
 
 class TestFullStoryShouldInvalidate:
@@ -719,11 +781,26 @@ class TestExploreDocThresholds:
         mock_search.return_value = [
             {"id": 1, "title": "Certain Steel Products From China: Preliminary Results", "distance": 0.5},
         ]
-        # cos_sim ~= 0.25 — above zero, below the similarity-model bar
-        # (0.33, measured 2026-07: genuine matches 0.467+, noise <=0.183).
+        # cos_sim ~= 0.25 — above zero, below the similarity-model bar.
         mock_embed.return_value = np.array([[1.0, 0.0], [0.25, 0.968]])
 
         result = _find_related_explore_docs("Sports story", "summary", [], db_session)
+        assert result == []
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    @patch("app.pipeline.analyze.action_center.search_explore_documents")
+    def test_a_same_place_notice_below_the_measured_bar_is_rejected(self, mock_search, mock_embed, db_session):
+        # Linked 2026-10-08 at title similarity 0.381, under the old 0.33
+        # bar: 189 of 299 stored links were unrelated like this one.
+        title = "Safety Zone; Bayfront Park 4th of July Fireworks Display, Intercoastal Waterway, Biscayne Bay, Miami, FL"
+        self._seed_doc(db_session, 1, title)
+        mock_search.return_value = [{"id": 1, "title": title, "distance": 0.80}]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.381, 0.925]])
+
+        result = _find_related_explore_docs(
+            "President proposes a presidential retreat at a private Florida golf club",
+            "summary", [], db_session,
+        )
         assert result == []
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
@@ -843,28 +920,27 @@ class TestFindRelatedSenatorsCommonWordSurnames:
         )
         assert [r["id"] for r in result] == ["s-figures"]
 
-    @patch("app.pipeline.analyze.action_center._embed_texts")
-    def test_disambiguation_phrase_uses_representative_title_not_senator(
-        self, mock_embed, db_session,
-    ):
-        """Every House candidate's disambiguation prototype was hardcoded
-        to "Senator {name} from {state}" regardless of chamber — weakening
-        the embedding signal for every one of the ~435 Representatives,
-        not just common-word-surname cases. "Delacroix" (>=4 chars, not a
-        common word) exercises the disambiguation path directly."""
-        db_session.add(Representative(
-            id="r-delacroix", name="Amara Delacroix", state="TX", party="R",
-        ))
+    def test_a_surname_several_members_share_names_none_of_them(self, db_session):
+        """2026-10-08: one story about the Speaker linked five members
+        sharing his surname."""
+        db_session.add_all([
+            Representative(id="r-1", name="Amara Delacroix", state="TX", party="R"),
+            Representative(id="r-2", name="Bryce Delacroix", state="OH", party="D"),
+            Representative(id="r-3", name="Celia Ostrander", state="NV", party="D"),
+        ])
         db_session.commit()
-        mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
 
-        _find_related_senators(
-            "Texas news", "Rep. Delacroix spoke at the event.", [], db_session,
+        result = _find_related_senators(
+            "Texas news", "Rep. Delacroix and Rep. Ostrander spoke at the event.", [], db_session,
         )
+        assert [m["id"] for m in result] == ["r-3"]
+        assert result[0]["match_reason"] == "referenced in coverage"
 
-        texts_embedded = mock_embed.call_args[0][0]
-        assert "Representative Amara Delacroix from TX" in texts_embedded
-        assert not any(t.startswith("Senator Amara Delacroix") for t in texts_embedded)
+    def test_a_two_letter_given_name_is_another_person(self, db_session):
+        db_session.add(Representative(id="r-1", name="Celia Ostrander", state="NV", party="D"))
+        db_session.commit()
+
+        assert _find_related_senators("Sports", "Former player Ed Ostrander was charged.", [], db_session) == []
 
 
 class TestFindRelatedSenatorsSameSurnameCollision:
@@ -1216,31 +1292,22 @@ class TestIssueSignatureMatching:
         match = _find_matching_issue(title, facts, [existing], recent_embs, title_emb, {420})
         assert match is None
 
-    def test_find_matching_issue_catches_a_shared_source_url_despite_a_reworded_title(self):
-        # Live 2026-08-26 bug: "DHS data claims and think tank connections"
-        # and "DHS data claims and state ballot measures", a day apart,
-        # both cited the exact same single NPR URL — different enough
-        # secondary framing that title cosine and signature overlap both
-        # missed it, so it became a second row instead of an update.
+    def test_a_shared_source_matches_only_with_titles_that_agree(self):
+        """One roundup article is cited by unrelated stories (2026-10-08:
+        a shared source alone merged 45 different-story pairs)."""
         existing = ActionIssue(
             id=621, date="2026-08-25", rank=3,
             title="DHS data claims and think tank connections",
             facts=json.dumps(["DHS cited a report from a conservative think tank."]),
             source_urls=json.dumps(["https://npr.org/nx-s1-5940807"]),
         )
-        # Deliberately dissimilar title embedding — this pair must match
-        # on source URL alone, not by accidentally clearing the title
-        # cosine floor.
         recent_embs = np.array([[1.0, 0.0]])
-        title_emb = np.array([0.0, 1.0])
-
-        match = _find_matching_issue(
-            "DHS data claims and state ballot measures",
-            ["DHS data was cited in a state ballot measure debate."],
-            [existing], recent_embs, title_emb, set(),
-            source_urls=["https://npr.org/nx-s1-5940807"],
-        )
-        assert match is existing
+        args = ("DHS data claims and state ballot measures", ["DHS data was cited in a state ballot measure debate."],
+                [existing], recent_embs)
+        orthogonal, agreeing = np.array([0.0, 1.0]), np.array([0.7, (1 - 0.7 ** 2) ** 0.5])
+        url = ["https://npr.org/nx-s1-5940807"]
+        assert _find_matching_issue(*args, orthogonal, set(), source_urls=url) is None
+        assert _find_matching_issue(*args, agreeing, set(), source_urls=url) is existing
 
     def test_find_matching_issue_does_not_match_on_url_when_none_are_shared(self):
         existing = ActionIssue(
@@ -1362,34 +1429,46 @@ class TestDedupeNearIdenticalIssues:
         assert result == [a, b]
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
-    def test_shared_source_url_collapses_regardless_of_title_similarity(self, mock_embed):
-        # Same underlying article, LLM reworded the headline enough that the
-        # titles are orthogonal in embedding space — same real-world case
-        # _find_matching_issue's #434 fix handles (checked before title
-        # cosine at all). The read-time pass must catch it too.
+    def test_a_shared_source_collapses_only_with_titles_that_agree(self, mock_embed):
         a = self._issue(1, "DHS data claims and think tank connections", datetime(2026, 8, 21))
         b = self._issue(2, "DHS data claims and state ballot measures", datetime(2026, 8, 22))
         a.source_urls = json.dumps(["https://npr.org/dhs-story"])
         b.source_urls = json.dumps(["https://npr.org/dhs-story"])
         mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0]])
-
-        result = dedupe_near_identical_issues([a, b])
-
-        assert result == [b]
+        assert dedupe_near_identical_issues([a, b]) == [a, b]
+        mock_embed.return_value = np.array([[1.0, 0.0], [0.7, (1 - 0.7 ** 2) ** 0.5]])
+        assert dedupe_near_identical_issues([a, b]) == [b]
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
-    def test_signature_overlap_collapses_below_near_identical_title_threshold(self, mock_embed):
-        # Same entities/numbers, title cosine sits in the gap between
-        # TOPIC_CHANGE_THRESHOLD (0.65) and _NEAR_IDENTICAL_TITLE_THRESHOLD
-        # (0.92) — only signature overlap should decide this one, same as
-        # _find_matching_issue.
+    def test_shared_names_below_a_near_identical_title_stay_separate(self, mock_embed):
+        """Shared names and numbers no longer decide: on 2026-10-08, 16 of
+        65 pairs the signature test called one story were (two stories
+        about one senator share two names)."""
         a = self._issue(1, "Varga attorney general nominee advances 54-45", datetime(2026, 8, 21))
-        b = self._issue(2, "Senate advances Varga attorney general pick 54-45", datetime(2026, 8, 22))
+        b = self._issue(2, "Varga campaign raises record sum 54-45", datetime(2026, 8, 22))
         mock_embed.return_value = np.array([[1.0, 0.0], [0.7, (1 - 0.7 ** 2) ** 0.5]])
 
-        result = dedupe_near_identical_issues([a, b])
+        assert dedupe_near_identical_issues([a, b]) == [a, b]
 
-        assert result == [b]
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_two_vote_drafts_are_only_the_same_item_with_the_same_content(self, mock_embed):
+        """Two House votes the same day matched on their template's words
+        ("Passed", "Representatives"); a draft is its record."""
+        a = self._issue(1, "House vote on S 2403: Passed, 401-14", datetime(2026, 9, 30, 10))
+        b = self._issue(2, "House vote on H R 9497: Passed, 415-9", datetime(2026, 9, 30, 11))
+        a.source_type = b.source_type = "house_roll_call_vote"
+        mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
+
+        assert dedupe_near_identical_issues([a, b]) == [a, b]
+
+    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
+    def test_rows_further_apart_than_the_rematch_window_stay_separate(self, mock_embed):
+        a = self._issue(1, "Varga attorney general nominee advances", datetime(2026, 8, 1))
+        b = self._issue(2, "Varga attorney general nominee advances", datetime(2026, 8, 21))
+        a.date = "2026-08-01"
+        mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0]])
+
+        assert dedupe_near_identical_issues([a, b]) == [a, b]
 
     @patch("app.pipeline.analyze.action_center._embed_texts_sim")
     def test_different_signatures_below_near_identical_stay_separate(self, mock_embed):
@@ -1419,13 +1498,11 @@ class TestDedupeNearIdenticalIssues:
         c = self._issue(3, "Senate advances Varga attorney general pick 54-45", datetime(2026, 8, 22, 2))
         a.source_urls = json.dumps(["https://npr.org/dhs-story"])
         b.source_urls = json.dumps(["https://npr.org/dhs-story"])
-        # A-B: orthogonal (merge is via shared URL alone, not cosine).
-        # B-C: cosine 0.7, same gap that collapses via signature overlap
-        # in test_signature_overlap_collapses_below_near_identical_title_threshold.
-        # A-C: orthogonal — no shared URL, no shared signature either.
+        # A-B: shared URL and titles agreeing (0.7). B-C: 0.5, no link.
+        # A-C: orthogonal.
         mock_embed.return_value = np.array([
             [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
+            [0.7, (1 - 0.7 ** 2) ** 0.5, 0.0],
             [0.0, 0.7, (1 - 0.7 ** 2) ** 0.5],
         ])
 
@@ -1872,8 +1949,11 @@ class TestFindMatchingIssueAgainstDevelopingRows:
         assert match is existing
 
     def test_a_developing_row_matches_on_shared_source_url(self):
+        # The draft's source is its vote record: a story citing it is the
+        # draft's story whatever its headline (SHARED_SOURCE_TITLE_SIM is
+        # for news rows).
         existing = ActionIssue(
-            id=901, title="Senate action on arms sale",
+            id=901, title="Senate action on arms sale", source_type="senate_roll_call_vote",
             facts=json.dumps(["A fact."]),
             source_urls=json.dumps(["https://www.senate.gov/legislative/vote.xml"]),
             status=ActionIssueStatus.DEVELOPING,
@@ -2260,6 +2340,15 @@ class TestDigestFiltering:
 
         assert _digest_reason(_make_article(title)) == "recurring digest title"
 
+    def test_an_outlets_newsletter_section_is_a_digest(self):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        url = "https://example.com/newsletters/healthcare/123-drugmakers-challenge-pilot/"
+        assert _digest_reason(_make_article("Drugmakers challenge pilot program", url=url)) == "newsletter section"
+        # A slug that only mentions a newsletter is not the section.
+        url = "https://example.com/2026/10/08/123/up-first-newsletter-story"
+        assert _digest_reason(_make_article("Senate passes the budget", url=url)) is None
+
     @pytest.mark.parametrize("title", [
         "House approves Pentagon funding framework in narrow vote",
         "Israel and Hamas reach agreement on hostage release",
@@ -2591,56 +2680,32 @@ class TestCongressGovUrlBuilding:
         assert ordinal(121) == "121st"
         assert ordinal(20) == "20th"
 
-    def test_bill_record_uses_records_own_congress(self):
-        from app.pipeline.analyze.action_center import _bill_record_to_result
-
-        result = _bill_record_to_result(
-            {"type": "HR", "number": "3055", "congress": 101,
-             "title": "An old appropriations act"},
-            query="appropriations", congress=119,
-        )
-        assert result is not None
-        assert result["url"] == (
-            "https://www.congress.gov/bill/101st-congress/house-bill/3055"
-        )
-        assert result["congress"] == 101
-        assert result["id"] == "HR.3055"
-
-    def test_bill_record_falls_back_to_search_congress(self):
-        from app.pipeline.analyze.action_center import _bill_record_to_result
-
-        result = _bill_record_to_result(
-            {"type": "S", "number": "1234", "title": "A bill"},
-            query="a bill", congress=119,
-        )
-        assert result is not None
-        assert result["url"] == (
-            "https://www.congress.gov/bill/119th-congress/senate-bill/1234"
-        )
-        assert result["congress"] == 119
-
-    def test_bill_record_tolerates_string_congress(self):
-        from app.pipeline.analyze.action_center import _bill_record_to_result
-
-        result = _bill_record_to_result(
-            {"type": "HR", "number": "22", "congress": "119", "title": "SAVE Act"},
-            query="SAVE Act", congress=119,
-        )
-        assert result is not None
-        assert "119th-congress" in result["url"]
-
-    def test_resolved_regex_bills_record_current_congress(self):
+    def test_a_bill_number_counts_when_its_title_is_named(self):
         from app.config import settings
         from app.pipeline.analyze.action_center import _resolve_bills
 
-        resolved = _resolve_bills([], ["The House passed H.R. 22 yesterday."])
+        titles = {"HR.22": ["SAVE Act", "Safeguard American Voter Eligibility Act"]}
+        resolved = _resolve_bills(["The House passed H.R. 22, the SAVE Act, yesterday."], None, titles)
 
-        assert len(resolved) == 1
-        assert resolved[0]["id"] == "HR.22"
+        assert [b["id"] for b in resolved] == ["HR.22"]
         assert resolved[0]["congress"] == settings.CURRENT_CONGRESS
-        assert (
-            f"{settings.CURRENT_CONGRESS}th-congress" in resolved[0]["url"]
+        assert resolved[0]["url"] == (
+            f"https://www.congress.gov/bill/{settings.CURRENT_CONGRESS}th-congress/house-bill/22"
         )
+
+    @pytest.mark.parametrize("text", [
+        # 2026-10-08: "S.2026" and "S.50" on live issues came from prose.
+        "Trump's 2026 agenda faces the Senate.",
+        "The U.S. 50 states sued.",
+        # A number whose words don't name the bill: the last Congress's, or
+        # just a number.
+        "The House passed H.R. 22 on a party-line vote.",
+    ])
+    def test_a_number_alone_is_not_a_bill(self, text):
+        from app.pipeline.analyze.action_center import _resolve_bills
+
+        titles = {"S.2026": ["Rural Broadband Act"], "S.50": ["Clean Water Act"], "HR.22": ["SAVE Act"]}
+        assert _resolve_bills([text], None, titles) == []
 
 
 class TestCleanupOldUnpostedIssues:
@@ -2916,13 +2981,13 @@ def test_a_bill_named_by_its_short_title_is_resolved():
 
     titles = {"protect college sports act": {"S.4668"}, "college athlete protection act": {"S.10", "HR.20"}}
     resolved = _resolve_bills(
-        [], ["The Senate passes the Protect College Sports Act, but the bill's future is unclear"], titles,
+        ["The Senate passes the Protect College Sports Act, but the bill's future is unclear"], titles,
     )
     assert [b["id"] for b in resolved] == ["S.4668"]
     # A title two bills share (companions) names neither; a title inside a
     # longer word run doesn't count.
-    assert _resolve_bills([], ["The College Athlete Protection Act advanced."], titles) == []
-    assert _resolve_bills([], ["The Protect College Sports Actors Guild met."], titles) == []
+    assert _resolve_bills(["The College Athlete Protection Act advanced."], titles) == []
+    assert _resolve_bills(["The Protect College Sports Actors Guild met."], titles) == []
 
 
 class TestElectionResultsIssuesMatchOnlyTheirRace:
@@ -3699,3 +3764,79 @@ class TestElectionResultsIssuesMatchOnlyTheirRace:
         db = self._count(db_session, "2026-HOUSE-TN-7", *names)
         issue = self._flip_issue("2026-HOUSE-TN-7", "Tennessee's 7th")
         assert (self._match(issue, text, db=db) is issue) is named, text
+
+
+def test_a_date_or_a_possessive_is_not_a_story_s_identity():
+    from app.pipeline.analyze.action_center import _issue_signature
+
+    assert _issue_signature("Senate vote on September 28, 2026", []) == set()
+    assert _issue_signature("Iranian school memorial", ["It was held 2026-09-28 on Monday."]) == {"iranian"}
+    assert _issue_signature("Trump's arch", ["Trump spoke."]) == {"trump"}
+    assert _issue_signature("Varga’s tariff order", []) == {"varga"}
+    # A figure is still identity.
+    assert "5000" in _issue_signature("A $5,000 dividend", [])
+
+
+def test_monitors_merge_only_with_near_identical_titles(monkeypatch):
+    """Merging deletes a monitor. The old 0.55 floor on the retrieval model
+    merged every pair of different topics (2026-10-08: one monitor held the
+    Iran, Canada-trade and Korea stories); no cross-topic pair of update
+    titles reached 0.75 on the similarity model."""
+    from types import SimpleNamespace
+
+    import app.pipeline.analyze.action_center as ac
+
+    monitors = [SimpleNamespace(id=i, title=t, updates=[]) for i, t in enumerate(["Iran", "Canada", "Iran again"])]
+    vecs = {"Iran": [1.0, 0.0], "Canada": [0.74, (1 - 0.74 ** 2) ** 0.5], "Iran again": [0.99, (1 - 0.99 ** 2) ** 0.5]}
+    monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: [vecs[t] for t in texts])
+    merged = []
+    monkeypatch.setattr(ac, "_merge_monitors", lambda keep, absorb, db: merged.append((keep.id, absorb.id)))
+
+    assert ac._merge_similar_monitors(monitors, db=None) is True
+    assert merged == [(0, 2)]
+
+
+def test_a_story_leading_two_days_is_one_timeline_entry(db_session):
+    from app.models import TimelineEntry
+    from app.pipeline.analyze.action_center import _save_timeline_entry
+
+    for day in ("2026-10-04", "2026-10-05"):
+        issue = _make_issue(day, "AI czar named", ["NPR"])
+        issue.is_current = True
+        db_session.add(issue)
+    db_session.commit()
+    _save_timeline_entry("2026-10-04", db_session)
+    _save_timeline_entry("2026-10-05", db_session)
+    assert [e.date for e in db_session.query(TimelineEntry)] == ["2026-10-04"]
+    # A different lead story the next day is its own entry.
+    other = _make_issue("2026-10-06", "Budget vote", ["AP"])
+    other.is_current = True
+    db_session.add(other)
+    db_session.commit()
+    _save_timeline_entry("2026-10-06", db_session)
+    assert sorted(e.date for e in db_session.query(TimelineEntry)) == ["2026-10-04", "2026-10-06"]
+
+
+def test_contact_your_senators_only_for_a_federal_policy_story():
+    from app.pipeline.analyze.action_center import _build_actions_from_data
+
+    def contact(**kw):
+        return any(a["type"] == "contact_senator" for a in _build_actions_from_data("t", [], [], [], [], **kw))
+
+    assert contact(policy_areas=["ENERGY"])
+    assert not contact(policy_areas=[])  # a foreign election, a fundraising total
+
+
+def test_updates_of_a_deleted_monitor_are_swept(db_session):
+    from app.pipeline.analyze.action_center import _sweep_orphan_updates
+
+    live = NationalMonitor(slug="live", title="Live", description="d", category="defense", status="active")
+    db_session.add(live)
+    db_session.commit()
+    db_session.add_all([
+        MonitorUpdate(monitor_id=live.id, date="2026-10-01", summary="s", source_url="u1", source_name="AP"),
+        MonitorUpdate(monitor_id=live.id + 99, date="2026-10-01", summary="s", source_url="u2", source_name="AP"),
+    ])
+    db_session.commit()
+    assert _sweep_orphan_updates(db_session) == 1
+    assert [u.source_url for u in db_session.query(MonitorUpdate)] == ["u1"]

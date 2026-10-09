@@ -60,6 +60,7 @@ from app.models import (
 )
 from app.pipeline.analyze import election_bluesky, election_coverage, race_relevance
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
+from app.pipeline.fetch.congress_legislators import fetch_bioguide_to_fec_ids
 from app.pipeline.fetch.fec import fetch_all_candidates, fetch_candidate_financials
 from app.pipeline.fetch.state_candidates import (
     crawl_for_new_sources,
@@ -105,6 +106,15 @@ ELECTION_PIPELINE_STEPS = [
 # is ~33 minutes, a small slice of the cycle's total candidates, so the full
 # set cycles through over multiple nightly runs rather than one multi-hour pass.
 FINANCIALS_BATCH_SIZE = 500
+
+# A candidate not refreshed in this many days goes ahead of the priority
+# order. Without it incumbents and fundraisers (~2,800 in 2026, back in the
+# pool every PIPELINE_CACHE_TTL_HOURS) filled every batch, and the ~1,450
+# candidates the FEC flags as not having raised money had not been
+# refreshed since 2026-08-01 when measured on 2026-10-08 — 169 of them
+# confirmed nominees. At 500 a night, that group costs ~105 slots a night
+# at fourteen days, leaving the rest a rotation of about a week.
+FINANCIALS_OVERDUE_DAYS = 14
 
 # The states (election_calendar.federal_states: every state with Senate
 # seats, read from the Senate's own list) are the only jurisdictions that
@@ -368,8 +378,9 @@ def _remove_senate_races_nobody_holds(db: Session, cycle: int) -> int:
 
 
 def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate]:
-    """Never-synced candidates first, then oldest-synced first; within each
-    group, incumbents before active fundraisers before everyone else.
+    """Never-synced candidates first, then anyone not refreshed in
+    FINANCIALS_OVERDUE_DAYS, then the rest; within each group, incumbents
+    before active fundraisers before everyone else, oldest sync first.
 
     Candidates synced within the FEC cache TTL are excluded entirely
     (2026-07 review M3): fetch_candidate_financials serves from ApiCache
@@ -386,6 +397,7 @@ def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate
         else_=2,
     )
     stale_before = utcnow() - timedelta(hours=settings.PIPELINE_CACHE_TTL_HOURS)
+    overdue = Candidate.last_financials_sync < utcnow() - timedelta(days=FINANCIALS_OVERDUE_DAYS)
     return (
         db.query(Candidate)
         .filter(or_(
@@ -396,6 +408,7 @@ def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate
         .filter(~Candidate.id.startswith(BALLOT_ONLY_ID_PREFIX))
         .order_by(
             Candidate.last_financials_sync.is_(None).desc(),
+            overdue.desc(),
             priority,
             Candidate.last_financials_sync.asc(),
         )
@@ -404,20 +417,37 @@ def _prioritize_for_financial_refresh(db: Session, limit: int) -> list[Candidate
     )
 
 
+def race_election_totals(totals: list[dict], election_year: int) -> dict | None:
+    """The candidate's FEC totals row for the election `election_year`
+    decides — the whole election period (election_full), or failing that
+    any row for that election — or None when the FEC has none.
+
+    Not simply the newest row: a candidate who has filed for this
+    election but not yet reported has only older elections' rows, and
+    the newest of those was shown as this race's money. Live on
+    2026-10-08, 41 of the 1,539 candidates with cached totals showed an
+    earlier election's figures — sitting members' 2024 re-election
+    money, one filer's 2004 race.
+    """
+    rows = [t for t in totals if t.get("candidate_election_year") == election_year]
+    return next((t for t in rows if t.get("election_full")), rows[0] if rows else None)
+
+
 async def _refresh_financials(db: Session, client: httpx.AsyncClient, batch_size: int) -> int:
     candidates = _prioritize_for_financial_refresh(db, batch_size)
     refreshed = 0
     for cand in candidates:
         try:
             totals = await fetch_candidate_financials(client, db, cand.id)
-            if totals:
-                latest = totals[0]
-                cand.contributions = latest.get("contributions")
-                cand.disbursements = latest.get("disbursements")
-                cand.cash_on_hand = latest.get("last_cash_on_hand_end_period")
-                cand.individual_itemized_contributions = latest.get(
-                    "individual_itemized_contributions",
-                )
+            # Every field is written, None included: a row that stops
+            # existing (or never matched this election) must clear what an
+            # earlier sync stored, not leave it standing.
+            row = race_election_totals(totals, cand.race.cycle_year) or {}
+            cand.contributions = row.get("contributions")
+            cand.disbursements = row.get("disbursements")
+            cand.cash_on_hand = row.get("last_cash_on_hand_end_period")
+            cand.individual_itemized_contributions = row.get("individual_itemized_contributions")
+            cand.financials_through = (row.get("coverage_end_date") or "")[:10] or None
             cand.last_financials_sync = utcnow()
             refreshed += 1
             db.commit()
@@ -589,6 +619,9 @@ def _upsert_measure(db: Session, raw: dict, detail: dict | None, source_name: st
     # drafter never reached a reader.
     measure.title_authority = detail.get("title_authority")
     measure.fiscal_authority = detail.get("fiscal_authority")
+    measure.summary_authority = detail.get("summary_authority")
+    measure.framing_authority = detail.get("framing_authority")
+    measure.source_position = detail.get("source_position")
     measure.source_url = detail.get("source_url")
     measure.republished_by = detail.get("republished_by")
     measure.source_name = source_name
@@ -699,6 +732,11 @@ def _supersede_rows(db: Session, state: str, election_date: str, source_name: st
 
     ids = {i["id"] for i in items}
     numbers = {i["number"] for i in items if i.get("number")}
+    # A re-keyed record can change its number too (Wyoming's heading-as-
+    # number became a short label, New Mexico's "HB 248 (1)" the state's
+    # "Bond Question 1"); its printed title is what stays. Reconciling it
+    # would show the same measure "no longer on the ballot" beside itself.
+    titles = {i["title"] for i in items if i.get("title")}
     rows = (
         db.query(BallotMeasure)
         .filter(BallotMeasure.state == state, BallotMeasure.election_date == election_date)
@@ -707,7 +745,9 @@ def _supersede_rows(db: Session, state: str, election_date: str, source_name: st
     deleted = 0
     for row in rows:
         other_source = row.source_name != source_name
-        rekeyed = row.number and row.number in numbers and row.id not in ids
+        rekeyed = row.id not in ids and (
+            (row.number and row.number in numbers) or (row.title and row.title in titles)
+        )
         if other_source or rekeyed:
             db.delete(row)
             deleted += 1
@@ -1286,7 +1326,9 @@ def _purge_retired_source(db: Session) -> int:
 
 
 def _record_unread_state(db: Session, state: str, election_day: str) -> None:
-    """Record a state no reader covers as NOT_YET_COVERED.
+    """Record a state no reader covers as NOT_YET_COVERED — or, where its
+    own law allows no statewide measure (registry `none_by_law`),
+    CONFIRMED_NONE citing that law.
 
     Anything the row carried from an earlier source's read is cleared: no
     reader is running, so a shrink streak can't continue and an operator's
@@ -1298,6 +1340,17 @@ def _record_unread_state(db: Session, state: str, election_day: str) -> None:
     """
 
 
+    law = ballot_measure_pdf_sources.none_by_law(state)
+    if law is not None:
+        # The state's own constitution rules out any statewide measure
+        # (registry `none_by_law`): a checked answer, cited to that law.
+        _set_coverage(
+            db, state, election_day, MeasureCoverage.CONFIRMED_NONE,
+            source_name=law["source_name"], error=f"none by law: {law['basis']}",
+        )
+        row = _coverage_row(db, state, election_day)
+        row.pending_shrink, row.shrink_streak, row.operator_note = None, 0, None
+        return
     reason = ballot_measure_pdf_sources.unread_reason(state) or "Civitas does not read this state's official measure list automatically yet."
     prior = _coverage_row(db, state, election_day)
     prior_source = prior.source_name if prior is not None else None
@@ -1337,7 +1390,9 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
     read its official list automatically yet, or it publishes no list of
     what is certified — is recorded NOT_YET_COVERED, never CONFIRMED_NONE (nothing
     was checked), and raises no alert (nothing broke): its page says so and
-    links the official lookup.
+    links the official lookup. The one exception is a state whose own law
+    allows no statewide measure (registry `none_by_law`, Delaware), recorded
+    CONFIRMED_NONE citing that law (_record_unread_state).
     """
 
     election_day = active_election(db).election_day.isoformat()
@@ -1427,6 +1482,24 @@ async def _confirmed_candidates_phase(db: Session, client, cycle: int) -> str:
     return detail
 
 
+def link_members(db: Session, cycle: int, crosswalk: dict[str, list[str]]) -> int:
+    """Record, on every candidate of `cycle` whose FEC id the bioguide->FEC
+    crosswalk lists, the member it belongs to (Candidate.member_bioguide).
+    An empty crosswalk (the read failed) changes nothing. Returns how many
+    candidates carry a member."""
+    if not crosswalk:
+        return 0
+    owner = {fec_id: bioguide for bioguide, ids in crosswalk.items() for fec_id in ids}
+    linked = 0
+    for cand in db.query(Candidate).join(Race, Candidate.race_id == Race.id).filter(Race.cycle_year == cycle):
+        member = owner.get(cand.id)
+        if cand.member_bioguide != member:
+            cand.member_bioguide = member
+        linked += member is not None
+    db.commit()
+    return linked
+
+
 async def run_election_pipeline(cycle: int | None = None) -> dict:
     """Sync candidate rosters, refresh a prioritized batch of financials,
     ingest race coverage, post grounded Bluesky updates, and snapshot
@@ -1486,6 +1559,12 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                 db.rollback()
                 logger.exception("Roster sync failed — continuing")
                 progress.fail("roster_sync")
+            try:
+                linked = link_members(db, cycle, await fetch_bioguide_to_fec_ids(client, db))
+                logger.info("Linked %d candidates to their member records", linked)
+            except Exception:
+                db.rollback()
+                logger.exception("Member linking failed — continuing")
 
             run.current_phase = "financial"
             db.commit()

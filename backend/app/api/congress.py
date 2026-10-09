@@ -1,6 +1,6 @@
 """The Congress reports: what each chamber did on a day, in a week, in a month."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import JSONResponse
@@ -38,6 +38,14 @@ def _parse_date(value: str) -> date:
     return parsed
 
 
+def _check_on_record(db: Session, first: date, last: date) -> None:
+    """404 a period wholly outside the days on record (record_span): before
+    the first, or starting after today."""
+    span = congress_service.record_span(db)
+    if span is None or last < span[0] or first > span[1]:
+        raise HTTPException(status_code=404, detail="No record of Congress for this date")
+
+
 @router.get("/latest")
 def latest(db: Session = Depends(get_db)) -> JSONResponse:
     """The most recent day either chamber met, as a day report; 404 before
@@ -50,13 +58,18 @@ def latest(db: Session = Depends(get_db)) -> JSONResponse:
 
 @router.get("/day/{day}")
 def day(day: str = Path(pattern=r"^\d{4}-\d{2}-\d{2}$"), db: Session = Depends(get_db)) -> JSONResponse:
-    return cached_json(congress_service.day_report(db, _parse_date(day)), max_age=_TTL_S)
+    parsed = _parse_date(day)
+    _check_on_record(db, parsed, parsed)
+    return cached_json(congress_service.day_report(db, parsed), max_age=_TTL_S)
 
 
 @router.get("/week/{day}")
 def week(day: str = Path(pattern=r"^\d{4}-\d{2}-\d{2}$"), db: Session = Depends(get_db)) -> JSONResponse:
     """The Monday-to-Sunday week containing `day`."""
-    return cached_json(congress_service.week_report(db, _parse_date(day)), max_age=_TTL_S)
+    parsed = _parse_date(day)
+    monday = parsed - timedelta(days=parsed.weekday())
+    _check_on_record(db, monday, monday + timedelta(days=6))
+    return cached_json(congress_service.week_report(db, parsed), max_age=_TTL_S)
 
 
 @router.get("/month/{month}")
@@ -65,6 +78,8 @@ def month(month: str = Path(pattern=r"^\d{4}-\d{2}$"), db: Session = Depends(get
     if not 1 <= mon <= 12:
         raise HTTPException(status_code=422, detail="Expected a month as YYYY-MM")
     _check_year(year)
+    first = date(year, mon, 1)
+    _check_on_record(db, first, date(year + mon // 12, mon % 12 + 1, 1) - timedelta(days=1))
     return cached_json(congress_service.month_report(db, year, mon), max_age=_TTL_S)
 
 

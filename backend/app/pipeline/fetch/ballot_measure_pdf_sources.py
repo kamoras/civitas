@@ -58,3 +58,17 @@ def unread_reason(state: str) -> str | None:
         return None
     entry = ((_load().get("unread") or {}).get(state.upper())) or {}
     return entry.get("reason") if isinstance(entry, dict) else None
+
+
+def none_by_law(state: str) -> dict | None:
+    """{"source_name", "basis"} when an unread state can have no statewide
+    measure at all, by its own law — its 'unread' entry's `none_by_law`
+    (Delaware: amendments take no popular vote, and there is no initiative
+    or referendum). Such a state is recorded confirmed none, citing that
+    law, instead of not yet covered. A fact about one election (a
+    pamphlet that lists none) is never put here: that needs a reader that
+    checks every election. Only the sync's unread states ask (a state
+    can't be both registered and unread: test_ballot_measures)."""
+    entry = ((_load().get("unread") or {}).get(state.upper())) or {}
+    law = entry.get("none_by_law") if isinstance(entry, dict) else None
+    return law if isinstance(law, dict) and law.get("source_name") and law.get("basis") else None

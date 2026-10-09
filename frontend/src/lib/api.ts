@@ -38,11 +38,16 @@ const TTL = {
    * Action Center data long after the backend's own header had been
    * shortened to fix exactly that). */
   VOLATILE: 30_000, // 30 sec
-  /** Directory/leaderboard lists — refreshed a couple times per session. */
+  /** Directory/leaderboard lists, and anything a rescore moves beside the
+   * scorecard (score history, signal overlap): the backend serves these
+   * for CACHE_TTL_DETAIL_S (2 min). Score history once sat in LONG, so a
+   * page's trend could show the night before's score for an hour after
+   * the scorecard beside it had moved. */
   SHORT: 120_000, // 2 min
   /** Deterministic derived data (score breakdowns, monitors) — changes at most daily. */
   MEDIUM: 300_000, // 5 min
-  /** Rarely-changing reference data (score history, elections, open comments). */
+  /** Rarely-changing reference data (elections, open comments). Never
+   * longer than the endpoint's own Cache-Control max-age. */
   LONG: 3_600_000, // 1 hour
 } as const;
 
@@ -495,6 +500,9 @@ export interface AppConfig {
   platformCategories: Record<string, string>;
   policyAreas: string[];
   billStages: Record<string, BillStageInfo>;
+  /** Bill types Legislative Effectiveness counts as bills ("S", "HR",
+   *  "SJRES", "HJRES"); simple and concurrent resolutions are not. */
+  substantiveBillTypes?: string[];
   /** Each dimension's share of the Representation Score (config_definitions.SCORE_WEIGHTS). */
   scoreWeights?: Record<string, number>;
   /** Each dimension's share of the Presidential Score (PRESIDENT_SCORE_WEIGHTS). */
@@ -1221,9 +1229,8 @@ export function sendLoadTiming(t: {
   navigator.sendBeacon(`${API_BASE}/track-timing?${params}`);
 }
 
-/** A navigation inside the app, which the middleware cannot see
- *  (NavigationBeacon; lib/pageLoad.ts says why). Same endpoint and the same
- *  counting as a page load: nginx sets the X-Real-IP the visitor hash uses. */
+/** A page view, sent by the browser (NavigationBeacon says why it is
+ *  counted there): nginx sets the X-Real-IP the visitor hash uses. */
 export function sendNavigation(path: string) {
   if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") return;
   navigator.sendBeacon(`${API_BASE}/track-visit?${new URLSearchParams({ path })}`);
@@ -1497,7 +1504,19 @@ export interface ApiUsageCounts {
   http: number;
   mcp: number;
   rateLimited: number;
-  errors: number;
+  /** Refused as the caller's mistake: any 4xx but 429 (an invalid
+   *  parameter, an id that doesn't exist). */
+  rejected: number;
+  /** The API's own failures (5xx). */
+  serverErrors: number;
+}
+
+/** Which parameter broke which rule on the invalid (422) requests. */
+export interface ApiRejection {
+  endpoint: string;
+  parameter: string;
+  reason: string;
+  count: number;
 }
 
 export interface ApiUsageDay extends ApiUsageCounts {
@@ -1510,6 +1529,7 @@ export interface ApiUsage {
   days: ApiUsageDay[];
   totals: ApiUsageCounts & { mcpConnections: number };
   byEndpoint: (ApiUsageCounts & { endpoint: string })[];
+  rejections: ApiRejection[];
 }
 
 export async function fetchAdminApiUsage(token: string, days: number = 30): Promise<ApiUsage> {
@@ -1708,7 +1728,7 @@ export async function setPoliticianVacancy(
 /** The post-run check that related score components still measure
  * different things. Refreshed by each pipeline run. */
 export async function fetchSignalOverlap(): Promise<SignalOverlap> {
-  return cachedFetch<SignalOverlap>(`${API_BASE}/signal-overlap`, TTL.LONG);
+  return cachedFetch<SignalOverlap>(`${API_BASE}/signal-overlap`, TTL.SHORT);
 }
 
 export async function fetchConfig(): Promise<AppConfig> {
@@ -1759,28 +1779,32 @@ export interface ScoreSnapshot {
   /** Dimension name -> score. Keys differ by entity type (senator/rep:
    * fundingIndependence/constituentAlignment/
    * fundingDiversity/legislativeEffectiveness; president: publicMandate/
-   * effectiveness/agencyAlignment/historicalLegacy) — untyped here since
+   * effectiveness/historicalLegacy) — untyped here since
    * ScoreTrend (the only consumer) only ever reads date/overallScore. */
   scores: Record<string, number>;
 }
 
 export interface ScoreHistory {
   snapshots: ScoreSnapshot[];
+  /** The latest score's change since the earliest snapshot on the same
+   *  scoring method (and, for a member, the same Congress); null when
+   *  there is none to compare with. */
+  change?: { since: string; points: number } | null;
 }
 
 export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHistory> {
   const url = `${API_BASE}/senators/${senatorId}/history`;
-  return withShape<ScoreHistory>(await cachedFetch(url, TTL.LONG), { lists: ["snapshots"] }, url);
+  return withShape<ScoreHistory>(await cachedFetch(url, TTL.SHORT), { lists: ["snapshots"] }, url);
 }
 
 export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHistory> {
   const url = `${API_BASE}/representatives/${repId}/history`;
-  return withShape<ScoreHistory>(await cachedFetch(url, TTL.LONG), { lists: ["snapshots"] }, url);
+  return withShape<ScoreHistory>(await cachedFetch(url, TTL.SHORT), { lists: ["snapshots"] }, url);
 }
 
 export async function fetchPresidentHistory(presidentId: string): Promise<ScoreHistory> {
   const url = `${API_BASE}/presidents/${presidentId}/history`;
-  return withShape<ScoreHistory>(await cachedFetch(url, TTL.LONG), { lists: ["snapshots"] }, url);
+  return withShape<ScoreHistory>(await cachedFetch(url, TTL.SHORT), { lists: ["snapshots"] }, url);
 }
 
 export interface OpenCommentItem {
@@ -1789,7 +1813,6 @@ export interface OpenCommentItem {
   agencyName: string | null;
   commentsCloseOn: string;
   commentUrl: string;
-  policyAreas: string[];
   docType: string;
   date: string;
   summary: string;
@@ -1836,7 +1859,10 @@ export async function fetchLiveResults(state?: string): Promise<LiveResults> {
 export async function fetchPviMap(): Promise<PviMap> {
   // `states` and `districts` are maps, not lists, and callers index into them
   // directly — an absent one has to arrive as {} rather than undefined.
-  const raw = asRecord(await cachedFetch(`${API_BASE}/elections/pvi`, TTL.LONG));
+  // VOLATILE, not LONG: the response carries the election's date and cycle,
+  // which the backend caches for 30 s around election day (phase_cache_s)
+  // so the switch reaches readers promptly; an hour here undid that.
+  const raw = asRecord(await cachedFetch(`${API_BASE}/elections/pvi`, TTL.VOLATILE));
   return {
     ...raw,
     states: asRecord(raw.states),
@@ -1854,7 +1880,7 @@ export async function fetchTownsForState(state: string): Promise<TownEntry[]> {
   // without a name) once crashed the whole state page at `towns.length`.
   // Anything unusable is no towns, and the page hides the town selector.
   const { towns } = withShape<{ towns: TownEntry[] }>(
-    await cachedFetch(url, TTL.LONG),
+    await cachedFetch(url, TTL.SHORT),
     { lists: ["towns"] },
     url
   );

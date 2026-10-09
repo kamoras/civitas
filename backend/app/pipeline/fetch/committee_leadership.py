@@ -30,11 +30,15 @@ import pathlib
 
 import httpx
 import yaml
+from lxml import etree
 
 from app.atomic_write import write_text_atomic
 from app.http_client import make_async_client
+from app.pipeline.fetch.house_clerk import MEMBER_DATA_URL
+from app.pipeline.fetch.house_leadership import clerk_house_leadership
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
+from app.pipeline.transform.normalize_members import strip_accents
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +98,127 @@ def build_committee_membership(
                 "title": m.get("title"),
             })
     return result
+
+
+# congress-legislators updates its committee file every month or two, and a
+# member seated in between has no entry: on 2026-10-08 a senator seated in
+# July and a representative seated in September showed no committees, while
+# the chambers' own lists named four and one. For a sitting member it doesn't
+# list, the chamber's list is read instead — the Clerk's member data for the
+# House, senate.gov's committee rosters for the Senate. Only for those
+# members: congress-legislators carries the titles both chambers' lists
+# leave out ("Ranking Member" in the House) and matched both lists
+# everywhere else (every other sitting member, the same day).
+SENATE_ROSTER_URL = "https://www.senate.gov/general/contact_information/senators_cfm.xml"
+SENATE_COMMITTEE_URL = "https://www.senate.gov/general/committee_membership/committee_memberships_{code}.xml"
+# senate.gov's position words, as the form prints them; "Member" is no title.
+_SENATE_POSITIONS = {"Chairman": "Chairman", "Ranking": "Ranking Member", "Vice Chairman": "Vice Chairman"}
+
+
+def _xml_root(body: bytes | None):
+    if not body:
+        return None
+    try:
+        return etree.fromstring(body)
+    except etree.XMLSyntaxError:
+        return None
+
+
+def house_assignments_from_clerk(
+    member_data: bytes | None, committees_raw: list[dict], known: set[str],
+) -> dict[str, list[dict]]:
+    """Committee assignments from the Clerk's MemberData.xml for the sitting
+    members not in `known`, named as congress-legislators names them (the
+    Clerk's comcode is its house_committee_id plus "00")."""
+    root = _xml_root(member_data)
+    if root is None:
+        return {}
+    by_code = {f"{c['house_committee_id']}00": c for c in committees_raw if c.get("house_committee_id")}
+    clerk_names = {c.get("comcode"): " ".join((c.findtext("committee-fullname") or "").split())
+                   for c in root.iterfind("committees/committee")}
+    result: dict[str, list[dict]] = {}
+    for member in root.iterfind("members/member"):
+        bioguide = (member.findtext("member-info/bioguideID") or "").strip()
+        if not bioguide or bioguide in known:
+            continue
+        for assignment in member.iterfind("committee-assignments/committee"):
+            code = assignment.get("comcode")
+            info = by_code.get(code)
+            name = info["name"] if info else clerk_names.get(code)
+            if not name:
+                continue
+            result.setdefault(bioguide, []).append({
+                "committeeName": name,
+                "chamber": info.get("type", "house") if info else "house",
+                "title": assignment.get("leadership"),
+            })
+    return result
+
+
+def senate_unlisted(roster_xml: bytes | None, known: set[str]) -> dict[tuple[str, str], str]:
+    """(state, folded surname) -> bioguide for the senators senate.gov lists
+    that congress-legislators' committee file doesn't."""
+    root = _xml_root(roster_xml)
+    if root is None:
+        return {}
+    unlisted = {}
+    for member in root.iterfind("member"):
+        bioguide = (member.findtext("bioguide_id") or "").strip()
+        if bioguide and bioguide not in known:
+            unlisted[((member.findtext("state") or "").strip(), _fold(member.findtext("last_name")))] = bioguide
+    return unlisted
+
+
+def senate_assignments(committee_xml: bytes | None, info: dict, unlisted: dict[tuple[str, str], str]) -> dict[str, list[dict]]:
+    """The unlisted senators' seats on one senate.gov committee roster."""
+    root = _xml_root(committee_xml)
+    if root is None:
+        return {}
+    result: dict[str, list[dict]] = {}
+    for member in root.iterfind("committees/members/member"):
+        bioguide = unlisted.get(((member.findtext("state") or "").strip(), _fold(member.findtext("name/last"))))
+        if bioguide:
+            result.setdefault(bioguide, []).append({
+                "committeeName": info["name"],
+                "chamber": info.get("type", "senate"),
+                "title": _SENATE_POSITIONS.get((member.findtext("position") or "").strip()),
+            })
+    return result
+
+
+def _fold(text: str | None) -> str:
+    return " ".join(strip_accents(text or "").lower().split())
+
+
+async def _fetch_bytes(client: httpx.AsyncClient, url: str) -> bytes | None:
+    resp = await fetch_with_retry(client, _rate_limiter, "GET", url, retry_on_4xx=False, log_label=f"committee-leadership {url}")
+    return resp.content if resp is not None else None
+
+
+async def fill_unlisted_members(
+    client: httpx.AsyncClient, membership: dict[str, list[dict]], committees_raw: list[dict],
+) -> int:
+    """Add the chambers' own committee lists for sitting members
+    congress-legislators doesn't list (see SENATE_ROSTER_URL's note).
+    Best-effort: a list that can't be read adds nothing. Returns how many
+    members it added."""
+    known = set(membership)
+    added = house_assignments_from_clerk(await _fetch_bytes(client, MEMBER_DATA_URL), committees_raw, known)
+    unlisted = senate_unlisted(await _fetch_bytes(client, SENATE_ROSTER_URL), known)
+    if unlisted:
+        for info in committees_raw:
+            code = info.get("senate_committee_id")
+            if not code:
+                continue
+            seats = senate_assignments(await _fetch_bytes(client, SENATE_COMMITTEE_URL.format(code=code)), info, unlisted)
+            for bioguide, rows in seats.items():
+                added.setdefault(bioguide, []).extend(rows)
+    for bioguide, rows in added.items():
+        membership[bioguide] = rows
+    if added:
+        logger.info("committee-leadership: %d sitting member(s) read from the chambers' own lists: %s",
+                    len(added), ", ".join(sorted(added)))
+    return len(added)
 
 
 def build_leadership_roles(legislators_raw: list[dict]) -> dict[str, str]:
@@ -200,8 +325,14 @@ async def refresh_committee_leadership_data(client: httpx.AsyncClient | None = N
             return False
 
         committee_membership = build_committee_membership(membership_raw, committees_raw)
+        try:
+            await fill_unlisted_members(client, committee_membership, committees_raw)
+        except Exception:
+            # Best-effort: congress-legislators' data is still written.
+            logger.warning("committee-leadership: the chambers' own lists could not be read", exc_info=True)
         leadership_roles = build_leadership_roles(legislators_raw)
         leadership_tenures = build_leadership_tenures(legislators_raw)
+        leadership_roles = await clerk_house_leadership(client, leadership_roles)
         failures = ingestion_gates(committee_membership, leadership_roles)
         if failures:
             for f in failures:

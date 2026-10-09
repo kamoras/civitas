@@ -46,12 +46,7 @@ between administrations mostly reflects oil shocks, productivity and global
 conditions rather than policy. Scoring growth *relative to peer economies*
 would remove the shared component.
 
-**Not built yet, and why.** The pipeline has no live source for other
-countries' GDP. The candidates are the Maddison Project, the World Bank API
-and the OECD API. None could be reached from the environment this work was
-done in, so the pipeline would have been built against a format nobody had
-checked. The limitation is stated on the About page and in the Effectiveness
-docstring instead.
+**Built in president v8**, below.
 
 ## Jobs: absolute, against a measured average
 
@@ -127,3 +122,201 @@ stale figure different from the one scored. The model no longer reads or writes 
   serve only as the pre-first-run fallback, and the first run replaces them.
 - The postwar comparison rests on 9–14 presidencies. That is the whole
   population, and it is small.
+
+## President v7: rulemaking counts were capped; a term cut short
+
+**Agency Alignment removed.** The Federal Register's documents API reports
+`count` as at most 10,000 (final rules over 2009-2017 read 10,000; each year
+alone reads about 3,500 to 3,900, checked 2026-10-06). The two-term
+administrations' final and proposed rule counts were both capped, so each read
+exactly 50% finalized. Counted in full (windows halved until under the cap),
+administrations since 1994 finalized between 59.6% (Obama) and 61.8% (George W.
+Bush), too little difference to score.
+
+**A presidency cut short.** Kennedy (1,036 days) and Ford (895) were compared
+with whole terms, when approval falls as a term goes on. From a start of 76%,
+presidents fell about 30.5 points over a whole term but 16.1 over their first
+1,001 days; Kennedy fell 14. Compared over his own days, his approval trend
+scores 57 rather than 87. Both are left out of the whole-term population.
+
+## President v8: growth relative to peer economies, catch-up set aside
+
+**Sources.** Maddison Project Database 2023 (Bolt & van Zanden 2024; GDP
+per person, 2011 international dollars at purchasing-power parity) for the
+US and the 13 peers, 1946-2022, bundled as
+`backend/app/data/peer_gdp_per_capita.json` by
+`backend/scripts/fetch_peer_gdp.py`; the World Bank's NY.GDP.PCAP.KD
+(constant 2015 US$) carries those levels past 2022. Where both exist the
+two series' annual growth rates agree (r = 0.90, 868 country-years
+1961-2022, mean difference 0.16 points).
+
+**How much is shared.** Over the years Effectiveness credits (the term's
+second year to its last), the peers' median growth per person explains 68%
+of the variance in a postwar term's US growth per person (World Bank,
+1961 on). Counting the first year too: 49%. A window shifted a year either
+way: 54%. The credited window is the one that lines up best.
+
+**Inherited momentum.** Growth in the two years before a term does not
+predict growth during it (r = -0.08 over 43 terms, MeasuringWorth), so
+nothing beyond the year-1 exclusion is carried for the predecessor.
+
+**Catch-up.** Compared raw, US-minus-peers growth rises with a term's
+start year: r = +0.73 over the 13 completed postwar terms (data through
+2025). In the 1950s and 1960s the peers were far below US incomes (median
+log gap -0.47 in 1950, -0.29 in 1990, -0.22 in 2022) and growing fast by
+catching up (Baumol 1986; Barro & Sala-i-Martin 1992). Three ways of
+setting that aside were measured:
+
+| Method | Fitted rate | Era trend r | Problem |
+|---|---|---|---|
+| None (raw) | - | +0.73 | penalizes the 1950s-60s |
+| Each peer-year's growth on its own gap, pooled | -3.3 to -5.3 by sample | +0.34 | rate unstable; over-credits every recent term |
+| Each term's peers regressed on their gaps | per term | -0.42 | follows noise: shared variance with US growth falls from 0.49 to 0.02 |
+| Each year's US-minus-peer-median on the peers' median gap, least squares | 5.6 to 10.2 by first year 1947-1955 | -0.06 to +0.26 | one reconstruction year swings it |
+| Same, Theil-Sen (median of pairwise slopes; Sen 1968) | 7.1 to 9.9 | -0.03 to +0.17 | chosen |
+
+(Era trends in the table are Maddison data through 2022, where Biden's term
+has one year.) The pipeline fits the Theil-Sen rate every run over every
+year since 1947 (8.9 in October 2026). With data through 2025 the adjusted
+figure's era trend is +0.41, all of it from the terms since 2017, when US
+growth per person ran 0.9 to 1.1 points a year ahead of the peers'; that is
+an outcome, not something the adjustment introduced.
+
+**Party.** Democratic minus Republican: total growth +0.92 points a year,
+growth per person +0.98, relative to peers raw +0.56, adjusted +0.56
+(13 completed postwar terms, data through 2025).
+
+**Effect on Effectiveness (October 2026 data, DB copy).** Eisenhower 36 to
+18, Kennedy 69 to 48, Johnson 87 to 76, Nixon 45 to 26, Ford 62 to 59,
+Carter 50 to 58, Reagan 69 to 70, George H. W. Bush 21 to 31, Clinton 73
+to 55, George W. Bush 20 to 28, Obama 44 to 49, Trump (first term) 20 to
+45, Biden 53 to 83. Prewar presidents are unchanged.
+
+**Limits.** The adjustment removes shocks the peers shared and their
+catch-up, not shocks that hit the US alone. Jobs (40% of Effectiveness)
+are still US payroll jobs per year, with no peer comparison.
+
+## President v9: approval by party, against the era's polarization
+
+**Question.** Average approval is tightly bunched (SD 9.1 points across
+the 14 completed polling-era presidencies), so a few points cost a lot of
+score. Is the spread signal?
+
+**Measurement precision is not the problem.** Splitting each president's
+polls into alternating halves, the halves' averages agree at r = 0.999
+(overall), 0.997 (own party), 0.998 (other party), 0.996 (independents).
+The differences are real; the question is what they measure.
+
+**Era is.** Approval by party (Gallup, via the American Presidency
+Project, every president from Truman) against the distance between the
+parties' mean DW-NOMINATE scores in the House over the term (Voteview;
+McCarty, Poole & Rosenthal 2006):
+
+| Measure | SD | r with polarization |
+|---|---|---|
+| Overall approval | 9.1 | -0.40 |
+| President's own party | 10.8 | +0.55 |
+| Other party | 14.3 | **-0.81** |
+| Independents | 10.2 | -0.46 |
+
+Other-party approval fell from 49% (Eisenhower) to 5.5% (Biden) while
+own-party approval rose; Jacobson (2019) and Donovan, Kellstedt, Key &
+Lebo (2020) document the same shift. Raw approval ranked presidents
+partly by when they served.
+
+**Two adjustments measured.**
+
+| Method | Slope range, leaving one presidency out | Largest move in any president's figure |
+|---|---|---|
+| Overall approval on polarization | -17 to -36 | 5.2 points |
+| Each group on polarization, gaps averaged | other party -80 to -98 | **2.5 points** (spread 8.5) |
+
+The single fit can't be estimated from 14 presidencies; the group fits can,
+because the other party's relationship is strong. Chosen: each group's
+approval minus what the group gave presidents under the same polarization
+(Theil-Sen fits, refitted every run), averaged over the three groups. Its
+own correlation with polarization is +0.16 and with raw approval +0.80.
+
+**Trend.** The approval trend, judged against the starting level (v6),
+shows no era relationship (r = -0.06 with polarization), so it is
+unchanged.
+
+**Effect (October 2026 data, DB copy).** Public Mandate: Truman 17 to 8,
+Kennedy 79 to 67, Johnson 67 to 47, Eisenhower 92 to 90, Carter 37 to 26,
+Reagan 61 to 65, George H. W. Bush 75 to 73, George W. Bush 46 to 55,
+Obama 46 to 54, Trump (first term) 21 to 40, Biden 24 to 38. Top 10
+overall: Reagan 7th to 5th, Johnson 5th to 9th, Kennedy 6th to 8th.
+
+**Also found.** Voteview names per-Congress files with three digits
+(H099); the fetcher's URL template wrote H99, a 404, for every Congress
+before the 100th. Only the sitting Congress had been read before.
+
+## President v10: beyond growth
+
+**Question.** Effectiveness measured growth and jobs. What else measures a
+president's record, and which candidates hold up? Each was tested on the
+same criteria as before: agreement with historians' matching category
+(C-SPAN 2021, per category), trend with era, consistency within a
+president, overlap with what is already scored, and how much of it the
+environment explains.
+
+**Legislative success** (share of roll calls where Congress voted the
+president's way, Voteview's coding of CQ's presidential positions, 11,987
+roll calls 1945-2026; Bond & Fleisher 1990; Bond 2024). Majority control
+and seat share explain 54% of it across 79 Congress-chamber cells. Set that
+aside and a president's House and Senate figures agree at r = +0.13, its
+agreement with historians' "Relations with Congress" is +0.22, and it
+trends with era (-0.72). Rejected: mostly the Congress a president faced.
+
+**Major laws** (Mayhew's important-enactment lists, 1947-2024). Per
+Congress: 5 to 22. A president's consecutive Congresses agree at +0.42,
+barely above any two consecutive Congresses (+0.33); first and second terms
+at +0.19; with historians' overall rating -0.40. Rejected: it follows
+Congress and the era (Nixon, with Democratic Congresses, tops it).
+
+**Fiscal balance** (change in the federal surplus as a share of GDP, FRED
+FYFSGDA188S). Agrees with historians' economic management at +0.67, but
+correlates -0.58 with its own starting level and +0.47 with the change in
+unemployment: it mostly follows the business cycle, and as a score would
+mark down borrowing in a recession, which most economists recommend. The
+cyclically adjusted series starts in 1965. Rejected.
+
+**Unemployment and inflation** (FRED UNRATE from 1948, CPIAUCSL from 1947;
+credited years as for GDP; peers from the Jorda-Schularick-Taylor
+Macrohistory Database R6 and the World Bank):
+
+| Measure | vs historians' Economic Management | Era trend | vs GDP part |
+|---|---|---|---|
+| Inflation, US | +0.67 | +0.16 | -0.01 |
+| Inflation vs peers | +0.15 | **-0.75** | -0.03 |
+| Inflation vs what its start predicts | +0.46 | +0.10 | +0.15 |
+| Unemployment change, US | +0.45 | +0.18 | +0.49 |
+| Unemployment change vs peers | +0.11 | +0.18 | +0.58 |
+| Unemployment change vs what its start predicts | +0.51 | -0.14 | +0.15 |
+| GDP vs peers (v8) | -0.15 | +0.23 | - |
+
+Peer comparison fails for both: no consistent peer unemployment before the
+1980s (harmonized series start 1983-1991 for most peers), and relative
+inflation trends with era, as poorer economies catching up run higher
+inflation (Balassa-Samuelson). Where a term starts explains most of where
+it goes (unemployment change r = -0.84 with its starting rate; average
+inflation +0.74 with the inherited rate), so each is judged against what
+presidents starting at the same rate saw: slopes -1.27 and +0.50, stable
+leaving out any one presidency (-1.19 to -1.38; 0.43 to 0.68). Jobs and
+unemployment overlap little (+0.17).
+
+**Weights.** Four nearly independent parts (pairwise 0.05 to 0.17) and no
+outside criterion to fit weights to without counting the historians twice:
+equal weights (Dawes 1979). Effectiveness then agrees with historians'
+economic management at +0.48 (+0.02 before) with no era trend (-0.06).
+
+**Effect (October 2026 data, DB copy).** Effectiveness: Eisenhower 18 to
+38, Kennedy 48 to 57, Johnson 76 to 71, Nixon 26 to 39, Ford 59 to 53,
+Carter 58 to 34, Reagan 70 to 70, George H. W. Bush 31 to 37, Clinton 55 to
+62, George W. Bush 28 to 32, Obama 49 to 54, Trump (first term) 45 to 50,
+Biden 83 to 73. Pre-1947 presidents unchanged.
+
+**Data note.** BLS published no unemployment or CPI figure for October
+2025 (the shutdown). A year counts once its December figure is out,
+averaged over its published months.
+
