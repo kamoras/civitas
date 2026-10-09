@@ -69,6 +69,47 @@ async def fetch_house_sworn_dates(client: httpx.AsyncClient, db: Session) -> dic
     return dates
 
 
+_CAUCUS_CACHE_KEY = "house-clerk-caucuses-v1"
+_CAUCUSES = {"D", "R", "I"}
+
+
+def parse_caucuses(xml: bytes) -> dict[str, str]:
+    """{bioguide ID: the caucus the Clerk records} from MemberData.xml's
+    <caucus> ("D", "R"; "I" for none). It is the chamber's own record of
+    which conference a member sits in, and differs from <party> for an
+    independent: in 2026-10 one member's party read I and caucus R (the
+    member chairs a subcommittee, a seat the majority conference assigns)."""
+    try:
+        root = etree.fromstring(xml)
+    except etree.XMLSyntaxError:
+        return {}
+    caucuses: dict[str, str] = {}
+    for info in root.iterfind("members/member/member-info"):
+        bioguide = (info.findtext("bioguideID") or "").strip()
+        caucus = (info.findtext("caucus") or "").strip()
+        if bioguide and caucus in _CAUCUSES:
+            caucuses[bioguide] = caucus
+    return caucuses
+
+
+async def fetch_house_caucuses(client: httpx.AsyncClient, db: Session) -> dict[str, str]:
+    """{bioguide ID: caucus} for the sitting House, or {} when the list
+    can't be read (caucus inference then decides for an independent)."""
+    cached = api_cache_get(db, "congress", _CAUCUS_CACHE_KEY, max_age_hours=_CACHE_HOURS)
+    if cached:
+        return cached
+    try:
+        resp = await client.get(MEMBER_DATA_URL, timeout=DEFAULT_FETCH_TIMEOUT_S)
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.warning("House Clerk member list unavailable: %s", e)
+        return {}
+    caucuses = parse_caucuses(resp.content)
+    if caucuses:
+        api_cache_set(db, "congress", _CAUCUS_CACHE_KEY, caucuses, normal_ttl_hours=_CACHE_HOURS)
+    return caucuses
+
+
 # A voting seat's <district> is "At Large" or an ordinal ("20th"); a
 # delegate's reads "Delegate" or "Resident Commissioner" (DC, the
 # territories). The Clerk's own wording, read as a form value.
