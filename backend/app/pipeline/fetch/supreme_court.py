@@ -32,9 +32,10 @@ SCOTUS_BASE = "https://www.supremecourt.gov"
 
 
 def parse_slip_opinions(page: str) -> dict[str, dict]:
-    """{docket: {"pdf", "author", "holding"}} from a term's slip-opinion
-    table: the opinion's PDF, the author's code ("BK", "R"; "PC" for per
-    curiam) and the holding the Court states in the link's title."""
+    """{docket: {"pdf", "author", "holding", "date"}} from a term's
+    slip-opinion table: the opinion's PDF, the author's code ("BK", "R";
+    "PC" for per curiam), the holding the Court states in the link's title,
+    and the date the Court gives (ISO; None if unreadable)."""
     out: dict[str, dict] = {}
     for row in lxml_html.fromstring(page).xpath("//tr[td]"):
         cells = row.xpath("./td")
@@ -46,8 +47,17 @@ def parse_slip_opinions(page: str) -> dict[str, dict]:
             "pdf": SCOTUS_BASE + link[0].get("href") if link[0].get("href", "").startswith("/") else link[0].get("href"),
             "author": cells[4].text_content().strip(),
             "holding": " ".join((link[0].get("title") or "").split()),
+            "date": _slip_date(cells[1].text_content()),
         })
     return out
+
+
+def _slip_date(text: str) -> str | None:
+    """The slip-opinion table's date ("6/29/26") as ISO."""
+    try:
+        return datetime.strptime(text.strip(), "%m/%d/%y").date().isoformat()
+    except ValueError:
+        return None
 
 
 def justice_for_code(code: str, justices: list[tuple[str, str]]) -> str | None:
@@ -171,6 +181,10 @@ async def fetch_scotus_cases(
                     body_parts.append(f"Citation: {cite_str}")
 
                 slip = slips.get(docket) or {}
+                # The Court's own date where it has posted the opinion: Oyez's
+                # "Decided" event is a copy, and one case of 114 read a month
+                # late there (2026-10-09).
+                decided_date = slip.get("date") or decided_date
                 if slip.get("holding"):
                     body_parts.insert(0, f"Holding (the Court's summary):\n{slip['holding']}")
                 body = "\n\n".join(body_parts)

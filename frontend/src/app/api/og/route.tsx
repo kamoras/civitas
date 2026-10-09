@@ -337,7 +337,7 @@ async function politicianImage(
             <div
               style={{
                 display: "flex",
-                color: scoreColorHex(overallScore),
+                color: scoreColorHex(displayScore(overallScore)),
                 fontSize: 24,
                 marginTop: 24,
               }}

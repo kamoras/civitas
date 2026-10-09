@@ -22,7 +22,7 @@ import json
 import logging
 import re
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from sqlalchemy import func as sa_func, or_
@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.http_client import make_async_client
-from app.models import ExploreDocument, Justice, Representative, Senator
+from app.models import ExploreDocument, Justice, President, Representative, Senator
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.analyze.floor_speech import speech_flags, titled_speeches
@@ -46,6 +46,7 @@ from app.pipeline.fetch.presidential_actions import (
     _fetch_body_text,
 )
 from app.pipeline.fetch.fr_rulemaking import (
+    fetch_fr_metadata,
     fetch_fr_rulemaking,
     _fetch_body_text as _fetch_rulemaking_body_text,
 )
@@ -54,6 +55,7 @@ from app.pipeline.transform.normalize_members import STATE_NAME_TO_CODE, strip_a
 from app.pipeline.analyze.document_authority import update_document_authority
 from app.pipeline.explore_ranking import calibrate_and_store
 from app.pipeline.lexical_index import rebuild_index
+from app.time_utils import utcnow
 from app.pipeline.vector_store import (
     _META_FIELDS,
     alert_rebuild_failed,
@@ -163,20 +165,105 @@ def _justice_lookup(db: Session) -> dict[str, str]:
     return lookup
 
 
-def _president_id_for_name(name: str) -> str | None:
-    """Best-effort mapping from Federal Register president name to our ID."""
-    name_lower = (name or "").lower()
-    mapping = {
-        "biden": "biden-46",
-        "trump": "trump-47",
-        "obama": "obama-44",
-        "bush": "gwbush-43",
-        "clinton": "clinton-42",
-    }
-    for key, pid in mapping.items():
-        if key in name_lower:
-            return pid
+def _president_id_for(db: Session, name: str, on_date: str) -> str | None:
+    """The presidency a document belongs to: the president whose term holds
+    its date, among those whose surname the Federal Register's name for the
+    signer contains. A name table mapped every "trump" to the second term,
+    and a document from the first would have been credited to it."""
+    words = set((name or "").lower().replace(".", " ").split())
+    for p in db.query(President).all():
+        names = p.name.lower().replace(".", " ").split()
+        in_term = p.term_start <= on_date and (p.term_end is None or on_date <= p.term_end)
+        if in_term and any(w in words for w in names[1:]):
+            return p.id
     return None
+
+
+# How far back stored Federal Register documents are re-read for what the
+# Register changes after publication (a comment period extended, reopened
+# or set late; a placeholder title replaced): a 60-day comment period and
+# a 30-day extension. Every stale value found on 2026-10-09 (41 of 4,251
+# documents checked) was on a document inside it.
+FR_REFRESH_DAYS = 90
+
+
+async def _refresh_federal_register(db: Session, client: httpx.AsyncClient) -> dict[str, int]:
+    """Bring stored Federal Register documents up to the Register: those
+    from the last FR_REFRESH_DAYS, and any whose comment period is still
+    open. Ingest reads only the newest pages and stores a document once, so
+    a comment period changed after its first night stayed as first read, and
+    a document listed under a provisional number kept that number after the
+    Register re-issued it under its own (a second copy, a dead link). A
+    number the Register says it has no document for is removed; nothing is
+    touched when it can't be asked."""
+    today = utcnow().date()
+    rows = db.query(ExploreDocument).filter(
+        ExploreDocument.source == "Federal Register",
+        or_(ExploreDocument.date >= (today - timedelta(days=FR_REFRESH_DAYS)).isoformat(),
+            ExploreDocument.comments_close_on >= today.isoformat()),
+    ).all()
+    by_number = {
+        r.external_id.removeprefix("fr-reg-") if r.external_id.startswith("fr-reg-")
+        else r.external_id.removeprefix("fr-"): r
+        for r in rows
+    }
+    got = await fetch_fr_metadata(client, list(by_number))
+    if got is None:
+        return {"updated": 0, "removed": 0}
+    found, missing = got
+    updated = removed = 0
+    for number, row in by_number.items():
+        if number in missing:
+            db.delete(row)
+            removed += 1
+            continue
+        doc = found.get(number)
+        if doc is None:
+            continue
+        title = doc.get("title") or row.title
+        if row.doc_type == "Executive Order" and doc.get("executive_order_number"):
+            title = f"EO {doc['executive_order_number']}: {title}"
+        fresh = {"title": title}
+        if row.chamber == "Regulatory":
+            fresh.update(
+                date=doc.get("publication_date") or row.date,
+                comments_close_on=doc.get("comments_close_on") or None,
+                # The Register drops a document's comment link once its
+                # period closes (787 of 5,460 on 2026-10-09); the stored
+                # link still names the docket, so only a new one replaces it.
+                comment_url=doc.get("comment_url") or row.comment_url,
+            )
+        else:
+            fresh["date"] = doc.get("signing_date") or doc.get("publication_date") or row.date
+        changed = {k: v for k, v in fresh.items() if getattr(row, k) != v}
+        for k, v in changed.items():
+            setattr(row, k, v)
+        updated += bool(changed)
+    db.commit()
+    return {"updated": updated, "removed": removed}
+
+
+def _drop_overlapping_granule_copies(db: Session) -> int:
+    """Remove a floor speech stored twice from one day's Record: GovInfo's
+    granules overlap, a section's heading granule ("STATEMENTS ON INTRODUCED
+    BILLS AND JOINT RESOLUTIONS") also holding the statement the next
+    granule holds under its own title. The two copies share the speaker and
+    text, so their external ids end in the same hash; the later granule in
+    the Record (the higher id: a day is stored in Record order) is the
+    statement's own and is kept. Returns how many were removed (5 pairs of
+    1,080 speeches, 2026-10-09)."""
+    rows = db.query(ExploreDocument.id, ExploreDocument.external_id, ExploreDocument.date).filter(
+        ExploreDocument.external_id.like(f"{_SPEECH_ID_PREFIX}%")
+    ).all()
+    newest: dict[tuple[str, str], int] = {}
+    for row_id, ext, day in rows:
+        key = (day, ext.rsplit("-", 1)[-1])
+        newest[key] = max(newest.get(key, row_id), row_id)
+    drop = [row_id for row_id, ext, day in rows if newest[(day, ext.rsplit("-", 1)[-1])] != row_id]
+    if drop:
+        db.query(ExploreDocument).filter(ExploreDocument.id.in_(drop)).delete(synchronize_session=False)
+        db.commit()
+    return len(drop)
 
 
 async def _backfill_presidential_bodies(
@@ -482,6 +569,9 @@ async def _ingest_floor_speeches(db: Session, client: httpx.AsyncClient) -> dict
                       normal_ttl_hours=_DAY_READ_TTL_HOURS, commit=False)
         db.commit()
         read.add(package_id)
+    dropped = _drop_overlapping_granule_copies(db)
+    if dropped:
+        logger.info("Congressional Record: removed %d speeches stored twice from overlapping granules", dropped)
     frontier = _read_frontier(packages, read)
     _purge_out_of_scope_speeches(db, frontier)
     logger.info("Congressional Record: %d of %d days read in format %s, frontier %s",
@@ -753,7 +843,7 @@ async def run_explore_pipeline() -> dict:
                     if exists:
                         continue
 
-                    president_id = _president_id_for_name(action.get("politician_name", ""))
+                    president_id = _president_id_for(db, action.get("politician_name", ""), action["date"])
 
                     db.add(ExploreDocument(
                         doc_type=action["doc_type"],
@@ -800,6 +890,8 @@ async def run_explore_pipeline() -> dict:
                         if case.get("url") and case["url"] != stored.url:
                             stored.url, stored.summary, stored.body = case["url"], case["summary"], case.get("body", "")
                             stored.politician_name, stored.politician_id = author_name or None, justice_id
+                        if case.get("date") and case["date"] != stored.date:
+                            stored.date = case["date"]
                         continue
 
                     db.add(ExploreDocument(
@@ -859,6 +951,15 @@ async def run_explore_pipeline() -> dict:
                 logger.info("Explore pipeline: ingested %d Federal Register rulemaking docs", stats["fr_rulemaking"])
             except Exception as e:
                 logger.warning("Federal Register rulemaking fetch failed: %s", e)
+                db.rollback()
+
+            # --- 5b. Stored Federal Register documents, as the Register has them now ---
+            try:
+                refreshed = await _refresh_federal_register(db, client)
+                logger.info("Explore pipeline: Federal Register refresh updated %d, removed %d",
+                            refreshed["updated"], refreshed["removed"])
+            except Exception as e:
+                logger.warning("Federal Register refresh failed: %s", e)
                 db.rollback()
 
         # --- 6. Backfill docs missing body content ---

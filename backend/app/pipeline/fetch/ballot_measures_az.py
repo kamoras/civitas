@@ -206,8 +206,10 @@ def _ballot_format(words: list[dict]) -> dict | None:
         "origin": None,
         "official_summary": join_lines(lines[desc + 1:yes]),
         "fiscal_impact": None,
-        "yes_means": yes_text.removeprefix(_YES_START),
-        "no_means": no_text.removeprefix(_NO_START),
+        # The whole statement, "A “yes” vote shall have the effect of ...":
+        # without its opening words it is a fragment.
+        "yes_means": yes_text,
+        "no_means": no_text,
         "title_authority": TITLE_AUTHORITY,
         "fiscal_authority": None,
     }

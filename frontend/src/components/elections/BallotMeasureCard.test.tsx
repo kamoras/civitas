@@ -80,4 +80,26 @@ describe("BallotMeasureCard", () => {
     expect(title).toHaveTextContent("Drafted by Florida Legislature");
     expect(screen.getAllByText(/Drafted by/)).toHaveLength(1);
   });
+
+  it("names the summary's and the yes/no sentences' own drafters beside them", () => {
+    render(
+      <BallotMeasureCard
+        measure={measure({
+          officialTitle: "Proposing an amendment to do a thing.",
+          titleAuthority: "A Legislature",
+          summaryAuthority: "A Fair Ballot Commission",
+          yesMeans: "If the majority of voters vote yes, the thing is done.",
+          noMeans: "If the majority of voters vote no, the thing is not done.",
+          framingAuthority: "A Fair Ballot Commission",
+        })}
+      />
+    );
+    const title = screen.getByText("OFFICIAL BALLOT TITLE").closest("section");
+    expect(title).toHaveTextContent("Drafted by A Legislature");
+    const summary = screen.getByText("OFFICIAL SUMMARY").closest("section");
+    expect(summary).toHaveTextContent("Drafted by A Fair Ballot Commission");
+    const framing = screen.getByText("A YES VOTE").closest("section");
+    expect(framing).toHaveTextContent("Drafted by A Fair Ballot Commission");
+    expect(screen.getAllByText(/Drafted by/)).toHaveLength(3);
+  });
 });

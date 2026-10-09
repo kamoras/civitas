@@ -1,5 +1,5 @@
-"""Build app/data/state_leg_district_crosswalk.json — which towns each
-state legislative district covers.
+"""Build app/data/state_leg_district_crosswalk.json — which places and
+counties each state legislative district covers.
 
 This is the state-legislative analog of county_district_crosswalk.json,
 and it exists for the same reason: Civitas never asks a visitor for their
@@ -7,415 +7,502 @@ address (AGENTS.md core design principle 8), so "which of these 75
 districts is mine" has to be answerable from something a person already
 knows. For a U.S. House district that is the county. State legislative
 districts are far smaller than a county — Rhode Island fits 75 lower-
-chamber seats into 5 of them — so the useful unit is the town or city.
+chamber seats into 5 of them — so the useful unit is the town, city or
+community, with the county listed too.
 
-WHY NOT THE OBVIOUS SOURCES. All three were probed live on 2026-09-21 and
-all three fail, which is worth recording so nobody re-walks them:
+SOURCE. Two Census Bureau files, joined on the 2020 Census block:
 
-  The results feed itself. A state legislative contest is a single
-  reporting unit (Enhanced Voting returns reportingStatus 1/1 and an
-  empty crossCounties for every one of Rhode Island's 133). There is no
-  locality breakdown to read.
+  * The Redistricting Data Office's 2026 state legislative Block
+    Equivalency Files (sldu26.zip / sldl26.zip, August 2026): every 2020
+    block -> the upper and lower chamber district it lies in, on the lines
+    drawn for the 2026 elections. The national files are corrected by
+    per-state files for the states that redrew after they were cut
+    (Michigan's senate, Minnesota and Mississippi); a corrected file
+    replaces the national file's rows for that state and chamber.
+  * The 2020 P.L. 94-171 redistricting file's geographic header, one per
+    state: every block's population and the county, county subdivision
+    and place (incorporated place or Census Designated Place) it lies in,
+    plus those units' names. Place and county subdivision names are
+    taken from the 2025 Gazetteer files where the code still exists, so
+    a CDP that has incorporated since 2020 carries its new name. A place
+    or town the Gazetteer has and the 2020 file doesn't (a merger, a new
+    city, a CDP given a new code) is drawn from TIGERweb's current
+    boundaries, and the blocks whose internal points fall inside it are
+    moved into it (`reassign`).
 
-  Census Block Assignment Files. baf2020/ is ideal in shape — SLDL, SLDU
-  and MCD keyed on the same block, joining to exactly 75 lower and 38
-  upper districts for Rhode Island — but it was published in February
-  2021, so its districts are the ones drawn in 2011-12, before nearly
-  every state's 2021-22 redistricting. baf/ is older still (2010 blocks).
-  Right method, wrong decade.
+Until August 2026 no block file carried the current districts (the 2020
+Block Assignment Files have the 2011-12 lines), and this script sampled a
+grid of points inside each town against TIGERweb's district polygons
+instead. The block join replaces that: it is exact, it weighs an overlap
+by the people living in it rather than by its area, and it needs no
+geometry. It reproduces the grid method's verified Rhode Island answers
+(Jamestown -> 74, Barrington -> 66 and 67, Cranston -> 9 districts,
+Providence -> all 14).
 
-  A spatial query with esriSpatialRelIntersects. Hopelessly over-broad:
-  a district whose boundary merely TOUCHES the town counts as
-  intersecting it. Jamestown RI (~5,500 people, comfortably inside one
-  ~14,000-person district) came back as 7 districts; Cranston came back
-  as 16 against a true 9.
+WHICH PLACES. A district lists, in this order:
 
-WHAT THIS DOES INSTEAD. Fetch the CURRENT district polygons and the town
-polygons from TIGERweb, lay a grid over each town, and ask which district
-contains each sample point that falls inside the town.
+  * In the "strong MCD" states (Census's own term), the county
+    subdivisions it covers. There they are real units of government that
+    people live in and vote in: Rhode Island has 39 towns and only 8
+    incorporated places. Everywhere else county subdivisions are
+    statistical inventions ("Fairburn-Union City CCD") and are not used.
+  * Every place it covers: incorporated places ("Takoma Park city") AND
+    Census Designated Places, the Bureau's name for a recognised community
+    with no municipal government. Incorporated places alone missed where
+    most suburban Americans live — Silver Spring, Bethesda, The Woodlands
+    and Hawaii's every town are CDPs. A CDP's name is written without the
+    " CDP" tag ("Silver Spring"): it is Census jargon nobody types. A
+    place whose name is already listed as a county subdivision of the
+    district (a borough that is both; a New England village sharing its
+    town's name) is not repeated.
+  * Every county it covers ("Montgomery County"), named as
+    county_district_crosswalk.json names them, so a search by county finds
+    every district in that county rather than only the few that happen to
+    contain no named place.
 
-There is no sliver problem in that formulation, which is the whole point
-of using it: legislative districts TILE the state with no gaps and no
-overlaps, so every point inside the town is inside exactly one district
-and every count is a real measure of the town-district overlap area. The
-threshold below is therefore only suppressing grid quantisation, not
-guessing at what counts as a real intersection.
+Towns and places are ordered by how many of the district's people live
+in them, so the first few names (all the page shows before "& N more")
+are the district's largest communities.
 
-VERIFIED against the independent block-assignment answer (baf2020, joined
-MCD -> SLDL): for Rhode Island this reproduces Jamestown -> 74,
-Barrington -> 66 and 67, Cranston -> 9 districts, and Providence -> all
-14, exactly. Two methods with nothing in common agreeing to the district
-is the reason to trust either.
+Run from the repo root (network required: ~90MB of district files plus
+20-100MB per state, cached in --cache):
 
-Network required to regenerate; the output is bundled and static, the
-same treatment county_district_crosswalk.json gets, because district
-boundaries only move when a state redistricts.
-
-    python scripts/fetch_state_leg_crosswalk.py RI
-    python scripts/fetch_state_leg_crosswalk.py RI VT NH   # several
+    python backend/scripts/fetch_state_leg_crosswalk.py RI
+    python backend/scripts/fetch_state_leg_crosswalk.py RI VT NH   # several
+    python backend/scripts/fetch_state_leg_crosswalk.py --existing  # every state already in the file
 """
 
+from __future__ import annotations
+
+import argparse
 import collections
+import io
 import json
-import pathlib
 import re
 import sys
 import urllib.parse
 import urllib.request
+import zipfile
+from collections.abc import Iterable, Iterator, Mapping
+from pathlib import Path
 
-# TIGERweb's Legislative service. Layers 1 and 2 are the CURRENT
-# ("2026") upper and lower chamber districts — the vintage the block
-# assignment files cannot give us.
-_LEG_URL = (
-    "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb"
-    "/Legislative/MapServer/{layer}/query"
+REPO = Path(__file__).resolve().parents[2]
+# Runs from the repo root on a bare python3: app.contact is standard library only.
+sys.path.insert(0, str(REPO / "backend"))
+from app.contact import BOT_USER_AGENT  # noqa: E402
+
+OUTPUT = REPO / "backend" / "app" / "data" / "state_leg_district_crosswalk.json"
+
+_BEF = (
+    "https://www2.census.gov/programs-surveys/decennial/rdo/mapping-files/2027/"
+    "2026-state-legislative-bef/{chamber}26.zip"
 )
-_CHAMBER_LAYERS = {"upper": 1, "lower": 2}
+_CHAMBER_FILES = {"upper": "sldu", "lower": "sldl"}
+_PL = (
+    "https://www2.census.gov/programs-surveys/decennial/2020/data/"
+    "01-Redistricting_File--PL_94-171/{folder}/{st}2020.pl.zip"
+)
 
-_TOWN_URL = (
+# Today's names for the 2020 codes (UTF-8, unlike the P.L. file, which
+# writes "Utqiagvik" for Utqiaġvik).
+_GAZETTEER = {
+    kind: "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2025_Gazetteer/"
+    f"2025_Gaz_{file}_national.zip"
+    for kind, file in (("place", "place"), ("cousub", "cousubs"))
+}
+
+# Current boundaries, for the places and towns created since 2020 (see
+# reassign): incorporated places are layer 4, CDPs layer 5, county
+# subdivisions layer 1.
+_TIGERWEB = (
     "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb"
     "/Places_CouSub_ConCity_SubMCD/MapServer/{layer}/query"
 )
+_TIGERWEB_LAYERS = {"place": (4, 5), "cousub": (1,)}
 
-# WHICH GEOGRAPHY NAMES A PLACE DEPENDS ON THE STATE, and getting it
-# wrong produces a list of names nobody recognises.
-#
-# Layer 1 is County Subdivisions. In the "strong MCD" states — Census's
-# own term — those are real units of government that people live in and
-# vote in: Rhode Island has 39 towns and only 8 incorporated places, so
-# places alone would miss where four out of five Rhode Islanders live.
-#
-# Layer 4 is Incorporated Places. Everywhere else, county subdivisions
-# are statistical inventions: Georgia's are Census County Divisions with
-# names like "Fairburn-Union City CCD" that appear on no sign and in no
-# address, while its incorporated places are "Roswell city" and
-# "Alpharetta city" — what a resident would actually type.
 _STRONG_MCD_STATES = {
     "CT", "ME", "MA", "MI", "MN", "NH", "NJ", "NY", "PA", "RI", "VT", "WI",
 }
-_COUNTY_SUBDIVISION_LAYER = 1
-_INCORPORATED_PLACE_LAYER = 4
-
-# Hawaii has no incorporated municipality at all — its only local
-# governments are the four counties and the consolidated City and County
-# of Honolulu — so the incorporated-places layer returns nothing for it.
-# The places a resident names (Hilo, Kailua, Hanalei) are Census
-# Designated Places, Census's own name for exactly that case: a
-# recognised community with no municipal government.
-_CDP_STATES = {"HI"}
-_CENSUS_DESIGNATED_PLACE_LAYER = 5
-
-# Counties, used only as a fallback. A district can contain no
-# incorporated place at all — three of Georgia's 180 House districts sit
-# entirely in unincorporated county land, mostly suburban Atlanta — and
-# a district with no place name is a district nobody can find. Its
-# county is the next thing a resident there knows about themselves.
-_COUNTY_URL = (
-    "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb"
-    "/State_County/MapServer/1/query"
-)
 
 # Census fills the gaps between real towns — open water, mostly — with a
-# placeholder "subdivision" carrying this name. It is a real polygon and
-# really does overlap districts along a coast, so it survives every
-# geometric test and has to be excluded by name. Rhode Island's Newport
-# and Jamestown districts pick it up off Narragansett Bay, where it would
-# have rendered as a town nobody lives in.
+# placeholder county subdivision carrying this name. Its blocks are
+# almost all unpopulated, but a lighthouse keeper's would list a town
+# nobody lives in, so it is excluded by name.
 _NOT_A_TOWN = "County subdivisions not defined"
 
-# TIGERweb answers in Web Mercator. Passing any other inSR silently
-# returns ZERO features rather than erroring, which reads exactly like a
-# state with no districts.
-_SR = "102100"
+# The P.L. 94-171 geographic header's columns (2020 technical
+# documentation, Chapter 6), 0-based. Pipe-delimited, no header row.
+_SUMLEV, _GEOCODE, _COUNTY, _COUSUB, _PLACE, _BASENAME, _NAME, _POP = 2, 9, 14, 17, 29, 86, 87, 90
+_LAT, _LON = 92, 93  # the block's internal point
+_BLOCK, _COUNTY_ROW, _COUSUB_ROW, _PLACE_ROW = "750", "050", "060", "160"
+_NO_PLACE = "99999"
 
-# Samples per side of each town's bounding box. 260 puts ~42,000 points
-# inside a city the size of Providence, which is enough resolution for
-# its smallest real slice (district 14, 0.61% of the city) to land tens
-# of points rather than one or two.
-_GRID = 260
+# When an overlap is too small to list. Block assignment is exact, so
+# every populated overlap is real people; the floor only guards the one
+# inexactness a block file has — a block the district line cuts through
+# is assigned whole to one side (the BEF's BlockSplits list), so a
+# block's worth of residents can land in the wrong district. A populated
+# 2020 block holds a median of 26-49 people (Georgia, Texas, Rhode
+# Island, Maryland), so 50 is about one block.
+#
+# An absolute count rather than a share, deliberately. A share of the
+# place hid 265 Fayetteville residents in the neighbouring Arkansas
+# senate district (0.3% of the city), and a share of the district can't
+# work where districts are huge: 0.5% of a Texas senate seat is 4,700
+# people. Measured on the 2026 files for RI, MD, TX, AR, CA and GA, the
+# total listed moves under 2% anywhere from 1 to 250 residents, and Rhode
+# Island's town lists equal the grid method's at every value. Over-
+# listing costs a reader one extra name; under-listing hides the race
+# they vote in.
+_MIN_RESIDENTS = 50
 
-# Share of a town's interior samples a district needs to be listed for
-# it. Deliberately far below the smallest real slice measured (0.61%):
-# over-listing costs a reader one extra row to scan, while under-listing
-# hides the race they actually vote in. Only grid quantisation is being
-# filtered here, not genuine overlap.
-_MIN_SHARE = 0.0025
-
-_FIPS = {
-    "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08",
-    "CT": "09", "DE": "10", "DC": "11", "FL": "12", "GA": "13", "HI": "15",
-    "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21",
-    "LA": "22", "ME": "23", "MD": "24", "MA": "25", "MI": "26", "MN": "27",
-    "MS": "28", "MO": "29", "MT": "30", "NE": "31", "NV": "32", "NH": "33",
-    "NJ": "34", "NM": "35", "NY": "36", "NC": "37", "ND": "38", "OH": "39",
-    "OK": "40", "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46",
-    "TN": "47", "TX": "48", "UT": "49", "VT": "50", "VA": "51", "WA": "53",
-    "WV": "54", "WI": "55", "WY": "56",
+_STATES = {
+    "AL": ("01", "Alabama"), "AK": ("02", "Alaska"), "AZ": ("04", "Arizona"),
+    "AR": ("05", "Arkansas"), "CA": ("06", "California"), "CO": ("08", "Colorado"),
+    "CT": ("09", "Connecticut"), "DE": ("10", "Delaware"), "DC": ("11", "District_of_Columbia"),
+    "FL": ("12", "Florida"),
+    "GA": ("13", "Georgia"), "HI": ("15", "Hawaii"), "ID": ("16", "Idaho"),
+    "IL": ("17", "Illinois"), "IN": ("18", "Indiana"), "IA": ("19", "Iowa"),
+    "KS": ("20", "Kansas"), "KY": ("21", "Kentucky"), "LA": ("22", "Louisiana"),
+    "ME": ("23", "Maine"), "MD": ("24", "Maryland"), "MA": ("25", "Massachusetts"),
+    "MI": ("26", "Michigan"), "MN": ("27", "Minnesota"), "MS": ("28", "Mississippi"),
+    "MO": ("29", "Missouri"), "MT": ("30", "Montana"), "NE": ("31", "Nebraska"),
+    "NV": ("32", "Nevada"), "NH": ("33", "New_Hampshire"), "NJ": ("34", "New_Jersey"),
+    "NM": ("35", "New_Mexico"), "NY": ("36", "New_York"), "NC": ("37", "North_Carolina"),
+    "ND": ("38", "North_Dakota"), "OH": ("39", "Ohio"), "OK": ("40", "Oklahoma"),
+    "OR": ("41", "Oregon"), "PA": ("42", "Pennsylvania"), "RI": ("44", "Rhode_Island"),
+    "SC": ("45", "South_Carolina"), "SD": ("46", "South_Dakota"), "TN": ("47", "Tennessee"),
+    "TX": ("48", "Texas"), "UT": ("49", "Utah"), "VT": ("50", "Vermont"),
+    "VA": ("51", "Virginia"), "WA": ("53", "Washington"), "WV": ("54", "West_Virginia"),
+    "WI": ("55", "Wisconsin"), "WY": ("56", "Wyoming"),
 }
+# Abbreviation -> FIPS, also read by scripts/fetch_ces_approval.py (one state table).
+_FIPS = {state: fips for state, (fips, _folder) in _STATES.items()}
 
-_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / \
-    "state_leg_district_crosswalk.json"
+
+# ---------------------------------------------------------------------------
+# Pure functions (unit-tested with a trimmed real fixture)
+# ---------------------------------------------------------------------------
+
+
+def district_key(code: str) -> str | None:
+    """A BEF district code as parse_state_leg_office reads the same
+    district off a ballot label: leading zeros dropped ("007" -> "7"), a
+    trailing letter kept ("01A" -> "1A", Minnesota's and Maryland's
+    subdistricts), and a district named by one letter kept as that letter
+    ("00A" -> "A", Alaska's senate). A code in any other shape ("ZZZ",
+    unassigned water; Massachusetts's "D01" and Vermont's "ADD", whose
+    ballots name districts by place) belongs to no seat a contest label
+    identifies this way and is skipped rather than guessed at."""
+    code = code.strip().upper().lstrip("0")
+    return code if re.fullmatch(r"\d+[A-Z]?|[A-Z]", code) else None
+
+
+def read_geo(
+    lines: Iterable[str], strong_mcd: bool, points: dict | None = None
+) -> tuple[dict, dict]:
+    """(blocks, names) from a P.L. 94-171 geographic header.
+
+    blocks: 15-digit block GEOID -> (population, unit ids) for populated
+    blocks only — an empty block can't put anyone in a district. A unit
+    id is ("county", code), ("cousub", code) or ("place", code).
+    names: unit id -> (display name, base name).
+    points, when given, is filled with each populated block's internal
+    point as (longitude, latitude).
+    """
+    blocks: dict[str, tuple[int, tuple]] = {}
+    names: dict[tuple[str, str], tuple[str, str]] = {}
+    for line in lines:
+        f = line.rstrip("\r\n").split("|")
+        level = f[_SUMLEV]
+        if level == _BLOCK:
+            pop = int(f[_POP] or 0)
+            if not pop:
+                continue
+            units = [("county", f[_COUNTY])]
+            if strong_mcd:
+                units.append(("cousub", f[_COUSUB]))
+            if f[_PLACE] != _NO_PLACE:
+                units.append(("place", f[_PLACE]))
+            blocks[f[_GEOCODE]] = (pop, tuple(units))
+            if points is not None:
+                points[f[_GEOCODE]] = (float(f[_LON]), float(f[_LAT]))
+        elif level == _COUNTY_ROW:
+            names[("county", f[_COUNTY])] = (f[_NAME], f[_BASENAME])
+        elif level == _COUSUB_ROW and strong_mcd:
+            names[("cousub", f[_COUSUB])] = (f[_NAME], f[_BASENAME])
+        elif level == _PLACE_ROW:
+            names[("place", f[_PLACE])] = (f[_NAME], f[_BASENAME])
+    return blocks, names
+
+
+def current_names(lines: Iterable[str], state_fips: str, kind: str) -> dict[tuple[str, str], str]:
+    """Unit id -> its name today, from a Census Gazetteer file ("place"
+    or "cousub"). The blocks are 2020's, and so are the P.L. file's names,
+    but a place keeps its code when it incorporates or changes its legal
+    type, so a CDP that became a city since ("Mountain House CDP" ->
+    "Mountain House city") is named as it is now. Both codes are the
+    GEOID's last five digits."""
+    out = {}
+    for line in lines:
+        f = line.rstrip("\r\n").split("|")
+        if f[1].startswith(state_fips):
+            out[(kind, f[1][-5:])] = f[4]
+    return out
+
+
+def inside(rings: list, x: float, y: float) -> bool:
+    """Even-odd ray cast: holes and multi-part polygons need no special
+    case, since every ring's crossings count."""
+    hit = False
+    for ring in rings:
+        j = len(ring) - 1
+        for i in range(len(ring)):
+            (xi, yi), (xj, yj) = ring[i], ring[j]
+            if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+                hit = not hit
+            j = i
+    return hit
+
+
+def reassign(blocks: dict, points: Mapping[str, tuple[float, float]], polygons: Mapping[tuple, list]) -> int:
+    """Move each block whose internal point lies in one of `polygons`
+    (unit id -> rings) into that unit, in place of the 2020 unit of the
+    same kind. For the places and towns created since 2020, which the
+    2020 block file can't name: a merger (Cahokia Heights), a CDP that
+    took a new code, a town incorporated as a village. Returns the number
+    of blocks moved."""
+    boxes = []
+    for unit, rings in polygons.items():
+        xs = [p[0] for ring in rings for p in ring]
+        ys = [p[1] for ring in rings for p in ring]
+        boxes.append((min(xs), min(ys), max(xs), max(ys), unit, rings))
+    moved = 0
+    for geoid, (x, y) in points.items():
+        # A new city in a strong-MCD state is usually a new place AND a
+        # new county subdivision at once, so every kind is tried.
+        hits = {unit[0]: unit for x0, y0, x1, y1, unit, rings in boxes
+                if x0 <= x <= x1 and y0 <= y <= y1 and inside(rings, x, y)}
+        if hits:
+            pop, units = blocks[geoid]
+            blocks[geoid] = (pop, tuple(u for u in units if u[0] not in hits) + tuple(hits.values()))
+            moved += 1
+    return moved
+
+
+def crosswalk(
+    blocks: Mapping[str, tuple[int, tuple]],
+    names: Mapping[tuple[str, str], tuple[str, str]],
+    assignment: Iterable[tuple[str, str]],
+) -> dict[str, list[str]]:
+    """District key -> its names: county subdivisions, then places, then
+    counties, each group by population inside the district, largest
+    first. `assignment` streams (block GEOID, BEF district code)."""
+    overlap: collections.Counter = collections.Counter()
+    unit_pop: collections.Counter = collections.Counter()
+    for geoid, code in assignment:
+        district = district_key(code)
+        block = blocks.get(geoid)
+        if district is None or block is None:
+            continue
+        pop, units = block
+        for unit in units:
+            overlap[district, unit] += pop
+            unit_pop[unit] += pop
+
+    kept: dict[str, list[tuple[int, tuple]]] = collections.defaultdict(list)
+    for (district, unit), pop in overlap.items():
+        # A place smaller than twice the floor is listed where at least
+        # half its people live, so no hamlet is left off every district.
+        if pop >= min(_MIN_RESIDENTS, unit_pop[unit] / 2):
+            kept[district].append((pop, unit))
+
+    order = {"cousub": 0, "place": 1, "county": 2}
+    out: dict[str, list[str]] = {}
+    for district, units in kept.items():
+        units.sort(key=lambda pu: (order[pu[1][0]], -pu[0], names[pu[1]][0]))
+        town_bases = {names[u][1] for _, u in units if u[0] == "cousub"}
+        listed: list[str] = []
+        for _, unit in units:
+            name, base = names[unit]
+            name = name.removesuffix(" CDP")
+            if name == _NOT_A_TOWN or name in listed:
+                continue
+            if unit[0] == "place" and base in town_bases:
+                continue
+            listed.append(name)
+        out[district] = listed
+    return out
+
+
+# ---------------------------------------------------------------------------
+# I/O
+# ---------------------------------------------------------------------------
+
+
+def download(url: str, cache: Path) -> Path:
+    dest = cache / url.rsplit("/", 1)[1]
+    if not dest.exists():
+        print(f"downloading {url}")
+        req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
+        part = dest.with_suffix(".part")
+        # www2.census.gov resets long transfers now and then; the 100MB
+        # state files need a second try often enough to build it in.
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(req, timeout=300) as resp, open(part, "wb") as fh:
+                    while chunk := resp.read(1 << 20):
+                        fh.write(chunk)
+                break
+            except OSError:
+                if attempt == 2:
+                    raise
+                print("   connection dropped, retrying")
+        part.rename(dest)
+    return dest
 
 
 def _query(url: str, params: dict) -> dict:
-    """POST, not GET: the ring lists fetched here run to thousands of
-    points and are far past any practical URL length.
-
-    Raises on an error payload. ArcGIS reports a failed query as HTTP
-    200 with an {"error": ...} body, so a caller that just reads
-    `features` sees an empty list and cannot tell a broken request from a
-    state with nothing in it — which is exactly how Minnesota first came
-    back as "0 towns" and wrote an empty crosswalk without complaining.
-    """
-    request = urllib.request.Request(url, data=urllib.parse.urlencode(params).encode())
-    with urllib.request.urlopen(request, timeout=180) as response:
-        payload = json.loads(response.read())
-    if isinstance(payload, dict) and "error" in payload:
+    """POST (ring lists run far past any URL length). ArcGIS reports a
+    failed query as HTTP 200 with an {"error": ...} body, so that raises
+    rather than reading as "nothing there"."""
+    req = urllib.request.Request(
+        url, data=urllib.parse.urlencode(params).encode(), headers={"User-Agent": BOT_USER_AGENT}
+    )
+    with urllib.request.urlopen(req, timeout=180) as resp:
+        payload = json.loads(resp.read())
+    if "error" in payload:
         raise RuntimeError(f"TIGERweb query failed: {payload['error']}")
     return payload
 
 
-# Asking for every polygon at once fails outright above a few hundred:
-# Minnesota has 2,762 county subdivisions and that request errors rather
-# than truncating. Pages are requested explicitly instead, ordered so the
-# offsets are stable.
-_PAGE = 400
-
-
-def _query_all(url: str, params: dict) -> list[dict]:
-    """Every matching feature, paged. Stops when a page comes back short
-    AND the service is no longer flagging more to fetch, so a state that
-    fits in one page costs one request."""
-    features: list[dict] = []
-    while True:
-        payload = _query(url, {
-            **params, "resultOffset": len(features),
-            "resultRecordCount": _PAGE, "orderByFields": "OID",
-        })
-        page = payload.get("features") or []
-        features.extend(page)
-        if not page:
-            break
-        if len(page) < _PAGE and not payload.get("exceededTransferLimit"):
-            break
-    return features
-
-
-def _bbox(rings: list) -> tuple[float, float, float, float]:
-    xs = [p[0] for ring in rings for p in ring]
-    ys = [p[1] for ring in rings for p in ring]
-    return min(xs), min(ys), max(xs), max(ys)
-
-
-def _spans(rings: list, y: float) -> list[tuple[float, float]]:
-    """The x-intervals where the horizontal line at `y` is inside the
-    polygon, as sorted (start, end) pairs.
-
-    This is a scanline, and it is what makes the whole script tractable.
-    Testing each sample point against every edge would be a few billion
-    edge comparisons for one state — Rhode Island alone is 39 towns by a
-    260x260 grid against 113 district polygons. Crossing each edge ONCE
-    per row instead, and then answering every sample on that row from the
-    resulting intervals, turns that into a few million.
-
-    Sorting the crossings and pairing them off is the same even-odd rule
-    ray casting uses, so holes and multi-part towns need no special case:
-    an enclave contributes two extra crossings and simply splits the
-    interval that contained it.
-    """
-    xs = []
-    for ring in rings:
-        count = len(ring)
-        j = count - 1
-        for i in range(count):
-            xi, yi = ring[i]
-            xj, yj = ring[j]
-            if (yi > y) != (yj > y):
-                xs.append((xj - xi) * (y - yi) / (yj - yi) + xi)
-            j = i
-    xs.sort()
-    return list(zip(xs[0::2], xs[1::2]))
-
-
-def _span_lookup(spans: list[tuple[float, float, str]], x: float) -> str | None:
-    """Which district's span covers `x`. Spans on one row don't overlap
-    (districts tile the state), so a linear walk is correct; the row's
-    span count is small enough that a bisect would buy nothing."""
-    for start, end, number in spans:
-        if start <= x <= end:
-            return number
-    return None
-
-
-def _districts(state_fips: str, chamber: str) -> list[tuple[str, list, tuple]]:
-    features = _query_all(_LEG_URL.format(layer=_CHAMBER_LAYERS[chamber]), {
-        "where": f"STATE='{state_fips}'", "outFields": "BASENAME",
-        "returnGeometry": "true", "outSR": _SR, "f": "json",
-    })
-    out = []
-    for feature in features:
-        basename = (feature.get("attributes") or {}).get("BASENAME") or ""
-        rings = (feature.get("geometry") or {}).get("rings")
-        # Normalised the same way parse_state_leg_office normalises what
-        # it reads off a ballot label: leading zeros dropped, a trailing
-        # letter kept and upper-cased (Minnesota's house districts are
-        # "10A"/"10B"), and a district named by a single letter kept as
-        # that letter (Alaska's senate districts are "A" through "T",
-        # which parse_state_leg_office reads the same way). A BASENAME
-        # in any other shape belongs to a chamber that doesn't identify
-        # its seats the way the contest labels do, and is skipped rather
-        # than guessed at.
-        name = basename.strip()
-        match = re.match(r"0*(\d+)([A-Za-z]?)$", name)
-        if rings and match:
-            out.append((match.group(1) + match.group(2).upper(), rings, _bbox(rings)))
-        elif rings and re.fullmatch(r"[A-Za-z]", name):
-            out.append((name.upper(), rings, _bbox(rings)))
+def new_unit_polygons(state_fips: str, units: Iterable[tuple[str, str]]) -> dict[tuple, list]:
+    """Current TIGERweb boundaries (longitude/latitude) of the given
+    place / county subdivision ids, a batch per layer."""
+    out: dict[tuple, list] = {}
+    for kind, layers in _TIGERWEB_LAYERS.items():
+        codes = sorted(code for k, code in units if k == kind)
+        for start in range(0, len(codes), 50):
+            ids = ",".join(f"'{state_fips}{c}'" if kind == "place" else f"'{c}'" for c in codes[start:start + 50])
+            for layer in layers:
+                field = "GEOID" if kind == "place" else "COUSUB"
+                where = f"{field} IN ({ids})" + ("" if kind == "place" else f" AND STATE='{state_fips}'")
+                payload = _query(_TIGERWEB.format(layer=layer), {
+                    "where": where, "outFields": field, "returnGeometry": "true",
+                    "outSR": "4326", "geometryPrecision": "6", "f": "json",
+                })
+                for feature in payload.get("features") or []:
+                    rings = (feature.get("geometry") or {}).get("rings")
+                    if rings:
+                        out[(kind, feature["attributes"][field][-5:])] = rings
     return out
 
 
-def _towns(state: str, state_fips: str) -> list[tuple[str, list]]:
-    layer = (
-        _COUNTY_SUBDIVISION_LAYER if state in _STRONG_MCD_STATES
-        else _CENSUS_DESIGNATED_PLACE_LAYER if state in _CDP_STATES
-        else _INCORPORATED_PLACE_LAYER
-    )
-    features = _query_all(_TOWN_URL.format(layer=layer), {
-        "where": f"STATE='{state_fips}'", "outFields": "NAME",
-        "returnGeometry": "true", "outSR": _SR, "f": "json",
-    })
-    return [
-        ((f.get("attributes") or {}).get("NAME") or "", f["geometry"]["rings"])
-        for f in features
-        if (f.get("geometry") or {}).get("rings")
-        and (f.get("attributes") or {}).get("NAME") != _NOT_A_TOWN
-    ]
-
-
-def _counties(state_fips: str) -> list[tuple[str, list]]:
-    features = _query_all(_COUNTY_URL, {
-        "where": f"STATE='{state_fips}'", "outFields": "NAME",
-        "returnGeometry": "true", "outSR": _SR, "f": "json",
-    })
-    return [
-        ((f.get("attributes") or {}).get("NAME") or "", f["geometry"]["rings"])
-        for f in features if (f.get("geometry") or {}).get("rings")
-    ]
-
-
-def _towns_for_districts(towns: list, districts: list) -> dict[str, set[str]]:
-    covers: dict[str, set[str]] = collections.defaultdict(set)
-    for name, rings in towns:
-        if not name:
-            continue
-        x0, y0, x1, y1 = _bbox(rings)
-        # Narrow to the districts whose bounding box overlaps this town's
-        # AT ALL, once, before touching a single row. Filtering per row on
-        # latitude alone still re-scanned every district on the far side
-        # of the state: Minnesota has 2,762 county subdivisions against
-        # 201 districts, and without this the run does not finish in any
-        # useful time. A township typically overlaps one or two.
-        nearby = [
-            (number, drings, box) for number, drings, box in districts
-            if box[0] <= x1 and box[2] >= x0 and box[1] <= y1 and box[3] >= y0
-        ]
-        hits: collections.Counter = collections.Counter()
-        sampled = 0
-        for j in range(_GRID):
-            y = y0 + (y1 - y0) * (j + 0.5) / _GRID
-            town_spans = _spans(rings, y)
-            if not town_spans:
-                continue
-            # Of those, only the ones this row actually crosses.
-            row_spans = []
-            for number, drings, (bx0, by0, bx1, by1) in nearby:
-                if by0 <= y <= by1:
-                    row_spans.extend((s0, s1, number) for s0, s1 in _spans(drings, y))
-            for i in range(_GRID):
-                x = x0 + (x1 - x0) * (i + 0.5) / _GRID
-                if not any(s0 <= x <= s1 for s0, s1 in town_spans):
+def bef_rows(zip_path: Path, state: str, fips: str) -> Iterator[tuple[str, str]]:
+    """(GEOID, district code) for one state's blocks: from the state's
+    corrected file when the archive has one ("27_MN_SLDU26.txt"), else
+    from the national file, which is sorted by GEOID so reading stops
+    once the state is passed."""
+    with zipfile.ZipFile(zip_path) as zf:
+        members = zf.namelist()
+        corrected = [m for m in members if m.startswith(f"{fips}_{state}_")]
+        member = corrected[0] if corrected else next(m for m in members if m.startswith("National"))
+        with zf.open(member) as raw:
+            reader = io.TextIOWrapper(raw, encoding="utf-8-sig")
+            next(reader)
+            seen = False
+            for line in reader:
+                if not line.startswith(fips):
+                    if seen:
+                        return
                     continue
-                sampled += 1
-                number = _span_lookup(row_spans, x)
-                if number is not None:
-                    hits[number] += 1
-        if not sampled:
+                seen = True
+                parts = line.rstrip("\r\n").split(",")
+                yield parts[0], parts[5]
+
+
+def build_state(state: str, cache: Path) -> dict[str, list[str]]:
+    fips, folder = _STATES[state]
+    pl = download(_PL.format(folder=folder, st=state.lower()), cache)
+    strong_mcd = state in _STRONG_MCD_STATES
+    points: dict[str, tuple[float, float]] = {}
+    with zipfile.ZipFile(pl) as zf, zf.open(f"{state.lower()}geo2020.pl") as raw:
+        blocks, names = read_geo(io.TextIOWrapper(raw, encoding="latin-1"), strong_mcd, points)
+    created: dict[tuple, str] = {}
+    for kind, url in _GAZETTEER.items():
+        if kind == "cousub" and not strong_mcd:
             continue
-        for number, count in hits.items():
-            if count / sampled >= _MIN_SHARE:
-                covers[number].add(name)
-    return covers
+        with zipfile.ZipFile(download(url, cache)) as zf, zf.open(zf.namelist()[0]) as raw:
+            for unit, name in current_names(io.TextIOWrapper(raw, encoding="utf-8"), fips, kind).items():
+                if unit in names:
+                    names[unit] = (name, names[unit][1])
+                else:
+                    created[unit] = name
+    if created:
+        polygons = new_unit_polygons(fips, created)
+        for unit in polygons:
+            # The base name only matters for matching a place against a
+            # town of the same name; the legal type is the last word.
+            names[unit] = (created[unit], created[unit].rsplit(" ", 1)[0])
+        moved = reassign(blocks, points, polygons)
+        print(f"   {state}: {len(created)} place(s)/town(s) since 2020, "
+              f"{len(polygons)} found on TIGERweb, {moved} blocks moved into them")
+    del points
+    out: dict[str, list[str]] = {}
+    for chamber, prefix in _CHAMBER_FILES.items():
+        bef = download(_BEF.format(chamber=prefix), cache)
+        seats = crosswalk(blocks, names, bef_rows(bef, state, fips))
+        print(f"   {state} {chamber}: {len(seats)} districts")
+        out.update({f"{state}-{chamber}-{number}": listed for number, listed in seats.items()})
+    if not out:
+        raise SystemExit(f"{state}: no districts — refusing to write an empty crosswalk")
+    return out
 
 
-def main() -> int:
-    states = [s.upper() for s in sys.argv[1:]]
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("states", nargs="*")
+    parser.add_argument("--existing", action="store_true", help="rebuild every state already in the file")
+    parser.add_argument("--cache", type=Path, default=Path.home() / ".cache" / "civitas-census")
+    args = parser.parse_args(argv)
+
+    existing = json.loads(OUTPUT.read_text()).get("districts", {}) if OUTPUT.exists() else {}
+    states = [s.upper() for s in args.states]
+    if args.existing:
+        states += sorted({key.split("-")[0] for key in existing})
     if not states:
-        print(__doc__)
+        parser.print_help()
         return 2
-
-    existing = {}
-    if _OUTPUT.exists():
-        existing = json.loads(_OUTPUT.read_text()).get("districts", {})
+    unknown = [s for s in states if s not in _STATES]
+    if unknown:
+        print(f"unknown state(s): {', '.join(unknown)}")
+        return 1
+    args.cache.mkdir(parents=True, exist_ok=True)
 
     districts_out = dict(existing)
-    for state in states:
-        fips = _FIPS.get(state)
-        if not fips:
-            print(f"unknown state {state}")
-            return 1
-        towns = _towns(state, fips)
-        if not towns:
-            print(f"{state}: no towns returned — refusing to write an empty crosswalk")
-            return 1
-        unit = "towns" if state in _STRONG_MCD_STATES else "places"
-        print(f"{state}: {len(towns)} {unit}")
+    for state in dict.fromkeys(states):
+        built = build_state(state, args.cache)
         # Rebuild this state from scratch so a district that disappeared
         # in a remap doesn't survive as a stale entry.
-        districts_out = {k: v for k, v in districts_out.items()
-                         if not k.startswith(f"{state}-")}
-        counties = None
-        for chamber in ("upper", "lower"):
-            seats = _districts(fips, chamber)
-            covers = _towns_for_districts(towns, seats)
-            # Only the districts that came back empty are re-run against
-            # counties, so a district that HAS places keeps the tighter,
-            # more recognisable list.
-            uncovered = [d for d in seats if d[0] not in covers]
-            if uncovered:
-                if counties is None:
-                    counties = _counties(fips)
-                # Roles swapped deliberately: the districts play the part
-                # of "towns" and the counties the part of "districts", so
-                # the share is measured against the DISTRICT. Asked the
-                # other way round, a small district inside a large county
-                # covers a fraction of a percent of it and is dropped —
-                # leaving the district uncovered, which is the one thing
-                # this fallback exists to prevent.
-                by_county = _towns_for_districts(
-                    [(number, rings) for number, rings, _box in uncovered],
-                    [(name, rings, _bbox(rings)) for name, rings in counties],
-                )
-                for county_name, district_numbers in by_county.items():
-                    for number in district_numbers:
-                        covers.setdefault(number, set()).add(county_name)
-                print(f"   {chamber}: {len(uncovered)} district(s) had no place; "
-                      f"fell back to counties")
-            for number, names in covers.items():
-                districts_out[f"{state}-{chamber}-{number}"] = sorted(names)
-            print(f"   {chamber}: {len(seats)} seats, {len(covers)} with coverage")
+        districts_out = {k: v for k, v in districts_out.items() if not k.startswith(f"{state}-")}
+        districts_out.update(built)
 
-    _OUTPUT.write_text(json.dumps({
+    OUTPUT.write_text(json.dumps({
         "_source": (
-            "U.S. Census Bureau TIGERweb: current-vintage state legislative "
-            "district polygons (TIGERweb/Legislative layers 1 and 2) against "
-            "county-subdivision polygons, resolved by point sampling inside "
-            "each town. See scripts/fetch_state_leg_crosswalk.py for why the "
-            "block assignment files and a plain spatial intersect both give "
-            "wrong answers here."
+            "U.S. Census Bureau: the Redistricting Data Office's 2026 state legislative "
+            "Block Equivalency Files (sldu26.zip / sldl26.zip, August 2026, national files "
+            "with the corrected per-state files replacing their rows), joined on the 2020 "
+            "Census block to the 2020 P.L. 94-171 geographic header (block population, "
+            "county, county subdivision and place, with their names). A district lists the "
+            "county subdivisions (strong-MCD states only), places (incorporated places and "
+            f"Census Designated Places) and counties with at least {_MIN_RESIDENTS} 2020 "
+            "residents inside the district (or half the residents of a smaller place), "
+            "named as in the Census Bureau's 2025 Gazetteer files. Generated by "
+            "backend/scripts/fetch_state_leg_crosswalk.py."
         ),
         "districts": dict(sorted(districts_out.items())),
-    }, indent=1, sort_keys=False) + "\n")
-    print(f"wrote {_OUTPUT} ({len(districts_out)} districts)")
+    }, indent=1) + "\n")
+    print(f"wrote {OUTPUT} ({len(districts_out)} districts)")
     return 0
 
 

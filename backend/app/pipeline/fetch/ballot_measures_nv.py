@@ -156,6 +156,28 @@ def _body_lines(pages: list[str], year: int) -> list[str]:
     return out
 
 
+# A fiscal note's own headings ("FINANCIAL IMPACT – CANNOT BE DETERMINED",
+# "OVERVIEW", "FINANCIAL IMPACT OF THE INITIATIVE"): a line set wholly in
+# capitals. They were run into the prose ("... DETERMINED OVERVIEW The
+# Statewide ..."); each heading and each paragraph under it now keeps its
+# own line, and the booklet's bullets theirs. No word is changed.
+_FISCAL_HEADING_RE = re.compile(r"^[A-Z][A-Z ,'’()–-]*[A-Z)]$")
+
+
+def _fiscal_text(lines: list[str]) -> str | None:
+    blocks: list[list[str]] = []
+    for line in lines:
+        heading = bool(_FISCAL_HEADING_RE.match(line)) and any(len(w) >= 4 for w in line.split())
+        if heading or not blocks or blocks[-1][0] == "\0heading":
+            blocks.append(["\0heading", line] if heading else [line])
+        else:
+            blocks[-1].append(line)
+    text = "\n".join(
+        b[1] if b[0] == "\0heading" else (join_lines(b) or "") for b in blocks
+    )
+    return re.sub(r"\s*•\s*", "\n• ", text).strip() or None
+
+
 def _between(lines: list[str], start: int, stop) -> tuple[list[str], int]:
     out = []
     i = start
@@ -200,7 +222,7 @@ def _read_section(number: str, lines: list[str]) -> dict | None:
         "official_title": None,
         "origin": petition,
         "official_summary": summary,
-        "fiscal_impact": join_lines(fiscal_lines + [lines[end]]),
+        "fiscal_impact": _fiscal_text(fiscal_lines + [lines[end]]),
         "yes_means": join_lines(yes_lines),
         "no_means": join_lines(no_lines),
         "title_authority": TITLE_AUTHORITY,

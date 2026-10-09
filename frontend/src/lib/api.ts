@@ -38,11 +38,16 @@ const TTL = {
    * Action Center data long after the backend's own header had been
    * shortened to fix exactly that). */
   VOLATILE: 30_000, // 30 sec
-  /** Directory/leaderboard lists — refreshed a couple times per session. */
+  /** Directory/leaderboard lists, and anything a rescore moves beside the
+   * scorecard (score history, signal overlap): the backend serves these
+   * for CACHE_TTL_DETAIL_S (2 min). Score history once sat in LONG, so a
+   * page's trend could show the night before's score for an hour after
+   * the scorecard beside it had moved. */
   SHORT: 120_000, // 2 min
   /** Deterministic derived data (score breakdowns, monitors) — changes at most daily. */
   MEDIUM: 300_000, // 5 min
-  /** Rarely-changing reference data (score history, elections, open comments). */
+  /** Rarely-changing reference data (elections, open comments). Never
+   * longer than the endpoint's own Cache-Control max-age. */
   LONG: 3_600_000, // 1 hour
 } as const;
 
@@ -1723,7 +1728,7 @@ export async function setPoliticianVacancy(
 /** The post-run check that related score components still measure
  * different things. Refreshed by each pipeline run. */
 export async function fetchSignalOverlap(): Promise<SignalOverlap> {
-  return cachedFetch<SignalOverlap>(`${API_BASE}/signal-overlap`, TTL.LONG);
+  return cachedFetch<SignalOverlap>(`${API_BASE}/signal-overlap`, TTL.SHORT);
 }
 
 export async function fetchConfig(): Promise<AppConfig> {
@@ -1789,17 +1794,17 @@ export interface ScoreHistory {
 
 export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHistory> {
   const url = `${API_BASE}/senators/${senatorId}/history`;
-  return withShape<ScoreHistory>(await cachedFetch(url, TTL.LONG), { lists: ["snapshots"] }, url);
+  return withShape<ScoreHistory>(await cachedFetch(url, TTL.SHORT), { lists: ["snapshots"] }, url);
 }
 
 export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHistory> {
   const url = `${API_BASE}/representatives/${repId}/history`;
-  return withShape<ScoreHistory>(await cachedFetch(url, TTL.LONG), { lists: ["snapshots"] }, url);
+  return withShape<ScoreHistory>(await cachedFetch(url, TTL.SHORT), { lists: ["snapshots"] }, url);
 }
 
 export async function fetchPresidentHistory(presidentId: string): Promise<ScoreHistory> {
   const url = `${API_BASE}/presidents/${presidentId}/history`;
-  return withShape<ScoreHistory>(await cachedFetch(url, TTL.LONG), { lists: ["snapshots"] }, url);
+  return withShape<ScoreHistory>(await cachedFetch(url, TTL.SHORT), { lists: ["snapshots"] }, url);
 }
 
 export interface OpenCommentItem {
@@ -1808,7 +1813,6 @@ export interface OpenCommentItem {
   agencyName: string | null;
   commentsCloseOn: string;
   commentUrl: string;
-  policyAreas: string[];
   docType: string;
   date: string;
   summary: string;
@@ -1855,7 +1859,10 @@ export async function fetchLiveResults(state?: string): Promise<LiveResults> {
 export async function fetchPviMap(): Promise<PviMap> {
   // `states` and `districts` are maps, not lists, and callers index into them
   // directly — an absent one has to arrive as {} rather than undefined.
-  const raw = asRecord(await cachedFetch(`${API_BASE}/elections/pvi`, TTL.LONG));
+  // VOLATILE, not LONG: the response carries the election's date and cycle,
+  // which the backend caches for 30 s around election day (phase_cache_s)
+  // so the switch reaches readers promptly; an hour here undid that.
+  const raw = asRecord(await cachedFetch(`${API_BASE}/elections/pvi`, TTL.VOLATILE));
   return {
     ...raw,
     states: asRecord(raw.states),
@@ -1873,7 +1880,7 @@ export async function fetchTownsForState(state: string): Promise<TownEntry[]> {
   // without a name) once crashed the whole state page at `towns.length`.
   // Anything unusable is no towns, and the page hides the town selector.
   const { towns } = withShape<{ towns: TownEntry[] }>(
-    await cachedFetch(url, TTL.LONG),
+    await cachedFetch(url, TTL.SHORT),
     { lists: ["towns"] },
     url
   );

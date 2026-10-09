@@ -1,13 +1,8 @@
 """Tests for New Mexico's strategy (ballot_measures_nm.py).
 
-fixtures_nm_2026.json is REAL — extract_text() of, fetched 2026-09-28:
-- amendments_pages: pages 5, 6, 10, 14, 22 and 27 of nmlegis.gov's
-  Constitutional_Amendments_2026.pdf (the "(ballot text)" page, the
-  General Information page that ends it, and each amendment's
-  "▸ SUMMARY" page — page footers included, as printed);
-- bond_act_pages: PDF pages 23-25 of the FINAL version of HB 248 (2026),
-  the 2026 Capital Projects General Obligation Bond Act, with the
-  legislature's line numbers and running committee tag as printed.
+fixtures_nm_sos_questions_2026.json is REAL (see its _source): the
+Secretary of State's 2026 statewide amendments and bond questions
+publication, extract_text() per page, and the home page's links to it.
 """
 
 import json
@@ -16,101 +11,83 @@ from pathlib import Path
 import pytest
 
 from app.pipeline.fetch import ballot_measures_nm as nm
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished
 
-FIXTURE = json.loads((Path(__file__).parent / "fixtures_nm_2026.json").read_text())
-AMEND = list(FIXTURE["amendments_pages"].values())
-BOND = list(FIXTURE["bond_act_pages"].values())
+FIXTURE = json.loads((Path(__file__).parent / "fixtures_nm_sos_questions_2026.json").read_text())
+PAGES = FIXTURE["pages"]
 
 
-def test_four_amendments_with_their_ballot_text_as_the_official_title():
-    measures = nm.parse_amendments(AMEND)
-    assert [m["number"] for m in measures] == ["1", "2", "3", "4"]
+def test_amendments_and_bond_questions_in_the_ballots_own_wording():
+    measures = nm.parse_publication(PAGES, 2026)
+    assert [m["number"] for m in measures] == ["1", "2", "3", "4", "Bond Question 1", "Bond Question 2", "Bond Question 3"]
     one = measures[0]
     assert one["title"] == "Constitutional Amendment 1"
+    # Sentence case, as the printed ballot reads — not the joint
+    # resolution's title in capitals, which the Legislative Council
+    # Service's publication prints.
     assert one["official_title"].startswith(
-        "PROPOSING AN AMENDMENT TO ARTICLE 4, SECTION 22 OF THE CONSTITUTION OF NEW MEXICO"
+        "Proposing an amendment to Article 4, Section 22 of the Constitution of New Mexico"
     )
-    assert one["official_title"].endswith("WILL BECOME LAW.")
+    assert one["official_title"].endswith("will become law.")
+    bond = measures[4]
+    assert bond["title"] == (
+        "The 2026 Capital Projects General Obligation Bond Act authorizes the issuance and sale of senior "
+        "citizen facility improvement, construction and equipment acquisition bonds."
+    )
+    assert bond["official_summary"].endswith("collection of the tax as permitted by law?")
+    assert "($21,582,213)" in bond["official_summary"]
     for m in measures:
-        # One drafter per quote: the Legislature's ballot text, never
-        # joined with the Legislative Council Service's summary under a
-        # shared attribution.
-        assert m["title_authority"] == "New Mexico Legislature"
-        assert m["official_summary"] is None
-        assert "SUMMARY of Proposed" not in m["official_title"]
-        assert "SUMMARY OF AND ARGUMENTS FOR AND AGAINST" not in m["official_title"]
-        assert m["yes_means"] is None and m["no_means"] is None
+        assert "Enmienda" not in str(m) and "Pregunta" not in str(m)
+        assert m["yes_means"] is None and m["fiscal_impact"] is None
 
 
-def test_an_item_line_in_another_shape_is_refused_not_folded_into_the_previous_one():
-    """The regression: "Constitutional Amendment 3: <text>" on one line
-    didn't match the item pattern, so #3's ballot text was appended to
-    #2's and #3 vanished — and its summary section was never checked
-    against a ballot-text item."""
-    pages = [AMEND[0].replace("Constitutional Amendment 3:\n\"PROPOSING", "Constitutional Amendment 3: \"PROPOSING")] + AMEND[1:]
-    assert pages[0] != AMEND[0]
-    with pytest.raises(ValueError):
-        nm.parse_amendments(pages)
+def test_refuses_another_years_publication():
+    assert nm.parse_publication(PAGES, 2028) is None
 
 
-def test_summary_sections_must_match_the_ballot_text_items():
-    # A summary for an amendment with no ballot-text item.
-    extra = AMEND + ["▸ SUMMARY of Proposed Constitutional Amendment 5\nSomething.\n▸ BACKGROUND AND INFORMATION"]
-    with pytest.raises(ValueError):
-        nm.parse_amendments(extra)
-    # A summary heading in a shape the reader doesn't know.
-    odd = AMEND[:-1] + [AMEND[-1].replace("▸ SUMMARY of Proposed Constitutional Amendment 4", "▸ SUMMARY of Amendment 4")]
-    with pytest.raises(ValueError):
-        nm.parse_amendments(odd)
+def test_a_question_missing_from_the_english_half_is_caught_by_the_spanish_count():
+    english = PAGES[1].replace("Bond Question 3\n", "")
+    assert english != PAGES[1]
+    assert nm.parse_publication([PAGES[0], english] + PAGES[2:], 2026) is None
 
 
-def test_amendment_without_a_summary_section_fails():
-    with pytest.raises(ValueError):
-        nm.parse_amendments(AMEND[:2])
+def test_an_item_in_another_shape_is_refused():
+    reshaped = PAGES[0].replace("Constitutional Amendment 2:\n", "Constitutional Amendment 2: ")
+    assert reshaped != PAGES[0]
+    assert nm.parse_publication([reshaped] + PAGES[1:], 2026) is None
 
 
-def test_bond_questions_come_from_the_final_act_with_line_numbers_stripped():
-    bonds = nm.parse_bond_act(BOND, "HB 248")
-    assert [b["number"] for b in bonds] == ["HB 248 (1)", "HB 248 (2)", "HB 248 (3)"]
-    senior = bonds[0]
-    assert senior["title"] == (
-        "The 2026 Capital Projects General Obligation Bond Act authorizes the issuance and sale "
-        "of senior citizen facility improvement, construction and equipment acquisition bonds."
-    )
-    # The FINAL act's amount — not the introduced bill's $30,000,000.
-    assert "($21,582,213)" in senior["official_summary"]
-    assert "three hundred fifty-two million two hundred twenty-five thousand" in bonds[2]["official_summary"]
-    for b in bonds:
-        assert b["official_summary"].endswith("as permitted by law?")
-        assert "HTRC" not in b["official_summary"] and "For___" not in b["official_summary"]
-
-
-def test_a_bond_item_the_question_pattern_misses_refuses_the_act():
-    """findall only raised on ZERO questions; one item worded outside the
-    pattern dropped out of the list silently."""
-    reworded = [p.replace("Obligation Bond Act authorizes the issuance and sale of\n10 library", "Obligation Bond Act provides for the issuance and sale of\n10 library") for p in BOND]
-    assert reworded != BOND
-    with pytest.raises(ValueError):
-        nm.parse_bond_act(reworded, "HB 248")
+def test_the_home_page_link_is_found():
+    url, ok = nm.find_publication_url(FIXTURE["home_links"], 2026)
+    assert ok and url.endswith("-2026-CA-and-GOB-Questions-final.pdf")
+    assert nm.find_publication_url(FIXTURE["home_links"], 2028) == (None, True)
 
 
 @pytest.mark.asyncio
-async def test_no_configured_bond_act_is_a_failure_not_an_amendments_only_list(monkeypatch):
-    monkeypatch.setattr(nm, "source_for_state", lambda st: {"bond_acts": {}})
-    assert await nm.fetch_measures(None, 2026) is None
+async def test_fetch_paths(monkeypatch):
+    page = {"html": FIXTURE["home_links"]}
 
+    async def get_text(client, url, label, **kw):
+        return page["html"]
 
-@pytest.mark.asyncio
-async def test_fetch_returns_amendments_then_bonds(monkeypatch):
-    monkeypatch.setattr(nm, "source_for_state", lambda st: {
-        "bond_acts": {"2026": {"bill": "HB 248", "url": "https://example.test/HB0248.pdf"}},
-    })
+    async def get_bytes(client, url, label, **kw):
+        return b"%PDF-fixture"
 
-    async def fake_pages(client, url, label):
-        return BOND if url.endswith("HB0248.pdf") else AMEND
+    class _Pdf:
+        pages = [type("P", (), {"extract_text": (lambda self, t=t: t)})() for t in PAGES]
 
-    monkeypatch.setattr(nm, "_pdf_pages_text", fake_pages)
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(nm, "get_text", get_text)
+    monkeypatch.setattr(nm, "get_bytes", get_bytes)
+    monkeypatch.setattr(nm.pdfplumber, "open", lambda f: _Pdf())
     pairs = await nm.fetch_measures(None, 2026)
-    assert len(pairs) == 7
-    assert pairs[0][1] == nm.AMENDMENTS_URL_PATTERN.format(year=2026)
-    assert pairs[-1][1] == "https://example.test/HB0248.pdf"
+    assert len(pairs) == 7 and all(url.endswith(".pdf") for _, url in pairs)
+
+    page["html"] = "<html><body><a href='/x.pdf'>2026 Voter Guide</a></body></html>"
+    with pytest.raises(NotYetPublished):
+        await nm.fetch_measures(None, 2026)

@@ -1,7 +1,6 @@
 """Service layer for House representative data — mirrors senator_service.py."""
 
 import json
-import math
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
@@ -19,6 +18,7 @@ from app.models import (
     Representative,
 )
 from app.pipeline.analyze.score_calculator import NON_INDUSTRY_CODES, compute_overall_score
+from app.score_display import displayed_score
 from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
@@ -311,10 +311,8 @@ REP_LEADERBOARD_SORTS: dict[str, str] = {
 
 
 def _half_up(x: float) -> float:
-    """Math.round's rounding (half away from zero for these non-negative
-    values). Python's round() rounds half to even, so 56.5 would rank as 56
-    here while the page shows 57."""
-    return float(math.floor(x + 0.5))
+    """The value as the page shows it (score_calculator.displayed_score)."""
+    return float(displayed_score(x))
 
 
 def _rep_sort_value(r, sort: str) -> float | None:

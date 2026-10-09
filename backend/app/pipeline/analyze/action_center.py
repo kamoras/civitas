@@ -86,6 +86,7 @@ from app.pipeline.vector_store import (
 from app.pipeline.analyze.lobbying_records import bill_mentions, names_bill
 from app.services.bill_service import bill_title_lists, names_phrase, short_title_index
 from app.time_utils import utcnow
+from app.timeline_entries import without_repeat_leads
 
 _US_EAST = ZoneInfo("America/New_York")
 
@@ -2563,6 +2564,7 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         .order_by(TimelineEntry.date)
         .all()
     )
+    recent_entries = without_repeat_leads(recent_entries)
 
     # Group by the full ISO (year, week) pair, not week number alone:
     # late-December dates can belong to ISO week 1 of the NEXT year (and
@@ -2667,6 +2669,7 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         .order_by(TimelineEntry.date)
         .all()
     )
+    past_year_entries = without_repeat_leads(past_year_entries)
     past_years: dict[int, list] = {}
     for e in past_year_entries:
         yr = int(e.date[:4])

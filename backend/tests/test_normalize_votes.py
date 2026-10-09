@@ -138,6 +138,21 @@ class TestNormalizeVotes:
         assert result["keyVotes"][0]["vote"] == "Yea"
         assert result["keyVotes"][1]["vote"] == "Nay"
 
+    def test_an_independents_recorded_caucus_decides_their_party_line(self):
+        """The House Clerk records an independent's caucus; it decides over
+        inference (which here has too few votes to say anything)."""
+        bills = [{"billId": "hr1", "billName": "Bill 1", "policyArea": "DEFENSE", "stance": "x",
+                  "partyLeaning": "R", "partySplit": "R", "description": ""}]
+        votes = {"hr1": "Nay"}
+        assert normalize_votes("B001", bills, votes, "I")["effectiveParty"] == "I"
+        recorded = normalize_votes("B001", bills, votes, "I", declared_caucus="R")
+        assert recorded["effectiveParty"] == "R"
+        assert recorded["votedAgainstPartyCount"] == 1
+        # A caucus of none is taken as recorded; a major-party member's own
+        # party stands whatever the field says.
+        assert normalize_votes("B001", bills, votes, "I", declared_caucus="I")["effectiveParty"] == "I"
+        assert normalize_votes("B001", bills, votes, "D", declared_caucus="R")["effectiveParty"] == "D"
+
     def test_party_loyalty_calculation(self):
         bills = [
             {"billId": f"hr{i}", "billName": f"Bill {i}", "policyArea": "DEFENSE",

@@ -121,11 +121,13 @@ async def test_fetch_dispatches_to_the_registered_strategy_and_caches(monkeypatc
 
     client = SimpleNamespace(get=fake_get)
     result = await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2026, "2026-11-03")
-    assert result == [pdf._to_measure(
+    # Each measure carries its place in the state's own list, which the
+    # page sorts by.
+    assert result == [{**pdf._to_measure(
         "ZZ", {"number": "1", "title": "T", "origin": None, "official_summary": "S",
                "fiscal_impact": None, "yes_means": None, "no_means": None},
         "2026-11-03", "https://example.com/2026/ballot.pdf",
-    )]
+    ), "source_position": 0}]
 
     # Second call must hit the cache, not fetch again.
     async def fail_get(*a, **kw):
@@ -368,7 +370,7 @@ async def test_fetch_dispatches_to_a_multi_document_strategy_and_caches(monkeypa
     monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", fake_multi)
 
     result = await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03")
-    assert result == [pdf._to_measure("ZZ", parsed, "2026-11-03", "https://example.com/q1.pdf")]
+    assert result == [{**pdf._to_measure("ZZ", parsed, "2026-11-03", "https://example.com/q1.pdf"), "source_position": 0}]
 
     # Second call must hit the cache, not call the strategy again.
     async def fail_multi(client, year):

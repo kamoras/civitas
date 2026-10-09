@@ -111,13 +111,14 @@ describe("RaceMoneyBars", () => {
     expect(screen.queryByText(/SITTING MEMBER|INCUMBENT/)).not.toBeInTheDocument();
   });
 
-  it("links an incumbent's representation score", () => {
+  it("links an incumbent's representation score, shown as the scorecard shows it", () => {
+    // 42.5 is 43 on the scorecard; one decimal here read 42.5.
     render(
-      <RaceMoneyBars candidates={[cand({ incumbentRecord: { id: "brian-jack", score: 42.42 } })]} />
+      <RaceMoneyBars candidates={[cand({ incumbentRecord: { id: "member-a", score: 42.5 } })]} />
     );
     const link = screen.getByRole("link");
-    expect(link).toHaveAttribute("href", "/politicians/brian-jack");
-    expect(screen.getByText("42.4")).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "/politicians/member-a");
+    expect(screen.getByText("43")).toBeInTheDocument();
   });
 
   it("badges unconfirmed entries only when the race asks for it", () => {

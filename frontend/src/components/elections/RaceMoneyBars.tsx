@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { BallotCandidate } from "@/types/election";
-import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
+import { cashOnHandDisplay, displayScore, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
 import { candidateName, incumbencyLabel, raisedLabel } from "@/lib/elections";
@@ -106,8 +106,8 @@ export default function RaceMoneyBars({
                 className="mt-1.5 inline-block font-mono text-[11px] text-ink-lo hover:text-phos"
               >
                 representation score{" "}
-                <span className={getScoreColor(c.incumbentRecord.score)}>
-                  {c.incumbentRecord.score.toFixed(1)}
+                <span className={getScoreColor(displayScore(c.incumbentRecord.score))}>
+                  {displayScore(c.incumbentRecord.score)}
                 </span>{" "}
                 →
               </Link>

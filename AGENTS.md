@@ -152,11 +152,13 @@ of these approaches:
 - **Statistical formulas** with shrinkage toward neutral for scoring metrics
 - **LLM inference** for tasks that require natural language synthesis from
   unstructured input: Action Center claim location (verbatim-checked),
-  monitor significance and merge decisions, timeline period summaries,
-  Bluesky spotlight and weekly-summary text (issue posts are the verified
-  lede, verbatim), early-signal vote drafts, on-request Explore document
-  summaries (`POST /api/explore/{id}/summary`, a write), and justice profile
-  summaries. Never a score, and never ballot content (§7). (Per-senator/rep
+  monitor significance, category and borderline-match decisions (merging is
+  title similarity alone), timeline period summaries, locating the actor and
+  predicate in a race's coverage for its post (`election_bluesky.py`,
+  verbatim spans), and on-request Explore document summaries
+  (`POST /api/explore/{id}/summary`, a write). Spotlight, issue and
+  early-signal posts are fixed templates around stored figures or verified
+  ledes, and the justice profile carries no generated summary. Never a score, and never ballot content (§7). (Per-senator/rep
   narrative generation and promise evaluation used to be LLM-based; both
   were removed in 2026-07 after live audits found the output unreliable
   regardless of prompting approach — see `cross_reference.py`'s and
@@ -210,7 +212,7 @@ the residual.
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
-| 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims and summaries, Bluesky posts, Explore document summaries, justice profiles (full list in the bullet above) |
+| 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor decisions and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
 employee PAC or a purely political PAC), the system defers to tier 2
@@ -253,6 +255,12 @@ The learning store upserts always overwrite prior entries (no confidence
 guards), ensuring the current run's classifications take precedence. Within
 a single pipeline run, this is harmless because learning store lookups
 short-circuit re-classification of already-seen entities.
+
+A donor's industry is taken from kNN only when all seven neighbours agree
+(`donor_classifier_ai._KNN_K`, `min_agreement`): measured 2026-10-09 on
+record-labelled PAC sponsors the prototype tier abstains on, a plurality
+vote was right 29% of the time at every similarity floor, and a wrong
+industry is worse than an unclassified one.
 
 kNN's own outputs (`source == KNN_SOURCE`) are stored for lookup but are
 **never used as kNN reference examples** — only labels from an upstream tier
@@ -797,11 +805,11 @@ What this rules in and out:
   picker); linking out to the official lookup for a reader who wants a
   precinct-exact answer. Where a district needs to be findable, give it
   place names a person already knows and let them filter: counties for a
-  U.S. House seat (`county_district_crosswalk.json`), towns for a state
-  legislative one (`state_leg_district_crosswalk.json`). Building that
-  crosswalk is real work — `scripts/fetch_state_leg_crosswalk.py`
-  documents why three obvious sources give wrong answers — and doing it
-  is the price of not asking.
+  U.S. House seat (`county_district_crosswalk.json`), towns, communities
+  (incorporated places and Census Designated Places) and counties for a
+  state legislative one (`state_leg_district_crosswalk.json`, a block-level
+  join documented in `scripts/fetch_state_leg_crosswalk.py`). Building
+  those crosswalks is real work, and doing it is the price of not asking.
 - **In:** following Civitas without an account. The Atom feeds (`/feeds`)
   are pulled, and a topic or state is chosen by which URL a reader
   subscribes to, so there is no subscriber list to keep. A push channel
@@ -929,8 +937,7 @@ Each member pipeline executes in 4 phases per chamber, defined in
    — no LLM call (campaign-promise analysis and per-senator narrative
    generation were both LLM-based here until removed in 2026-07 for
    unreliable output; see `cross_reference.py` and `policy_alignment.py`).
-   Justice impartiality scoring (separate phase) still uses the LLM for a
-   9-justice profile summary.
+   Justice scoring (separate phase) makes no LLM call either.
 4. **ASSEMBLE + SAVE** — Build scorecards for senators, presidents, and
    justices; validate via `assemble/validator.py`; persist to SQLite
 
@@ -1267,7 +1274,9 @@ the pending list).
 | Bill policy area + stance derivation (embedding-based) | `backend/app/pipeline/analyze/bill_analyzer.py` |
 | Commemorative bill detection (LES 1x tier; calibrated threshold) | `backend/app/pipeline/analyze/commemorative.py` + `backend/scripts/calibrate_commemorative.py` |
 | Party alignment (content-based) + partisan depth | `backend/app/pipeline/analyze/party_platform.py` |
-| Caucus inference (votes + cosponsorship) | `backend/app/pipeline/transform/normalize_votes.py` |
+| Caucus: the House Clerk's recorded caucus, else inference (votes + cosponsorship) | `backend/app/pipeline/fetch/house_clerk.py` (`parse_caucuses`), `backend/app/pipeline/transform/normalize_votes.py` |
+| Committee seats and leadership titles (congress-legislators; the Clerk's list decides the House posts it names) | `backend/app/pipeline/fetch/committee_leadership.py`, `backend/app/pipeline/fetch/house_leadership.py` |
+| Donor name casing (learned from Federal Register prose) | `backend/app/pipeline/transform/normalize_finance.py` (`_clean_donor_name`), `backend/scripts/build_name_casing.py`, `backend/app/data/name_casing.json` |
 | kNN classifier + inverse-freq balancing | `backend/app/pipeline/analyze/nn_classifier.py` |
 | Sponsorship analysis (PageRank leadership + SVD ideology) | `backend/app/pipeline/analyze/sponsorship_analysis.py` |
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
