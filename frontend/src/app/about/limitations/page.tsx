@@ -78,17 +78,18 @@ export default async function LimitationsChapter() {
         <Limitation title="Funding windows differ by chamber">
           <P>
             Funding covers a member&apos;s most recent completed election: six years of fundraising
-            for a senator, two for a representative. The PAC share and top-donor concentration are
-            each scored against the member&apos;s own chamber, but industry concentration is not,
-            and no adjustment makes six years and two years the same span. Within a chamber members
-            are measured over the same length of time, except a member with no completed election
-            yet (appointed, or seated by a special election), who is measured on the campaign still
-            in progress; across chambers the scores are best read side by side, not ranked, which is
-            why the compare page names no winner when a senator and a representative are compared.
-            Where FEC&apos;s candidate totals leave out the race that won a House seat, that
-            election is read from the campaign committee&apos;s own totals for the cycle. The window
-            itself is deliberate: a strict two-year window would leave most senators with little or
-            no fundraising to measure. FEC filings also lag donations by weeks or months.
+            for a senator, two for a representative. The PAC share, top-donor concentration and
+            industry concentration (within the member&apos;s party) are each scored against the
+            member&apos;s own chamber, but no adjustment makes six years and two years the same
+            span. Within a chamber members are measured over the same length of time, except a
+            member with no completed election yet (appointed, or seated by a special election), who
+            is measured on the campaign still in progress; across chambers the scores are best read
+            side by side, not ranked, which is why the compare page names no winner when a senator
+            and a representative are compared. Where FEC&apos;s candidate totals leave out the race
+            that won a House seat, that election is read from the campaign committee&apos;s own
+            totals for the cycle. The window itself is deliberate: a strict two-year window would
+            leave most senators with little or no fundraising to measure. FEC filings also lag
+            donations by weeks or months.
           </P>
         </Limitation>
       </Section>
@@ -161,12 +162,12 @@ export default async function LimitationsChapter() {
         </Limitation>
         <Limitation title="Some bills are labelled by content">
           <P>
-            Partisan depth (the lean bar and its policy-area breakdown) labels each bill a member
-            voted on, housekeeping motions aside, by comparing it with each party&apos;s positions
-            in that area, and a sponsored bill with no tracked roll call, or only a housekeeping one
-            (a motion to table or recommit, say), gets its party badge the same way. Bipartisan or
-            cross-cutting bills can be misread. It never decides whether a member broke with their
-            party.
+            Where no roll call recorded how each party voted, a bill&apos;s lean comes from
+            comparing it with each party&apos;s positions in that area: for partisan depth (the lean
+            bar and its policy-area breakdown), and for the party badge on a sponsored bill with no
+            tracked roll call, or only a housekeeping one (a motion to table or recommit, say).
+            Bipartisan or cross-cutting bills can be misread. It never decides whether a member
+            broke with their party.
           </P>
         </Limitation>
       </Section>

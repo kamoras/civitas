@@ -28,8 +28,8 @@ and classified by cosine similarity to category prototypes.
 
 Policy area taxonomy is based on the Congressional Research Service
 (CRS) policy area scheme used by Congress.gov, which organizes
-legislation into standardized subject categories. Our 15-category
-taxonomy maps to the top-level CRS areas with granularity calibrated
+legislation into standardized subject categories. Our 18-category
+taxonomy (POLICY_TAXONOMY, PROCEDURAL included) maps to the top-level CRS areas with granularity calibrated
 to the embedding model's discriminative resolution (validated against
 118th Congress bills with known CRS labels).
 
@@ -39,12 +39,11 @@ following the coding scheme in the Comparative Agendas Project
 Politics"), where legislative direction is inferred from verbs like
 "expand," "restrict," "repeal," and "establish."
 
-Party alignment is determined by content analysis against party
-platform embeddings (see party_platform.py), grounded in the manifesto
-analysis literature (Laver, Benoit & Garry 2003; Budge et al. 2001).
-Vote tallies serve as a secondary refinement signal, not the primary
-determinant — addressing the strategic-voting confound identified in
-roll-call-based measures (Clinton, Jackman & Rivers 2004).
+Party alignment is how the parties actually voted on the bill's roll
+call wherever one exists (party_platform.refine_with_vote_data); content
+analysis against party platform embeddings (see party_platform.py),
+grounded in the manifesto analysis literature (Laver, Benoit & Garry 2003;
+Budge et al. 2001), decides it only where no roll call does.
 
 References
 ----------

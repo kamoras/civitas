@@ -110,7 +110,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
           <FilterTile
             count={advancedCount}
             label="ADVANCING"
-            help="Bills (S./H.R./joint resolutions) that have passed at least one chamber and haven't yet become law. Being referred to committee doesn't count: nearly every bill is, automatically. Simple/concurrent resolutions (e.g. designating an awareness month) are left out: they're routinely agreed to without debate, and Legislative Effectiveness weights them a fifth as much as a bill. Click to filter the list below to just these."
+            help="Bills (S./H.R./joint resolutions) that have been reported out of committee or gone further (to the floor, through a chamber, to the President) and haven't yet become law. Being referred to committee doesn't count: nearly every bill is, automatically. Simple/concurrent resolutions (e.g. designating an awareness month) are left out: they're routinely agreed to without debate, and Legislative Effectiveness weights them a fifth as much as a bill. Click to filter the list below to just these."
             pressed={filter === "advancing"}
             onSelect={() => toggleFilter("advancing")}
             activeClass="border-signal-amber/40 bg-signal-amber/10"

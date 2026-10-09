@@ -23,7 +23,7 @@ external API calls to cloud AI services.
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                           DATA SOURCES (read-only)                           │
 │                                                                              │
-│  Congress.gov   FEC API    GovInfo API  Senate.gov  Oyez    BLS / BEA        │
+│  Congress.gov   FEC API    GovInfo API  Senate.gov  Oyez    BLS / FRED       │
 │  (bills, votes, (campaign  (bill text,  (speeches,  (SCOTUS (jobs,           │
 │   members)       finance)   histories)   remarks)    cases)  GDP)            │
 │                                                                              │
@@ -54,7 +54,7 @@ external API calls to cloud AI services.
 │                                                │                             │
 │  ┌──────────┐   ┌──────────┐   ┌────────────┐  │   ┌──────────────────────┐  │
 │  │4. EXPLORE│   │5.JUSTICES│   │6.PRESIDENTS│  │   │     7. FINALIZE      │  │
-│  │ (sqlite- │   │ (Oyez)   │   │(BLS/BEA/   │◄─┘   │ (persist scores,     │  │
+│  │ (sqlite- │   │ (Oyez)   │   │(BLS/FRED/  │◄─┘   │ (persist scores,     │  │
 │  │  vec)    │   │          │   │ UCSB)      │      │  PipelineRun record) │  │
 │  └──────────┘   └──────────┘   └────────────┘      └──────────────────────┘  │
 │                                                                              │
@@ -151,9 +151,10 @@ Pulls raw data from each government API and stores the complete response verbati
 | Lobbying Disclosure Act registry (lda.gov) | Registered lobbying spend by client, and the bills named in filings, for organizations in donor–vote matches. Each registrant's report for a quarter counts once, the latest posted: an amendment restates its quarter, and summing it with the original had overstated 20 of 274 cached searches, one by $3.74M (`lda._latest_per_quarter`) | 0.2 RPS anonymous / 1.0 with `LDA_API_KEY` |
 | Oyez / supremecourt.gov | Justice voting records, case metadata, docket pages | ~2 RPS (fixed pauses) |
 | Supreme Court Database / FJC / Martin-Quinn | Justice votes in cases the federal government argued (newest release), each justice's nomination dates, ideal points per term | 1.0 RPS, cached |
-| BLS | Unemployment, inflation, job growth by administration | batch |
+| BLS | Payroll job growth by administration | batch |
+| FRED | Unemployment and consumer prices (BLS series, annual means) | batch, cached 7 days |
 | Cooperative Election Study (Harvard Dataverse, CC0) | Approval of each member among their own constituents, by the respondent's party (informational; `scripts/fetch_ces_approval.py`, per survey release) | one-off download |
-| BEA | GDP growth by quarter | batch |
+| MeasuringWorth / Maddison Project / World Bank | US real GDP back to 1790; real GDP per person for 13 peer economies | batch, cached 30 days |
 | Federal Register | Executive orders signed per administration | 1.0 RPS |
 | House Clerk / Senate eFD | STOCK Act periodic transaction reports, and annual and new-filer financial disclosures (PDF/HTML, parsed) | 1.0 / 0.5 RPS |
 | OGE | Sitting president's disclosures: the annual report (OGE Form 278e), whose Part 7 lists every transaction of its year as text, and the OGE Form 278-T periodic transaction reports since, which are scans read by OCR (PDF, parsed) | 0.5 RPS |
@@ -193,7 +194,7 @@ per-vote reasoning — regardless of prompting approach. See
 
 1. Embed bill titles → classify policy area, stance direction, procedural and commemorative bills (prototype similarity, kNN for the residual)
 2. Classify donors by type and industry (tiered: FEC metadata → learning store → embedding → kNN)
-3. Party alignment per bill: how the parties actually split on its roll call; a vote with no roll call carries no party label for loyalty (content similarity to party platforms feeds only the per-area depth breakdown; see "Party Alignment" below)
+3. Party alignment per bill: how the parties actually split on its roll call; a vote with no roll call carries no party label for loyalty (content similarity to party platforms stands in only where no roll call recorded each party's vote; see "Party Alignment" below)
 4. Sponsorship network over the chamber: PageRank legislative leadership and SVD ideology from the cosponsorship matrix
 5. Donor–vote connections: substantial industry funding matched against policy-anchored vote similarity, with registered lobbying spend (LDA) by client attached, and bills the member voted on that the organization's own filings name
 6. Select key votes: against the party line, related to a top donor's industry, substantive
@@ -236,7 +237,7 @@ Fetches and scores Supreme Court justices, weekly on Sunday UTC (or whenever the
 ### Phase 6 — PRESIDENTS
 
 Scores sitting and historical presidents from a mix of live and archival sources:
-- **Live**: BLS employment rate, BEA/FRED GDP growth, UCSB American Presidency Project approval polling (with Gallup's by-party breakdown, compared within its era against Voteview's House polarization), FRED/BLS unemployment and consumer prices (Effectiveness since 1947, each judged against where the term started)
+- **Live**: BLS payroll jobs, MeasuringWorth real GDP and Maddison/World Bank peer-economy GDP, UCSB American Presidency Project approval polling (with Gallup's by-party breakdown, compared within its era against Voteview's House polarization), FRED/BLS unemployment and consumer prices (Effectiveness since 1947, each judged against where the term started)
 - **Historical**: C-SPAN Presidential Historians Survey (historical legacy), UCSB election-margin data, MeasuringWorth real-GDP series (1790–present), Maddison Project GDP per person for the US and 13 peer economies (1946–2022, extended by the World Bank's live series): postwar growth is scored relative to those peers, with their catching up with US incomes set aside
 - All three score dimensions (Public Mandate, Effectiveness, Historical Legacy) are computed from source data with no LLM involvement. Dimensions a president has no real data source for are left N/A rather than filled with a placeholder.
 
@@ -317,13 +318,16 @@ removal.
 The LLM is still used where the output genuinely requires natural-language
 synthesis from unstructured input: Action Center claim location (it
 points at an attributable sentence in a clustered article; the text shown is
-the source's own, checked verbatim).
+the source's own, checked verbatim), national-monitor significance, category
+and borderline-match decisions, timeline period summaries, locating who did
+what in a race's coverage for its post (verbatim spans), and on-request
+Explore document summaries.
 
 Everything else uses geometric methods in sentence-embedding space:
 
 | Task | Method | Rationale |
 |------|---------|-----------|
-| Bill policy area | Prototype similarity, kNN over the learning store for the residual (17 areas incl. procedural) | Deterministic, explainable, ~100ms vs. ~30s |
+| Bill policy area | Prototype similarity, kNN over the learning store for the residual (18 areas incl. procedural) | Deterministic, explainable, ~100ms vs. ~30s |
 | Donor industry | Tiered: FEC metadata → learning store → prototype similarity → kNN | Generalizes from precedent; full audit trail |
 | Party alignment | The roll call's actual party split; content similarity to party platform positions only where no roll call exists | Loyalty is defined by how the parties voted (see "Party Alignment" below) |
 | Donor–vote connections | Industry funding share × policy-anchored vote similarity | Transparent, reproducible threshold |
@@ -341,7 +345,7 @@ LLM calls per full nightly run: 0 (Phase 3 is fully deterministic, see above). T
 3. **Reproducibility.** Model weights are pinned. An analysis run today produces identical output to one run six months ago on the same input. Cloud-hosted models update without notice.
 4. **Latency independence.** No rate limits, no network jitter, no API quota.
 
-The choice of LFM2.5-1.2B-Instruct over larger alternatives (7B+) is deliberate. The inference tasks here are structured extraction — completing a constrained template (key facts and actions from a cluster of news articles) — not open-ended generation. Empirically, a ~1B-class model produces acceptable quality on these tasks in a few seconds per call on ARM, vs. 25–45s for a 7B model. The quality ceiling is determined by the structure of the prompt, not model size.
+The choice of LFM2.5-1.2B-Instruct over larger alternatives (7B+) is deliberate. The inference tasks here are mostly structured extraction — pointing at an attributable sentence or span in an article, which is then checked verbatim, or a yes/no judgment — not open-ended generation; recommended actions are built from bill and source data, never by the model. Empirically, a ~1B-class model produces acceptable quality on these tasks in a few seconds per call on ARM, vs. 25–45s for a 7B model. The quality ceiling is determined by the structure of the prompt, not model size.
 
 ---
 
@@ -355,7 +359,7 @@ Classification decisions — what industry a donor belongs to, which direction a
 | 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection |
 | 2b | SVD / PageRank on cosponsorship matrix | Fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors (~5%), bill classification from reference corpus |
-| 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Action Center issue synthesis |
+| 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Natural-language text only: Action Center claim location, monitor decisions, timeline summaries, race-post spans, Explore summaries — never a classification feeding a score |
 
 Key embedding-based classification features:
 - **Semantic prototypes** define each category via natural-language descriptions, not keyword lists. The embedding model matches entities to the nearest prototype by cosine similarity.
@@ -394,7 +398,7 @@ This enables selective re-verification: low-confidence classifications from prev
 
 Whether a member voted with or against their party is decided only by **how the parties actually voted on that roll call** (`stamp_roll_call_outcome` records `partySplit`): a roll call is party-labeled when at least 65% of one party voted Yea and at most 35% of the other did, and a member breaks when they vote with the other side. A bill whose content reads partisan but passed with both party majorities is not a party-line vote, and since v6.18 a vote with no recorded roll call carries no party label at all (the bill's content lean used to stand in, so voting for a bill that read as the other party's counted as a break whatever the parties did). Each stored vote records its roll call (`key_votes.roll_call`), and the vote API returns the Congress record's question, date and per-party tally with it, so every break on a profile shows why it is one. Since v6.19, housekeeping questions never count either way (`normalize_votes.is_housekeeping`): quorum calls, adjourning, approving the Journal, the House's previous question, motions to table or to recommit, and (since v6.28) the House's motion to commit, the motion to recommit's twin for a bill no committee reported. They split on party lines as a matter of course, so voting with the other side on one says little about the member; in the 119th Congress they were 31% of the House's party-line roll calls and 3% of the Senate's. Rule votes, cloture and nominations still count: they decide whether a bill reaches the floor, whether it gets a vote, and who serves. Since v6.20, Constituent Alignment's break rate is each member's party-line record over every roll call the chamber recorded this Congress (`party_line_record.party_line_records`, stored per member as `party_line_record`), not the sample of recent votes stored for the profile. A break counts only toward the other party: on that roll call, the party's members who broke sit on average nearer the other party (first-dimension position from the chamber's Voteview data) than the party does. Since v6.27 each position is weighted by its reliability and read from its party's mean, and until a member's new record is full (`prior_until_votes`, 200 votes, a convention) a full record from the last Congress, where they have one, decides their side (before the new Congress's positions pass the gates, everyone's last positions do), and a member with no usable position this Congress is read on the last Congress's (a stated choice); once the new positions are in, neither applies to a member who switched parties during this Congress or between the two, whose last positions were cast in their old party; a position recorded under the other major party is never read for the member. A vote against the party from its own flank is listed on the scorecard but not counted, since how far toward the flank a member sits is measured by position congruence (scored once the new Congress's positions pass the gates). Each measure counts once: a nominee's cloture and confirmation votes, or a bill's motion to proceed, cloture and passage, are one decision (`measure_key`); amendments and motions to commit or waive are each their own question. In the 119th Senate 37% of roll calls repeat a measure already voted on. Both rules were tested against election results (`docs/research/constituent-alignment.md`, sections 11 and 12).
 
-For partisan depth (the lean bar and its per-area breakdown), which is not a count of breaks, the system labels each bill a member voted on with a nearest-centroid classifier (Rocchio 1971) in sentence-embedding space, and counts a Yea toward the party the bill matches in that area and a Nay toward the other (a housekeeping roll call is procedural, not a vote on its bill, since v6.28):
+For partisan depth (the lean bar and its per-area breakdown), which is not a count of breaks, each Yea counts toward the party the bill leans to and each Nay toward the other, in every policy area the bill touches, weighted by the area's confidence (a housekeeping roll call is procedural, not a vote on its bill, since v6.28). The lean is the same `partyLeaning` loyalty reads: the roll call's party split wherever one was recorded (`refine_with_vote_data`), so a bill both parties passed counts toward neither. Only where no roll call recorded each party's vote does the bill's content decide its lean, with a nearest-centroid classifier (Rocchio 1971) in sentence-embedding space:
 1. Each party's platform positions per policy area are embedded as seed centroids
 2. Each run blends the seeds with the bills earlier runs labelled for each party, in both chambers, by the parties' actual split where there was a roll call (`_build_data_centroids`; both chamber pipelines rebuild them at start since v6.28)
 3. Bill text is embedded and compared to both party centroids
@@ -1050,7 +1054,7 @@ House representatives use the same scoring framework, data sources, and classifi
 
 Score history is tracked in `ScoreSnapshot` records so the frontend can render historical score trends per senator/representative.
 
-Additional member metrics, both chambers (informational, not scored):
+Additional member metrics, both chambers. Ideology and partisan depth are informational, not scored; the Leadership Score is also shown on its own, and is the leadership part of Legislative Effectiveness (25% of it, 30% when there is no coalition data):
 
 | Metric | What It Measures | Technique |
 |--------|------------------|-----------|
@@ -1064,9 +1068,9 @@ Each justice is scored on one measure (`JUSTICE_SCORE_WEIGHTS`): independence fr
 
 ### Presidential Scores
 
-Presidents are scored on three dimensions — Public Mandate (25%), Effectiveness (25%) and Historical Legacy (50%), each president's shown as the share it actually carries when a dimension is missing — using a mix of live API data (BLS employment, BEA/FRED GDP) and historical records (C-SPAN Historians Survey, UCSB American Presidency Project approval and election margins, MeasuringWorth GDP). Independence, Follow-Through, and Competence were removed in 2026-07 rather than left as hand-set values with no live formula behind them; a president with no data source for a dimension shows N/A and the overall score renormalizes over whichever dimensions actually apply. See the [scoring changelog](/changelog) for the full account.
+Presidents are scored on three dimensions — Public Mandate (25%), Effectiveness (25%) and Historical Legacy (50%), each president's shown as the share it actually carries when a dimension is missing — using a mix of live data (BLS payroll jobs, FRED unemployment and consumer prices, MeasuringWorth real GDP, Maddison/World Bank peer-economy GDP, Voteview House polarization) and historical records (C-SPAN Historians Survey, UCSB American Presidency Project approval and election margins). Independence, Follow-Through, and Competence were removed in 2026-07 rather than left as hand-set values with no live formula behind them; a president with no data source for a dimension shows N/A and the overall score renormalizes over whichever dimensions actually apply. See the [scoring changelog](/changelog) for the full account.
 
-A member's dimension falls back to a neutral 50 when its data is missing or too thin to trust (a failed fetch, a new member), and is shrunk toward 50 as its evidence thins; a president's dimension with no data source shows N/A instead. A record that is present but empty is not missing: a member with no substantive bills after half a year in office scores Legislative Effectiveness on a credit of 0. No LLM input is used in score calculation — formulas are deterministic and auditable.
+A member's dimension falls back to a neutral 50 when its data is missing or too thin to trust (a failed fetch, a new member); a part resting on few observations is shrunk toward a reference (Constituent Alignment's voting part toward its party's typical score, its position part and Legislative Effectiveness's leadership part toward 50), while Funding Independence drops a part it can't measure and Legislative Effectiveness's bill part is not shrunk; a president's dimension with no data source shows N/A instead. A record that is present but empty is not missing: a member with no substantive bills after half a year in office scores Legislative Effectiveness on a credit of 0. No LLM input is used in score calculation — formulas are deterministic and auditable.
 
 ---
 
@@ -1351,7 +1355,7 @@ Key algorithmic decisions and their academic backing:
 |----------|-----------|-----------|
 | Embeddings over keywords for classification | Semantic similarity generalizes to unseen text; keywords are brittle | Reimers & Gurevych 2019 (Sentence-BERT) |
 | kNN over LLM for donor classification | 5s vs 40min, no hallucinated categories, deterministic | Cover & Hart 1967; Snell et al. 2017 |
-| Party alignment from the roll call's actual split only | "Broke with party" is defined by how the parties voted; content feeds only the per-area depth breakdown | Poole & Rosenthal 1985; Laver et al. 2003 |
+| Party alignment from the roll call's actual split only | "Broke with party" is defined by how the parties voted; content stands in only where no roll call recorded each party's vote | Poole & Rosenthal 1985; Laver et al. 2003 |
 | Learning store as experience replay | Past classifications bootstrap future accuracy | Lin 1992; Yarowsky 1995 |
 | Inverse HHI for funding diversity | Standard concentration metric from IO economics | Rhoades 1993 |
 | Linear shrinkage toward 50 on thin evidence (fixed rate `min(n/k, 1)`, not empirical Bayes; Constituent Alignment's position part instead uses a measured reliability weight relative to a full record, v6.27) | Keeps a few votes or cases from producing an extreme score | Stein-type shrinkage idea: Efron & Morris 1975 |
