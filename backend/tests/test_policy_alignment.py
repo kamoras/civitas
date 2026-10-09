@@ -73,3 +73,18 @@ def test_lobbying_client_says_whether_it_is_a_committees_own_name(donor_extra, c
         assert matches[0]["lobbyingClientIsCommittee"] is is_committee
     finally:
         clear_alignment_cache()
+
+
+def test_a_long_bill_title_is_cut_at_a_word(monkeypatch):
+    """The title as a Senate vote carries it; cut mid-word it read "...
+    under chapter 8 of ti" in the stored description."""
+    monkeypatch.setattr("app.pipeline.analyze.policy_alignment.industry_policy_similarity", lambda *a: 0.9)
+    title = ("A joint resolution providing for congressional disapproval under chapter 8 of title 5, "
+             "United States Code, of the rule submitted by the Department of Education")
+    matches = detect_donor_vote_connections(
+        donors=[{"type": "Org/Employees", "industry": "EDUCATION", "name": "A University", "total": 1}],
+        votes=[{"vote": "Yea", "policyArea": "EDUCATION", "billId": "sjres1-119", "billName": title,
+                "totalYeas": 50, "totalNays": 49}],
+        industry_breakdown=[{"industry": "EDUCATION", "total": 1}],
+    )
+    assert "under chapter 8 of… (EDUCATION)" in matches[0]["description"]

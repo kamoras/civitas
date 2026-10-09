@@ -114,3 +114,16 @@ def test_a_different_person_with_a_members_surname_elsewhere_in_the_state_is_not
 def test_the_district_still_decides_when_a_member_there_has_the_surname(db_session):
     _reps(db_session, ("R1", "Ann Velez", "NY", 7), ("R2", "Anna Velez", "NY", 8))
     assert match_representative(current_representatives(db_session), "Velez", "Anna", "NY07").id == "R1"
+
+
+def test_a_member_filing_under_a_new_surname_is_matched_in_the_district(db_session):
+    """The Clerk's index row as filed (names replaced): the member's own
+    surname moved into the first-name field under a married name."""
+    _reps(db_session, ("R1", "Dana Whitcombe", "IA", 2), ("R2", "Dana Pell", "IA", 3))
+    roster = current_representatives(db_session)
+    assert match_representative(roster, "Larkspur", "Dana Whitcombe", "IA02").id == "R1"
+    # Only in the member's own district, and only with the first name first.
+    assert match_representative(roster, "Larkspur", "Dana Whitcombe", "IA03") is None
+    assert match_representative(roster, "Larkspur", "Whitcombe Dana", "IA02") is None
+    # A different person in the district sharing only the first name.
+    assert match_representative(roster, "Larkspur", "Dana", "IA02") is None

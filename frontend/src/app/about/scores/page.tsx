@@ -652,7 +652,9 @@ export default function ScoresChapter() {
           policy area. For the industry&apos;s largest donor we look up the Lobbying Disclosure Act
           registry (lda.gov) under the donor&apos;s name: the sponsoring company&apos;s when the
           donor is its PAC. A PAC the FEC lists no separate sponsor for is searched under its own
-          name, and finding nothing there is reported as unknown, not as no lobbying.
+          name, and finding nothing there is reported as unknown, not as no lobbying. Spending is
+          what the filings report, one report per lobbying firm, client and quarter: an amendment
+          restates its quarter, so only the latest filed is counted.
         </P>
         <P>
           Profiles show registered lobbying spend for every client the search matched, each with its
