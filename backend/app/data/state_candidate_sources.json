@@ -815,7 +815,7 @@
         "runoff_threshold_pct": null,
         "discovery": {
           "url": "https://s3.amazonaws.com/dl.ncsbe.gov/Elections/{year}/Candidate%20Filing/Candidate_Listing_{year}.csv",
-          "year_regex": "\"11/0[2-8]/{year}\""
+          "year_regex": "\\b11/0[2-8]/{year}\\b"
         },
         "format": {
           "office_column": "contest_name",
