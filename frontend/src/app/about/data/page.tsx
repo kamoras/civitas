@@ -338,9 +338,10 @@ export default function DataChapter() {
             current day and is then deleted. Without the key, the scrambled value can&apos;t be
             turned back into an address. Raw IP addresses and browser identification strings are
             never stored, only a coarse browser, operating system and device type (for example
-            &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser opening a page counts: search
-            and AI crawlers, scripts and automated browsers aren&apos;t visitors and aren&apos;t
-            counted.
+            &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser opening a page counts, and the
+            page itself sends the count once it has loaded: search and AI crawlers, scripts and
+            automated browsers that never run the page aren&apos;t visitors and aren&apos;t counted.
+            Turning JavaScript off means you aren&apos;t counted either.
           </Item>
           <Item label="Page views">A count per page type, per day.</Item>
           <Item label="Load times">
