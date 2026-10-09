@@ -24,9 +24,9 @@ instead of posing as a real zero, with an ops alert when a whole run's
 lookups fail.
 
 Notes on interpretation:
-- Amounts are order-of-magnitude signals, not audited totals — quarterly
-  amendments can double-count. Good enough to distinguish "this org lobbies
-  Washington with $2M/yr" from "no registered lobbying at all".
+- Amounts are what the filers reported, not audited totals: one report per
+  registrant, client and quarter, the latest posted, so an amendment
+  replaces its original rather than adding to it (_latest_per_quarter).
 - The registry's client-name search is loose ("APPLE" returns Appleton
   International Airport), so each filing's client is checked against the
   searched name before its amounts or bills count (is_same_client).
@@ -44,7 +44,7 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from sqlalchemy.orm import Session
@@ -128,6 +128,42 @@ def _sum_filing_amounts(results: list[dict]) -> float:
                 except (TypeError, ValueError):
                     pass
     return total
+
+
+# A quarterly report's filing type names its quarter: "Q2", "Q2Y" (no
+# activity), "2A" (amendment), "2T"/"2TY" (termination), "2AY". The
+# registry's own codes, read as a form value.
+_QUARTER_RE = re.compile(r"^Q?([1-4])")
+
+
+def _latest_per_quarter(filings: list[dict]) -> list[dict]:
+    """One report per registrant, client and quarter: the latest posted.
+    An amendment restates its quarter's report in full, and a filer
+    sometimes submits the same report twice, so summing every filing
+    counted a quarter two or three times: 20 of the 274 cached searches
+    (2026-10) overstated, one by $3.74M (a quarter of its total) and one by
+    65%. Registrations (no quarter) carry no amounts and pass through."""
+    latest: dict[tuple, dict] = {}
+    rest: list[dict] = []
+    for f in filings:
+        m = _QUARTER_RE.match((f.get("filing_type") or "").upper())
+        if m is None:
+            rest.append(f)
+            continue
+        key = (_client_name(f), (f.get("registrant") or {}).get("name") or "", f.get("filing_year"), m.group(1))
+        if key not in latest or _posted(f) >= _posted(latest[key]):
+            latest[key] = f
+    return rest + list(latest.values())
+
+
+def _posted(filing: dict) -> datetime:
+    """When the registry posted a filing (its offsets vary with daylight
+    time, so compared as instants, not strings); the earliest instant when
+    it doesn't say."""
+    try:
+        return datetime.fromisoformat(filing.get("dt_posted") or "")
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
 
 
 def _filing_mentions(results: list[dict]) -> list[dict]:
@@ -506,8 +542,9 @@ def _activity_from(org_key: str, filings: list[dict], complete: bool) -> Lobbyin
     whose client matches (is_same_client), their total by client, and the
     bills they name."""
     own = [f for f in filings if is_same_client(org_key, _client_name(f))]
+    counted = _latest_per_quarter(own)
     by_client: dict[str, float] = {}
-    for f in own:
+    for f in counted:
         by_client[_client_name(f)] = by_client.get(_client_name(f), 0.0) + _sum_filing_amounts([f])
     clients = sorted(by_client.items(), key=lambda c: (-c[1], c[0]))
     # Quarterly reports repeat the same description word for word: keep one
@@ -522,7 +559,7 @@ def _activity_from(org_key: str, filings: list[dict], complete: bool) -> Lobbyin
         else:
             merged[key] = m
     return LobbyingActivity(
-        total=_sum_filing_amounts(own),
+        total=_sum_filing_amounts(counted),
         mentions=list(merged.values())[:_MAX_MENTIONS],
         complete=complete,
         clients=clients,

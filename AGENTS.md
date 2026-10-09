@@ -935,7 +935,8 @@ Between TRANSFORM and the rest, both chamber pipelines run
 
 - Anyone in the database but absent from the roster is marked
   `is_current=False` with a `left_office_date`. Reversible — reappearing on
-  the roster restores them and clears the clock. Skipped (with an ops alert)
+  the roster restores them and clears the clock, and a serving member on the
+  roster who still carries a departure date has it cleared. Skipped (with an ops alert)
   when the roster comes back implausibly small, so a truncated Congress.gov
   response can't retire a chamber, and skipped for single-member
   `senator_filter` runs.
@@ -1118,7 +1119,9 @@ annual report outranks it. Filers are matched in `filer_matching.py`: the
 last-name field up to its first comma ("Doe, Jr."), and a House filer listed
 under a district no member of that surname holds — the Clerk keeps a member's
 pre-redistricting district — is matched across the state only when the first
-names agree (a shared token, or a measured similarity ratio). Each fetch module's
+names agree (a shared token, or a measured similarity ratio); failing that, a
+filer whose given names hold a member's whole name ("Roe, Jane Doe": a married
+name) is matched to that member of the listed district. Each fetch module's
 `PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
 parser's output changes, and already-ingested reports are re-read (a re-read
 that can't read the report at all keeps the earlier holdings; one that reads

@@ -70,6 +70,12 @@ export default function DataChapter() {
               Roll-call votes with every member&apos;s position, and each chamber&apos;s live floor
               log.
             </Fact>
+            <Fact label="unitedstates/congress-legislators">
+              Committee seats and party leadership titles, an open dataset refreshed weekly. It
+              updates every month or two, so a member seated since then takes their committee seats
+              from the chamber&apos;s own list: the House Clerk&apos;s member data or
+              senate.gov&apos;s committee rosters.
+            </Fact>
             <Fact label="GovInfo">
               The Congressional Record, read in full each day, and its Daily Digest.
             </Fact>
@@ -98,7 +104,8 @@ export default function DataChapter() {
             </Fact>
             <Fact label="Lobbying Disclosure Act registry (lda.gov)">
               Registered lobbying spending by organizations that appear among donors, and the bills
-              their filings name.
+              their filings name. Each lobbying firm&apos;s report for a quarter counts once, the
+              latest filed, so an amendment replaces the report it amends.
             </Fact>
             <Fact label="Partisan lean">
               State and district Cook PVI, computed from official presidential returns (MIT Election
