@@ -92,7 +92,7 @@ from app.pipeline.transform.normalize_votes import (
 )
 from app.time_utils import utcnow
 from app.pipeline.senate_pipeline import invalidate_stale_analysis
-from app.pipeline.fetch.house_clerk import fetch_house_sworn_dates
+from app.pipeline.fetch.house_clerk import fetch_house_caucuses, fetch_house_sworn_dates
 from app.pipeline.analyze.bill_analyzer import classify_all_bills, classify_policy_areas_multi
 from app.pipeline.analyze.party_platform import (
     analyze_partisan_depth,
@@ -297,6 +297,12 @@ async def run_house_pipeline() -> dict:
                 for r in reps:
                     if r.get("bioguideId") in stored:
                         r["swornDate"] = stored[r["bioguideId"]]
+
+            # The caucus the Clerk records, which decides an independent's
+            # party-line reading (normalize_votes' declared_caucus).
+            caucuses = await fetch_house_caucuses(client, db)
+            for r in reps:
+                r["declaredCaucus"] = caucuses.get(r.get("bioguideId", ""))
 
             # Build bioguide -> rep mapping
             bio_to_rep: dict[str, dict] = {}
@@ -788,6 +794,7 @@ async def run_house_pipeline() -> dict:
                         rep_votes,
                         rep.get("party", "I"),
                         leader_spans=leader_spans,
+                        declared_caucus=rep.get("declaredCaucus"),
                     )
 
                     # Add recent votes

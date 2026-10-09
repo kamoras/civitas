@@ -267,6 +267,11 @@ _NOT_A_NAME = frozenset({
 })
 
 
+# A parenthetical inside a printed name: the nickname a ballot prints
+# beside the given name (clean_display_name keeps it for display).
+_PARENTHETICAL_RE = re.compile(r"\([^)]*\)")
+
+
 def _without_trailing_suffix(name: str) -> str:
     """"John A. Doe, Jr." without its ", Jr.": a comma before a
     generational suffix is not the "Last, First" comma, and read as one it
@@ -287,8 +292,8 @@ def _given_names(name: str) -> list[str]:
     J" (surname, then given names) and a state prints "Doe, John
     J. Jr." or "John J. Doe Jr.". Taking the tokens AFTER any comma
     handles the first two; for the third the leading token already is the
-    given name."""
-    name = _without_trailing_suffix(name)
+    given name. A printed nickname ("Jane (Jj) Doe") is not compared."""
+    name = _without_trailing_suffix(_PARENTHETICAL_RE.sub(" ", name))
     tail = name.split(",", 1)[1] if "," in name else name
     words = ("".join(ch for ch in token if ch.isalpha()) for token in _fold(tail).replace(".", " ").split())
     return [w for w in words if len(w) > 1 and w not in _NOT_A_NAME]
@@ -375,8 +380,8 @@ def _record_given(display_name: str | None, last_name: str) -> tuple[list[str], 
     record's display name states — its surname's words, honorifics and
     suffixes set aside, so "J. Smith" states only the initial "j", "Mary
     Anne Smith" both "mary" and "anne", and "Smith", "Smith Jr." and "Dr.
-    Smith" state nothing."""
-    display = _without_trailing_suffix(display_name or "")
+    Smith" state nothing. A printed nickname is not one of them."""
+    display = _without_trailing_suffix(_PARENTHETICAL_RE.sub(" ", display_name or ""))
     if "," in display:
         words = _fold(display.split(",", 1)[1]).replace(".", " ").split()
     else:
@@ -599,6 +604,10 @@ def _keep_ballot_only(
     cand.candidate_status = None
     cand.confirmed_general = True
     db.commit()
+    # The name as the state prints it, exactly as for a matched candidate:
+    # without it the page showed every one of these people in the
+    # FEC-style "SURNAME, GIVEN" built above (60 of them on 2026-10-08).
+    _note_ballot_name(db, cand, record)
     return cid
 
 
@@ -1673,6 +1682,33 @@ def _state_office_source(
     return source, records, main_answered
 
 
+def _judicial_source(
+    db: Session, cycle: int, state: str,
+    source: dict, records: list[dict], main_answered: bool,
+    general: dict | None, general_records: list[dict] | None,
+) -> tuple[dict, list[dict], bool]:
+    """(source, records, answered) for this state's judgeships this run:
+    _state_office_source's rule, for a general_list that opts in with its
+    own judicial_offices. Primary results name only the winners of
+    CONTESTED primaries -- North Carolina's left out every unopposed
+    nominee (its Supreme Court seat, half its Court of Appeals seats) and
+    kept nominees their party has since replaced -- so the certified
+    list, once it answers with judgeships, is the source and stays it."""
+    if not (general and general.get("judicial_offices")):
+        return source, records, main_answered
+    listed = [r for r in general_records or [] if r["office"] in JUDICIAL_COURT_LABELS]
+    if listed:
+        return general, listed, True
+    marker = api_cache_get(
+        db, JUDICIAL_MARKER_TIER, judicial_marker_key(state, cycle),
+        max_age_hours=JUDICIAL_MARKER_TTL_HOURS,
+    ) or {}
+    list_name = str(general.get("source_name") or "")
+    if list_name and marker.get("sourceName") == list_name:
+        return general, [], False
+    return source, records, main_answered
+
+
 async def sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cycle: int) -> dict:
     """_sync_confirmed_candidates, with every source raise it contained
     reported in one alert."""
@@ -1855,9 +1891,15 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
                 ballot_list=_is_ballot_list(state_source, state_records),
             )
             state_leg_count = _sync_state_leg_nominees(db, cycle, state, state_source, state_leg)
-        if main_state_answered:
+        judicial_source, judicial_records, judicial_answered = _judicial_source(
+            db, cycle, state, source, judicial, main_state_answered, general, general_records,
+        )
+        if judicial_answered:
             judicial_count = _sync_judicial_nominees(
-                db, cycle, state, source, judicial, ballot_list=_is_ballot_list(source, main_records),
+                db, cycle, state, judicial_source, judicial_records,
+                ballot_list=_is_ballot_list(
+                    judicial_source, general_records if judicial_source is general else main_records,
+                ),
             )
 
         # A state with its own general FILING list gets its November ballot

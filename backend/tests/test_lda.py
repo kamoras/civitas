@@ -573,6 +573,30 @@ class TestClientsShown:
         assert act.clients == [("THE COCA-COLA COMPANY", 900_000.0),
                                ("COCA-COLA BOTTLING COMPANY UNITED, INC.", 70_000.0)]
 
+    def test_an_amended_or_resubmitted_quarter_counts_once(self):
+        """Cached 2025 search results as the registry returned them (names
+        replaced): an amendment restates its quarter, and a report can be
+        submitted twice; the latest posted report for each registrant,
+        client and quarter is the one counted."""
+        def f(registrant, ftype, income, expenses, posted):
+            return {"client": {"name": "ACME TRANSIT UNION"}, "registrant": {"name": registrant},
+                    "filing_type": ftype, "income": income, "expenses": expenses, "filing_year": 2025,
+                    "dt_posted": posted, "lobbying_activities": []}
+        filings = [
+            f("ACME TRANSIT UNION", "Q1", None, "70000.00", "2025-04-17T14:56:12-04:00"),
+            f("ACME TRANSIT UNION", "1A", None, "70000.00", "2025-09-15T13:18:45-04:00"),
+            f("ACME TRANSIT UNION", "Q2", None, "301389.00", "2025-07-16T14:19:02-04:00"),
+            f("ACME TRANSIT UNION", "2A", None, "318889.00", "2025-07-16T14:25:26-04:00"),
+            f("FIRM ONE LLP", "Q1", "250000.00", None, "2025-04-21T22:30:27-04:00"),
+            f("FIRM ONE LLP", "Q1", "250000.00", None, "2025-04-21T22:30:46-04:00"),
+            # A termination report is its quarter's report; another quarter is not touched.
+            f("FIRM TWO LLC", "Q3", "50000.00", None, "2025-10-16T10:00:00-04:00"),
+            f("FIRM TWO LLC", "4TY", "50000.00", None, "2026-01-19T10:00:00-05:00"),
+            f("FIRM TWO LLC", "RR", None, None, "2025-01-02T10:00:00-05:00"),
+        ]
+        act = lda._activity_from("ACME TRANSIT UNION", filings, True)
+        assert act.total == 70_000 + 318_889 + 250_000 + 50_000 + 50_000
+
     @pytest.mark.asyncio
     async def test_the_description_names_the_search_and_every_client_is_listed(self, db_session):
         matches = [{"lobbyistOrg": "Coca-Cola PAC", "lobbyingClient": "COCA-COLA", "description": ""}]

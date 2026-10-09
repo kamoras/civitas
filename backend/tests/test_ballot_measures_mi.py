@@ -47,6 +47,9 @@ def test_both_real_2026_proposals():
     assert two["official_summary"].startswith("The proposal would:\n• Prohibit regulated electric")
     assert two["official_summary"].count("\n• ") == 3
     assert two["official_summary"].endswith("Should this proposal be adopted?")
+    # The closing question stands apart from the last bullet, as printed.
+    assert two["official_summary"].endswith("internet political communications.\n\nShould this proposal be adopted?")
+    assert "\n\n" not in one["official_summary"]
     for m in (one, two):
         assert m["yes_means"] is None and m["no_means"] is None
         assert "[ ]" not in m["official_summary"]

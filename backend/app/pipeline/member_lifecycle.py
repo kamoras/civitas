@@ -202,6 +202,16 @@ def reconcile_roster(
             m.vacancy_reason = None
             m.left_office_date = None
             restored.append(m.id)
+        elif m.is_current and on_roster and (m.left_office_date or m.vacancy_reason):
+            # Serving, yet carrying a departure: four sitting House members
+            # held a left_office_date for two months (2026-08 to 2026-10)
+            # after being set serving by a path that left it behind. The API
+            # serves it as leftOfficeDate, and it would restart the purge
+            # clock from the old date if they ever left. On the roster
+            # tonight, so it is cleared.
+            m.vacancy_reason = None
+            m.left_office_date = None
+            restored.append(m.id)
 
     if unmatchable:
         logger.warning(

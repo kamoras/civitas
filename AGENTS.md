@@ -254,6 +254,12 @@ guards), ensuring the current run's classifications take precedence. Within
 a single pipeline run, this is harmless because learning store lookups
 short-circuit re-classification of already-seen entities.
 
+A donor's industry is taken from kNN only when all seven neighbours agree
+(`donor_classifier_ai._KNN_K`, `min_agreement`): measured 2026-10-09 on
+record-labelled PAC sponsors the prototype tier abstains on, a plurality
+vote was right 29% of the time at every similarity floor, and a wrong
+industry is worse than an unclassified one.
+
 kNN's own outputs (`source == KNN_SOURCE`) are stored for lookup but are
 **never used as kNN reference examples** — only labels from an upstream tier
 (FEC metadata, rules, prototype similarity) vote. Otherwise one run's guess
@@ -508,8 +514,12 @@ here: **do not change a ranking weight because a result set looks better.**
 
 `backend/scripts/evaluate_explore_search.py` is the instrument. It reports
 MRR and Recall@k for each channel and for the fusion, broken out by query
-style (title / paraphrase / identifier / rare-term), against the live index.
-Run it before and after, and say what moved.
+style (title / paraphrase / identifier / rare-term / passage), against the
+live index. Run it before and after, and say what moved. Every probe is built
+from the document's own words (the "paraphrase" style is a bag of its most
+frequent words, not a rewording), so keyword leads semantic by construction
+and identifier probes are near zero for any encoder: compare the semantic
+channel with itself across a change, not with keyword.
 
 Relevance judgments there are derived by known-item retrieval, not
 hand-labelled — a document is pulled from the corpus, a plausible query for
@@ -793,11 +803,11 @@ What this rules in and out:
   picker); linking out to the official lookup for a reader who wants a
   precinct-exact answer. Where a district needs to be findable, give it
   place names a person already knows and let them filter: counties for a
-  U.S. House seat (`county_district_crosswalk.json`), towns for a state
-  legislative one (`state_leg_district_crosswalk.json`). Building that
-  crosswalk is real work — `scripts/fetch_state_leg_crosswalk.py`
-  documents why three obvious sources give wrong answers — and doing it
-  is the price of not asking.
+  U.S. House seat (`county_district_crosswalk.json`), towns, communities
+  (incorporated places and Census Designated Places) and counties for a
+  state legislative one (`state_leg_district_crosswalk.json`, a block-level
+  join documented in `scripts/fetch_state_leg_crosswalk.py`). Building
+  those crosswalks is real work, and doing it is the price of not asking.
 - **In:** following Civitas without an account. The Atom feeds (`/feeds`)
   are pulled, and a topic or state is chosen by which URL a reader
   subscribes to, so there is no subscriber list to keep. A push channel
@@ -818,12 +828,15 @@ then deleted (`api/visits.py`, `VisitSalt`). A permanent key would not do:
 the IPv4 space is small enough to enumerate, so anyone holding the key could
 recover every stored IP. With the salt gone, nobody can.
 
-A visit is a browser opening a page: the middleware counts a request only
-with `Sec-Fetch-Dest: document` (`lib/pageLoad.ts`), which every current
-browser sends and crawlers and scripts don't, and `track_visit` drops
-headless Chrome (`HeadlessChrome`, the default for Playwright-driven
-agents). Counting clients that sent no fetch metadata made crawlers two
-thirds of the unique visitors on 2026-10-01.
+A visit is a browser running a page: the page's own script reports it once
+mounted (`NavigationBeacon`, the first path and each navigation after it),
+and `track_visit` drops headless Chrome (`HeadlessChrome`, the default for
+Playwright-driven agents). Never count from the request a server sees:
+headers prove nothing. Counting requests without fetch metadata made
+crawlers two thirds of the unique visitors on 2026-10-01; the
+`Sec-Fetch-Dest: document` check that replaced it was beaten within a
+week by a crawler that sent it from thousands of rotating addresses and
+never ran a script (~7,000 of 7,357 visitors on 2026-10-08).
 
 Page-load timings (`POST /api/track-timing`, `PageLoadTiming`) are counted too,
 and deliberately carry even less: the browser reports one cold load's Navigation
@@ -932,7 +945,8 @@ Between TRANSFORM and the rest, both chamber pipelines run
 
 - Anyone in the database but absent from the roster is marked
   `is_current=False` with a `left_office_date`. Reversible — reappearing on
-  the roster restores them and clears the clock. Skipped (with an ops alert)
+  the roster restores them and clears the clock, and a serving member on the
+  roster who still carries a departure date has it cleared. Skipped (with an ops alert)
   when the roster comes back implausibly small, so a truncated Congress.gov
   response can't retire a chamber, and skipped for single-member
   `senator_filter` runs.
@@ -1115,7 +1129,9 @@ annual report outranks it. Filers are matched in `filer_matching.py`: the
 last-name field up to its first comma ("Doe, Jr."), and a House filer listed
 under a district no member of that surname holds — the Clerk keeps a member's
 pre-redistricting district — is matched across the state only when the first
-names agree (a shared token, or a measured similarity ratio). Each fetch module's
+names agree (a shared token, or a measured similarity ratio); failing that, a
+filer whose given names hold a member's whole name ("Roe, Jane Doe": a married
+name) is matched to that member of the listed district. Each fetch module's
 `PARSER_VERSION` keys its parse cache and is stored per report — bump it when a
 parser's output changes, and already-ingested reports are re-read (a re-read
 that can't read the report at all keeps the earlier holdings; one that reads
@@ -1257,7 +1273,9 @@ the pending list).
 | Bill policy area + stance derivation (embedding-based) | `backend/app/pipeline/analyze/bill_analyzer.py` |
 | Commemorative bill detection (LES 1x tier; calibrated threshold) | `backend/app/pipeline/analyze/commemorative.py` + `backend/scripts/calibrate_commemorative.py` |
 | Party alignment (content-based) + partisan depth | `backend/app/pipeline/analyze/party_platform.py` |
-| Caucus inference (votes + cosponsorship) | `backend/app/pipeline/transform/normalize_votes.py` |
+| Caucus: the House Clerk's recorded caucus, else inference (votes + cosponsorship) | `backend/app/pipeline/fetch/house_clerk.py` (`parse_caucuses`), `backend/app/pipeline/transform/normalize_votes.py` |
+| Committee seats and leadership titles (congress-legislators; the Clerk's list decides the House posts it names) | `backend/app/pipeline/fetch/committee_leadership.py`, `backend/app/pipeline/fetch/house_leadership.py` |
+| Donor name casing (learned from Federal Register prose) | `backend/app/pipeline/transform/normalize_finance.py` (`_clean_donor_name`), `backend/scripts/build_name_casing.py`, `backend/app/data/name_casing.json` |
 | kNN classifier + inverse-freq balancing | `backend/app/pipeline/analyze/nn_classifier.py` |
 | Sponsorship analysis (PageRank leadership + SVD ideology) | `backend/app/pipeline/analyze/sponsorship_analysis.py` |
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |

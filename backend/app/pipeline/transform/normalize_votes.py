@@ -453,6 +453,7 @@ def normalize_votes(
     senator_party: str = "I",
     cosponsorship_profile: dict | None = None,
     leader_spans: list[tuple[str | None, str | None]] | None = None,
+    declared_caucus: str | None = None,
 ) -> dict:
     """Normalize voting data for a senator.
 
@@ -469,6 +470,11 @@ def normalize_votes(
             for caucus inference (optional).
         leader_spans: majority_leader_spans() for this member — when they
             were majority leader, for the reconsider-switch exemption.
+        declared_caucus: the caucus the chamber records for the member
+            ("D", "R", or "I" for none) — the House Clerk's member data
+            (house_clerk.parse_caucuses). For an Independent it decides,
+            and inference runs only without it (the Senate publishes no
+            such field).
 
     Returns:
         Normalized voting record.
@@ -478,9 +484,12 @@ def normalize_votes(
     voted_against_party = 0
     total_tracked = 0
 
-    # For Independents, infer their caucus party from voting + cosponsorship
+    # For Independents: the caucus the chamber records, else one inferred
+    # from voting + cosponsorship.
     effective_party = senator_party
-    if senator_party == "I":
+    if senator_party == "I" and declared_caucus in ("D", "R", "I"):
+        effective_party = declared_caucus
+    elif senator_party == "I":
         inferred = _infer_caucus_party(
             bill_classifications, senator_votes, cosponsorship_profile,
         )

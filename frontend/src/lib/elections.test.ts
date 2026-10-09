@@ -390,6 +390,31 @@ describe("matchesDistrictQuery", () => {
     expect(matchesDistrictQuery(many, "newport")).toBe(true);
   });
 
+  it("ignores accents, punctuation, curly apostrophes and saint/st", () => {
+    // Place names as the crosswalks store them (2026-10-09: one county
+    // and four towns with diacritics, 189 names with "." or "'", none
+    // findable the way a reader types them).
+    const places = {
+      district: 2,
+      areas: ["Doña Ana County", "Prince George's County", "St. Louis County", "Cañon City city"],
+      candidates: [],
+    };
+    expect(matchesDistrictQuery(places, "dona ana")).toBe(true);
+    expect(matchesDistrictQuery(places, "prince georges")).toBe(true);
+    expect(matchesDistrictQuery(places, "Prince George’s")).toBe(true);
+    expect(matchesDistrictQuery(places, "st louis")).toBe(true);
+    expect(matchesDistrictQuery(places, "saint louis")).toBe(true);
+    expect(matchesDistrictQuery(places, "canon city")).toBe(true);
+    expect(matchesDistrictQuery(places, "kent")).toBe(false);
+  });
+
+  it("still matches a multi-seat label as printed", () => {
+    expect(matchesDistrictQuery({ district: "5-2", areas: [], candidates: [] }, "5-2")).toBe(true);
+    expect(
+      matchesDistrictQuery({ district: "8 (unexpired term)", areas: [], candidates: [] }, "8")
+    ).toBe(true);
+  });
+
   it("matches on a candidate or sitting representative's name", () => {
     expect(matchesDistrictQuery(race, "amaro")).toBe(true);
     expect(matchesDistrictQuery(race, "leonard")).toBe(true);

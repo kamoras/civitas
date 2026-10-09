@@ -115,7 +115,11 @@ _MEASURE_TYPES: tuple[tuple[str, str], ...] = (
 _MEASURE_RE = re.compile(
     r"(?<![A-Za-z0-9.])(?:"
     + "|".join(f"(?P<t{i}>{p})" for i, (p, _) in enumerate(_MEASURE_TYPES))
-    + r")\s?(?P<n>\d{1,5})\b"
+    # A number ends where the digits do: filers run a title straight on
+    # ("HR 4553Energy, Water Appropriations Act"), which a word boundary
+    # missed, so the number was not seen and its title read as the
+    # neighbouring number's.
+    + r")\s?(?P<n>\d{1,5})(?!\d)"
 )
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -123,6 +127,15 @@ _YEAR_RE = re.compile(r"(?:19|20)\d\d")
 
 _DF_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "bill_title_token_df.json"
 
+
+# Two numbers joined only by a slash are one bill's companions, written
+# together with one title (every short gap between numbers in the sampled
+# filings was a slash; see bill_mentions). Measured 2026-10-09 on 1,644
+# activity descriptions (22 of the calibration clients' 2025 filings and the
+# cached filings of six donor-vote matches): 817 bill links before, 932
+# after, none lost; a random 40 of the 115 new ones read by hand were all
+# the bill the filer named.
+_COMPANION_JOIN_RE = re.compile(r"\s*/\s*")
 
 # Where a filer's clause ends: a semicolon, a line break, or a sentence
 # end — a period after a real word (two or more lower-case letters), so an
@@ -143,17 +156,30 @@ def bill_mentions(text: str) -> list[tuple[str, str, str]]:
     """
     text = text or ""
     matches = list(_MEASURE_RE.finditer(text))
+
+    def joined(a: int, b: int) -> bool:
+        return bool(_COMPANION_JOIN_RE.fullmatch(text[matches[a].end():matches[b].start()]))
+
     out: list[tuple[str, str, str]] = []
     for k, m in enumerate(matches):
         prefix = next(
             _MEASURE_TYPES[i][1] for i in range(len(_MEASURE_TYPES)) if m.group(f"t{i}")
         )
-        lo = matches[k - 1].end() if k else 0
-        hi = matches[k + 1].start() if k + 1 < len(matches) else len(text)
-        after = text[m.end():hi]
+        # Companion numbers written together share one title: "HR 4016/
+        # S 2572 Department of Defense Appropriations Act" titles both, and
+        # "... Act (H.R.2854/S.1686)" both. Each side reaches past the
+        # numbers it is joined to.
+        first, last = k, k
+        while first > 0 and joined(first - 1, first):
+            first -= 1
+        while last + 1 < len(matches) and joined(last, last + 1):
+            last += 1
+        lo = matches[first - 1].end() if first else 0
+        hi = matches[last + 1].start() if last + 1 < len(matches) else len(text)
+        after = text[matches[last].end():hi]
         end = _CLAUSE_END_RE.search(after)
         after = after[: end.start()] if end else after
-        before = text[lo:m.start()]
+        before = text[lo:matches[first].start()]
         starts = list(_CLAUSE_END_RE.finditer(before))
         before = before[starts[-1].end():] if starts else before
         out.append((

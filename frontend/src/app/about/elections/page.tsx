@@ -100,7 +100,10 @@ export default async function ElectionsChapter() {
           So each page covers what&apos;s uniform statewide and lists what it omits (county and city
           offices, local measures, primary ballots and so on), with a link to your own election
           office. Once a gap closes for a state, it comes off that state&apos;s list: a disclaimer
-          that outlives the gap stops describing the page.
+          that outlives the gap stops describing the page. And the list names only gaps a state
+          actually has: no judicial line where judges are appointed or elected at another election,
+          no &ldquo;retention questions&rdquo; where voters never decide whether to keep a judge, no
+          legislative line in a year the state elects no legislature.
         </P>
         <P>
           That link goes to the state&apos;s own voter lookup, where you can see your sample ballot
@@ -135,6 +138,19 @@ export default async function ElectionsChapter() {
           day on, a &ldquo;member before this election&rdquo;, since the results can stay up until
           the new Congress is sworn in), not the &ldquo;incumbent&rdquo;: no seat on the new map has
           a previous holder.
+        </P>
+        <P>
+          State legislative districts are far smaller than a county, so each one lists the places it
+          covers: the towns themselves in the states where towns are the local government (New
+          England, New York, New Jersey, Pennsylvania, Michigan, Minnesota, Wisconsin), every city
+          and every unincorporated community Census names (Silver Spring, The Woodlands), and every
+          county it touches. Type any of them, or a candidate&apos;s name or the district number,
+          and the list narrows. The places come from the Census Bureau&apos;s 2026 state legislative
+          district files joined block by block to the 2020 census, so a place is listed for a
+          district only where people in it actually live inside that district; a sliver with fewer
+          than 50 residents (about one census block) is left off. A city split between districts is
+          listed under each, and your street decides which: the state&apos;s own voter lookup gives
+          the exact answer.
         </P>
         <Sub title="The optional town selector">
           <P>
@@ -214,6 +230,54 @@ export default async function ElectionsChapter() {
             the state&apos;s four House races. New York City&apos;s Board of Elections posts a
             contest list too, but it is marked tentative, predates the state&apos;s certification
             and covers only the city&apos;s districts, so it isn&apos;t presented as the ballot.
+          </P>
+        </More>
+        <More label="Checked against twelve certified lists, 9 October 2026">
+          <P>
+            A second audit compared the pages for twelve states, across most of the systems Civitas
+            reads, with each state&apos;s own certified list. Federal contests matched in all of
+            them apart from how some names were written. What it found, and what changed:
+          </P>
+          <List>
+            <Item label="North Carolina’s legislature and courts">
+              Read from primary results, which in North Carolina list only contested primaries: the
+              page showed 59 legislative nominees in 55 of 170 districts (three since replaced by
+              their party), and nothing for the Supreme Court seat. Both now come from the State
+              Board of Elections&apos; candidate list for November.
+            </Item>
+            <Item label="Names">
+              Candidates who never filed with the FEC (60 of them in 17 states) were shown as
+              &ldquo;SURNAME, GIVEN&rdquo; rather than as printed, and a nickname the ballot prints
+              inside a name (&ldquo;Tobias (Toby)&rdquo;) was dropped. Both now read as the state
+              prints them.
+            </Item>
+            <Item label="Incumbents">
+              Nine sitting members running again were not marked as incumbents, because someone else
+              in the race carried the FEC&apos;s open-seat code. A member the state&apos;s ballot
+              lists is now trusted as running.
+            </Item>
+            <Item label="Parties">
+              Where a state prints a party Civitas has no code for (California&apos;s Peace and
+              Freedom, &ldquo;No Party Preference&rdquo;), it is now shown as printed rather than as
+              no party. A party named &ldquo;American Independent&rdquo; or &ldquo;Independent
+              American&rdquo; is a party, not an independent.
+            </Item>
+            <Item label="Special elections and runoffs">
+              A legislative seat with a special election for the rest of its term beside its regular
+              contest is shown as two contests. Louisiana&apos;s House contests on 3 November are an
+              all-party primary with a 12 December runoff, and Georgia requires a majority in
+              November with a 1 December runoff; both pages now say so above the ballot.
+            </Item>
+            <Item label="Finding your district">
+              The filter ignores accents and punctuation, so &ldquo;dona ana&rdquo;, &ldquo;st
+              louis&rdquo; and &ldquo;prince georges&rdquo; find their places.
+            </Item>
+          </List>
+          <P>
+            Ohio&apos;s and Utah&apos;s legislative nominees still come from primary results: Ohio
+            publishes no statewide list of November candidates (its counties certify their own), and
+            Utah&apos;s is a scanned image. New York&apos;s and northern Nevada&apos;s House races
+            still list FEC filers, for the reason above.
           </P>
         </More>
         <More label="How the candidate lists were checked, September 2026">
@@ -398,17 +462,22 @@ export default async function ElectionsChapter() {
             Ballot titles are among the most litigated documents in election law: courts have voided
             measures over a legislature&apos;s wording. So each quote names its author
             (&ldquo;Drafted by the Georgia General Assembly&rdquo;, &ldquo;Prepared by the
-            Legislative Analyst&rsquo;s Office&rdquo;): who wrote it tells you how to weigh it. We
-            don&apos;t reproduce the pro and con arguments in voter guides; campaigns write those,
-            some states sell the slots, and printing them as a matched pair would manufacture a
-            balance that may not exist.
+            Legislative Analyst&rsquo;s Office&rdquo;): who wrote it tells you how to weigh it.
+            Where the summary or the yes/no description has a different author from the title, as in
+            Alabama, where a Fair Ballot Commission writes them under the Legislature&apos;s
+            question, each names its own. Where the law leaves it open who wrote a text, we name
+            everyone it could be rather than guess one. Measures are listed in the order the state
+            lists them. We don&apos;t reproduce the pro and con arguments in voter guides; campaigns
+            write those, some states sell the slots, and printing them as a matched pair would
+            manufacture a balance that may not exist.
           </P>
         </Sub>
         <Sub title="“No measures” is different from “we don’t know yet”">
           <P>
             An empty section reads as &ldquo;nothing to research&rdquo;: a damaging thing to imply
             about a state with seventeen amendments pending. So a state is shown as having no
-            statewide measures only when its official source establishes it, and a state we
+            statewide measures only when its official source establishes it (or, as in Delaware, its
+            constitution allows none: amendments there take no popular vote), and a state we
             haven&apos;t covered, or whose ingest failed, says <em>that</em> and points to the
             official lookup. Measures removed from the ballot (courts have struck about 2.3% since
             1995) are marked removed and kept for a while, not silently deleted.

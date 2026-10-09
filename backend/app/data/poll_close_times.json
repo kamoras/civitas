@@ -1,5 +1,5 @@
 {
-  "_source": "https://ballotpedia.org/State_Poll_Opening_and_Closing_Times_(2026) (polling hours per state statute, all times local), fetched 2026-09-28 by backend/scripts/fetch_poll_close_times.py. Close is the latest closing time the row states: in the zone it names, or else the latest instant across the state's zones (49 CFR Part 71) on election day, ties broken by midsummer; null = varies. Closes and zones re-derived from the stored hours on 2026-09-30 (--rederive).",
+  "_source": "https://ballotpedia.org/State_Poll_Opening_and_Closing_Times_(2026) (polling hours per state statute, all times local), fetched 2026-09-28 by backend/scripts/fetch_poll_close_times.py. Close is the latest closing time the row states: in the zone it names, or else the latest instant across the state's zones (49 CFR Part 71) on election day, ties broken by midsummer; null = varies. Closes and zones re-derived from the stored hours on 2026-10-08 (--rederive).",
   "states": {
     "AK": {
       "close": "20:00",
@@ -207,9 +207,10 @@
       "zone": "America/Denver"
     },
     "TN": {
-      "close": null,
+      "close": "20:00",
       "hours": "Varies by county",
-      "zone": "America/Chicago"
+      "statute": "Polls close 8 p.m. Eastern; 7 p.m. Central (Tenn. Code Ann. 2-3-201(a))",
+      "zone": "America/New_York"
     },
     "TX": {
       "close": "19:00",

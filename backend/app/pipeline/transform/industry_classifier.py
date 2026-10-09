@@ -73,6 +73,13 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
         "Lockheed Raytheon Boeing Northrop Grumman General Dynamics BAE L3Harris Leidos "
         "naval army air force Pentagon"
     ),
+    # Measured and not changed (2026-10-09): adding "credit union league
+    # association of credit unions" here moved a credit-union trade group off
+    # LABOR_UNIONS (5 of the FEC file's 25 credit-union PACs read as unions,
+    # 1 after) and lifted the record-labelled committees from 250 to 253
+    # right, but it relabelled 434 of the learning store's 25,403 names, and
+    # of 60 of those judged by hand 19 improved and 19 got worse. Any edit
+    # to a prototype moves every name near it; this one is a wash.
     "FINANCE": (
         "banking investment securities hedge private equity venture capital. "
         "Wall Street asset management brokerage wealth management credit lending mortgage. "

@@ -26,7 +26,8 @@
     "TX land_office_commissioner": "Four-year term (Tex. Const. art. IV §23).",
     "TX state_board_of_education": "Fifteen members elected by district to four-year staggered terms, with a 2-4-4 cycle only in the election after redistricting (Tex. Educ. Code §7.103); 2026 elects four-year terms.",
     "TX legislature": "Senate four years with a 2-4-4 cycle after redistricting (Tex. Const. art. III §3); the 16 districts up in 2026 are the ones that drew four-year terms in 2022, so 2026 elects four-year terms. House two years.",
-    "SC statewide": "Governor (jointly with the Lieutenant Governor since 2018), Secretary of State, Treasurer, Attorney General, Comptroller General, Superintendent of Education and Commissioner of Agriculture all four years (S.C. Const. art. IV §3, art. VI §7). The Adjutant General has been appointed since 2019 and is not on the ballot.",
+    "AR statewide": "Governor, Lieutenant Governor, Attorney General, Secretary of State, Treasurer, Auditor and Commissioner of State Lands all four years since 1986 (Ark. Const. amend. 63).",
+    "SC statewide":"Governor (jointly with the Lieutenant Governor since 2018), Secretary of State, Treasurer, Attorney General, Comptroller General, Superintendent of Education and Commissioner of Agriculture all four years (S.C. Const. art. IV §3, art. VI §7). The Adjutant General has been appointed since 2019 and is not on the ballot.",
     "VT statewide": "All six executive officers are elected biennially, to two-year terms (Vt. Const. ch. II sec. 43).",
     "NH governor": "Two-year term (N.H. Const. pt. II art. 42).",
     "NM public_lands_commissioner": "Four-year term (N.M. Const. art. V §1, Commissioner of Public Lands).",
@@ -46,7 +47,10 @@
       "treasurer": 4, "auditor": 4, "agriculture_commissioner": 4,
       "public_service_commission": 4, "state_board_of_education": 4
     },
-    "AR": {"governor": 4, "state_lands_commissioner": 4},
+    "AR": {
+      "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4,
+      "treasurer": 4, "auditor": 4, "state_lands_commissioner": 4
+    },
     "CA": {
       "governor": 4, "lt_governor": 4, "attorney_general": 4, "secretary_of_state": 4,
       "treasurer": 4, "controller": 4, "insurance_commissioner": 4, "school_superintendent": 4,

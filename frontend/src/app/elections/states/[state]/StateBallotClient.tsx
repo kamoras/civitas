@@ -9,6 +9,7 @@ import CoverageFeed from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
+import GeneralRunoffNotice, { otherPrimaryLabel } from "@/components/elections/GeneralRunoffNotice";
 import DistrictFinder from "@/components/elections/DistrictFinder";
 import DistrictMap from "@/components/elections/DistrictMap";
 import TownContestCard from "@/components/elections/TownContestCard";
@@ -107,9 +108,9 @@ function NomineeName({ nominee }: { nominee: StatewideNominee }) {
  * the 290th still has to find their seat by typing its name.
  */
 function StateLegSeatRow({ seat }: { seat: StateLegDistrict }) {
-  // Suffixes kept: a county here is the fallback for a district with
-  // no incorporated place, and "Forsyth County" must not render as
-  // "Forsyth" beside Georgia's actual Forsyth city.
+  // Suffixes kept: a district lists its counties after its places, and
+  // "Forsyth County" must not render as "Forsyth" beside Georgia's
+  // actual Forsyth city.
   const townsLabel = districtAreaLabel(seat.towns, 3, false);
   return (
     <div className="grid grid-cols-[42px_1fr] items-baseline gap-3 border border-white/[0.09] bg-surface px-3 py-2">
@@ -162,8 +163,8 @@ function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
             type="search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by town, candidate, or district number"
-            aria-label={`Filter ${chamber.label} seats by town, candidate, or district number`}
+            placeholder="Filter by town, county, candidate, or district number"
+            aria-label={`Filter ${chamber.label} seats by town, county, candidate, or district number`}
             className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
           />
           <p role="status" aria-live="polite" className="sr-only">
@@ -179,8 +180,8 @@ function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
         ))}
         {shown.length === 0 && (
           <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
-            No {chamber.label} seat matches “{filter}”. Try your town, a candidate&apos;s name, or a
-            district number.
+            No {chamber.label} seat matches “{filter}”. Try your town, your county, a
+            candidate&apos;s name, or a district number.
           </p>
         )}
       </div>
@@ -192,8 +193,8 @@ function StateLegislatureDetail({ ballot }: { ballot: StateBallot }) {
   return (
     <div>
       <p className="text-xs text-ink-min mb-3">
-        Each voter votes in exactly one seat per chamber. Each is listed with the towns it covers:
-        filter by yours to find it.
+        Each voter votes in exactly one seat per chamber. Each is listed with the places and
+        counties it covers: filter by yours to find it.
       </p>
       {ballot.stateLegRaces.map((chamber) => (
         <StateLegChamberSection key={chamber.chamber} chamber={chamber} />
@@ -1778,6 +1779,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 {ballot.primaryDate && (
                   <p className="mt-0.5 font-mono text-xs text-ink-min">
                     PRIMARY: {ballot.primaryDate}
+                    {(ballot.otherPrimaries ?? []).map((o) => (
+                      <span key={`${String(o.offices)}-${o.date}`}>
+                        {" · "}
+                        {otherPrimaryLabel(o)}: {o.date}
+                      </span>
+                    ))}
                   </p>
                 )}
                 {/* From election day the page is about the count; a lean
@@ -1835,6 +1842,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               ballot, not under it: in a state still on FEC filers after its
               primary, a reader who only sees a footnote has been misled. */}
             <BallotBasisNotice basis={ballot.ballotBasis} />
+            <GeneralRunoffNotice runoffs={ballot.generalRunoffs} />
 
             {federalRaces.length === 0 && (
               <p className="mb-4 text-base text-ink-min">

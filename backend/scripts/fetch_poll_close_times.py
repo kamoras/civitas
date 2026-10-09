@@ -14,7 +14,8 @@ state spanning two time zones closes in each at local time, so the last
 close is the latest of those instants on the election date itself (a
 zone keeping daylight time read as it is that night), unless the row
 names the zone a time belongs to (Nebraska's does). A state whose hours
-"vary by municipality/county" gets null, and the loader holds it until the latest
+"vary by municipality/county" gets null (unless the statute fixes the close
+-- STATUTORY_CLOSES), and the loader holds it until the latest
 close of any state — the error the gate is allowed to make is waiting
 too long, never too short.
 
@@ -80,6 +81,15 @@ UA = {"User-Agent": BOT_USER_AGENT}
 SOURCE_URL = "https://ballotpedia.org/State_Poll_Opening_and_Closing_Times_({year})"
 DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "poll_close_times.json"
 
+# A state whose Ballotpedia row says its hours "vary" because its counties
+# set the OPENING time, while the statute fixes the close: the statute's
+# own words, read like any row. Only a close the statute itself fixes
+# belongs here -- a state where the close genuinely varies by town (New
+# Hampshire) keeps null and waits for the latest close of any state.
+STATUTORY_CLOSES = {
+    "TN": "Polls close 8 p.m. Eastern; 7 p.m. Central (Tenn. Code Ann. 2-3-201(a))",
+}
+
 _PM_RE = re.compile(r"(\d{1,2})(?::(\d{2}))?\s*p\.m\.", re.IGNORECASE)
 
 
@@ -141,6 +151,9 @@ def rederive(path: pathlib.Path) -> int:
     on = election_day(data["year"])
     for code, entry in data["states"].items():
         close = last_close(entry["hours"], STATE_ZONES[code], on)
+        if close is None and code in STATUTORY_CLOSES:
+            entry["statute"] = STATUTORY_CLOSES[code]
+            close = last_close(STATUTORY_CLOSES[code], STATE_ZONES[code], on)
         entry["close"] = close[0] if close else None
         entry["zone"] = close[1] if close else STATE_ZONES[code][-1]
     data["_source"] = _source_note(data["_source"].split(" (polling hours")[0], data["_source"])
@@ -185,11 +198,14 @@ def main() -> int:
             missing.append(name)
             continue
         close = last_close(hours, STATE_ZONES[code], reference)
-        states[code] = {
-            "close": close[0] if close else None,
-            "zone": close[1] if close else STATE_ZONES[code][-1],
-            "hours": hours,
-        }
+        states[code] = {"hours": hours}
+        if close is None and code in STATUTORY_CLOSES:
+            states[code]["statute"] = STATUTORY_CLOSES[code]
+            close = last_close(STATUTORY_CLOSES[code], STATE_ZONES[code], reference)
+        states[code].update(
+            close=close[0] if close else None,
+            zone=close[1] if close else STATE_ZONES[code][-1],
+        )
     if missing:
         print(f"missing rows: {missing}", file=sys.stderr)
         return 1

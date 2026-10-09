@@ -192,6 +192,28 @@ class TestTopTwo:
         records = await self._run(monkeypatch, 2)
         nolan = next(r for r in records if r["last_name"] == "Nolan")
         assert nolan["party"] == ""
+        # What the state printed is what the ballot says: the page shows
+        # it rather than the FEC filing's code.
+        assert nolan["party_label"] == "No Party Preference"
+
+    @pytest.mark.asyncio
+    async def test_a_state_office_keeps_a_party_it_has_no_code_for(self, monkeypatch):
+        """California's Assembly, 2026-10-09: a Peace and Freedom nominee
+        and two No Party Preference ones were shown with no party at all."""
+        tsv = (
+            "Contest Name\tCandidate Name\tParty Name\tVote Total\n"
+            "State Assembly Member District 63\tPat Placeholder\tRepublican\t900\n"
+            "State Assembly Member District 63\tLee Placeholder\tPeace and Freedom\t500\n"
+            "State Assembly Member District 63\tSam Placeholder\tDemocratic\t400\n"
+        ).encode()
+        _serve(monkeypatch, tsv)
+        records = await tb.fetch_confirmed_candidates(
+            None, 2026, "CA", {"advance_count": 2, "statewide_offices": True, "format": self._FMT},
+        )
+        by_name = {r["last_name"]: r for r in records}
+        assert by_name["Lee Placeholder"]["party"] == "O"
+        assert by_name["Lee Placeholder"]["party_label"] == "Peace and Freedom"
+        assert "party_label" not in by_name["Pat Placeholder"]
 
     @pytest.mark.asyncio
     async def test_same_data_as_a_party_primary_would_take_only_the_leader(
