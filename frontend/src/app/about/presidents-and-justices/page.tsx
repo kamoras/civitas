@@ -275,9 +275,9 @@ export default function PresidentsAndJusticesChapter() {
         </P>
         <P>
           Two refinements were tested and not adopted. Splitting &ldquo;other presidents&rdquo; into
-          the appointer&apos;s party and the other party: across 31,506 votes, justices sided with
+          the appointer&apos;s party and the other party: across 31,650 votes, justices sided with
           other administrations of their appointer&apos;s party about as often as with the other
-          party&apos;s (+1.0 points, not significant), so the loyalty is to the one president, and
+          party&apos;s (+1.1 points, not significant), so the loyalty is to the one president, and
           for four of today&apos;s nine justices no other president of their appointer&apos;s party
           has served yet. Scoring how often a justice votes against their usual ideological side: in
           divided decisions that rate tracks closeness to the Court&apos;s center (a −0.77
@@ -286,11 +286,15 @@ export default function PresidentsAndJusticesChapter() {
         <P>
           One question is still open: timing. A justice&apos;s years under the appointing president
           are always their first. A placebo test moves a fake &ldquo;appointer&rdquo; window of the
-          same length to the years just after. It still finds about 4 of the 6.5 points, so part of
-          the gap seems to come from a justice&apos;s early years, whoever is president. Comparing
-          each vote with colleagues&apos; votes on the same case removed only a quarter of that
-          placebo effect and made the estimates much noisier, so it was not adopted. The score is
-          unchanged while a measure that passes the placebo is studied.
+          same length to the years just after, and it still finds about 4 of the 6.6 points. So much
+          of the gap seems to come from a justice&apos;s early years, whoever is president. Two
+          fixes were tested against that placebo, and neither passed, so neither was adopted:
+          comparing each vote with colleagues&apos; votes on the same case removed under a third of
+          the placebo effect; and fitting the career drift directly leaves about 3 points, no more
+          than fake windows placed elsewhere in a career produce. The president who returned in 2025
+          after a gap gives a direct test, but 43 cases since then are too few to decide it. The
+          score is unchanged for now, and should be read as partly measuring when in a
+          justice&apos;s career the appointing president served.
         </P>
         <More label="Measures we removed">
           <P>

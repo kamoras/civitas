@@ -7,8 +7,8 @@ downloaded once into --cache:
 - Epstein & Posner (2016), "Supreme Court Justices' Loyalty to the
   President", J. Legal Studies 45: every vote in a case of concern to the
   president, 1937-2014, hand-coded by the Solicitor General's position.
-- The Supreme Court Database, 2025 Release 01 (justice-centered, by
-  citation): every vote 1946-2024, whose lead parties extend the president
+- The Supreme Court Database, 2026 Release 01 (justice-centered, by
+  citation): every vote 1946-2025, whose lead parties extend the president
   cases past 2014.
 - Martin-Quinn scores (2024 release): each justice's position per term.
 
@@ -26,11 +26,14 @@ Research-only dependencies (scripts/requirements-research.txt):
 import gzip
 
 import argparse
+import csv
 import io
+import re
 import pathlib
 import sys
 import urllib.request
 import zipfile
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -43,8 +46,9 @@ from app.pipeline.analyze.justice_loyalty import MIN_VOTES_EACH_SIDE, Estimate, 
 
 SOURCES = {
     "JusticePresident.zip": "https://epstein.wustl.edu/s/JusticePresident.zip",
-    "SCDB_2025_01_justiceCentered_Citation.zip": "https://scdb.la.psu.edu/?jet_download=d9fd858d0211fe70abbe33bf7cd7ec832f3a2313",
+    "SCDB_2026_01_justiceCentered_Citation.zip": "https://scdb.la.psu.edu/?jet_download=c99e5d5b7131dda1f6d1c06a5e7c4dda58c38c88",
     "mq_justices.csv": "https://mqscores.wustl.edu/media/2024/justices.csv",
+    "judges.csv": "https://www.fjc.gov/sites/default/files/history/judges.csv",
 }
 # Presidents by the day they took office (a decision is credited to the
 # president in office on its date, as in Epstein & Posner's main results).
@@ -167,7 +171,7 @@ def panel(ep: pd.DataFrame, sc: pd.DataFrame) -> pd.DataFrame:
 
 
 def loyalty(P: pd.DataFrame) -> pd.DataFrame:
-    print("\n== 3. Loyalty, 1937-2024 ==")
+    print("\n== 3. Loyalty, 1937 on ==")
     fit = smf.ols("y ~ in_office + pet + C(justiceName)", P).fit(
         cov_type="cluster", cov_kwds={"groups": pd.factorize(P.justiceName)[0]})
     print(f"  pooled: {fit.params['in_office']:+.3f} (t={fit.tvalues['in_office']:.1f}), N={len(P)} votes "
@@ -276,9 +280,13 @@ def same_party(P: pd.DataFrame) -> dict[str, pd.DataFrame]:
     return specs
 
 
-def _split_half(P: pd.DataFrame, formula: str) -> tuple[int, float]:
-    """(justices, Spearman-Brown reliability) of the per-justice in_office
-    estimate between odd and even terms."""
+def _split_half(P: pd.DataFrame, formula: str) -> tuple[int, float, float]:
+    """(justices, Spearman-Brown reliability, the same weighted) of the
+    per-justice in_office estimate between odd and even terms. The weighted
+    correlation counts each justice by 1 / (se_odd^2 + se_even^2), so a
+    justice with a few dozen votes a side, whose halves are mostly noise,
+    does not decide it alone (one such justice moves the unweighted figure
+    from 0.67 to 0.33)."""
     rows = []
     for _, g in P.groupby("justiceName"):
         est = []
@@ -286,11 +294,16 @@ def _split_half(P: pd.DataFrame, formula: str) -> tuple[int, float]:
             h = g[g.term % 2 == half]
             if h.in_office.nunique() < 2 or min(h.in_office.sum(), (1 - h.in_office).sum()) < 8:
                 break
-            est.append(smf.ols(formula, h).fit().params["in_office"])
+            f = smf.ols(formula, h).fit()
+            est.append((f.params["in_office"], f.bse["in_office"]))
         if len(est) == 2:
-            rows.append(est)
-    r = np.corrcoef(np.array(rows).T)[0, 1]
-    return len(rows), 2 * r / (1 + r)
+            rows.append((est[0][0], est[1][0], 1 / (est[0][1] ** 2 + est[1][1] ** 2)))
+    x, y, w = (np.array(c) for c in zip(*rows))
+    r = np.corrcoef(x, y)[0, 1]
+    mx, my = np.average(x, weights=w), np.average(y, weights=w)
+    rw = np.average((x - mx) * (y - my), weights=w) / np.sqrt(
+        np.average((x - mx) ** 2, weights=w) * np.average((y - my) ** 2, weights=w))
+    return len(rows), 2 * r / (1 + r), 2 * rw / (1 + rw)
 
 
 def _against_colleagues(P: pd.DataFrame) -> pd.DataFrame:
@@ -332,7 +345,7 @@ def era(P: pd.DataFrame) -> None:
     for label, d, formula in (
         ("+ term fixed effects", P, "y ~ in_office + pet + C(term)"),
         *((f"{lo}-{hi}, + term fixed effects", P[P.term.between(lo, hi)], "y ~ in_office + pet + C(term)")
-          for lo, hi in ((1937, 1952), (1953, 1980), (1981, 2024))),
+          for lo, hi in ((1937, 1952), (1953, 1980), (1981, int(P.term.max())))),
         *((name, P.dropna(subset=[col]), tpl.format(f=col, x="in_office")) for name, col, tpl in ERA_SPECS),
     ):
         b, t = pooled(d, formula, "in_office")
@@ -344,10 +357,10 @@ def era(P: pd.DataFrame) -> None:
                                   lambda g: g.in_office == 1, lambda g: g.in_office == 0)
         R, A = fits[name], fits["A"]
         both = R.index.intersection(A.index)
-        n, rel = _split_half(d, tpl.format(f=col, x="in_office"))
+        n, rel, rel_w = _split_half(d, tpl.format(f=col, x="in_office"))
         print(f"  {name}: {len(R)} justices ({sum(j in R.index for j in CURRENT)} current), mean {R.attrs['mu'] * 100:+.1f}, "
               f"tau {R.attrs['tau'] * 100:.1f}, Spearman with A {spearmanr(R.loc[both, 'shrunk'], A.loc[both, 'shrunk']).statistic:.2f}, "
-              f"split-half reliability {rel:.2f} ({n} justices)")
+              f"split-half reliability {rel:.2f}, weighted {rel_w:.2f} ({n} justices)")
     print("  per justice: shrunk ± se, score; for E-excl also the weight on the justice's own estimate, tau2 / (tau2 + se2)")
     tau2 = fits["E-excl"].attrs["tau"] ** 2
     for j in sorted(fits["A"].index, key=lambda j: (j not in CURRENT, j)):
@@ -390,6 +403,173 @@ def era(P: pd.DataFrame) -> None:
               f"{(T[name + ' t'].abs() > 1.96).mean():.0%}")
 
 
+def _tenure(P: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.Path) -> pd.Series:
+    """Each vote's years on the Court: its term minus the justice's first
+    term, the first term the justice voted in the Database (every vote from
+    1946), or for a justice seated earlier the term of their first Supreme
+    Court commission (FJC; a commission from July on joins that October's
+    term). Both Rehnquist appointments count from 1971."""
+    def term_of(d: str) -> int:
+        dt = datetime.strptime(d, "%m/%d/%Y") if "/" in d else datetime.strptime(d, "%Y-%m-%d")
+        return dt.year if dt.month >= 7 else dt.year - 1
+    people = []
+    with open(judges, encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f):
+            terms = [term_of(row[f"Commission Date ({i})"]) for i in range(1, 7)
+                     if row.get(f"Court Type ({i})") == "Supreme Court" and row.get(f"Commission Date ({i})")]
+            if terms:
+                people.append((re.sub(r"[^a-z]", "", row["Last Name"].lower()), row["First Name"][:1].upper(), min(terms)))
+    first_vote = sc.groupby("justiceName").term.min()
+    start = {}
+    for j, t0 in P.groupby("justiceName").term.min().items():
+        base = re.sub(r"\d$", "", j) if j.startswith("WHRehnquist") else j
+        if base in first_vote.index and first_vote[base] > 1946:
+            start[j] = int(first_vote[base])
+            continue
+        key = re.sub(r"[^a-z]", "", re.sub(r"\d$", "", j).lower())
+        start[j] = max(t for last, initial, t in people if key.endswith(last) and j[0] == initial and t <= t0)
+    return P.term - P.justiceName.map(start)
+
+
+# Career-curve shapes tried (section 8), simplest first.
+CAREER_SHAPES = {
+    "none": "", "linear": " + tenure", "quadratic": " + tenure + I(tenure ** 2)",
+    "cubic": " + tenure + I(tenure ** 2) + I(tenure ** 3)", "spline df3": " + cr(tenure, df=3)",
+    "spline df4": " + cr(tenure, df=4)", "spline df6": " + cr(tenure, df=6)", "dummies": " + C(tenure_capped)",
+}
+
+
+def _career_curve(pooled, P: pd.DataFrame, flag: str) -> np.ndarray:
+    """The pooled fit's career curve at each row's tenure, relative to the
+    first term."""
+    base = P.assign(pet=0, **{flag: 0})
+    return (pooled.predict(base) - pooled.predict(base.assign(tenure=0, tenure_capped=0))).values
+
+
+def _career_fit(P: pd.DataFrame, shape: str, flag: str = "in_office") -> tuple:
+    """(pooled fit, per-justice table) of candidate F: the appointer
+    indicator with a pooled career curve; per justice, the vote less the
+    pooled curve, on the indicator and the petitioner control, shrunk as
+    the pipeline does."""
+    pooled = smf.ols(f"y ~ {flag} + pet + C(justiceName){CAREER_SHAPES[shape]}", P).fit(
+        cov_type="cluster", cov_kwds={"groups": pd.factorize(P.justiceName)[0]})
+    R = _per_justice(P.assign(y=P.y - _career_curve(pooled, P, flag)), f"y ~ {flag} + pet", flag,
+                     lambda g: g[flag] == 1, lambda g: g[flag] == 0)
+    return pooled, R
+
+
+def career(P: pd.DataFrame, sv: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.Path) -> None:
+    """Candidate F: the appointer indicator with a pooled career-tenure
+    curve. Identified because the appointer's window varies in length (and
+    a few windows start years into a career), so at a given tenure some
+    justices are still under their appointer and others are not. Gated by
+    the section 7 placebo, and by the one return of an appointer years into
+    his appointees' careers (non-consecutive terms, January 2025)."""
+    print("\n== 8. A career curve (F), gated ==")
+    P = P.assign(tenure=_tenure(P, sc, judges))
+    P = P.assign(tenure_capped=P.tenure.clip(upper=25))
+    w = P[P.in_office == 1].groupby("justiceName").tenure.agg(["min", "nunique"])
+    print(f"  appointer windows, terms: {w['nunique'].value_counts().sort_index().to_dict()}; starting after the "
+          f"first term: {int((w['min'] > 0).sum())} of {len(w)}")
+    print("  votes under the appointer / others by years on the Court: " + ", ".join(
+        f"{t}: {int(a)}/{int(b)}" for t, (b, a) in pd.crosstab(P.tenure.clip(upper=12), P.in_office).iterrows()))
+    # shape: 10-fold cross-validation by case, simplest within one se of the best
+    folds = P.caseId.map(dict(zip(P.caseId.unique(), np.random.default_rng(0).integers(0, 10, P.caseId.nunique()))))
+    err = {}
+    for name, f in CAREER_SHAPES.items():
+        e = np.empty(len(P))
+        for k in range(10):
+            m = smf.ols("y ~ in_office + pet + C(justiceName)" + f, P[folds != k]).fit()
+            e[(folds == k).values] = (P.y[folds == k] - m.predict(P[folds == k])).values ** 2
+        err[name] = e
+    best = min(err, key=lambda n: err[n].mean())
+    within = {}
+    for name, e in err.items():
+        d = e - err[best]
+        within[name] = d.mean() <= d.std(ddof=1) / np.sqrt(len(d))
+        print(f"  out-of-sample MSE {name:10} {e.mean():.5f} (above the best by {d.mean():.6f}, "
+              f"se {d.std(ddof=1) / np.sqrt(len(d)):.6f})")
+    shape = next(n for n in CAREER_SHAPES if within[n])
+    A = _per_justice(P, "y ~ in_office + pet", "in_office", lambda g: g.in_office == 1, lambda g: g.in_office == 0)
+    fits = {}
+    for name in dict.fromkeys((shape, "spline df3")):
+        pooled, R = _career_fit(P, name)
+        fits[name] = R
+        grid = P.iloc[[0] * 7].assign(tenure=range(0, 35, 5))
+        curve = _career_curve(pooled, grid.assign(tenure_capped=grid.tenure.clip(upper=25)), "in_office")
+        n, rel, rel_w = _split_half(P.assign(y=P.y - _career_curve(pooled, P, "in_office")), "y ~ in_office + pet")
+        both = R.index.intersection(A.index)
+        print(f"  F ({name}{', chosen' if name == shape else ''}): pooled appointer {pooled.params['in_office']:+.3f} "
+              f"(t={pooled.tvalues['in_office']:.1f}); career curve at 0, 5, ... 30 years "
+              f"{', '.join(f'{c * 100:+.1f}' for c in curve)} points; per justice mean {R.attrs['mu'] * 100:+.1f}, "
+              f"tau {R.attrs['tau'] * 100:.1f}, Spearman with A "
+              f"{spearmanr(R.loc[both, 'shrunk'], A.loc[both, 'shrunk']).statistic:.2f}, "
+              f"split-half {rel:.2f}, weighted {rel_w:.2f} ({n})")
+    F = fits[shape]
+    for j in CURRENT:
+        a, f = A.loc[j], F.loc[j]
+        print(f"    {j:12} A {a.shrunk * 100:+5.1f}, {a.score:5.1f} | F {f.shrunk * 100:+5.1f} ± {f.shrunk_se * 100:.1f}, "
+              f"{f.score:5.1f}")
+    # gate 1: the section 7 placebo, refitted with the career curve
+    Q = P[P.in_office == 0]
+    length = P[P.in_office == 1].groupby("justiceName").term.nunique()
+    real = smf.ols("y ~ in_office + pet + C(justiceName)" + CAREER_SHAPES[shape], P).fit().params["in_office"]
+    placebo = []
+    for k in range(25):
+        parts = []
+        for j, g in Q.groupby("justiceName"):
+            terms = sorted(g.term.unique())
+            if j in length.index and k + length[j] < len(terms):
+                parts.append(g.assign(fake=g.term.isin(terms[k:k + length[j]]).astype(int)))
+        if len(parts) < 3:
+            break
+        pooled, R = _career_fit(pd.concat(parts), shape, "fake")
+        placebo.append((pooled.params["fake"], pooled.tvalues["fake"]))
+        if k == 0:
+            # does a justice's own fake window predict their real estimate?
+            # (a justice-specific career path the pooled curve can't remove)
+            both = R.index.intersection(F.index)
+            print(f"  placebo k=0 per justice: tau {R.attrs['tau'] * 100:.1f} (real F {F.attrs['tau'] * 100:.1f}); "
+                  f"Spearman with the real F estimate {spearmanr(R.loc[both, 'b'], F.loc[both, 'b']).statistic:+.2f} "
+                  f"({len(both)} justices)")
+    v, t = np.array(placebo).T
+    print(f"  gate 1, placebo under F: k=0 {v[0] * 100:+.1f} (t={t[0]:.1f}), k=1 {v[1] * 100:+.1f}; over {len(v)} "
+          f"shifts mean {v.mean() * 100:+.1f}, sd {v.std(ddof=1) * 100:.1f}, |t| > 1.96 in {np.mean(np.abs(t) > 1.96):.0%}; "
+          f"real {real * 100:+.1f}, matched or exceeded in size by {np.mean(np.abs(v) >= abs(real)):.0%} of shifts")
+    print("    by k: " + ", ".join(f"{k} {x * 100:+.1f}" for k, x in enumerate(v)))
+    # gate 2: an appointer's return years into his appointees' careers
+    sv = sv.assign(date=pd.to_datetime(sv.dateDecision))
+    # the president who served non-consecutive terms: his first term's start,
+    # his successor's, and his return
+    names = [p for p, _ in PRESIDENTS]
+    back = next(i for i, p in enumerate(names) if p in names[:i])
+    returning = names[back]
+    first, between = next(s for p, s in PRESIDENTS if p == returning), PRESIDENTS[back - 1][1]
+    appointees = {j for j, p in APPOINTER.items() if p == returning}
+    for label, lo, switch, hi, after_is_appointer in (
+        ("return, non-consecutive term", between, PRESIDENTS[back][1], "2100-01-01", True),
+        ("departure, first term to successor", first, between, PRESIDENTS[back][1], False),
+    ):
+        d = sv[(sv.date >= lo) & (sv.date < hi)]
+        d = d.assign(post=(d.date >= switch).astype(int))
+        sides = d.groupby("justiceName").post.nunique()
+        # justices sitting on both sides, less the other president's appointees
+        # (their own appointer leaves or arrives at the same switch)
+        other = {president_on(lo), president_on(switch)} - {returning}
+        d = d[d.justiceName.isin(sides[sides == 2].index) & ~d.justiceName.map(APPOINTER).isin(other)]
+        treat = d.justiceName.isin(appointees).astype(int)
+        d = d.assign(treat=treat, in_office=treat * (d.post if after_is_appointer else 1 - d.post))
+        m = smf.ols("vote_for_pres ~ in_office + C(caseId) + C(justiceName)", d).fit(
+            cov_type="cluster", cov_kwds={"groups": pd.factorize(d.caseId)[0]})
+        b, se = m.params["in_office"], m.bse["in_office"]
+        rates = d.groupby(["treat", "post"]).vote_for_pres.mean()
+        cases = d.groupby("post").caseId.nunique()
+        print(f"  gate 2, {label}: {cases[0]} cases before, {cases[1]} after; the appointees "
+              f"{rates[(1, 0)]:.3f} -> {rates[(1, 1)]:.3f}, the others {rates[(0, 0)]:.3f} -> {rates[(0, 1)]:.3f}; "
+              f"appointer effect (case and justice fixed effects, clustered by case) {b * 100:+.1f} points, "
+              f"95% CI [{(b - 1.96 * se) * 100:+.1f}, {(b + 1.96 * se) * 100:+.1f}]")
+
+
 def against_ideology(sc: pd.DataFrame, mq: pd.DataFrame) -> None:
     """Would "votes against their own ideological side" measure fairness?
     In the justice-centered Database, `direction` is the justice's own
@@ -421,18 +601,8 @@ def validity(P: pd.DataFrame, R: pd.DataFrame, mq: pd.DataFrame) -> None:
     rho = spearmanr(R.shrunk, R.extremity)
     print(f"  loyalty vs mean distance from the Court's median (Martin-Quinn): Spearman {rho.statistic:.2f} "
           f"(p {rho.pvalue:.2f}, {len(R)} justices)")
-    rows = []
-    for j, g in P.groupby("justiceName"):
-        est = []
-        for half in (0, 1):
-            h = g[g.term % 2 == half]
-            if h.in_office.nunique() < 2 or min(h.in_office.sum(), (1 - h.in_office).sum()) < 8:
-                break
-            est.append(smf.ols("y ~ in_office + pet", h).fit().params["in_office"])
-        if len(est) == 2:
-            rows.append(est)
-    r = np.corrcoef(np.array(rows).T)[0, 1]
-    print(f"  split-half (odd vs even terms, {len(rows)} justices): r {r:.2f}, Spearman-Brown {2 * r / (1 + r):.2f}")
+    n, rel, rel_w = _split_half(P, "y ~ in_office + pet")
+    print(f"  split-half (odd vs even terms, {n} justices): Spearman-Brown {rel:.2f}, weighted {rel_w:.2f}")
 
 
 def main():
@@ -442,17 +612,19 @@ def main():
     args = ap.parse_args()
     paths = fetch(args.cache)
     ep = read_zip(paths["JusticePresident.zip"], ".dta", lambda b: pd.read_stata(b, convert_categoricals=False))
-    sc = read_zip(paths["SCDB_2025_01_justiceCentered_Citation.zip"], ".csv",
+    sc = read_zip(paths["SCDB_2026_01_justiceCentered_Citation.zip"], ".csv",
                   lambda b: pd.read_csv(b, encoding="latin-1", low_memory=False))
     mq = pd.read_csv(paths["mq_justices.csv"])
     reproduce(ep)
     gov = government_codes(ep, sc.drop_duplicates("caseId")[["caseId", "term", "petitioner", "respondent"]])
-    P = panel(ep, scdb_votes(sc, gov))
+    sv = scdb_votes(sc, gov)
+    P = panel(ep, sv)
     R = loyalty(P)
     validity(P, R, mq)
     same_party(P)
     against_ideology(sc, mq)
     era(P)
+    career(P, sv, sc, paths["judges.csv"])
     if args.write_bundle:
         write_bundle(ep)
 
