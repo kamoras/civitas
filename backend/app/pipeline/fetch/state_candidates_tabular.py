@@ -67,8 +67,8 @@ acted on blindly:
        both Public Service Commission seats, which are elected
        statewide but held by district (see StatewideNominee.district).
        Its county subdivisions are Census County Divisions and had to
-       be swapped for incorporated places; three of its House districts
-       lie entirely in unincorporated land and fall back to counties.
+       be swapped for places (incorporated and CDPs), with each
+       district's counties listed beside them.
   ID   LIVE. "State Representative District N Seat A"/"Seat B" —
        two seats of ONE district, now kept apart by StateLegNominee.seat
        rather than colliding: 35 districts, 70 lower seats, which is
