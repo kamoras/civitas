@@ -199,6 +199,12 @@ export interface BallotMeasure {
    * the author is more neutral than the bare quote. */
   titleAuthority: string | null;
   fiscalAuthority: string | null;
+  /** The summary's drafter, when the state names one other than the
+   * title's (Alabama's Fair Ballot Commission under the Legislature's
+   * question). Null: none named separately. */
+  summaryAuthority?: string | null;
+  /** The drafter of the yes/no sentences, when the state names one. */
+  framingAuthority?: string | null;
   sourceName: string;
   sourceUrl: string | null;
   /** The county election office whose copy of the state's document was read, when the
@@ -420,6 +426,13 @@ export interface StateBallot {
    * (house.gov, a member's name) can answer for the old map.
    * Optional for an older backend: absent reads as false. */
   newDistrictLines?: boolean;
+  /** Where November does not settle a contest by plurality (Georgia's
+   * majority rule; Louisiana's 2026 House open primary), with the
+   * runoff's date. Optional for an older backend. */
+  generalRunoffs?: GeneralRunoff[];
+  /** Contests whose primary was not `primaryDate` (Alabama's postponed
+   * House districts). Optional for an older backend. */
+  otherPrimaries?: OtherPrimary[];
   senateRaces: RaceWithCandidates[];
   /** Only set (and only meaningful) when senateRaces is empty — the
    * Senate's three-class rotation (U.S. Const. art. I §3) means most
@@ -715,4 +728,23 @@ export interface LiveFeedStatus {
   checkedAt: string;
   /** The last read that was stored; null until one is. */
   lastOkAt: string | null;
+}
+
+/** One November rule that is not plurality (backend election_rules.json). */
+export interface GeneralRunoff {
+  /** "S", "H", or "*" for every contest on the ballot. */
+  offices: ("S" | "H")[] | "*";
+  /** The November contest is itself an all-party primary. */
+  openPrimary: boolean;
+  /** ISO date of the runoff. */
+  runoffDate: string;
+}
+
+/** Contests whose primary had its own date (backend election_rules.json). */
+export interface OtherPrimary {
+  offices: ("S" | "H")[] | "*";
+  /** House districts it covers; absent for all of them. */
+  districts?: number[];
+  /** ISO date. */
+  date: string;
 }

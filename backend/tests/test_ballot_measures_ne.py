@@ -42,7 +42,10 @@ def test_pamphlet_initiatives_verbatim():
     assert pamphlet["442"]["official_summary"].endswith("compete against public schools or institutions.")
     assert "Internet-based" in pamphlet["440"]["official_summary"]
     for m in pamphlet.values():
-        assert m["title_authority"] is None  # the pamphlet names no drafter
+        # Neb. Rev. Stat. §32-1410: the Attorney General writes both the
+        # ballot title and the FOR/AGAINST statement of a petition measure.
+        assert m["title_authority"] == ne.PETITION_TITLE_AUTHORITY
+        assert m["framing_authority"] == ne.PETITION_FRAMING_AUTHORITY
 
 
 def test_slip_law_link_and_ballot_language():

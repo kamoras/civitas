@@ -42,7 +42,7 @@ estimate's drafter, so it is attributed to its publisher.
 
 import re
 
-from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
+from app.pipeline.fetch.ballot_measure_text import join_lines
 
 AUTHORITY = "Wyoming Secretary of State"
 
@@ -80,12 +80,19 @@ def _parse_block(heading: str, lines: list[str]) -> dict:
     fiscal_idx = next((i for i, ln in enumerate(body) if _FISCAL_RE.match(ln.strip())), None)
     summary_lines = body if fiscal_idx is None else body[:fiscal_idx]
     fiscal_lines = [] if fiscal_idx is None else body[fiscal_idx + 1:]
-    summary = clean_text(" ".join(summary_lines))
+    # join_lines, not " ".join: a word hyphenated across a line break is
+    # rejoined ("prop-" / "erty"), as every other reader does.
+    summary = join_lines(summary_lines)
     if not summary:
         raise ValueError(f"WY {heading!r}: empty ballot language")
-    fiscal = clean_text(" ".join(fiscal_lines))
+    fiscal = join_lines(fiscal_lines)
     return {
-        "number": heading,
+        # The designation without the heading's "PROPOSED" ("INITIATIVE
+        # PROPOSITION NUMBER ONE"); the whole heading is the title. The
+        # heading used to be the number too, and so the record id, spaces
+        # and all — id_key keeps the id a slug.
+        "number": heading.removeprefix("PROPOSED ").strip(),
+        "id_key": heading,
         "title": heading,
         "origin": _origin(heading),
         "official_summary": summary,

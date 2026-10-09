@@ -23,12 +23,17 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
   // question itself, for most states). It is rendered beside whichever of
   // the two it names, and never beside the display label `title`, which
   // can be a label like "Proposition 3" that nobody drafted.
-  const drafter = measure.titleAuthority ? (
-    // Naming the drafter is MORE neutral than the bare quote: ballot
-    // titles are routinely litigated as slanted, and who wrote one is
-    // what tells a reader how to weigh it.
-    <p className="text-[10px] text-ink-min mt-1">Drafted by {measure.titleAuthority}</p>
-  ) : null;
+  // Naming the drafter is MORE neutral than the bare quote: ballot
+  // titles are routinely litigated as slanted, and who wrote one is what
+  // tells a reader how to weigh it. The summary and the yes/no sentences
+  // carry their own drafter where the state names a different one
+  // (summaryAuthority, framingAuthority) — Alabama's Fair Ballot
+  // Commission writes both under the Legislature's question, and one
+  // "Drafted by" beside the title credited its words to the Legislature.
+  const drafted = (by: string | null | undefined) =>
+    by ? <p className="text-[10px] text-ink-min mt-1">Drafted by {by}</p> : null;
+  const summaryDrafter =
+    measure.summaryAuthority || (!measure.officialTitle ? measure.titleAuthority : null);
 
   return (
     <article
@@ -69,7 +74,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
           <blockquote className="text-xs text-ink border-l-2 border-white/15 pl-3">
             {measure.officialTitle}
           </blockquote>
-          {drafter}
+          {drafted(measure.titleAuthority)}
         </section>
       )}
 
@@ -79,7 +84,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
             OFFICIAL SUMMARY
           </h4>
           <p className="text-xs text-ink whitespace-pre-line">{measure.officialSummary}</p>
-          {!measure.officialTitle && drafter}
+          {drafted(summaryDrafter)}
         </section>
       )}
 
@@ -100,6 +105,11 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
               </h4>
               <p className="text-xs text-ink">{measure.noMeans}</p>
             </div>
+          )}
+          {measure.framingAuthority && (
+            <p className="text-[10px] text-ink-min sm:col-span-2">
+              Drafted by {measure.framingAuthority}
+            </p>
           )}
         </section>
       )}

@@ -106,7 +106,7 @@ export function districtAreaLabel(
  * Matching runs against that list IN FULL, not the truncated
  * districtAreaLabel display string: a reader typing "washington"
  * must still match a district whose label elided it behind "& 2 more".
- * Substring, case-insensitive.
+ * Substring, compared through searchFold on both sides.
  */
 export function matchesDistrictQuery(
   race: {
@@ -118,8 +118,9 @@ export function matchesDistrictQuery(
   },
   query: string
 ): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
+  const raw = query.trim().toLowerCase();
+  const q = searchFold(query);
+  if (!raw) return true;
   // "AL" is what an at-large district renders as, so it must also be
   // what an at-large district is searchable by.
   const districtLabel = race.district === 0 ? "al" : String(race.district ?? "").toLowerCase();
@@ -129,13 +130,29 @@ export function matchesDistrictQuery(
   // seats; "1" still does not match "10", because "10" leads with "10".
   const districtNumber = districtLabel.match(/^\d+/)?.[0] ?? "";
   return (
-    districtLabel === q ||
-    (districtNumber !== "" && districtNumber !== districtLabel && districtNumber === q) ||
-    (race.areas ?? []).some((a) => a.toLowerCase().includes(q)) ||
+    districtLabel === raw ||
+    (districtNumber !== "" && districtNumber !== districtLabel && districtNumber === raw) ||
+    (q !== "" && (race.areas ?? []).some((a) => searchFold(a).includes(q))) ||
     race.candidates.some(
-      (c) => c.name.toLowerCase().includes(q) || (c.ballotName ?? "").toLowerCase().includes(q)
+      (c) =>
+        q !== "" && (searchFold(c.name).includes(q) || searchFold(c.ballotName ?? "").includes(q))
     )
   );
+}
+
+/** A place or person's name reduced to what a reader types: no case, no
+ * accents ("Dona Ana" finds "Doña Ana County"), no punctuation ("prince
+ * georges" and a phone's curly "Prince George’s" both find "Prince
+ * George's"; "st louis" finds "St. Louis"), and "saint" read as "st". */
+export function searchFold(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[.'\u2018\u2019]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\bsaint\b/g, "st")
+    .trim();
 }
 
 /** What a candidate's money column says: the FEC's contributions for this

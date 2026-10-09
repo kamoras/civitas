@@ -78,6 +78,8 @@ from app.pipeline.fetch.ballot_measures_ok import fetch_measures as ok_fetch_mea
 from app.pipeline.fetch.ballot_measures_sd import fetch_measures as sd_fetch_measures
 from app.pipeline.fetch.ballot_measures_mt import fetch_measures as mt_fetch_measures
 from app.pipeline.fetch.ballot_measures_nm import fetch_measures as nm_fetch_measures
+from app.pipeline.fetch.ballot_measures_or import fetch_measures as or_fetch_measures
+from app.pipeline.fetch.ballot_measures_ri import fetch_measures as ri_fetch_measures
 from app.pipeline.fetch.ballot_measures_wa import fetch_measures as wa_fetch_measures
 from app.pipeline.fetch.ballot_measures_wy import parse_document as parse_wy_document
 from app.pipeline.fetch.ballot_measures_ga import fetch_measures as ga_fetch_measures
@@ -257,7 +259,9 @@ MULTI_DOCUMENT_STRATEGIES = {
     "sd_ballot_questions": sd_fetch_measures,
     "hi_proposed_amendments": hi_fetch_measures,
     "mt_qualified_ballot_issues": mt_fetch_measures,
-    "nm_amendments_and_bonds": nm_fetch_measures,
+    "nm_sos_statewide_questions": nm_fetch_measures,
+    "or_voters_pamphlet_absence": or_fetch_measures,
+    "ri_voter_information_handbook": ri_fetch_measures,
     "wa_certified_measures": wa_fetch_measures,
     "ga_amendments_booklet": ga_fetch_measures,
     "ms_sample_ballot": ms_fetch_measures,
@@ -344,6 +348,12 @@ def _to_measure(state: str, parsed: dict, election_date: str, source_url: str) -
         # renders "Drafted by ..." beside whichever of the two it names.
         "title_authority": parsed.get("title_authority"),
         "fiscal_authority": parsed.get("fiscal_authority"),
+        # The summary's and the yes/no framing's drafters, where the state
+        # names one other than the title's (Alabama's Fair Ballot
+        # Commission under the Legislature's question). None: no separate
+        # drafter named.
+        "summary_authority": parsed.get("summary_authority"),
+        "framing_authority": parsed.get("framing_authority"),
         "source_url": source_url,
         # Set only when the state's own site couldn't be read and its
         # document was read from a county election office's republication
@@ -431,6 +441,11 @@ def _finish(db, state: str, year: int, measures: list[dict]) -> list[dict] | Non
             state, year, len(measures), dupes, dupe_numbers,
         )
         return None
+    # Every reader returns its measures in the state's own order (the
+    # document's, or the order its index lists them); the page sorts by
+    # this rather than by the printed number, which sorts as a string.
+    for position, measure in enumerate(measures):
+        measure["source_position"] = position
     api_cache_set(
         db, CACHE_TIER, f"{state}-{year}", measures,
         normal_ttl_hours=CACHE_TTL_HOURS,

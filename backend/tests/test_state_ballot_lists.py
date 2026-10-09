@@ -186,7 +186,7 @@ def test_certified_pdf_reads_each_line_under_its_party_and_office():
         ("H", 5, "R", "Rick Brattin"),
         ("S", None, "D", "Jane Example"),
         ("H", 5, "D", "Emanuel Cleaver, II"),
-        ("H", 5, "L", "Randall Langkraehr"),  # annotation stripped, as everywhere
+        ("H", 5, "L", "Randall (Randy) Langkraehr"),  # the nickname the ballot prints
         ("H", 2, "I", "Indy Pendent"),
     }
 
@@ -280,6 +280,9 @@ async def test_a_ballot_candidate_with_no_fec_filing_is_shown(db_session, only):
 
     beach = db_session.query(Candidate).filter(Candidate.id.startswith("ballot:")).one()
     assert beach.name == 'BEACH, WALTER "ROCKY"'
+    # The page shows the name as the state prints it, not the FEC-style
+    # form built for matching (60 such rows had none on 2026-10-08).
+    assert beach.ballot_name == 'Walter "Rocky" Beach'
     assert beach.party == "IND"
     assert beach.confirmed_general is True
     assert beach.fec_filed is False
