@@ -14,6 +14,7 @@ industry classifier.
 import json
 import logging
 import re
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from app.pipeline.fetch.fec import (
@@ -497,6 +498,8 @@ def build_top_donors(
             existing["type"] = donor_type
         donor_map[employer] = existing
 
+    merge_misspelled_employers(donor_map)
+
 
 
     # The candidate's own money (self-loans recorded as "Lastname,
@@ -528,6 +531,63 @@ def build_top_donors(
         # their own committees in the concentration score and the UI.
         and d.get("type") != "CandidateAffiliated"
     ][:100]
+
+
+# One employer written two ways (donors type it): the same once punctuation
+# is set aside ("ACME, INC." / "ACME INC"), or one word apart with that word
+# misspelled ("ASSCOIATES"). The word test: both spellings at least
+# _EMPLOYER_TYPO_MIN_LEN letters, no digit (a store or plan number tells
+# two things apart), Ratcliff/Obershelp ratio at least
+# EMPLOYER_TYPO_MIN_RATIO. Calibrated 2026-10-09 on the FEC employer totals
+# cached for 654 committees (70,744 names): 829 names were another's
+# spelling but for punctuation; of 95,409 pairs one word apart, 168 sampled
+# across the similarity bands from 0.70 up were judged by hand (112 the same
+# employer). At 5 letters and 0.80 the merge is right on an estimated 95.5%
+# of the pairs it joins and finds 78.7% of the one-word misspellings (0.85:
+# 96.5% and 69%; 0.75 at 4 letters: 85% and 89%). The wrong joins are
+# near-namesakes: "Avalon Ventures" / "Avalon BioVentures", and two pairs of
+# universities whose names differ by a compass word ("Northeastern" /
+# "Northwestern"). Refusing a join when both words are in the bill-title
+# vocabulary was measured and not used: of the 198 joins the rule makes in
+# the cache it stops 9, two of them rightly, three of them real misspellings
+# ("Country" / "County", "Technologies" / "Technology").
+EMPLOYER_TYPO_MIN_RATIO = 0.80
+_EMPLOYER_TYPO_MIN_LEN = 5
+_NOT_NAME_CHARS_RE = re.compile(r"[^A-Z0-9&]+")
+
+
+def _employer_key(name: str) -> str:
+    return " ".join(_NOT_NAME_CHARS_RE.sub(" ", name.upper()).split())
+
+
+def _one_word_typo(a: str, b: str) -> bool:
+    wa, wb = a.split(), b.split()
+    if len(wa) != len(wb):
+        return False
+    diff = [(x, y) for x, y in zip(wa, wb) if x != y]
+    if len(diff) != 1:
+        return False
+    x, y = diff[0]
+    return (min(len(x), len(y)) >= _EMPLOYER_TYPO_MIN_LEN and not any(c.isdigit() for c in x + y)
+            and SequenceMatcher(None, x, y).ratio() >= EMPLOYER_TYPO_MIN_RATIO)
+
+
+def merge_misspelled_employers(donor_map: dict[str, dict]) -> None:
+    """Fold an employer written two ways into one donor, in place, keeping
+    the spelling with more money. Only money grouped by employer
+    (Org/Employees, not a committee) is merged."""
+    keys = sorted(
+        (k for k, d in donor_map.items() if d.get("type") == "Org/Employees" and not d.get("isCommittee")),
+        key=lambda k: -(donor_map[k].get("total") or 0),
+    )
+    kept: list[tuple[str, str]] = []  # (donor_map key, folded spelling), most money first
+    for key in keys:
+        folded = _employer_key(key)
+        into = next((k for k, f in kept if f == folded or _one_word_typo(f, folded)), None)
+        if into is None:
+            kept.append((key, folded))
+        else:
+            donor_map[into]["total"] += donor_map.pop(key).get("total") or 0
 
 
 _NAME_CASING_PATH = Path(__file__).resolve().parents[2] / "data" / "name_casing.json"
