@@ -37,7 +37,6 @@ from app.ordinals import ordinal
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.score_display import displayed_rank
-from app.services.justice_service import justice_overall
 from app.services.senator_service import STATE_NAMES
 
 logger = logging.getLogger(__name__)
@@ -94,10 +93,6 @@ def _president_overall(p: President) -> float | None:
     if all(v is None for v in scores):
         return None
     return compute_president_overall_score(p)
-
-
-def _justice_overall(j: Justice) -> float | None:
-    return justice_overall(j)
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +225,6 @@ def list_politicians(
                 continue
             if party and (j.appointing_party or "R") != party:
                 continue
-            overall = _justice_overall(j)
             is_chief = "Chief" in (j.role_title or "")
             results.append({
                 "id": j.id,
@@ -242,8 +236,10 @@ def list_politicians(
                 "district": None,
                 "role": "Chief Justice" if is_chief else "Associate Justice",
                 "thumbnailUrl": j.thumbnail_url,
-                "hasScorecard": overall is not None,
-                "overallScore": overall,
+                # Justices have a scorecard and no score (justice v3):
+                # null is "not scored", never 0.
+                "hasScorecard": True,
+                "overallScore": None,
                 "activeIssueCount": len(issue_map.get(j.id, [])),
             })
 
@@ -369,20 +365,15 @@ def _chamber_rank(branch: str, entity, db: Session) -> dict | None:
     leaderboard's order — the overall score as displayed (a whole number,
     rounded half up), ties sharing a standard competition rank — so the
     profile states the rank the leaderboard shows. None for whom the
-    leaderboard doesn't rank: a member or justice no longer serving, a
-    sitting president (only completed terms are ranked: get_president_leaderboard),
-    or anyone not scored."""
+    leaderboard doesn't rank: a member no longer serving, a sitting
+    president (only completed terms are ranked: get_president_leaderboard),
+    any justice (justice v3 scores and ranks none), or anyone not scored."""
     scores: dict[str, float] = {}
     if branch == "president":
         if entity.is_current:
             return None
         for p in db.query(President).filter(President.is_current == False).all():  # noqa: E712
             scores[p.id] = compute_president_overall_score(p)
-    elif branch == "scotus" and entity.is_active:
-        for j in db.query(Justice).filter(Justice.is_active == True).all():  # noqa: E712
-            overall = justice_overall(j)
-            if overall is not None:
-                scores[j.id] = overall
     elif branch in ("senate", "house") and getattr(entity, "is_current", False):
         model = Senator if branch == "senate" else Representative
         for m in db.query(model).filter(model.is_current == True).all():  # noqa: E712
@@ -460,7 +451,7 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
 
     branch, entity = result
     overall = _senator_overall(entity) if branch in ("senate", "house") else (
-        _president_overall(entity) if branch == "president" else _justice_overall(entity)
+        _president_overall(entity) if branch == "president" else None  # justices: not scored
     )
     scorecard = _build_scorecard(branch, politician_id, db)
 
@@ -468,7 +459,7 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
         "id": politician_id,
         "branch": branch,
         "identity": _build_identity(branch, entity),
-        "hasScorecard": overall is not None,
+        "hasScorecard": overall is not None or branch == "scotus",
         "overallScore": overall,
         "scorecard": scorecard,
         "chamberRank": _chamber_rank(branch, entity, db),

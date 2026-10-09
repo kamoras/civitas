@@ -1,22 +1,11 @@
 // Score-to-presentation helpers only. Overall scores are computed by the
 // backend (score_calculator.compute_overall_score / president_scorer.
-// compute_president_overall_score / justice_service._build_score) and sent
+// compute_president_overall_score) and sent
 // as the `overall` field on each score breakdown — the frontend must never
 // recompute a weighted sum from sub-scores itself (see git history for the
 // bug this caused: a hardcoded fallback-weights object here went stale
 // after a backend scoring-dimension merge and silently mis-weighted scores
 // until /api/config loaded).
-
-// The justice score is independence from the appointing president: 100 is
-// no favoritism either way, and it falls with favor toward that president's
-// government or against it (justice_loyalty). The label names the degree,
-// not a motive or a direction; the scorecard states the direction.
-export function getJusticeLabel(score: number): string {
-  if (score >= 75) return "EVEN-HANDED";
-  if (score >= 50) return "MOSTLY EVEN-HANDED";
-  if (score >= 25) return "UNEVEN";
-  return "MARKEDLY UNEVEN";
-}
 
 // Labels describe how well a member represents their constituents, not
 // general virtue — "GOOD" previously read as a moral judgment on the

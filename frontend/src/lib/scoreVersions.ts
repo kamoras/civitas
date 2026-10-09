@@ -32,6 +32,18 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "Justice v3",
+    date: "2026-10-09",
+    title: "Supreme Court justices are no longer scored",
+    tldr: "Justices were scored on whether they side with the federal government more often while the president who appointed them is in office. A placebo test showed that a window of the same length placed later in each justice's career produces most of the same differences, so the score could not be read as loyalty for any one justice. No justice is scored or ranked now; each one's page shows the estimate with its confidence interval, as information.",
+    changes: [
+      "Scores retired, by sitting justice (justice v2 research run, Supreme Court Database 2026 Release 01): Kavanaugh 96, Thomas 92, Gorsuch 84, Jackson 79, Barrett 73, Kagan 65, Sotomayor 54, Roberts 31, Alito 16, all now not scored. The API serves null, never 0; the leaderboard lists justices by seniority.",
+      "Why: a justice's years under the appointing president are always their first. Fake windows of the same length placed later in each career reproduce most of the differences between justices (their spread is 60 to 70% of the real spread) and track each justice's real estimate; only 11 of 25 justices with enough career to test sit outside what their own fake windows produce, and six of the nine sitting justices have too short a career after their appointer to test at all.",
+      "Two alternatives were tested and failed the same placebo: comparing each vote with colleagues' votes on the same case, and fitting a career-tenure curve. The return in 2025 of a president to a second, non-consecutive term gives a direct test (+2.7 points for his appointees, 95% interval -6.2 to +11.6, 43 cases), too few cases to decide.",
+      "What is shown: each justice's own estimate (no longer pulled toward other justices) with its 95% confidence interval and the vote shares behind it, and the Court-level finding: about 2.5 points once career timing is set aside, 95% interval -0.7 to +5.6, not distinguishable from no effect. The study is in docs/research/justice-scores.md.",
+    ],
+  },
+  {
     version: "v6.34",
     date: "2026-10-09",
     title: "Donor industries only where the evidence agrees; one employer, one donor",

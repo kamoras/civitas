@@ -4,19 +4,19 @@ import axe from "axe-core";
 import JusticeScorecard from "./JusticeScorecard";
 import type { Justice } from "@/types/justice";
 
-// Samuel A. Alito, Jr. as the local API served it on 2026-09-28, from the
-// 2026 Supreme Court Database release.
+// A justice as the API serves one under justice v3: no score, the
+// appointer estimate with its interval.
 const justice: Justice = {
-  id: "samuel_a_alito_jr",
-  name: "Samuel A. Alito, Jr.",
-  lastName: "Alito",
+  id: "jane_q_example",
+  name: "Jane Q. Example",
+  lastName: "Example",
   roleTitle: "Associate Justice of the Supreme Court of the United States",
-  appointingPresident: "George W. Bush",
+  appointingPresident: "A. President",
   appointingParty: "R",
   dateStart: "2006-01-31",
   isActive: true,
   thumbnailUrl: null,
-  score: { loyalty: 16.1, overall: 16.1 },
+  score: { loyalty: null, overall: null },
   casesDecided: 117,
   majorityPct: 82.9,
   dissentPct: 15.4,
@@ -26,12 +26,14 @@ const justice: Justice = {
   authoredConcurrence: 6,
   closeCaseMajorityPct: 46.2,
   agreement: [
-    { id: "clarence_thomas", name: "Clarence Thomas", share: 91.2 },
-    { id: "brett_m_kavanaugh", name: "Brett M. Kavanaugh", share: 88.0 },
+    { id: "john_doe", name: "John Doe", share: 91.2 },
+    { id: "richard_r_roe", name: "Richard R. Roe", share: 88.0 },
   ],
   loyalty: {
-    estimate: 0.1434,
-    se: 0.0501,
+    estimate: 0.1916,
+    se: 0.062,
+    ciLow: 0.0701,
+    ciHigh: 0.3131,
     votesIn: 56,
     votesOut: 399,
     rateIn: 0.75,
@@ -45,38 +47,47 @@ const justice: Justice = {
 };
 
 describe("JusticeScorecard", () => {
-  it("states the loyalty estimate, its range and the rates behind it", () => {
+  it("says the justice is not scored, why, and links the research", () => {
     render(
       <main>
-        <JusticeScorecard justice={justice} rank={{ rank: 9, of: 9 }} />
+        <JusticeScorecard justice={justice} />
       </main>
     );
-    expect(
-      screen.getByRole("heading", { level: 1, name: "Samuel A. Alito, Jr." })
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "#9 of 9 justices" })).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /75% of 56 votes while George W\. Bush was president, and in 57% of 399 under other presidents.*14\.3 points more often.*give or take 5\.0\./
-      )
-    ).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "14.3 points, plus or minus 5.0" })).toBeInTheDocument();
-    expect(screen.getByText(/through the 2025 term/)).toBeInTheDocument();
-    expect(screen.getByText(/\+2\.50 in the 2024 term/)).toBeInTheDocument();
-    expect(screen.getByText("Clarence Thomas")).toBeInTheDocument();
-    // The API's names, punctuation included; never rebuilt from an id.
-    expect(screen.getByText("Brett M. Kavanaugh")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Jane Q. Example" })).toBeInTheDocument();
+    // The header and each of the three columns.
+    expect(screen.getAllByText("Not scored")).toHaveLength(4);
+    expect(screen.getByText(/No method yet separates loyalty/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "The research" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("docs/research/justice-scores.md")
+    );
+    // No rank and no number standing in for a score.
+    expect(screen.queryByText(/#\d+ of/)).not.toBeInTheDocument();
   });
 
-  it("an unmeasured justice is not given a score", () => {
+  it("shows the appointer estimate with its interval, as information", () => {
+    render(<JusticeScorecard justice={justice} />);
+    expect(
+      screen.getByText(
+        /75% of 56 votes while A\. President was president, and in 57% of 399 under other presidents.*19\.2 points more often.*95% confidence interval 7\.0 to 31\.3/
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "19.2 points, 95% interval 7.0 to 31.3" })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/through the 2025 term/)).toBeInTheDocument();
+    expect(screen.getByText(/\+2\.50 in the 2024 term/)).toBeInTheDocument();
+    // The API's names, punctuation included; never rebuilt from an id.
+    expect(screen.getByText("Richard R. Roe")).toBeInTheDocument();
+  });
+
+  it("an unmeasured justice has no estimate and no stand-in number", () => {
     render(
       <main>
-        <JusticeScorecard
-          justice={{ ...justice, score: { loyalty: null, overall: null }, loyalty: null }}
-        />
+        <JusticeScorecard justice={{ ...justice, loyalty: null }} />
       </main>
     );
-    expect(screen.getAllByText(/Not yet measured/).length).toBe(2);
+    expect(screen.getByText(/Not yet measured/)).toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
@@ -88,7 +99,7 @@ describe("JusticeScorecard", () => {
   it("has no structural accessibility violations", async () => {
     render(
       <main>
-        <JusticeScorecard justice={justice} rank={{ rank: 9, of: 9 }} />
+        <JusticeScorecard justice={justice} />
       </main>
     );
     const result = await axe.run(document.body, {

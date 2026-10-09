@@ -1,5 +1,6 @@
-"""Justice scorecard pipeline: the voting record from Oyez, and loyalty to
-the appointing president (the score) from the Supreme Court Database."""
+"""Justice scorecard pipeline: the voting record, and the appointing
+president's effect on each justice's votes from the Supreme Court Database
+(shown, not scored: justice v3, justice_loyalty)."""
 
 import csv
 import gzip
@@ -16,7 +17,7 @@ from app.contact import BOT_USER_AGENT
 from app.http_client import make_async_client
 from app.models import President
 from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
-from app.pipeline.analyze.justice_loyalty import Loyalty, Vote, label, loyalty_by_justice, president_on
+from app.pipeline.analyze.justice_loyalty import Estimate, Vote, estimates_by_justice, label, president_on
 from app.pipeline.fetch.justice_records import RECENT_TERMS, fetch_fjc, fetch_martin_quinn, fetch_scdb
 from app.pipeline.fetch.justice_votes import fetch_case_votes, fetch_current_justices
 from app.services.justice_service import group_votes_by_case_and_justice, upsert_justice
@@ -62,7 +63,7 @@ def _appointers(names: set[str], appointments: list[dict], terms: list[tuple[str
 
 
 async def _measure_loyalty(client: httpx.AsyncClient, db: Session) -> tuple[dict | None, str | None]:
-    """({"loyalty": {database name: Loyalty}, "term", "current", "ideal"},
+    """({"loyalty": {database name: Estimate}, "term", "current", "ideal"},
     None), or (None, what couldn't be read) when a source is down: the
     stored values then stand, and the reason goes into the run's alert,
     which outlives the logs."""
@@ -82,9 +83,8 @@ async def _measure_loyalty(client: httpx.AsyncClient, db: Session) -> tuple[dict
     rows = _bundled_rows()
     for justice, labeled in label(votes, _appointers({v.justice for v in votes}, appointments, terms), terms).items():
         rows.setdefault(justice, []).extend(labeled)
-    loyalty, mean, spread = loyalty_by_justice(rows)
-    logger.info("Justice loyalty: %d justices, mean %+.3f, between-justice sd %.3f (%s)",
-                len(loyalty), mean, spread, scdb["release"])
+    loyalty = estimates_by_justice(rows)
+    logger.info("Justice appointer effect: %d justices estimated (%s)", len(loyalty), scdb["release"])
     return {"loyalty": loyalty, "term": scdb["term"], "current": scdb["current"], "cases": scdb.get("cases") or [],
             # None when the Martin-Quinn file couldn't be read: the stored
             # positions stay (an outage read as {} erased every justice's).
@@ -117,20 +117,21 @@ def _database_name(justice: dict, current: list[str]) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
-def _loyalty_fields(result: Loyalty | None, term: int, ideal: list | None, ideal_read: bool = True) -> dict:
-    fields = {"loyalty_through_term": term}
+def _loyalty_fields(e: Estimate | None, term: int, ideal: list | None, ideal_read: bool = True) -> dict:
+    """The stored fields for one justice. Never a score (justice v3): the
+    v2 score and its shrunk estimate are cleared so no stale number
+    outlives the change; the justice's own estimate and its standard error
+    are stored, NULL for a justice the Database doesn't cover yet."""
+    fields = {"loyalty_through_term": term, "score_loyalty": None, "loyalty": None, "loyalty_se": None}
     if ideal_read:
         fields["ideal_points"] = json.dumps(ideal) if ideal else None
-    if result is None:
-        # Not in the Database yet (a justice newer than its release):
-        # unscored, never a neutral or fabricated number.
-        return {**fields, "score_loyalty": None, "loyalty": None, "loyalty_se": None,
+    if e is None:
+        return {**fields, "appointer_effect": None, "appointer_effect_se": None,
                 "loyalty_votes_in": None, "loyalty_votes_out": None,
                 "loyalty_rate_in": None, "loyalty_rate_out": None}
-    e = result.estimate
     return {
-        **fields, "score_loyalty": result.score, "loyalty": round(result.loyalty, 4),
-        "loyalty_se": round(result.se, 4), "loyalty_votes_in": e.votes_in, "loyalty_votes_out": e.votes_out,
+        **fields, "appointer_effect": round(e.raw, 4), "appointer_effect_se": round(e.se, 4),
+        "loyalty_votes_in": e.votes_in, "loyalty_votes_out": e.votes_out,
         "loyalty_rate_in": round(e.rate_in, 4), "loyalty_rate_out": round(e.rate_out, 4),
     }
 
@@ -255,7 +256,8 @@ async def run_justice_pipeline(db: Session) -> dict:
             ))
 
         upsert_justice(db, record, jvotes)
-        logger.info("  %s: loyalty score %s, cases=%d", j["name"], record.get("score_loyalty"), analysis["cases_decided"])
+        logger.info("  %s: appointer effect %s, cases=%d", j["name"], record.get("appointer_effect"),
+                    analysis["cases_decided"])
 
     db.commit()
     logger.info("=== Justice pipeline complete: %d justices, %d votes ===", len(justices), len(all_votes))
