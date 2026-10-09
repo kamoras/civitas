@@ -327,17 +327,19 @@ class TestPresidentScoreBreakdownService:
 
 
 class TestJusticeScoreBreakdownService:
-    def test_returns_the_stored_loyalty_facts(self, db_session):
+    def test_returns_the_stored_estimate_and_no_score(self, db_session):
+        # A v2 score left in the database is never served (justice v3).
         db_session.add(Justice(
             id="j1", name="Justice One", last_name="One", appointing_party="R", is_active=True,
-            score_loyalty=72.5, loyalty=0.0412, loyalty_se=0.031, loyalty_votes_in=210,
-            loyalty_votes_out=380, loyalty_rate_in=0.55, loyalty_rate_out=0.49, loyalty_through_term=2025,
+            score_loyalty=72.5, loyalty=0.03, loyalty_se=0.02, appointer_effect=0.0412, appointer_effect_se=0.031,
+            loyalty_votes_in=210, loyalty_votes_out=380, loyalty_rate_in=0.55, loyalty_rate_out=0.49,
+            loyalty_through_term=2025,
         ))
         db_session.commit()
         breakdown = get_justice_score_breakdown(db_session, "j1")
-        assert breakdown["loyalty"]["score"] == 72.5
+        assert breakdown["loyalty"]["score"] is None
         assert breakdown["loyalty"]["facts"] == {
-            "estimate": 0.0412, "se": 0.031, "votesIn": 210, "votesOut": 380,
+            "estimate": 0.0412, "se": 0.031, "ciLow": -0.0196, "ciHigh": 0.1020, "votesIn": 210, "votesOut": 380,
             "rateIn": 0.55, "rateOut": 0.49, "throughTerm": 2025,
         }
 

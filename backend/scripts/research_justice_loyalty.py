@@ -27,12 +27,14 @@ import gzip
 
 import argparse
 import csv
+import math
 import io
 import re
 import pathlib
 import sys
 import urllib.request
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime
 
 import numpy as np
@@ -42,7 +44,7 @@ from scipy.stats import spearmanr
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from app.contact import BOT_USER_AGENT  # noqa: E402
-from app.pipeline.analyze.justice_loyalty import MIN_VOTES_EACH_SIDE, Estimate, shrink  # noqa: E402
+from app.pipeline.analyze.justice_loyalty import MIN_VOTES_EACH_SIDE, Estimate  # noqa: E402
 
 SOURCES = {
     "JusticePresident.zip": "https://epstein.wustl.edu/s/JusticePresident.zip",
@@ -74,6 +76,37 @@ PARTY = {
 # Epstein & Posner's pres_inOfficeN, FDR (1) to Obama (13): 1 Democratic.
 EP_PRESIDENT_DEMOCRAT = {1: 1, 2: 1, 3: 0, 4: 1, 5: 1, 6: 0, 7: 0, 8: 1, 9: 0, 10: 0, 11: 1, 12: 0, 13: 1}
 CURRENT = ["JGRoberts", "CThomas", "SAAlito", "SSotomayor", "EKagan", "NMGorsuch", "BMKavanaugh", "ACBarrett", "KBJackson"]
+# Justice v2's score, kept here to compare specifications (the pipeline no
+# longer scores justices: justice v3): 0 at this many between-justice sds.
+ZERO_AT_SDS = 2.0
+
+
+@dataclass(frozen=True)
+class Shrunk:
+    loyalty: float
+    se: float
+    score: float
+
+
+def shrink(estimates: dict[str, Estimate]) -> tuple[dict[str, Shrunk], float, float]:
+    """({justice: Shrunk}, the mean effect, the between-justice sd): each
+    estimate shrunk toward the mean by its own noise (DerSimonian-Laird
+    1986), and justice v2's score, 100 at no effect falling to 0 at
+    ZERO_AT_SDS between-justice sds."""
+    b = np.array([e.raw for e in estimates.values()])
+    se2 = np.array([e.se ** 2 for e in estimates.values()])
+    w = 1 / se2
+    q = (w * (b - (w * b).sum() / w.sum()) ** 2).sum()
+    tau2 = max(0.0, (q - (len(b) - 1)) / (w.sum() - (w ** 2).sum() / w.sum()))
+    mu = float((b / (se2 + tau2)).sum() / (1 / (se2 + tau2)).sum())
+    tau = math.sqrt(tau2)
+    out = {}
+    for name, e in estimates.items():
+        s2 = e.se ** 2
+        shrunk = (tau2 * e.raw + s2 * mu) / (tau2 + s2) if tau2 + s2 > 0 else mu
+        score = 100.0 if tau <= 0 else round(max(0.0, 100.0 * (1 - abs(shrunk) / (ZERO_AT_SDS * tau))), 1)
+        out[name] = Shrunk(shrunk, math.sqrt(tau2 * s2 / (tau2 + s2)) if tau2 + s2 > 0 else 0.0, score)
+    return out, mu, tau
 
 
 def fetch(cache: pathlib.Path) -> dict[str, pathlib.Path]:
@@ -439,6 +472,51 @@ CAREER_SHAPES = {
 }
 
 
+def _placebo_windows(P: pd.DataFrame):
+    """(k, the votes not under the appointer with `fake` marking a window
+    of each justice's appointer length, k terms into the rest of their
+    career), for k = 0 up to where fewer than three justices have one."""
+    Q = P[P.in_office == 0]
+    length = P[P.in_office == 1].groupby("justiceName").term.nunique()
+    for k in range(25):
+        parts = []
+        for j, g in Q.groupby("justiceName"):
+            terms = sorted(g.term.unique())
+            if j in length.index and k + length[j] < len(terms):
+                parts.append(g.assign(fake=g.term.isin(terms[k:k + length[j]]).astype(int)))
+        if len(parts) < 3:
+            return
+        yield k, pd.concat(parts)
+
+
+def _per_justice_placebo(name: str, real: pd.DataFrame, fakes: dict[int, pd.DataFrame]) -> None:
+    """Do fake windows reproduce the per-justice differences? Fake tau
+    against real tau, how a justice's fake estimate tracks their real one,
+    and how many real estimates fall outside the justice's own placebo
+    band (mean ± 1.96 sd of their fake estimates over every shift)."""
+    taus = [R.attrs["tau"] for R in fakes.values()]
+    k0 = fakes[0]
+    both = k0.index.intersection(real.index)
+    by_j = pd.DataFrame({k: R.b for k, R in fakes.items()})
+    n = by_j.notna().sum(axis=1)
+    band = by_j[n >= 5]
+    mean, sd = band.mean(axis=1), band.std(axis=1, ddof=1)
+    r = real.b.reindex(band.index)
+    outside = ((r - mean).abs() > 1.96 * sd).dropna()
+    avg = by_j.mean(axis=1).reindex(real.index).dropna()
+    print(f"  {name} per justice: real tau {real.attrs['tau'] * 100:.1f}; fake tau at k=0 {taus[0] * 100:.1f}, median over "
+          f"{len(taus)} shifts {np.median(taus) * 100:.1f}; Spearman of a justice's real estimate with their k=0 fake "
+          f"{spearmanr(k0.loc[both, 'b'], real.loc[both, 'b']).statistic:+.2f} ({len(both)}), with their mean fake over "
+          f"shifts {spearmanr(avg, real.b.loc[avg.index]).statistic:+.2f} ({len(avg)}); real outside their own placebo band "
+          f"for {int(outside.sum())} of {len(outside)} justices with 5+ shifts ({outside.mean():.0%})")
+    for j in [j for j in CURRENT if j in band.index] + [j for j in CURRENT if j not in band.index]:
+        if j in band.index:
+            print(f"    {j:12} real {real.b[j] * 100:+5.1f}; fake {mean[j] * 100:+5.1f} ± {1.96 * sd[j] * 100:4.1f} "
+                  f"over {int(n[j])} shifts{'  OUTSIDE' if outside.get(j) else ''}")
+        else:
+            print(f"    {j:12} real {real.b[j] * 100:+5.1f}; {int(n.get(j, 0))} shifts, too few for a band")
+
+
 def _career_curve(pooled, P: pd.DataFrame, flag: str) -> np.ndarray:
     """The pooled fit's career curve at each row's tenure, relative to the
     first term."""
@@ -511,32 +589,39 @@ def career(P: pd.DataFrame, sv: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.
         print(f"    {j:12} A {a.shrunk * 100:+5.1f}, {a.score:5.1f} | F {f.shrunk * 100:+5.1f} ± {f.shrunk_se * 100:.1f}, "
               f"{f.score:5.1f}")
     # gate 1: the section 7 placebo, refitted with the career curve
-    Q = P[P.in_office == 0]
-    length = P[P.in_office == 1].groupby("justiceName").term.nunique()
-    real = smf.ols("y ~ in_office + pet + C(justiceName)" + CAREER_SHAPES[shape], P).fit().params["in_office"]
-    placebo = []
-    for k in range(25):
-        parts = []
-        for j, g in Q.groupby("justiceName"):
-            terms = sorted(g.term.unique())
-            if j in length.index and k + length[j] < len(terms):
-                parts.append(g.assign(fake=g.term.isin(terms[k:k + length[j]]).astype(int)))
-        if len(parts) < 3:
-            break
-        pooled, R = _career_fit(pd.concat(parts), shape, "fake")
+    real =smf.ols("y ~ in_office + pet + C(justiceName)" + CAREER_SHAPES[shape], P).fit().params["in_office"]
+    placebo, fakes = [], {}
+    for k, D in _placebo_windows(P):
+        pooled, fakes[k] = _career_fit(D, shape, "fake")
         placebo.append((pooled.params["fake"], pooled.tvalues["fake"]))
-        if k == 0:
-            # does a justice's own fake window predict their real estimate?
-            # (a justice-specific career path the pooled curve can't remove)
-            both = R.index.intersection(F.index)
-            print(f"  placebo k=0 per justice: tau {R.attrs['tau'] * 100:.1f} (real F {F.attrs['tau'] * 100:.1f}); "
-                  f"Spearman with the real F estimate {spearmanr(R.loc[both, 'b'], F.loc[both, 'b']).statistic:+.2f} "
-                  f"({len(both)} justices)")
     v, t = np.array(placebo).T
     print(f"  gate 1, placebo under F: k=0 {v[0] * 100:+.1f} (t={t[0]:.1f}), k=1 {v[1] * 100:+.1f}; over {len(v)} "
           f"shifts mean {v.mean() * 100:+.1f}, sd {v.std(ddof=1) * 100:.1f}, |t| > 1.96 in {np.mean(np.abs(t) > 1.96):.0%}; "
           f"real {real * 100:+.1f}, matched or exceeded in size by {np.mean(np.abs(v) >= abs(real)):.0%} of shifts")
     print("    by k: " + ", ".join(f"{k} {x * 100:+.1f}" for k, x in enumerate(v)))
+    # per justice, for F and for the score itself (A)
+    _per_justice_placebo("F", F, fakes)
+    _per_justice_placebo("A", A, {k: _per_justice(D, "y ~ fake + pet", "fake", lambda g: g.fake == 1,
+                                                  lambda g: g.fake == 0) for k, D in _placebo_windows(P)})
+    # the Court-level effect that survives the placebo: A's pooled effect
+    # less its k=0 placebo, with a bootstrap over justices
+    D0 = next(D for _, D in _placebo_windows(P))
+
+    def net(p: pd.DataFrame, d0: pd.DataFrame) -> float:
+        return (smf.ols("y ~ in_office + pet + C(justiceName)", p).fit().params["in_office"]
+                - smf.ols("y ~ fake + pet + C(justiceName)", d0).fit().params["fake"])
+
+    rng, names, draws = np.random.default_rng(0), P.justiceName.unique(), []
+    by_p, by_d = dict(tuple(P.groupby("justiceName"))), dict(tuple(D0.groupby("justiceName")))
+    for _ in range(200):
+        pick = rng.choice(names, len(names))
+        p = pd.concat([by_p[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick)])
+        d0 = pd.concat([by_d[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick) if j in by_d])
+        draws.append(net(p, d0))
+    lo, hi = np.percentile(draws, [2.5, 97.5])
+    print(f"  Court-level: A's pooled effect less its k=0 placebo {net(P, D0) * 100:+.1f} points, 95% bootstrap CI over "
+          f"justices [{lo * 100:+.1f}, {hi * 100:+.1f}] (200 draws); F's +{real * 100:.1f} against its placebo sd "
+          f"{v.std(ddof=1) * 100:.1f}: [{(real - 1.96 * v.std(ddof=1)) * 100:+.1f}, {(real + 1.96 * v.std(ddof=1)) * 100:+.1f}]")
     # gate 2: an appointer's return years into his appointees' careers
     sv = sv.assign(date=pd.to_datetime(sv.dateDecision))
     # the president who served non-consecutive terms: his first term's start,

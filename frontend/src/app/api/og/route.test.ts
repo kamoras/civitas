@@ -121,7 +121,7 @@ describe("scoreFooterLabel", () => {
   it("calls only the congressional score a representation score", () => {
     expect(scoreFooterLabel("senate")).toBe("REPRESENTATION SCORE");
     expect(scoreFooterLabel("house")).toBe("REPRESENTATION SCORE");
-    expect(scoreFooterLabel("scotus")).toBe("CIVITAS SCORE");
+    expect(scoreFooterLabel("scotus")).toBe("NOT SCORED");
     expect(scoreFooterLabel("president")).toBe("CIVITAS SCORE");
     expect(scoreFooterLabel(undefined)).toBe("CIVITAS SCORE");
   });

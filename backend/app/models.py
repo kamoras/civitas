@@ -1194,8 +1194,9 @@ class LiveResultRead(Base):
 
 
 class Justice(Base):
-    """Supreme Court justice: the voting record from Oyez, and loyalty to
-    the appointing president, the score (pipeline/analyze/justice_loyalty)."""
+    """Supreme Court justice: the voting record, and the appointing
+    president's effect on their votes, shown and not scored
+    (pipeline/analyze/justice_loyalty)."""
     __tablename__ = "justices"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)  # oyez identifier
@@ -1214,15 +1215,22 @@ class Justice(Base):
     # longer mapped; 0020 made them nullable and the next release drops them
     # (migrations/README.md).
 
-    # Loyalty to the appointing president (justice_loyalty): the score, the
-    # shrunk effect (a share: 0.145 is 14.5 points) and its standard error,
-    # the votes under the appointing president and under others with the
-    # share of each for the government, and the Supreme Court Database term
-    # the record runs through. NULL until measured, or for a justice the
-    # Database doesn't cover yet.
+    # Justice v2's loyalty score and shrunk effect. Justice v3 scores no
+    # justice: the pipeline writes NULL here and nothing reads them; they
+    # stay mapped this release so the image before can still read them, then
+    # are unmapped and dropped (migrations/README.md, pending contract).
     score_loyalty: Mapped[float | None] = mapped_column(Float, nullable=True)
     loyalty: Mapped[float | None] = mapped_column(Float, nullable=True)
     loyalty_se: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The appointing president's effect on the justice's votes (justice
+    # v3, justice_loyalty.fit), shown with its confidence interval and not
+    # scored: the justice's own estimate (a share: 0.145 is 14.5 points) and
+    # its standard error, the votes under the appointing president and under
+    # others with the share of each for the government, and the Supreme
+    # Court Database term the record runs through. NULL until measured, or
+    # for a justice the Database doesn't cover yet.
+    appointer_effect: Mapped[float | None] = mapped_column(Float, nullable=True)
+    appointer_effect_se: Mapped[float | None] = mapped_column(Float, nullable=True)
     loyalty_votes_in: Mapped[int | None] = mapped_column(Integer, nullable=True)
     loyalty_votes_out: Mapped[int | None] = mapped_column(Integer, nullable=True)
     loyalty_rate_in: Mapped[float | None] = mapped_column(Float, nullable=True)

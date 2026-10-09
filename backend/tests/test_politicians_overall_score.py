@@ -6,9 +6,11 @@ in #82/#83). This locks in its remaining local behavior, the
 all-zero "not yet scored" guard, and that it adds no rounding of its own:
 the page rounds once, for display."""
 
+import json
+
 import pytest
 
-from app.api.politicians import _president_overall, _senator_overall
+from app.api.politicians import _chamber_rank, _president_overall, _senator_overall, list_politicians
 from app.models import Justice, President, Representative, Senator
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.score_display import displayed_score
@@ -192,17 +194,12 @@ class TestChamberRank:
         assert _chamber_rank("president", db_session.get(President, "b-2"), db_session) == {"rank": 2, "of": 2}
         assert _chamber_rank("president", db_session.get(President, "c-3"), db_session) is None
 
-    def test_justices_rank_by_loyalty_and_the_unmeasured_are_unranked(self, db_session):
-        from app.api.politicians import _chamber_rank
-        for jid, score in (("a", 90.0), ("b", 40.0), ("new", None)):
+    def test_no_justice_is_ranked_or_scored(self, db_session):
+        # Justice v3: a v2 score left in the database ranks no one, and the
+        # directory says "not scored" (null), never 0.
+        for jid, score in (("a", 90.0), ("b", 40.0)):
             db_session.add(Justice(id=jid, name=jid, last_name=jid, is_active=True, score_loyalty=score))
-        db_session.add(Justice(id="retired", name="r", last_name="r", is_active=False, score_loyalty=99.0))
         db_session.commit()
-
-        def rank(jid):
-            return _chamber_rank("scotus", db_session.get(Justice, jid), db_session)
-
-        assert rank("a") == {"rank": 1, "of": 2}
-        assert rank("b") == {"rank": 2, "of": 2}
-        assert rank("new") is None
-        assert rank("retired") is None
+        assert _chamber_rank("scotus", db_session.get(Justice, "a"), db_session) is None
+        rows = json.loads(list_politicians(branch="scotus", state=None, party=None, q=None, db=db_session).body)
+        assert {(r["id"], r["hasScorecard"], r["overallScore"]) for r in rows} == {("a", True, None), ("b", True, None)}

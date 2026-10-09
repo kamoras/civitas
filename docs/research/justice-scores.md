@@ -1,9 +1,11 @@
 # Justice scorecard: what each measure actually measured
 
-Two studies. The first (v6.13) cut the Supreme Court scorecard from four
+Three studies. The first (v6.13) cut the Supreme Court scorecard from four
 measures to two; the second (justice v2, September 2026) found those two
 ranked justices by distance from the Court's center and replaced them with
-loyalty to the appointing president.
+loyalty to the appointing president; the third (justice v3, October 2026)
+found that measure could not be told apart from career timing for an
+individual justice, and retired justice scores.
 
 The first study's numbers were printed by `backend/scripts/research_justice_scores.py`,
 which ran the repository's then `analyze_justice_votes` over real and
@@ -543,33 +545,84 @@ no candidate has yet passed the placebo:
   produce.
 - Per justice, every version tracks each justice's own career path.
 
-What this means for the scorecard is a decision for the project, not this
-study. The measure as scored ranks justices partly by when in their career
-their appointer served.
+The next section measures the score itself the same way, and the decision
+follows from it.
 
-## The score
+## Per justice: the score itself under the placebo (2026-10-09), and justice v3
 
-The pipeline refits every justice at each run: Epstein & Posner's votes
-through 2014 (bundled, `backend/app/data/justice_president_votes_1937_2014.csv.gz`,
-written by the research script) and the newest Supreme Court Database
-release from 2015 on, with each appointing president taken from the Federal
-Judicial Center's nomination dates and the presidents' own terms. The table
-above is the research run; the scorecard shows the pipeline's.
+The F study found that fake windows reproduce F's differences between
+justices. The same test was run on A, the score as it stood. For each shift
+k, fake windows were placed, each justice was fitted, and DerSimonian-Laird
+shrinkage was applied as the score does. Section 8 of the research script
+prints it.
 
-**Score = 100 × (1 − |loyalty| / (2 × sd))**, floored at 0, where sd is the
-random-effects spread between justices' true effects (8.5 points in the
-research run). 100 is no favoritism either way. Favor against the appointing
-president's government lowers the score the same as favor toward it: both
-are a departure from treating every president's government alike. The zero
-point, two between-justice sds (17 points in the research run), is a design
-choice: it puts the scale in units of how much justices actually differ,
-rather than a number typed in, so it moves with the data. Every estimate is shown with its standard
-error, since per-justice estimates are noisy (above).
+| | Real tau | Fake tau, k = 0 | Fake tau, median of 25 shifts | Spearman, real with own k = 0 fake | Real outside own placebo band |
+|---|---|---|---|---|---|
+| A | 8.5 | 6.0 | 4.9 | +0.34 (31 justices) | 11 of 25 (44%) |
+| F | 7.6 | 5.3 | 4.8 | +0.37 (31) | 8 of 25 (32%) |
 
-Research-run scores: Kavanaugh 96, Thomas 92, Gorsuch 84, Jackson 79,
-Barrett 73, Kagan 65, Sotomayor 54, Roberts 31, Alito 16.
+A justice's placebo band is the mean ± 1.96 sd of their own fake estimates
+over every shift. It is defined for the 25 justices with five or more
+shifts.
+
+- **Fake windows reproduce most of A's spread between justices:** 6.0 of
+  8.5 points of between-justice sd at k = 0, 4.9 at the median shift.
+- **A justice's fake estimate tracks their real one.**
+- **For more than half of the testable justices, the real estimate is
+  inside what their own fake windows produce.**
+- **The real estimate does sit outside the band for 11 justices**,
+  including Roberts (+15.5 against fake −0.6 ± 9.0) and Alito (+19.2 against
+  −1.3 ± 11.5). But this check favours the real window: it is always the
+  first years of a career, which no fake window can reach, and the k = 0
+  placebo shows those years run high for everyone.
+- **Six of the nine sitting justices can't be tested at all.** Sotomayor 2
+  shifts, Kagan 3, Barrett 2, Gorsuch, Kavanaugh and Jackson 0: their
+  careers after the appointer are too short.
+
+**The Court-level effect that survives the placebo.** Take A's pooled effect
+less its own k = 0 placebo, with a bootstrap over justices (200 draws): **+2.5
+points, 95% interval −0.7 to +5.6**. F's +2.7 against its placebo sd of 3.4
+gives a wider −4.0 to +9.5. Either way, it is not distinguishable from no
+effect.
+
+**Decision: justice v3, no justice scored or ranked.**
+- A's per-justice differences are substantially reproduced by fake
+  windows, as F's were. For most sitting justices the data can't test them
+  at all.
+- So the data can't support ranking individual justices on this measure.
+- Per-justice 0-100 scores are retired. Each scorecard says "not scored":
+  no method yet separates loyalty to the appointing president from career
+  timing for an individual justice.
+- Each justice's own estimate, unshrunk, is shown with its 95% confidence
+  interval as information, unranked. It isn't shrunk because shrinkage
+  toward the other justices only made sense to place justices on a common
+  scale.
+- The Court-level finding above is stated on the justices leaderboard and
+  the About page.
+
+Scores retired, from the justice v2 research run (Supreme Court Database
+2026 Release 01): Kavanaugh 96, Thomas 92, Gorsuch 84, Jackson 79, Barrett
+73, Kagan 65, Sotomayor 54, Roberts 31, Alito 16. All are now not scored.
+
+## What is shown (justice v3)
+
+The pipeline refits every justice at each run:
+- Epstein & Posner's votes through 2014 (bundled,
+  `backend/app/data/justice_president_votes_1937_2014.csv.gz`, written by the
+  research script);
+- the newest Supreme Court Database release from 2015 on;
+- each appointing president taken from the Federal Judicial Center's
+  nomination dates and the presidents' own terms.
+
+Each justice's own least-squares estimate of the appointing president's
+effect and its HC1 standard error are stored (`justices.appointer_effect`,
+`appointer_effect_se`). The API adds the 95% interval (estimate ± 1.96 se)
+and serves every score as null ("not scored", never 0).
 
 A justice not yet in the Database, or without 10 votes both under the
-appointing president and under others, is unscored, never given a neutral
-number. Martin-Quinn positions are shown beside the score, for context,
-and not scored.
+appointing president and under others, has no estimate. Martin-Quinn
+positions and the voting record are shown beside it, for context.
+
+Justice v2's score, for the record: 100 × (1 − |shrunk effect| / (2 ×
+between-justice sd)), floored at 0. The research script still computes it
+(`shrink`) to compare specifications.

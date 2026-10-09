@@ -27,7 +27,7 @@ router = APIRouter(prefix="/justices")
 
 @router.get("/leaderboard")
 def leaderboard(db: Session = Depends(get_db)):
-    """All active justices ranked by weighted impartiality score."""
+    """All sitting justices, by seniority: not ranked or scored (justice v3)."""
     data = get_justice_leaderboard(db)
     return _cached_json([e.model_dump(by_alias=True) for e in data], max_age=CACHE_TTL_LIST_S)
 
@@ -69,9 +69,8 @@ def detail(justice_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{justice_id}/score-breakdown")
 def score_breakdown(justice_id: str, db: Session = Depends(get_db)):
-    """Full component-level derivation behind each of a justice's scored
-    dimensions — the "show the math" panel's data source. Recomputed
-    on-demand from stored JusticeVote rows, not re-fetched from Oyez."""
+    """The figures behind a justice's appointer estimate, as stored by the
+    pipeline; its score is always null (justice v3 scores no justice)."""
     breakdown = get_justice_score_breakdown(db, justice_id)
     if breakdown is None:
         raise HTTPException(status_code=404, detail="Justice not found")

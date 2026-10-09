@@ -255,11 +255,13 @@ export function formatStanding(identity: OgPoliticianIdentity | undefined): stri
 }
 
 // "Representation" is what the congressional score measures (how well a
-// member represents constituents). Presidents and justices are scored on
-// other dimensions, so their cards take the neutral name the score line
-// already uses.
+// member represents constituents). Presidents are scored on other
+// dimensions, so their cards take the neutral name the score line already
+// uses. Justices are not scored (justice v3): their card says so rather
+// than naming a score it doesn't show.
 export function scoreFooterLabel(branch: string | undefined): string {
-  return branch === "senate" || branch === "house" ? "REPRESENTATION SCORE" : "CIVITAS SCORE";
+  if (branch === "senate" || branch === "house") return "REPRESENTATION SCORE";
+  return branch === "scotus" ? "NOT SCORED" : "CIVITAS SCORE";
 }
 
 async function politicianImage(

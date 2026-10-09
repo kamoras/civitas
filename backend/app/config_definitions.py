@@ -33,17 +33,10 @@ PRESIDENT_SCORE_WEIGHTS: dict[str, float] = {
     "historicalLegacy": 0.5,
 }
 
-# Supreme Court score weights: the single source shared by the scorer
-# (services/justice_service.py), the directory's overall score
-# (api/politicians.py) and the public /justices/weights endpoint.
-#
-# Justice v2: loyalty to the appointing president
-# (pipeline/analyze/justice_loyalty.py), the one measure. Consistency and
-# Independence, the two bloc-agreement measures before it, ranked justices
-# by their distance from the Court's median (docs/research/justice-scores.md).
-JUSTICE_SCORE_WEIGHTS: dict[str, float] = {
-    "loyalty": 1.0,
-}
+# Supreme Court justices are not scored (justice v3): no method yet
+# separates loyalty to the appointing president from career timing for an
+# individual justice (docs/research/justice-scores.md), so there are no
+# justice score weights. The appointer's estimated effect is shown, unranked.
 
 INDUSTRIES: dict[str, dict] = {
     "PHARMA":          {"name": "Pharmaceuticals",          "color": "#ff4444"},

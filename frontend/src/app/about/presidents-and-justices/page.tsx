@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { pageMetadata } from "@/lib/site";
+import { COURT_FINDING, JUSTICE_RESEARCH_URL, NOT_SCORED_REASON } from "@/lib/justices";
 import {
   AboutPage,
   Summary,
@@ -14,9 +15,9 @@ import {
 } from "@/components/about/AboutPage";
 
 export const metadata = pageMetadata({
-  title: "How Presidents and Supreme Court Justices Are Scored",
+  title: "How Presidents Are Scored, and Why Justices Are Not",
   description:
-    "How Civitas scores every U.S. president (public mandate, economic effectiveness, agency follow-through and historical legacy), and how it scores Supreme Court justices' independence from the president who appointed them.",
+    "How Civitas scores every U.S. president (public mandate, economic effectiveness and historical legacy), and why it does not score Supreme Court justices: no method yet separates loyalty to the appointing president from career timing.",
   path: "/about/presidents-and-justices",
 });
 
@@ -28,8 +29,9 @@ export default function PresidentsAndJusticesChapter() {
       title="Presidents & justices"
       lede={
         <p>
-          Presidents are scored on how well they served the country; justices on whether they favor
-          the president who appointed them. Both from records, not opinions typed in by us.
+          Presidents are scored on how well they served the country, from records, not opinions
+          typed in by us. Justices are not scored: the one measure we tested could not be separated
+          from when in a career the appointing president served.
         </p>
       }
     >
@@ -45,8 +47,8 @@ export default function PresidentsAndJusticesChapter() {
           shows its actual share of their overall.
         </Point>
         <Point>
-          Justices are scored on whether they side with the federal government more often while the
-          president who appointed them is in office, shown with its margin of error.
+          Justices are not scored or ranked. How often each sided with the federal government under
+          the appointing president is shown as information, with its confidence interval.
         </Point>
         <Point>
           Four presidential scores were removed: three because no real data could support them, one
@@ -237,64 +239,58 @@ export default function PresidentsAndJusticesChapter() {
         </More>
       </Section>
 
-      <Section id="justices" title="How Supreme Court justices are scored">
+      <Section id="justices" title="Why Supreme Court justices are not scored">
         <P>
-          One question: does a justice side with the federal government more often while the
-          president who appointed them is in office than under other presidents? Epstein and Posner
-          (2016) asked it of every justice since 1937. Comparing a justice with themselves cancels
-          out their ideology and how often they side with any government.
+          {NOT_SCORED_REASON} Until October 2026 justices were scored on one question, from Epstein
+          and Posner (2016): does a justice side with the federal government more often while the
+          president who appointed them is in office than under other presidents? A placebo test
+          showed the answer could not be read as loyalty for any one justice.
         </P>
         <List>
-          <Item label="The votes">
-            Every vote in a signed decision of a case the federal government argued: Epstein and
-            Posner&apos;s through 2014, and the Supreme Court Database&apos;s after. The appointing
-            president is whoever was in office on the nomination date, from the Federal Judicial
-            Center.
+          <Item label="The placebo">
+            A justice&apos;s years under the appointing president are always their first. Moving a
+            fake &ldquo;appointer&rdquo; window of the same length to later in each career still
+            finds most of the effect (about 4 of 6.6 points, pooled) and most of the differences
+            between justices: the spread between justices&apos; fake windows is 60 to 70% of the
+            real spread, and only 11 of 25 justices with enough career to test sit outside what
+            their own fake windows produce. Six of today&apos;s nine have too short a career after
+            their appointer for the test to say anything.
           </Item>
-          <Item label="The estimate">
-            How many points more often the justice sided with the government under the appointing
-            president, with whether the government brought the case held fixed. One justice&apos;s
-            record is a few hundred votes, so each estimate is pulled toward the average of all
-            justices by how uncertain it is, and shown with its margin of error.
+          <Item label="Two fixes">
+            Comparing each vote with colleagues&apos; votes on the same case removed under a third
+            of the placebo effect. Fitting the career drift directly left about 3 points, no more
+            than fake windows placed elsewhere in a career produce. Neither passed.
           </Item>
-          <Item label="The score">
-            100 at no favoritism either way, falling to 0 at twice the spread between justices.
-            Favoring the appointing president&apos;s government and disfavoring it both lower it.
-          </Item>
+          <Item label="The Court as a whole">{COURT_FINDING}</Item>
         </List>
         <P>
-          A justice the database doesn&apos;t cover yet is not scored. Each justice&apos;s
-          Martin-Quinn position (where they sit, liberal to conservative) and voting record over the
-          last four terms are shown beside the score and not scored: where a justice sits says
-          nothing about favoring the president who appointed them. The voting record is read from
-          the Supreme Court Database for every term its newest release covers, all orally argued
-          cases, and from the Oyez Project only for a term after that, since Oyez enters votes case
-          by case and had entered 13 of one term&apos;s 59 decided cases more than a year on. When
-          Oyez lists a justice twice in one decision, the vote counts once if the entries agree and
-          is left out if they don&apos;t.
+          What each justice&apos;s page shows instead: the share of their votes for the federal
+          government under the appointing president and under others, and the difference with the
+          government&apos;s side of each case held fixed, with its 95% confidence interval. It is
+          information, not a score, and no justice is ranked by it. Every vote in a signed decision
+          of a case the federal government argued: Epstein and Posner&apos;s through 2014, and the
+          Supreme Court Database&apos;s after; the appointing president is whoever was in office on
+          the nomination date, from the Federal Judicial Center.
         </P>
         <P>
-          Two refinements were tested and not adopted. Splitting &ldquo;other presidents&rdquo; into
-          the appointer&apos;s party and the other party: across 31,650 votes, justices sided with
-          other administrations of their appointer&apos;s party about as often as with the other
-          party&apos;s (+1.1 points, not significant), so the loyalty is to the one president, and
-          for four of today&apos;s nine justices no other president of their appointer&apos;s party
-          has served yet. Scoring how often a justice votes against their usual ideological side: in
-          divided decisions that rate tracks closeness to the Court&apos;s center (a −0.77
-          correlation with distance from the median), the same flaw that removed the old measures.
+          Each justice&apos;s Martin-Quinn position (where they sit, liberal to conservative) and
+          voting record over the last four terms are shown too, not scored. The voting record is
+          read from the Supreme Court Database for every term its newest release covers, all orally
+          argued cases, and from the Oyez Project only for a term after that, since Oyez enters
+          votes case by case and had entered 13 of one term&apos;s 59 decided cases more than a year
+          on. When Oyez lists a justice twice in one decision, the vote counts once if the entries
+          agree and is left out if they don&apos;t.
         </P>
         <P>
-          One question is still open: timing. A justice&apos;s years under the appointing president
-          are always their first. A placebo test moves a fake &ldquo;appointer&rdquo; window of the
-          same length to the years just after, and it still finds about 4 of the 6.6 points. So much
-          of the gap seems to come from a justice&apos;s early years, whoever is president. Two
-          fixes were tested against that placebo, and neither passed, so neither was adopted:
-          comparing each vote with colleagues&apos; votes on the same case removed under a third of
-          the placebo effect; and fitting the career drift directly leaves about 3 points, no more
-          than fake windows placed elsewhere in a career produce. The president who returned in 2025
-          after a gap gives a direct test, but 43 cases since then are too few to decide it. The
-          score is unchanged for now, and should be read as partly measuring when in a
-          justice&apos;s career the appointing president served.
+          Also tested and not adopted: splitting &ldquo;other presidents&rdquo; into the
+          appointer&apos;s party and the other party (across 31,650 votes, justices sided with other
+          administrations of their appointer&apos;s party about as often as with the other
+          party&apos;s, +1.1 points, not significant); and scoring how often a justice votes against
+          their usual ideological side (in divided decisions that rate tracks closeness to the
+          Court&apos;s center, a −0.77 correlation with distance from the median, the same flaw that
+          removed the old measures). The president who returned in 2025 after a gap gives a direct
+          test of loyalty, but 43 cases since then are too few to decide it. The study is at{" "}
+          <a href={JUSTICE_RESEARCH_URL}>docs/research/justice-scores.md</a>.
         </P>
         <More label="Measures we removed">
           <P>

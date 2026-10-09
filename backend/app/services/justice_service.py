@@ -7,7 +7,6 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from app.config_definitions import JUSTICE_SCORE_WEIGHTS
 from app.models import Justice, JusticeVote
 from app.schemas import (
     JusticeAgreementSchema,
@@ -20,23 +19,26 @@ from app.schemas import (
 logger = logging.getLogger(__name__)
 
 
-def justice_overall(j: Justice) -> float | None:
-    """The overall score: the weighted measures (JUSTICE_SCORE_WEIGHTS),
-    None until measured. Rounded like every other scorer's serializer."""
-    if j.score_loyalty is None:
-        return None
-    return round(j.score_loyalty * JUSTICE_SCORE_WEIGHTS["loyalty"], 2)
+# A 95% confidence interval: the estimate ± this many standard errors.
+CI_Z = 1.96
 
 
 def _build_score(j: Justice) -> JusticeScoreSchema:
-    return JusticeScoreSchema(loyalty=j.score_loyalty, overall=justice_overall(j))
+    """Justice v3 scores no justice: every score is null ("not scored"),
+    whatever an earlier version left in the database."""
+    return JusticeScoreSchema(loyalty=None, overall=None)
 
 
 def _loyalty(j: Justice) -> JusticeLoyaltySchema | None:
-    if j.loyalty is None or j.loyalty_se is None:
+    """The appointing president's estimated effect on the justice's votes,
+    with its 95% confidence interval: shown as information, not a score."""
+    if j.appointer_effect is None or j.appointer_effect_se is None:
         return None
     return JusticeLoyaltySchema(
-        estimate=j.loyalty, se=j.loyalty_se, votes_in=j.loyalty_votes_in or 0, votes_out=j.loyalty_votes_out or 0,
+        estimate=j.appointer_effect, se=j.appointer_effect_se,
+        ci_low=round(j.appointer_effect - CI_Z * j.appointer_effect_se, 4),
+        ci_high=round(j.appointer_effect + CI_Z * j.appointer_effect_se, 4),
+        votes_in=j.loyalty_votes_in or 0, votes_out=j.loyalty_votes_out or 0,
         rate_in=j.loyalty_rate_in or 0.0, rate_out=j.loyalty_rate_out or 0.0, through_term=j.loyalty_through_term,
     )
 
@@ -125,6 +127,7 @@ def get_justice_leaderboard(db: Session) -> list[JusticeLeaderboardEntry]:
             role_title=j.role_title,
             appointing_president=j.appointing_president,
             appointing_party=j.appointing_party,
+            date_start=j.date_start,
             is_active=j.is_active,
             thumbnail_url=j.thumbnail_url,
             score=score,
@@ -133,8 +136,9 @@ def get_justice_leaderboard(db: Session) -> list[JusticeLeaderboardEntry]:
             dissent_pct=j.dissent_pct,
             loyalty=_loyalty(j),
         ))
-    # Unmeasured justices last, then by name, so ties keep one order.
-    entries.sort(key=lambda e: (e.score.overall is None, -(e.score.overall or 0), e.name))
+    # Not ranked (justice v3): by seniority, the Chief Justice first, then
+    # by the date each took the seat.
+    entries.sort(key=lambda e: ("Chief" not in (e.role_title or ""), e.date_start or "9999", e.name))
     return entries
 
 
@@ -151,18 +155,17 @@ def group_votes_by_case_and_justice(
 
 
 def get_justice_score_breakdown(db: Session, justice_id: str) -> dict | None:
-    """The justice's score and the figures behind it, as stored by the
-    pipeline (justice_loyalty): the loyalty estimate, its standard error,
-    the votes under the appointing president and under others and the share
-    of each for the government. Measured across every justice at once (the
-    estimate is shrunk toward all justices' mean), so it is read, not
-    recomputed for one."""
+    """The figures behind the justice's appointer estimate, as stored by the
+    pipeline (justice_loyalty): the estimate, its standard error and 95%
+    interval, the votes under the appointing president and under others and
+    the share of each for the government. The score is always null: justice
+    v3 scores no justice."""
     j = db.query(Justice).filter(Justice.id == justice_id).first()
     if not j:
         return None
     loyalty = _loyalty(j)
     return {"loyalty": {
-        "score": j.score_loyalty,
+        "score": None,
         "components": [],
         "facts": loyalty.model_dump(by_alias=True) if loyalty else None,
     }}
