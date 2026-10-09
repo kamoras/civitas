@@ -229,6 +229,7 @@ def classify_batch_nn(
     prototype_descriptions: dict[str, str] | None = None,
     k: int = 7,
     min_similarity: float = 0.65,
+    min_agreement: int = 1,
 ) -> dict[str, str]:
     """Classify names by kNN in sentence-transformer embedding space.
 
@@ -254,6 +255,9 @@ def classify_batch_nn(
             inverse-frequency weighting is what does the real precision
             work, not this floor (see the inverse-frequency weighting
             comment below for that side).
+
+        min_agreement: How many of the k neighbours must carry the winning
+            label for it to be returned; with fewer the name is OTHER.
 
     Returns:
         Dict mapping query name -> predicted category.
@@ -319,15 +323,15 @@ def classify_batch_nn(
         top_k_sims = similarities[i][top_k_idx]
 
         votes: Counter[str] = Counter()
+        voters: Counter[str] = Counter()
         for idx, sim in zip(top_k_idx, top_k_sims):
             if sim >= min_similarity:
                 label = ref_labels[idx]
                 votes[label] += float(sim) * inv_freq.get(label, 1.0)
+                voters[label] += 1
 
-        if votes:
-            results[name] = votes.most_common(1)[0][0]
-        else:
-            results[name] = "OTHER"
+        winner = votes.most_common(1)[0][0] if votes else None
+        results[name] = winner if winner and voters[winner] >= min_agreement else "OTHER"
 
     category_counts = Counter(results.values())
     logger.info(

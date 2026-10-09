@@ -11,8 +11,21 @@ matching unitedstates/congress-legislators' published schema.
 
 import json
 
+import pytest
+
 from app.pipeline.fetch import committee_leadership as cl
+from app.pipeline.fetch import house_leadership
 from app.pipeline.transform import committee_data
+
+
+@pytest.fixture(autouse=True)
+def _no_clerk_pages(monkeypatch):
+    """The Clerk's leadership list is its own module's test; here it is
+    unreadable, so the refresh keeps congress-legislators' titles."""
+    async def unreadable(client, url):
+        return None
+
+    monkeypatch.setattr(house_leadership, "_fetch", unreadable)
 
 
 def _synthetic_source():

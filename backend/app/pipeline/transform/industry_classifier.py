@@ -73,10 +73,18 @@ INDUSTRY_DESCRIPTIONS: dict[str, str] = {
         "Lockheed Raytheon Boeing Northrop Grumman General Dynamics BAE L3Harris Leidos "
         "naval army air force Pentagon"
     ),
+    # "credit union league association of credit unions" (2026-10-09): a
+    # credit-union trade group shares "unions" with LABOR_UNIONS and read as
+    # one (5 of the 25 credit-union PACs in the FEC's 2026 committee file).
+    # With it, 1 of 25; on the 551 committees the records label
+    # (scripts/evaluate_industry_classifier.py) right answers 250 -> 253 and
+    # labor unions unchanged at 155. The three labor organizations it moves
+    # from no answer to FINANCE are decided by their FEC type before any
+    # name is read (fec.structured_industry).
     "FINANCE": (
         "banking investment securities hedge private equity venture capital. "
         "Wall Street asset management brokerage wealth management credit lending mortgage. "
-        "Credit union savings bank federal credit union mutual savings. "
+        "Credit union savings bank federal credit union mutual savings credit union league association of credit unions. "
         "Goldman Sachs Morgan Stanley JPMorgan Citigroup Bank of America Wells Fargo BlackRock "
         "Fidelity Vanguard Raymond James BB&T Truist PNC Capital One TD Bank "
         "financial services fiduciary trading derivatives bonds equities"

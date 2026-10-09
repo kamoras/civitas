@@ -33,6 +33,7 @@ import yaml
 
 from app.atomic_write import write_text_atomic
 from app.http_client import make_async_client
+from app.pipeline.fetch.house_leadership import clerk_house_leadership
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -202,6 +203,7 @@ async def refresh_committee_leadership_data(client: httpx.AsyncClient | None = N
         committee_membership = build_committee_membership(membership_raw, committees_raw)
         leadership_roles = build_leadership_roles(legislators_raw)
         leadership_tenures = build_leadership_tenures(legislators_raw)
+        leadership_roles = await clerk_house_leadership(client, leadership_roles)
         failures = ingestion_gates(committee_membership, leadership_roles)
         if failures:
             for f in failures:

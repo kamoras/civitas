@@ -11,7 +11,10 @@ not in the AI results (edge cases), it falls back to the embedding-based
 industry classifier.
 """
 
+import json
 import logging
+import re
+from pathlib import Path
 
 from app.pipeline.fetch.fec import (
     committee_id_of,
@@ -495,6 +498,7 @@ def build_top_donors(
         donor_map[employer] = existing
 
 
+
     # The candidate's own money (self-loans recorded as "Lastname,
     # Firstname") is frequently mistyped Org/Employees by the semantic
     # classifier — the 2026-07 audit found 19 senators listed as their own
@@ -526,17 +530,53 @@ def build_top_donors(
     ][:100]
 
 
+_NAME_CASING_PATH = Path(__file__).resolve().parents[2] / "data" / "name_casing.json"
+_name_casing_cache: dict[str, str] | None = None
+
+
+def _name_casing() -> dict[str, str]:
+    """{lower-case word: its written form} for the words usage writes in
+    capitals or with an interior capital ("ucla": "UCLA"), from
+    app/data/name_casing.json (scripts/build_name_casing.py)."""
+    global _name_casing_cache
+    if _name_casing_cache is None:
+        try:
+            _name_casing_cache = json.loads(_NAME_CASING_PATH.read_text())["forms"]
+        except (OSError, ValueError, KeyError):
+            logger.warning("name_casing.json unreadable: donor names keep first-letter capitals only")
+            _name_casing_cache = {}
+    return _name_casing_cache
+
+
+# A run of letters, and what precedes it: a run after a digit or an
+# apostrophe is the rest of a word ("21ST", "AMERICA'S"), not a word.
+_LETTER_RUN_RE = re.compile(r"(?<![A-Za-z])[A-Za-z]+")
+_APOSTROPHES = ("'", "’")
+
+
 def _clean_donor_name(name: str) -> str:
-    """Convert FEC ALL CAPS names to title case, preserving acronyms."""
-    if name == name.upper():
-        acronyms = {"llc", "inc", "pac", "corp", "co", "ltd", "lp", "pllc"}
-        words = name.lower().split()
-        return " ".join(
-            word.upper() if word in acronyms else word[0].upper() + word[1:]
-            if word else word
-            for word in words
-        )
-    return name
+    """The FEC prints names in capitals; show each word as it is written.
+    A word usage writes in capitals or with an interior capital takes that
+    form ("UCLA", "AFL-CIO", "McDonnell"; _name_casing), any other its
+    first letter capitalized. Words were all first-letter capitalized
+    until 2026-10, which printed "Ucla" and "Cuny" — a guess where usage
+    is on record. A name not in capitals is left as filed."""
+    if name != name.upper():
+        return name
+    forms = _name_casing()
+
+    def word(m: re.Match) -> str:
+        run = m.group(0)
+        prev = name[m.start() - 1] if m.start() else " "
+        if prev.isdigit() or prev in _APOSTROPHES:
+            return run.lower()
+        if name[m.end():m.end() + 1] in _APOSTROPHES:
+            # Part of an elided or possessive word ("INT'L", "AMERICA'S"):
+            # not the word the table describes.
+            return run.capitalize()
+        return forms.get(run.lower()) or run.capitalize()
+
+    return " ".join(_LETTER_RUN_RE.sub(word, name).split())
 
 
 def _build_industry_breakdown(

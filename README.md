@@ -353,12 +353,13 @@ Classification decisions — what industry a donor belongs to, which direction a
 | 1 | FEC metadata / learning store exact match | Instant | Donor types, previously classified bills and donors |
 | 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection |
 | 2b | SVD / PageRank on cosponsorship matrix | Fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors (~5%), bill classification from reference corpus |
+| 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors, bill classification from reference corpus. A donor's industry is taken from the neighbours only when all seven agree (2026-10-09: on 177 record-labelled PAC sponsors the prototype tier abstains on, a plurality vote was right 29% of the time at every similarity floor; unanimous neighbours 8 of 8); otherwise the donor stays unclassified |
 | 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Action Center issue synthesis |
 
 Key embedding-based classification features:
 - **Semantic prototypes** define each category via natural-language descriptions, not keyword lists. The embedding model matches entities to the nearest prototype by cosine similarity.
 - **PAC decontextualization** detects "[Industry] PAC" naming patterns via a PAC-context prototype and margin-based runner-up selection, replacing regex suffix stripping.
+- **Donor name casing** comes from usage: the FEC prints names in capitals, and a word that the Federal Register's prose writes in capitals or with an interior capital ("UCLA", "AFL-CIO", "McDonnell") keeps that form (`app/data/name_casing.json`, `scripts/build_name_casing.py`); any other word gets a first capital. On 348 capitalized organization names judged by hand it fixed 58 word occurrences that first-letter capitals got wrong and broke 6 ("(Aka", "Co" for Colorado).
 - **Self-funded detection** uses SequenceMatcher ratio (Ratcliff & Obershelp 1988) for fuzzy name similarity instead of exact string matching.
 - **Batch skip detection** classifies employer names and memo texts against skip prototypes in vectorized batches for performance.
 - **Semantic category normalization** maps stale/unknown category labels to valid industries via embedding similarity, replacing a hardcoded alias table.
@@ -401,7 +402,7 @@ For partisan depth (the lean bar and its per-area breakdown), which is not a cou
 
 One procedural exception, read from the chamber's own result field: a **majority leader** who votes with the prevailing side against their own party — a Nay on a motion the chamber recorded as rejected, or a Yea on one carried over their party's opposition — is doing so to be able to move to reconsider (Senate Rule XIII; House Rule XIX cl. 2), so the vote carries no party signal. It applies only within the member's tenure as majority leader (`leadership_tenures.json`); the Speaker and minority leader are never exempted. In the 119th Congress every off-party vote by the two chambers' majority leaders (17 in all) was such a switch.
 
-Independent senators have their caucus party inferred mathematically from voting patterns (proportion of votes aligning with each party), ensuring they are scored fairly against the party they actually caucus with.
+An independent is read with the party they caucus with. For a representative that is the caucus the House Clerk records (`<caucus>` in MemberData.xml, `house_clerk.parse_caucuses`): the chamber's own record, which can differ from the member's party (in 2026-10 one independent representative's read R; the member chairs a subcommittee, a seat the majority conference assigns). The Senate publishes no such field, so an independent senator's caucus is inferred from voting and cosponsorship patterns; inference also decides for a representative when the Clerk's list can't be read.
 
 ---
 

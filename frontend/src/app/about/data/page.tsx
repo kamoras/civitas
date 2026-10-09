@@ -73,6 +73,17 @@ export default function DataChapter() {
             <Fact label="GovInfo">
               The Congressional Record, read in full each day, and its Daily Digest.
             </Fact>
+            <Fact label="Party leadership and caucus">
+              House leadership posts come from the House Clerk&apos;s member list: Speaker, both
+              leaders and whips, both conference chairs, the Democratic caucus vice chair and the
+              Republican Policy Committee chair. Other party posts, such as conference vice chairs
+              and secretaries or campaign committee chairs, appear only where the volunteer-kept
+              congress-legislators dataset records them, since no official list publishes them, so a
+              member holding one may show no title. Senate posts come from that dataset and match
+              senate.gov&apos;s leadership page. An independent representative is read with the
+              caucus the Clerk records for them; an independent senator with the party they vote and
+              cosponsor with, since the Senate records no caucus.
+            </Fact>
             <Fact label="Voteview">
               Congress-by-congress roll-call positions (Nokken-Poole), for Constituent Alignment.
             </Fact>
