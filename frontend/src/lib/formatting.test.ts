@@ -15,6 +15,8 @@ import {
   isNewFact,
   issueRef,
   localDateStr,
+  policyAreaLabel,
+  restatesTitle,
   safeHref,
 } from "./formatting";
 
@@ -254,5 +256,26 @@ describe("asLabel", () => {
     expect(asLabel("progressive Democrat leader")).toBe("Progressive Democrat leader");
     expect(asLabel("centrist Independent")).toBe("Centrist Independent");
     expect(asLabel("")).toBe("");
+  });
+});
+
+describe("policyAreaLabel", () => {
+  it("prints a code without its underscores", () => {
+    expect(policyAreaLabel("FOREIGN_POLICY")).toBe("FOREIGN POLICY");
+    expect(policyAreaLabel("TECH")).toBe("TECH");
+  });
+});
+
+describe("restatesTitle", () => {
+  it("matches a summary that only repeats the headline", () => {
+    expect(restatesTitle("Senate passes the bill", "Senate passes the bill.")).toBe(true);
+    expect(restatesTitle("Senate passes the bill, AP says", "Senate passes the bill")).toBe(true);
+  });
+  it("keeps a summary that says something more", () => {
+    expect(
+      restatesTitle("Senate passes the bill", "The vote was 52-48 after a week of debate.")
+    ).toBe(false);
+    expect(restatesTitle("Senate passes the bill", "")).toBe(false);
+    expect(restatesTitle("Senate passes the bill", undefined)).toBe(false);
   });
 });

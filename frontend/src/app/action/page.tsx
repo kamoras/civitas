@@ -10,7 +10,12 @@ import PageFallback from "@/components/layout/PageFallback";
 import PageMasthead from "@/components/layout/PageMasthead";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useAsyncData, type AsyncData } from "@/hooks/useAsyncData";
-import { commentPeriodToday, describeDaysLeft, formatUtcDate } from "@/lib/formatting";
+import {
+  commentPeriodToday,
+  describeDaysLeft,
+  formatUtcDate,
+  policyAreaLabel,
+} from "@/lib/formatting";
 import ShareButtons from "@/components/action/ShareButtons";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { focusTabWhenSelected, keepFocusOnSelectedTab, retryKeepingFocus } from "@/lib/tabFocus";
@@ -221,7 +226,7 @@ function SecondaryIssue({
               <IssueMeta issue={issue} as="span" />
               {(issue.policyAreas ?? []).length > 0 && (
                 <span className="mt-1 block font-mono text-xs tracking-[0.08em] text-ink-lo">
-                  {issue.policyAreas.join(" · ")}
+                  {issue.policyAreas.map(policyAreaLabel).join(" · ")}
                 </span>
               )}
               <span className="mt-1.5 block font-display text-lg font-semibold leading-snug text-ink-hi">

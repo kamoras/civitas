@@ -7,7 +7,7 @@ import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
 import type { BillInFlight } from "@/types/bill";
 import { monitorHref } from "@/lib/routes";
-import { issueRef, parseUtc } from "@/lib/formatting";
+import { issueRef, parseUtc, policyAreaLabel, restatesTitle } from "@/lib/formatting";
 import { billHref } from "@/lib/congress";
 
 /**
@@ -82,7 +82,10 @@ export function buildRecordEntries(
       ref: issueRef(i.publicId),
       date: i.date,
       title: i.title,
-      detail: i.summary ? clamp(i.summary, 78) : i.policyAreas.join(" · "),
+      detail:
+        i.summary && !restatesTitle(i.title, i.summary)
+          ? clamp(i.summary, 78)
+          : i.policyAreas.map(policyAreaLabel).join(" · "),
       href: `/issue/${i.publicId}`,
       tone: "text-phos-mid",
     })),
