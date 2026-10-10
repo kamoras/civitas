@@ -1,4 +1,4 @@
-import { fetchRemoteImage, type RemoteImageResult } from "./remoteImage";
+import { fetchRemoteImage, onAllowedHost, type RemoteImageResult } from "./remoteImage";
 
 /**
  * Every photo a page shows is served from this site, at
@@ -25,6 +25,20 @@ export interface PhotoRef {
   kind: PhotoKind;
   id: string;
 }
+
+/**
+ * The only hosts each kind's photo is fetched from: the URL the backend
+ * names and every redirect hop. A copy of backend `PHOTO_SOURCE_HOSTS`
+ * (app/photos.py, which says where each list comes from), held equal by
+ * backend/tests/test_same_origin_photos.py. An issue's photo URL is read
+ * from an RSS item, so without this a feed could point the server at any
+ * host.
+ */
+export const PHOTO_HOSTS: Record<PhotoKind, readonly string[]> = {
+  bioguide: ["bioguide.congress.gov"],
+  justice: ["api.oyez.org"],
+  issue: ["rollcall.com"],
+};
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -58,7 +72,7 @@ async function photoSource({ kind, id }: PhotoRef): Promise<string | null | "fai
     if (res.status === 404) return null;
     if (!res.ok) return "failed";
     const { url } = (await res.json()) as { url?: unknown };
-    return typeof url === "string" && url.startsWith("https://") ? url : null;
+    return typeof url === "string" && URL.canParse(url) ? url : null;
   } catch {
     return "failed";
   }
@@ -69,5 +83,9 @@ export async function fetchPhoto(photo: PhotoRef): Promise<RemoteImageResult> {
   const source = await photoSource(photo);
   if (source === null) return { status: "missing" };
   if (source === "failed") return { status: "failed" };
-  return fetchRemoteImage(source, { types: PHOTO_TYPES });
+  const hosts = PHOTO_HOSTS[photo.kind];
+  // A source off the kind's hosts is refused as "no such photo" (a cached
+  // 404): the backend should never name one, and retrying won't change it.
+  if (!onAllowedHost(new URL(source), hosts)) return { status: "missing" };
+  return fetchRemoteImage(source, { types: PHOTO_TYPES, hosts });
 }

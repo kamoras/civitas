@@ -42,30 +42,69 @@ async function readCapped(res: Response, max: number): Promise<Buffer | null> {
   return Buffer.concat(chunks);
 }
 
+// A real photo host redirects once at most (a moved file, a CDN); more is
+// not a photo.
+const MAX_REDIRECTS = 3;
+
+/** An https URL on one of `hosts`, on the default port, with no
+ *  credentials in it. */
+export function onAllowedHost(url: URL, hosts: readonly string[]): boolean {
+  return (
+    url.protocol === "https:" &&
+    url.port === "" &&
+    !url.username &&
+    !url.password &&
+    hosts.includes(url.hostname)
+  );
+}
+
 /**
- * Fetches an image. `types` limits which media types are accepted (bare,
- * without parameters); by default any `image/*`.
+ * Fetches an image from one of `hosts`: the URL and every redirect hop
+ * must be on them, so a redirect can't take the server anywhere else (the
+ * redirects are followed here, one at a time, not by fetch). `types`
+ * limits which media types are accepted (bare, without parameters); by
+ * default any `image/*`.
+ *
+ * Hosts are checked by name, not by the address they resolve to: the
+ * global fetch has no hook to vet the connected address without adding
+ * undici as a dependency, and a look-up before the fetch could be undone
+ * by DNS rebinding. Every allowed host is a named public site.
  */
 export async function fetchRemoteImage(
   url: string,
-  { types }: { types?: readonly string[] } = {}
+  { types, hosts }: { types?: readonly string[]; hosts: readonly string[] }
 ): Promise<RemoteImageResult> {
   try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36",
-      },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (res.status === 404 || res.status === 410) return { status: "missing" };
-    const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-    const accepted = types ? types.includes(contentType) : contentType.startsWith("image/");
-    if (!res.ok || !accepted) return { status: "failed" };
-    if (Number(res.headers.get("content-length") ?? 0) > MAX_IMAGE_BYTES)
-      return { status: "failed" };
-    const bytes = await readCapped(res, MAX_IMAGE_BYTES);
-    return bytes ? { status: "ok", bytes, contentType } : { status: "failed" };
+    const signal = AbortSignal.timeout(5000);
+    let target = new URL(url);
+    for (let hop = 0; ; hop++) {
+      if (!onAllowedHost(target, hosts)) return { status: "failed" };
+      const res = await fetch(target, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36",
+        },
+        redirect: "manual",
+        signal,
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location || hop >= MAX_REDIRECTS) return { status: "failed" };
+        target = new URL(location, target);
+        continue;
+      }
+      if (res.status === 404 || res.status === 410) return { status: "missing" };
+      const contentType = (res.headers.get("content-type") ?? "")
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+      const accepted = types ? types.includes(contentType) : contentType.startsWith("image/");
+      if (!res.ok || !accepted) return { status: "failed" };
+      if (Number(res.headers.get("content-length") ?? 0) > MAX_IMAGE_BYTES)
+        return { status: "failed" };
+      const bytes = await readCapped(res, MAX_IMAGE_BYTES);
+      return bytes ? { status: "ok", bytes, contentType } : { status: "failed" };
+    }
   } catch {
     return { status: "failed" };
   }

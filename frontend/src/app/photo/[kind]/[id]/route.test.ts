@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 import type { RemoteImageResult } from "@/lib/remoteImage";
 
-const fetchRemoteImage =
-  vi.fn<(url: string, opts?: { types?: readonly string[] }) => Promise<RemoteImageResult>>();
-vi.mock("@/lib/remoteImage", () => ({
-  fetchRemoteImage: (url: string, opts?: { types?: readonly string[] }) =>
-    fetchRemoteImage(url, opts),
+type Opts = { types?: readonly string[]; hosts: readonly string[] };
+const fetchRemoteImage = vi.fn<(url: string, opts: Opts) => Promise<RemoteImageResult>>();
+vi.mock("@/lib/remoteImage", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/remoteImage")>()),
+  fetchRemoteImage: (url: string, opts: Opts) => fetchRemoteImage(url, opts),
 }));
 
 const { GET } = await import("./route");
@@ -71,11 +71,12 @@ describe("GET /photo/[kind]/[id]", () => {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
     const [url, opts] = fetchRemoteImage.mock.calls[0];
     expect(url).toBe("https://bioguide.congress.gov/photo/B001309.jpg");
-    expect(opts?.types).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    expect(opts.types).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    expect(opts.hosts).toEqual(["bioguide.congress.gov"]);
   });
 
-  it("serves a stored photo from the source the backend names", async () => {
-    const backend = backendAnswers(200, { url: "https://img.example.org/a.png" });
+  it("serves a stored photo from an allowed host the backend names", async () => {
+    const backend = backendAnswers(200, { url: "https://api.oyez.org/files/a.png" });
     fetchRemoteImage.mockResolvedValue({
       status: "ok",
       bytes: Buffer.from([4]),
@@ -84,7 +85,24 @@ describe("GET /photo/[kind]/[id]", () => {
     const res = await get("justice", "jane_q_doe");
     expect(res.status).toBe(200);
     expect(String(backend.mock.calls[0][0])).toMatch(/\/api\/photo-sources\/justice\/jane_q_doe$/);
-    expect(fetchRemoteImage.mock.calls[0][0]).toBe("https://img.example.org/a.png");
+    const [url, opts] = fetchRemoteImage.mock.calls[0];
+    expect(url).toBe("https://api.oyez.org/files/a.png");
+    // Every redirect hop is held to the same hosts (lib/remoteImage.ts).
+    expect(opts.hosts).toEqual(["api.oyez.org"]);
+  });
+
+  // An issue's photo URL comes from an RSS item: the route must not fetch
+  // from a host the kind's data can't come from, even if the backend says so.
+  it.each([
+    "https://images.example.org/a.jpg",
+    "https://api.oyez.org/files/a.png", // a justice host, not an issue one
+    "https://rollcall.com.evil.example/a.jpg",
+    "https://rollcall.com:8443/a.jpg",
+  ])("refuses a source off the kind's hosts: %s", async (url) => {
+    backendAnswers(200, { url });
+    const res = await get("issue", "812");
+    expect(res.status).toBe(404);
+    expect(fetchRemoteImage).not.toHaveBeenCalled();
   });
 
   it("answers a photo the source doesn't have with a cacheable 404", async () => {

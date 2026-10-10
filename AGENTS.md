@@ -882,9 +882,16 @@ site at `/photo/<kind>/<id>` (2026-10): the API hands out those paths
 (`app/photos.py`; JSON-LD makes them absolute), and the frontend route
 (`app/photo/[kind]/[id]/route.ts`, `lib/photos.ts`) fetches the picture
 server-side — a bioguide portrait by its id, a stored source (Oyez, the
-outlet) looked up by kind and id through `GET /api/photo-sources/…`, https
-only. It takes an id, never a URL, so it is not an open proxy; add a kind
-there for a new picture, never a URL parameter. nginx caches the route
+outlet) looked up by kind and id through `GET /api/photo-sources/…`. It
+takes an id, never a URL, so it is not an open proxy; add a kind there for
+a new picture, never a URL parameter. An issue's photo URL still comes from
+an RSS item, so each kind is fetched only from its own hosts
+(`PHOTO_SOURCE_HOSTS` in `app/photos.py`, mirrored by `PHOTO_HOSTS` in
+`lib/photos.ts` and held equal by a test), https on the default port: the
+pipeline drops a source elsewhere, the endpoint refuses one, and the route
+follows redirects itself and refuses any hop off the list. Hosts are
+checked by name, not resolved address (Node's fetch has no connect-time
+hook without adding undici). nginx caches the route
 (`photo_cache`, a week unread, stale on error) and rate-limits its cache
 misses only, through the api-misses hop, sized so a cold directory page is
 paced rather than refused. `tests/test_same_origin_photos.py` and

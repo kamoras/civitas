@@ -17,6 +17,7 @@ from app.api.action import _build_issue_response
 from app.api.photos import get_photo_source
 from app.api.politicians import get_politician, list_politicians
 from app.models import ActionIssue, Justice, Senator
+from app.photos import PHOTO_SOURCE_HOSTS
 from app.services.justice_service import get_all_justices, get_justice_leaderboard
 
 APP = Path(__file__).resolve().parents[1] / "app"
@@ -49,11 +50,11 @@ def seeded(db_session):
     db_session.add(Senator(id="sen-a", name="Senator A", state="VT", party="I", bioguide_id="X000001"))
     db_session.add(Justice(
         id="justice_a", name="Justice A", last_name="A", is_active=True,
-        thumbnail_url="https://photos.example.org/justice_a.png",
+        thumbnail_url="https://api.oyez.org/sites/default/files/justice_a.png",
     ))
     db_session.add(ActionIssue(
         id=7, date="2026-10-01", rank=1, title="An issue", is_current=True,
-        image_url="https://news.example.org/uploads/photo.jpg",
+        image_url="https://rollcall.com/app/uploads/photo.jpg",
     ))
     db_session.commit()
     return db_session
@@ -74,8 +75,8 @@ def test_every_photo_field_is_a_same_origin_path(seeded):
 
 
 def test_the_route_can_look_up_a_stored_source(seeded):
-    assert get_photo_source("justice", "justice_a", db=seeded) == {"url": "https://photos.example.org/justice_a.png"}
-    assert get_photo_source("issue", "7", db=seeded) == {"url": "https://news.example.org/uploads/photo.jpg"}
+    assert get_photo_source("justice", "justice_a", db=seeded) == {"url": "https://api.oyez.org/sites/default/files/justice_a.png"}
+    assert get_photo_source("issue", "7", db=seeded) == {"url": "https://rollcall.com/app/uploads/photo.jpg"}
 
 
 @pytest.mark.parametrize("kind,photo_id", [
@@ -87,11 +88,32 @@ def test_an_unknown_photo_is_a_404(seeded, kind, photo_id):
     assert err.value.status_code == 404
 
 
-def test_a_non_https_source_is_never_handed_out(db_session):
-    db_session.add(Justice(id="j", name="J", last_name="J", thumbnail_url="http://backend:8000/api/admin"))
+@pytest.mark.parametrize("source", [
+    "http://backend:8000/api/admin",            # not https, internal
+    "https://images.example.org/a.png",         # https, but not an allowed host
+    "https://rollcall.com/app/uploads/a.jpg",   # another kind's host
+    "https://api.oyez.org.evil.example/a.png",  # a lookalike
+    "https://api.oyez.org:8443/a.png",          # an allowed host, another port
+    "https://user@api.oyez.org/a.png",          # credentials in the URL
+])
+def test_a_stored_source_off_its_kinds_hosts_is_never_handed_out(db_session, source):
+    db_session.add(Justice(id="j", name="J", last_name="J", thumbnail_url=source))
     db_session.commit()
-    with pytest.raises(HTTPException):
+    with pytest.raises(HTTPException) as err:
         get_photo_source("justice", "j", db=db_session)
+    assert err.value.status_code == 404
+
+
+def test_the_frontend_route_allows_the_same_hosts():
+    """The route re-checks every URL and redirect hop against its own copy
+    (it can't import Python); the two lists must not drift apart."""
+    ts = (APP.parents[1] / "frontend" / "src" / "lib" / "photos.ts").read_text()
+    block = re.search(r"PHOTO_HOSTS[^=]*=\s*\{(.*?)\n\}", ts, re.S).group(1)
+    frontend = {
+        kind: frozenset(re.findall(r'"([^"]+)"', hosts))
+        for kind, hosts in re.findall(r"(\w+):\s*\[([^\]]*)\]", block)
+    }
+    assert frontend == PHOTO_SOURCE_HOSTS
 
 
 # A literal image URL on another host, anywhere the API or its services

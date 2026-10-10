@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 
 import httpx
 
+from app.photos import photo_source_allowed
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 from app.pipeline.fetch.oyez_common import OYEZ_BASE, unix_to_date as _unix_to_date
 
@@ -40,6 +41,11 @@ async def fetch_current_justices(client: httpx.AsyncClient) -> list[dict]:
         active_role = next((r for r in roles if r.get("date_end") == 0), roles[-1] if roles else {})
         appointing = active_role.get("appointing_president") or ""
         thumb = (j.get("thumbnail") or {}).get("href", "")
+        # Only from the hosts the site's photo route will fetch from
+        # (app/photos.py); anything else would show no photo anyway.
+        if thumb and not photo_source_allowed("justice", thumb):
+            logger.warning("Oyez thumbnail on a host not allowed for justice photos: %s", thumb)
+            thumb = ""
 
         jid = j.get("identifier", "")
 

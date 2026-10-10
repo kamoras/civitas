@@ -312,6 +312,17 @@ class TestRightsClearedImageUrl:
         articles = _parse_rss_feed(self._item(rights).encode(), "Roll Call")
         assert articles[0].image_url == expected_url
 
+    @pytest.mark.parametrize("url", [
+        "https://images.example.org/img.jpg",
+        "http://rollcall.com/img.jpg",
+        "https://rollcall.com:8443/img.jpg",
+    ])
+    def test_a_rights_cleared_image_off_the_allowed_hosts_is_dropped(self, url):
+        # The site's photo route fetches issue photos only from these hosts
+        # (app/photos.py), so a feed item can't point the server elsewhere.
+        articles = _parse_rss_feed(self._item("1", url=url).encode(), "Roll Call")
+        assert articles[0].image_url is None
+
     def test_no_media_content_at_all_is_none(self):
         articles = _parse_rss_feed(
             """<?xml version="1.0"?><rss><channel><item>
