@@ -17,7 +17,6 @@ from app.services.justice_service import (
     get_all_justices,
     get_justice,
     get_justice_leaderboard,
-    get_justice_score_breakdown,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,21 +59,11 @@ def _run_pipeline_background():
 
 @router.get("/{justice_id}")
 def detail(justice_id: str, db: Session = Depends(get_db)):
-    """Single justice detail by id (e.g. 'john_g_roberts_jr')."""
+    """Single justice detail by id (the Oyez slug)."""
     result = get_justice(db, justice_id)
     if not result:
         raise HTTPException(status_code=404, detail="Justice not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
-
-
-@router.get("/{justice_id}/score-breakdown")
-def score_breakdown(justice_id: str, db: Session = Depends(get_db)):
-    """The figures behind a justice's appointer estimate, as stored by the
-    pipeline; its score is always null (justice v3 scores no justice)."""
-    breakdown = get_justice_score_breakdown(db, justice_id)
-    if breakdown is None:
-        raise HTTPException(status_code=404, detail="Justice not found")
-    return _cached_json(breakdown, max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("")

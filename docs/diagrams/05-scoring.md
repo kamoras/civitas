@@ -124,28 +124,27 @@ below it, Historical Legacy carries two thirds.
 flowchart LR
     SCDB["Supreme Court Database<br/>votes in federal-government cases"] --> FIT["per-justice fit:<br/>for the government ~ appointer in office<br/>+ government petitioner (HC1)"]
     FJC["FJC nominations<br/>+ presidents' terms"] --> FIT
-    FIT --> SHR["shrunk across justices<br/>(DerSimonian-Laird)"]
-    SHR --> JOVR["<b>Justice score</b><br/>100 × (1 − |loyalty| / 2 sd)"]
+    FIT --> EST["<b>Appointer estimate</b><br/>estimate ± 1.96 SE<br/>shown, not scored"]
 ```
 
-One measure since justice v2: independence from the appointing president
-(Epstein & Posner 2016). Consistency and Independence from the appointing
-party's bloc, and before them Judicial Restraint and Bipartisan Agreement,
-were removed; see `docs/research/justice-scores.md`.
-
-Single source of truth in `JUSTICE_SCORE_WEIGHTS` — shared by the scorer, the
-directory's overall calculation, and the public weights endpoint. These were
-previously three independent copies that could silently drift.
+No justice is scored since justice v3. The appointing president's effect
+(Epstein & Posner 2016) is each justice's own unshrunk estimate, shown with
+its 95% confidence interval and unranked (`analyze/justice_loyalty.py`,
+`services/justice_service.py` `CI_Z`): a placebo study found that windows of
+the same length later in a career reproduce most of the differences between
+justices. Justice v2 scored that estimate 0-100; Consistency, Independence,
+Judicial Restraint and Bipartisan Agreement came before it. See
+`docs/research/justice-scores.md`.
 
 ## Source map
 
 | Concern | Code |
 |---|---|
-| Weights | `backend/app/config_definitions.py` — `SCORE_WEIGHTS`, `PRESIDENT_SCORE_WEIGHTS`, `JUSTICE_SCORE_WEIGHTS` |
+| Weights | `backend/app/config_definitions.py` — `SCORE_WEIGHTS`, `PRESIDENT_SCORE_WEIGHTS` |
 | Member formulas | `analyze/score_calculator.py` (module docstring states the current rule) |
 | Why each version changed | `docs/methodology/` (one decision record per version) |
 | President formulas | `analyze/president_scorer.py` |
-| Justice formulas | `services/justice_service.py` |
+| Justice appointer estimate (not scored) | `analyze/justice_loyalty.py`, `services/justice_service.py` |
 | Public weights endpoint | `GET /api/config` |
 | A member's breakdown and the scorecard's figures | `explain_scores` → `GET /api/{senators|representatives}/{id}/score-breakdown` (components + `facts`); rendered by `frontend/src/components/scorecard/` |
 | Human-readable version history | `frontend/src/lib/scoreVersions.ts` → `/changelog` |

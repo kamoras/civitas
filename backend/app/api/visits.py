@@ -1,12 +1,18 @@
 """Privacy-respecting unique-visitor tracking.
 
-No raw IP or User-Agent is ever stored. `POST /api/track-visit` is sent by
-the browser itself, through nginx (frontend NavigationBeacon), for the page
-it opened and each navigation after it — so a client that never runs the
-page is never counted — and records only an HMAC of
-the IP under a random salt that exists for the current UTC day and is then
-deleted — see SiteVisit in models.py for why that makes past hashes
-unrecoverable and why this table can't grow per-request.
+No raw IP or User-Agent is ever stored. `POST /api/track-visit` is called by
+the frontend's proxy (frontend/src/proxy.ts), which relays requests the site
+needs in order to work at all — the page itself, and the requests Next's
+router makes once the page runs in a browser — and a page counts only when
+both arrive from one client (_confirmed_paths). A client that never runs
+the page is never counted, and the visit and the page it started on are
+counted without the browser sending anything a blocker could refuse. Later
+pages in the same tab are sent by the browser (frontend NavigationBeacon):
+a click on a link Next has prefetched reaches no server at all.
+What is recorded is only an HMAC of the IP under a random salt that exists
+for the current UTC day and is then deleted — see SiteVisit in models.py for
+why that makes past hashes unrecoverable and why this table can't grow
+per-request.
 """
 
 import asyncio
@@ -17,12 +23,14 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
+from typing import Literal
 
 from fastapi import APIRouter, Query, Request
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session
 
+from app.api import throttle
 from app.database import VisitsSessionLocal
 from app.issue_ids import from_public_id
 from app.models import ApiRejectionCount, ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
@@ -270,11 +278,18 @@ async def run_visit_consumer() -> None:
 # Headless Chrome, as Playwright and Puppeteer drive it by default (the
 # cloud agents that test this site among them), says so in its own User-Agent
 # token, the way the parsers below read "Chrome/" or "Firefox/". It runs the
-# site's scripts and sends fetch metadata like a person's browser, so it
-# reaches both counting paths (the middleware's page loads and the in-app
-# navigation beacon); both arrive here, so this one check covers them. An
-# agent driving a real browser window can't be told apart, and is browsing.
+# site's scripts like a person's browser, so it would pass the page-then-
+# router check (_confirmed_paths); only this token tells it apart. An agent
+# driving a real browser window can't be told apart, and is browsing.
 _AUTOMATED_BROWSER = "HeadlessChrome"
+# Crawlers that render pages in a real browser engine (Bingbot, Applebot,
+# Baiduspider-render, OAI-SearchBot…) run the page too, and name themselves
+# by the crawler convention: a "NameBot/1.0" product token, "crawler" or
+# "spider", and a "+https://…" link to a page about the bot. Of the 17
+# addresses that sent the browser beacon in 16 hours on 2026-10-10, 14 were
+# these. "bot/" with its version slash, not "bot": a CUBOT phone says
+# "CUBOT X30 Build/…".
+_SELF_DECLARED_CRAWLER = re.compile(r"[a-z]bot/|crawler|spider|\+https?://", re.IGNORECASE)
 
 
 def _parse_browser(ua: str) -> str:
@@ -356,8 +371,6 @@ def _load_or_create_salt(date: str) -> bytes | None:
 def _today() -> str:
     """The current UTC day, as the salts are dated — the throttle store's
     own clock, since a visit salt can come from there (_shared_salt)."""
-    from app.api import throttle
-
     return throttle.utc_today()
 
 
@@ -446,8 +459,6 @@ def _fallback_salt_for(date: str) -> bytes:
         # salt that outlives its day.
         return secrets.token_bytes(32)
     if _fallback_salt is None or _fallback_salt[0] != date or not _fallback_salt[2]:
-        from app.api import throttle
-
         shared = throttle.derived_salt(f"visits:{date}", date)
         if shared is not None:
             _fallback_salt = (date, shared, True)
@@ -525,10 +536,11 @@ def _extract_issue_public_id(raw: str) -> str | None:
 
 
 def _track_ip(request: Request) -> str:
-    # The browser's beacon reaches this through nginx, which sets X-Real-IP
-    # for every request it proxies (nginx/civitas.conf) — the same header
-    # its rate limits are keyed by. backend:8000 isn't reachable outside
-    # the Docker network, so nothing else can supply it.
+    # nginx sets X-Real-IP for every request it proxies (nginx/civitas.conf)
+    # — the same header its rate limits are keyed by — and the frontend's
+    # proxy relays the one nginx set for the page request it reports.
+    # backend:8000 isn't reachable outside the Docker network, so nothing
+    # else can supply it.
     forwarded = request.headers.get("X-Real-IP")
     if forwarded:
         return forwarded
@@ -536,40 +548,101 @@ def _track_ip(request: Request) -> str:
     return peer or "unknown"
 
 
+# page        the proxy saw a browser ask for a page (Sec-Fetch-Dest:
+#             document; frontend/src/lib/visitSignal.ts)
+# router      the proxy saw a same-origin fetch from a page running in a
+#             browser: Next's router prefetching the links in view
+# navigation  the browser itself: a page opened inside the app
+#             (NavigationBeacon), which reaches no server otherwise
+VisitSignal = Literal["page", "router", "navigation"]
+
+# How long an opened page waits for its browser's first router request.
+# Next prefetches the links in view within a second or two of the page
+# hydrating; minutes cover a slow connection or a tab opened in the
+# background.
+_PENDING_S = 10 * 60
+# How long a client that has run a page has its navigations counted: the
+# whole day. Its key changes at midnight anyway (throttle.client_key), so
+# this is "has run a page today", which the visit itself already records.
+_RAN_PAGE_S = 24 * 3600
+_PENDING, _RAN_PAGE = "visit-pending", "visit-ran-page"
+
+
+def _held_path(path: str) -> str:
+    """The page as it is held while it waits: the route template, or the
+    issue's own path — exactly what PageView and IssueView keep, so a
+    request path never sits in the store as it was sent."""
+    issue = _extract_issue_public_id(path)
+    return f"/issue/{issue}" if issue else _normalize_path(path)
+
+
+def _confirmed_paths(ip: str, kind: VisitSignal, path: str) -> list[str]:
+    """The page views `kind` from `ip` completes, in the throttle store
+    (RAM, keyed by throttle.client_key — never the IP).
+
+    A page request is held, not counted: its headers prove nothing (in
+    October 2026 a crawler sending Sec-Fetch-Dest: document and randomised
+    Chrome User-Agents from thousands of residential addresses was ~7,000 of
+    a day's 7,357 counted visitors, and it never ran a page). The page's
+    first router request from the same client — sent only by the page's
+    own script running in a browser — counts every page it holds. A
+    navigation counts its own page too, once the client has run a page
+    today; one that hasn't is no reader clicking a link.
+
+    The page and router requests are how the site works (the router's
+    prefetches are its links), so a reader blocking tracking requests still
+    has the visit and its first page counted, with nothing extra sent. Only
+    the navigation beacon is a request of its own, and a blocker that
+    refuses it is respected.
+    """
+    key = throttle.client_key(ip, "visit")
+    if kind == "page":
+        throttle.hold(_PENDING, key, _held_path(path), ttl=_PENDING_S)
+        return []
+    paths = throttle.take(_PENDING, key)
+    if kind == "navigation" and (paths or throttle.held(_RAN_PAGE, key)):
+        paths.append(_held_path(path))
+    if paths:
+        throttle.hold(_RAN_PAGE, key, "", ttl=_RAN_PAGE_S)
+    return paths
+
+
 @router.post("/track-visit", status_code=204)
-async def track_visit(request: Request, path: str = Query("/")) -> None:
-    """Enqueues a visit event and returns immediately — see the module
-    docstring for why this never touches the database directly.
+async def track_visit(request: Request, kind: VisitSignal = Query(...), path: str = Query("/")) -> None:
+    """Enqueues the page views this request completes and returns
+    immediately — see the module docstring for why this never touches the
+    database directly.
 
     Must stay `async def`, not `def`: asyncio.Queue is explicitly not
     thread-safe, and `_visit_queue.put_nowait` below has to run on the
     same event loop thread run_visit_consumer's `await _visit_queue.get()`
     is running on. A plain `def` here would get dispatched to Starlette's
-    thread pool instead, calling put_nowait from the wrong thread. This
-    is safe specifically because there's no actual blocking I/O left in
-    this body at all (hashing/regex only) — the original event-loop-
-    blocking problem was the inline DB call, which is gone, not the
-    async keyword itself.
+    thread pool instead, calling put_nowait from the wrong thread. The
+    throttle store's calls run on its own threads (throttle.run).
     """
     ip = _track_ip(request)
     user_agent = request.headers.get("User-Agent", "")
-    if _AUTOMATED_BROWSER in user_agent:
+    if _AUTOMATED_BROWSER in user_agent or _SELF_DECLARED_CRAWLER.search(user_agent):
+        return
+    paths = await throttle.run(_confirmed_paths, ip, kind, path)
+    if not paths:
         return
     date = _today()
-
-    event = _VisitEvent(
-        date=date,
-        visitor_hash=_visitor_hash(ip, await _daily_salt(date)),
-        browser=_parse_browser(user_agent),
-        os=_parse_os(user_agent),
-        device_type=_parse_device(user_agent),
-        normalized_path=_normalize_path(path),
-        issue_public_id=_extract_issue_public_id(path),
-    )
-    try:
-        _visit_queue.put_nowait(event)
-    except asyncio.QueueFull:
-        logger.warning("Visit queue full (%d) — dropping visit event", _VISIT_QUEUE_MAXSIZE)
+    visitor_hash = _visitor_hash(ip, await _daily_salt(date))
+    for page in paths:
+        event = _VisitEvent(
+            date=date,
+            visitor_hash=visitor_hash,
+            browser=_parse_browser(user_agent),
+            os=_parse_os(user_agent),
+            device_type=_parse_device(user_agent),
+            normalized_path=_normalize_path(page),
+            issue_public_id=_extract_issue_public_id(page),
+        )
+        try:
+            _visit_queue.put_nowait(event)
+        except asyncio.QueueFull:
+            logger.warning("Visit queue full (%d) — dropping visit event", _VISIT_QUEUE_MAXSIZE)
 
 
 @router.post("/track-timing", status_code=204)
@@ -583,7 +656,7 @@ async def track_timing(
     the browser's LoadTimingBeacon after the load event.
 
     Unlike track-visit this is called by the browser itself, through nginx's
-    rate-limited /api/ location, so it reads nothing about the caller — no
+    rate-limited /api/ location, and it reads nothing about the caller — no
     IP, no User-Agent. The route is normalized exactly as track-visit's is and
     each duration is reduced to its histogram bucket before it is queued (see
     PageLoadTiming), so an arbitrary client can at most add counts to a

@@ -7,10 +7,10 @@ totals it's compared against are windowed to the 2 most recent elections
 """
 
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
+from app.pipeline.fetch import fec
 from app.pipeline.fetch.fec import (
-    _cycle_query,
     _cycle_tag,
     _sort_financials_recent_first,
     financials_election_year,
@@ -18,15 +18,33 @@ from app.pipeline.fetch.fec import (
 )
 
 
-def test_cycle_query_formats_repeated_params_deduped_and_sorted():
-    q = _cycle_query([2024, 2022, 2024])
-    # one repeated param per cycle, sorted ascending, each exactly once
-    assert q == "&two_year_transaction_period=2022&two_year_transaction_period=2024"
+async def test_receipts_query_each_cycle_and_keep_the_largest_overall(db_session):
+    # One query naming three cycles times out at the FEC for a large
+    # campaign; one per cycle, merged, gives the same largest receipts.
+    pages = {
+        "2022": [{"contribution_receipt_amount": a} for a in (900, 50)],
+        "2024": [{"contribution_receipt_amount": a} for a in (700, 600)],
+    }
+    urls: list[str] = []
+
+    async def fake_fetch(client, url):
+        urls.append(url)
+        return {"results": pages[url.rsplit("=", 1)[1]]}
+
+    with patch.object(fec, "_fetch_or_raise", side_effect=fake_fetch), \
+         patch.object(fec, "_TOP_RECEIPTS", 3):
+        rows = await fec.fetch_committee_receipts(None, db_session, "C001", cycles=[2024, 2022, 2024])
+    assert [r["contribution_receipt_amount"] for r in rows] == [900, 700, 600]
+    assert [u.count("two_year_transaction_period") for u in urls] == [1, 1]
+    assert all("is_individual=true" in u for u in urls)
 
 
-def test_cycle_query_empty_when_no_cycles():
-    assert _cycle_query(None) == ""
-    assert _cycle_query([]) == ""
+async def test_receipts_unwindowed_is_one_query_with_no_period(db_session):
+    fetch = AsyncMock(return_value={"results": []})
+    with patch.object(fec, "_fetch_or_raise", fetch):
+        await fec.fetch_pac_receipts(None, db_session, "C001")
+    (url,) = [c.args[1] for c in fetch.await_args_list]
+    assert "two_year_transaction_period" not in url and "is_individual=false" in url
 
 
 def test_cycle_tag_used_for_cache_key_disambiguation():
