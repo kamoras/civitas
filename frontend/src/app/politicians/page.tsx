@@ -1,7 +1,7 @@
 "use client";
 
 import { displayScore } from "@/lib/formatting";
-import { districtName } from "@/lib/elections";
+import { districtName, stateBallotHref } from "@/lib/elections";
 import { Suspense, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -14,6 +14,7 @@ import { fetchPoliticianDirectory } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { getScoreBgColor } from "@/lib/representation";
 import { formerOfficeBadge } from "@/lib/officeStatus";
+import { delegationOrder } from "@/lib/delegationOrder";
 import type { PoliticianCard } from "@/types/politicians";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 
@@ -112,6 +113,9 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
           <img
             src={p.thumbnailUrl}
             alt={p.name}
+            // Hundreds of cards: load the portraits as they scroll into view.
+            loading="lazy"
+            decoding="async"
             className="w-10 h-10 object-cover shrink-0 opacity-80 group-hover:opacity-100 transition-opacity"
           />
         ) : (
@@ -160,7 +164,9 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
         {p.activeIssueCount > 0 && (
           <div className="shrink-0 flex items-center gap-1 mt-0.5">
             <span className="inline-block w-1.5 h-1.5 bg-signal-cyan animate-pulse" />
-            <span className="font-mono text-xs text-signal-cyan">{p.activeIssueCount} ACTIVE</span>
+            <span className="font-mono text-xs text-signal-cyan">
+              IN {p.activeIssueCount} {p.activeIssueCount === 1 ? "ISSUE" : "ISSUES"}
+            </span>
           </div>
         )}
       </div>
@@ -169,6 +175,18 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
 }
 
 const EMPTY_DIRECTORY: PoliticianCard[] = [];
+
+/** Keeps ?state= in the address bar so a filtered delegation can be
+ * bookmarked, shared and returned to with Back. The History API, not
+ * router.replace(): on this statically prerendered route a router.replace()
+ * after a load with a query string silently does nothing (AGENTS.md,
+ * "Client-side URL state"). */
+function writeStateParam(state: string) {
+  const url = new URL(window.location.href);
+  if (state) url.searchParams.set("state", state);
+  else url.searchParams.delete("state");
+  window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+}
 
 export default function PoliticiansPage() {
   return (
@@ -184,7 +202,11 @@ function PoliticiansPageContent() {
   const initialState = searchParams.get("state") || "";
   const [branch, setBranch] = useState<BranchFilter>(initialBranch);
   const [party, setParty] = useState<PartyFilter>("ALL");
-  const [state, setState] = useState<string>(initialState);
+  const [state, setStateValue] = useState<string>(initialState);
+  const setState = (next: string) => {
+    setStateValue(next);
+    writeStateParam(next);
+  };
   const [search, setSearch] = useState<string>("");
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -200,7 +222,7 @@ function PoliticiansPageContent() {
   const filtered = useMemo(() => {
     let list = all;
     if (party !== "ALL") list = list.filter((p) => p.party === party);
-    if (state) list = list.filter((p) => p.state === state);
+    if (state) list = delegationOrder(list.filter((p) => p.state === state));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q));
@@ -262,7 +284,7 @@ function PoliticiansPageContent() {
               ))}
               {activeCount > 0 && (
                 <span className="font-mono text-xs text-ink-lo self-center ml-2">
-                  {activeCount} IN ACTIVE ISSUES
+                  {activeCount} IN ACTION CENTER ISSUES
                 </span>
               )}
             </div>
@@ -344,6 +366,24 @@ function PoliticiansPageContent() {
               <p className="font-mono text-xs text-ink-min mb-3 tracking-widest">
                 {filtered.length} POLITICIAN{filtered.length !== 1 ? "S" : ""}
               </p>
+              {/* A House district is a number few people know. The state's
+                  ballot page finds it from the county a reader lives in, with
+                  nothing typed or sent (AGENTS.md section 8). Those are the
+                  lines of the coming election, which in a redrawn state are
+                  not the ones the sitting member was elected on, so the
+                  link says which lines it shows. */}
+              {state && state !== "DC" && branch !== "senate" && (
+                <p className="mb-4 text-sm text-ink-lo">
+                  Don&apos;t know your House district?{" "}
+                  <Link
+                    href={`${stateBallotHref(state)}#ballot-house`}
+                    className="underline underline-offset-2 hover:text-phos"
+                  >
+                    Find it by county on the {state} ballot page
+                  </Link>{" "}
+                  (2026 district lines).
+                </p>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {filtered.map((p) => (
                   <PoliticianCardUI key={p.id} p={p} />

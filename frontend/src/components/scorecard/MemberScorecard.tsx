@@ -61,6 +61,7 @@ export default function MemberScorecard({
   committees,
   rank,
   titleAs = "h1",
+  former = false,
 }: {
   member: Senator;
   chamber: "senate" | "house";
@@ -72,6 +73,8 @@ export default function MemberScorecard({
   committees?: Committee[];
   rank?: { rank: number; of: number } | null;
   titleAs?: "h1" | "h2";
+  /** No longer serving: the header leaves out how to reach them. */
+  former?: boolean;
 }) {
   const config = useConfig();
   const weights = config?.scoreWeights;
@@ -139,6 +142,7 @@ export default function MemberScorecard({
             committees={committees}
             rank={rank}
             titleAs={titleAs}
+            former={former}
           />
 
           <div className="grid items-stretch gap-5 lg:grid-cols-3">

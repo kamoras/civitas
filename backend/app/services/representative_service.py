@@ -216,12 +216,13 @@ def get_representatives_by_state(
     per_page: int = 10,
     party: str | None = None,
 ) -> PaginatedRepresentativesSchema:
-    """Return a paginated, optionally party-filtered list of representatives
-    for a given state (unlike senators, a state can have many)."""
+    """Return a paginated, optionally party-filtered list of the state's
+    serving representatives (unlike senators, a state can have many); a
+    departed member is left out as in get_senators_by_state."""
     base_q = (
         db.query(Representative)
         .options(*_rep_eager_options())
-        .filter(Representative.state == state.upper())
+        .filter(Representative.state == state.upper(), Representative.is_current == True)  # noqa: E712
         .order_by(Representative.district)
     )
     if party:
