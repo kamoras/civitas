@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchMonitors, fetchMonitorDetail } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { retryKeepingFocus } from "@/lib/tabFocus";
-import { formatUtcDate, safeHref } from "@/lib/formatting";
+import { formatUtcDate, policyAreaLabel, safeHref } from "@/lib/formatting";
 import { SECTION_HEADING, TEXT_LINK } from "@/components/action/IssueEnrichment";
 import type { MonitorUpdate, NationalMonitor } from "@/lib/api";
 
@@ -128,7 +128,7 @@ function MonitorRow({
                   _merge_monitors) — past a handful they read as noise. */}
               {areas.length > 0 && (
                 <span className="text-ink-lo">
-                  {areas.slice(0, 3).join(" · ")}
+                  {areas.slice(0, 3).map(policyAreaLabel).join(" · ")}
                   {areas.length > 3 && ` +${areas.length - 3}`}
                 </span>
               )}
