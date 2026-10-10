@@ -258,3 +258,26 @@ export function competitionRanks<T>(
 export function asLabel(phrase: string): string {
   return phrase.charAt(0).toUpperCase() + phrase.slice(1);
 }
+
+/**
+ * A policy-area code as a reader sees it ("FOREIGN_POLICY" -> "FOREIGN
+ * POLICY"). The codes come from config_definitions.POLICY_AREAS; every
+ * surface that prints one sets it in uppercase mono, so only the
+ * underscore needs to go.
+ */
+export function policyAreaLabel(code: string): string {
+  return code.replace(/_/g, " ");
+}
+
+/**
+ * Whether an issue's summary only repeats its headline. When a source gives
+ * a headline and no other attributable sentence, the summary is that
+ * headline again (backend post_composer), and a card that prints both reads
+ * as a glitch. Compared as letters and digits, so "Headline." and "headline"
+ * match, and a summary that is the headline cut short matches too.
+ */
+export function restatesTitle(title: string, summary: string | null | undefined): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const s = norm(summary ?? "");
+  return s.length > 0 && norm(title).includes(s);
+}

@@ -38,6 +38,9 @@ Tables:
   claims   when something was last claimed. `claim` succeeds only when the
            previous claim is at least `period` old, in one conditional
            upsert, so two workers can't both win it.
+  held     short-lived values kept under a key until it comes back for
+           them (`hold`, `take`, `held`): the page a client opened, waiting
+           for proof its browser ran the page (api/visits.py).
 
 Each operation is one `BEGIN IMMEDIATE` transaction, so SQLite's writer
 lock makes the read-modify-write atomic across processes. Every row
@@ -50,7 +53,9 @@ cost ~1.4 ms for the same work). Paid by every request that
 reaches the backend on a limited route: every mutation (WriteRateLimit), the
 public API and Explore search (public.RateLimit), and the two
 live-lookup routes, bills/{id}/record and explore/{id}/comments
-(UpstreamRouteLimit, plus the shared hourly budget on a cache miss).
+(UpstreamRouteLimit, plus the shared hourly budget on a cache miss) —
+and the visit counter, on every page and router request the frontend
+relays (api/visits.py).
 
 The limits fail open: a limiter that can't reach its store lets the
 request through and logs it, rather than turning a locked database into an
@@ -98,12 +103,18 @@ CREATE TABLE IF NOT EXISTS claims (
     claimed_at REAL NOT NULL, expires_at REAL NOT NULL,
     PRIMARY KEY (bucket, key)
 );
+CREATE TABLE IF NOT EXISTS held (
+    bucket TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+    expires_at REAL NOT NULL,
+    PRIMARY KEY (bucket, key, value)
+);
 CREATE TABLE IF NOT EXISTS salt_days (
     kind TEXT NOT NULL, date TEXT NOT NULL, salt BLOB NOT NULL,
     PRIMARY KEY (kind, date)
 );
 CREATE INDEX IF NOT EXISTS windows_expiry ON windows (expires_at);
 CREATE INDEX IF NOT EXISTS claims_expiry ON claims (expires_at);
+CREATE INDEX IF NOT EXISTS held_expiry ON held (expires_at);
 """
 
 _local = threading.local()
@@ -303,6 +314,7 @@ def _purge_expired(conn: sqlite3.Connection, now: float) -> None:
         _last_purge = now
     conn.execute("DELETE FROM windows WHERE expires_at < ?", (now,))
     conn.execute("DELETE FROM claims WHERE expires_at < ?", (now,))
+    conn.execute("DELETE FROM held WHERE expires_at < ?", (now,))
 
 
 # The store's salts, one table for both kinds, each kept for its own time:
@@ -617,6 +629,62 @@ def claim(bucket: str, key: str | None, *, period: float) -> bool:
     return won
 
 
+def hold(bucket: str, key: str | None, value: str, *, ttl: float) -> None:
+    """Keep `value` under `key` for `ttl` seconds (a value already held is
+    kept once, its time restarted). Nothing for a None key, or when the
+    store can't be written: what is held is best-effort."""
+    if key is None:
+        return
+    now = time.time()
+    try:
+        with _Txn() as conn:
+            conn.execute(
+                "INSERT INTO held (bucket, key, value, expires_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT (bucket, key, value) DO UPDATE SET expires_at = excluded.expires_at",
+                (bucket, str(key), value, now + ttl),
+            )
+            _purge_expired(conn, now)
+    except sqlite3.Error:
+        logger.warning("Throttle %r unavailable — not holding", bucket, exc_info=True)
+
+
+def take(bucket: str, key: str | None) -> list[str]:
+    """Every unexpired value held under `key` (or its key under yesterday's
+    salt, ClientKey), deleted as it is returned, so two workers can't both
+    take one. [] for a None key or when the store can't answer."""
+    if key is None:
+        return []
+    keys = (str(key), _previous_key(key) or str(key))
+    try:
+        with _Txn() as conn:
+            rows = conn.execute(
+                "DELETE FROM held WHERE bucket = ? AND key IN (?, ?) RETURNING value, expires_at",
+                (bucket, *keys),
+            ).fetchall()
+    except sqlite3.Error:
+        logger.warning("Throttle %r unavailable — nothing taken", bucket, exc_info=True)
+        return []
+    now = time.time()
+    return sorted(value for value, expires_at in rows if expires_at >= now)
+
+
+def held(bucket: str, key: str | None) -> bool:
+    """Whether anything unexpired is held under `key` (or its key under
+    yesterday's salt). False for a None key or when the store can't answer."""
+    if key is None:
+        return False
+    keys = (str(key), _previous_key(key) or str(key))
+    try:
+        with _using() as conn:
+            return conn.execute(
+                "SELECT 1 FROM held WHERE bucket = ? AND key IN (?, ?) AND expires_at >= ? LIMIT 1",
+                (bucket, *keys, time.time()),
+            ).fetchone() is not None
+    except sqlite3.Error:
+        logger.warning("Throttle %r unavailable", bucket, exc_info=True)
+        return False
+
+
 def clear(*buckets: str) -> None:
     """Forget everything counted in `buckets` (tests reset limits this way)."""
     marks = ",".join("?" * len(buckets))
@@ -624,5 +692,6 @@ def clear(*buckets: str) -> None:
         with _Txn() as conn:
             conn.execute(f"DELETE FROM windows WHERE bucket IN ({marks})", buckets)
             conn.execute(f"DELETE FROM claims WHERE bucket IN ({marks})", buckets)
+            conn.execute(f"DELETE FROM held WHERE bucket IN ({marks})", buckets)
     except sqlite3.Error:
         logger.warning("Throttle clear failed", exc_info=True)

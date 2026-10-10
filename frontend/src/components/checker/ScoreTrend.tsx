@@ -183,8 +183,16 @@ export default function ScoreTrend({ snapshots, change = null }: ScoreTrendProps
         </span>
       </div>
       {versionChanges.length > 0 && (
-        <div className="text-xs text-ink-lo font-mono mt-0.5">
-          ┊ methodology updated ({versionChanges.map((v) => v.version).join(", ")}): see{" "}
+        <div
+          className="text-xs text-ink-lo font-mono mt-0.5"
+          title={versionChanges.map((v) => v.version).join(", ")}
+        >
+          {/* A count, not the version list: a long-serving member's chart
+              crosses twenty-odd versions, and a line of version numbers
+              tells a reader nothing the changelog doesn't say better. */}
+          ┊ scoring method updated{" "}
+          {versionChanges.length === 1 ? "once" : `${versionChanges.length} times`} in this period:
+          see{" "}
           <a href="/changelog" className="underline underline-offset-2 hover:text-phos">
             scoring changelog
           </a>
