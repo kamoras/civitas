@@ -117,8 +117,8 @@ erDiagram
         int id PK
         string name
         string appointing_president
-        float score_consistency "0.35/0.80"
-        float score_independence "0.45/0.80"
+        float appointer_effect "shown, not scored (justice v3)"
+        float appointer_effect_se "95% interval = effect ± 1.96 SE"
         int cases_decided
         json agreement_matrix
     }

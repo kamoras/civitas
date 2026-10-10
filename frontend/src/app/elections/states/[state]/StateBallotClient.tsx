@@ -875,6 +875,12 @@ function leanTextClass(race: {
  * the tierCandidates split — the leading D/R names, so a reader can find
  * their district by the names they know as well as by county.
  *
+ * tierCandidates leads with any active candidate of a major party, funded
+ * or not, so an empty side means no candidate of that party is on file:
+ * "no Republican listed", not "no funded Republican", which read as if an
+ * unfunded one were on the ballot. "Listed" because a nominee chosen
+ * outside a primary may be missing (the page says so above the list).
+ *
  * On new lines the member going into the election is marked "(sitting
  * member)" — "(member before this election)" from election day on, since
  * the results window can run to January 3, when the new Congress sits —
@@ -923,7 +929,7 @@ function HouseDistrictOption({
               {dem.incumbentChallenge === "I" ? incumbentMark(dem) : ""}
             </span>
           ) : (
-            <span className="text-ink-min">no funded Democrat</span>
+            <span className="text-ink-min">no Democrat listed</span>
           )}
           <span className="text-[11px] text-ink-min">vs</span>
           {rep ? (
@@ -932,7 +938,7 @@ function HouseDistrictOption({
               {rep.incumbentChallenge === "I" ? incumbentMark(rep) : ""}
             </span>
           ) : (
-            <span className="text-ink-min">no funded Republican</span>
+            <span className="text-ink-min">no Republican listed</span>
           )}
         </span>
       </span>

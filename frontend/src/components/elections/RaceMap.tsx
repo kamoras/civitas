@@ -56,6 +56,11 @@ export default function RaceMap({
   // style object in favor of a plain `style` prop, same as any other SVG
   // element — hover is now tracked ourselves.
   const [hoveredFips, setHoveredFips] = useState<string | null>(null);
+  // Keyboard focus gets the hover outline, thicker: the paths set
+  // `outline: none` (a rectangle around a state's bounding box is
+  // meaningless), which left a keyboard user tabbing through 50 states
+  // with no visible focus at all (WCAG 2.4.7).
+  const [focusedFips, setFocusedFips] = useState<string | null>(null);
 
   const activate = (e: KeyboardEvent, stateCode: string) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -80,7 +85,8 @@ export default function RaceMap({
             const stateCode = FIPS_TO_STATE[fips];
             if (!stateCode) return null;
             const isSelected = selectedState === stateCode;
-            const isHovered = hoveredFips === fips;
+            const isHovered = hoveredFips === fips || focusedFips === fips;
+            const isFocused = focusedFips === fips;
 
             return (
               <Geography
@@ -89,6 +95,8 @@ export default function RaceMap({
                 onClick={() => onStateClick(stateCode)}
                 onMouseEnter={() => setHoveredFips(fips)}
                 onMouseLeave={() => setHoveredFips(null)}
+                onFocus={() => setFocusedFips(fips)}
+                onBlur={() => setFocusedFips(null)}
                 // react-simple-maps hardcodes tabIndex=0 on each path, but
                 // SVG paths don't fire onClick from Enter/Space — wire up
                 // button semantics + keyboard activation ourselves.
@@ -102,7 +110,7 @@ export default function RaceMap({
                       ? getHoverFillColor(stateCode, isSelected)
                       : getFillColor(stateCode, isSelected),
                   stroke: isHovered ? "#00ff41" : "#0a1a0a",
-                  strokeWidth: isHovered ? 1 : 0.5,
+                  strokeWidth: isFocused ? 2.5 : isHovered ? 1 : 0.5,
                   outline: "none",
                   cursor: "pointer",
                 }}
@@ -114,7 +122,9 @@ export default function RaceMap({
             geographies={geographies}
             selectedState={selectedState}
             hoveredFips={hoveredFips}
+            focusedFips={focusedFips}
             setHoveredFips={setHoveredFips}
+            setFocusedFips={setFocusedFips}
             onStateClick={onStateClick}
             activate={activate}
             getFillColor={getFillColor}
@@ -131,7 +141,9 @@ function SmallStateCallouts({
   geographies,
   selectedState,
   hoveredFips,
+  focusedFips,
   setHoveredFips,
+  setFocusedFips,
   onStateClick,
   activate,
   getFillColor,
@@ -141,7 +153,9 @@ function SmallStateCallouts({
   geographies: { id?: string | number; rsmKey: string }[];
   selectedState: string | null;
   hoveredFips: string | null;
+  focusedFips: string | null;
   setHoveredFips: (fips: string | null) => void;
+  setFocusedFips: (fips: string | null) => void;
   onStateClick: (state: string) => void;
   activate: (e: KeyboardEvent, state: string) => void;
   getFillColor: RaceMapProps["getFillColor"];
@@ -166,7 +180,8 @@ function SmallStateCallouts({
         const y = CALLOUT_TOP + i * CALLOUT_STEP;
         const isSelected = selectedState === stateCode;
         const fips = String(geo.id);
-        const isHovered = hoveredFips === fips;
+        const isFocused = focusedFips === fips;
+        const isHovered = hoveredFips === fips || isFocused;
         return (
           <g
             key={stateCode}
@@ -177,6 +192,8 @@ function SmallStateCallouts({
             onKeyDown={(e) => activate(e, stateCode)}
             onMouseEnter={() => setHoveredFips(fips)}
             onMouseLeave={() => setHoveredFips(null)}
+            onFocus={() => setFocusedFips(fips)}
+            onBlur={() => setFocusedFips(null)}
             style={{ cursor: "pointer", outline: "none" }}
           >
             <line
@@ -200,7 +217,7 @@ function SmallStateCallouts({
                     : getFillColor(stateCode, isSelected)
               }
               stroke={isHovered ? "#00ff41" : "rgba(255,255,255,0.35)"}
-              strokeWidth={1}
+              strokeWidth={isFocused ? 2.5 : 1}
             />
             <text
               x={CALLOUT_X + 23}

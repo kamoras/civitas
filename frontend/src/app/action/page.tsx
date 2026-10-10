@@ -10,7 +10,13 @@ import PageFallback from "@/components/layout/PageFallback";
 import PageMasthead from "@/components/layout/PageMasthead";
 import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api";
 import { useAsyncData, type AsyncData } from "@/hooks/useAsyncData";
-import { commentPeriodToday, describeDaysLeft, formatUtcDate } from "@/lib/formatting";
+import {
+  commentPeriodToday,
+  describeDaysLeft,
+  formatUtcDate,
+  policyAreaLabel,
+  restatesTitle,
+} from "@/lib/formatting";
 import ShareButtons from "@/components/action/ShareButtons";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { focusTabWhenSelected, keepFocusOnSelectedTab, retryKeepingFocus } from "@/lib/tabFocus";
@@ -31,7 +37,6 @@ import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import { countIsOfficial } from "@/lib/developing";
 import { tabControl } from "@/lib/controlStyles";
 import { issuesUrl } from "@/lib/routes";
-import { summaryRestatesTitle } from "@/lib/issueSummary";
 
 /** Plain status line, the loading state the records pages use: no pulse. */
 function Status({ children }: { children: React.ReactNode }) {
@@ -106,7 +111,7 @@ function IssueBody({
 }) {
   return (
     <>
-      {!summaryRestatesTitle(issue.title, issue.summary) && (
+      {!restatesTitle(issue.title, issue.summary) && (
         <p className="mb-4 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
           {issue.summary}
           <SummarySource issue={issue} />
@@ -224,13 +229,13 @@ function SecondaryIssue({
               <IssueMeta issue={issue} as="span" />
               {(issue.policyAreas ?? []).length > 0 && (
                 <span className="mt-1 block font-mono text-xs tracking-[0.08em] text-ink-lo">
-                  {issue.policyAreas.join(" · ")}
+                  {issue.policyAreas.map(policyAreaLabel).join(" · ")}
                 </span>
               )}
               <span className="mt-1.5 block font-display text-lg font-semibold leading-snug text-ink-hi">
                 {issue.title}
               </span>
-              {!expanded && !summaryRestatesTitle(issue.title, issue.summary) && (
+              {!expanded && !restatesTitle(issue.title, issue.summary) && (
                 <span className="mt-1 line-clamp-2 block font-display text-[15px] leading-relaxed text-ink-lo">
                   {issue.summary}
                 </span>

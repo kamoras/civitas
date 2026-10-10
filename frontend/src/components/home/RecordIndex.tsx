@@ -7,9 +7,8 @@ import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
 import type { BillInFlight } from "@/types/bill";
 import { monitorHref } from "@/lib/routes";
-import { issueRef, parseUtc } from "@/lib/formatting";
+import { issueRef, parseUtc, policyAreaLabel, restatesTitle } from "@/lib/formatting";
 import { billHref } from "@/lib/congress";
-import { summaryRestatesTitle } from "@/lib/issueSummary";
 
 /**
  * The dense, dated index of what has recently entered the record.
@@ -84,9 +83,9 @@ export function buildRecordEntries(
       date: i.date,
       title: i.title,
       detail:
-        i.summary && !summaryRestatesTitle(i.title, i.summary)
+        i.summary && !restatesTitle(i.title, i.summary)
           ? clamp(i.summary, 78)
-          : i.policyAreas.join(" · "),
+          : i.policyAreas.map(policyAreaLabel).join(" · "),
       href: `/issue/${i.publicId}`,
       tone: "text-phos-mid",
     })),

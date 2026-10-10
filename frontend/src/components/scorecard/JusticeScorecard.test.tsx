@@ -69,11 +69,11 @@ describe("JusticeScorecard", () => {
     render(<JusticeScorecard justice={justice} />);
     expect(
       screen.getByText(
-        /75% of 56 votes while A\. President was president, and in 57% of 399 under other presidents.*19\.2 points more often.*95% confidence interval 7\.0 to 31\.3/
+        /75% of 56 votes while A\. President was president, and in 57% of 399 under other presidents.*19\.2 points more often.*95% confidence interval \+7\.0 to \+31\.3 points/
       )
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("img", { name: "19.2 points, 95% interval 7.0 to 31.3" })
+      screen.getByRole("img", { name: "+19.2 points, 95% interval +7.0 to +31.3" })
     ).toBeInTheDocument();
     expect(screen.getByText(/through the 2025 term/)).toBeInTheDocument();
     expect(screen.getByText(/\+2\.50 in the 2024 term/)).toBeInTheDocument();

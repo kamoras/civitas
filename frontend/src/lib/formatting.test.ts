@@ -15,6 +15,8 @@ import {
   isNewFact,
   issueRef,
   localDateStr,
+  policyAreaLabel,
+  restatesTitle,
   safeHref,
 } from "./formatting";
 
@@ -254,5 +256,47 @@ describe("asLabel", () => {
     expect(asLabel("progressive Democrat leader")).toBe("Progressive Democrat leader");
     expect(asLabel("centrist Independent")).toBe("Centrist Independent");
     expect(asLabel("")).toBe("");
+  });
+});
+
+describe("policyAreaLabel", () => {
+  it("prints a code without its underscores", () => {
+    expect(policyAreaLabel("FOREIGN_POLICY")).toBe("FOREIGN POLICY");
+    expect(policyAreaLabel("TECH")).toBe("TECH");
+  });
+});
+
+describe("restatesTitle", () => {
+  it("catches a lede that is the headline with a period, in any case", () => {
+    expect(restatesTitle("Senate passes the bill", "Senate passes the bill.")).toBe(true);
+    expect(restatesTitle("Agency’s rule takes effect", "agency's rule takes effect")).toBe(true);
+  });
+
+  it("keeps a summary that says more", () => {
+    expect(restatesTitle("Senate passes the bill", "Senate passes the bill, 52 to 48.")).toBe(
+      false
+    );
+  });
+
+  it("is false for no summary", () => {
+    expect(restatesTitle("Senate passes the bill", "")).toBe(false);
+    expect(restatesTitle("Senate passes the bill", null)).toBe(false);
+  });
+
+  it("compares letters in any script, so accents can't fake or hide a repeat", () => {
+    expect(restatesTitle("Luján wins the seat", "Luján wins the seat.")).toBe(true);
+    expect(restatesTitle("Luján wins the seat", "Lujan wins the seat")).toBe(false);
+  });
+
+  it("matches a summary that only repeats the headline", () => {
+    expect(restatesTitle("Senate passes the bill", "Senate passes the bill.")).toBe(true);
+    expect(restatesTitle("Senate passes the bill, AP says", "Senate passes the bill")).toBe(true);
+  });
+  it("keeps a summary that says something more", () => {
+    expect(
+      restatesTitle("Senate passes the bill", "The vote was 52-48 after a week of debate.")
+    ).toBe(false);
+    expect(restatesTitle("Senate passes the bill", "")).toBe(false);
+    expect(restatesTitle("Senate passes the bill", undefined)).toBe(false);
   });
 });

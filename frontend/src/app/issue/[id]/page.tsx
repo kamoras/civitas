@@ -6,7 +6,7 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import { ActionIssue } from "@/types/action";
 import { usableRecord } from "@/lib/ssrPayload";
-import { commentPeriodToday, formatUtcDate } from "@/lib/formatting";
+import { commentPeriodToday, formatUtcDate, restatesTitle } from "@/lib/formatting";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
 import { countIsOfficial, factsHeading, factsSectionId, factsShareLabel } from "@/lib/developing";
 import {
@@ -28,7 +28,6 @@ import JsonLd from "@/components/seo/JsonLd";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
-import { summaryRestatesTitle } from "@/lib/issueSummary";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -187,7 +186,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             <h1 className="mt-3 text-balance font-display text-3xl font-extrabold leading-tight tracking-[-0.01em] text-ink-hi sm:text-4xl">
               {issue.title}
             </h1>
-            {!summaryRestatesTitle(issue.title, issue.summary) && (
+            {!restatesTitle(issue.title, issue.summary) && (
               <p className="mt-4 font-display text-base leading-relaxed text-ink sm:text-[17px]">
                 {issue.summary}
                 <SummarySource issue={issue} />

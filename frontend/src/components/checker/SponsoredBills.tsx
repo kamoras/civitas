@@ -7,6 +7,7 @@ import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
 import { billHref } from "@/lib/congress";
+import { policyAreaLabel } from "@/lib/formatting";
 
 interface SponsoredBillsProps {
   bills: SponsoredBill[];
@@ -178,7 +179,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                             key={a.area}
                             className={`text-xs px-1.5 py-0.5 border ${policyAreaBadgeClass(a.party)}`}
                           >
-                            {a.area}
+                            {policyAreaLabel(a.area)}
                           </span>
                         ))}
                     </div>

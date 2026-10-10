@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { retryKeepingFocus } from "@/lib/tabFocus";
 import { fetchTimeline } from "@/lib/api";
-import { formatUtcDate, formatWeekRange, safeHref } from "@/lib/formatting";
+import { formatUtcDate, formatWeekRange, policyAreaLabel, safeHref } from "@/lib/formatting";
 import { SECTION_HEADING, TEXT_LINK } from "@/components/action/IssueEnrichment";
 import type { TimelineEntry, TimelineMonth, TimelineWeek, UpcomingEvent } from "@/lib/api";
 
@@ -76,7 +76,7 @@ function DayRow({
         )}
         <span className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs tracking-[0.06em] text-ink-min">
           {(entry.policyAreas ?? []).length > 0 && (
-            <span>{entry.policyAreas.slice(0, 2).join(" · ")}</span>
+            <span>{entry.policyAreas.slice(0, 2).map(policyAreaLabel).join(" · ")}</span>
           )}
           {entry.monitorSlug && (
             <button
