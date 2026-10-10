@@ -255,7 +255,7 @@ Scores sitting and historical presidents from a mix of live and archival sources
 
 Persists everything computed in phases 3–6:
 - Writes senator/representative scores, key votes, donor–vote matches and sponsored bills to SQLite
-- Appends a `ScoreSnapshot` record (all 5 sub-scores + overall) for each member — enables historical score trend charts
+- Appends a `ScoreSnapshot` record (all 5 sub-scores + overall) for each member — enables historical score trend charts. A member whose run failed keeps the last passing run's scores and gets no snapshot that day, since the snapshot is stamped with this run's `ALGORITHM_VERSION`
 - Records a `PipelineRun` with phase timings, counts, and any per-member errors
 - Runs a SHA-256 fingerprint over all analysis source files (docstring-stripped ASTs, so comment-only edits don't count); if changed since last run, clears `AnalysisCache` and `LearnedClassification` so stale results from the old code are not served
 

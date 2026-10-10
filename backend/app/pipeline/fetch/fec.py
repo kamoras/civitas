@@ -655,11 +655,35 @@ async def with_seat_election(
     return [*financials, row]
 
 
-def _cycle_query(cycles: list[int] | None) -> str:
-    """FEC's Schedule A cycle filter — repeat the param for OR semantics."""
-    if not cycles:
-        return ""
-    return "".join(f"&two_year_transaction_period={c}" for c in sorted(set(cycles)))
+# Rows the receipts queries keep: the FEC's largest page.
+_TOP_RECEIPTS = 100
+
+
+async def _top_receipts(
+    client: httpx.AsyncClient, committee_id: str, is_individual: bool, cycles: list[int] | None,
+) -> list[dict]:
+    """A committee's largest Schedule A receipts over `cycles`, largest first.
+
+    One query per cycle, merged: the largest receipts across the cycles are
+    among each cycle's largest, so the result is the same as one query
+    naming every cycle. That one query (the param repeated, OR semantics)
+    times out at the FEC for a large Senate campaign's three cycles — HTTP
+    504 "Query timed out" after 30s, every time, while each cycle alone
+    answers in about 6s (measured 2026-10-10 on the two committees that
+    failed that night) — and a member whose receipts can't be read keeps
+    the last run's scorecard."""
+    rows: list[dict] = []
+    for cycle in sorted(set(cycles)) if cycles else [None]:
+        period = f"&two_year_transaction_period={cycle}" if cycle else ""
+        data = await _fetch_or_raise(
+            client,
+            f"{FEC_API_BASE}/schedules/schedule_a/?committee_id={committee_id}"
+            f"&sort=-contribution_receipt_amount&per_page={_TOP_RECEIPTS}"
+            f"&is_individual={'true' if is_individual else 'false'}{period}",
+        )
+        rows.extend(data.get("results", []))
+    rows.sort(key=lambda r: -(r.get("contribution_receipt_amount") or 0))
+    return rows[:_TOP_RECEIPTS]
 
 
 def _cycle_tag(cycles: list[int] | None) -> str:
@@ -686,14 +710,8 @@ async def fetch_committee_receipts(
     if cached is not None:
         return cached
 
-    # Get individual contributions only (for employer grouping)
-    data = await _fetch_or_raise(
-        client,
-        f"{FEC_API_BASE}/schedules/schedule_a/?committee_id={committee_id}"
-        f"&sort=-contribution_receipt_amount&per_page=100&is_individual=true"
-        f"{_cycle_query(cycles)}",
-    )
-    results = data.get("results", [])
+    # Individual contributions only (for employer grouping)
+    results = await _top_receipts(client, committee_id, True, cycles)
     api_cache_set(db, "fec", cache_key, results)
     return results
 
@@ -715,13 +733,7 @@ async def fetch_pac_receipts(
         return cached
 
     # is_individual=false returns committee-to-committee contributions (PACs)
-    data = await _fetch_or_raise(
-        client,
-        f"{FEC_API_BASE}/schedules/schedule_a/?committee_id={committee_id}"
-        f"&sort=-contribution_receipt_amount&per_page=100&is_individual=false"
-        f"{_cycle_query(cycles)}",
-    )
-    results = data.get("results", [])
+    results = await _top_receipts(client, committee_id, False, cycles)
     api_cache_set(db, "fec", cache_key, results)
     return results
 
