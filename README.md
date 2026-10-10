@@ -431,8 +431,13 @@ The Action Center is intentionally separate from the nightly pipeline because it
 Every hour at :15
        │
        ▼
-  1. FETCH ───── RSS (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call —
-       │         8 feeds across 7 newsrooms; NPR's two desks count as one)
+  1. FETCH ───── RSS (NPR, PBS, BBC, The Hill, Politico, Roll Call —
+       │         7 feeds across 6 newsrooms; NPR's two desks count as one).
+       │         AP's mirror went stale on 2026-09-09 and apnews.com walls
+       │         off automated readers, so AP was dropped (2026-10).
+       │         A feed or trending source that fails, or has nothing new
+       │         for longer than twice its longest gap in 60 days (and the
+       │         48h window), raises an ops alert (check_source_freshness).
        │         + Google Trends + Bluesky trending
        │         48-hour article window; direct URLs only (no redirect wrappers)
        │         Reddit was a third trending source until 2026-09: it now
@@ -563,7 +568,7 @@ Every hour at :15
        │         Repost + like outlet posts that match active issues.
 ```
 
-**Why cluster before ranking?** Articles about the same event arrive from multiple outlets within minutes. Without clustering, every "top issue" would be the same story from AP, NPR, BBC, and PBS. Clustering first, then ranking by source breadth, surfaces the most distinct newsworthy topics.
+**Why cluster before ranking?** Articles about the same event arrive from multiple outlets within minutes. Without clustering, every "top issue" would be the same story from NPR, BBC, PBS and The Hill. Clustering first, then ranking by source breadth, surfaces the most distinct newsworthy topics.
 
 **Why filter at 0.20 cosine similarity?** The policy prototype filter is deliberately permissive. False negatives (dropping a real policy story) are worse than false positives. Borderline cases are handled downstream by extraction rather than by asking a model to be neutral: a cluster that yields no verbatim, adjacently-asserted claim simply produces no issue.
 
