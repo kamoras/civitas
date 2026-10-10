@@ -32,7 +32,7 @@ drift — that is the failure mode these are exposed to, and naming the source i
 the mitigation.
 
 The scoring diagram is the one most likely to go stale: weights live in
-`SCORE_WEIGHTS` / `PRESIDENT_SCORE_WEIGHTS` / `JUSTICE_SCORE_WEIGHTS`
+`SCORE_WEIGHTS` / `PRESIDENT_SCORE_WEIGHTS`
 (`backend/app/config_definitions.py`) and component splits in
 `score_calculator.py`, all of which are actively iterated. Those dicts are
 authoritative; if this folder disagrees with them, this folder is wrong.

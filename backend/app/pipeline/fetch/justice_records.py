@@ -1,4 +1,4 @@
-"""The academic records the justice score reads (justice_loyalty.py).
+"""The academic records the justice appointer estimate reads (justice_loyalty.py).
 
 - The Supreme Court Database (Spaeth, Epstein, Martin et al.,
   scdb.la.psu.edu): every justice's vote in every orally argued case, with
