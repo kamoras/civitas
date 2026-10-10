@@ -454,10 +454,10 @@ describe("the state page in results mode", () => {
     await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
     const drawer = within(screen.getByRole("dialog"));
     // The picker lists both districts, with no D+3 beside either.
-    expect(drawer.getAllByRole("button", { name: /no funded Democrat/ })).toHaveLength(2);
+    expect(drawer.getAllByRole("button", { name: /no Democrat listed/ })).toHaveLength(2);
     expect(drawer.queryByText("D+3")).not.toBeInTheDocument();
     expect(districtMapProps.at(-1)?.showLean).toBe(false);
-    await userEvent.click(drawer.getAllByRole("button", { name: /no funded Democrat/ })[1]);
+    await userEvent.click(drawer.getAllByRole("button", { name: /no Democrat listed/ })[1]);
     const picked = within(screen.getByRole("dialog"));
     expect(picked.getByText("District 2")).toBeInTheDocument();
     expect(picked.queryByText("D+3")).not.toBeInTheDocument();

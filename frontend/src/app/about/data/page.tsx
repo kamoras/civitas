@@ -356,12 +356,19 @@ export default function DataChapter() {
             current day and is then deleted. Without the key, the scrambled value can&apos;t be
             turned back into an address. Raw IP addresses and browser identification strings are
             never stored, only a coarse browser, operating system and device type (for example
-            &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser opening a page counts, and the
-            page itself sends the count once it has loaded: search and AI crawlers, scripts and
-            automated browsers that never run the page aren&apos;t visitors and aren&apos;t counted.
-            Turning JavaScript off means you aren&apos;t counted either.
+            &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser that runs the page counts: a
+            visit is counted when, after asking for a page, the same browser makes the requests the
+            running page makes anyway to load its links. Scripts and crawlers that never run the
+            page aren&apos;t counted, and neither are search and AI crawlers that do run it but say
+            what they are, or automated browsers. Turning JavaScript off means you aren&apos;t
+            counted either. An ad or tracker blocker makes no difference to the visit or the page
+            you arrived on, because counting them sends nothing beyond what the page needs.
           </Item>
-          <Item label="Page views">A count per page type, per day.</Item>
+          <Item label="Page views">
+            A count per page type, per day. Pages you open by following a link inside the site send
+            a small request of their own to be counted; a blocker that refuses tracking requests
+            stops it, and those pages then aren&apos;t counted.
+          </Item>
           <Item label="Load times">
             A tally of how long pages take to load, in broad ranges, with nothing about who loaded
             them.

@@ -1,4 +1,4 @@
-import { displayScore } from "@/lib/formatting";
+import { displayScore, restatesTitle } from "@/lib/formatting";
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
 import { loadArchivoBold } from "@/lib/ogFonts";
@@ -141,11 +141,13 @@ async function issueImage(
   issue: { title?: string; summary?: string; imageUrl?: string | null } | null
 ) {
   const title = issue?.title ?? "Civitas Action Center";
-  const summary = issue?.summary
-    ? issue.summary.length > 140
-      ? issue.summary.slice(0, 137) + "…"
-      : issue.summary
-    : "Track what Congress is doing, and what you can do about it.";
+  const summary = !issue?.summary
+    ? "Track what Congress is doing, and what you can do about it."
+    : restatesTitle(title, issue.summary)
+      ? ""
+      : issue.summary.length > 140
+        ? issue.summary.slice(0, 137) + "…"
+        : issue.summary;
   const section = "ACTION CENTER";
   const footerLabel = "PUBLIC FEDERAL DATA";
 

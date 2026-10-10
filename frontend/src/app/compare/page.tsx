@@ -53,16 +53,21 @@ function SenatorSelector({
   onSelect,
   selectedId,
   initialChamber,
+  initialState,
 }: {
   side: "left" | "right";
   onSelect: (senator: Senator | null, chamber: Chamber) => void;
   selectedId?: string;
   initialChamber?: Chamber;
+  /** The state of a member preselected from the URL (a scorecard's
+   *  "Compare with another member" link), so the panel shows them chosen
+   *  rather than an empty "Select a state". */
+  initialState?: string;
 }) {
   const [chamber, setChamber] = useState<Chamber>(initialChamber ?? "senate");
   const [senateStates, setSenateStates] = useState<StateInfo[]>([]);
   const [houseStates, setHouseStates] = useState<RepStateInfo[]>([]);
-  const [selectedState, setSelectedState] = useState("");
+  const [selectedState, setSelectedState] = useState(initialState ?? "");
   const [members, setMembers] = useState<Senator[]>([]);
   const [loading, setLoading] = useState(false);
   const label = side === "left" ? "LEFT" : "RIGHT";
@@ -90,6 +95,13 @@ function SenatorSelector({
         .catch(() => setMembers([]))
         .finally(() => setLoading(false));
     }
+  }, []);
+
+  // Load the preselected member's state once, on mount; later changes come
+  // through the select, which loads on its own.
+  useEffect(() => {
+    if (initialState) loadMembers(initialState, initialChamber ?? "senate");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleChamberToggle = (newChamber: Chamber) => {
@@ -493,12 +505,14 @@ function ComparePageInner() {
               onSelect={handleLeft}
               selectedId={leftSenator?.id}
               initialChamber={leftChamber}
+              initialState={leftSenator?.state}
             />
             <SenatorSelector
               side="right"
               onSelect={handleRight}
               selectedId={rightSenator?.id}
               initialChamber={rightChamber}
+              initialState={rightSenator?.state}
             />
           </div>
 

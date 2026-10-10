@@ -36,7 +36,7 @@ flowchart TB
     subgraph SENATE["Senate pipeline"]
         P1["<b>1. FETCH</b><br/>Congress.gov members · bills · actions<br/>Senate.gov roll calls · FEC<br/>raw responses stored verbatim in ApiCache"]
         P2["<b>2. TRANSFORM</b><br/>FEC dedup by committee ID + amendment<br/>bill title normalisation<br/>employer name canonicalisation<br/>memo-text earmark separation"]
-        P2B["<b>2b. ROSTER LIFECYCLE</b><br/>in DB but off the roster → seat vacant<br/>back on the roster → restored<br/>gone > 180 days → deleted with child rows<br/><i>skipped if the roster looks truncated</i><br/><i>presidents and justices never touched</i>"]
+        P2B["<b>2b. ROSTER LIFECYCLE</b><br/>in DB but off the roster → marked former member<br/>back on the roster → restored<br/>gone > 180 days → deleted with child rows<br/><i>skipped if the roster looks truncated</i><br/><i>presidents and justices never touched</i>"]
         P3["<b>3. ANALYZE</b> — deterministic, no LLM call<br/>bill titles → policy area · stance · commemorative<br/>donors → type · industry<br/>party alignment: the roll call's split, else content<br/>PageRank leadership · SVD ideology<br/>donor–vote connections · key votes<br/>scores against references measured this run"]
         P7["<b>7. FINALIZE</b><br/>persist scores, key votes, donor–vote matches,<br/>sponsored bills<br/>append ScoreSnapshot per member<br/>ground-truth gate · PipelineRun timings"]
         P1 --> P2 --> P2B --> P3 --> P7

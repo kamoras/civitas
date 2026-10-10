@@ -78,14 +78,7 @@ def normalize_members(
 
         # Clean name to "First Last" order for display and initials
         name = _clean_name(raw_name)
-        name_parts = name.split()
-
-        # Initials: first letter of first name + first letter of last name
-        initials = ""
-        if len(name_parts) >= 2:
-            initials = name_parts[0][0].upper() + name_parts[-1][0].upper()
-        elif name_parts:
-            initials = name_parts[0][0].upper()
+        initials = _initials(name, last_name_for_match)
 
         official_url = (detail.get("officialWebsiteUrl") or "").rstrip("/")
         addr_info = detail.get("addressInformation") or {}
@@ -176,12 +169,7 @@ def normalize_house_members(
         rep_id = member_slug(raw_name, detail.get("lastName"))  # settled by app.member_ids.assign_member_ids
 
         name = _clean_name(raw_name)
-        name_parts = name.split()
-        initials = ""
-        if len(name_parts) >= 2:
-            initials = name_parts[0][0].upper() + name_parts[-1][0].upper()
-        elif name_parts:
-            initials = name_parts[0][0].upper()
+        initials = _initials(name, last_name_for_match)
 
         official_url = (detail.get("officialWebsiteUrl") or "").rstrip("/")
         addr_info = detail.get("addressInformation") or {}
@@ -333,16 +321,25 @@ def strip_accents(text: str) -> str:
 
 
 def _clean_name(name: str) -> str:
-    """Clean up senator name formatting."""
-    # Congress.gov returns "LastName, FirstName" format sometimes
-    if "," in name:
-        parts = [s.strip() for s in name.split(",", 1)]
-        if len(parts) == 2:
-            return f"{parts[1]} {parts[0]}"
-    # Remove suffixes like Jr., III, etc. from display (keep for ID)
-    # The original JS keeps the suffix but uses .replace that returns the match itself,
-    # effectively a no-op. Replicate that behavior: do not strip suffixes.
-    return name
+    """Congress.gov's "Last, First Middle[, Suffix]" in reading order,
+    "First Middle Last Suffix". Splitting at the first comma only put a
+    generational suffix inside the given names ("King, Angus S., Jr." read
+    "Angus S., Jr. King")."""
+    if "," not in name:
+        return name
+    last, first, *suffix = (part.strip() for part in name.split(","))
+    return " ".join(p for p in (first, last, *suffix) if p)
+
+
+def _initials(name: str, last_name: str) -> str:
+    """First letter of the first name and of the surname's last word, as
+    before suffixes were kept in order (never of a trailing "Jr.")."""
+    parts = name.split()
+    if not parts:
+        return ""
+    if len(parts) == 1 or not last_name.split():
+        return parts[0][0].upper()
+    return parts[0][0].upper() + last_name.split()[-1][0].upper()
 
 
 def _normalize_party(party_name: str | None) -> str:

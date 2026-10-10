@@ -32,6 +32,7 @@ export default function ScorecardHeader({
   committees,
   rank,
   titleAs: Title,
+  former = false,
 }: {
   member: Senator;
   chamber: "senate" | "house";
@@ -42,6 +43,7 @@ export default function ScorecardHeader({
   committees?: Committee[];
   rank?: { rank: number; of: number } | null;
   titleAs: "h1" | "h2";
+  former?: boolean;
 }) {
   const overall = displayScore(member.representationScore.overall);
   const office = chamber === "senate" ? "Senator" : "Representative";
@@ -54,7 +56,9 @@ export default function ScorecardHeader({
       ? "less than a year in office"
       : `${years} ${years === 1 ? "year" : "years"} in office`;
   const fecOffice = chamber === "senate" ? "S" : "H";
-  const phone = member.officePhone;
+  // A departed member's office line, contact form and site now reach the
+  // successor's office (it inherits the suite and phone), or nothing.
+  const phone = former ? "" : member.officePhone;
 
   return (
     <header
@@ -136,6 +140,10 @@ export default function ScorecardHeader({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="font-mono text-xs text-ink-min">
             Reflects the {currentCongressLabel()} ·{" "}
+            <Link href="/about/scores" className="underline underline-offset-2 hover:text-phos">
+              how scores are computed
+            </Link>{" "}
+            ·{" "}
             <Link href="/changelog" className="underline underline-offset-2 hover:text-phos">
               scoring changelog
             </Link>
@@ -169,7 +177,7 @@ export default function ScorecardHeader({
               {phone}
             </a>
           )}
-          {member.contactFormUrl && (
+          {!former && member.contactFormUrl && (
             <a
               href={safeHref(member.contactFormUrl) || "#"}
               target="_blank"
@@ -179,7 +187,7 @@ export default function ScorecardHeader({
               Send a message ↗
             </a>
           )}
-          {member.websiteUrl && (
+          {!former && member.websiteUrl && (
             <a
               href={safeHref(member.websiteUrl) || "#"}
               target="_blank"
@@ -214,7 +222,7 @@ export default function ScorecardHeader({
             Compare with another member
           </Link>
         </p>
-        {member.officeAddress && (
+        {!former && member.officeAddress && (
           <p className="text-xs text-ink-min">DC office: {member.officeAddress}</p>
         )}
       </div>
