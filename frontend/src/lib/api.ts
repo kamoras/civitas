@@ -1229,11 +1229,14 @@ export function sendLoadTiming(t: {
   navigator.sendBeacon(`${API_BASE}/track-timing?${params}`);
 }
 
-/** A page view, sent by the browser (NavigationBeacon says why it is
- *  counted there): nginx sets the X-Real-IP the visitor hash uses. */
+/** A page opened inside the app, sent by the browser (NavigationBeacon
+ *  says why it is counted there): nginx sets the X-Real-IP the visitor hash
+ *  uses. */
 export function sendNavigation(path: string) {
   if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") return;
-  navigator.sendBeacon(`${API_BASE}/track-visit?${new URLSearchParams({ path })}`);
+  navigator.sendBeacon(
+    `${API_BASE}/track-visit?${new URLSearchParams({ kind: "navigation", path })}`
+  );
 }
 
 // --- Admin API ---

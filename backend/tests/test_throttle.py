@@ -623,3 +623,35 @@ def test_the_sweep_writes_once_a_day(throttle_store, monkeypatch):
         monkeypatch.setattr(throttle, "_last_forget", -1e9)  # a minute on, each time
         throttle.forget_stale_salt()
     assert len(began) == 1
+
+
+def test_held_values_are_taken_once_and_expire(monkeypatch):
+    throttle.hold("b", "k", "/a", ttl=60)
+    throttle.hold("b", "k", "/a", ttl=60)  # held once, not twice
+    throttle.hold("b", "k", "/b", ttl=60)
+    throttle.hold("b", "other", "/c", ttl=60)
+    assert throttle.held("b", "k")
+    assert throttle.take("b", "k") == ["/a", "/b"]
+    assert throttle.take("b", "k") == [] and not throttle.held("b", "k")
+    assert throttle.take("b", None) == [] and not throttle.held("b", None)
+
+    real = time.time
+    monkeypatch.setattr(throttle.time, "time", lambda: real() + 61)
+    assert not throttle.held("b", "other")
+    assert throttle.take("b", "other") == []
+
+
+def test_held_values_survive_midnight_under_yesterdays_key(monkeypatch):
+    class _Today(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2099, 1, 1, 23, 59, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(throttle, "datetime", _Today)
+    before = throttle.client_key("203.0.113.1", "visit")
+    throttle.hold("b", before, "/a", ttl=3600)
+    _tomorrow(monkeypatch)
+    after = throttle.client_key("203.0.113.1", "visit")
+    assert after != before and after.previous == before
+    assert throttle.held("b", after)
+    assert throttle.take("b", after) == ["/a"]

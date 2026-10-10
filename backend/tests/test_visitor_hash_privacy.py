@@ -16,10 +16,10 @@ from sqlalchemy import create_engine, text
 
 from app import database
 from app.api import visits
-from app.api.visits import _daily_salt, _load_or_create_salt, _visitor_hash, track_visit
+from app.api.visits import _daily_salt, _load_or_create_salt, _visitor_hash
 from app.models import SiteVisit, VisitSalt, VisitsMigration
 
-from tests.visits_helpers import _drain_queue_and_write, _make_request
+from tests.visits_helpers import _drain_queue_and_write, _make_request, _view
 
 
 def _use(db):
@@ -75,9 +75,9 @@ class TestHash:
     def test_same_ip_same_day_dedupes(self, db_session, monkeypatch):
         monkeypatch.setattr(visits, "_salt_cache", None)
         with _use(db_session):
-            asyncio.run(track_visit(_make_request(peer_ip="198.51.100.7"), path="/"))
-            asyncio.run(track_visit(_make_request(peer_ip="198.51.100.7"), path="/about"))
-            asyncio.run(track_visit(_make_request(peer_ip="198.51.100.8"), path="/"))
+            asyncio.run(_view(_make_request(peer_ip="198.51.100.7"), "/"))
+            asyncio.run(_view(_make_request(peer_ip="198.51.100.7"), "/about"))
+            asyncio.run(_view(_make_request(peer_ip="198.51.100.8"), "/"))
         _drain_queue_and_write(db_session)
         assert db_session.query(SiteVisit).count() == 2
 
