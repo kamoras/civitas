@@ -341,3 +341,16 @@ def test_existing_issues_get_their_facts_article_links_where_unambiguous(patched
     with eng.connect() as conn:
         links = conn.execute(text("SELECT fact_source_urls FROM action_issues WHERE id = 1")).scalar()
     assert json.loads(links) == ["https://npr.org/a", ""]
+
+
+def test_0040_drops_the_orphan_tables_where_an_old_database_has_them(patched_engine):
+    database._run_migrations("0039")
+    with patched_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE alert_subscriptions (id INTEGER PRIMARY KEY, email VARCHAR(254))"))
+        conn.execute(text("CREATE UNIQUE INDEX ix_alert_subscriptions_email ON alert_subscriptions (email)"))
+        conn.execute(text("CREATE TABLE daily_themes (id INTEGER PRIMARY KEY)"))
+    database._run_migrations("0040")
+    with patched_engine.connect() as conn:
+        names = set(conn.execute(text("SELECT name FROM sqlite_master")).scalars())
+    assert not names & {"alert_subscriptions", "ix_alert_subscriptions_email", "daily_themes",
+                        "member_analysis_fingerprints"}
