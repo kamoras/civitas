@@ -1015,7 +1015,7 @@ async def run_house_pipeline() -> dict:
             # ── PHASE 6: SNAPSHOTS ──
             logger.info("--- House Phase 6: SNAPSHOTS ---")
             progress.begin("snapshots")
-            _record_rep_snapshots(db)
+            _record_rep_snapshots(db, {member_id for member_id, _ in member_failures})
 
             run_calibration_check("representative")
 
@@ -1107,11 +1107,12 @@ async def run_house_pipeline() -> dict:
         db.close()
 
 
-def _record_rep_snapshots(db: Session) -> None:
-    """Snapshot today's scores for all representatives."""
+def _record_rep_snapshots(db: Session, failed: "set[str] | frozenset[str]" = frozenset()) -> None:
+    """Snapshot today's scores for all representatives, except `failed`
+    (see senate_pipeline._record_score_snapshots)."""
 
     today = utcnow().date().isoformat()
-    reps = db.query(Representative).all()
+    reps = [r for r in db.query(Representative).all() if r.id not in failed]
     count = 0
     for r in reps:
         overall = compute_overall_score(r)
