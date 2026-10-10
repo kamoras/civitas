@@ -11,6 +11,7 @@ from app.api.feedback import router as feedback_router
 from app.api.health import router as health_router
 from app.api.justices import router as justices_router
 from app.api.pipeline import router as pipeline_router
+from app.api.photos import router as photos_router
 from app.api.politicians import router as politicians_router
 from app.api.presidents import router as presidents_router
 from app.api.public import router as public_router
@@ -23,6 +24,7 @@ api_router = APIRouter(prefix="/api")
 
 api_router.include_router(health_router, tags=["health"])
 api_router.include_router(politicians_router, tags=["politicians"])
+api_router.include_router(photos_router, tags=["photos"])
 api_router.include_router(senators_router, tags=["senators"])
 api_router.include_router(representatives_router, tags=["representatives"])
 api_router.include_router(presidents_router, tags=["presidents"])

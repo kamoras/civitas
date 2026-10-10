@@ -15,6 +15,7 @@ import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/ty
 import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
+import Photo from "@/components/Photo";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   "Senate Floor Speech": "FLOOR SPEECH",
@@ -270,8 +271,7 @@ export default function PoliticianProfileClient({
                   official's page has no name/photo/party anywhere on it. */}
               <div className="flex items-center gap-3 mb-4">
                 {identity.thumbnailUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- external, varied politician-photo hosts
-                  <img
+                  <Photo
                     src={identity.thumbnailUrl}
                     alt={identity.name}
                     className="w-12 h-12 object-cover border border-white/[0.07] shrink-0"

@@ -384,6 +384,14 @@ export default function DataChapter() {
           listed above, and none carries anything about a visitor. Nothing is kept in your browser
           either: the site stores no preferences, history or record of what you did there.
         </P>
+        <P>
+          Your browser asks nothing of any other host. Every picture comes from this server: the
+          members&apos; official portraits (from bioguide.congress.gov), the justices&apos; photos
+          (from Oyez) and a news photo on an Action Center issue (from the outlet that licensed it)
+          are fetched by this server, which keeps a copy and serves it to you, so those sites never
+          see who is looking. The fonts, scripts, maps and styles are hosted here too. Links to
+          sources are only followed if you click them.
+        </P>
         <Sub title="The one company between you and this server" id="cloudflare">
           <P>
             Every visit reaches this server through Cloudflare&apos;s network. It shields a site

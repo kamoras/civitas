@@ -1,8 +1,8 @@
 /**
  * Server-side fetch of a remote image, for the two places the site needs a
  * photo's bytes rather than a link to it: the Open Graph cards
- * (`app/api/og/route.tsx`) and the same-origin photo route the share-image
- * capture reads (`app/photo/bioguide/[id]/route.ts`).
+ * (`app/api/og/route.tsx`) and the same-origin photo route every page loads
+ * its pictures from (`app/photo/[kind]/[id]/route.ts`, via lib/photos.ts).
  *
  * bioguide.congress.gov sits behind Cloudflare bot-mitigation that blocks a
  * plain HEAD request outright (confirmed live) and challenges a GET that

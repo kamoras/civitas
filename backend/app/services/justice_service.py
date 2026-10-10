@@ -8,6 +8,7 @@ from typing import Sequence
 from sqlalchemy.orm import Session
 
 from app.models import Justice, JusticeVote
+from app.photos import justice_photo
 from app.schemas import (
     JusticeAgreementSchema,
     JusticeLeaderboardEntry,
@@ -74,7 +75,7 @@ def _build_justice_response(j: Justice, names: dict[str, str]) -> JusticeSchema:
         appointing_party=j.appointing_party,
         date_start=j.date_start,
         is_active=j.is_active,
-        thumbnail_url=j.thumbnail_url,
+        thumbnail_url=justice_photo(j),
         score=score,
         cases_decided=j.cases_decided,
         majority_pct=j.majority_pct,
@@ -129,7 +130,7 @@ def get_justice_leaderboard(db: Session) -> list[JusticeLeaderboardEntry]:
             appointing_party=j.appointing_party,
             date_start=j.date_start,
             is_active=j.is_active,
-            thumbnail_url=j.thumbnail_url,
+            thumbnail_url=justice_photo(j),
             score=score,
             cases_decided=j.cases_decided,
             majority_pct=j.majority_pct,

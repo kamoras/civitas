@@ -2,7 +2,7 @@ import { displayScore } from "@/lib/formatting";
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
 import { loadArchivoBold } from "@/lib/ogFonts";
-import { fetchRemoteImage } from "@/lib/remoteImage";
+import { fetchPhoto, parsePhotoPath } from "@/lib/photos";
 import { STATE_CODES } from "@/lib/stateCodes";
 import { usableRecord } from "@/lib/ssrPayload";
 import { ISO_DATE, fetchDay, fetchWeek } from "@/lib/congressServer";
@@ -72,13 +72,14 @@ async function fetchIssue(id: string) {
   }
 }
 
-// Fetches the photo's bytes and inlines them as a data URI rather than
-// leaving the img src pointing at the remote URL, since satori's own
-// internal fetch for a remote <img> src isn't guaranteed to get past
-// bioguide's bot-mitigation (see lib/remoteImage.ts).
-async function fetchPhotoAsDataUri(url: string): Promise<string | null> {
-  const photo = await fetchRemoteImage(url);
-  return photo.status === "ok"
+// Inlines the photo as a data URI, fetched from its source by the same code
+// the /photo route uses: the API gives a same-origin path, which satori
+// can't fetch from inside the frontend container, and satori's own fetch
+// wouldn't get past bioguide's bot-mitigation (see lib/remoteImage.ts).
+async function fetchPhotoAsDataUri(path: string): Promise<string | null> {
+  const ref = parsePhotoPath(path);
+  const photo = ref ? await fetchPhoto(ref) : null;
+  return photo?.status === "ok"
     ? `data:${photo.contentType};base64,${photo.bytes.toString("base64")}`
     : null;
 }
