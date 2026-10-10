@@ -106,7 +106,10 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
             <span className="text-ink-min text-xs">|</span>
             <span className="text-ink-lo text-xs">{docTypeLabel(result.docType)}</span>
             {commentOpen && (
-              <span className="text-xs font-mono tracking-wide px-1.5 py-0.5 bg-phos/20 text-phos border border-phos/30 animate-pulse">
+              // No pulse: the fading text dropped below 4.5:1 contrast for
+              // part of every cycle (axe, WCAG 1.4.3), and an endless blink
+              // on every open-comment result is motion nobody can pause.
+              <span className="text-xs font-mono tracking-wide px-1.5 py-0.5 bg-phos/20 text-phos border border-phos/30">
                 OPEN FOR COMMENT
               </span>
             )}

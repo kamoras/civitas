@@ -124,14 +124,15 @@ export default function NewsChapter() {
         </P>
         <P>
           One exception, labelled on the page as <strong className="text-ink-hi">Developing</strong>
-          : when the Senate or House passes a bill, or an agency publishes a significant rule,
-          before the news has covered it, a short draft is made from the primary record itself, in a
-          fixed template with nothing characterized: a vote&apos;s measure, result, tally and date,
-          or a rule&apos;s agency, title, abstract and publication date. It carries a note that
-          broader coverage hasn&apos;t confirmed it yet, and isn&apos;t posted anywhere else until
-          press coverage does. A vote the news already covers isn&apos;t drafted, and a draft gives
-          way once the reporting on its bill appears: it leaves the Action Center, and the
-          homepage&apos;s record of recent issues lists the reporting in its place.
+          : when the Senate or House passes a bill, or an agency publishes a significant rule (on
+          its publication day, not while it waits on public inspection), before the news has covered
+          it, a short draft is made from the primary record itself, in a fixed template with nothing
+          characterized: a vote&apos;s measure, result, tally and date, or a rule&apos;s agency,
+          title, abstract and publication date. It carries a note that broader coverage hasn&apos;t
+          confirmed it yet, and isn&apos;t posted anywhere else until press coverage does. A vote
+          the news already covers isn&apos;t drafted, and a draft gives way once the reporting on
+          its bill appears: it leaves the Action Center, and the homepage&apos;s record of recent
+          issues lists the reporting in its place.
         </P>
         <P>
           Each issue ends with what you can do about it, built from the record and never advocacy

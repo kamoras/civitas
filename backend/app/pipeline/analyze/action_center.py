@@ -2463,6 +2463,18 @@ def _generate_period_summary(label: str, entries: list, cache_key: dict, db: "Se
     }
 
 
+def week_span_label(start: date, end: date) -> str:
+    """ "September 21–27, 2026", "September 28–October 4, 2026",
+    "December 28, 2026–January 3, 2027". Formatting the end as a bare day
+    gave a week across a month boundary as "September 28–4, 2026", which
+    the model then copied into the week's summary."""
+    if start.year != end.year:
+        return f"{start.strftime('%B %-d, %Y')}–{end.strftime('%B %-d, %Y')}"
+    if start.month != end.month:
+        return f"{start.strftime('%B %-d')}–{end.strftime('%B %-d, %Y')}"
+    return f"{start.strftime('%B %-d')}–{end.strftime('%-d, %Y')}"
+
+
 def generate_period_summaries(today_str: str, db: "Session") -> None:
     """Generate missing week/month/year summaries for all completed periods.
 
@@ -2527,7 +2539,7 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         if existing:
             continue
 
-        label = f"the week of {monday.strftime('%B %-d')}–{sunday.strftime('%-d, %Y')}"
+        label = f"the week of {week_span_label(monday, sunday)}"
         top_areas: dict[str, int] = {}
         for e in week_entries:
             for area in _json.loads(e.policy_areas or "[]"):
