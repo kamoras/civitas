@@ -2,19 +2,22 @@ import { describe, expect, it } from "vitest";
 import { formerOfficeBadge, formerOfficeNotice } from "./officeStatus";
 
 describe("formerOfficeNotice", () => {
-  it("calls a departed senator's seat vacant, with reason and date", () => {
+  it("calls a departed senator a former senator, with reason and date", () => {
     const notice = formerOfficeNotice({
       branch: "senate",
       name: "Jane Doe",
       vacancyReason: "resigned",
       leftOfficeDate: "2026-03-01",
     });
-    expect(notice.label).toBe("Seat Vacant");
+    expect(notice.label).toBe("Former Senator");
+    // A successor may already hold the seat: never claim it is empty.
+    expect(notice.label.toLowerCase()).not.toContain("vacant");
     expect(notice.detail).toContain("Jane Doe is no longer serving (resigned) as of 2026-03-01");
   });
 
   it("omits the parenthetical when no reason is recorded", () => {
     const notice = formerOfficeNotice({ branch: "house", name: "Jane Doe" });
+    expect(notice.label).toBe("Former Representative");
     expect(notice.detail).toContain("Jane Doe is no longer serving.");
   });
 
@@ -60,7 +63,7 @@ describe("formerOfficeNotice", () => {
 describe("formerOfficeBadge", () => {
   it("appends the vacancy reason for congressional seats", () => {
     expect(formerOfficeBadge({ branch: "senate", name: "Jane Doe", vacancyReason: "died" })).toBe(
-      "SEAT VACANT · DIED"
+      "FORMER SENATOR · DIED"
     );
   });
 

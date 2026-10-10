@@ -322,11 +322,14 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
 
 
 def get_senators_by_state(db: Session, state: str) -> list[SenatorSchema]:
-    """Return all senators for a given state code."""
+    """The state's serving senators. A departed senator's row stays through
+    the retirement grace period (member_lifecycle), and listing it gave a
+    state with a seated successor three senators, the departed one
+    unmarked (the compare page's picker reads this)."""
     senators = (
         db.query(Senator)
         .options(*_senator_eager_options())
-        .filter(Senator.state == state.upper())
+        .filter(Senator.state == state.upper(), Senator.is_current == True)  # noqa: E712
         .all()
     )
     return [build_senator_response(s, db) for s in senators]
@@ -413,7 +416,7 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
     Senate represents constituents right now is a statement about people
     who hold the office, and a member who left mid-term keeps a rank they
     can no longer act on. They stay fully browsable on their profile and
-    in the directory (with a vacancy banner) until member_lifecycle.py
+    in the directory (marked as a former member) until member_lifecycle.py
     removes them for good. Presidents are the deliberate exception — the
     only meaningful presidential comparison is against the historical
     field, so that leaderboard ranks former presidents and excludes the

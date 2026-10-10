@@ -23,5 +23,5 @@ BOT_USER_AGENT = f"Mozilla/5.0 (compatible; Civitas/1.0; +{CONTACT_EMAIL})"
 
 # Civitas fetching its own pages (the Bluesky link-card reader, the
 # healthchecks): named as itself in the logs. It runs no page script, so it
-# is never counted as a visit or an issue view (frontend NavigationBeacon).
+# is never counted as a visit or an issue view (api/visits.py).
 SELF_FETCH_USER_AGENT = f"Civitas-Bot/1.0 (+{CONTACT_EMAIL})"

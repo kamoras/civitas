@@ -833,15 +833,37 @@ then deleted (`api/visits.py`, `VisitSalt`). A permanent key would not do:
 the IPv4 space is small enough to enumerate, so anyone holding the key could
 recover every stored IP. With the salt gone, nobody can.
 
-A visit is a browser running a page: the page's own script reports it once
-mounted (`NavigationBeacon`, the first path and each navigation after it),
-and `track_visit` drops headless Chrome (`HeadlessChrome`, the default for
-Playwright-driven agents). Never count from the request a server sees:
-headers prove nothing. Counting requests without fetch metadata made
-crawlers two thirds of the unique visitors on 2026-10-01; the
-`Sec-Fetch-Dest: document` check that replaced it was beaten within a
-week by a crawler that sent it from thousands of rotating addresses and
-never ran a script (~7,000 of 7,357 visitors on 2026-10-08).
+A visit is a browser running a page, counted from requests the site needs
+anyway. The frontend's proxy (`src/proxy.ts`, `lib/visitSignal.ts`) relays
+two kinds to `track_visit`: a page request (`Sec-Fetch-Dest: document`),
+which is only *held* in the throttle store under the client's daily key,
+and a same-origin fetch from a running page (`Sec-Fetch-Dest: empty` — in
+practice Next prefetching the links in view, which every page does within
+seconds of loading), which counts what that client holds
+(`_confirmed_paths`). Pages opened inside the app after the first are sent
+by the page (`NavigationBeacon`): a click on a prefetched link reaches no
+server, verified under `next build`. `track_visit` drops headless Chrome
+(`HeadlessChrome`, the default for Playwright-driven agents) and crawlers
+that render pages in a real browser engine and say so in their User-Agent
+(`_SELF_DECLARED_CRAWLER`: Bingbot, Applebot, OAI-SearchBot — 14 of the 17
+addresses that sent the beacon in 16 hours on 2026-10-10).
+
+Two things this rules out. Never count from one request's headers: counting
+requests without fetch metadata made crawlers two thirds of the unique
+visitors on 2026-10-01, and the `Sec-Fetch-Dest: document` check that
+replaced it was beaten within a week by a crawler that sent it from
+thousands of rotating addresses and never ran a script (~7,000 of 7,357
+visitors on 2026-10-08). And never count from a request of the page's own
+that exists only to count: the beacon that counted every page from 2026-10-09
+matched EasyPrivacy's `/track-visit?` rule, on by default in uBlock Origin,
+Brave and AdGuard, and 0 of 4 search- and social-referred readers in six
+hours sent it (19 visitors counted on 2026-10-10). A reader who blocks
+tracking requests has chosen to; don't rename an endpoint to get past the
+list. Their visit and first page still count, because the requests that
+count them are the ones the site's links need; their later pages don't. Next
+strips `RSC`, `Next-Router-Prefetch` and `_rsc` before the proxy runs, which
+is why the router request is known by its fetch metadata, and why the proxy
+can't tell a prefetch from a click.
 
 Page-load timings (`POST /api/track-timing`, `PageLoadTiming`) are counted too,
 and deliberately carry even less: the browser reports one cold load's Navigation
