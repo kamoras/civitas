@@ -28,6 +28,7 @@ import JsonLd from "@/components/seo/JsonLd";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import { summaryRestatesTitle } from "@/lib/issueSummary";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -186,10 +187,12 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             <h1 className="mt-3 text-balance font-display text-3xl font-extrabold leading-tight tracking-[-0.01em] text-ink-hi sm:text-4xl">
               {issue.title}
             </h1>
-            <p className="mt-4 font-display text-base leading-relaxed text-ink sm:text-[17px]">
-              {issue.summary}
-              <SummarySource issue={issue} />
-            </p>
+            {!summaryRestatesTitle(issue.title, issue.summary) && (
+              <p className="mt-4 font-display text-base leading-relaxed text-ink sm:text-[17px]">
+                {issue.summary}
+                <SummarySource issue={issue} />
+              </p>
+            )}
             {issue.status === "developing" && (
               <div className="mt-3">
                 <DevelopingDisclosure

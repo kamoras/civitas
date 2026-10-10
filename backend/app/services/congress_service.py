@@ -226,6 +226,12 @@ def _minutes(convened: str | None, adjourned: str | None) -> int | None:
     return b - a if a is not None and b is not None and b >= a else None
 
 
+def _session_length(minutes: int) -> str:
+    """ "under a minute" for a sitting that opened and closed inside one
+    minute (a pro forma session often does), not "0 minutes"."""
+    return "under a minute" if minutes < 1 else _plural(minutes, "minute")
+
+
 def _chamber_sentence(chamber: str, day: dict) -> str:
     name = _CHAMBER_NAME[chamber]
     status = day["status"]
@@ -249,10 +255,10 @@ def _chamber_sentence(chamber: str, day: dict) -> str:
         return f"The {name} {_list_phrase(parts)}."
     minutes = day["minutesInSession"]
     if "pro forma session" in (day.get("adjournmentText") or "").lower():
-        length = f" for {_plural(minutes, 'minute')}" if minutes is not None else ""
+        length = f" for {_session_length(minutes)}" if minutes is not None else ""
         return f"The {name} met in pro forma session{length}."
     if minutes is not None and minutes < 60:
-        return f"The {name} met for {_plural(minutes, 'minute')} and took no record votes."
+        return f"The {name} met for {_session_length(minutes)} and took no record votes."
     return f"The {name} met and took no record votes."
 
 

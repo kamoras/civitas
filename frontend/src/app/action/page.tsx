@@ -31,6 +31,7 @@ import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import { countIsOfficial } from "@/lib/developing";
 import { tabControl } from "@/lib/controlStyles";
 import { issuesUrl } from "@/lib/routes";
+import { summaryRestatesTitle } from "@/lib/issueSummary";
 
 /** Plain status line, the loading state the records pages use: no pulse. */
 function Status({ children }: { children: React.ReactNode }) {
@@ -105,10 +106,12 @@ function IssueBody({
 }) {
   return (
     <>
-      <p className="mb-4 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
-        {issue.summary}
-        <SummarySource issue={issue} />
-      </p>
+      {!summaryRestatesTitle(issue.title, issue.summary) && (
+        <p className="mb-4 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
+          {issue.summary}
+          <SummarySource issue={issue} />
+        </p>
+      )}
       {issue.status === "developing" && (
         <DevelopingDisclosure
           sourceType={issue.sourceType}
@@ -227,7 +230,7 @@ function SecondaryIssue({
               <span className="mt-1.5 block font-display text-lg font-semibold leading-snug text-ink-hi">
                 {issue.title}
               </span>
-              {!expanded && (
+              {!expanded && !summaryRestatesTitle(issue.title, issue.summary) && (
                 <span className="mt-1 line-clamp-2 block font-display text-[15px] leading-relaxed text-ink-lo">
                   {issue.summary}
                 </span>

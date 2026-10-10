@@ -9,6 +9,7 @@ import type { BillInFlight } from "@/types/bill";
 import { monitorHref } from "@/lib/routes";
 import { issueRef, parseUtc } from "@/lib/formatting";
 import { billHref } from "@/lib/congress";
+import { summaryRestatesTitle } from "@/lib/issueSummary";
 
 /**
  * The dense, dated index of what has recently entered the record.
@@ -82,7 +83,10 @@ export function buildRecordEntries(
       ref: issueRef(i.publicId),
       date: i.date,
       title: i.title,
-      detail: i.summary ? clamp(i.summary, 78) : i.policyAreas.join(" · "),
+      detail:
+        i.summary && !summaryRestatesTitle(i.title, i.summary)
+          ? clamp(i.summary, 78)
+          : i.policyAreas.join(" · "),
       href: `/issue/${i.publicId}`,
       tone: "text-phos-mid",
     })),
