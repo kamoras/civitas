@@ -61,6 +61,17 @@ export default function NewsChapter() {
           sections filtered out. Articles are kept if they&apos;re about U.S. policy, and grouped
           into stories by headline similarity.
         </P>
+        <More label="How an article is judged to be about U.S. policy">
+          <P>
+            Each article is compared with 827 feed articles a person labelled as U.S. policy news or
+            not, and kept when the 41 it most resembles, weighted by how closely, are at least 80%
+            U.S. policy. Tested on articles published one to six weeks after the labelled ones, 89
+            to 97% of what it keeps is U.S. policy news, and it finds 76 to 87% of it. The rule it
+            replaced, closeness to two dozen written descriptions of policy topics, kept 61 to 67%
+            relevant articles: storm and flood coverage, foreign politics and crime passed, while
+            campaign coverage was dropped. Foreign news with no U.S. government role is not kept.
+          </P>
+        </More>
         <P>
           Stories are then ranked: 40% civic actionability (are officials named, does it resemble
           the government documents we index), 35% breadth (how many independent newsrooms cover it)

@@ -971,8 +971,9 @@ that office, comparison against predecessors is the only meaningful ranking.
 
 In addition to the main pipeline, the **Action Center pipeline** runs hourly to
 surface trending civic issues. It fetches RSS feeds from low-bias news sources,
-filters articles for U.S. policy relevance using embedding similarity, clusters
-related articles, incorporates trending topics from Google Trends and Bluesky,
+filters articles for U.S. policy relevance by a kNN vote against hand-labelled
+feed articles (`relevance_votes`; `docs/research/action-center-relevance.md`),
+clusters related articles, incorporates trending topics from Google Trends and Bluesky,
 and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
@@ -1008,6 +1009,10 @@ every stage downstream treats it as one story. Three mechanical signals:
   between actors, and a headline that names its own subject is what tells the
   two apart. A body cut at the description cap has its trailing fragment
   discarded first, since a fragment's entities are disjoint by construction.
+  For the same reason an abbreviation's period ("U.S.", "Rep.") is not a
+  sentence break, and photo credits and a broadcast sign-off ("… reports.")
+  are not items: before 2026-10 those made 16 single stories in 627 feed
+  articles read as lists.
 
 This has to happen here because once several stories share one article the
 boundary between them is not recoverable later — cluster coherence filtering
