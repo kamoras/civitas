@@ -1,13 +1,15 @@
 """Fetch articles from low-bias news RSS feeds for the Action Center.
 
-Sources chosen for factual reporting and minimal partisan lean:
-  - AP News (via RSS)
-  - NPR Politics / World
-  - PBS NewsHour
-  - BBC World News (direct URLs, no redirect wrapping)
+Sources chosen for factual reporting and minimal partisan lean: NPR
+Politics / World, PBS NewsHour, BBC World News, The Hill, Politico and Roll
+Call (NEWS_FEEDS), plus per-state outlets for election coverage
+(STATE_NEWS_FEEDS).
 
-Each source is fetched independently; failures are logged and skipped
-so the system degrades gracefully if a feed goes down.
+Each source is fetched independently; a failure is logged and skipped so the
+rest still arrive. A feed that fails, or keeps answering with nothing new, for
+longer than its own measured rhythm raises an ops alert
+(ops_alerts.check_source_freshness), so a dead source never reads as a quiet
+news day.
 """
 
 import logging
@@ -17,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
+from zoneinfo import ZoneInfo
 
 from xml.etree.ElementTree import Element
 
@@ -25,6 +28,7 @@ from defusedxml import ElementTree as SafeET
 import httpx
 
 from app.contact import BOT_USER_AGENT
+from app.ops_alerts import check_source_freshness
 
 logger = logging.getLogger(__name__)
 
@@ -145,11 +149,23 @@ def _is_multi_topic_digest(title: str) -> bool:
     return normalized.startswith(_MULTI_TOPIC_DIGEST_TITLE_PREFIXES)
 
 
+# AP News was read through feedx.net's mirror until 2026-10-10. Its newest
+# item is from 2026-09-09: the mirror stopped updating, and the pipeline read
+# a month of nothing as nothing new. AP publishes no feed it can be read from
+# honestly: every apnews.com feed path answers this site's User-Agent with a
+# Cloudflare challenge page (403), which is AP saying no, and another scraper
+# of the same pages would be getting past that wall by proxy. AP's own
+# Bluesky account has a working RSS feed (bsky.app/profile/apnews.com/rss),
+# but its items are social-media teasers with no headline and a bit.ly link,
+# and an issue's title is its top article's headline — feeding teasers in is
+# a change to what issues are titled, not a source swap, so it is left out.
+# AP's wire stories still arrive through PBS NewsHour, which republishes them.
+#
+# A feed whose dates are local time without an offset names its zone in
+# "timezone": Roll Call writes "2026-10-09 17:12:54" for an article its own
+# page dates 2026-10-09T17:12:54-04:00. Unreadable, those dates exempted every
+# Roll Call item from MAX_ARTICLE_AGE_HOURS.
 NEWS_FEEDS: list[dict[str, str]] = [
-    {
-        "name": "AP News",
-        "url": "https://feedx.net/rss/ap.xml",
-    },
     # Both NPR feeds share ONE source name (2026-07 fix): source-name
     # counts drive the action center's coverage-breadth ranking signal and
     # the National Monitor unique-source promotion bar, and two feeds from
@@ -183,11 +199,13 @@ NEWS_FEEDS: list[dict[str, str]] = [
     {
         "name": "Roll Call",
         "url": "https://rollcall.com/feed/",
+        "timezone": "America/New_York",
     },
 ]
 
 
-def _parse_pub_date(raw: str | None) -> datetime | None:
+def _parse_pub_date(raw: str | None, naive_tz: timezone | ZoneInfo = timezone.utc) -> datetime | None:
+    """A feed item's date. One with no offset is read in ``naive_tz``."""
     if not raw:
         return None
     parsed: datetime | None = None
@@ -196,7 +214,7 @@ def _parse_pub_date(raw: str | None) -> datetime | None:
     except Exception:
         pass
     if parsed is None:
-        for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
+        for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
             try:
                 parsed = datetime.strptime(raw, fmt)
                 break
@@ -208,9 +226,10 @@ def _parse_pub_date(raw: str | None) -> datetime | None:
     # zones; comparing that against the aware cutoff raised TypeError
     # inside _parse_rss_feed, which the caller's blanket except logged as
     # "Failed to fetch feed" — one malformed item silently dropped the
-    # entire source. Treat naive as UTC.
+    # entire source. A naive date is read in the feed's own zone (UTC unless
+    # the feed says otherwise — see NEWS_FEEDS).
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=naive_tz)
     return parsed
 
 
@@ -377,8 +396,17 @@ def _resolve_summary(desc: str, full_text: str) -> tuple[str, bool]:
     return "", False
 
 
-def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
-    """Parse RSS 2.0 / Atom XML into NewsArticle objects."""
+def _parse_rss_feed(
+    xml_bytes: bytes,
+    source_name: str,
+    naive_tz: timezone | ZoneInfo = timezone.utc,
+    keep_old: bool = False,
+) -> list[NewsArticle]:
+    """Parse RSS 2.0 / Atom XML into NewsArticle objects.
+
+    ``keep_old`` keeps items older than MAX_ARTICLE_AGE_HOURS, for a caller
+    that needs every item's date (the freshness check) and filters itself.
+    """
     articles: list[NewsArticle] = []
     try:
         root = SafeET.fromstring(xml_bytes)
@@ -387,7 +415,10 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
         return []
 
     ns = {"atom": "http://www.w3.org/2005/Atom"}
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=MAX_ARTICLE_AGE_HOURS)
+    cutoff = (
+        datetime.min.replace(tzinfo=timezone.utc) if keep_old
+        else datetime.now(timezone.utc) - timedelta(hours=MAX_ARTICLE_AGE_HOURS)
+    )
 
     # RSS 2.0 items
     for item in root.iter("item"):
@@ -395,7 +426,7 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
         link = _extract_text(item.find("link"))
         desc = _extract_body_text(item.find("description"))
         full_text = _extract_body_text(item.find(_CONTENT_ENCODED_TAG))
-        pub_date = _parse_pub_date(_extract_text(item.find("pubDate")))
+        pub_date = _parse_pub_date(_extract_text(item.find("pubDate")), naive_tz)
         categories = [_extract_text(c) for c in item.findall("category") if _extract_text(c)]
 
         if not title or not link:
@@ -454,7 +485,8 @@ def _parse_rss_feed(xml_bytes: bytes, source_name: str) -> list[NewsArticle]:
         # the truthiness trap above.)
         pub_date = _parse_pub_date(
             _extract_text(entry.find("atom:published", ns))
-            or _extract_text(entry.find("atom:updated", ns))
+            or _extract_text(entry.find("atom:updated", ns)),
+            naive_tz,
         )
         # Atom puts the label in @term rather than in the element's text.
         # Populated so the two branches produce the same shape of article:
@@ -498,17 +530,26 @@ def fetch_news_articles(
     """
     feeds = feeds or NEWS_FEEDS
     all_articles: list[NewsArticle] = []
+    # What each feed showed, for check_source_freshness: every item's date,
+    # old ones included, or None when the fetch failed.
+    observed: dict[str, tuple[str, list[datetime] | None]] = {}
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=MAX_ARTICLE_AGE_HOURS)
 
     for feed_info in feeds:
         name = feed_info["name"]
         url = feed_info["url"]
+        observed[url] = (name, None)
         t0 = time.perf_counter()
         try:
             resp = httpx.get(url, timeout=FEED_TIMEOUT, follow_redirects=True, headers={
                 "User-Agent": BOT_USER_AGENT,
             })
             resp.raise_for_status()
-            articles = _parse_rss_feed(resp.content, name)
+            every_item = _parse_rss_feed(
+                resp.content, name, ZoneInfo(feed_info.get("timezone", "UTC")), keep_old=True,
+            )
+            observed[url] = (name, [a.published for a in every_item if a.published])
+            articles = [a for a in every_item if not a.published or a.published >= cutoff]
             elapsed = time.perf_counter() - t0
             # Count empty descriptions, don't just fetch. A feed whose
             # articles all arrive body-less is the signature of a parse
@@ -530,6 +571,14 @@ def fetch_news_articles(
             all_articles.extend(articles)
         except Exception as e:
             logger.warning("Failed to fetch feed %s: %s", name, e)
+
+    check_source_freshness(
+        observed,
+        # Past the article window a feed contributes nothing at all, so no
+        # silence shorter than that is worth an alert, whatever the rhythm.
+        floor=timedelta(hours=MAX_ARTICLE_AGE_HOURS),
+        kind="news feed",
+    )
 
     # Drop opinion/editorial/blog pieces — these carry partisan framing that
     # pollutes the action center.  Match on URL path segments that news outlets
@@ -566,8 +615,8 @@ def fetch_news_articles(
 # Per-state political coverage, for attaching news to RACES — deliberately
 # NOT part of NEWS_FEEDS, which drives the national Action Center.
 #
-# The Action Center's eight feeds are all national (AP, NPR, PBS, BBC, The
-# Hill, Politico, Roll Call), which cannot cover 50 states' House and
+# The Action Center's feeds are all national (NPR, PBS, BBC, The Hill,
+# Politico, Roll Call), which cannot cover 50 states' House and
 # Senate races. That gap is what the open Bluesky candidate-name search
 # was filling, and it filled it with 7,740 items of which Minnesota's
 # contribution included a profane insult of a candidate and a post about

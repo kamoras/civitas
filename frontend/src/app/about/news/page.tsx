@@ -34,8 +34,8 @@ export default function NewsChapter() {
     >
       <Summary>
         <Point>
-          News comes from seven newsrooms, checked hourly. The mix runs from center to lean-left,
-          with no right-of-center outlet at present: a limitation, stated.
+          News comes from six newsrooms, checked hourly. The mix runs from center to lean-left, with
+          no right-of-center outlet at present: a limitation, stated.
         </Point>
         <Point>
           A model is used to find a claim in an article, not to write one. Every news sentence you
@@ -56,10 +56,14 @@ export default function NewsChapter() {
 
       <Section id="action-center" title="How the Action Center picks stories">
         <P>
-          Eight feeds from seven newsrooms are read every hour: AP News, NPR (Politics and World,
-          counted as one), PBS NewsHour, BBC World, The Hill, Politico and Roll Call, with opinion
-          sections filtered out. Articles are kept if they&apos;re about U.S. policy, and grouped
-          into stories by headline similarity.
+          Seven feeds from six newsrooms are read every hour: NPR (Politics and World, counted as
+          one), PBS NewsHour, BBC World, The Hill, Politico and Roll Call, with opinion sections
+          filtered out. AP News was read through a mirror until October 2026, when the mirror was
+          found a month stale; AP&apos;s own site turns away automated readers, so it was dropped
+          rather than read around that. AP stories still arrive through PBS NewsHour. A feed that
+          fails, or has nothing new for longer than its own usual gaps, raises an alert to the
+          operator. Articles are kept if they&apos;re about U.S. policy, and grouped into stories by
+          headline similarity.
         </P>
         <P>
           Stories are then ranked: 40% civic actionability (are officials named, does it resemble
