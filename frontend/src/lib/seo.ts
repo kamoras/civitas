@@ -62,10 +62,13 @@ export function describeProfile(profile: PoliticianProfile): {
       description: `${name}, ${role}: executive orders, public record, and scorecard, built from Federal Register and other public federal records.`,
     };
   }
-  // Justices: role is "Chief Justice" / "Associate Justice".
+  // Justices: the profile's role is Oyez's full title ("Associate Justice of
+  // the Supreme Court of the United States"), which would say "Supreme
+  // Court" twice and push the name out of a search result's title.
+  const seat = role.includes("Chief") ? "Chief Justice" : "Associate Justice";
   return {
-    title: `${role} ${name}: Supreme Court Voting Record`,
-    description: `${role} ${name}: Supreme Court voting record, opinions, and impartiality scorecard, from public case records.`,
+    title: `${seat} ${name}: Supreme Court Voting Record`,
+    description: `${seat} ${name}: Supreme Court voting record, opinions, and votes under the appointing president, from public case records. Not scored.`,
   };
 }
 

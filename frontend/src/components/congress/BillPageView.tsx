@@ -6,6 +6,7 @@ import BackToTop from "@/components/BackToTop";
 import type { BillDetail } from "@/types/bill";
 import type { BillPerson, BillRecord } from "@/types/congress";
 import { billStageStyle } from "@/lib/billStages";
+import { policyAreaLabel } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { CHAMBER_NAME, dayHref, longDate, shortDate } from "@/lib/congress";
 import { CongressTabs } from "./CongressNav";
@@ -441,7 +442,7 @@ export default function BillPageView({
                     </h2>
                     <ul className="flex flex-col gap-1 text-sm text-ink">
                       {detail.policyAreas.map((a) => (
-                        <li key={a.area}>{a.area}</li>
+                        <li key={a.area}>{policyAreaLabel(a.area)}</li>
                       ))}
                     </ul>
                   </section>

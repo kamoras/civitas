@@ -34,6 +34,7 @@ import {
   COURT_FINDING,
   JUSTICE_RESEARCH_URL,
   NOT_SCORED_REASON,
+  signedPoints,
 } from "@/lib/justices";
 import { houseSeatLabel } from "@/lib/elections";
 
@@ -501,11 +502,7 @@ function apptParty(party: string | null) {
 function loyaltyPoints(entry: JusticeLoyalty | null): string | null {
   const l = appointerEstimate(entry);
   if (!l) return null;
-  const p = (share: number) => {
-    const v = share * 100;
-    return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
-  };
-  return `${p(l.estimate)} (${p(l.ciLow)} to ${p(l.ciHigh)})`;
+  return `${signedPoints(l.estimate)} (${signedPoints(l.ciLow)} to ${signedPoints(l.ciHigh)})`;
 }
 
 /** The sitting justices by seniority, not ranked or scored (justice v3):

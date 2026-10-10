@@ -578,7 +578,7 @@ function LastRunCards({
             <>
               <Stat label="EXPLORE DOCS">{supp.exploreDocsIngested}</Stat>
               <Stat label="SCOTUS">
-                {supp.justicesSkipped ? "skipped" : `${supp.justicesScored} scored`}
+                {supp.justicesSkipped ? "skipped" : `${supp.justicesScored} justices`}
               </Stat>
               <Stat label="PRESIDENTS">{supp.presidentsUpdated}</Stat>
             </>

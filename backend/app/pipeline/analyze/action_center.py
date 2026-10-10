@@ -1291,73 +1291,8 @@ def _digest_reason(article: NewsArticle) -> str | None:
     return None
 
 
-# Minimum number of already-published issues before the learned prototype
-# comparison below runs at all — a handful of rows can't represent the
-# breadth of civic topics this platform covers, and a small sample would
-# make the comparison noise, not data.
-_LEARNED_PROTOTYPE_MIN_SAMPLE = 50
-_LEARNED_PROTOTYPE_SAMPLE_SIZE = 300
-
-
-def _learned_relevance_prototypes(db: "Session") -> list[str] | None:
-    """Real published-issue text as an alternative relevance-prototype set,
-    for comparison against the hand-written _POLICY_PROTOTYPES below —
-    None on a fresh install with too little history to be representative.
-
-    Every ActionIssue row already passed the full pipeline (relevance
-    filter, clustering, grounding checks), so this is a real, growing
-    sample of confirmed-relevant civic text rather than one person's
-    guess at what each policy category sounds like. Most recent rows
-    first, so the sample tracks what the platform actually covers now
-    rather than getting diluted by years of accumulated history.
-    """
-    rows = (
-        db.query(ActionIssue.title, ActionIssue.summary)
-        .order_by(ActionIssue.created_at.desc())
-        .limit(_LEARNED_PROTOTYPE_SAMPLE_SIZE)
-        .all()
-    )
-    if len(rows) < _LEARNED_PROTOTYPE_MIN_SAMPLE:
-        return None
-    return [f"{title}. {summary}" for title, summary in rows if title]
-
-
-def _log_relevance_prototype_agreement(
-    db: "Session", texts: list[str], article_embeddings: np.ndarray, hardcoded_relevant: np.ndarray,
-) -> None:
-    """Non-blocking measurement: would a prototype set learned from real
-    published issues have made the same relevant/not-relevant call as the
-    hand-written _POLICY_PROTOTYPES list, on the same articles?
-
-    Purely observational — logs an agreement-rate counter and never
-    affects which articles the pipeline actually keeps. The hand-written
-    list remains the one that gates the pipeline until real comparison
-    data justifies recalibrating or replacing it; swapping the anchor set
-    would also shift the score distribution POLICY_RELEVANCE_THRESHOLD
-    was calibrated against, so a same-day one-shot replacement isn't
-    trustworthy without that data.
-    """
-    try:
-        learned_prototypes = _learned_relevance_prototypes(db)
-        if not learned_prototypes:
-            return
-        learned_embeddings = _embed_texts_sim(learned_prototypes)
-        learned_scores = (article_embeddings @ learned_embeddings.T).max(axis=1)
-        # Same threshold as the hardcoded set for now — comparing decisions
-        # made under one shared bar is the simplest first cut. A learned
-        # set may need its own separately-measured bar; that's exactly the
-        # kind of thing this comparison is meant to surface evidence for.
-        learned_relevant = learned_scores >= POLICY_RELEVANCE_THRESHOLD
-        agree = int(np.sum(learned_relevant == hardcoded_relevant))
-        action_metrics.increment("relevance_prototype_agree", agree)
-        action_metrics.increment("relevance_prototype_disagree", len(texts) - agree)
-    except Exception:
-        logger.exception("Learned-prototype relevance comparison failed (non-blocking)")
-
-
 def _filter_policy_relevant(
     articles: list[NewsArticle],
-    db: "Session | None" = None,
 ) -> list[tuple[NewsArticle, np.ndarray]]:
     """Keep only articles about US policy/legislation; drop digest articles."""
     if not articles:
@@ -1415,10 +1350,6 @@ def _filter_policy_relevant(
         len(relevant), len(articles),
         n_digests, n_penalized, POLICY_RELEVANCE_THRESHOLD,
     )
-    if db is not None:
-        _log_relevance_prototype_agreement(
-            db, texts, article_embeddings, effective_scores >= POLICY_RELEVANCE_THRESHOLD,
-        )
     return relevant
 
 
@@ -4595,7 +4526,7 @@ def _run_refresh(db: Session) -> int:
 
     # 2. Filter for policy relevance
     _set_refresh_state(stage="filter")
-    relevant = _filter_policy_relevant(articles, db)
+    relevant = _filter_policy_relevant(articles)
     if not relevant:
         logger.warning("No policy-relevant articles found")
         action_metrics.increment("refresh_aborted_no_relevant_articles")

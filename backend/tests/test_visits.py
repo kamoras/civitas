@@ -8,18 +8,20 @@ views actually accumulate rather than no-op like SiteVisit does.
 
 import asyncio
 import pathlib
+import sqlite3
 from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy.exc import OperationalError
 
+from app.api import throttle, visits
 from app.api.admin import admin_top_pages
 from app.api.visits import (
     _extract_issue_public_id, _VisitEvent, _normalize_path, _write_visit_batch, track_visit,
 )
 from app.issue_ids import to_public_id
-from app.models import IssueView, PageView
-from tests.visits_helpers import _drain_queue_and_write, _make_request
+from app.models import IssueView, PageView, SiteVisit
+from tests.visits_helpers import _drain_queue_and_write, _make_request, _view
 
 
 class TestNormalizePath:
@@ -79,8 +81,8 @@ class TestKnownRoutesStayInSync:
         other than "/other" — otherwise a new page silently drains into
         the catch-all bucket exactly like /bills did (see
         TestNormalizePath's recently_added_pages_are_tracked). /admin is exempt: the
-        frontend middleware explicitly excludes it from tracking (see
-        frontend/src/middleware.ts's matcher)."""
+        frontend proxy explicitly excludes it from tracking (see
+        frontend/src/proxy.ts's matcher)."""
         app_dir = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "app"
         if not app_dir.is_dir():
             return  # frontend checkout not present in this environment
@@ -107,23 +109,110 @@ class TestKnownRoutesStayInSync:
         assert [c for c in chapters if _normalize_path(c) != c] == []
 
 
+_BROWSER = "Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0 Safari/537.36"
+
+
+def _signal(kind: str, path: str = "/", ip: str = "203.0.113.5"):
+    return track_visit(_make_request(peer_ip=ip, user_agent=_BROWSER), kind=kind, path=path)
+
+
+def _counted(db) -> dict[str, int]:
+    _drain_queue_and_write(db)
+    return {r.path: r.count for r in db.query(PageView).all()}
+
+
+class TestCountedOnlyWhenThePageRuns:
+    """A page request alone proves nothing (a crawler sends browser
+    headers); a page counts once the same client's browser makes one of
+    the requests Next's router makes when the page runs."""
+
+    async def test_a_page_request_alone_counts_nothing(self, db_session):
+        await _signal("page", "/leaderboard")
+        assert _counted(db_session) == {}
+        assert db_session.query(SiteVisit).count() == 0
+
+    async def test_the_first_router_request_counts_the_page_once(self, db_session):
+        await _signal("page", "/leaderboard")
+        for _ in range(5):  # a page prefetches every link in view
+            await _signal("router", "/compare")
+        assert _counted(db_session) == {"/leaderboard": 1}
+        assert db_session.query(SiteVisit).count() == 1
+
+    async def test_another_clients_router_request_does_not_count_it(self, db_session):
+        await _signal("page", "/leaderboard", ip="203.0.113.5")
+        await _signal("router", ip="203.0.113.6")
+        assert _counted(db_session) == {}
+
+    async def test_a_router_request_with_no_page_counts_nothing(self, db_session):
+        await _signal("router", "/compare")
+        assert _counted(db_session) == {}
+
+    async def test_a_page_not_run_within_the_window_is_dropped(self, db_session, monkeypatch):
+        await _signal("page", "/leaderboard")
+        real = throttle.time.time
+        monkeypatch.setattr(throttle.time, "time", lambda: real() + visits._PENDING_S + 1)
+        await _signal("router")
+        assert _counted(db_session) == {}
+
+    async def test_a_navigation_counts_once_the_client_has_run_a_page(self, db_session):
+        await _signal("navigation", "/compare")  # no page run: nothing
+        assert _counted(db_session) == {}
+        await _signal("page", "/leaderboard")
+        await _signal("router")
+        await _signal("navigation", "/compare")
+        await _signal("navigation", "/politicians/jane-doe")
+        assert _counted(db_session) == {"/leaderboard": 1, "/compare": 1, "/politicians/[id]": 1}
+
+    async def test_a_navigation_also_completes_a_held_page(self, db_session):
+        await _signal("page", "/leaderboard")
+        await _signal("navigation", "/compare")
+        assert _counted(db_session) == {"/leaderboard": 1, "/compare": 1}
+
+    async def test_a_held_page_keeps_only_what_page_views_keep(self, db_session, throttle_store):
+        await _signal("page", "/politicians/jane-doe?ref=x")
+        await _signal("page", f"/issue/{to_public_id(3)}")
+        conn = sqlite3.connect(throttle_store)
+        held = sorted(v for (v,) in conn.execute("SELECT value FROM held"))
+        conn.close()
+        assert held == [f"/issue/{to_public_id(3)}", "/politicians/[id]"]
+
+
 class TestTrackVisitPageViews:
     async def test_a_headless_automation_browser_is_not_a_visitor(self, db_session):
         """Playwright/Puppeteer's default headless Chrome (cloud agents testing
-        the site) runs scripts and sends fetch metadata, so only its own
-        User-Agent token tells it apart; it reaches both counting paths."""
+        the site) runs the page like a browser, so it passes the page-then-
+        router check; only its own User-Agent token tells it apart."""
         headless = (
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
             "HeadlessChrome/131.0.0.0 Safari/537.36"
         )
-        await track_visit(_make_request(user_agent=headless), path="/")
+        await _view(_make_request(user_agent=headless), "/")
         assert _drain_queue_and_write(db_session) == 0
-        await track_visit(_make_request(user_agent="Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0 Safari/537.36"), path="/")
+        await _view(_make_request(user_agent="Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0 Safari/537.36"), "/")
+        assert _drain_queue_and_write(db_session) == 1
+
+    @pytest.mark.parametrize("user_agent", [
+        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; bingbot/2.0; "
+        "+http://www.bing.com/bingbot.htm) Chrome/116.0.1938.76 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/17.4 Safari/605.1.15 (Applebot/0.1; +http://www.apple.com/go/applebot)",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36; compatible; OAI-SearchBot/1.4; +https://openai.com/searchbot",
+        "Mozilla/5.0 (compatible; Baiduspider-render/2.0; +http://www.baidu.com/search/spider.html)",
+    ])
+    async def test_a_crawler_that_renders_the_page_is_not_a_visitor(self, db_session, user_agent):
+        await _view(_make_request(user_agent=user_agent), "/")
+        assert _drain_queue_and_write(db_session) == 0
+
+    async def test_a_phone_whose_model_ends_in_bot_is_a_visitor(self, db_session):
+        cubot = ("Mozilla/5.0 (Linux; Android 10; CUBOT X30 Build/QP1A.190711.020) AppleWebKit/537.36 "
+                 "(KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36")
+        await _view(_make_request(user_agent=cubot), "/")
         assert _drain_queue_and_write(db_session) == 1
 
     async def test_repeat_views_accumulate_not_dedupe(self, db_session):
-        await track_visit(_make_request(), path="/politicians/chuck-grassley")
-        await track_visit(_make_request(), path="/politicians/jane-doe")
+        await _view(_make_request(), "/politicians/chuck-grassley")
+        await _view(_make_request(), "/politicians/jane-doe")
         _drain_queue_and_write(db_session)
 
         rows = db_session.query(PageView).all()
@@ -132,8 +221,8 @@ class TestTrackVisitPageViews:
         assert rows[0].count == 2
 
     async def test_different_pages_get_separate_rows(self, db_session):
-        await track_visit(_make_request(), path="/leaderboard")
-        await track_visit(_make_request(), path="/compare")
+        await _view(_make_request(), "/leaderboard")
+        await _view(_make_request(), "/compare")
         _drain_queue_and_write(db_session)
 
         rows = {r.path: r.count for r in db_session.query(PageView).all()}
@@ -147,8 +236,8 @@ class TestTrackVisitIssueViews:
 
     async def test_issue_view_accumulates_alongside_the_normalized_page_view(self, db_session):
         pid = to_public_id(1)
-        await track_visit(_make_request(), path=f"/issue/{pid}")
-        await track_visit(_make_request(), path=f"/issue/{pid}")
+        await _view(_make_request(), f"/issue/{pid}")
+        await _view(_make_request(), f"/issue/{pid}")
         _drain_queue_and_write(db_session)
 
         issue_rows = db_session.query(IssueView).all()
@@ -162,15 +251,15 @@ class TestTrackVisitIssueViews:
         assert page_rows[0].count == 2
 
     async def test_different_issues_get_separate_rows(self, db_session):
-        await track_visit(_make_request(), path=f"/issue/{to_public_id(1)}")
-        await track_visit(_make_request(), path=f"/issue/{to_public_id(2)}")
+        await _view(_make_request(), f"/issue/{to_public_id(1)}")
+        await _view(_make_request(), f"/issue/{to_public_id(2)}")
         _drain_queue_and_write(db_session)
 
         rows = {r.issue_public_id: r.count for r in db_session.query(IssueView).all()}
         assert rows == {to_public_id(1): 1, to_public_id(2): 1}
 
     async def test_malformed_issue_id_writes_no_issue_view_row(self, db_session):
-        await track_visit(_make_request(), path="/issue/not-a-real-id")
+        await _view(_make_request(), "/issue/not-a-real-id")
         _drain_queue_and_write(db_session)
 
         assert db_session.query(IssueView).all() == []
@@ -210,8 +299,8 @@ class TestVisitQueueArchitecture:
         tiny_queue = asyncio.Queue(maxsize=1)
         monkeypatch.setattr("app.api.visits._visit_queue", tiny_queue)
 
-        await track_visit(_make_request(), path="/leaderboard")  # fills the queue
-        result = await track_visit(_make_request(), path="/compare")  # must not raise or block
+        await _view(_make_request(), "/leaderboard")  # fills the queue
+        result = await _view(_make_request(), "/compare")  # must not raise or block
 
         assert result is None
         assert tiny_queue.qsize() == 1  # the second event was dropped, not queued
@@ -220,8 +309,8 @@ class TestVisitQueueArchitecture:
 class TestAdminTopPages:
     async def test_returns_pages_sorted_by_views_desc(self, db_session):
         for _ in range(3):
-            await track_visit(_make_request(), path="/leaderboard")
-        await track_visit(_make_request(), path="/compare")
+            await _view(_make_request(), "/leaderboard")
+        await _view(_make_request(), "/compare")
         _drain_queue_and_write(db_session)
 
         result = admin_top_pages(days=7, limit=10, db=db_session)

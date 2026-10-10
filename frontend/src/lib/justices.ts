@@ -15,6 +15,14 @@ export function appointerEstimate(l: JusticeLoyalty | null | undefined): Justice
   return l && typeof l.ciLow === "number" && typeof l.ciHigh === "number" ? l : null;
 }
 
+/** A share as signed points, "+6.3" / "−4.3" (a true minus sign): the
+ *  estimate and both ends of its interval on one scale, positive meaning
+ *  more often under the appointing president. */
+export function signedPoints(share: number): string {
+  const v = share * 100;
+  return `${v >= 0 ? "+" : "\u2212"}${Math.abs(v).toFixed(1)}`;
+}
+
 /** The Court-level finding, stated as fact: the appointer effect pooled over
  *  every justice since 1937, less what a placebo window at the same point in
  *  a career shows, with a bootstrap interval over justices. Printed by
