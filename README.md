@@ -123,6 +123,8 @@ the content is per-request.
 
 **Hardware:** Raspberry Pi 5 (16 GB RAM), NVMe SSD. All models, databases, and services run on-device. No cloud GPU, no third-party AI APIs, no data leaves the device.
 
+**Pages request nothing from other hosts.** Every photo (members' bioguide portraits, justices' Oyez photos, an Action Center issue's licensed news photo) is served from the site at `/photo/<kind>/<id>`: the API gives that path (`backend/app/photos.py`), and the frontend route `app/photo/[kind]/[id]/route.ts` fetches the picture server-side by kind and id (never a URL; stored sources come from `GET /api/photo-sources/{kind}/{id}`). Each kind is fetched only from its own hosts, over https: bioguide.congress.gov, api.oyez.org, and rollcall.com for issue photos (`PHOTO_SOURCE_HOSTS` in `backend/app/photos.py`), enforced by the pipeline, the endpoint, and the route on every redirect hop, since an issue photo's URL comes from an RSS item. nginx keeps each one a week (`photo_cache`), serves the last copy when a source is down, and rate-limits only cache misses, through the same loopback hop as the API: 10/s per client with a burst of 600, the first 60 immediate, so a cold directory page (543 portraits) is paced, never refused. A photo bioguide doesn't have is a 404, shown as initials (`components/Photo.tsx`). Fonts, scripts, styles and map data are self-hosted; `tests/test_same_origin_photos.py` and `frontend/src/lib/sameOriginImages.test.ts` fail on an absolute image URL on another host.
+
 ---
 
 ## Nightly Pipeline: Phase by Phase

@@ -37,7 +37,7 @@ import { formatEasternTime } from "@/lib/results";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { monitorHref } from "@/lib/routes";
 import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
-import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
+import Photo from "@/components/Photo";
 
 /** Hairline section header: the one used by RecordIndex and /elections. */
 export const SECTION_HEADING =
@@ -77,23 +77,17 @@ export function IssueImage({
 
   if (size === "thumbnail") {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- external, varied source-article hosts; not worth per-host next/image remotePatterns
-      <img
+      <Photo
         src={issue.imageUrl}
         alt={alt}
-        // A shared image of the card leaves the photo out: it's on the
-        // publisher's host, which a capture never requests (lib/shareImage.ts).
-        {...{ [SHARE_EXCLUDE_ATTR]: "" }}
         className="h-16 w-16 shrink-0 border border-white/[0.07] object-cover sm:h-20 sm:w-20"
       />
     );
   }
 
   return (
-    // Left out of shared images, as above.
-    <figure className="mb-5" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- external, varied source-article hosts; not worth per-host next/image remotePatterns */}
-      <img
+    <figure className="mb-5">
+      <Photo
         src={issue.imageUrl}
         alt={alt}
         className="max-h-96 w-full border border-white/[0.07] object-cover"

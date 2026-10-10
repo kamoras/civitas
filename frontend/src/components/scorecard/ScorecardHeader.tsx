@@ -10,6 +10,7 @@ import MetricTooltip from "@/components/checker/MetricTooltip";
 import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import Photo from "@/components/Photo";
 
 /**
  * `min-h-6` for WCAG 2.2 SC 2.5.8 (24x24 targets): the links sit in a
@@ -60,6 +61,15 @@ export default function ScorecardHeader({
   // successor's office (it inherits the suite and phone), or nothing.
   const phone = former ? "" : member.officePhone;
 
+  const initials = (
+    <div
+      className={`flex h-24 w-20 shrink-0 items-center justify-center border-2 text-2xl font-bold sm:h-28 sm:w-24 ${PARTY_BORDER[member.party]} ${PARTY_COLORS[member.party]}`}
+      aria-hidden="true"
+    >
+      {member.initials}
+    </div>
+  );
+
   return (
     <header
       id="overview"
@@ -72,19 +82,14 @@ export default function ScorecardHeader({
           name had about 146px at 320px and long surnames split mid-word. */}
       <div className="flex min-w-0 flex-col gap-5 sm:flex-row lg:col-start-1 lg:row-start-1">
         {thumbnailUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- external, varied politician-photo hosts
-          <img
+          <Photo
             src={thumbnailUrl}
             alt={member.name}
             className={`h-24 w-20 shrink-0 border-2 object-cover sm:h-28 sm:w-24 ${PARTY_BORDER[member.party]}`}
+            fallback={initials}
           />
         ) : (
-          <div
-            className={`flex h-24 w-20 shrink-0 items-center justify-center border-2 text-2xl font-bold sm:h-28 sm:w-24 ${PARTY_BORDER[member.party]} ${PARTY_COLORS[member.party]}`}
-            aria-hidden="true"
-          >
-            {member.initials}
-          </div>
+          initials
         )}
         <div className="flex min-w-0 flex-col gap-2">
           <Title className="break-words text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">

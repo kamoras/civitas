@@ -22,6 +22,7 @@ from app.pipeline.analyze.score_calculator import compute_overall_score, get_dis
 from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
+from app.photos import issue_photo
 from app.pipeline.fetch.congress import expected_current_congress
 from app.services.bill_record import parse_bill_id
 from app.time_utils import comment_period_today, utcnow
@@ -404,7 +405,7 @@ def _build_issue_response(
         source_type=getattr(issue, "source_type", None),
         count_as_of=count_as_of,
         count_official=count_official,
-        image_url=getattr(issue, "image_url", None),
+        image_url=issue_photo(issue),
         image_alt=getattr(issue, "image_alt", "") or "",
         image_credit=getattr(issue, "image_credit", "") or "",
     ).model_dump(by_alias=True)

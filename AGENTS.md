@@ -895,6 +895,32 @@ files, Network Error Logging, a clearance cookie only if it challenges a
 visitor) is disclosed on `/about/data#cloudflare`; check that section still
 matches when anything about the proxy changes.
 
+**A page requests nothing from another host** — and images are where that
+slipped. Member portraits used to load straight from bioguide.congress.gov
+(justices' from Oyez, an issue's news photo from the outlet), so every
+visitor's IP went to each of them, and about one portrait in nine failed
+outright under a full directory page. Every photo is now served from this
+site at `/photo/<kind>/<id>` (2026-10): the API hands out those paths
+(`app/photos.py`; JSON-LD makes them absolute), and the frontend route
+(`app/photo/[kind]/[id]/route.ts`, `lib/photos.ts`) fetches the picture
+server-side — a bioguide portrait by its id, a stored source (Oyez, the
+outlet) looked up by kind and id through `GET /api/photo-sources/…`. It
+takes an id, never a URL, so it is not an open proxy; add a kind there for
+a new picture, never a URL parameter. An issue's photo URL still comes from
+an RSS item, so each kind is fetched only from its own hosts
+(`PHOTO_SOURCE_HOSTS` in `app/photos.py`, mirrored by `PHOTO_HOSTS` in
+`lib/photos.ts` and held equal by a test), https on the default port: the
+pipeline drops a source elsewhere, the endpoint refuses one, and the route
+follows redirects itself and refuses any hop off the list. Hosts are
+checked by name, not resolved address (Node's fetch has no connect-time
+hook without adding undici). nginx caches the route
+(`photo_cache`, a week unread, stale on error) and rate-limits its cache
+misses only, through the api-misses hop, sized so a cold directory page is
+paced rather than refused. `tests/test_same_origin_photos.py` and
+`frontend/src/lib/sameOriginImages.test.ts` fail on an absolute image URL
+on another host; fonts, scripts, styles and map data are self-hosted, and
+`/about/data#privacy` says so — check it when that changes.
+
 The same line covers the visitor's own browser. The Action Center used to
 remember a "your state" pick in `localStorage` (also read by the compare
 page), a "log my action" diary with streaks, and which issues the browser had
@@ -1362,7 +1388,8 @@ the pending list).
 | Per-client rate limits + once-per-period rules shared by every API worker | `backend/app/api/throttle.py` |
 | Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
-| Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/`, `frontend/src/app/photo/bioguide/[id]/route.ts` |
+| Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/` |
+| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
@@ -1511,10 +1538,8 @@ the pending list).
   The guard covers images only (`<img>`, SVG `<image>`, CSS image urls) —
   fonts, stylesheets and an external `<use href>` inside a captured section
   are fetched as-is, which is fine only while they stay self-hosted.
-  Member photos are the exception, read through the same-origin
-  `/photo/bioguide/[id]` route (cached and rate-limited in nginx) — add a
-  route like it (taking an id, never a URL) rather than proxying arbitrary
-  URLs.
+  Every photo the site shows is already same-origin (§8's `/photo/<kind>/<id>`),
+  so a capture draws them as-is.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
   Activating a tab must focus **the incoming tab**, not its panel — the
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving

@@ -25,6 +25,7 @@ from defusedxml import ElementTree as SafeET
 import httpx
 
 from app.contact import BOT_USER_AGENT
+from app.photos import photo_source_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,11 @@ def _rights_cleared_image(item: Element) -> "_RightsClearedImage | None":
         if rights is not None and (rights.text or "").strip() == "1":
             url = media.get("url", "").strip()
             if not url:
+                continue
+            # Only from the hosts the site's photo route will fetch from
+            # (app/photos.py): a feed item names its own image URL.
+            if not photo_source_allowed("issue", url):
+                logger.info("Rights-cleared image on a host not allowed for issue photos, skipped: %s", url)
                 continue
             text_el = media.find(_MEDIA_TEXT_TAG)
             credit_el = media.find(_LICENSOR_NAME_TAG)
