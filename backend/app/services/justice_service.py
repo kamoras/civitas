@@ -154,23 +154,6 @@ def group_votes_by_case_and_justice(
     return dict(case_votes), dict(justice_votes)
 
 
-def get_justice_score_breakdown(db: Session, justice_id: str) -> dict | None:
-    """The figures behind the justice's appointer estimate, as stored by the
-    pipeline (justice_loyalty): the estimate, its standard error and 95%
-    interval, the votes under the appointing president and under others and
-    the share of each for the government. The score is always null: justice
-    v3 scores no justice."""
-    j = db.query(Justice).filter(Justice.id == justice_id).first()
-    if not j:
-        return None
-    loyalty = _loyalty(j)
-    return {"loyalty": {
-        "score": None,
-        "components": [],
-        "facts": loyalty.model_dump(by_alias=True) if loyalty else None,
-    }}
-
-
 def upsert_justice(db: Session, data: dict, votes: list[dict]) -> None:
     """Create or update a justice record with vote data."""
     jid = data["id"]

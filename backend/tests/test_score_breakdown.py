@@ -6,8 +6,8 @@ Two things are verified per entity type:
    same input — guards against the _core extraction accidentally changing
    behavior (the extraction is meant to be pure refactoring).
 2. The new service-layer assembler functions (get_senator_score_breakdown,
-   get_representative_score_breakdown, get_president_score_breakdown,
-   get_justice_score_breakdown) correctly reconstruct their inputs from
+   get_representative_score_breakdown, get_president_score_breakdown)
+   correctly reconstruct their inputs from
    ORM relationships and return a real breakdown, using the in-memory
    SQLite db_session fixture.
 """
@@ -46,7 +46,7 @@ from app.pipeline.analyze.score_calculator import (
     _legislative_effectiveness_core,
     explain_scores,
 )
-from app.services.justice_service import get_justice_score_breakdown
+from app.services.justice_service import get_justice
 from app.services.president_service import get_president_score_breakdown
 from app.services.representative_service import get_representative_score_breakdown
 from app.services.senator_service import get_senator_score_breakdown
@@ -326,9 +326,12 @@ class TestPresidentScoreBreakdownService:
             assert breakdown[dim]["score"] is None, f"{dim} should be None with no stored data"
 
 
-class TestJusticeScoreBreakdownService:
+class TestJusticeDetailServesNoScore:
+    """No justice has a score breakdown: justice v3 scores no justice. The
+    estimate's figures are on the detail (get_justice), and a v2 score left
+    in the database is never served."""
+
     def test_returns_the_stored_estimate_and_no_score(self, db_session):
-        # A v2 score left in the database is never served (justice v3).
         db_session.add(Justice(
             id="j1", name="Justice One", last_name="One", appointing_party="R", is_active=True,
             score_loyalty=72.5, loyalty=0.03, loyalty_se=0.02, appointer_effect=0.0412, appointer_effect_se=0.031,
@@ -336,17 +339,14 @@ class TestJusticeScoreBreakdownService:
             loyalty_through_term=2025,
         ))
         db_session.commit()
-        breakdown = get_justice_score_breakdown(db_session, "j1")
-        assert breakdown["loyalty"]["score"] is None
-        assert breakdown["loyalty"]["facts"] == {
+        detail = get_justice(db_session, "j1").model_dump(by_alias=True)
+        assert detail["score"] == {"loyalty": None, "overall": None}
+        assert detail["loyalty"] == {
             "estimate": 0.0412, "se": 0.031, "ciLow": -0.0196, "ciHigh": 0.1020, "votesIn": 210, "votesOut": 380,
             "rateIn": 0.55, "rateOut": 0.49, "throughTerm": 2025,
         }
 
-    def test_an_unmeasured_justice_has_no_facts(self, db_session):
+    def test_an_unmeasured_justice_has_no_estimate(self, db_session):
         db_session.add(Justice(id="j2", name="Justice Two", last_name="Two", is_active=True))
         db_session.commit()
-        assert get_justice_score_breakdown(db_session, "j2")["loyalty"] == {"score": None, "components": [], "facts": None}
-
-    def test_returns_none_for_missing_justice(self, db_session):
-        assert get_justice_score_breakdown(db_session, "nope") is None
+        assert get_justice(db_session, "j2").loyalty is None

@@ -5,7 +5,12 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, type ShareSubject } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
-import { appointerEstimate, JUSTICE_RESEARCH_URL, NOT_SCORED_REASON } from "@/lib/justices";
+import {
+  appointerEstimate,
+  JUSTICE_RESEARCH_URL,
+  NOT_SCORED_REASON,
+  signedPoints,
+} from "@/lib/justices";
 import ScoreColumn from "./ScoreColumn";
 
 const PARTY: Record<string, { label: string; text: string; border: string }> = {
@@ -58,7 +63,7 @@ function EstimateScale({ loyalty }: { loyalty: JusticeLoyalty }) {
   const at = (share: number) =>
     `${((Math.max(-AXIS_POINTS, Math.min(AXIS_POINTS, share * 100)) + AXIS_POINTS) / (2 * AXIS_POINTS)) * 100}%`;
   const bg = "bg-ink-lo";
-  const label = `${pts(loyalty.estimate)} points, 95% interval ${pts(loyalty.ciLow)} to ${pts(loyalty.ciHigh)}`;
+  const label = `${signedPoints(loyalty.estimate)} points, 95% interval ${signedPoints(loyalty.ciLow)} to ${signedPoints(loyalty.ciHigh)}`;
   return (
     <div role="img" aria-label={label}>
       <div className="relative h-8" aria-hidden="true">
@@ -103,7 +108,8 @@ function LoyaltyColumn({ justice }: { justice: Justice }) {
             {appointer} was president, and in {pct(l.rateOut)} of {l.votesOut} under other
             presidents. With the government&apos;s side of the case held fixed, that is{" "}
             {pts(Math.abs(l.estimate))} points {l.estimate >= 0 ? "more" : "less"} often under the
-            appointing president (95% confidence interval {pts(l.ciLow)} to {pts(l.ciHigh)}).
+            appointing president (95% confidence interval {signedPoints(l.ciLow)} to{" "}
+            {signedPoints(l.ciHigh)} points, where + is more often).
           </p>
           <EstimateScale loyalty={l} />
           <p className="text-sm leading-relaxed text-ink-lo">
@@ -268,9 +274,7 @@ export default function JusticeScorecard({
               </div>
             </div>
             <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-              <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                Judicial Score
-              </p>
+              <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">Score</p>
               <p className="font-display text-2xl font-extrabold text-ink-min">Not scored</p>
               <p className="text-sm leading-relaxed text-ink-lo">
                 {NOT_SCORED_REASON}{" "}
