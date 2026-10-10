@@ -151,6 +151,7 @@ export default function PoliticianProfileClient({
                   committees={identity.committees}
                   rank={profile.chamberRank}
                   titleAs="h1"
+                  former={hasLeftOffice}
                 />
               )}
               {branch === "president" && (

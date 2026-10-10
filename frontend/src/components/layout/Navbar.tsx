@@ -117,14 +117,8 @@ export default function Navbar() {
         push past that margin.
       */}
       <RecordsBand />
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:bg-surface-base focus:text-phos focus:border focus:border-phos/60
-                   focus:px-4 focus:py-2 focus:font-mono focus:text-xs focus:tracking-widest
-                   focus:outline-none"
-      >
-        SKIP TO MAIN CONTENT
-      </a>
+      {/* The skip link is the root layout's, ahead of everything: a second
+          one here cost keyboard users an extra Tab on every page. */}
       <nav aria-label="Main navigation" className="border-b-3 border-white/15">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <Link

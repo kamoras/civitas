@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RaceMap from "./RaceMap";
@@ -40,5 +40,24 @@ describe("RaceMap", () => {
     callout.focus();
     await userEvent.keyboard("{Enter}");
     expect(onStateClick).toHaveBeenCalledTimes(2);
+  });
+
+  it("outlines the state that has keyboard focus (paths have no outline of their own)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ATLAS }));
+    render(
+      <RaceMap
+        selectedState={null}
+        onStateClick={vi.fn()}
+        getFillColor={() => "#222"}
+        getHoverFillColor={() => "#333"}
+      />
+    );
+    const [texas] = await screen.findAllByRole("button", { name: "TX" });
+    expect(texas.style.strokeWidth).toBe("0.5");
+    act(() => texas.focus());
+    expect(texas.style.strokeWidth).toBe("2.5");
+    expect(texas.style.stroke).not.toBe("#0a1a0a");
+    act(() => texas.blur());
+    expect(texas.style.strokeWidth).toBe("0.5");
   });
 });

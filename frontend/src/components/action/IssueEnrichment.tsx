@@ -19,7 +19,14 @@
  */
 
 import Link from "next/link";
-import { formatUtcDate, isNewFact, issueDateLabel, issueRef, safeHref } from "@/lib/formatting";
+import {
+  formatUtcDate,
+  isNewFact,
+  issueDateLabel,
+  issueRef,
+  policyAreaLabel,
+  safeHref,
+} from "@/lib/formatting";
 import {
   countIsOfficial,
   developingSource,
@@ -193,7 +200,7 @@ export function IssueTags({
       className={`flex flex-wrap items-baseline gap-x-4 gap-y-1.5 font-mono text-xs tracking-[0.08em] text-ink-lo ${className}`}
     >
       {areas.map((area) => (
-        <span key={area}>{area}</span>
+        <span key={area}>{policyAreaLabel(area)}</span>
       ))}
       {slugs.map((slug) => (
         <span key={slug}>
@@ -333,7 +340,11 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       key: "directory",
       verb: "Contact",
       what: "Find your senators and representative",
-      detail: "No member was named in the coverage",
+      // What the reader gets by following the link, not why there is no
+      // named member: over a third of issues land here, and "No member was
+      // named in the coverage" read as an apology in the one place the
+      // page offers something to do.
+      detail: "Pick your state: each member's page has their phone number and contact form",
       href: "/politicians",
       internal: true,
       label: "Directory →",

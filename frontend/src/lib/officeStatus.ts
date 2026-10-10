@@ -3,13 +3,12 @@ import type { PoliticianBranch } from "@/types/politicians";
 /**
  * Wording for a politician who is no longer serving.
  *
- * "Seat Vacant" is only true for a Senate/House seat — those seats are
- * held continuously and a departure really does leave one empty until a
- * successor arrives. The presidency and the Court work the other way:
- * a president's term ends and the office passes on the same day, so
- * labelling Obama's page "SEAT VACANT" reads as though the office itself
- * were unfilled. Former presidents and retired justices get a
- * "Former President" / "Former Justice" framing instead.
+ * Always framed by the person ("Former Senator"), never the seat. A
+ * departure leaves a Senate or House seat empty only until a successor is
+ * sworn in, and the departed member's page stays up through the retirement
+ * grace period, well past that: "Seat Vacant" sat on the directory card of
+ * a senator whose appointed successor was listed right beside it. The
+ * presidency and the Court pass on the same day anyway.
  */
 export interface OfficeStatusNotice {
   /** Short uppercase-able label — banner heading and directory-card badge. */
@@ -66,12 +65,12 @@ export function formerOfficeNotice(input: OfficeStatusInput): OfficeStatusNotice
   const reason = input.vacancyReason ? ` (${input.vacancyReason})` : "";
   const asOf = input.leftOfficeDate ? ` as of ${input.leftOfficeDate}` : "";
   return {
-    label: "Seat Vacant",
+    label: branch === "senate" ? "Former Senator" : "Former Representative",
     detail: `${name} is no longer serving${reason}${asOf}. ${RECORD_NOTE}`,
   };
 }
 
-/** Compact badge for the directory grid, e.g. "SEAT VACANT — RESIGNED". */
+/** Compact badge for the directory grid, e.g. "FORMER SENATOR · RESIGNED". */
 export function formerOfficeBadge(input: OfficeStatusInput): string {
   const { label } = formerOfficeNotice(input);
   const suffix =

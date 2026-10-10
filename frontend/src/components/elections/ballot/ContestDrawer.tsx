@@ -69,7 +69,11 @@ export default function ContestDrawer({
       >
         <div className="flex items-center justify-between gap-3 border-b border-white/[0.14] px-4 py-2.5">
           <span className="font-mono text-xs tracking-[0.12em] text-ink-lo">
-            CONTEST {index + 1} OF {total} · {COLUMN_LABEL[contest.column]}
+            {/* "Section", not "contest": the drawer also pages through parts
+                that are not contests (news coverage), and the page header
+                counts contests the voter actually decides ("17 contests"
+                beside "contest 6 of 7" read as a contradiction). */}
+            SECTION {index + 1} OF {total} · {COLUMN_LABEL[contest.column]}
           </span>
           <button
             type="button"

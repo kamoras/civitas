@@ -5,7 +5,7 @@ not a test module, so nothing here is collected.
 
 from unittest.mock import MagicMock
 
-from app.api.visits import _visit_queue, _write_visit_batch
+from app.api.visits import _visit_queue, _write_visit_batch, track_visit
 
 
 def _make_request(peer_ip: str = "203.0.113.5", user_agent: str = "Mozilla/5.0") -> MagicMock:
@@ -13,6 +13,13 @@ def _make_request(peer_ip: str = "203.0.113.5", user_agent: str = "Mozilla/5.0")
     req.client.host = peer_ip
     req.headers = {"User-Agent": user_agent}
     return req
+
+
+async def _view(request, path: str) -> None:
+    """A page opened in a browser that runs it, as the frontend's proxy
+    reports it: the page request, then the router's first request."""
+    await track_visit(request, kind="page", path=path)
+    await track_visit(request, kind="router", path="/")
 
 
 def _drain_queue_and_write(db) -> int:
