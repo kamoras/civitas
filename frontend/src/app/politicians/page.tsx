@@ -126,11 +126,10 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
         {p.thumbnailUrl ? (
           <Photo
             src={p.thumbnailUrl}
+            // Hundreds of cards: Photo's lazy loads each portrait as it
+            // scrolls into view (loading="lazy", decoding="async").
             lazy
             alt={p.name}
-            // Hundreds of cards: load the portraits as they scroll into view.
-            loading="lazy"
-            decoding="async"
             className="w-10 h-10 object-cover shrink-0 opacity-80 group-hover:opacity-100 transition-opacity"
             fallback={<Initials name={p.name} />}
           />
