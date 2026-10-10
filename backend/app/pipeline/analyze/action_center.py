@@ -13,8 +13,10 @@ Flow:
   8. Persist as ActionIssue rows for the current date
 """
 
+import hashlib
 import json
 import logging
+import pathlib
 import re
 import threading
 from collections import Counter
@@ -81,6 +83,7 @@ from app.pipeline.fetch.news_feeds import (
 from app.pipeline.fetch.trending import TrendingTopic, fetch_trending_topics
 from app.pipeline.vector_store import (
     get_embedding_model,
+    get_similarity_model,
     search_explore_documents,
 )
 from app.pipeline.analyze.lobbying_records import bill_mentions, names_bill
@@ -149,23 +152,90 @@ _POLICY_PROTOTYPES = [
     "Global economy, inflation, recession, central bank, financial markets",
 ]
 
-_US_CIVIC_PROTOTYPES = [
-    "US Congress bill vote legislation Senate House passed signed",
-    "President executive order White House federal policy decision",
-    "US Supreme Court federal court ruling constitutional law decision",
-    "US military action Pentagon American troops deployed strikes",
-    "Federal agency regulation EPA FDA FTC FCC rule enforcement policy",
-    "American workers economy domestic policy jobs wages US",
-    "US federal budget spending deficit appropriations government shutdown",
-    "US election voting rights ballot federal electoral",
-    "US immigration border policy ICE deportation federal",
-    "US healthcare Medicare Medicaid insurance federal program policy",
-]
-
-# Measured under the similarity model: civic headlines score 0.354-0.583
-# against the prototypes, non-civic (sports/entertainment/lifestyle)
-# 0.027-0.053 — threshold sits mid-gap with wide margin on both sides.
+# Gates TRENDING TOPICS only (_compute_trending_boost), since 2026-10-10.
+# It used to gate feed articles too, and there it was measured against 602
+# hand-labelled feed articles (2026-10-10, label = "a U.S. policy,
+# legislation, government or civic story a reader of this site would
+# want"): precision 0.62 [0.56, 0.67], recall 0.80 [0.75, 0.85] (95%
+# bootstrap CIs). The old comment's "civic 0.354-0.583, non-civic
+# 0.027-0.053" was a handful of hand-picked headlines; on real feeds the
+# two score distributions overlap (median 0.27 relevant vs 0.17 not,
+# interquartile 0.21-0.34 vs 0.11-0.25), so pure disaster coverage (the
+# "Extreme weather" prototype), foreign politics, crime and markets stories
+# passed while campaign coverage fell under the bar. No threshold fixes
+# that: precision passes 0.70 only once recall is below 0.46. Articles now
+# go through the kNN vote below. Trending topics are short search phrases,
+# a distribution the labelled examples don't cover, so this pair stays
+# there, unmeasured. See docs/research/action-center-relevance.md.
 POLICY_RELEVANCE_THRESHOLD = 0.20
+
+# The article relevance gate: a similarity-weighted vote among the
+# POLICY_RELEVANCE_K nearest hand-labelled feed articles in
+# app/data/policy_relevance_examples.json (kNN, Cover & Hart 1967; the
+# labelled set plays the part prototypes play elsewhere — the human
+# knowledge that seeds the classifier). k and the vote threshold come from
+# app/data/policy_relevance_calibration.json, written by
+# scripts/calibrate_policy_relevance.py, which also records the held-out
+# measurement. Measured 2026-10-10 (k=41, vote >= 0.80), with the reference
+# set cut at a date and tested on feed articles a week or more after it (so
+# one story can't sit on both sides), against the prototype gate on the
+# same articles, at three cuts: precision 0.89-0.97 vs 0.61-0.67, recall
+# 0.76-0.87 vs 0.73-0.77, McNemar p = 1e-12, 1e-10, 3e-5 — the test sets
+# run one to six weeks past their reference set, so that much topic drift
+# is inside the measurement. Its known weakness is a new U.S. story whose
+# nearest examples are foreign coverage of the same place (the first day of
+# a U.S.-Russia deal read like Ukraine-war coverage). Rerun the script when
+# examples are added (test_policy_relevance_calibration_matches_examples
+# fails until you do).
+_DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
+_RELEVANCE_EXAMPLES_PATH = _DATA_DIR / "policy_relevance_examples.json"
+_RELEVANCE_CALIBRATION_PATH = _DATA_DIR / "policy_relevance_calibration.json"
+_relevance_examples_cache: list[dict] | None = None
+_relevance_calibration_cache: dict | None = None
+_relevance_reference_cache: dict[int, np.ndarray] = {}
+
+
+def relevance_examples() -> list[dict]:
+    global _relevance_examples_cache
+    if _relevance_examples_cache is None:
+        _relevance_examples_cache = json.loads(_RELEVANCE_EXAMPLES_PATH.read_text())["examples"]
+    return _relevance_examples_cache
+
+
+def relevance_calibration() -> dict:
+    global _relevance_calibration_cache
+    if _relevance_calibration_cache is None:
+        _relevance_calibration_cache = json.loads(_RELEVANCE_CALIBRATION_PATH.read_text())
+    return _relevance_calibration_cache
+
+
+def relevance_examples_hash() -> str:
+    """Identifies the labelled set a calibration was fitted to."""
+    payload = json.dumps([[e["text"], e["relevant"]] for e in relevance_examples()])
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def relevance_votes(
+    article_embeddings: np.ndarray, reference: np.ndarray, labels: np.ndarray, k: int,
+) -> np.ndarray:
+    """Similarity-weighted share of relevant examples among each article's k
+    nearest (unit vectors, so the dot product is the cosine). Negative
+    similarities weigh nothing; an article with no positive neighbour
+    scores 0."""
+    sims = article_embeddings @ reference.T
+    k = min(k, reference.shape[0])
+    nearest = np.argpartition(-sims, k - 1, axis=1)[:, :k]
+    weights = np.take_along_axis(sims, nearest, axis=1).clip(min=0.0)
+    relevant = labels[nearest]
+    return (weights * relevant).sum(axis=1) / np.maximum(weights.sum(axis=1), 1e-9)
+
+
+def _relevance_reference() -> np.ndarray:
+    """The labelled examples' embeddings, once per similarity model."""
+    key = id(get_similarity_model())
+    if key not in _relevance_reference_cache:
+        _relevance_reference_cache[key] = _embed_texts_sim([e["text"] for e in relevance_examples()])
+    return _relevance_reference_cache[key]
 # The clustering cut is calibrated, not typed: action_thresholds.get("cluster_title").
 # How many candidate clusters get an LLM generation attempt per hourly run.
 # 2026-08: lowered from 4 to 2 as a deliberate capacity choice, not a
@@ -1144,6 +1214,32 @@ _DIGEST_ITEM_SPLIT_RE = re.compile(r"((?<=[.!?])\s+|\s*[;•·|]\s*)")
 # Negotiators met in Cairo."), three or more sharing NOTHING is a list.
 _DIGEST_MIN_ITEMS = 3
 
+# Two things in a single story's teaser that the split above turned into
+# extra, guaranteed-disjoint "items" — measured 2026-10-10: of 19 articles
+# this body check dropped from 627 feed articles, 18 were single stories (14
+# of them U.S. policy stories), 16 pushed to three items by one of these
+# (now 2 drops, both single stories; docs/research/action-center-relevance.md):
+#  - A period that ends an abbreviation is not a sentence break: dotted
+#    initials ("U.S.", "D.C.", "Joshua A.") and the abbreviated titles and
+#    months written before names and dates ("Rep.", "Sen.", "Sept."). "An
+#    investigation is underway after U.S. | Immigration and Customs ..."
+#    became two items.
+_ABBREVIATION_END_RE = re.compile(
+    r"(?:\b[A-Z]\.)+$"
+    r"|\b(?:Sens?|Reps?|Gov|Gen|Lt|Col|Sgt|Capt|Adm|Dr|Mrs?|Ms|St|Jr|Sr"
+    r"|Jan|Feb|Aug|Sept?|Oct|Nov|Dec|No|Ft|Mt)\.$"
+)
+#  - Attribution is not an item: a photo credit in parentheses ("(Image
+#    credit: ...)", "(AP Photo/...)") anywhere, and a broadcast segment's
+#    closing sign-off ("<reporter> reports.", "<host> discussed it with
+#    <guest>."), which names people who are not in the story. Dropping an
+#    item can only make a body less list-like, so a sign-off pattern that
+#    catches a real sentence errs toward keeping the article.
+_CREDIT_ITEM_RE = re.compile(r"^\(.*\)?$")
+_SIGN_OFF_ITEM_RE = re.compile(
+    r"\breports(?: from [^.]*)?\.?$|\b(?:discussed|spoke|talked)\b.*\bwith\b[^.]*\.?$"
+)
+
 
 def _split_body_items(summary: str, truncated: bool = False) -> list[tuple[str, bool]]:
     """Split a feed description into (item, first_word_is_forced_capital).
@@ -1175,10 +1271,16 @@ def _split_body_items(summary: str, truncated: bool = False) -> list[tuple[str, 
     first_forced = all(d.strip() == "" for d in delimiters)
     items: list[tuple[str, bool]] = [(parts[0], first_forced)]
     for delimiter, item in zip(delimiters, parts[2::2]):
-        items.append((item, delimiter.strip() == ""))
+        sentence_break = delimiter.strip() == ""
+        if sentence_break and _ABBREVIATION_END_RE.search(items[-1][0].rstrip()):
+            items[-1] = (f"{items[-1][0]} {item}", items[-1][1])
+        else:
+            items.append((item, sentence_break))
     if truncated and len(items) > 1:
         items.pop()
-    return items
+    if len(items) > 1 and _SIGN_OFF_ITEM_RE.search(items[-1][0].strip()):
+        items.pop()
+    return [(item, forced) for item, forced in items if not _CREDIT_ITEM_RE.match(item.strip())]
 
 
 # Singular and plural possessives both: "Varga's", "Democrats'".
@@ -1291,9 +1393,7 @@ def _digest_reason(article: NewsArticle) -> str | None:
     return None
 
 
-def _filter_policy_relevant(
-    articles: list[NewsArticle],
-) -> list[tuple[NewsArticle, np.ndarray]]:
+def _filter_policy_relevant(articles: list[NewsArticle]) -> list[tuple[NewsArticle, np.ndarray]]:
     """Keep only articles about US policy/legislation; drop digest articles."""
     if not articles:
         return []
@@ -1322,33 +1422,23 @@ def _filter_policy_relevant(
     if not specific:
         return []
 
-    prototype_embeddings = _embed_texts_sim(_POLICY_PROTOTYPES)
-    us_civic_embeddings = _embed_texts_sim(_US_CIVIC_PROTOTYPES)
-
     texts = [f"{a.title}. {a.summary[:200]}" for a in specific]
     article_embeddings = _embed_texts_sim(texts)
+    labels = np.array([e["relevant"] for e in relevance_examples()], dtype=float)
+    calibration = relevance_calibration()
+    k = int(calibration["k"])
+    threshold = float(calibration["threshold"])
+    votes = relevance_votes(article_embeddings, _relevance_reference(), labels, k)
 
-    # Max-over-prototypes: an article is relevant if it scores high against ANY
-    # policy prototype, not just the average direction. The mean collapses 18
-    # diverse prototypes into one diffuse vector that sits below the news-headline
-    # floor for nearly every article.
-    policy_scores = (article_embeddings @ prototype_embeddings.T).max(axis=1)
-    us_civic_scores = (article_embeddings @ us_civic_embeddings.T).max(axis=1)
-    # Gently penalize articles that are policy-relevant but have no US actor —
-    # purely foreign-domestic stories require stronger policy relevance to pass.
-    effective_scores = policy_scores * np.where(us_civic_scores >= 0.15, 1.0, 0.82)
-
-    relevant: list[tuple[NewsArticle, np.ndarray]] = []
-    for i, (article, score) in enumerate(zip(specific, effective_scores)):
-        if score >= POLICY_RELEVANCE_THRESHOLD:
-            relevant.append((article, article_embeddings[i]))
-
-    n_penalized = int(np.sum(us_civic_scores < 0.15))
+    relevant = [
+        (article, article_embeddings[i])
+        for i, (article, vote) in enumerate(zip(specific, votes))
+        if vote >= threshold
+    ]
     logger.info(
         "Policy relevance filter: %d/%d articles passed "
-        "(%d digests dropped, %d low-US-civic penalized, threshold=%.2f)",
-        len(relevant), len(articles),
-        n_digests, n_penalized, POLICY_RELEVANCE_THRESHOLD,
+        "(%d digests dropped, kNN k=%d, vote threshold=%.2f)",
+        len(relevant), len(articles), n_digests, k, threshold,
     )
     return relevant
 

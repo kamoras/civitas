@@ -2431,6 +2431,22 @@ class TestDigestFiltering:
         ("House sends the bill to the Senate",
          "The House passed the bill. It now goes to the Senate."),
         ("Nothing here", ""),
+        # An abbreviation's period is not a sentence break: split after
+        # "Rep." the name lands in an item of its own, a third disjoint one.
+        ("Dana Varga refuses to drop reelection bid",
+         "Voters in Ohio's 7th district react to calls for Rep. Dana Varga "
+         "to drop out. He ran uncontested in the primary. The Democratic "
+         "nominee is Lee Okafor."),
+        # A photo credit names someone who is not in the story.
+        ("Varga denied bail in extradition fight",
+         "Prosecutors told the court that Dana Varga boasted about multiple "
+         "passports. Defense lawyers for Quillen argued it was a role. "
+         "(Image credit: Lee Okafor)"),
+        # Nor does a broadcast segment's sign-off.
+        ("The debate over money in politics",
+         "Voters in Alaska are weighing a ballot measure on donations. It "
+         "follows a Supreme Court decision on party spending. Dana Varga "
+         "discussed it with Lee Okafor."),
     ])
     def test_single_story_bodies_are_kept(self, title, body):
         from app.pipeline.analyze.action_center import _digest_reason
@@ -2564,7 +2580,7 @@ class TestDigestFiltering:
 
     def test_digests_are_dropped_before_embedding_and_counted(self):
         from app.pipeline.analyze import action_metrics
-        from app.pipeline.analyze.action_center import _filter_policy_relevant
+        from app.pipeline.analyze import action_center as ac
 
         digest = _make_article("Up First briefing: three stories to start your day")
         story = _make_article("House approves Pentagon funding framework")
@@ -2575,19 +2591,16 @@ class TestDigestFiltering:
             return np.array([[1.0, 0.0]] * len(texts))
 
         action_metrics.reset()
-        with patch(
-            "app.pipeline.analyze.action_center._embed_texts_sim",
-            side_effect=fake_embed,
-        ):
-            kept = _filter_policy_relevant([digest, story])
+        with patch.object(ac, "_embed_texts_sim", side_effect=fake_embed), \
+                patch.object(ac, "_relevance_reference", return_value=np.array([[1.0, 0.0]])), \
+                patch.object(ac, "relevance_examples", return_value=[{"relevant": True}]), \
+                patch.object(ac, "relevance_calibration", return_value={"k": 1, "threshold": 0.5}):
+            kept = ac._filter_policy_relevant([digest, story])
 
         assert [a.title for a, _ in kept] == [story.title]
-        # The digest never reaches the embedding model at all — the article
-        # batch is the third _embed_texts_sim call (after the two prototype
-        # sets) and contains only the real story.
-        assert not any("Up First" in t for t in embedded[-1])
+        # The digest never reaches the embedding model at all.
+        assert embedded == [[f"{story.title}. {story.summary}"]]
         assert action_metrics.snapshot()["articles_dropped_digest"] == 1
-
 
 class TestSimilarityModelGates:
     """2026-07 embedding-swap (step 2): the measured symmetric-similarity
@@ -2611,28 +2624,55 @@ class TestSimilarityModelGates:
         assert out.shape == (1, 2)
         fake.encode.assert_called_once()
 
-    def test_policy_filter_separates_on_measured_scale(self):
-        from app.pipeline.analyze.action_center import _filter_policy_relevant
+    def test_policy_filter_keeps_articles_whose_neighbours_are_relevant(self):
+        """The gate is a vote among the nearest labelled examples, not a
+        similarity bar: an article lands with whichever examples it sits
+        closest to."""
+        from app.pipeline.analyze import action_center as ac
 
         civic = _make_article("House approves Pentagon funding framework in narrow vote")
         sports = _make_article("Spain defeats Argentina 1-0 in World Cup final")
+        # Two relevant examples along x, two not-relevant along y.
+        reference = np.array([[1.0, 0.0], [0.96, 0.28], [0.0, 1.0], [0.28, 0.96]])
+        examples = [{"relevant": True}, {"relevant": True}, {"relevant": False}, {"relevant": False}]
 
         def fake_embed(texts):
-            # Prototype-space stub reproducing the MEASURED similarity-model
-            # scale: civic headline ~0.38 vs prototypes, sports ~0.03.
-            if len(texts) > 2 and "Congress" in texts[0]:
-                return np.eye(len(texts), 4)[:, :4] if False else np.tile(np.array([1.0, 0.0]), (len(texts), 1))
-            out = []
-            for t in texts:
-                if "Pentagon" in t:
-                    out.append([0.38, 0.925])
-                else:
-                    out.append([0.03, 0.9995])
-            return np.array(out)
+            return np.array([[0.98, 0.2] if "Pentagon" in t else [0.1, 0.995] for t in texts])
 
-        with patch("app.pipeline.analyze.action_center._embed_texts_sim", side_effect=fake_embed):
-            kept = _filter_policy_relevant([civic, sports])
+        with patch.object(ac, "_embed_texts_sim", side_effect=fake_embed), \
+                patch.object(ac, "_relevance_reference", return_value=reference), \
+                patch.object(ac, "relevance_examples", return_value=examples), \
+                patch.object(ac, "relevance_calibration", return_value={"k": 2, "threshold": 0.85}):
+            kept = ac._filter_policy_relevant([civic, sports])
         assert [a.title for a, _ in kept] == [civic.title]
+
+    def test_relevance_vote_is_similarity_weighted(self):
+        from app.pipeline.analyze.action_center import relevance_votes
+
+        reference = np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]])
+        labels = np.array([1.0, 0.0, 1.0])
+        article = np.array([[0.8, 0.6]])
+        # k=2: neighbours at cosine 0.8 (relevant) and 0.6 (not).
+        assert relevance_votes(article, reference, labels, 2)[0] == pytest.approx(0.8 / 1.4)
+        # k=3 adds the opposite example, which weighs nothing.
+        assert relevance_votes(article, reference, labels, 3)[0] == pytest.approx(0.8 / 1.4)
+        # k beyond the reference size is the whole set.
+        assert relevance_votes(article, reference, labels, 50)[0] == pytest.approx(0.8 / 1.4)
+
+    def test_policy_relevance_calibration_matches_examples(self):
+        """scripts/calibrate_policy_relevance.py fits k and the threshold to
+        one labelled set; editing the set without rerunning it would gate
+        on a fit to different data."""
+        from app.pipeline.analyze import action_center as ac
+
+        calibration = ac.relevance_calibration()
+        examples = ac.relevance_examples()
+        assert calibration["examples_hash"] == ac.relevance_examples_hash()
+        assert calibration["examples"] == len(examples)
+        assert 1 <= calibration["k"] <= len(examples)
+        assert 0.0 < calibration["threshold"] < 1.0
+        assert {e["relevant"] for e in examples} == {True, False}
+        assert {e["sample"] for e in examples} == {"feed", "clustered"}
 
     def test_trending_boost_runs_on_sim_model(self):
         from app.pipeline.analyze.action_center import _compute_trending_boost

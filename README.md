@@ -441,8 +441,14 @@ Every hour at :15
        │         A source that FAILS is reported as failed, never merged in
        │         as a source that simply had nothing to say.
        ▼
-  2. FILTER ──── Embed each article against 24 policy prototypes (19 US, 5 intl.)
-       │         Discard cosine_sim < 0.20 (off-topic articles)
+  2. FILTER ──── Drop multi-story digests, then a kNN vote: each article's 41
+       │         nearest of 827 hand-labelled feed articles, weighted by
+       │         similarity; keep it if >= 80% of the weight is relevant
+       │         (app/data/policy_relevance_*.json). Measured on articles 1-6
+       │         weeks past the reference set: precision 0.89-0.97, recall
+       │         0.76-0.87, where the 24 policy prototypes it replaced kept
+       │         0.61-0.67 relevant and found 0.73-0.77
+       │         (docs/research/action-center-relevance.md)
        ▼
   3. CLUSTER ─── Complete linkage on title embeddings at the calibrated
        │         cluster_title cut (bundled start: cosine 0.40):
