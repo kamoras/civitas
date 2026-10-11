@@ -625,6 +625,20 @@ def test_the_sweep_writes_once_a_day(throttle_store, monkeypatch):
     assert len(began) == 1
 
 
+def test_tallies_count_by_the_hour_and_say_when_they_began(monkeypatch):
+    assert throttle.tallied("t", hours=24) == (0, None)
+    throttle.tally("t")
+    throttle.tally("t", 2)
+    total, began = throttle.tallied("t", hours=24)
+    assert total == 3 and began <= time.time() < began + 3600
+
+    real = time.time
+    monkeypatch.setattr(throttle.time, "time", lambda: real() + 5 * 3600)
+    throttle.tally("t")
+    assert throttle.tallied("t", hours=24)[0] == 4
+    assert throttle.tallied("t", hours=2)[0] == 1  # the earlier hour is outside
+
+
 def test_held_values_are_taken_once_and_expire(monkeypatch):
     throttle.hold("b", "k", "/a", ttl=60)
     throttle.hold("b", "k", "/a", ttl=60)  # held once, not twice

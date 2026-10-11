@@ -242,7 +242,7 @@ export default async function LimitationsChapter() {
       <Section id="news-and-data" title="News and classification">
         <Limitation title="The news sources lean center to left">
           <P>
-            The seven newsrooms span center to lean-left under common media-bias ratings, with no
+            The six newsrooms span center to lean-left under common media-bias ratings, with no
             right-of-center outlet at present. That shapes which stories surface, even though every
             sentence shown is quoted.
           </P>

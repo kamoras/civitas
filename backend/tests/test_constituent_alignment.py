@@ -648,6 +648,57 @@ class TestPositionCongruence:
         assert by_label["Position congruence"]["weight"] == 0.3
         assert by_label["Position congruence"]["detail"].startswith("Nokken-Poole dim1")
 
+    def _congruence_for(self, party, state="SW"):
+        core = _constituent_alignment_core(record(10), [], {}, state=state, party=party, bioguide_id="X1")
+        return {c["label"]: c for c in core["components"]}["Position congruence"]
+
+    def test_the_same_distance_scores_the_same_for_either_party(self):
+        """One scale for both parties: 0.1 toward the flank (more liberal
+        for a D, more conservative for an R) scores 25 for each, and 0.1
+        toward the center 75, in a swing seat and a safe one alike."""
+        for state, pvi in (("SW", 0), ("DS", -15)):
+            for d_dim1, r_dim1, expected in ((-0.45, 0.45, 25.0), (-0.25, 0.25, 75.0)):
+                shift = 0.006 * pvi
+                self.patch({"X1": d_dim1 + shift})
+                d = self._congruence_for("D", state)["score"]
+                self.patch({"X1": r_dim1 + shift})
+                assert d == self._congruence_for("R", state)["score"] == expected
+
+    def test_the_detail_names_the_seat_lean_and_where_0_and_100_are(self):
+        """A 0 or 100 beside two dim1 numbers reads as arbitrary; the detail
+        says the seat lean read, the distance, and the scale's ends."""
+        self.patch({"X1": -0.34})  # DS expects -0.44
+        detail = self._congruence_for("D", "DS")["detail"]
+        assert "a seat at D+15" in detail
+        assert "0.10 toward the seat's center" in detail
+        assert "0 at 0.20 toward the flank and 100 at 0.20 toward the seat's center" in detail
+        assert "most out-of-step tenth" in detail and "the same for both parties" in detail
+        assert "past it" not in detail
+
+    def test_a_position_past_the_scale_says_it_is_at_the_end(self):
+        self.patch({"X1": 0.70})  # 0.35 toward an R flank against a 0.2 scale
+        flank = self._congruence_for("R")
+        assert flank["score"] == 0.0 and "at or past it, so the part is at 0" in flank["detail"]
+        self.patch({"X1": 0.05})
+        center = self._congruence_for("R")
+        assert center["score"] == 100.0 and "at or past it, so the part is at 100" in center["detail"]
+
+    def test_a_thin_position_is_judged_against_the_scale_at_its_weight(self):
+        """A thin record twice past the scale but at half weight sits at
+        the end only when its weighted distance reaches it."""
+        self.patch({"X1": -0.65}, votes={"X1": 24})  # 0.3 flank-ward, half weight: 0.15 of 0.2
+        detail = self._congruence_for("D")["detail"]
+        assert self._congruence_for("D")["score"] == 12.5 and "past it" not in detail
+
+    def test_a_carried_scale_names_its_congress(self):
+        self.patch({"X1": -0.45}, congress=120, scale_congress=119)
+        rec = {**record(10), "partyLineRecord": {"congress": 120, "votes": 0, "breaks": []}}
+        core = _constituent_alignment_core(rec, [], {}, state="SW", party="D", bioguide_id="X1")
+        detail = {c["label"]: c for c in core["components"]}["Position congruence"]["detail"]
+        assert "carried from the 119th Congress" in detail
+        self.patch({"X1": -0.45}, congress=119, scale_congress=119)
+        assert "carried" not in self._congruence_for("D")["detail"]
+
 
 class TestPositionMeasure:
     def _rows(self, with_np=True):

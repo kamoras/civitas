@@ -862,14 +862,14 @@ def _p90(x) -> float:
     return statistics.quantiles([float(v) for v in x], n=10)[8]
 
 
-def _per_party_extremity(M, pos="nokken_poole_dim1", lean="pvi"):
+def _per_party_extremity(M, pos="nokken_poole_dim1", lean="pvi", deg=1, out="ext"):
     """fetch/voteview.py's construct: per-party OLS of position on seat lean,
-    residual signed toward the party flank."""
+    residual signed toward the party flank (deg=2: the quadratic
+    alternative section 15 tests)."""
     M = M.copy()
     for party, g in M.groupby("party"):
-        b, a = np.polyfit(g[lean], g[pos], 1)
-        res = g[pos] - (a + b * g[lean])
-        M.loc[g.index, "ext"] = -res if party == "D" else res
+        res = g[pos] - np.polyval(np.polyfit(g[lean], g[pos], deg), g[lean])
+        M.loc[g.index, out] = -res if party == "D" else res
     return M
 
 
@@ -1304,6 +1304,94 @@ def position_scale_test(p, m):
     _flank_effect(p)
 
 
+# ------------------------------------- 15. position congruence's extremes
+# The 0s and 100s are the members past the saturation point. Two things
+# could make them artifacts rather than records: the expectation missing at
+# the ends of seat lean (a straight line where the relation bends), and the
+# clip itself. Both are put in front of section 14's outcomes.
+
+def _quadratic_t(g, pos="nokken_poole_dim1", lean="pvi"):
+    """t of the squared-lean term in one party's quadratic fit."""
+    X = np.column_stack([np.ones(len(g)), g[lean], g[lean] ** 2])
+    b, *_ = np.linalg.lstsq(X, g[pos].values, rcond=None)
+    e = g[pos].values - X @ b
+    se = np.sqrt(np.diag(e @ e / (len(e) - 3) * np.linalg.inv(X.T @ X)))
+    return b[2] / se[2]
+
+
+def _full_records(M):
+    """The members the pipeline's scale is taken over (_congruence_scales)."""
+    ref = score_calculator._position_reliability("house").get("reference_votes", 0)
+    n = pd.to_numeric(M.get("nominate_number_of_votes"), errors="coerce")
+    return M[n >= ref] if n is not None and n.notna().any() else M
+
+
+# Saturation points tried, as quantiles of the full records' |extremity|
+# (0.90 ships), beside a tanh with no clip at the shipped scale.
+SATURATIONS = (0.75, 0.90, 0.95, 0.99)
+
+
+def _extremes_scores(M):
+    """Each member's score under the shipped design, the quadratic
+    expectation, each saturation point and the tanh."""
+    M = _per_party_extremity(_per_party_extremity(M), deg=2, out="ext2")
+    F = _full_records(M)
+    w = M.w.values
+    M["s_quad"] = _linear(M.ext2, np.full(len(M), _p90(F.ext2.abs())), w)
+    for q in SATURATIONS:
+        M[f"s_q{round(q * 100)}"] = _linear(M.ext, np.full(len(M), float(np.quantile(F.ext.abs(), q))), w)
+    M["s_tanh"] = 50 - 50 * np.tanh(w * M.ext / _p90(F.ext.abs()))
+    return M
+
+
+def _extremes_compare(S, y, base, groups, loyo=False):
+    b0 = smf.ols(f"{y} ~ {base}", S).fit()
+    cols = ["s_q90", "s_quad"] + [f"s_q{round(q * 100)}" for q in SATURATIONS if q != 0.90] + ["s_tanh"]
+    for k in cols:
+        r = smf.ols(f"{y} ~ {base} + {k}", S).fit(cov_type="cluster", cov_kwds={"groups": groups})
+        at_end = ((S[k] <= 0) | (S[k] >= 100)).mean()
+        extra = f" LOYO RMSE {loyo_rmse(f'{y} ~ {base} + {k}', S):.4f}" if loyo else ""
+        print(f"   {k:7s} at 0 or 100: {at_end:5.1%}  {r.params[k]:.4f}/pt (t={r.tvalues[k]:4.1f}) "
+              f"dR2={r.rsquared - b0.rsquared:.4f}{extra}")
+    r = smf.ols(f"{y} ~ {base} + s_q90 + s_quad", S).fit(cov_type="cluster", cov_kwds={"groups": groups})
+    print(f"   entered together: linear {r.params['s_q90']:.4f} (t={r.tvalues['s_q90']:.1f}), "
+          f"quadratic {r.params['s_quad']:.4f} (t={r.tvalues['s_quad']:.1f})")
+
+
+def position_extremes_test(p, m):
+    print("\n== 15. Position congruence's extremes ==")
+    parts, curv = [], []
+    for c, g in m.groupby("cong"):
+        vv = pd.read_csv(p[f"H{c}_members.csv"])[["icpsr", "nokken_poole_dim1", "nokken_poole_dim2",
+                                                  "nominate_number_of_votes"]]
+        g = _drop_placeholders(g.merge(vv, left_on="id", right_on="icpsr").dropna(subset=["nokken_poole_dim1"]))
+        curv += [("House", q, _quadratic_t(gp)) for q, gp in g.groupby("party")]
+        g["w"] = _weights(g, "house")
+        parts.append(_extremes_scores(g))
+    st, nat, tot, cands = _senate_returns(p)
+    srows = []
+    for c in SENATES:
+        M = _senate_positions(p, c, st, nat)
+        curv += [("Senate", q, _quadratic_t(gp)) for q, gp in M.groupby("party")]
+        M = _extremes_scores(M)
+        if c < max(SENATES):
+            srows.append(_attach_senate_share(M, 1788 + 2 * c, tot, cands).assign(year=1788 + 2 * c))
+    for chamber in ("House", "Senate"):
+        for q in ("D", "R"):
+            ts = [t for ch, pq, t in curv if ch == chamber and pq == q]
+            print(f" curvature, {chamber} {q}: squared-lean t median {np.median(ts):+.2f}, "
+                  f"|t| > 2 in {sum(abs(t) > 2 for t in ts)} of {len(ts)} Congresses "
+                  f"({sum(t > 2 for t in ts)} positive)")
+    S = contested(pd.concat(parts)).reset_index(drop=True)
+    print(f" House generals 1994-2010 (N={len(S)}), base LOYO RMSE {loyo_rmse('y ~ x + lterms + C(fe)', S):.4f}:")
+    _extremes_compare(S, "y", "x + lterms + C(fe)", S.id, loyo=True)
+    S = pd.concat(srows, ignore_index=True)
+    S = S[S.own.notna()].reset_index(drop=True)
+    S["fe"] = S.year.astype(str) + S.party
+    print(f" Senate generals 1990-2024 (N={len(S)}):")
+    _extremes_compare(S, "own", "x + I(x**2) + C(fe)", pd.factorize(S.icpsr)[0])
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--cache", default=".research-cache/constituent-alignment", type=pathlib.Path)
@@ -1325,6 +1413,8 @@ def main():
     seat_expectation_test(paths)
     # Section 14: position congruence's score scale, shape and thin records.
     position_scale_test(paths, m)
+    # Section 15: the extremes, the expectation's form and the saturation point.
+    position_extremes_test(paths, m)
 
 
 if __name__ == "__main__":
