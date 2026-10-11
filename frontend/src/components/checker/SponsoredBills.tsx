@@ -36,6 +36,7 @@ const ADVANCING_STAGES = new Set([
   "ON_FLOOR",
   "PASSED_CHAMBER",
   "IN_OTHER_CHAMBER",
+  "PASSED_BOTH",
   "TO_PRESIDENT",
 ]);
 

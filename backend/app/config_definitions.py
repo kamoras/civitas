@@ -161,9 +161,14 @@ BILL_STAGES: dict[str, dict] = {
     "ON_FLOOR":         {"name": "On the Floor",       "color": "#ff8a3d", "order": 5},
     "PASSED_CHAMBER":   {"name": "Passed Chamber",     "color": "#8b5cf6", "order": 6},
     "IN_OTHER_CHAMBER": {"name": "In Other Chamber",   "color": "#f59e0b", "order": 7},
-    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 8},
-    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 9},
-    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 10},
+    # 2026-10: a bill the second chamber had passed read "In Other Chamber"
+    # until it was presented to the President: 21 House bills the Senate
+    # passed in the week of 2026-09-28 among them. Passed both is passed
+    # both, whether or not an amendment still has to be agreed.
+    "PASSED_BOTH":      {"name": "Passed Both Chambers", "color": "#4de3e8", "order": 8},
+    "TO_PRESIDENT":     {"name": "To President",       "color": "#ec4899", "order": 9},
+    "ENACTED":          {"name": "Enacted",            "color": "#00ff41", "order": 10},
+    "VETOED":           {"name": "Vetoed",             "color": "#ef4444", "order": 11},
 }
 
 # Derived from BILL_STAGES's keys rather than listed separately, so a code

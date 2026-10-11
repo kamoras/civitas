@@ -1093,6 +1093,10 @@ def parse_house_vote_xml(
         "question": question,
         "documentTitle": vote_desc or legis_num,
         "documentName": legis_num,
+        # The amendment voted on, as the Clerk names it ("Doe of Ohio Part B
+        # Amendment No. 1"); empty on a vote that isn't on an amendment.
+        # Such a vote has no <vote-desc>, so its title is only the bill's number.
+        "amendment": _meta_text("amendment-author"),
         "result": vote_result,
         "rejected": roll_call_rejected(vote_result),
         "majorityRequirement": requirement.group(1) if requirement else "1/2",

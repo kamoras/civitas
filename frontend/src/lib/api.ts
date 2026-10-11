@@ -521,9 +521,10 @@ const DEFAULT_CONFIG: AppConfig = {
     ON_FLOOR: { name: "On the Floor", color: "#ff8a3d", order: 5 },
     PASSED_CHAMBER: { name: "Passed Chamber", color: "#8b5cf6", order: 6 },
     IN_OTHER_CHAMBER: { name: "In Other Chamber", color: "#f59e0b", order: 7 },
-    TO_PRESIDENT: { name: "To President", color: "#ec4899", order: 8 },
-    ENACTED: { name: "Enacted", color: "#00ff41", order: 9 },
-    VETOED: { name: "Vetoed", color: "#ef4444", order: 10 },
+    PASSED_BOTH: { name: "Passed Both Chambers", color: "#4de3e8", order: 8 },
+    TO_PRESIDENT: { name: "To President", color: "#ec4899", order: 9 },
+    ENACTED: { name: "Enacted", color: "#00ff41", order: 10 },
+    VETOED: { name: "Vetoed", color: "#ef4444", order: 11 },
   },
 };
 

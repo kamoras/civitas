@@ -11,6 +11,7 @@ export const MAIN_FLOW_STAGES = [
   "ON_FLOOR",
   "PASSED_CHAMBER",
   "IN_OTHER_CHAMBER",
+  "PASSED_BOTH",
   "TO_PRESIDENT",
   "ENACTED",
 ];
