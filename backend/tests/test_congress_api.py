@@ -295,6 +295,17 @@ def test_bill_days_are_of_the_bills_congress(week_of_sept_21):
     assert [d["date"] for d in cs.bill_days(db, "S.4668", 120)] == ["2027-02-02"]
 
 
+def test_a_sitting_shorter_than_a_minute_is_not_zero_minutes():
+    counts = {"billsPassed": 0, "resolutionsPassed": 0, "recordVotes": 0, "confirmed": 0, "confirmedLists": 0}
+    day = {"status": "final", "counts": counts, "minutesInSession": 0,
+           "adjournmentText": "Senate will meet in a pro forma session."}
+    assert cs._chamber_sentence("senate", day) == "The Senate met in pro forma session for under a minute."
+    day.update(adjournmentText="", minutesInSession=0)
+    assert cs._chamber_sentence("house", day) == "The House met for under a minute and took no record votes."
+    day.update(minutesInSession=2)
+    assert cs._chamber_sentence("house", day) == "The House met for 2 minutes and took no record votes."
+
+
 def test_routine_lists_are_named_not_counted():
     counts = {"billsPassed": 0, "resolutionsPassed": 0, "recordVotes": 0, "confirmed": 7, "confirmedLists": 1}
     day = {"status": "final", "counts": counts, "minutesInSession": None, "adjournmentText": ""}

@@ -25,7 +25,7 @@ import json
 import logging
 import threading
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 
@@ -760,3 +760,116 @@ def check_pipeline_staleness() -> None:
             dedupe_key=f"stale-pipeline-{label.lower().replace(' ', '-')}-{utcnow():%Y-%m-%d}",
             condition=f"stale-pipeline-{label.lower().replace(' ', '-')}",
         )
+
+
+# --- Source freshness -------------------------------------------------------
+#
+# A source that keeps answering with nothing new is the quiet version of a
+# dead one: the feeds' fetch loop logged "Fetched 0 articles from AP News" at
+# INFO for a month (2026-09-09 to 2026-10-10) while its mirror served the same
+# stale items, and nothing else noticed. Each source's state is one ApiCache
+# row: the publication times it has shown (pruned to SOURCE_FRESHNESS_HISTORY),
+# when it was first checked, and whether a staleness alert is open.
+SOURCE_FRESHNESS_TIER = "_source_freshness"
+SOURCE_FRESHNESS_HISTORY = timedelta(days=60)
+# Holds the history window for a feed publishing every couple of hours (the
+# state outlets' median gap, measured 2026-10-10) and keeps each row to a few
+# tens of kilobytes.
+_SOURCE_FRESHNESS_KEEP = 500
+# A source is stale once its silence passes twice the longest gap it has
+# shown between items in the history window — its own measured rhythm,
+# weekends and recesses included — and never before the caller's `floor`,
+# the point past which the silence costs something.
+SOURCE_FRESHNESS_MULTIPLE = 2
+
+
+def _as_utc_naive(t: datetime) -> datetime:
+    return t if t.tzinfo is None else t.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def longest_gap(times: list[datetime]) -> timedelta:
+    """The longest stretch between consecutive times (sorted input)."""
+    return max((b - a for a, b in zip(times, times[1:])), default=timedelta(0))
+
+
+def check_source_freshness(
+    observed: dict[str, tuple[str, list[datetime] | None]], *, floor: timedelta, kind: str,
+) -> None:
+    """Alert on any source that has gone quiet for longer than its own rhythm.
+
+    ``observed`` maps a stable source key to (label, the publication times
+    this check saw, or None when the fetch failed). A failed fetch adds
+    nothing, so a source that keeps failing goes stale the same way as one
+    that keeps answering with old items, and a source that has never shown a
+    dated item is measured from when it was first checked. One alert per
+    stale stretch (``condition`` stays open until the source shows something
+    new). Never raises.
+    """
+    now = utcnow()
+    alerts: list[tuple[str, str, str, str]] = []
+    resolved: list[str] = []
+    db = None
+    try:
+        db = SessionLocal()
+        rows = {
+            r.cache_key: r for r in db.query(ApiCache).filter(
+                ApiCache.tier == SOURCE_FRESHNESS_TIER, ApiCache.cache_key.in_(list(observed)),
+            )
+        }
+        for key, (label, times) in observed.items():
+            row = rows.get(key)
+            state = json.loads(row.data_json) if row else {}
+            first_checked = datetime.fromisoformat(state.get("first_checked") or now.isoformat())
+            seen = {datetime.fromisoformat(t) for t in state.get("seen", [])}
+            seen |= {_as_utc_naive(t) for t in times or []}
+            history = sorted(t for t in seen if t >= now - SOURCE_FRESHNESS_HISTORY)[-_SOURCE_FRESHNESS_KEEP:]
+            since = history[-1] if history else first_checked
+            limit = max(floor, SOURCE_FRESHNESS_MULTIPLE * longest_gap(history))
+            alerted = bool(state.get("alerted"))
+            condition = f"source-stale:{key}"
+            if now - since > limit:
+                if not alerted:
+                    hours = (now - since).total_seconds() / 3600
+                    newest = (
+                        f"its newest item is from {since:%Y-%m-%d %H:%M} UTC" if history
+                        else f"it has shown no dated item since first checked ({since:%Y-%m-%d %H:%M} UTC)"
+                    )
+                    latest = ("The latest fetch failed." if times is None else
+                              "The latest fetch succeeded: the source is answering with old items.")
+                    body = (
+                        f"The {kind} '{label}' ({key}) has had nothing new for {hours:.0f} hours: "
+                        f"{newest}. Its longest gap in the last {SOURCE_FRESHNESS_HISTORY.days} days "
+                        f"is {longest_gap(history).total_seconds() / 3600:.1f} hours, so the bar is "
+                        f"{limit.total_seconds() / 3600:.0f} hours. {latest}"
+                    )
+                    alerts.append((f"Stale {kind}: {label}", body, f"{condition}:{since.isoformat()}", condition))
+                    alerted = True
+            elif alerted:
+                resolved.append(condition)
+                alerted = False
+                # The stale stretch is not the source's rhythm: kept, it would
+                # double the bar for the next two months.
+                stale_since = datetime.fromisoformat(state.get("since") or since.isoformat())
+                history = [t for t in history if t > stale_since]
+            data = json.dumps({
+                "label": label,
+                "first_checked": first_checked.isoformat(),
+                "since": since.isoformat(),
+                "alerted": alerted,
+                "seen": [t.isoformat() for t in history],
+            })
+            if row is not None:
+                row.data_json, row.cached_at = data, now
+            else:
+                db.add(ApiCache(tier=SOURCE_FRESHNESS_TIER, cache_key=key, data_json=data, cached_at=now))
+        db.commit()
+    except Exception:
+        logger.exception("Source freshness check failed (non-fatal)")
+        return
+    finally:
+        if db is not None:
+            db.close()
+    for subject, body, dedupe_key, condition in alerts:
+        send_ops_alert(subject, body, dedupe_key=dedupe_key, condition=condition)
+    for condition in resolved:
+        resolve_ops_alert(condition)
