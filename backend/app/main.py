@@ -20,7 +20,7 @@ from app.api.public import PublicApiPreflight
 from app.api.public_mcp import PATH as MCP_PATH, McpEndpoint
 from app.api.router import api_router
 from app.api.throttle import RAM_DIR, run_maintenance
-from app.api.visits import run_visit_consumer
+from app.api.visits import check_visits_confirmed, run_visit_consumer
 from app.background import WritesElsewhere, WritesHeld, start_writer, writing
 from app.config import settings
 from app.database import SessionLocal, init_db
@@ -234,8 +234,8 @@ def _run_startup_rescore(
 
 
 async def _watch_pipeline_service() -> None:
-    """Alert when the pipeline service stops (ops_alerts.check_pipeline_service_alive),
-    and keep this process's CURRENT_CONGRESS up with the Congress in office
+    """Alert when the pipeline service stops (ops_alerts.check_pipeline_service_alive)
+    or visits stop being confirmed (visits.check_visits_confirmed), and keep this process's CURRENT_CONGRESS up with the Congress in office
     (app.config.advance_current_congress): nothing here runs pipeline jobs,
     whose start advances it where they run."""
     from app.config import advance_current_congress
@@ -252,6 +252,10 @@ async def _watch_pipeline_service() -> None:
             await asyncio.to_thread(check_pipeline_service_alive)
         except Exception:
             logger.warning("Pipeline liveness check failed", exc_info=True)
+        try:
+            await asyncio.to_thread(check_visits_confirmed)
+        except Exception:
+            logger.warning("Visit confirmation check failed", exc_info=True)
         await asyncio.sleep(_LIVENESS_EVERY_S)
 
 

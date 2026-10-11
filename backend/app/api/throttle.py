@@ -38,6 +38,8 @@ Tables:
   claims   when something was last claimed. `claim` succeeds only when the
            previous claim is at least `period` old, in one conditional
            upsert, so two workers can't both win it.
+           `tally` / `tallied` keep plain counts here too, one row per
+           hour under an empty key: how often something happened, by no one.
   held     short-lived values kept under a key until it comes back for
            them (`hold`, `take`, `held`): the page a client opened, waiting
            for proof its browser ran the page (api/visits.py).
@@ -683,6 +685,47 @@ def held(bucket: str, key: str | None) -> bool:
     except sqlite3.Error:
         logger.warning("Throttle %r unavailable", bucket, exc_info=True)
         return False
+
+
+# Hourly tallies: rows in `windows` under an empty key, kept a day past
+# their hour.
+_TALLY_PERIOD_S = 3600
+_TALLY_KEPT_S = 25 * 3600
+
+
+def tally(bucket: str, n: int = 1) -> None:
+    """Add `n` to this hour's count of `bucket` — a count of events, about
+    no one. Best-effort, like everything here."""
+    now = time.time()
+    window = int(now // _TALLY_PERIOD_S)
+    try:
+        with _Txn() as conn:
+            conn.execute(
+                "INSERT INTO windows (bucket, key, window, count, expires_at) VALUES (?, '', ?, ?, ?) "
+                "ON CONFLICT (bucket, key, window) DO UPDATE SET count = count + excluded.count",
+                (bucket, window, n, (window + 1) * _TALLY_PERIOD_S + _TALLY_KEPT_S),
+            )
+    except sqlite3.Error:
+        logger.warning("Throttle tally %r unavailable", bucket, exc_info=True)
+
+
+def tallied(bucket: str, *, hours: int) -> tuple[int, float | None]:
+    """(the count of `bucket` over the last `hours` hours, including this one;
+    when its oldest counted hour began, or None if it has none). The store
+    lives in RAM, so a restart starts every tally again: the start says how
+    much of the span was actually watched. (0, None) when unreadable."""
+    first = int(time.time() // _TALLY_PERIOD_S) - hours + 1
+    try:
+        with _using() as conn:
+            total, oldest = conn.execute(
+                "SELECT COALESCE(SUM(count), 0), MIN(window) FROM windows "
+                "WHERE bucket = ? AND key = '' AND window >= ?",
+                (bucket, first),
+            ).fetchone()
+    except sqlite3.Error:
+        logger.warning("Throttle tally %r unavailable", bucket, exc_info=True)
+        return 0, None
+    return total, None if oldest is None else oldest * _TALLY_PERIOD_S
 
 
 def clear(*buckets: str) -> None:

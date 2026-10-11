@@ -30,6 +30,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session
 
+from app import ops_alerts
 from app.api import throttle
 from app.database import VisitsSessionLocal
 from app.issue_ids import from_public_id
@@ -283,13 +284,16 @@ async def run_visit_consumer() -> None:
 # driving a real browser window can't be told apart, and is browsing.
 _AUTOMATED_BROWSER = "HeadlessChrome"
 # Crawlers that render pages in a real browser engine (Bingbot, Applebot,
-# Baiduspider-render, OAI-SearchBot…) run the page too, and name themselves
-# by the crawler convention: a "NameBot/1.0" product token, "crawler" or
-# "spider", and a "+https://…" link to a page about the bot. Of the 17
-# addresses that sent the browser beacon in 16 hours on 2026-10-10, 14 were
-# these. "bot/" with its version slash, not "bot": a CUBOT phone says
-# "CUBOT X30 Build/…".
-_SELF_DECLARED_CRAWLER = re.compile(r"[a-z]bot/|crawler|spider|\+https?://", re.IGNORECASE)
+# Baiduspider-render, OAI-SearchBot, GoogleOther…) run the page too, and
+# name themselves by the crawler convention: "(compatible; Name…)", a
+# "NameBot/1.0" product token, "crawler" or "spider", a "+https://…" link to
+# a page about the bot. Of the 17 addresses that sent the browser beacon in
+# 16 hours on 2026-10-10, 14 were these; every client that made a router
+# request from an ordinary-looking User-Agent between 00:00 and 01:05 UTC on
+# 2026-10-11 was GoogleOther, whose only marker is "compatible;". No current
+# browser sends "compatible;" (Internet Explorer did). "bot/" with its
+# version slash, not "bot": a CUBOT phone says "CUBOT X30 Build/…".
+_SELF_DECLARED_CRAWLER = re.compile(r"compatible;|[a-z]bot/|crawler|spider|\+https?://", re.IGNORECASE)
 
 
 def _parse_browser(ua: str) -> str:
@@ -566,6 +570,17 @@ _PENDING_S = 10 * 60
 # this is "has run a page today", which the visit itself already records.
 _RAN_PAGE_S = 24 * 3600
 _PENDING, _RAN_PAGE = "visit-pending", "visit-ran-page"
+_CONFIRMED = "visit-confirmed"
+
+# check_visits_confirmed: alert when pages are being held and none has been
+# confirmed for a whole day. A day, not a few hours: real readers who run
+# the page are few here (one ordinary browser in the first hour after
+# #893 shipped, against ~50 crawler page holds an hour), so a quiet night
+# with no reader is normal and must not page anyone. The hold floor keeps a
+# day with almost no traffic quiet too.
+_UNCONFIRMED_HOURS = 24
+_UNCONFIRMED_MIN_HOLDS = 200
+UNCONFIRMED_CONDITION = "visits-unconfirmed"
 
 
 def _held_path(path: str) -> str:
@@ -598,13 +613,50 @@ def _confirmed_paths(ip: str, kind: VisitSignal, path: str) -> list[str]:
     key = throttle.client_key(ip, "visit")
     if kind == "page":
         throttle.hold(_PENDING, key, _held_path(path), ttl=_PENDING_S)
+        throttle.tally(_PENDING)
         return []
     paths = throttle.take(_PENDING, key)
+    if paths:
+        throttle.tally(_CONFIRMED, len(paths))
     if kind == "navigation" and (paths or throttle.held(_RAN_PAGE, key)):
         paths.append(_held_path(path))
     if paths:
         throttle.hold(_RAN_PAGE, key, "", ttl=_RAN_PAGE_S)
     return paths
+
+
+# Whether this process may have an unconfirmed-visits alert open: True until
+# its first healthy check, which resolves one another process (or this one,
+# before a restart) raised.
+_may_be_alerting = True
+
+
+def check_visits_confirmed() -> None:
+    """Alert when the visit counter holds pages but confirms none over a
+    whole day of watching: the router requests that confirm them have
+    stopped arriving, which reads on the dashboard as no visitors rather
+    than as a fault. Every API worker runs it (main._watch_pipeline_service);
+    the alert's dedupe makes it page once."""
+    global _may_be_alerting
+    holds, began = throttle.tallied(_PENDING, hours=_UNCONFIRMED_HOURS)
+    confirmed, _ = throttle.tallied(_CONFIRMED, hours=_UNCONFIRMED_HOURS)
+    if confirmed:
+        if _may_be_alerting and ops_alerts.resolve_ops_alert(UNCONFIRMED_CONDITION) >= 0:
+            _may_be_alerting = False
+        return
+    watched = began is not None and time.time() - began >= (_UNCONFIRMED_HOURS - 1) * 3600
+    if watched and holds >= _UNCONFIRMED_MIN_HOLDS:
+        _may_be_alerting = True
+        ops_alerts.send_ops_alert(
+            "Visits: pages held, none confirmed",
+            f"{holds} page requests were held for confirmation in the last "
+            f"{_UNCONFIRMED_HOURS} hours and none was confirmed: no router request "
+            "(Sec-Fetch-Dest: empty, same-origin) reached the visit counter from the "
+            "frontend proxy. Visitor counts read zero until it is fixed "
+            "(frontend/src/proxy.ts, lib/visitSignal.ts, app/api/visits.py).",
+            dedupe_key=f"{UNCONFIRMED_CONDITION}-{_today()}",
+            condition=UNCONFIRMED_CONDITION,
+        )
 
 
 @router.post("/track-visit", status_code=204)
