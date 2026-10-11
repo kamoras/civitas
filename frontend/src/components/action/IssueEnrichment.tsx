@@ -354,7 +354,9 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
   }
 
   // The committee with jurisdiction, one per chamber at most (backend
-  // app/committee_routing.py), and the two members who lead it.
+  // app/committee_routing.py), and the two members who lead it. Worded as a
+  // likely match, not a fact: held out, about four in five named committees
+  // were right, and the rest are mostly stories no committee clearly handles.
   for (const action of issue.actions ?? []) {
     const c = action.type === "contact_committee" ? action.committee : null;
     const href = c ? safeHref(c.url ?? action.url ?? null) : null;
@@ -370,7 +372,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       what: c.name,
       detail: (
         <>
-          The committee that handles this
+          Likely the committee for this, matched by its jurisdiction
           {leaders.map(([role, m]) =>
             m ? (
               <span key={role}>

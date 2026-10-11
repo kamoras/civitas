@@ -249,7 +249,7 @@ describe("WhatYouCanDo", () => {
     expect(link).toHaveAttribute("href", "https://www.finance.senate.gov/");
     const row = link.closest("li")!;
     expect(row).toHaveTextContent("Senate Committee on Finance");
-    expect(row).toHaveTextContent("The committee that handles this");
+    expect(row).toHaveTextContent("Likely the committee for this, matched by its jurisdiction");
     expect(within(row).getByRole("link", { name: "Sen. Pat Doe" })).toHaveAttribute(
       "href",
       "/politicians/S9"

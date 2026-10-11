@@ -1047,11 +1047,17 @@ Each issue's actions are fixed templates around stored data:
   (`committee_jurisdictions.json`, `scripts/fetch_committee_jurisdictions.py`;
   hubness-corrected, CSLS) blended with the votes of the nearest
   hand-labelled issues (`committee_routing_examples.json`, an empty label
-  meaning no committee). It abstains below the calibrated threshold
-  (`committee_routing_calibration.json`, `scripts/calibrate_committee_routing.py`,
-  which reports held-out precision and recall; the test fails until it is
-  rerun after either data file changes). The rules' subjects alone were
-  measured at 0.46 held-out precision — do not drop the labelled votes to
+  meaning no committee). It names a committee only when both signals pick
+  the same one and the combined share clears the threshold
+  (`committee_routing_calibration.json`, `scripts/calibrate_committee_routing.py`).
+  The threshold is chosen on the training issues by the Action Center's
+  precision rule (exact lower 95% bound ≥ 0.80, else the highest bound);
+  the held-out curve is written for reading, never chosen from. The rule is
+  not met yet (0.82 held out, bound 0.67), so the row is worded as a likely
+  match — keep that wording until a recalibration reports
+  `precision_rule_met_on_training: true` and the held-out bound agrees. The
+  test fails until the script is rerun after either data file changes. The rules' subjects alone were
+  measured at 0.38 held-out precision — do not drop the labelled votes to
   "simplify". The chair and ranking member are read from the stored rosters
   when the issue is served (`api/action._committee_leaders`).
 - **"Comment by <date>"** for a proposed or final rule (the Register's own

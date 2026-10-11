@@ -24,16 +24,20 @@ Two signals, both in all-MiniLM-L6-v2 space, combined per chamber:
      An example whose story no committee handles votes "none".
 
 combined = alpha·prototype share + (1 − alpha)·kNN share. The top committee
-is named when combined clears the threshold and beats the "none" vote;
-otherwise the chamber abstains. A wrong committee misleads a reader in the
+is named only when both signals pick it, combined clears the threshold and
+it beats the "none" vote; otherwise the chamber abstains (decide). A wrong committee misleads a reader in the
 one place the page tells them where to go, so the fit favours precision.
 
 Measured (scripts/calibrate_committee_routing.py, 2026-10-11): prototypes
-alone named the right committee for about half the issues that have one —
-the rules' 1946 subject wording ("Interoceanic canals") is far from news
-prose — and no threshold lifted their precision past ~0.6. The labelled
-votes carry what the wording can't. The held-out figures and the fitted
-alpha, k, temperature and threshold are in
+alone are 0.38 precise held out — the rules' 1946 subject wording
+("Interoceanic canals") is far from news prose. Blended without the
+agreement gate, 0.77-0.81 at any threshold. With the gate, 0.82 (bootstrap
+0.67-0.94) at the threshold the training issues chose, naming a committee
+for 22% of held-out issues. The Action Center's bar (precision's exact
+lower 95% bound at least 0.80) is met at no threshold: precision does not
+rise with the threshold, and almost every miss is a story labelled as no
+committee's, so the frontend words the row as a likely match. The full
+held-out curve, the fitted alpha, k, temperature and threshold are in
 app/data/committee_routing_calibration.json; rerun the script when examples
 or jurisdictions change (test_committee_routing_calibration_matches_data
 fails until you do).
@@ -49,6 +53,7 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+from typing import NamedTuple
 
 import numpy as np
 
@@ -134,11 +139,17 @@ class Reference:
             self.votes[ch] = v
 
 
+class Shares(NamedTuple):
+    """One chamber's shares for a batch of issues."""
+    combined: np.ndarray  # (issues, committees + 1); the last column is "none"
+    agree: np.ndarray  # (issues,) the two signals' top committees are the same
+
+
 def shares(x: np.ndarray, ref: Reference, k: int, alpha: float, temperature: float,
-           mask: np.ndarray | None = None) -> dict[str, np.ndarray]:
-    """{chamber: (issues, committees + 1)} combined shares, last column the
-    "none" vote. `mask` (issues, examples) limits which labelled issues each
-    issue may draw on — the calibration's held-out runs; None is all of them."""
+           mask: np.ndarray | None = None) -> dict[str, Shares]:
+    """{chamber: Shares}. `mask` (issues, examples) limits which labelled
+    issues each issue may draw on — the calibration's held-out runs; None is
+    all of them."""
     n, m = x.shape[0], ref.examples.shape[0]
     allowed = np.ones((n, m), bool) if mask is None else mask
     # Hubness: each subject's mean similarity to its HUB_K nearest reference
@@ -165,15 +176,23 @@ def shares(x: np.ndarray, ref: Reference, k: int, alpha: float, temperature: flo
             weights.sum(axis=1, keepdims=True), 1e-9)
         combined = (1 - alpha) * knn
         combined[:, :ncols] += alpha * proto_share
-        out[ch] = combined
+        agree = proto_share.argmax(axis=1) == knn[:, :ncols].argmax(axis=1)
+        out[ch] = Shares(combined, agree)
     return out
 
 
-def decide(combined: np.ndarray, threshold: float) -> np.ndarray:
-    """Per issue, the routed committee column, or -1 to abstain."""
+def decide(s: Shares, threshold: float) -> np.ndarray:
+    """Per issue, the routed committee column, or -1 to abstain. A committee
+    is named only when both signals pick it (`agree`) and its combined share
+    clears the threshold and beats the "none" vote. The agreement gate was
+    chosen by measurement (scripts/calibrate_committee_routing.py): the
+    threshold alone never lifted held-out precision past ~0.81, because
+    nearly every wrong committee was named for a story no committee handles,
+    and those are where the rules' wording and the labelled issues disagree."""
+    combined = s.combined
     best = combined[:, :-1].argmax(axis=1)
     top = combined[np.arange(len(best)), best]
-    return np.where((top >= threshold) & (top > combined[:, -1]), best, -1)
+    return np.where(s.agree & (top >= threshold) & (top > combined[:, -1]), best, -1)
 
 
 _reference: Reference | None = None
@@ -189,8 +208,8 @@ def route_committees(title: str, summary: str) -> list[dict]:
     x = embed([issue_text(title, summary)])
     committees = jurisdictions()
     routed = []
-    for ch, combined in shares(x, _reference, cal["k"], cal["alpha"], cal["temperature"]).items():
-        col = int(decide(combined, cal["threshold"])[0])
+    for ch, s in shares(x, _reference, cal["k"], cal["alpha"], cal["temperature"]).items():
+        col = int(decide(s, cal["threshold"])[0])
         if col >= 0:
             code = _reference.codes[ch][col]
             routed.append({"code": code, "name": committees[code]["name"], "chamber": ch,

@@ -558,15 +558,19 @@ Every hour at :15
        │         - the committee with jurisdiction, per chamber or none
        │           (app/committee_routing.py): House Rule X / Senate Rule
        │           XXV subjects (hubness-corrected similarity) blended with
-       │           the votes of the nearest of 460 hand-labelled issues;
-       │           held out, 79% precise (0.67-0.89), naming one for 40%
-       │           of the cases that have one; the rules alone, 46%. The
-       │           chair and ranking member are read when the issue is
-       │           served (app/data/committee_routing_*.json)
+       │           the votes of the nearest of 460 hand-labelled issues,
+       │           named only when both signals pick the same committee;
+       │           held out, 82% precise (bootstrap 0.67-0.94), naming one
+       │           for 22% of issues; the rules alone, 38%. The bar of an
+       │           exact lower 95% bound >= 0.80 is met at no threshold, so
+       │           the row says "likely". The chair and ranking member are
+       │           read when the issue is served
+       │           (app/data/committee_routing_*.json; the calibration file
+       │           holds the whole held-out curve)
        │         - "Comment by <date>": a proposed or final rule still open
        │           whose title clears the same 0.49; served only while open
        │         Replayed on the last 30 days of issues (2026-10-11), the
-       │         share offering only "find your members" fell 80% -> 39%
+       │         share offering only "find your members" fell 80% -> 64%
        │         The Today tab's open comment periods (/api/action/
        │         open-comments) lead with any a recent issue links, then
        │         rules (the Register's own type) by readers (its page_views,

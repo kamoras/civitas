@@ -161,17 +161,20 @@ export default function NewsChapter() {
         </P>
         <More label="How the committee is chosen">
           <P>
-            Each chamber&apos;s committee is named from two measurements, and only when both point
-            the same way strongly enough. The first compares the issue with each committee&apos;s
-            jurisdiction as the House and Senate rules list it (House Rule X, Senate Rule XXV; the
-            intelligence and Indian Affairs committees from their own published statements). The
-            second looks at the most similar of 460 past issues, each read and labelled by hand with
-            the committees that handle it, or with none. Their chair and ranking member come from
-            the committee rosters the site already keeps, as they stand when you read the issue.
-            Tested on issues newer than every labelled one it learned from, the committee named was
-            one of the right ones 79% of the time, and a committee was named for two in five of the
-            chamber-by-chamber cases that have one; the rest say nothing rather than guess. The
-            rules&apos; wording alone did much worse (46%): it dates from 1946 in places and reads
+            Each chamber&apos;s committee is named from two measurements, and only when both pick
+            the same committee and do so strongly enough. The first compares the issue with each
+            committee&apos;s jurisdiction as the House and Senate rules list it (House Rule X,
+            Senate Rule XXV; the intelligence and Indian Affairs committees from their own published
+            statements). The second looks at the most similar of 460 past issues, each read and
+            labelled by hand with the committees that handle it, or with none. Their chair and
+            ranking member come from the committee rosters the site already keeps, as they stand
+            when you read the issue. Tested on issues newer than every labelled one it learned from,
+            the committee named was one of the right ones 82% of the time, and a committee was named
+            for about one issue in five; the rest say nothing rather than guess. That is short of
+            the bar the site sets for stating it as fact (being confident precision is at least
+            80%), and asking for more certainty didn&apos;t raise it, so the row says
+            &ldquo;likely&rdquo;. Most of the misses were stories no committee clearly handles. The
+            rules&apos; wording alone did much worse (38%): it dates from 1946 in places and reads
             nothing like the news.
           </P>
           <P>

@@ -21,6 +21,9 @@ def test_calibration_matches_the_labelled_issues_and_prototypes():
     assert 0.0 < cal["alpha"] <= 1.0
     assert 0.0 < cal["threshold"] < 1.0
     assert cal["held_out"]["issues"] > 0
+    assert cal["held_out_recent"]["issues"] > 0
+    assert any(row["threshold"] == cal["threshold"] for row in cal["held_out_curve"])
+    assert isinstance(cal["precision_rule_met_on_training"], bool)
 
 
 def test_labels_name_only_committees_of_their_own_chamber():
@@ -74,15 +77,29 @@ def test_an_issue_like_one_no_committee_handles_abstains():
 
 
 def test_below_the_threshold_routing_abstains_rather_than_guesses():
-    combined = np.array([[0.30, 0.25, 0.45], [0.60, 0.30, 0.10]])
-    assert list(cr.decide(combined, threshold=0.5)) == [-1, 0]
+    s = cr.Shares(np.array([[0.30, 0.25, 0.45], [0.60, 0.30, 0.10]]), np.array([True, True]))
+    assert list(cr.decide(s, threshold=0.5)) == [-1, 0]
+
+
+def test_a_committee_only_one_signal_picks_is_not_named():
+    s = cr.Shares(np.array([[0.90, 0.05, 0.05]]), np.array([False]))
+    assert list(cr.decide(s, threshold=0.1)) == [-1]
+
+
+def test_the_two_signals_disagreeing_is_detected():
+    ref = _toy_reference()
+    # Closest labelled issue votes HB, but the prototypes point at HA.
+    ref.votes["house"] = np.array([[0, 1.0, 0], [1.0, 0, 0], [0, 0, 1.0]])
+    s = cr.shares(np.array([[1.0, 0, 0, 0]]), ref, k=1, alpha=0.5, temperature=10.0)["house"]
+    assert not s.agree[0]
+    assert cr.decide(s, threshold=0.0)[0] == -1
 
 
 def test_a_mask_keeps_an_issue_from_voting_for_itself():
     ref = _toy_reference()
     x = np.array([[1.0, 0, 0, 0]])
     mask = np.array([[False, True, True]])
-    knn_only = cr.shares(x, ref, k=1, alpha=1e-9, temperature=10.0, mask=mask)["house"]
+    knn_only = cr.shares(x, ref, k=1, alpha=1e-9, temperature=10.0, mask=mask)["house"].combined
     assert knn_only[0, 0] < 0.5
 
 
@@ -109,10 +126,11 @@ def test_routing_lives_outside_the_fingerprinted_code():
 
 
 @pytest.mark.slow
-def test_a_stopgap_funding_story_routes_to_appropriations():
+def test_a_stopgap_funding_story_names_no_unrelated_committee():
+    # It may abstain (the two signals can split between Appropriations and
+    # Budget); it must never name anything else.
     routed = cr.route_committees(
         "Senate passes stopgap funding bill to avert shutdown",
         "The Senate voted to pass a continuing resolution to keep the government funded.",
     )
     assert {c["code"] for c in routed} <= {"HSAP", "SSAP", "HSBU", "SSBU"}
-    assert routed
