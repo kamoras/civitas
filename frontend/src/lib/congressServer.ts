@@ -89,8 +89,13 @@ export async function fetchBillRecord(
  * X-Forwarded-For only from a private-network peer. */
 async function visitorHeaders(): Promise<Record<string, string>> {
   try {
-    const ip = (await headers()).get("x-real-ip");
-    return ip ? { "X-Forwarded-For": ip } : {};
+    const h = await headers();
+    const ip = h.get("x-real-ip");
+    // The reader's User-Agent too: a self-declared crawler spends its own
+    // share of the hourly Congress.gov budget (api/rate_limit.py), not the
+    // readers'.
+    const ua = h.get("user-agent");
+    return { ...(ip ? { "X-Forwarded-For": ip } : {}), ...(ua ? { "User-Agent": ua } : {}) };
   } catch {
     return {}; // outside a request (a build-time render)
   }

@@ -2,11 +2,11 @@
 Bills-in-flight API — all bills currently moving through Congress,
 unioned across the Senate and House, for the process-flow visualization.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.rate_limit import UpstreamRouteLimit, try_spend_upstream
+from app.api.rate_limit import UpstreamRouteLimit, declares_itself_a_crawler, try_spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.database import get_db, off_loop
 from app.http_client import make_async_client
@@ -67,6 +67,7 @@ _RECORD_DEADLINE_S = 10.0
 @router.get("/bills/{bill_id}/record")
 async def get_bill_record(
     _rl: UpstreamRouteLimit,
+    request: Request,
     bill_id: str,
     congress: int | None = Query(None, ge=93, le=200),
     db: Session = Depends(get_db),
@@ -78,7 +79,8 @@ async def get_bill_record(
     A cache miss fetches from Congress.gov on the pipeline's own key, so the
     route is rate-limited and its upstream calls budgeted (rate_limit.py);
     with the budget spent, the parts not stored are named in `unavailable`
-    and fetched by a later visit. A congress that hasn't begun is refused
+    and fetched by a later visit. A self-declared crawler spends from its
+    own share of the budget, so crawlers can't spend the readers' hour. A congress that hasn't begun is refused
     before anything is fetched."""
     if parse_bill_id(bill_id) is None:
         raise HTTPException(status_code=404, detail="Not a bill id")
@@ -86,9 +88,15 @@ async def get_bill_record(
     congress = congress or current
     if congress > current:
         raise HTTPException(status_code=404, detail="That Congress hasn't convened")
+    # The frontend passes the reader's User-Agent on (congressServer.ts).
+    crawler = declares_itself_a_crawler(request.headers.get("User-Agent"))
+
+    async def spend(calls: int) -> bool:
+        return await try_spend_upstream(calls, crawler=crawler)
+
     async with make_async_client() as client:
         raw = await fetch_bill_record(
-            client, db, congress, bill_id, spend=try_spend_upstream, deadline_s=_RECORD_DEADLINE_S,
+            client, db, congress, bill_id, spend=spend, deadline_s=_RECORD_DEADLINE_S,
         )
     if raw["not_found"]:
         raise HTTPException(status_code=404, detail="Bill not found")

@@ -31,6 +31,7 @@ from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session
 
 from app.api import throttle
+from app.api.rate_limit import SELF_DECLARED_CRAWLER
 from app.database import VisitsSessionLocal
 from app.issue_ids import from_public_id
 from app.models import ApiRejectionCount, ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
@@ -284,12 +285,9 @@ async def run_visit_consumer() -> None:
 _AUTOMATED_BROWSER = "HeadlessChrome"
 # Crawlers that render pages in a real browser engine (Bingbot, Applebot,
 # Baiduspider-render, OAI-SearchBot…) run the page too, and name themselves
-# by the crawler convention: a "NameBot/1.0" product token, "crawler" or
-# "spider", and a "+https://…" link to a page about the bot. Of the 17
+# by the crawler convention (rate_limit.SELF_DECLARED_CRAWLER). Of the 17
 # addresses that sent the browser beacon in 16 hours on 2026-10-10, 14 were
-# these. "bot/" with its version slash, not "bot": a CUBOT phone says
-# "CUBOT X30 Build/…".
-_SELF_DECLARED_CRAWLER = re.compile(r"[a-z]bot/|crawler|spider|\+https?://", re.IGNORECASE)
+# these.
 
 
 def _parse_browser(ua: str) -> str:
@@ -622,7 +620,7 @@ async def track_visit(request: Request, kind: VisitSignal = Query(...), path: st
     """
     ip = _track_ip(request)
     user_agent = request.headers.get("User-Agent", "")
-    if _AUTOMATED_BROWSER in user_agent or _SELF_DECLARED_CRAWLER.search(user_agent):
+    if _AUTOMATED_BROWSER in user_agent or SELF_DECLARED_CRAWLER.search(user_agent):
         return
     paths = await throttle.run(_confirmed_paths, ip, kind, path)
     if not paths:

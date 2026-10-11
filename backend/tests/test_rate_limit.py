@@ -156,8 +156,35 @@ def test_an_uncounted_public_request_reports_no_remaining_quota():
 
 async def test_the_upstream_budget_is_charged_asynchronously_and_refuses_when_spent(monkeypatch):
     monkeypatch.setattr(rate_limit, "_UPSTREAM_CALLS_PER_HOUR", 3)
+    monkeypatch.setattr(rate_limit, "_CRAWLER_CALLS_PER_HOUR", 0)
     rate_limit.reset_upstream_budget()
     await rate_limit.spend_upstream(2)
     with pytest.raises(HTTPException) as refused:
         await rate_limit.spend_upstream(2)
     assert refused.value.status_code == 503 and "Retry-After" in refused.value.headers
+
+
+async def test_crawlers_spend_their_own_share_of_the_upstream_budget(monkeypatch):
+    """Self-declared crawlers made 89% of bill-page requests and the budget
+    answered 2,479 of 2,740 bill records with a 503 (2026-10-11): spent by
+    crawlers, refused to readers. Each now has its own share."""
+    monkeypatch.setattr(rate_limit, "_UPSTREAM_CALLS_PER_HOUR", 10)
+    monkeypatch.setattr(rate_limit, "_CRAWLER_CALLS_PER_HOUR", 4)
+    rate_limit.reset_upstream_budget()
+    assert await rate_limit.try_spend_upstream(4, crawler=True)
+    assert not await rate_limit.try_spend_upstream(1, crawler=True)  # the crawlers' share is spent
+    assert await rate_limit.try_spend_upstream(6)                     # the readers' is whole
+    assert not await rate_limit.try_spend_upstream(1)
+    rate_limit.reset_upstream_budget()
+
+
+@pytest.mark.parametrize("ua,crawler", [
+    ("Mozilla/5.0 (compatible; SemrushBot/7~bl; +http://www.semrush.com/bot.html)", True),
+    ("Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)", True),
+    ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36",
+     False),
+    ("Mozilla/5.0 (Linux; Android 11; CUBOT X30 Build/RP1A) AppleWebKit/537.36", False),
+    (None, False),
+])
+def test_declares_itself_a_crawler(ua, crawler):
+    assert rate_limit.declares_itself_a_crawler(ua) is crawler

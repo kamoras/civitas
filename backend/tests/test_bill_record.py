@@ -232,7 +232,7 @@ class TestRoutes:
                                  latest_action_date="2026-09-01"))
         senate.commit()
 
-        async def spent(n):
+        async def spent(n, *, crawler=False):
             return False
         monkeypatch.setattr(bills_api, "try_spend_upstream", spent)
         r = client.get("/api/bills/S.4668/record?congress=119")
@@ -241,11 +241,22 @@ class TestRoutes:
         assert set(body["unavailable"]) == {"bill", "summaries", "actions", "cosponsors", "text"}
         assert body["title"] == "Placeholder Act" and body["votes"][0]["number"] == 243
 
-        async def allowed(n):
+        async def allowed(n, *, crawler=False):
             return True
         monkeypatch.setattr(bills_api, "try_spend_upstream", allowed)
         r = client.get("/api/bills/S.4668/record?congress=119")
         assert r.status_code == 200 and r.json()["unavailable"] == []
+
+    def test_a_crawler_spends_its_own_share(self, client, monkeypatch):
+        seen = []
+
+        async def spend(n, *, crawler=False):
+            seen.append(crawler)
+            return True
+        monkeypatch.setattr(bills_api, "try_spend_upstream", spend)
+        client.get("/api/bills/S.4668/record?congress=119",
+                   headers={"User-Agent": "Mozilla/5.0 (compatible; SemrushBot/7~bl; +http://www.semrush.com/bot.html)"})
+        assert seen and all(seen)
 
     def test_a_partial_record_is_not_kept_by_any_cache(self, client, monkeypatch):
         fake, _ = _answers(fail={"text"})
@@ -265,6 +276,7 @@ class TestRoutes:
 
         rate_limit.reset_upstream_budget()
         monkeypatch.setattr(rate_limit, "_UPSTREAM_CALLS_PER_HOUR", 7)
+        monkeypatch.setattr(rate_limit, "_CRAWLER_CALLS_PER_HOUR", 0)
         assert client.get("/api/bills/S.4668/record?congress=119").status_code == 200  # 5 calls
         r = client.get("/api/bills/S.4669/record?congress=119")  # the bill fits, the other 4 don't
         assert r.status_code == 200 and r.headers["Cache-Control"] == "no-store"
