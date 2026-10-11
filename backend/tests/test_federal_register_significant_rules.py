@@ -68,6 +68,18 @@ def _mock_client(results: list[dict]):
 
 class TestFetchRecentSignificantRules:
     @pytest.mark.asyncio
+    async def test_leaves_out_a_rule_not_yet_published(self, db_session, monkeypatch):
+        """On public inspection, a rule carries a publication date days
+        ahead; until that day it has not been published."""
+        monkeypatch.setattr(
+            "app.pipeline.fetch.federal_register.comment_period_today", lambda: "2026-09-01",
+        )
+        scheduled = {**SAMPLE_RULE, "document_number": "2026-99999", "publication_date": "2026-09-04"}
+        client = _mock_client([SAMPLE_RULE, scheduled])
+        results = await fetch_recent_significant_rules(client, db_session)
+        assert [r["documentNumber"] for r in results] == ["2026-17733"]
+
+    @pytest.mark.asyncio
     async def test_parses_a_rule(self, db_session):
         client = _mock_client([SAMPLE_RULE])
         results = await fetch_recent_significant_rules(client, db_session)
