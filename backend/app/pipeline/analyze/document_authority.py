@@ -252,6 +252,19 @@ def pagerank(
     return x / total if total > 0 else x
 
 
+# Identifier namespaces a document's text can name without citing another
+# document. A RIN names a rulemaking, not a document, and a rule prints its
+# own in its heading; one RIN covers every FAA airworthiness directive,
+# another every airspace change, and documents stored before their RINs
+# were recorded can't say which RIN is their own. Counted as citations,
+# RINs made 49,846 of the graph's 50,187 edges on 2026-10-11 (an
+# airworthiness directive "cited by" 306 documents that never mention it);
+# without them 341 edges remain, a sample of 25 all real citations by
+# Executive Order, FR citation or FR document number. A RIN is still a
+# declared identifier: searching one finds its documents (lexical index).
+NOT_CITATIONS = ("rin:",)
+
+
 def build_citation_graph(
     identity_rows, text_rows,
 ) -> tuple[list[int], list[tuple[int, int]], np.ndarray]:
@@ -299,6 +312,8 @@ def build_citation_graph(
             continue
         text = f"{doc.get('summary') or ''}\n{doc.get('body') or ''}"
         for ident in extract_citations(text):
+            if ident.startswith(NOT_CITATIONS):
+                continue
             for target in owner.get(ident, ()):
                 if target != row:
                     edges.add((row, target))

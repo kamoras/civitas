@@ -18,8 +18,9 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.api.explore import get_explore_document_summary
+from app.api.explore import body_extent, get_explore_document_summary
 from app.models import ExploreDocument
+from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
 from app.services import explore_summary
 
 
@@ -701,3 +702,19 @@ async def test_stats_count_every_group_in_one_pass(db_session):
         "byChamber": {"Executive": 2},
         "openForComment": 1,
     }
+
+
+@pytest.mark.parametrize("fields,extent", [
+    ({}, "full"),
+    # Cut at the stored limit: 2,488 Federal Register bodies were, under a
+    # page heading that said "Full text" (2026-10-11).
+    ({"body": "x" * MAX_BODY_LEN}, "excerpt"),
+    ({"doc_type": "Senate Floor Speech", "source": "Congressional Record (GovInfo)", "chamber": "Senate",
+      "external_id": "crec-v1-CREC-2026-09-30-pt1-PgS5238-abc", "body": "x" * 20_000}, "full"),
+    ({"doc_type": "House Floor Speech", "source": "Congressional Record (GovInfo)", "chamber": "House",
+      "external_id": "house-floor-placeholder", "body": "x" * 500}, "excerpt"),
+    ({"doc_type": "Supreme Court Opinion", "source": "Supreme Court (supremecourt.gov)", "chamber": "Judicial",
+      "body": "Holding (the Court's summary):\nPlaceholder."}, "summary"),
+])
+def test_body_extent_says_how_much_of_the_document_the_body_holds(db_session, fields, extent):
+    assert body_extent(_make_doc(db_session, **fields)) == extent

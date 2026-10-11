@@ -26,7 +26,7 @@ flowchart TB
 
         DOC --> EMB["Embed title + summary + body<br/><b>in windows of the encoder's context length</b>"]
         DOC --> FTS["Tokenise title · summary · body<br/><b>external content — text not duplicated</b>"]
-        DOC --> CITE["Parse canonical citations<br/>EO no. · volume FR page · RIN · FR doc no."]
+        DOC --> CITE["Parse canonical citations<br/>EO no. · volume FR page · FR doc no.<br/>(a RIN names a rulemaking, not a citation)"]
 
         EMB --> UPSERT[("vec_explore — sqlite-vec<br/>384-dim, all-MiniLM-L6-v2")]
         FTS --> FTSIDX[("explore_fts — SQLite FTS5<br/>inverted index + sync triggers")]
@@ -154,6 +154,15 @@ of an authority ordering, rather than leaving them out of it, would quietly
 demote every speech in the corpus on every query. On a corpus too new to have
 accumulated cross-references, nobody clears the bar and the prior does nothing
 at all — the correct failure mode for a signal like this.
+
+A RIN in a document's text makes no edge (`NOT_CITATIONS`). It names a
+rulemaking, which a rule prints in its own heading, and some RINs span a whole
+series: one covers every FAA airworthiness directive. Counted as citations they
+made 49,846 of 50,187 edges (2026-10-11) and put airworthiness directives at
+the top of the authority ranking, each "cited by" 306 documents that never
+mentioned it; without them the graph has 341 edges, a sampled 25 of them all
+real citations. The known-item evaluation moved by nothing on any query style,
+as expected of a prior it cannot judge (see "How to read this" in the script).
 
 **Duplicates are collapsed, crowding is demoted.** This corpus is known
 to accumulate byte-identical rows (a 2026-07 audit found 1,758 of them, 31% of

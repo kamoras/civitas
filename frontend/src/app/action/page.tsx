@@ -15,6 +15,7 @@ import {
   describeDaysLeft,
   formatUtcDate,
   policyAreaLabel,
+  restatesTitle,
 } from "@/lib/formatting";
 import ShareButtons from "@/components/action/ShareButtons";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
@@ -110,10 +111,12 @@ function IssueBody({
 }) {
   return (
     <>
-      <p className="mb-4 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
-        {issue.summary}
-        <SummarySource issue={issue} />
-      </p>
+      {!restatesTitle(issue.title, issue.summary) && (
+        <p className="mb-4 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
+          {issue.summary}
+          <SummarySource issue={issue} />
+        </p>
+      )}
       {issue.status === "developing" && (
         <DevelopingDisclosure
           sourceType={issue.sourceType}
@@ -232,7 +235,7 @@ function SecondaryIssue({
               <span className="mt-1.5 block font-display text-lg font-semibold leading-snug text-ink-hi">
                 {issue.title}
               </span>
-              {!expanded && (
+              {!expanded && !restatesTitle(issue.title, issue.summary) && (
                 <span className="mt-1 line-clamp-2 block font-display text-[15px] leading-relaxed text-ink-lo">
                   {issue.summary}
                 </span>
