@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -79,6 +79,7 @@ export default function BillPageView({
   record,
   detail,
   stageName,
+  strip,
 }: {
   billId: string;
   /** The page's own URL path, with ?congress= for an earlier Congress's bill. */
@@ -86,6 +87,8 @@ export default function BillPageView({
   record: BillRecord | null;
   detail: BillDetail | null;
   stageName: string | null;
+  /** The "this week" strip, rendered by the server page. */
+  strip?: ReactNode;
 }) {
   const label = record?.billLabel ?? detail?.billId ?? billId;
   const title = record?.title ?? detail?.title ?? "";
@@ -122,6 +125,7 @@ export default function BillPageView({
               {" / "}
               <span aria-current="page">{label}</span>
             </nav>
+            {strip}
 
             <div
               id="overview"

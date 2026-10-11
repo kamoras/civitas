@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -195,7 +196,14 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
   );
 }
 
-export default function DayReportView({ report }: { report: DayReport }) {
+export default function DayReportView({
+  report,
+  strip,
+}: {
+  report: DayReport;
+  /** The "this week" strip, rendered by the server page. */
+  strip?: ReactNode;
+}) {
   const { senate, house } = report.chambers;
   const sources = (["senate", "house"] as const)
     .map((c) => report.chambers[c])
@@ -213,6 +221,7 @@ export default function DayReportView({ report }: { report: DayReport }) {
           >
             <p>{report.sentence}</p>
           </PageMasthead>
+          {strip}
           <PeriodNav
             active="day"
             hrefs={{

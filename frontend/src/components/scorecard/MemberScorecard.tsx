@@ -42,8 +42,10 @@ const DRAWER_TITLE: Record<DrawerView, string> = {
 /**
  * A senator's or representative's scorecard, at a glance: who they are and
  * their Representation Score, then the three scored dimensions side by side,
- * each showing what drives its number (no expanding to find it), then their
- * holdings, then what is on record but not scored. Every full list opens in
+ * each led by the breakdown's one-sentence finding and then the evidence
+ * behind its number (no expanding to find it; only the method, the
+ * components, weights and statistics, sits behind "How this is computed"),
+ * then their holdings, then what is on record but not scored. Every full list opens in
  * a drawer over the page. On a phone the columns stack into cards.
  *
  * Every number stated comes from the API: the stored scores, the score

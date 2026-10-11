@@ -4,6 +4,7 @@ import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { ISO_DATE, fetchDay } from "@/lib/congressServer";
 import { longDate } from "@/lib/congress";
 import DayReportView from "@/components/congress/DayReportView";
+import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 
 export async function generateMetadata({
   params,
@@ -44,5 +45,5 @@ export default async function CongressDayPage({ params }: { params: Promise<{ da
   if (!ISO_DATE.test(date)) notFound();
   const report = await fetchDay(date);
   if (!report) notFound();
-  return <DayReportView report={report} />;
+  return <DayReportView report={report} strip={<ThisWeekStrip variant="compact" />} />;
 }

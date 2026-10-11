@@ -6,6 +6,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import DayReportView from "@/components/congress/DayReportView";
+import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import { CongressTabs } from "@/components/congress/CongressNav";
 
 export const metadata = pageMetadata({
@@ -22,7 +23,7 @@ export default async function CongressPage() {
   // a revalidation. The fetch itself is still cached for five minutes.
   await connection();
   const report = await fetchLatestDay();
-  if (report) return <DayReportView report={report} />;
+  if (report) return <DayReportView report={report} strip={<ThisWeekStrip variant="compact" />} />;
   return (
     <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
       <Navbar />

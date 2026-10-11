@@ -92,12 +92,27 @@ export default function EffectivenessColumn({
       tooltip={TOOLTIP}
       weight={weight}
       score={score}
+      finding={dimension?.finding}
+      method={dimension && <ComponentBars components={dimension.components} />}
       more={{
         label: `All ${bills.length} sponsored bills and resolutions`,
         onClick: onMore,
       }}
     >
-      {facts?.bills != null ? (
+      {facts?.bills != null && dimension?.finding ? (
+        // The finding states the bills; the stage counts are charted below.
+        facts.resolutions > 0 && (
+          <p className="text-sm leading-relaxed text-ink-lo">
+            Besides these,{" "}
+            {count(
+              facts.resolutions,
+              "simple or concurrent resolution",
+              "simple or concurrent resolutions"
+            )}
+            .
+          </p>
+        )
+      ) : facts?.bills != null ? (
         <Lede facts={facts} chamber={chamber} />
       ) : (
         !facts && <p className="text-base text-ink-lo">No sponsored bills on record yet.</p>
@@ -145,8 +160,6 @@ export default function EffectivenessColumn({
           </ul>
         </Block>
       )}
-
-      {dimension && <ComponentBars components={dimension.components} />}
     </ScoreColumn>
   );
 }
