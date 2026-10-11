@@ -21,7 +21,7 @@ from collections.abc import Awaitable, Callable
 import httpx
 from sqlalchemy.orm import Session
 
-from app.models import RollCall, RollCallPosition, Representative, Senator
+from app.models import RepSponsoredBill, RollCall, RollCallPosition, Representative, Senator, SponsoredBill
 from app.config import settings
 from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async, api_cache_set_many_async
@@ -80,14 +80,18 @@ async def _congress_get(client: httpx.AsyncClient, url: str):
 
 async def fetch_bill_record(
     client: httpx.AsyncClient, db: Session, congress: int, bill_id: str,
-    spend: Callable[[int], Awaitable[None]] | None = None, deadline_s: float | None = None,
+    spend: Callable[[int], Awaitable[bool]] | None = None, deadline_s: float | None = None,
 ) -> dict:
     """{bill, summaries, actions, cosponsors, text, unavailable: [...],
     not_found}: not_found when Congress.gov has no such bill.
 
     `spend(n)` is charged, before the requests it pays for go out, with the
     parts not already cached — the bill first, the rest once it exists (the
-    public route's upstream budget; it raises to refuse). A bill Congress.gov
+    public route's upstream budget, rate_limit.try_spend_upstream). When it
+    refuses, those parts are not fetched and are named in `unavailable`,
+    like a part Congress.gov didn't answer: the reader gets what is stored,
+    and a later visit fetches the rest. Refused with a 503, a spent budget
+    took the bill's page down (500, 2026-10-11). A bill Congress.gov
     has no record of is cached too, so the same wrong id asked again costs
     nothing upstream.
 
@@ -110,14 +114,13 @@ async def fetch_bill_record(
         return out
     missing = [part for part in _PARTS if cached[part] is None]
 
-    async def charge(n: int) -> None:
-        if spend is not None and n:
-            await spend(n)
+    async def charge(n: int) -> bool:
+        return spend is None or not n or await spend(n)
 
     # The bill itself is charged first, the other parts once it exists: a
     # wrong id stops after that one request and must not be charged for the
     # four it never makes. Each charge still comes before its requests.
-    await charge(1 if "bill" in missing else 0)
+    refused = not await charge(1 if "bill" in missing else 0)
     rest_charged = False
     fetched: dict = {}  # written in one transaction, in the finally below
     try:
@@ -126,7 +129,7 @@ async def fetch_bill_record(
             if cached[part] is not None:
                 out[part] = cached[part].get("value")
                 continue
-            if part != "bill" and "bill" in out["unavailable"]:
+            if refused or (part != "bill" and "bill" in out["unavailable"]):
                 # The bill request itself failed (an outage, most likely):
                 # the rest would fail the same way — not fetched, not charged.
                 out[part] = None
@@ -134,7 +137,11 @@ async def fetch_bill_record(
                 continue
             if part != "bill" and not rest_charged:
                 rest_charged = True
-                await charge(sum(1 for p in missing if p != "bill"))
+                if not await charge(sum(1 for p in missing if p != "bill")):
+                    refused = True
+                    out[part] = None
+                    out["unavailable"].append(part)
+                    continue
             url = f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{suffix}"
             if deadline_s is None:
                 data = await _congress_get(client, url)
@@ -339,9 +346,22 @@ def _person(p: dict, links: MemberLinks) -> dict:
     }
 
 
+def _stored_bill(db: Session, congress: int, bill_id: str) -> dict:
+    """The bill as the site's own sponsored-bill rows hold it, in
+    Congress.gov's shape, for a record whose bill part could not be fetched
+    (Congress.gov down, or the upstream budget spent); empty when no
+    sitting member sponsored it."""
+    for model in (SponsoredBill, RepSponsoredBill):
+        row = db.query(model).filter(model.bill_id == bill_id, model.congress == congress).first()
+        if row is not None:
+            return {"title": row.title, "introducedDate": row.introduced_date,
+                    "latestAction": {"actionDate": row.latest_action_date, "text": row.latest_action}}
+    return {}
+
+
 def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
     links = MemberLinks(db)
-    bill = raw.get("bill") or {}
+    bill = raw.get("bill") or (_stored_bill(db, congress, bill_id) if "bill" in (raw.get("unavailable") or []) else {})
     summaries = sorted(raw.get("summaries") or [], key=lambda s: s.get("updateDate") or s.get("actionDate") or "")
     latest_summary = summaries[-1] if summaries else None
     votes = db.query(RollCall).filter(RollCall.bill_id == bill_id, RollCall.congress == congress) \

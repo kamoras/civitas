@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app import ops_alerts
 from app.api import throttle
+from app.api.rate_limit import SELF_DECLARED_CRAWLER
 from app.database import VisitsSessionLocal
 from app.issue_ids import from_public_id
 from app.models import ApiRejectionCount, ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
@@ -284,16 +285,10 @@ async def run_visit_consumer() -> None:
 # driving a real browser window can't be told apart, and is browsing.
 _AUTOMATED_BROWSER = "HeadlessChrome"
 # Crawlers that render pages in a real browser engine (Bingbot, Applebot,
-# Baiduspider-render, OAI-SearchBot, GoogleOther…) run the page too, and
-# name themselves by the crawler convention: "(compatible; Name…)", a
-# "NameBot/1.0" product token, "crawler" or "spider", a "+https://…" link to
-# a page about the bot. Of the 17 addresses that sent the browser beacon in
-# 16 hours on 2026-10-10, 14 were these; every client that made a router
-# request from an ordinary-looking User-Agent between 00:00 and 01:05 UTC on
-# 2026-10-11 was GoogleOther, whose only marker is "compatible;". No current
-# browser sends "compatible;" (Internet Explorer did). "bot/" with its
-# version slash, not "bot": a CUBOT phone says "CUBOT X30 Build/…".
-_SELF_DECLARED_CRAWLER = re.compile(r"compatible;|[a-z]bot/|crawler|spider|\+https?://", re.IGNORECASE)
+# Baiduspider-render, OAI-SearchBot, GoogleOther…) run the page too, and name
+# themselves by the crawler convention (rate_limit.SELF_DECLARED_CRAWLER). Of the 17
+# addresses that sent the browser beacon in 16 hours on 2026-10-10, 14 were
+# these.
 
 
 def _parse_browser(ua: str) -> str:
@@ -674,7 +669,7 @@ async def track_visit(request: Request, kind: VisitSignal = Query(...), path: st
     """
     ip = _track_ip(request)
     user_agent = request.headers.get("User-Agent", "")
-    if _AUTOMATED_BROWSER in user_agent or _SELF_DECLARED_CRAWLER.search(user_agent):
+    if _AUTOMATED_BROWSER in user_agent or SELF_DECLARED_CRAWLER.search(user_agent):
         return
     paths = await throttle.run(_confirmed_paths, ip, kind, path)
     if not paths:

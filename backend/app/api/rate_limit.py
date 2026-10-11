@@ -10,6 +10,7 @@ and the hourly upstream budget holds for the whole backend.
 
 import ipaddress
 import math
+import re
 import time
 from typing import Annotated
 
@@ -120,6 +121,32 @@ WriteRateLimit = Annotated[None, Depends(write_rate_limit)]
 _UPSTREAM_ROUTE_LIMIT = 10          # requests per minute per IP
 _UPSTREAM_CALLS_PER_HOUR = 200      # upstream calls, all public routes together
 _UPSTREAM_BUCKET = "upstream-budget"
+# The part of that hour self-declared crawlers may spend (try_spend_upstream),
+# the rest kept for everyone else. Measured on production's nginx log for
+# the 24 hours to 2026-10-11 13:00 UTC: 2,667 bill-page requests for 2,201
+# different bills, 2,378 of them (89%) from crawlers naming themselves
+# (SemrushBot alone 1,858, then bingbot 205, AhrefsBot 178), and 2,479 of
+# the backend's 2,740 bill-record answers were the budget's 503. Everyone
+# else made 289 bill-page requests, about 12 an hour: at most 5 upstream
+# calls each, some 60 calls an hour, which the 150 left to them covers at
+# twice the day's average. Crawlers still fill the cache with their 50.
+_CRAWLER_CALLS_PER_HOUR = 50
+
+# A client naming itself a crawler by the convention crawlers follow: a
+# "NameBot/1.0" product token, "crawler" or "spider", and a "+https://…"
+# link to a page about the bot. "bot/" with its version slash, not "bot": a
+# CUBOT phone says "CUBOT X30 Build/…". Structural, like the browser-token
+# parsing in visits.py, which reads it too.
+# "(compatible; Name…)", a "NameBot/1.0" product token, "crawler" or
+# "spider", or a "+https://…" link to a page about the bot. "compatible;" is
+# GoogleOther's only marker (every ordinary-looking client that ran a page
+# 2026-10-11 00:00–01:05 UTC was GoogleOther); no current browser sends it.
+# "bot/" with its version slash, not "bot": a CUBOT phone says "CUBOT X30".
+SELF_DECLARED_CRAWLER = re.compile(r"compatible;|[a-z]bot/|crawler|spider|\+https?://", re.IGNORECASE)
+
+
+def declares_itself_a_crawler(user_agent: str | None) -> bool:
+    return bool(SELF_DECLARED_CRAWLER.search(user_agent or ""))
 _upstream_route_limiter = _PerClientLimit("upstream-lookups", _UPSTREAM_ROUTE_LIMIT, 60.0, "lookups")
 
 
@@ -129,6 +156,25 @@ async def upstream_route_limit(request: Request) -> None:
 
 
 UpstreamRouteLimit = Annotated[None, Depends(upstream_route_limit)]
+
+
+async def try_spend_upstream(calls: int, *, crawler: bool = False) -> bool:
+    """Charge `calls` upstream requests to this hour's public budget and
+    say whether they fit; refused, nothing is charged. For a route that
+    can answer from what it has stored when the budget is spent (a bill's
+    record), where spend_upstream's 503 would take the page down.
+
+    A self-declared crawler spends from its own share
+    (_CRAWLER_CALLS_PER_HOUR), everyone else from the rest, so crawlers
+    walking every bill can't spend the hour readers share."""
+    if calls <= 0:
+        return True
+    key, limit = (("crawlers", _CRAWLER_CALLS_PER_HOUR) if crawler
+                  else ("all", _UPSTREAM_CALLS_PER_HOUR - _CRAWLER_CALLS_PER_HOUR))
+    decision = await throttle.run(
+        throttle.hit, _UPSTREAM_BUCKET, key, limit=limit, period=3600.0, cost=calls,
+    )
+    return decision.allowed
 
 
 async def spend_upstream(calls: int) -> None:
@@ -143,7 +189,8 @@ async def spend_upstream(calls: int) -> None:
     if calls <= 0:
         return
     decision = await throttle.run(
-        throttle.hit, _UPSTREAM_BUCKET, "all", limit=_UPSTREAM_CALLS_PER_HOUR, period=3600.0, cost=calls,
+        throttle.hit, _UPSTREAM_BUCKET, "all", limit=_UPSTREAM_CALLS_PER_HOUR - _CRAWLER_CALLS_PER_HOUR,
+        period=3600.0, cost=calls,
     )
     if not decision.allowed:
         raise HTTPException(
