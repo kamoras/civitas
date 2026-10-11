@@ -48,8 +48,9 @@ from app.broadcast import SITE_URL
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db, off_loop
 from app.member_ids import resolve_member_id
-from app.models import President, Representative, ScoreSnapshot, Senator
+from app.models import Justice, President, Representative, ScoreSnapshot, Senator
 from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
+from app.score_display import displayed_rank
 from app.schemas import (
     PublicApiIndexSchema,
     PublicHistorySchema,
@@ -62,6 +63,7 @@ from app.schemas import (
 )
 from app.services.explore_search import hybrid_search
 from app.state_names import STATE_NAMES
+from app.time_utils import comment_period_today
 from app.services.pagination import paginate_bounds
 from app.services.representative_service import (
     get_rep_leaderboard,
@@ -383,7 +385,8 @@ def openapi_spec_dict() -> dict:
             summary="Open, read-only access to Civitas's scores, member records and document search.",
             description=(
                 f"No key or account. {PUBLIC_READ_LIMIT} requests per minute per IP, reported in the "
-                "X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset (a Unix time) headers; over it, "
+                "X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset headers (Reset is a Unix time: "
+                "when the quota is whole again, or on a 429 when the next request is let in); over it, "
                 "429 with Retry-After. CORS is open to every origin. Scores run 0-100, higher is a "
                 f"better representative; how each is computed: {SITE_URL}/about/scores. A parameter an "
                 "endpoint doesn't take is refused (422) rather than ignored, and a choice is read in "
@@ -407,16 +410,20 @@ def openapi_spec() -> JSONResponse:
 
 
 @router.get("/", response_model=PublicApiIndexSchema, tags=["Reference"], summary="What this API offers")
-def api_index() -> JSONResponse:
+def api_index(_rl: PublicReadLimit, request: Request) -> JSONResponse:
     """Every endpoint with a one-line summary, the rate limit and where the
-    documentation is. Built from the same spec, so it lists what exists."""
+    documentation is. Built from the same spec, so it lists what exists.
+
+    Counted and answered with the rate-limit headers like every other
+    endpoint: the documentation says each answer carries them, and this
+    one went out without (2026-10-11)."""
     endpoints = {
         f"{method.upper()} {path}": op.get("summary", "")
         for path, ops in openapi_spec_dict()["paths"].items()
         for method, op in ops.items()
     }
-    return JSONResponse(
-        content={
+    return _pub_json(
+        {
             "name": "Civitas Public API",
             "version": "v1",
             "rateLimit": f"{PUBLIC_READ_LIMIT} requests per minute per IP",
@@ -427,7 +434,7 @@ def api_index() -> JSONResponse:
             "mcp": f"{SITE_URL}{PREFIX}/mcp",
             "source": "https://github.com/kamoras/civitas",
         },
-        headers=_CORS_HEADERS,
+        request, max_age=CACHE_TTL_CONFIG_S,
     )
 
 
@@ -457,13 +464,24 @@ def list_states(
 # Senators
 # ---------------------------------------------------------------------------
 
-def _senate_rows(db: Session) -> list[dict]:
-    """Every serving senator, best score first, with a competition rank."""
-    rows = [e.model_dump(by_alias=True) for e in get_leaderboard(db)]
-    for i, row in enumerate(rows):
-        tied = i and row["representationScore"]["overall"] == rows[i - 1]["representationScore"]["overall"]
-        row["rank"] = rows[i - 1]["rank"] if tied else i + 1
+def _ranked(rows: list[dict]) -> list[dict]:
+    """A whole chamber's rows, best overall score first, each with its
+    rank as the site shows it: a competition rank over the score as
+    displayed (a whole number), so members who show the same score share
+    one (score_display.displayed_rank). The Senate list used to rank on the
+    unrounded score, which gave 63 of 100 senators a rank other than the
+    one on their profile and the leaderboard (2026-10-11), while the House
+    list ranked as displayed but ordered each tie by name, so a higher
+    `overall` could come after a lower one."""
+    rows = sorted(rows, key=lambda r: (-r["representationScore"]["overall"], r["name"]))
+    field = [r["representationScore"]["overall"] for r in rows]
+    for row in rows:
+        row["rank"] = displayed_rank(row["representationScore"]["overall"], field)
     return rows
+
+
+def _senate_rows(db: Session) -> list[dict]:
+    return _ranked([e.model_dump(by_alias=True) for e in get_leaderboard(db)])
 
 
 @router.get("/senators", response_model=PublicSenatorPageSchema, tags=["Senators"],
@@ -536,7 +554,7 @@ def list_representatives(
     `rank` is the member's place in the whole House, whatever the filters.
     Filter by `state` for a delegation; `district` is 0 for an at-large
     seat."""
-    rows = get_rep_leaderboard(db, page=1, per_page=_WHOLE_CHAMBER)["entries"]
+    rows = _ranked(get_rep_leaderboard(db, page=1, per_page=_WHOLE_CHAMBER)["entries"])
     return _pub_json(_page(rows, party, state, page, per_page), request)
 
 
@@ -575,12 +593,17 @@ def get_representative_history(
 # Search
 # ---------------------------------------------------------------------------
 
+_NO_POLITICIAN = "No member, president or justice with that id"
+
+
 def _politician_id(db: Session, given: str) -> str:
     """The Civitas id a search's politician filter names: the id itself, or
     a senator's or representative's bioguide id. An id that is neither is
     refused (404) rather than searched: a filter matching no one returned
-    an empty result set that read as "they never said anything about it"."""
-    for model in (Senator, Representative, President):
+    an empty result set that read as "they never said anything about it".
+    A justice's id counts: every opinion result carries its author's as
+    `politicianId`, and passed back it was refused (2026-10-11)."""
+    for model in (Senator, Representative, President, Justice):
         if db.get(model, given) is not None:
             return given
     for model in (Senator, Representative):
@@ -589,11 +612,11 @@ def _politician_id(db: Session, given: str) -> str:
             return row[0]
     if (renamed := resolve_member_id(db, given)) != given:
         return renamed
-    raise HTTPException(status_code=404, detail="No member or president with that id")
+    raise HTTPException(status_code=404, detail=_NO_POLITICIAN)
 
 
 @router.get("/search", response_model=PublicSearchResponseSchema, tags=["Search"],
-            responses={404: {"description": "No member or president with that id"}},
+            responses={404: {"description": _NO_POLITICIAN}},
             summary="Search floor speeches, presidential actions, opinions and rules")
 async def search_documents(
     _rl: PublicReadLimit,
@@ -602,9 +625,9 @@ async def search_documents(
                    "identifier such as \"Executive Order 14110\""),
     chamber: Chamber | None = Query(None, description="Only documents from this branch"),
     doc_type: DocType | None = Query(None, description="Only this kind of document"),
-    politician_id: str | None = Query(None, description="Only documents by this member or president: their "
-                                      "Civitas id (as in their URL, e.g. jane-doe) or their bioguide id "
-                                      "(e.g. D000123)"),
+    politician_id: str | None = Query(None, description="Only documents by this member, president or justice: "
+                                      "their Civitas id (as in their URL, e.g. jane-doe, and as results give "
+                                      "it in politicianId) or a member's bioguide id (e.g. D000123)"),
     limit: int = Query(20, ge=1, le=50, description="How many results"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
@@ -631,7 +654,14 @@ async def search_documents(
         )
 
     results = outcome["results"]
+    today = comment_period_today()
     for result in results:
+        # Documented as where to comment while the period is open, the rule
+        # the site shows it by (formatting.isCommentPeriodOpen): the stored
+        # link outlives the period, and 780 of the 1,428 documents carrying
+        # one were closed or had no closing date (2026-10-11).
+        if not (result["commentsCloseOn"] and result["commentsCloseOn"] >= today):
+            result["commentUrl"] = ""
         # The keyword channel marks matched terms with control characters
         # for the site's renderer; a public client gets plain text.
         result["snippet"] = (result.get("snippet") or "").replace(HIGHLIGHT_START, "").replace(HIGHLIGHT_END, "")

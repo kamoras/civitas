@@ -46,6 +46,7 @@ from app.pipeline.fetch.presidential_actions import (
     _fetch_body_text,
 )
 from app.pipeline.fetch.fr_rulemaking import (
+    PAGE_MARKER_RE,
     fetch_fr_metadata,
     fetch_fr_rulemaking,
     _fetch_body_text as _fetch_rulemaking_body_text,
@@ -322,6 +323,41 @@ async def _backfill_presidential_bodies(
         db.commit()
         logger.info("Backfilled body content for %d presidential documents", len(filled))
     return filled
+
+
+# Stored documents cleaned of the Register's page markers per run
+# (fr_rulemaking.UNPRINTED_XPATH): each changed body is embedded again, and
+# 500 average-length rulemaking bodies are about 5 million characters, some
+# ten minutes of the Pi's embedding. 7,571 bodies had markers (2026-10-11),
+# so the stored text is clean in about sixteen runs; new documents arrive
+# without them.
+PAGE_MARKER_CLEANUP_PER_RUN = 500
+_PAGE_MARKER_LIKE = "%( printed page %"
+_BLANK_LINES = re.compile(r"\n[ \t]*(?:\n[ \t]*){2,}")
+
+
+def _without_page_markers(text: str | None) -> str:
+    return _BLANK_LINES.sub("\n\n", PAGE_MARKER_RE.sub("", text or "")).strip()
+
+
+def _strip_page_markers(db: Session, limit: int = PAGE_MARKER_CLEANUP_PER_RUN) -> list[int]:
+    """Clean up to `limit` stored documents of the page markers read into
+    them before the fetchers dropped them, presidential documents first
+    (a marker began their summaries), then newest first. Returns the ids
+    changed; the embed step finds them by their text hash."""
+    docs = (
+        db.query(ExploreDocument)
+        .filter(or_(ExploreDocument.body.like(_PAGE_MARKER_LIKE), ExploreDocument.summary.like(_PAGE_MARKER_LIKE)))
+        .order_by((ExploreDocument.chamber == "Executive").desc(), ExploreDocument.date.desc())
+        .limit(limit)
+        .all()
+    )
+    for d in docs:
+        d.body = _without_page_markers(d.body)
+        d.summary = _without_page_markers(d.summary)
+    if docs:
+        db.commit()
+    return [d.id for d in docs]
 
 
 async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
@@ -967,6 +1003,7 @@ async def run_explore_pipeline() -> dict:
         # the change.
         backfilled = await _backfill_presidential_bodies(db, client)
         backfilled += await _backfill_rulemaking_bodies(db)
+        backfilled += _strip_page_markers(db)
         if backfilled:
             logger.info("Explore pipeline: backfilled %d document bodies", len(backfilled))
 
