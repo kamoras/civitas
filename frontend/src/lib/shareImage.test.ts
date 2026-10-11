@@ -1,30 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bioguideIdFromPhotoUrl, bioguidePhotoUrl } from "./bioguide";
 import {
   captureImageData,
   captureScale,
   displayUrl,
-  proxiedImageUrl,
   sectionUrl,
   shareFileName,
 } from "./shareImage";
-
-describe("proxiedImageUrl", () => {
-  it("routes a bioguide photo through the same-origin photo route", () => {
-    expect(proxiedImageUrl("https://bioguide.congress.gov/bioguide/photo/B/B001309.jpg")).toBe(
-      "/photo/bioguide/B001309"
-    );
-  });
-
-  // The route takes only an id, so anything else is read directly (and a
-  // host without CORS headers is simply left out of the picture) — never
-  // handed to a server-side fetch.
-  it("leaves every other URL alone", () => {
-    expect(proxiedImageUrl("https://example.com/photo/B/B001309.jpg")).toBeNull();
-    expect(proxiedImageUrl("https://bioguide.congress.gov/bioguide/photo/B/../x.jpg")).toBeNull();
-    expect(proxiedImageUrl("/_next/static/media/a.png")).toBeNull();
-  });
-});
 
 describe("sectionUrl / displayUrl", () => {
   it("appends the section anchor, replacing any existing one", () => {
@@ -92,36 +73,15 @@ describe("captureImageData", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("reads a member photo through the site's own route", async () => {
-    // A minimal Response: jsdom's Blob can't be handed to Node's Response.
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      blob: async () => new Blob(["jpg"], { type: "image/jpeg" }),
-    });
-    const data = await captureImageData(
-      "https://bioguide.congress.gov/bioguide/photo/B/B001309.jpg"
-    );
-    expect(fetchSpy).toHaveBeenCalledWith("/photo/bioguide/B001309");
-    expect(data).toMatch(/^data:image\/jpeg;base64,/);
+  it("loads a site photo like any same-origin image", async () => {
+    expect(await captureImageData("/photo/bioguide/B001309")).toBe(false);
   });
 
   // A capture must never make the visitor's browser request a third-party
-  // host (AGENTS.md §8) — a publisher's image is left blank, unfetched.
-  it("leaves any other third-party image blank without requesting it", async () => {
+  // host (AGENTS.md §8) — a third-party image is left blank, unfetched.
+  it("leaves a third-party image blank without requesting it", async () => {
     const data = await captureImageData("https://images.example-news.com/photo.jpg");
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(data).toMatch(/^data:image\/png;base64,/);
-  });
-});
-
-describe("bioguide photo URLs", () => {
-  it("round-trips an id through the URL the API serves", () => {
-    expect(bioguideIdFromPhotoUrl(bioguidePhotoUrl("B001309"))).toBe("B001309");
-  });
-
-  it("rejects a URL whose folder letter doesn't match the id", () => {
-    expect(
-      bioguideIdFromPhotoUrl("https://bioguide.congress.gov/bioguide/photo/Z/B001309.jpg")
-    ).toBeNull();
   });
 });

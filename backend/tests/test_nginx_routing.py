@@ -157,18 +157,50 @@ def test_every_cached_location_rate_limits_its_misses_and_not_its_hits():
     server, whose location for that path does — a cache-busting query
     string gets no unlimited path to the backend or the OG renderer."""
     public, internal = _servers()
-    # The Atom feeds are the API's too, under public paths of their own.
+    # The Atom feeds are the API's too, under public paths of their own;
+    # /photo/ is every image a page shows.
     cached = [loc for loc in _locations(public)
-              if "proxy_cache " in loc[3] and loc[1].startswith(("/api/", "/feed"))]
-    assert {loc[1] for loc in cached} >= {"/api/", "/api/explore", "/api/config", "/api/og", "/feed.xml", "/feed/"}
+              if "proxy_cache " in loc[3] and loc[1].startswith(("/api/", "/feed", "/photo/"))]
+    assert {loc[1] for loc in cached} >= {
+        "/api/", "/api/explore", "/api/config", "/api/og", "/feed.xml", "/feed/", "/photo/",
+    }
     for modifier, pattern, upstream, body in cached:
         assert "limit_req" not in body and upstream == _MISSES_HOP, pattern
         inner = _match(_locations(internal), pattern)
         assert inner is not None and "limit_req zone=" in inner[3], pattern
     assert "search_miss_limit" in _match(_locations(internal), "/api/explore")[3]
+    assert "photo_miss_limit" in _match(_locations(internal), "/photo/bioguide/X000001")[3]
     # The hop mustn't append itself to X-Forwarded-For: its last entry is
     # how the backend identifies clients.
     assert "$proxy_add_x_forwarded_for" not in internal
+
+
+def test_photos_are_served_by_the_frontend_through_the_miss_hop():
+    assert route("/photo/bioguide/X000001") == "frontend_upstream"
+    assert route("/photo/justice/x") == "frontend_upstream"
+
+
+def _directive(body: str, name: str) -> str:
+    match = re.search(rf"^\s*{name}\s+([^;]+);", body, re.M)
+    assert match, name
+    return match.group(1)
+
+
+def test_a_cold_directory_load_is_paced_not_refused():
+    """The directory shows every member's portrait at once, so a reader's
+    first visit after the photo cache went cold is that many misses. The
+    miss burst must hold them all (an excess would be refused, and that
+    portrait left blank), and the public location must wait out the
+    pacing of the last one rather than time out on it."""
+    public, internal = _servers()
+    inner = _directive(_match(_locations(internal), "/photo/x/y")[3], "limit_req")
+    burst = int(re.search(r"burst=(\d+)", inner).group(1))
+    delay = int(re.search(r"delay=(\d+)", inner).group(1))
+    rate = int(re.search(r"zone=photo_miss_limit:\S+ rate=(\d+)r/s", CONF.read_text()).group(1))
+    # 535 voting members of Congress, 6 delegates, 9 justices.
+    assert burst >= 535 + 6 + 9
+    outer = _directive(_match(_locations(public), "/photo/x/y")[3], "proxy_read_timeout")
+    assert int(outer.rstrip("s")) > (burst - delay) / rate
 
 
 def test_explore_summaries_stream_from_the_pipeline_process():

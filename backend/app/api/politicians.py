@@ -34,6 +34,7 @@ from app.member_ids import resolve_member_id
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
 from app.ordinals import ordinal
+from app.photos import bioguide_photo, justice_photo
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.score_display import displayed_rank
@@ -42,12 +43,6 @@ from app.services.senator_service import STATE_NAMES
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _bioguide_photo(bioguide_id: str | None) -> str | None:
-    if not bioguide_id:
-        return None
-    return f"https://bioguide.congress.gov/bioguide/photo/{bioguide_id[0]}/{bioguide_id}.jpg"
 
 
 def _cached_json(data, max_age: int = CACHE_TTL_DETAIL_S) -> JSONResponse:
@@ -158,7 +153,7 @@ def list_politicians(
                 "stateName": STATE_NAMES.get(s.state, s.state),
                 "district": None,
                 "role": "Senator",
-                "thumbnailUrl": _bioguide_photo(s.bioguide_id),
+                "thumbnailUrl": bioguide_photo(s.bioguide_id),
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
                 "activeIssueCount": len(issue_map.get(s.id, [])),
@@ -187,7 +182,7 @@ def list_politicians(
                 "stateName": STATE_NAMES.get(r.state, r.state),
                 "district": getattr(r, "district", None),
                 "role": "Representative",
-                "thumbnailUrl": _bioguide_photo(r.bioguide_id),
+                "thumbnailUrl": bioguide_photo(r.bioguide_id),
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
                 "activeIssueCount": len(issue_map.get(r.id, [])),
@@ -235,7 +230,7 @@ def list_politicians(
                 "stateName": None,
                 "district": None,
                 "role": "Chief Justice" if is_chief else "Associate Justice",
-                "thumbnailUrl": j.thumbnail_url,
+                "thumbnailUrl": justice_photo(j),
                 # Justices have a scorecard and no score (justice v3):
                 # null is "not scored", never 0.
                 "hasScorecard": True,
@@ -280,7 +275,7 @@ def _build_identity(branch: str, entity) -> dict:
             "state": entity.state,
             "stateName": STATE_NAMES.get(entity.state, entity.state),
             "role": "Senator",
-            "thumbnailUrl": _bioguide_photo(entity.bioguide_id),
+            "thumbnailUrl": bioguide_photo(entity.bioguide_id),
             "yearsInOffice": entity.years_in_office,
             "contactFormUrl": entity.contact_form_url or "",
             "websiteUrl": entity.website_url or "",
@@ -300,7 +295,7 @@ def _build_identity(branch: str, entity) -> dict:
             "stateName": STATE_NAMES.get(entity.state, entity.state),
             "district": getattr(entity, "district", None),
             "role": "Representative",
-            "thumbnailUrl": _bioguide_photo(entity.bioguide_id),
+            "thumbnailUrl": bioguide_photo(entity.bioguide_id),
             "contactFormUrl": entity.contact_form_url or "",
             "websiteUrl": entity.website_url or "",
             "isCurrent": entity.is_current,
@@ -328,7 +323,7 @@ def _build_identity(branch: str, entity) -> dict:
             "role": entity.role_title or "Associate Justice",
             "appointingPresident": entity.appointing_president,
             "dateStart": entity.date_start,
-            "thumbnailUrl": entity.thumbnail_url,
+            "thumbnailUrl": justice_photo(entity),
             "isActive": entity.is_active,
         }
     return {}

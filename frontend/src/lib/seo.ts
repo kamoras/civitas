@@ -86,7 +86,7 @@ export function personJsonLd(id: string, profile: PoliticianProfile) {
     name: identity.name,
     url: absoluteUrl(`/politicians/${encodeURIComponent(id)}`),
     jobTitle: identity.role,
-    ...(identity.thumbnailUrl ? { image: identity.thumbnailUrl } : {}),
+    ...(identity.thumbnailUrl ? { image: absoluteUrl(identity.thumbnailUrl) } : {}),
     ...(branch in BODY_NAMES
       ? { memberOf: { "@type": "GovernmentOrganization", name: BODY_NAMES[branch] } }
       : {}),

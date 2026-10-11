@@ -20,6 +20,7 @@ from app.config import settings
 from app.config_definitions import BillStage
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
+from app.photos import bioguide_photo
 from app.schemas import (
     BillDetailSchema,
     BillInFlightSchema,
@@ -59,12 +60,6 @@ _CHANGED_TIER = "bill-collection"
 _CHANGED_KEY = "changed-at"
 _CHANGED_CHECK_SECONDS = 10.0
 _changes = PolledRow(_CHANGED_TIER, _CHANGED_KEY, every_s=_CHANGED_CHECK_SECONDS, decode=decode_json_dict)
-
-
-def _bioguide_photo(bioguide_id: str | None) -> str | None:
-    if not bioguide_id:
-        return None
-    return f"https://bioguide.congress.gov/bioguide/photo/{bioguide_id[0]}/{bioguide_id}.jpg"
 
 
 def _bill_mention_counts(db: Session) -> dict[str, int]:
@@ -168,7 +163,7 @@ def _build_rows(db: Session) -> list[_Row]:
                     sponsor_name=member_name,
                     sponsor_party=member_party,
                     sponsor_state=member_state,
-                    sponsor_thumbnail_url=_bioguide_photo(bioguide_id),
+                    sponsor_thumbnail_url=bioguide_photo(bioguide_id),
                     introduced_date=introduced_date,
                     latest_action=latest_action,
                     latest_action_date=latest_action_date,
@@ -381,7 +376,7 @@ def get_bill_detail(db: Session, bill_id: str, congress: int | None = None) -> B
         sponsor_name=member.name,
         sponsor_party=member.party,
         sponsor_state=member.state,
-        sponsor_thumbnail_url=_bioguide_photo(member.bioguide_id),
+        sponsor_thumbnail_url=bioguide_photo(member.bioguide_id),
         introduced_date=sp.introduced_date,
         latest_action=sp.latest_action,
         latest_action_date=sp.latest_action_date,
