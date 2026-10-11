@@ -11,6 +11,7 @@ audit: 1,758 exact-duplicate rows, 31% of the table).
 import asyncio
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
+from importlib import import_module
 from types import SimpleNamespace
 import os
 import subprocess
@@ -19,6 +20,7 @@ import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.models import ExploreDocument
@@ -28,6 +30,7 @@ from app.pipeline.explore_pipeline import (
     _ingest_floor_speeches,
     _purge_out_of_scope_speeches,
     _stable_hash,
+    _strip_page_markers,
     run_explore_pipeline,
 )
 
@@ -750,3 +753,55 @@ async def test_a_locked_top_up_on_a_whole_index_still_ends_the_rebuild_alert(db_
          patch("app.ops_alerts.resolve_ops_alert") as resolve:
         assert await explore_pipeline._embed_step(db_session) == 0
     resolve.assert_called_once_with("explore-index-rebuild")
+
+
+# The opening of a presidential document's Federal Register full-text page
+# (2026-04-09), trimmed: the page-break marker the Register marks
+# unprinted, then the document.
+_FR_FULL_TEXT = """<span class="printed-page-inline unprinted-element document-markup" data-page="18267">
+      (<svg class="svg-icon svg-icon-doc-generic"><use xlink:href="/assets/fr-icons.svg#doc-generic"></use></svg> printed page 18267)
+    </span><span class="printed-page-details unprinted-element document-markup" id="page-18267" data-page="18267"><svg class="svg-icon svg-icon-doc-generic"><use xlink:href="/assets/fr-icons.svg#doc-generic"></use></svg></span>
+                <p><a href="/executive-order/14400" class="eo">Executive Order 14400</a> of April 3, 2026</p>
+                <h1 id="h-1">Placeholder Title</h1>
+                <p id="p-1" data-page="18267">By the authority vested in me as President by the Constitution and the laws of the United States of America, it is hereby ordered:</p>"""
+
+
+class TestFederalRegisterPageMarkers:
+    """The Register's page-break markers, "( printed page 18267)", are
+    markup it does not print. Read as text, one began 192 presidential
+    documents' summaries and they sat between the paragraphs of 7,571
+    bodies (2026-10-11)."""
+
+    @pytest.mark.parametrize("module", ["presidential_actions", "fr_rulemaking"])
+    def test_the_fetchers_leave_them_out(self, module):
+        fetch = import_module(f"app.pipeline.fetch.{module}")._fetch_body_text
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, text=_FR_FULL_TEXT))
+
+        async def read():
+            async with httpx.AsyncClient(transport=transport) as client:
+                return await fetch(client, "https://www.federalregister.gov/documents/full_text/html/x.html")
+
+        text = asyncio.run(read())
+        assert "printed page" not in text
+        assert text.startswith("Executive Order 14400 of April 3, 2026")
+
+    def test_stored_text_is_cleaned_a_bounded_number_a_run(self, db_session):
+        stored = "( printed page 18267)\n \n Executive Order 14400 of April 3, 2026\n Placeholder Title"
+        rule = "Captain of the Port.\n \n\n ( printed page 22457)\n \n \n IV. Regulatory Analyses"
+        db_session.add_all([
+            ExploreDocument(doc_type="Final Rule", source="Federal Register", title="Placeholder rule",
+                            summary="An abstract.", body=rule, date="2026-09-01", chamber="Regulatory"),
+            ExploreDocument(doc_type="Executive Order", source="Federal Register", title="EO 14400: Placeholder",
+                            summary=stored[:60], body=stored, date="2026-04-03", chamber="Executive"),
+        ])
+        db_session.commit()
+
+        (first,) = _strip_page_markers(db_session, limit=1)
+        eo = db_session.get(ExploreDocument, first)
+        assert eo.chamber == "Executive"  # presidential first: the marker began its summary
+        assert eo.body == "Executive Order 14400 of April 3, 2026\n Placeholder Title"
+        assert eo.summary.startswith("Executive Order 14400")
+
+        (second,) = _strip_page_markers(db_session, limit=1)
+        assert db_session.get(ExploreDocument, second).body == "Captain of the Port.\n\nIV. Regulatory Analyses"
+        assert _strip_page_markers(db_session) == []

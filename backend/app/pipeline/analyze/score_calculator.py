@@ -178,6 +178,7 @@ from app.config_definitions import (
     SATURATION_QUANTILE,
 )
 from app.models import PromiseAlignment
+from app.ordinals import ordinal
 from app.pipeline.analyze.constituent_approval import senate_approval
 from app.pipeline.analyze.population_reference import (
     CONSTITUENT_REFERENCE,
@@ -2200,6 +2201,31 @@ def position_congruence_score(extremity: float, saturation: float, weight: float
     return 50.0 - 50.0 * max(-1.0, min(weight * extremity / saturation, 1.0))
 
 
+def _pvi_label(pvi: int) -> str:
+    """Cook's spelling of a signed PVI (positive = R lean): R+9, D+4, EVEN."""
+    return "EVEN" if pvi == 0 else f"{'R' if pvi > 0 else 'D'}+{abs(pvi)}"
+
+
+def _congruence_scale_note(weighted_extremity: float, saturation: float,
+                           scale_congress: int | None, congress: int | None) -> str:
+    """Where position congruence's 0 and 100 come from, for the breakdown:
+    without it a 0 or 100 beside two dim1 numbers reads as arbitrary. The
+    scale is one distance on Voteview's scale for both parties (pooled, a
+    stated choice, research note section 14)."""
+    carried = (
+        f", carried from the {ordinal(int(scale_congress))} Congress until this one has enough full records"
+        if scale_congress and congress and int(scale_congress) != int(congress) else ""
+    )
+    note = (
+        f". 50 at the expectation, 0 at {saturation:.2f} toward the flank and 100 at {saturation:.2f} "
+        "toward the seat's center: the distance beyond which the most out-of-step tenth of this "
+        f"chamber's members with a full record sit, the same for both parties{carried}"
+    )
+    if abs(weighted_extremity) >= saturation:
+        note += f"; this position is at or past it, so the part is at {0 if weighted_extremity > 0 else 100}"
+    return note
+
+
 def _calc_constituent_alignment(
     voting_record: dict,
     lobbying_matches: list[dict],
@@ -2338,7 +2364,8 @@ def _constituent_alignment_core(
     congruence_score = None
     congruence_detail = ""
     if dim1 is not None and position_fit is not None and congruence_sat:
-        expected_dim1 = float(position_fit["a"]) + float(position_fit["b"]) * _seat_pvi(state, district)
+        seat_pvi = _seat_pvi(state, district)
+        expected_dim1 = float(position_fit["a"]) + float(position_fit["b"]) * seat_pvi
         residual = float(dim1) - expected_dim1
         extremity = -residual if eval_party == "D" else residual
         # None: Voteview reported no count of the roll calls behind the
@@ -2349,7 +2376,8 @@ def _constituent_alignment_core(
         congruence_score = position_congruence_score(extremity, float(congruence_sat), weight)
         congruence_detail = (
             f"{ideal.get('measure', 'NOMINATE')} dim1 {float(dim1):+.2f} vs "
-            f"{expected_dim1:+.2f} expected for a {eval_party} member of this seat, "
+            f"{expected_dim1:+.2f} expected for a {eval_party} member of a seat at {_pvi_label(seat_pvi)}, "
+            f"{abs(extremity):.2f} "
             + ("toward the party flank" if extremity > 0 else "toward the seat's center")
         )
         if position_votes is None and weight < 1.0:
@@ -2369,6 +2397,9 @@ def _constituent_alignment_core(
                 + (f" (half strength at about {half:.0f} roll calls)" if half else "")
                 + ", pulled toward 50"
             )
+        congruence_detail += _congruence_scale_note(
+            weight * extremity, float(congruence_sat), ideal.get("scale_congress"), ideal.get("congress"),
+        )
     elif reliability and position_fit is not None and congruence_sat and bioguide_id:
         # A current section with no usable position for this member (Voteview
         # hasn't placed them, or gave its 0, 0 placeholder): neutral, as a

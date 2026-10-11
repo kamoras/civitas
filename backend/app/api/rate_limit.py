@@ -137,7 +137,12 @@ _CRAWLER_CALLS_PER_HOUR = 50
 # link to a page about the bot. "bot/" with its version slash, not "bot": a
 # CUBOT phone says "CUBOT X30 Build/…". Structural, like the browser-token
 # parsing in visits.py, which reads it too.
-SELF_DECLARED_CRAWLER = re.compile(r"[a-z]bot/|crawler|spider|\+https?://", re.IGNORECASE)
+# "(compatible; Name…)", a "NameBot/1.0" product token, "crawler" or
+# "spider", or a "+https://…" link to a page about the bot. "compatible;" is
+# GoogleOther's only marker (every ordinary-looking client that ran a page
+# 2026-10-11 00:00–01:05 UTC was GoogleOther); no current browser sends it.
+# "bot/" with its version slash, not "bot": a CUBOT phone says "CUBOT X30".
+SELF_DECLARED_CRAWLER = re.compile(r"compatible;|[a-z]bot/|crawler|spider|\+https?://", re.IGNORECASE)
 
 
 def declares_itself_a_crawler(user_agent: str | None) -> bool:
