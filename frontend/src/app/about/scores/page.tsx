@@ -355,11 +355,18 @@ export default function ScoresChapter() {
             the same way, and a 0 means they break far more often than that, or, much more rarely,
             far less. On the position part, sitting where the seat predicts is 50, with more only
             for sitting nearer the seat&apos;s center, so a member who matches both scores about 85
-            (70% of 100 plus 30% of 50). On the voting part, because each party&apos;s yardstick is
-            measured from its own members, a party that happens to be more unified isn&apos;t scored
-            higher for it: across every Senate from 1989 on, the two parties&apos; average
-            voting-part scores differed by 2.1 points on average, and which one was higher changed
-            from Congress to Congress.
+            (70% of 100 plus 30% of 50). The position part reaches 0 (toward the flank) or 100
+            (toward the center) at the distance beyond which the most out-of-step tenth of the
+            chamber&apos;s members sit, one distance on Voteview&apos;s scale for both parties, so
+            about a tenth of members sit at one end or the other. The party whose members spread
+            more widely around their seats&apos; expectation has more of them at the ends (in the
+            119th Congress, Republicans). We checked that the members at the ends are there on full
+            records, sat on the same side in the previous Congress, and that neither a curved
+            expectation nor a different cutoff predicted elections better. On the voting part,
+            because each party&apos;s yardstick is measured from its own members, a party that
+            happens to be more unified isn&apos;t scored higher for it: across every Senate from
+            1989 on, the two parties&apos; average voting-part scores differed by 2.1 points on
+            average, and which one was higher changed from Congress to Congress.
           </P>
         </Sub>
         <More label="Where the numbers come from, with September 2026 examples (before v6.20)">
