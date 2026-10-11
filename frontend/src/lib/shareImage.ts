@@ -12,14 +12,12 @@
  * is how the friend who receives the picture gets to the rest of it.
  *
  * Nothing leaves the browser, and a capture requests nothing from any host
- * but this site: a member photo comes through the site's own
- * `/photo/bioguide/…` route, and any other third-party image is left out
+ * but this site: every photo the site shows is already same-origin
+ * (`/photo/…`, lib/photos.ts), and any third-party image is left out
  * (see `captureImageData`). That guard sees images only: modern-screenshot
  * fetches fonts, stylesheets and external `<use href>` targets directly,
  * which is safe while those stay self-hosted (app/fonts.ts, compiled CSS).
  */
-
-import { bioguideIdFromPhotoUrl } from "./bioguide";
 
 export const SHARE_EXCLUDE_ATTR = "data-share-exclude";
 export const SHARE_SECTION_ATTR = "data-share-section";
@@ -41,44 +39,23 @@ export interface ShareSubject {
   url: string;
 }
 
-// bioguide.congress.gov sends no CORS headers and sits behind a Cloudflare
-// challenge, so the browser can neither read those photos into a canvas
-// nor fetch them itself. The site's own route fetches them server-side
-// (`app/photo/bioguide/[id]/route.ts`); only bioguide ids are accepted
-// there, so it is not an open proxy.
-
-/** Same-origin URL for a member photo the capture must read, or null for
- *  any other image. */
-export function proxiedImageUrl(url: string): string | null {
-  const id = bioguideIdFromPhotoUrl(url);
-  return id ? `/photo/bioguide/${id}` : null;
-}
-
 /** A 1x1 transparent PNG: what a third-party image becomes in a capture. */
 const BLANK_PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 /**
  * How the capture gets each image's bytes. Same-origin (and inline) images
- * load normally; a member photo goes through the site's own route; anything
+ * load normally — every photo the site shows is one (`/photo/…`); anything
  * else is left blank without being requested, so a capture never sends a
  * request from the visitor's browser to a third-party host. Sections mark
  * such images `data-share-exclude` so the blank takes no space.
  */
 export async function captureImageData(url: string): Promise<string | false> {
   if (/^(data|blob):/.test(url)) return false;
-  let sameOrigin = false;
   try {
-    sameOrigin = new URL(url, window.location.href).origin === window.location.origin;
-  } catch {
-    return BLANK_PIXEL;
-  }
-  const proxied = proxiedImageUrl(url);
-  if (!proxied) return sameOrigin ? false : BLANK_PIXEL;
-  try {
-    const res = await fetch(proxied);
-    if (!res.ok) return BLANK_PIXEL;
-    return await blobToDataUrl(await res.blob());
+    return new URL(url, window.location.href).origin === window.location.origin
+      ? false
+      : BLANK_PIXEL;
   } catch {
     return BLANK_PIXEL;
   }
@@ -129,15 +106,6 @@ function resolveClassStyle(
   const value = getComputedStyle(probe)[prop];
   probe.remove();
   return value || fallback;
-}
-
-async function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
 }
 
 /** Breaks a URL into lines no wider than `max`, after a "/" or "#" where it

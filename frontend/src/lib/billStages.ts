@@ -88,6 +88,13 @@ const STAGE_STYLES: Record<string, BillStageStyle> = {
     bar: "bg-signal-amber",
     rule: "border-l-signal-amber",
   },
+  PASSED_BOTH: {
+    text: "text-signal-cyan",
+    border: "border-signal-cyan/30",
+    bg: "bg-signal-cyan/10",
+    bar: "bg-signal-cyan",
+    rule: "border-l-signal-cyan",
+  },
   TO_PRESIDENT: {
     text: "text-signal-magenta",
     border: "border-signal-magenta/30",

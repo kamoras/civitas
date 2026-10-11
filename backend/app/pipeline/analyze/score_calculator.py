@@ -3033,6 +3033,7 @@ _LES_STAGE_ORDER: dict[str, int] = {
     "ON_FLOOR": 3,
     "PASSED_CHAMBER": 4,
     "IN_OTHER_CHAMBER": 4,  # already passed its own chamber; no separate V&W stage for this
+    "PASSED_BOTH": 4,       # V&W's PASS is its own chamber's passage; the second is no further stage
     "TO_PRESIDENT": 4,      # same — passed both chambers, not yet a new milestone
     "ENACTED": 5,
     "VETOED": 4,            # passed Congress, never became law

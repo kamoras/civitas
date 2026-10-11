@@ -13,12 +13,18 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_REFERENCE_S, cached_json
 from app.database import get_db
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ActionIssueStatus, ExploreDocument, Justice, President, Representative, Senator
+from app.config import settings
+from app.models import (
+    ActionIssue, ActionIssueStatus, CongressEvent, ExploreDocument, Justice, President, Representative, RollCall,
+    Senator,
+)
+from app.pipeline.fetch.congressional_record import congress_start
 from app.services.bill_service import _collect_bills
 from app.services.congress_service import session_days
 
@@ -43,6 +49,27 @@ def _iso_date(value: datetime | str | None) -> str | None:
     return text
 
 
+def _reported_bills(db: Session) -> list[tuple[str, str]]:
+    """(bill id, the last day it appears) for every current-congress bill a
+    Congress report links to: Digest entries and roll calls."""
+    congress = settings.CURRENT_CONGRESS
+    start = congress_start(congress).isoformat()
+    last: dict[str, str] = {}
+    for bill_id, day in (
+        db.query(CongressEvent.bill_id, func.max(CongressEvent.date))
+        .filter(CongressEvent.bill_id.isnot(None), CongressEvent.date >= start)
+        .group_by(CongressEvent.bill_id)
+        .all()
+    ) + (
+        db.query(RollCall.bill_id, func.max(RollCall.date))
+        .filter(RollCall.bill_id.isnot(None), RollCall.congress == congress)
+        .group_by(RollCall.bill_id)
+        .all()
+    ):
+        last[bill_id] = max(last.get(bill_id, ""), day or "")
+    return sorted(last.items())
+
+
 @router.get("/sitemap")
 def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
     """Ids + lastmod for every politician profile, bill, and issue page.
@@ -52,9 +79,11 @@ def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
     permanent site content, and departed members still inside their
     retirement grace window, whose profiles still render.
 
-    Bills: exactly the set `/bills` lists (`_collect_bills`, the current
-    congress's bills from sitting members), so the sitemap never advertises
-    a bill page the site itself doesn't link to.
+    Bills: the set `/bills` lists (`_collect_bills`, the current
+    congress's bills from sitting members), and the current congress's
+    bills the Congress reports link to (a Digest entry or a roll call),
+    which include bills no sitting member sponsors: 36 linked bill pages
+    were missing on 2026-10-11. Never a bill page the site doesn't link to.
 
     Issues: every CONFIRMED issue, current or retired — the issue archive
     is a permanent record, and each has its own stable public id. DEVELOPING
@@ -75,6 +104,10 @@ def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
             continue
         seen_bills.add(bill_id)
         bills.append({"id": bill_id, "lastmod": _iso_date(row.latest_action_date)})
+    for bill_id, day in _reported_bills(db):
+        if bill_id not in seen_bills:
+            seen_bills.add(bill_id)
+            bills.append({"id": bill_id, "lastmod": _iso_date(day)})
 
     issues = [
         {"id": to_public_id(iid), "lastmod": _iso_date(date)}

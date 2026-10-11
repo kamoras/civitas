@@ -27,7 +27,8 @@ function chamberCell(day: PeriodDay, chamber: "senate" | "house") {
   if (c.counts.billsPassed)
     parts.push(`${c.counts.billsPassed} bill${c.counts.billsPassed === 1 ? "" : "s"} passed`);
   if (!parts.length && c.minutesInSession !== null && c.minutesInSession < 60)
-    parts.push(`${c.minutesInSession} min`);
+    // A Senate pro forma session lasts seconds; "0 min" read as no session.
+    parts.push(c.minutesInSession === 0 ? "<1 min" : `${c.minutesInSession} min`);
   return <span className="text-ink">{parts.length ? parts.join(" · ") : "Met"}</span>;
 }
 

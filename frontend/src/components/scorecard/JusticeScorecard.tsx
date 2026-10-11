@@ -12,6 +12,7 @@ import {
   signedPoints,
 } from "@/lib/justices";
 import ScoreColumn from "./ScoreColumn";
+import Photo from "@/components/Photo";
 
 const PARTY: Record<string, { label: string; text: string; border: string }> = {
   D: { label: "D", text: "text-dem-blue", border: "border-dem-blue/40" },
@@ -238,8 +239,7 @@ export default function JusticeScorecard({
                 about 146px at 320px and long surnames split mid-word. */}
             <div className="flex min-w-0 flex-col gap-5 sm:flex-row">
               {j.thumbnailUrl && (
-                // eslint-disable-next-line @next/next/no-img-element -- external, varied justice-photo hosts; not worth per-host next/image remotePatterns
-                <img
+                <Photo
                   src={j.thumbnailUrl}
                   alt=""
                   className={`h-28 w-24 shrink-0 border-2 object-cover ${party.border}`}

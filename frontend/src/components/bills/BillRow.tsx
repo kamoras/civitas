@@ -6,6 +6,7 @@ import { useConfig } from "@/hooks/useConfig";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { billStageStyle } from "@/lib/billStages";
 import { billHref } from "@/lib/congress";
+import Photo from "@/components/Photo";
 
 function timeAgo(dateStr: string): string {
   if (!dateStr) return "";
@@ -67,9 +68,9 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
             className="flex min-h-6 shrink-0 items-center gap-1 hover:text-phos"
           >
             {bill.sponsorThumbnailUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Photo
                 src={bill.sponsorThumbnailUrl}
+                lazy
                 alt=""
                 className="h-4 w-4 border border-white/[0.07] object-cover"
               />

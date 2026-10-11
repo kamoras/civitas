@@ -235,6 +235,32 @@ def test_a_resolution_goes_no_further_than_its_kind_can():
     assert classify_bill_stage_from_actions(presented, bill_type="hr") == BillStage.TO_PRESIDENT
 
 
+def test_passage_by_the_second_chamber_is_passed_both():
+    """A House bill the Senate passed read "In Other Chamber" until it was
+    presented (52 measures on 2026-10-11). Newest first, as Congress.gov
+    lists them; trimmed from a House bill's real history."""
+    senate_passed = [
+        {"actionCode": "17000", "type": "Floor",
+         "text": "Passed/agreed to in Senate: Passed Senate without amendment by Unanimous Consent."},
+        {"actionCode": "14500", "type": "Committee", "text": "Senate Committee discharged by Unanimous Consent."},
+        {"actionCode": "H14000", "type": "Floor", "text": "Received in the Senate."},
+        {"actionCode": "8000", "type": "Floor", "text": "Passed/agreed to in House: On motion to suspend the rules "
+                                                         "and pass the bill Agreed to by voice vote."},
+        {"actionCode": "H11100", "type": "IntroReferral", "text": "Referred to the House Committee."},
+    ]
+    assert classify_bill_stage_from_actions(senate_passed, bill_type="hr") == BillStage.PASSED_BOTH
+    assert classify_bill_stage_from_actions(senate_passed, bill_type="hconres") == BillStage.PASSED_BOTH
+    # Only its own chamber's passage: still in the other chamber.
+    house_only = [{"actionCode": "H14000", "type": "Floor", "text": "Received in the Senate."}, *senate_passed[3:]]
+    assert classify_bill_stage_from_actions(house_only, bill_type="hr") == BillStage.IN_OTHER_CHAMBER
+    # A Senate bill passed by the House under suspension.
+    assert classify_bill_stage_from_actions(
+        [{"actionCode": "H37300", "type": "Floor", "text": "On motion to suspend the rules and pass the bill Agreed to."},
+         {"actionCode": "17000", "type": "Floor", "text": "Passed Senate without amendment."}],
+        bill_type="s",
+    ) == BillStage.PASSED_BOTH
+
+
 def test_a_veto_with_the_signing_code_is_a_veto():
     # Newest first. Congress.gov gives "Vetoed by President." code E30000,
     # the code of "Signed by President.".

@@ -777,6 +777,7 @@ class TestLegislativeEffectiveness:
             BillStage.ON_FLOOR.value: 3,
             BillStage.PASSED_CHAMBER.value: 4,
             BillStage.IN_OTHER_CHAMBER.value: 4,
+            BillStage.PASSED_BOTH.value: 4,
             BillStage.TO_PRESIDENT.value: 4,
             BillStage.ENACTED.value: 5,
             BillStage.VETOED.value: 4,

@@ -185,9 +185,10 @@ _STAGE_RANK: dict[BillStage, int] = {
     BillStage.ON_FLOOR: 5,
     BillStage.PASSED_CHAMBER: 6,
     BillStage.IN_OTHER_CHAMBER: 7,
-    BillStage.TO_PRESIDENT: 8,
-    BillStage.VETOED: 9,
-    BillStage.ENACTED: 10,
+    BillStage.PASSED_BOTH: 8,
+    BillStage.TO_PRESIDENT: 9,
+    BillStage.VETOED: 10,
+    BillStage.ENACTED: 11,
 }
 
 
@@ -231,6 +232,12 @@ _RESOLUTION_CEILING = {
     "sconres": BillStage.IN_OTHER_CHAMBER, "hconres": BillStage.IN_OTHER_CHAMBER,
 }
 
+# Passage action codes by the chamber that passed (_ACTION_CODE_STAGE's
+# PASSED_CHAMBER codes less the post-passage housekeeping ones). A passage
+# by the chamber a measure didn't start in means it has passed both: it
+# reaches the second chamber only by passing the first.
+_PASSAGE_CHAMBER = {"8000": "h", "H37300": "h", "H1B000": "h", "17000": "s"}
+
 
 def classify_bill_stage_from_actions(
     actions: list[dict], is_law: bool = False, bill_type: str | None = None,
@@ -264,6 +271,7 @@ def classify_bill_stage_from_actions(
 
     best: BillStage | None = None
     passed_seen = False
+    origin = (bill_type or "")[:1].lower()  # "h" or "s"; "" when not given
     # Oldest -> newest so "referral after passage" is detectable.
     for action in reversed(actions):
         code = action.get("actionCode")
@@ -274,6 +282,8 @@ def classify_bill_stage_from_actions(
             continue
         if stage == BillStage.PASSED_CHAMBER:
             passed_seen = True
+            if origin and _PASSAGE_CHAMBER.get(code, origin) != origin:
+                stage = BillStage.PASSED_BOTH
         elif passed_seen and stage in (
             BillStage.INTRODUCED, BillStage.REFERRED, BillStage.IN_COMMITTEE, BillStage.REPORTED,
             BillStage.ON_FLOOR,
@@ -283,6 +293,8 @@ def classify_bill_stage_from_actions(
             best = stage
 
     ceiling = _RESOLUTION_CEILING.get((bill_type or "").lower())
+    if ceiling == BillStage.IN_OTHER_CHAMBER and best == BillStage.PASSED_BOTH:
+        ceiling = BillStage.PASSED_BOTH  # a concurrent resolution both chambers agreed to
     if best is not None and ceiling is not None and _STAGE_RANK[best] > _STAGE_RANK[ceiling]:
         best = ceiling
     return best or _FALLBACK_STAGE
