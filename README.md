@@ -554,6 +554,25 @@ Every hour at :15
        │         A bill number counts only when the words around it name
        │         that bill (lobbying_records.names_bill); a member's bare
        │         surname only when no other member shares it
+       │         Actions (template text around stored data, no model):
+       │         - the committee with jurisdiction, per chamber or none
+       │           (app/committee_routing.py): House Rule X / Senate Rule
+       │           XXV subjects (hubness-corrected similarity) blended with
+       │           the votes of the nearest of 460 hand-labelled issues;
+       │           held out, 79% precise (0.67-0.89), naming one for 40%
+       │           of the cases that have one; the rules alone, 46%. The
+       │           chair and ranking member are read when the issue is
+       │           served (app/data/committee_routing_*.json)
+       │         - "Comment by <date>": a proposed or final rule still open
+       │           whose title clears the same 0.49; served only while open
+       │         Replayed on the last 30 days of issues (2026-10-11), the
+       │         share offering only "find your members" fell 80% -> 39%
+       │         The Today tab's open comment periods (/api/action/
+       │         open-comments) lead with any a recent issue links, then
+       │         rules (the Register's own type) by readers (its page_views,
+       │         read once a day into fr_page_views), then notices; by
+       │         deadline, 6 of the top 10 were PRA renewals and a waiver
+       │         petition (2026-10-11), by salience none were
        ▼
   8. MONITORS ── Detect cross-day recurring topics (title similarity ≥ 0.85)
        │         Create NationalMonitor records (matching issues on 5

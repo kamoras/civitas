@@ -160,6 +160,105 @@ describe("WhatYouCanDo", () => {
     // Closed yesterday: still worth reading, no longer commentable.
     expect(screen.getByRole("link", { name: "Document →" })).toHaveAttribute("href", "/explore/8");
   });
+
+  it("says when a comment action closes and how long is left, once per document", () => {
+    render(
+      <WhatYouCanDo
+        issue={issue({
+          actions: [
+            {
+              text: "Comment by October 11",
+              type: "comment_period",
+              url: "/explore/7#comment",
+              docId: 7,
+              closesOn: "2026-10-11",
+            },
+          ],
+          relatedExploreDocs: [
+            {
+              id: 7,
+              title: "A proposed rule",
+              docType: "Proposed Rule",
+              date: "2026-09-01",
+              url: null,
+              commentUrl: "https://www.regulations.gov/x",
+              commentsCloseOn: "2026-10-11",
+            },
+          ],
+        })}
+        today="2026-09-29"
+      />
+    );
+    const links = screen.getAllByRole("link", { name: "Comment →" });
+    expect(links).toHaveLength(1);
+    const row = links[0].closest("li")!;
+    expect(row).toHaveTextContent("A proposed rule");
+    expect(row).toHaveTextContent("Proposed Rule · Comment by October 11 · 12 days left");
+  });
+
+  it("drops a comment action whose period has closed", () => {
+    render(
+      <WhatYouCanDo
+        issue={issue({
+          actions: [
+            {
+              text: "Comment by September 28",
+              type: "comment_period",
+              url: "/explore/7#comment",
+              docId: 7,
+              closesOn: "2026-09-28",
+            },
+          ],
+        })}
+        today="2026-09-29"
+      />
+    );
+    expect(screen.queryByRole("link", { name: "Comment →" })).toBeNull();
+  });
+
+  it("names the committee that handles the issue, with its chair and ranking member", () => {
+    render(
+      <WhatYouCanDo
+        issue={issue({
+          actions: [
+            {
+              text: "Contact the Senate Committee on Finance",
+              type: "contact_committee",
+              url: "https://www.finance.senate.gov/",
+              committee: {
+                code: "SSFI",
+                name: "Senate Committee on Finance",
+                chamber: "senate",
+                url: "https://www.finance.senate.gov/",
+                chair: { id: "S9", name: "Pat Doe", party: "R", state: "ID", chamber: "senate" },
+                rankingMember: {
+                  id: "S8",
+                  name: "Lee Roe",
+                  party: "D",
+                  state: "OR",
+                  chamber: "senate",
+                },
+              },
+            },
+          ],
+        })}
+        today="2026-09-29"
+      />
+    );
+    const link = screen.getByRole("link", { name: "Committee ↗" });
+    expect(link).toHaveAttribute("href", "https://www.finance.senate.gov/");
+    const row = link.closest("li")!;
+    expect(row).toHaveTextContent("Senate Committee on Finance");
+    expect(row).toHaveTextContent("The committee that handles this");
+    expect(within(row).getByRole("link", { name: "Sen. Pat Doe" })).toHaveAttribute(
+      "href",
+      "/politicians/S9"
+    );
+    expect(within(row).getByRole("link", { name: "Sen. Lee Roe" })).toHaveAttribute(
+      "href",
+      "/politicians/S8"
+    );
+  });
 });
 
 describe("IssueTags", () => {

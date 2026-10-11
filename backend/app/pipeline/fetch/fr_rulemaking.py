@@ -53,6 +53,12 @@ FR_TYPE_LABELS = {
     "Notice": "Notice",
 }
 
+# The stored doc_types that propose or set a rule — the Register's own `type`
+# field, not anything read from a title. A notice with a comment period is
+# mostly a Paperwork Reduction Act collection, a waiver or exemption
+# petition, or a meeting (463 of the 648 documents open on 2026-10-11).
+RULE_DOC_TYPES = (FR_TYPE_LABELS["Proposed Rule"], FR_TYPE_LABELS["Rule"])
+
 FIELDS = [
     "document_number",
     # Set on a correction ("C1-...") or republication ("R1-...") of another
@@ -139,9 +145,9 @@ REFRESH_BATCH = 20
 
 
 async def fetch_fr_metadata(
-    client: httpx.AsyncClient, numbers: list[str],
+    client: httpx.AsyncClient, numbers: list[str], fields: list[str] = REFRESH_FIELDS,
 ) -> tuple[dict[str, dict], set[str]] | None:
-    """({document number: REFRESH_FIELDS}, the numbers the Federal Register
+    """({document number: `fields`}, the numbers the Federal Register
     says it has no document for), or None when it could not be asked: a
     failed request is never read as "not found"."""
     found: dict[str, dict] = {}
@@ -151,7 +157,7 @@ async def fetch_fr_metadata(
         try:
             resp = await client.get(
                 f"{FR_BASE}/documents/{','.join(batch)}.json",
-                params={"fields[]": REFRESH_FIELDS},
+                params={"fields[]": fields},
                 timeout=DEFAULT_FETCH_TIMEOUT_S,
             )
             data = resp.json()

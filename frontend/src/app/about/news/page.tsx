@@ -152,12 +152,34 @@ export default function NewsChapter() {
         <P>
           Each issue ends with what you can do about it, built from the record and never advocacy
           for or against a position: contact the members of Congress the coverage names (through
-          their own contact form), follow the bills involved, and read or comment on the related
-          federal documents while their comment period is open. When the coverage names no member,
-          it points to the directory, where you pick your own state; the site never asks where you
-          live. A seat changing party on election night is the exception: its issue is the count, so
-          what you can do is follow that count on its state&apos;s page.
+          their own contact form), contact the committee that handles the subject, follow the bills
+          involved, comment on a rule about the story by its deadline, and read the related federal
+          documents. When the coverage names no member, it also points to the directory, where you
+          pick your own state; the site never asks where you live. A seat changing party on election
+          night is the exception: its issue is the count, so what you can do is follow that count on
+          its state&apos;s page.
         </P>
+        <More label="How the committee is chosen">
+          <P>
+            Each chamber&apos;s committee is named from two measurements, and only when both point
+            the same way strongly enough. The first compares the issue with each committee&apos;s
+            jurisdiction as the House and Senate rules list it (House Rule X, Senate Rule XXV; the
+            intelligence and Indian Affairs committees from their own published statements). The
+            second looks at the most similar of 460 past issues, each read and labelled by hand with
+            the committees that handle it, or with none. Their chair and ranking member come from
+            the committee rosters the site already keeps, as they stand when you read the issue.
+            Tested on issues newer than every labelled one it learned from, the committee named was
+            one of the right ones 79% of the time, and a committee was named for two in five of the
+            chamber-by-chamber cases that have one; the rest say nothing rather than guess. The
+            rules&apos; wording alone did much worse (46%): it dates from 1946 in places and reads
+            nothing like the news.
+          </P>
+          <P>
+            A comment action appears only for a proposed or final rule (the Federal Register&apos;s
+            own document type) still open for comment, whose title is as close to the issue&apos;s
+            as a related document&apos;s must be; it disappears when the period closes.
+          </P>
+        </More>
         <More label="Keeping the hourly refresh running">
           <P>
             Only one refresh runs at a time, even while a deploy briefly runs two copies of the
@@ -175,9 +197,12 @@ export default function NewsChapter() {
         <List>
           <Item label="Today">
             The day&apos;s issues, each with what you can do about it, and below them the federal
-            documents whose comment period is open, soonest deadline first, each linking to its page
-            in Explore and the comment form there. Every day still on the record can be paged
-            through, one at a time.
+            documents whose comment period is open, each linking to its page in Explore and the
+            comment form there. Those come in order of how much they matter, not which closes first:
+            any a recent issue links, then proposed and final rules by how many people have read
+            them (the Federal Register&apos;s own count), then notices, which are mostly paperwork
+            renewals and waiver requests. By deadline alone, six of the first ten were such notices
+            on 11 October 2026. Every day still on the record can be paged through, one at a time.
           </Item>
           <Item label="Ongoing">
             When a story keeps coming back, on five separate days within two weeks and from at least
