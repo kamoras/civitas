@@ -426,6 +426,41 @@ def test_house_votes_stored_without_a_requirement_are_repaired_once(db_session, 
     assert _run(ca.repair_house_requirements(None, db_session)) == (0, "ok")
 
 
+def _house_amendment_vote() -> str:
+    """The Clerk's form of a House amendment vote: no description, and the
+    amendment named in <amendment-author> (shape of 2026 roll 43)."""
+    text = (FIX / "roll_calls" / "house_2026_roll309.xml").read_text()
+    return (text.replace("<vote-question>On Passage</vote-question>",
+                         "<vote-question>On Agreeing to the Amendment</vote-question>\n"
+                         "<amendment-num>1</amendment-num>\n"
+                         "<amendment-author>Doe of Ohio Part B Amendment No. 1</amendment-author>")
+                .replace("<vote-desc>National Fraud Enforcement Division Act</vote-desc>", "<vote-desc></vote-desc>"))
+
+
+def test_a_house_amendment_vote_is_titled_by_its_amendment(db_session, monkeypatch):
+    """90 House amendment votes were titled only "H R 4776" (2026-10-11)."""
+    monkeypatch.setattr(ca, "_get", _fake_get({"roll309.xml": _house_amendment_vote().encode()}))
+    db_session.add(RollCall(chamber="house", congress=119, session=2, number=308, date="2026-09-16",
+                            source_url="https://clerk.house.gov/evs/2026/roll308.xml", majority_requirement="1/2"))
+    db_session.commit()
+    asyncio.run(ca.sync_roll_calls(None, db_session, "house", 119, 2, limit=1))
+    stored = db_session.query(RollCall).filter_by(number=309).one()
+    assert (stored.question, stored.title, stored.bill_id) == (
+        "On Agreeing to the Amendment", "Doe of Ohio Part B Amendment No. 1", "HR.9576")
+
+
+def test_house_amendment_votes_stored_without_their_amendment_are_repaired_once(db_session, monkeypatch):
+    db_session.add(RollCall(chamber="house", congress=119, session=2, number=309, date="2026-09-16",
+                            question="On Agreeing to the Amendment", title="H R 9576", majority_requirement="1/2",
+                            source_url="https://clerk.house.gov/evs/2026/roll309.xml"))
+    db_session.commit()
+    monkeypatch.setattr(ca, "_get", _fake_get({"roll309.xml": _house_amendment_vote().encode()}))
+    assert _run(ca.repair_house_requirements(None, db_session)) == (1, "ok")
+    assert db_session.query(RollCall).one().title == "Doe of Ohio Part B Amendment No. 1"
+    monkeypatch.setattr(ca, "_get", _fake_get({}))
+    assert _run(ca.repair_house_requirements(None, db_session)) == (0, "ok")
+
+
 def test_a_run_reads_the_newest_first(monkeypatch):
     # Floor logs, then recent Digests, then the current session's votes
     # before the previous session's: a fresh database shows this week
@@ -505,6 +540,22 @@ def test_a_pro_forma_day_has_its_times_and_says_so():
            "minutesInSession": _minutes(parsed["convened_at"], parsed["adjourned_at"]),
            "adjournmentText": parsed["adjournment_text"]}
     assert _chamber_sentence("senate", day) == "The Senate met in pro forma session for 3 minutes."
+
+
+def test_a_pro_forma_session_of_seconds_is_under_a_minute():
+    """The Digest times the Senate's pro forma sessions to the second; 59
+    day reports said "for 0 minutes" (2026-10-11)."""
+    from app.pipeline.fetch.daily_digest import parse_chamber_action
+    from app.services.congress_service import _chamber_sentence, _minutes
+
+    parsed = parse_chamber_action(
+        "Chamber Action\nThe Senate met at 1:30:01 p.m. in pro forma session, and adjourned at "
+        "1:30:39 p.m. until 3:30 p.m. on Tuesday, October 13, 2026.")
+    day = {"status": "final", "counts": {"billsPassed": 0, "resolutionsPassed": 0, "confirmed": 0, "recordVotes": 0},
+           "minutesInSession": _minutes(parsed["convened_at"], parsed["adjourned_at"]),
+           "adjournmentText": parsed["adjournment_text"]}
+    assert day["minutesInSession"] == 0
+    assert _chamber_sentence("senate", day) == "The Senate met in pro forma session for under a minute."
 
 
 def test_the_house_xml_gives_no_first_name_and_none_is_invented():

@@ -447,6 +447,15 @@ def _senate_amended_bill(xml_text: str) -> str | None:
     return floor_logs.bill_id_from_number(root.findtext(".//amendment/amendment_to_document_number"))
 
 
+def _vote_title(parsed: dict) -> str:
+    """What the vote was on: a House amendment vote by the amendment the
+    Clerk names, else the measure's title. The Clerk gives an amendment vote
+    no description, and 90 of them read only as the bill's number in its
+    raw form ("H R 4776"), with nothing to tell one amendment from the next
+    (2026-10-11)."""
+    return parsed.get("amendment") or parsed.get("documentTitle") or parsed.get("voteTitle") or ""
+
+
 def _store_roll_call(db: Session, chamber: str, congress: int, session: int, number: int,
                      parsed: dict, url: str, bill_id: str | None = None) -> None:
     counts = floor_logs.tally(parsed["members"])
@@ -455,7 +464,7 @@ def _store_roll_call(db: Session, chamber: str, congress: int, session: int, num
         vote_date = _senate_vote_date(vote_date) or ""
     row = RollCall(
         chamber=chamber, congress=congress, session=session, number=number, date=vote_date,
-        question=parsed.get("question") or "", title=parsed.get("documentTitle") or parsed.get("voteTitle") or "",
+        question=parsed.get("question") or "", title=_vote_title(parsed),
         result=(parsed.get("result") or "")[:120], rejected=parsed.get("rejected"),
         majority_requirement=(parsed.get("majorityRequirement") or "")[:10],
         bill_id=floor_logs.bill_id_from_number(parsed.get("documentName")) or bill_id,
@@ -582,14 +591,19 @@ async def sync_roll_calls(client: httpx.AsyncClient, db: Session, chamber: str,
 # majority requirement ("2/3" on a suspension). Re-read this many per run
 # until none is left; each costs one request, once.
 _REQUIREMENT_REPAIR_BATCH = 60
+_AMENDMENT_QUESTION = "On Agreeing to the Amendment%"
 
 
 async def repair_house_requirements(client: httpx.AsyncClient, db: Session,
                                     limit: int = _REQUIREMENT_REPAIR_BATCH) -> tuple[int, str]:
-    """-> (repaired, outcome). Reads only <vote-type>; the stored tally and
-    positions are left as they are."""
+    """-> (repaired, outcome). Re-reads House votes stored before the parser
+    read <vote-type> (no majority requirement) or <amendment-author> (an
+    amendment vote titled only by its bill: _vote_title), and sets those two
+    fields; the stored tally and positions are left as they are."""
     rows = db.query(RollCall).filter(
-        RollCall.chamber == "house", RollCall.majority_requirement == "",
+        RollCall.chamber == "house",
+        (RollCall.majority_requirement == "")
+        | (RollCall.question.like(_AMENDMENT_QUESTION) & RollCall.title.notlike("%Amendment%")),
     ).order_by(RollCall.id.desc()).limit(limit).all()
     repaired = 0
     for rc in rows:
@@ -602,6 +616,9 @@ async def repair_house_requirements(client: httpx.AsyncClient, db: Session,
         if parsed is None:
             continue
         rc.majority_requirement = parsed["majorityRequirement"][:10]
+        if rc.question.startswith(_AMENDMENT_QUESTION.rstrip("%")):
+            # Every title names an amendment after this, so none is re-read.
+            rc.title = parsed["amendment"] or f"An amendment to {rc.title}"
         db.commit()
         repaired += 1
     return repaired, "ok"

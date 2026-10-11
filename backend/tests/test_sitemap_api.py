@@ -9,7 +9,7 @@ import pytest
 from app.api.sitemap import _iso_date, sitemap_entries
 from app.config import settings
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ActionIssueStatus, Justice, President, Representative, Senator, SponsoredBill
+from app.models import ActionIssue, ActionIssueStatus, CongressEvent, Justice, President, Representative, RollCall, Senator, SponsoredBill
 from app.services.bill_service import clear_bill_collection_cache
 
 
@@ -120,3 +120,24 @@ def test_explore_documents_are_counted_and_listed_a_page_at_a_time(db_session, m
     second = json.loads(sitemap.sitemap_explore(page=1, db=db_session).body)["documents"]
     assert [d["lastmod"] for d in first + second] == ["2026-01-01", "2026-01-02", "2026-01-03"]
     assert len(first) == 2 and len(second) == 1
+
+
+def test_bills_the_congress_reports_link_to_are_listed(db_session, monkeypatch):
+    """A bill in a day's Digest or a roll call has a page the reports link
+    to, sponsored by a sitting member or not (36 were missing, 2026-10-11).
+    Only the current congress's: a bill number names another bill in each."""
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
+    db_session.add_all([
+        CongressEvent(chamber="senate", date="2026-09-30", kind="passed", seq=1, name="A", text="Passed.",
+                      bill_id="HR.275", source="digest"),
+        CongressEvent(chamber="senate", date="2026-10-01", kind="passed", seq=1, name="A", text="Passed.",
+                      bill_id="HR.275", source="digest"),
+        CongressEvent(chamber="senate", date="2024-06-01", kind="passed", seq=1, name="Old", text="Passed.",
+                      bill_id="S.9999", source="digest"),
+        RollCall(chamber="house", congress=119, session=1, number=1, date="2025-02-05", question="On Passage",
+                 title="", result="Passed", yeas=1, nays=0, present=0, not_voting=0, bill_id="HR.1000",
+                 source_url="https://clerk.house.gov/evs/2025/roll001.xml"),
+    ])
+    db_session.commit()
+    bills = {b["id"]: b["lastmod"] for b in _body(db_session)["bills"]}
+    assert bills == {"HR.275": "2026-10-01", "HR.1000": "2025-02-05"}
