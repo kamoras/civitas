@@ -147,6 +147,25 @@ class TestCitationGraph:
         assert edges == []
         assert inbound.tolist() == [0]
 
+    def test_a_shared_rin_is_not_a_citation(self):
+        # Two airworthiness directives as stored: each prints the series'
+        # RIN in its own heading, the newer one declares it (identifiers),
+        # the older one predates identifiers being recorded. Neither cites
+        # the other; only the newer one's Executive Order reference is an edge.
+        docs = [
+            {"id": 1, "external_id": "fr-reg-2026-00001", "title": "Airworthiness Directives; Placeholder A",
+             "doc_type": "Final Rule", "summary": "", "identifiers": "[]",
+             "body": "[Docket No. FAA-2026-0001]\nRIN 2120-AA64\nThe FAA is superseding an AD."},
+            {"id": 2, "external_id": "fr-reg-2026-00002", "title": "Airworthiness Directives; Placeholder B",
+             "doc_type": "Final Rule", "summary": "", "identifiers": '["rin:2120-AA64"]',
+             "body": "[Docket No. FAA-2026-0002]\nRIN 2120-AA64\nUnder Executive Order 12866 ..."},
+            {"id": 3, "external_id": "fr-1", "title": "EO 12866: Regulatory Planning and Review",
+             "doc_type": "Executive Order", "summary": "", "body": "", "identifiers": None},
+        ]
+        _order, edges, inbound = build_citation_graph(docs, docs)
+        assert edges == [(1, 2)]
+        assert inbound.tolist() == [0, 0, 1]
+
     def test_repeated_citations_are_one_edge(self):
         docs = [
             {"id": 1, "external_id": "fr-1", "title": "EO 12866: Review",

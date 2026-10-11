@@ -22,6 +22,7 @@ from app.api.response_helpers import (
 from app.database import get_db, off_loop
 from app.member_ids import resolve_member_id
 from app.models import ExploreDocument
+from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
 from app.services.explore_search import browse_documents, hybrid_search
 from app.time_utils import comment_period_today
 
@@ -198,6 +199,28 @@ async def _load_document(db: Session, doc_id: int) -> ExploreDocument | None:
     return await off_loop(db, read)
 
 
+# Floor speeches read whole from the Record carry this id prefix
+# (explore_pipeline._SPEECH_ID_PREFIX, before its format version); the
+# others are the legacy rows, 400 or 500 characters of each speech.
+_WHOLE_SPEECH_ID_PREFIX = "crec-"
+
+
+def body_extent(doc: ExploreDocument) -> str:
+    """How much of the document `body` holds, for the page to say so rather
+    than head every one "Full text": "full"; "excerpt", cut short (a
+    Federal Register body stops at the stored limit, as 2,488 did on
+    2026-10-11, and a legacy floor speech at its first few hundred
+    characters); or "summary", a Supreme Court case's holding, question and
+    decision rather than the opinion, which is at `url`."""
+    if doc.doc_type == "Supreme Court Opinion":
+        return "summary"
+    if doc.source == "Federal Register" and len(doc.body or "") >= MAX_BODY_LEN:
+        return "excerpt"
+    if (doc.doc_type or "").endswith("Floor Speech") and not (doc.external_id or "").startswith(_WHOLE_SPEECH_ID_PREFIX):
+        return "excerpt"
+    return "full"
+
+
 @router.get("/{doc_id}")
 async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
     """Return full details for a single explore document."""
@@ -211,6 +234,7 @@ async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
             "title": doc.title,
             "summary": doc.summary,
             "body": doc.body,
+            "bodyExtent": body_extent(doc),
             "date": doc.date,
             "docType": doc.doc_type,
             "source": doc.source,

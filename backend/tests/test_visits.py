@@ -199,6 +199,8 @@ class TestTrackVisitPageViews:
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/131.0.0.0 Safari/537.36; compatible; OAI-SearchBot/1.4; +https://openai.com/searchbot",
         "Mozilla/5.0 (compatible; Baiduspider-render/2.0; +http://www.baidu.com/search/spider.html)",
+        "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; GoogleOther)",
     ])
     async def test_a_crawler_that_renders_the_page_is_not_a_visitor(self, db_session, user_agent):
         await _view(_make_request(user_agent=user_agent), "/")
@@ -316,3 +318,48 @@ class TestAdminTopPages:
         result = admin_top_pages(days=7, limit=10, db=db_session)
         assert result[0] == {"path": "/leaderboard", "views": 3}
         assert result[1] == {"path": "/compare", "views": 1}
+
+
+class TestUnconfirmedVisitsAlert:
+    """Pages held but never confirmed read as "no visitors", not as a fault:
+    check_visits_confirmed turns a day of that into an ops alert."""
+
+    @pytest.fixture
+    def alerts(self, monkeypatch):
+        sent, resolved = [], []
+        monkeypatch.setattr(visits.ops_alerts, "send_ops_alert", lambda *a, **k: sent.append(k) or True)
+        monkeypatch.setattr(visits.ops_alerts, "resolve_ops_alert", lambda c: resolved.append(c) or 1)
+        monkeypatch.setattr(visits, "_may_be_alerting", True)
+        return sent, resolved
+
+    @staticmethod
+    def _hold_pages(monkeypatch, n: int, hours_ago: float) -> None:
+        real = throttle.time.time
+        monkeypatch.setattr(throttle.time, "time", lambda: real() - hours_ago * 3600)
+        throttle.tally(visits._PENDING, n)
+        monkeypatch.setattr(throttle.time, "time", real)
+
+    def test_a_watched_day_of_holds_with_none_confirmed_alerts(self, alerts, monkeypatch):
+        self._hold_pages(monkeypatch, 150, hours_ago=23)
+        self._hold_pages(monkeypatch, 100, hours_ago=0)
+        visits.check_visits_confirmed()
+        sent, _ = alerts
+        assert len(sent) == 1 and sent[0]["condition"] == visits.UNCONFIRMED_CONDITION
+
+    def test_a_day_not_yet_watched_does_not_alert(self, alerts, monkeypatch):
+        # A restart empties the RAM store: hours of crawler holds after a
+        # deploy, before any reader, are not a day without confirmations.
+        self._hold_pages(monkeypatch, 500, hours_ago=3)
+        visits.check_visits_confirmed()
+        assert alerts[0] == []
+
+    def test_little_traffic_does_not_alert(self, alerts, monkeypatch):
+        self._hold_pages(monkeypatch, 20, hours_ago=23)
+        visits.check_visits_confirmed()
+        assert alerts[0] == []
+
+    async def test_a_confirmed_page_resolves_it_once(self, alerts, db_session):
+        await _view(_make_request(), "/leaderboard")
+        visits.check_visits_confirmed()
+        visits.check_visits_confirmed()
+        assert alerts == ([], [visits.UNCONFIRMED_CONDITION])

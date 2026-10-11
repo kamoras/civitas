@@ -1180,7 +1180,7 @@ Every document feeds three structures, all rebuilt from the
 |---|---|---|
 | `vec_explore` | `/data/vectors.db` (sqlite-vec) | 384-dim embeddings of each document's whole text, in windows of the encoder's context length each led by the title, with doc type / chamber / politician as filterable metadata |
 | `explore_fts` | app DB (SQLite FTS5) | A BM25F inverted index over title, summary and body. External-content, so the text is not duplicated; triggers keep it live between runs |
-| `authority` / `cited_by_count` | `explore_documents` columns | PageRank over the citation graph between these documents |
+| `authority` / `cited_by_count` | `explore_documents` columns | PageRank over the citation graph between these documents (an Executive Order, FR citation or FR document number cited in the text; a RIN names a rulemaking and makes no edge) |
 
 **Query flow:**
 ```

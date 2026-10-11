@@ -12,6 +12,7 @@ import re
 import httpx
 from lxml import html as lxml_html
 
+from app.pipeline.fetch.fr_rulemaking import drop_unprinted
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ async def _fetch_body_text(client: httpx.AsyncClient, url: str) -> str:
         if resp.status_code != 200:
             return ""
         tree = lxml_html.fromstring(resp.text)
+        drop_unprinted(tree)
         for el in tree.iter("script", "style", "svg", "img"):
             el.drop_tree()
         raw = tree.text_content()

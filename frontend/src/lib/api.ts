@@ -879,6 +879,10 @@ export interface ExploreDocumentDetail {
   title: string;
   summary: string;
   body: string;
+  /** How much of the document `body` holds (api/explore.py body_extent):
+   * all of it, an excerpt cut short, or a case summary rather than the
+   * opinion. Optional only for a backend older than the field. */
+  bodyExtent?: "full" | "excerpt" | "summary";
   date: string;
   docType: string;
   source: string;

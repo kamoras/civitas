@@ -1249,6 +1249,115 @@ rule's means reclassifies 0 of 2,351 Senate and 0 of 6,055 House breaks
   - Members scored from 1 to 39 votes or a placeholder, all since departed,
     move by up to 50 points.
 
+### 15. Position congruence's extremes: records, not artifacts (audited 2026-10)
+
+**The question.** Position congruence puts some members at exactly 0 or
+100. Are those the members' records, or something the method does to them?
+The production scores were pulled read-only on 2026-10-10 (computed: every
+current member's breakdown, the deployed `member_ideal_points.json` and
+district table) and each candidate artifact checked in turn.
+
+**The distribution (computed).** 10 of 100 senators and 44 of 433
+representatives sit at 0 or 100, as a scale clipped at the 90th
+percentile of |extremity| must put about a tenth there. By party: Senate
+Democrats 2.2% at 0 and none at 100, Senate Republicans 11.3% and 5.7%;
+House Democrats 2.3% and none, House Republicans 8.7% and 8.7%. The means
+are about 50 for every chamber and party (49.6 to 51.3).
+
+**What each extreme rests on (computed).**
+
+- *Re-derived by hand.* All 533 stored values reproduce from the deployed
+  section (Nokken-Poole, 119th Congress, seat lean from Cook PVI on the
+  lines the 119th House was elected on, the per-party fit and the
+  scale), to the rounding shown.
+- *Few votes.* None. Every member at 0 or 100 rests on at least 182
+  scaled roll calls (weight 0.97); the rest on 503 or more (weight 1).
+  Thin records sit between, as section 14's weight intends.
+- *Wrong member, party or seat.* None. Every current member's Voteview row
+  matches their party and seat; the one member who left their party
+  during the Congress is read on the record since the switch, against the
+  caucus the pipeline infers.
+- *Sign.* A Democrat more liberal than expected, or a Republican more
+  conservative, scores below 50, as it should.
+- *Stability.* Every member at 0 or 100 in the 119th sat on the same side
+  of 50 in the 118th (10 of 10 senators, 37 of 37 representatives with a
+  118th position), most of them within 15 points of the same end (5 and
+  31); on DW-NOMINATE, the 119th's career measure, all of them are on the
+  same side too. The scores correlate 0.72 (Senate) and 0.80 (House) with
+  the 118th's.
+- *Symmetry.* The same distance on Voteview's scale scores the same for
+  either party (a test pins it). More Republicans reach the ends because
+  Republican positions spread more widely around their seats' expectation
+  (residual standard deviation 0.178 against 0.112 in the Senate, 0.151
+  against 0.110 in the House), which section 14's pooled scale reflects
+  by its stated choice.
+- *Scale against the other parts.* Position congruence's contribution
+  varies less than the vote part's across members (standard deviation 7.7
+  against 17.9 points in the Senate, 7.9 against 17.6 in the House), so an
+  end on this part moves Constituent Alignment by at most 15 points from a
+  typical member's.
+- *Validity, recomputed on current data.* Over the Congress before each
+  election, as in v6.29: senators' personal vote (two-party share minus
+  their party's presidential share, 2022 and 2024, n = 44) rises +0.95
+  points per standard deviation of the score (95% bootstrap interval +0.17
+  to +1.73), position alone; v6.29 measured +1.27 beside the other parts.
+
+**The expectation's form at the ends of seat lean.** The one candidate
+artifact with a measurable footprint: in the House, a member's position
+bends with seat lean rather than following a straight line (119th, on the
+pipeline's Cook PVI, computed: the squared-lean term's t is +4.5 for
+Democrats and −4.3 for Republicans; leave-one-out error 7% to 8% lower with it).
+Members in the deepest-partisan and the swing seats sit nearer the center
+than the line predicts, and those in moderately safe seats further out, so
+on a curved expectation some of today's ends would move inward. The same
+bend runs through history (printed by section 15 of the script):
+
+| Squared-lean term, per Congress | Median t | \|t\| > 2 |
+|---|---|---|
+| House Democrats, 103rd–111th | +3.03 | 7 of 8 |
+| House Republicans | −1.43 | 3 of 8 |
+| Senate Democrats, 101st–119th | −0.58 | 1 of 19 |
+| Senate Republicans | −1.05 | 7 of 19 |
+
+But the score is a claim about what constituents judge, so the form was
+put in front of section 14's elections. The curved expectation predicts
+House generals worse, not better, and the straight line's residual carries
+the signal the curve removes:
+
+| Design | House generals 1994–2010: coef/pt (t), ΔR², held-out RMSE | Senate generals 1990–2024: coef/pt (t), ΔR² |
+|---|---|---|
+| **Straight line, p90 clip (shipped)** | **0.035 (5.2), 0.0090, 6.153** | **0.040 (2.4), 0.0111** |
+| Quadratic per party, p90 clip | 0.028 (4.3), 0.0057, 6.179 | 0.044 (2.7), 0.0127 |
+| Both entered | line 0.223 (4.7), quadratic −0.194 (−4.1) | line −0.005 (−0.1), quadratic 0.048 (1.0) |
+
+(Base held-out RMSE 6.196.) In the Senate the curve does slightly better,
+within the noise, and the 119th Senate shows no bend (on Cook PVI, computed: t −0.9 D, −0.2 R).
+**Kept: the straight line**, in both chambers, one construct: where the two
+could be told apart, the House, the line wins clearly.
+
+**The clip.** A score clipped at the 90th percentile treats everyone past
+it alike. Other saturation points, and a tanh that never reaches the ends:
+
+| Saturation | House: at 0 or 100, ΔR², held-out RMSE | Senate: at 0 or 100, ΔR² |
+|---|---|---|
+| 75th percentile | 24.2%, 0.0097, 6.146 | 19.5%, 0.0092 |
+| **90th (shipped)** | **9.6%, 0.0090, 6.153** | **7.2%, 0.0111** |
+| 95th | 4.8%, 0.0086, 6.157 | 3.5%, 0.0123 |
+| 99th | 1.0%, 0.0086, 6.154 | 1.3%, 0.0130 |
+| tanh at the 90th, no clip | 0.0%, 0.0092, 6.150 | 0.0%, 0.0107 |
+
+The House leans toward clipping sooner and the Senate toward later, each by
+about a thousandth of R²; none is distinguishable from the shipped point.
+**Kept.**
+
+**Verdict.** The extremes are the members' records: full records,
+reproduced exactly, stable across Congresses and measures, scored on one
+scale for both parties, by a design whose form and clip the election
+evidence supports or cannot improve on. What made them look arbitrary was
+the breakdown: it gave two positions and a 0 or 100 with no scale. Since
+this audit it names the seat lean read, the distance, where 0 and 100 sit
+and why, and says when a position is past the end.
+
 ## What the evidence does not settle
 
 - **The association fades over time.** Per election, the position coefficient

@@ -26,6 +26,23 @@ _COLLAPSE_WS = re.compile(r"[ \t]+")
 _COLLAPSE_NL = re.compile(r"\n{3,}")
 MAX_BODY_LEN = 15_000
 
+# What the Register's full-text HTML marks as not part of the printed
+# document: chiefly its page-break markers, "( printed page 18267)", one at
+# every page of the printed issue. Read as text they began 192 presidential
+# documents' summaries and sat between paragraphs of 7,571 bodies
+# (2026-10-11).
+UNPRINTED_XPATH = "//*[contains(concat(' ', normalize-space(@class), ' '), ' unprinted-element ')]"
+# The same markers in text stored before they were dropped
+# (explore_pipeline._strip_page_markers).
+PAGE_MARKER_RE = re.compile(r"\(\s*printed page \d+\)")
+
+
+def drop_unprinted(tree) -> None:
+    """Remove the Register's unprinted markup from a parsed full-text page,
+    keeping the text that follows each element."""
+    for el in tree.xpath(UNPRINTED_XPATH):
+        el.drop_tree()
+
 FR_BASE = "https://www.federalregister.gov/api/v1"
 
 FR_DOC_TYPES = ["RULE", "PRORULE", "NOTICE"]
@@ -96,6 +113,7 @@ async def _fetch_body_text(client: httpx.AsyncClient, url: str) -> str:
         if resp.status_code != 200:
             return ""
         tree = lxml_html.fromstring(resp.text)
+        drop_unprinted(tree)
         for el in tree.iter("script", "style", "svg", "img"):
             el.drop_tree()
         raw = tree.text_content()
