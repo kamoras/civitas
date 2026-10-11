@@ -845,8 +845,18 @@ by the page (`NavigationBeacon`): a click on a prefetched link reaches no
 server, verified under `next build`. `track_visit` drops headless Chrome
 (`HeadlessChrome`, the default for Playwright-driven agents) and crawlers
 that render pages in a real browser engine and say so in their User-Agent
-(`_SELF_DECLARED_CRAWLER`: Bingbot, Applebot, OAI-SearchBot — 14 of the 17
-addresses that sent the beacon in 16 hours on 2026-10-10).
+(`_SELF_DECLARED_CRAWLER`: Bingbot, Applebot, OAI-SearchBot, GoogleOther —
+14 of the 17 addresses that sent the beacon in 16 hours on 2026-10-10).
+When judging whether counting works from nginx logs, leave those out too:
+GoogleOther's User-Agent is a Chrome-on-Android one ending in
+"(compatible; GoogleOther)", and it makes `_rsc` requests by the hundred
+(none of which reached the counter as a router request), which on 2026-10-11 read
+as "real browsers ran the page and weren't counted" when no ordinary browser
+had visited. Because a broken confirmation path reads as zero visitors
+rather than as an error, `check_visits_confirmed` (every API worker, on the
+liveness loop) raises an ops alert when a whole watched day holds pages and
+confirms none; its window is a day because readers who run the page are few
+enough that a quiet night is normal.
 
 Two things this rules out. Never count from one request's headers: counting
 requests without fetch metadata made crawlers two thirds of the unique
