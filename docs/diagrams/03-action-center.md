@@ -19,7 +19,7 @@ the heartbeat for fifteen minutes a run (2026-09-27).
 flowchart TB
     TICK(["Hourly at :15"]) --> FETCH
 
-    FETCH["<b>1. FETCH</b><br/>8 RSS feeds across 7 newsrooms<br/>+ Google Trends + Bluesky trending<br/>48h article window · direct URLs only"]
+    FETCH["<b>1. FETCH</b><br/>7 RSS feeds across 6 newsrooms<br/>+ Google Trends + Bluesky trending<br/>48h article window · direct URLs only"]
     FETCH --> FILTER
 
     FILTER["<b>2. FILTER</b><br/>embed each article against<br/>24 policy prototypes (19 US, 5 international)"]
