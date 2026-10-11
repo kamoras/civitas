@@ -72,6 +72,7 @@ from app.pipeline.analyze.grounding import (
     proposal_stated_as_fact,
 )
 from app.pipeline.analyze import claims as claim_layer
+from app.pipeline.analyze.post_composer import compose
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline import lease
@@ -489,8 +490,14 @@ def _record_generation_sample(
     output: dict,
     passed: bool,
     violations: list[str] | None = None,
+    once_per_day: bool = False,
 ) -> None:
     """Persist one LLM generation attempt as future fine-tuning data.
+
+    ``once_per_day`` skips a row whose task and input were already recorded
+    today (UTC): call_llm caches a day's answer per input, so a later hourly
+    run asking the same thing gets the cached answer back, and recording it
+    again would count one generation many times.
 
     2026-08 research finding: this pipeline's mechanical grounding/role
     checks already work as a free, automatic labeling function — every
@@ -513,6 +520,12 @@ def _record_generation_sample(
     """
     sample_db = Session(bind=db.get_bind())
     try:
+        if once_per_day and sample_db.query(LlmGenerationSample.id).filter(
+            LlmGenerationSample.task == task,
+            LlmGenerationSample.input_text == input_text,
+            LlmGenerationSample.created_at >= datetime.combine(utcnow().date(), datetime.min.time()),
+        ).first():
+            return
         sample_db.add(LlmGenerationSample(
             task=task,
             rank=rank,
@@ -989,10 +1002,11 @@ def locate_claim(
     unwritten code and reporting success. An unimportable function is not
     a private one, it is one whose verification has to be guessed at.
     """
+    user_prompt = _CLAIM_PROMPT_TEMPLATE.format(source=source_material)
     located = call_llm(
         prompt_version=ACTION_CENTER_PROMPT_VERSION,
         system_prompt=_SYSTEM_PROMPT,
-        user_prompt=_CLAIM_PROMPT_TEMPLATE.format(source=source_material),
+        user_prompt=user_prompt,
         cache_key={"date": today, "rank": rank, "src": source_material[:200]},
         db_session=db,
         max_tokens=200,
@@ -1000,7 +1014,21 @@ def locate_claim(
     )
     if isinstance(located, str):
         located = extract_json(located)
-    return located if isinstance(located, dict) else None
+    located = located if isinstance(located, dict) else None
+    # The training row is this call: the prompt as sent, the model's spans,
+    # and whether compose() verifies them in the source (the check
+    # claims._extract applies). Until 2026-10-10 the only row was the
+    # composed issue, stored against the unfilled template.
+    verified = bool(located) and bool(compose(
+        str(located.get("actor") or ""), str(located.get("predicate") or ""), source_material,
+    ))
+    _record_generation_sample(
+        db, "action_center_claim", rank, 1, user_prompt, located or {},
+        passed=verified,
+        violations=None if verified else ["spans not found verbatim and together in the source"],
+        once_per_day=True,
+    )
+    return located
 
 
 
@@ -2553,6 +2581,18 @@ def _generate_period_summary(label: str, entries: list, cache_key: dict, db: "Se
     }
 
 
+def week_span_label(start: date, end: date) -> str:
+    """ "September 21–27, 2026", "September 28–October 4, 2026",
+    "December 28, 2026–January 3, 2027". Formatting the end as a bare day
+    gave a week across a month boundary as "September 28–4, 2026", which
+    the model then copied into the week's summary."""
+    if start.year != end.year:
+        return f"{start.strftime('%B %-d, %Y')}–{end.strftime('%B %-d, %Y')}"
+    if start.month != end.month:
+        return f"{start.strftime('%B %-d')}–{end.strftime('%B %-d, %Y')}"
+    return f"{start.strftime('%B %-d')}–{end.strftime('%-d, %Y')}"
+
+
 def generate_period_summaries(today_str: str, db: "Session") -> None:
     """Generate missing week/month/year summaries for all completed periods.
 
@@ -2617,7 +2657,7 @@ def generate_period_summaries(today_str: str, db: "Session") -> None:
         if existing:
             continue
 
-        label = f"the week of {monday.strftime('%B %-d')}–{sunday.strftime('%-d, %Y')}"
+        label = f"the week of {week_span_label(monday, sunday)}"
         top_areas: dict[str, int] = {}
         for e in week_entries:
             for area in _json.loads(e.policy_areas or "[]"):
@@ -4887,8 +4927,12 @@ def _run_refresh(db: Session) -> int:
         composed_text = f"{title} {summary} " + " ".join(facts)
         reasons = grounding_violations(composed_text, issue_source_text)
         reasons += hedge_and_editorializing_violations(composed_text)
+        # No model wrote this: it is composed from verified spans, so its
+        # input is the source text it was composed from and checked
+        # against. The calls that located the spans are recorded by
+        # locate_claim.
         _record_generation_sample(
-            db, "action_center_issue", rank, 1, _CLAIM_PROMPT_TEMPLATE,
+            db, "action_center_issue", rank, 1, issue_source_text,
             {"title": title, "summary": summary, "facts": facts},
             passed=not reasons, violations=reasons or None,
         )

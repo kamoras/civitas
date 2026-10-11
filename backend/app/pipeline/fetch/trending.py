@@ -26,16 +26,25 @@ difference.
 
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 
 from defusedxml import ElementTree as SafeET
 
 import httpx
 
 from app.contact import BOT_USER_AGENT
+from app.ops_alerts import check_source_freshness
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
 FETCH_TIMEOUT = 15.0
+# How long a trending source may go without returning topics before it
+# raises an ops alert, at the least (its measured rhythm can raise the bar):
+# Google's is a daily product, so a day without it is a full cycle of
+# ranking run without that signal. Logged failures alone went unread: Reddit
+# 403'd for an unknown stretch before anyone looked.
+TRENDING_SILENCE_FLOOR = timedelta(hours=24)
 
 
 @dataclass
@@ -153,15 +162,20 @@ def fetch_trending_topics() -> list[TrendingTopic]:
 
     all_topics: list[TrendingTopic] = []
     failed: list[str] = []
+    # A fetch that returned topics counts as something new now; one that
+    # returned none, or failed, adds nothing (check_source_freshness).
+    observed = {}
     for name, fetch in (("google_trends", _fetch_google_trends),
                         ("bluesky", _fetch_bluesky_trending)):
         topics = fetch()
+        observed[f"trending:{name}"] = (name, None if topics is None else [utcnow()] if topics else [])
         if topics is None:
             failed.append(name)
             action_metrics.increment(f"trending_source_failed_{name}")
             continue
         action_metrics.increment(f"trending_topics_{name}", len(topics))
         all_topics.extend(topics)
+    check_source_freshness(observed, floor=TRENDING_SILENCE_FLOOR, kind="trending source")
 
     if failed:
         logger.error(

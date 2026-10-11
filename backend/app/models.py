@@ -1525,11 +1525,11 @@ class LlmGenerationSample(Base):
     __tablename__ = "llm_generation_samples"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    task: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # "action_center_issue"
+    task: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # "action_center_claim" (one model call), "action_center_issue" (the composed issue)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False)  # 1 = first try, 2/3 = retries
-    input_text: Mapped[str] = mapped_column(Text, nullable=False)  # the user_prompt actually sent
-    output_json: Mapped[str] = mapped_column(Text, nullable=False)  # {"title","summary","facts"} as generated
+    input_text: Mapped[str] = mapped_column(Text, nullable=False)  # claim: the user_prompt as sent; issue: the source text it was composed from
+    output_json: Mapped[str] = mapped_column(Text, nullable=False)  # claim: the located {"actor","predicate"}; issue: {"title","summary","facts"}
     passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
     # Why this attempt was rejected — null when passed. Free-text reasons
     # from the same mechanical checks the pipeline already gates on

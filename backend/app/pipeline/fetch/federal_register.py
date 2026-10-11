@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.time_utils import comment_period_today
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,13 @@ async def fetch_recent_significant_rules(
         logger.warning("Federal Register recent significant rules fetch failed: %s", e)
         return []
 
+    # The documents API lists a document once it is on public inspection,
+    # with its scheduled publication date, days ahead. The early-signal
+    # issue says the rule "published ... on {date}", so a future date made
+    # it state a publication that had not happened (an issue dated the 10th
+    # said a rule was published on the 13th). Wait for the day; the
+    # Federal Register's day is Eastern.
+    today = comment_period_today()
     results = [
         {
             "title": r.get("title", ""),
@@ -94,6 +102,7 @@ async def fetch_recent_significant_rules(
         }
         for r in raw_results
         if not _is_correction(r.get("title", ""))
+        and (r.get("publication_date") or "") <= today
     ]
     api_cache_set(db, "federal_register", cache_key, results, normal_ttl_hours=max_age_hours)
     return results

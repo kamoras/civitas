@@ -1643,6 +1643,58 @@ class TestRecordGenerationSample:
             input_text="x", output={"summary": "y"}, passed=True,
         )  # must not raise
 
+    def test_once_per_day_skips_a_repeat_of_todays_input(self, db_session):
+        """call_llm caches a day's answer per input, so a later hourly run
+        asking the same thing is not a new generation."""
+        for _ in range(2):
+            _record_generation_sample(
+                db_session, "action_center_claim", rank=1, attempt=1,
+                input_text="same prompt", output={}, passed=False, once_per_day=True,
+            )
+        _record_generation_sample(
+            db_session, "action_center_claim", rank=1, attempt=1,
+            input_text="another prompt", output={}, passed=False, once_per_day=True,
+        )
+        assert db_session.query(LlmGenerationSample).count() == 2
+
+    def test_a_claim_call_is_recorded_as_sent(self, db_session):
+        """The row is the prompt the model got, with the article in it —
+        not the template with a literal {source} (every row from 2026-09-24
+        to 2026-10-10) — and whether its spans verified."""
+        from app.pipeline.analyze import action_center as ac
+
+        source = "Senate passes the budget. The Senate passed the budget 51-49 on Tuesday."
+        spans = {"actor": "The Senate", "predicate": "passed the budget 51-49 on Tuesday"}
+        with patch.object(ac, "call_llm", return_value=spans):
+            assert ac.locate_claim(source, db=db_session, today="2026-10-10", rank=1) == spans
+        with patch.object(ac, "call_llm", return_value={"actor": "The House", "predicate": "voted no"}):
+            ac.locate_claim("Other story. Nothing here.", db=db_session, today="2026-10-10", rank=2)
+
+        rows = db_session.query(LlmGenerationSample).order_by(LlmGenerationSample.rank).all()
+        assert [r.task for r in rows] == ["action_center_claim", "action_center_claim"]
+        assert "{source}" not in rows[0].input_text
+        assert source in rows[0].input_text
+        assert json.loads(rows[0].output_json) == spans
+        assert [r.passed for r in rows] == [True, False]
+
+    def test_no_sample_is_recorded_against_the_unfilled_template(self):
+        import ast
+        import inspect
+
+        from app.pipeline.analyze import action_center as ac
+
+        tree = ast.parse(inspect.getsource(ac))
+        calls = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "_record_generation_sample"
+        ]
+        assert calls
+        for call in calls:
+            assert not any(
+                isinstance(arg, ast.Name) and arg.id == "_CLAIM_PROMPT_TEMPLATE"
+                for arg in [*call.args, *(k.value for k in call.keywords)]
+            )
+
     def test_does_not_hold_the_callers_write_transaction(self, tmp_path):
         """The refresh loop's session commits only after every cluster's
         LLM work. A sample flushed into it held SQLite's write lock for the

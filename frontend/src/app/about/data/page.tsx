@@ -171,7 +171,7 @@ export default function DataChapter() {
               opens; otherwise USAGov&apos;s directory of election offices.
             </Fact>
             <Fact label="News & trends">
-              RSS feeds from seven newsrooms, Google Trends and Bluesky, for the Action Center.
+              RSS feeds from six newsrooms, Google Trends and Bluesky, for the Action Center.
             </Fact>
           </Facts>
         </Sub>
