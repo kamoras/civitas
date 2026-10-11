@@ -173,14 +173,16 @@ export default async function FeedsPage() {
                 The same rules as everything else Civitas publishes. An issue post is a claim quoted
                 word for word from its sources, or their headline. A Congress post is the day&apos;s
                 counts from the official Record, filled into a fixed sentence, with bill numbers but
-                never their titles. A member spotlight is their scores and rank as numbers. A race
-                update names who did what, both parts copied word for word from a news report about
-                that race, never one already posted; posts by members of the public are never
-                restated, and there are at most four a day. An election-night post is a state&apos;s
-                own count (who leads, their share and how much is in) in a fixed sentence, saying
-                &ldquo;leads&rdquo; until the state lists its count as official; Civitas never calls
-                a race. Each links to the page with the full record. More on how the news is handled
-                is in <A href="/about/news">News &amp; Congress reports</A>.
+                never their titles. A member spotlight is the one finding where their scorecard
+                stands furthest from their chamber&apos;s, in the scorecard&apos;s own fixed
+                sentence, then their score and rank. A race update names who did what, both parts
+                copied word for word from a news report about that race, never one already posted;
+                posts by members of the public are never restated, and there are at most four a day.
+                An election-night post is a state&apos;s own count (who leads, their share and how
+                much is in) in a fixed sentence, saying &ldquo;leads&rdquo; until the state lists
+                its count as official; Civitas never calls a race. Each links to the page with the
+                full record. More on how the news is handled is in{" "}
+                <A href="/about/news">News &amp; Congress reports</A>.
               </P>
             </Section>
           </div>
