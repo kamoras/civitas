@@ -3,6 +3,7 @@ import Footer from "@/components/layout/Footer";
 import Masthead from "@/components/home/Masthead";
 import RecordIndex from "@/components/home/RecordIndex";
 import Holdings from "@/components/home/Holdings";
+import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import JsonLd from "@/components/seo/JsonLd";
 import {
   BSKY_PROFILE_URL,
@@ -57,6 +58,7 @@ export default function Home() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16">
         <Masthead />
+        <ThisWeekStrip variant="full" />
         <div className="mx-auto mt-8 grid max-w-7xl grid-cols-1 gap-8 px-4 sm:px-6 md:mt-10 md:grid-cols-12 md:gap-9">
           <RecordIndex />
           <Holdings />

@@ -6,6 +6,7 @@ import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import { describeProfile, personJsonLd } from "@/lib/seo";
+import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import PoliticianProfileClient from "./PoliticianProfileClient";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -110,7 +111,11 @@ export default async function PoliticianProfilePage({
           ]),
         ]}
       />
-      <PoliticianProfileClient profile={profile} breakdown={breakdown} />
+      <PoliticianProfileClient
+        profile={profile}
+        breakdown={breakdown}
+        strip={<ThisWeekStrip variant="compact" />}
+      />
     </>
   );
 }

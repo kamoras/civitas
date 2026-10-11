@@ -16,6 +16,7 @@ from app.pipeline.analyze.party_line_record import load_record
 from app.pipeline.analyze.score_calculator import explain_scores, funding_share_base, party_line_tally
 from app.pipeline.transform.normalize_votes import stored_vote
 from app.services.bill_record import roll_call_summaries
+from app.services.score_findings import add_findings
 
 
 
@@ -131,7 +132,8 @@ def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) ->
     breaks its Constituent Alignment counts (and the flank breaks it
     doesn't) as the chamber recorded each roll call: the member's vote and
     how each party split. Served with the score so the list and the number
-    can't disagree."""
+    can't disagree. Each dimension also carries its one-sentence finding
+    (score_findings)."""
     entity_dict = build_score_breakdown_entity(entity, lobbying_donation_attr=lobbying_donation_attr)
     if entity_dict["district"] is None:
         breakdown = explain_scores(entity_dict)
@@ -154,4 +156,4 @@ def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) ->
                 {"vote": b.get("vote"), "rollCall": summaries.get(b.get("rollCall"))}
                 for b in record.get(key) or []
             ]
-    return breakdown
+    return add_findings(breakdown, "senate" if entity_dict["district"] is None else "house")

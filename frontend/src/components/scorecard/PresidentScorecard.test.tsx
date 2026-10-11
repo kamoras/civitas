@@ -159,7 +159,7 @@ describe("PresidentScorecard", () => {
     ).toBeInTheDocument();
     // Each score shows its actual share of this president's overall, not
     // the nominal weight (Historical Legacy is unscored for a sitting one).
-    expect(screen.getAllByText("50% of the score")).toHaveLength(2);
+    expect(screen.getAllByText("50% of the overall score.")).toHaveLength(2);
     expect(
       screen.getByText(
         /Growth is counted from the term's second full year, so there's no figure yet\./

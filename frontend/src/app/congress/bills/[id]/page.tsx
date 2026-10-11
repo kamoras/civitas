@@ -10,6 +10,7 @@ import { billCanonicalPath, billHref, parseCongressParam } from "@/lib/congress"
 import { ordinal } from "@/components/scorecard/format";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import BillPageView from "@/components/congress/BillPageView";
+import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -127,6 +128,7 @@ export default async function BillPage({ params, searchParams }: PageProps) {
         record={record}
         detail={detail}
         stageName={detail ? (stages[detail.stage]?.name ?? null) : null}
+        strip={<ThisWeekStrip variant="compact" />}
       />
     </>
   );

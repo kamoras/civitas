@@ -567,4 +567,51 @@ describe("MemberScorecard", () => {
     ).toBeInTheDocument();
     expect(within(column).queryByText(/Electing a Member/)).not.toBeInTheDocument();
   });
+
+  it("leads each column with the API's finding, and keeps the method behind a disclosure", async () => {
+    const withFindings = {
+      fundingIndependence: {
+        ...breakdown.fundingIndependence,
+        finding:
+          "Gifts of $200 or less made up 24% of the money, more than the House median of 6%.",
+      },
+      constituentAlignment: {
+        ...breakdown.constituentAlignment,
+        finding:
+          "Breaks with the party about 7 times as often as Republicans in districts that lean the same way.",
+      },
+      legislativeEffectiveness: {
+        ...breakdown.legislativeEffectiveness,
+        finding: "Of 65 bills sponsored this Congress, 4 passed the House; none has become law.",
+      },
+    } as RepresentationScoreBreakdown;
+    renderCard(withFindings);
+    for (const [id, dimension] of [
+      ["funding-independence", "fundingIndependence"],
+      ["constituent-alignment", "constituentAlignment"],
+      ["legislative-effectiveness", "legislativeEffectiveness"],
+    ] as const) {
+      const column = document.getElementById(id)!;
+      const finding = within(column).getByText(withFindings[dimension].finding!);
+      // First in the column's body, before the evidence.
+      expect(finding.parentElement!.firstElementChild).toBe(finding);
+      // The components and their statistics sit in a closed disclosure.
+      const details = within(column).getByText("How this is computed").closest("details")!;
+      expect(details.open).toBe(false);
+      expect(
+        within(details).getByText(withFindings[dimension].components[0].label)
+      ).toBeInTheDocument();
+    }
+    // The figures the findings leave out are still on the page.
+    expect(
+      screen.getByText(/11% of \$1\.2M in contributions came from PACs\.$/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Voted against most Republicans on 6 of 76/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Besides these, 6 simple or concurrent resolutions\./)
+    ).toBeInTheDocument();
+    // The old ledes' duplicate sentences are gone.
+    expect(screen.queryByText(/Sponsored 65 bills this Congress/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/came from donors giving \$200 or less/)).not.toBeInTheDocument();
+  });
 });
