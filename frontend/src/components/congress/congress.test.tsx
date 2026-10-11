@@ -451,7 +451,7 @@ describe("bill page", () => {
       screen.getByRole("heading", { level: 1, name: "Protect College Sports Act of 2026" })
     ).toBeTruthy();
     // A part Congress.gov did not return is said to be missing, not shown empty.
-    expect(screen.getByText(/did not return the cosponsors/)).toBeTruthy();
+    expect(screen.getByText(/could not get the cosponsors from/)).toBeTruthy();
     expect(await screen.findByRole("link", { name: "Rob Delgado" })).toBeTruthy();
     expect(screen.getByText("Reed Paul")).toBeTruthy();
     await userEvent.selectOptions(screen.getByLabelText("State"), "KY");

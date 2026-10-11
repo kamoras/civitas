@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
+from app.api.rate_limit import UpstreamRouteLimit, try_spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.database import get_db, off_loop
 from app.http_client import make_async_client
@@ -77,7 +77,9 @@ async def get_bill_record(
 
     A cache miss fetches from Congress.gov on the pipeline's own key, so the
     route is rate-limited and its upstream calls budgeted (rate_limit.py);
-    a congress that hasn't begun is refused before anything is fetched."""
+    with the budget spent, the parts not stored are named in `unavailable`
+    and fetched by a later visit. A congress that hasn't begun is refused
+    before anything is fetched."""
     if parse_bill_id(bill_id) is None:
         raise HTTPException(status_code=404, detail="Not a bill id")
     current = expected_current_congress()
@@ -86,7 +88,7 @@ async def get_bill_record(
         raise HTTPException(status_code=404, detail="That Congress hasn't convened")
     async with make_async_client() as client:
         raw = await fetch_bill_record(
-            client, db, congress, bill_id, spend=spend_upstream, deadline_s=_RECORD_DEADLINE_S,
+            client, db, congress, bill_id, spend=try_spend_upstream, deadline_s=_RECORD_DEADLINE_S,
         )
     if raw["not_found"]:
         raise HTTPException(status_code=404, detail="Bill not found")

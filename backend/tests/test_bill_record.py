@@ -6,9 +6,10 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api import bills as bills_api
 from app.database import get_db
 from app.main import app
-from app.models import RollCall, RollCallPosition, Senator
+from app.models import RollCall, RollCallPosition, Senator, SponsoredBill
 from app.services import bill_record as br
 
 # Congress.gov's answer for S. 4668 (119th), trimmed to what is shaped.
@@ -151,12 +152,36 @@ def test_only_cache_misses_are_charged_before_anything_is_fetched(senate, monkey
     assert charged == [1, 4]  # the bill, then the rest; the cached call charges nothing
 
     async def refuse(n):
-        raise RuntimeError("budget spent")
+        return False
     monkeypatch.setattr(br, "_congress_get", fake)
     n = len(calls)
-    with pytest.raises(RuntimeError):
-        asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4669", spend=refuse))
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4669", spend=refuse))
     assert len(calls) == n  # refused before any request went out
+    assert set(raw["unavailable"]) == set(br._PARTS) and raw["not_found"] is False
+
+
+def test_a_spent_budget_serves_what_is_stored_and_a_later_visit_fetches_the_rest(senate, monkeypatch):
+    """The shared hourly budget spent: the bill (cached by an earlier visit)
+    is served with the other parts named unavailable, nothing is fetched or
+    cached for them, and the next visit with budget fetches only those."""
+    fake, calls = _answers()
+    monkeypatch.setattr(br, "_congress_get", fake)
+    budget = {"left": 1}
+
+    async def spend(n):
+        if n > budget["left"]:
+            return False
+        budget["left"] -= n
+        return True
+
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=spend))
+    assert raw["bill"] is not None
+    assert raw["unavailable"] == ["summaries", "actions", "cosponsors", "text"]
+    assert len(calls) == 1
+    budget["left"] = 10
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=spend))
+    assert raw["unavailable"] == [] and raw["actions"] is not None
+    assert len(calls) == 5 and budget["left"] == 6
 
 
 def test_congress_gov_url_ordinal(senate):
@@ -198,6 +223,30 @@ class TestRoutes:
         assert r.status_code == 200 and r.json()["votes"][0]["number"] == 243
         assert r.headers["Cache-Control"].startswith("public, max-age=")
 
+    def test_a_spent_budget_is_a_partial_record_not_an_error(self, client, senate, monkeypatch):
+        """A spent hourly budget answered 503, and the bill's page with it 500
+        (2026-10-11). Now: 200, what is stored, the rest named, nothing kept
+        by a cache; the next visit with budget fetches it."""
+        senate.add(SponsoredBill(senator_id="nora-bellweather", bill_id="S.4668", congress=119,
+                                 title="Placeholder Act", latest_action="Placed on the calendar.",
+                                 latest_action_date="2026-09-01"))
+        senate.commit()
+
+        async def spent(n):
+            return False
+        monkeypatch.setattr(bills_api, "try_spend_upstream", spent)
+        r = client.get("/api/bills/S.4668/record?congress=119")
+        assert r.status_code == 200 and r.headers["Cache-Control"] == "no-store"
+        body = r.json()
+        assert set(body["unavailable"]) == {"bill", "summaries", "actions", "cosponsors", "text"}
+        assert body["title"] == "Placeholder Act" and body["votes"][0]["number"] == 243
+
+        async def allowed(n):
+            return True
+        monkeypatch.setattr(bills_api, "try_spend_upstream", allowed)
+        r = client.get("/api/bills/S.4668/record?congress=119")
+        assert r.status_code == 200 and r.json()["unavailable"] == []
+
     def test_a_partial_record_is_not_kept_by_any_cache(self, client, monkeypatch):
         fake, _ = _answers(fail={"text"})
         monkeypatch.setattr(br, "_congress_get", fake)
@@ -217,8 +266,9 @@ class TestRoutes:
         rate_limit.reset_upstream_budget()
         monkeypatch.setattr(rate_limit, "_UPSTREAM_CALLS_PER_HOUR", 7)
         assert client.get("/api/bills/S.4668/record?congress=119").status_code == 200  # 5 calls
-        r = client.get("/api/bills/S.4669/record?congress=119")  # 5 more don't fit
-        assert r.status_code == 503 and r.headers["Retry-After"]
+        r = client.get("/api/bills/S.4669/record?congress=119")  # the bill fits, the other 4 don't
+        assert r.status_code == 200 and r.headers["Cache-Control"] == "no-store"
+        assert r.json()["unavailable"] == ["summaries", "actions", "cosponsors", "text"]
         # A cached answer still serves once the budget is spent.
         assert client.get("/api/bills/S.4668/record?congress=119").status_code == 200
         codes = [client.get("/api/bills/S.4668/record?congress=119").status_code for _ in range(10)]
@@ -290,6 +340,7 @@ def _charging(charged: list):
     what it was charged."""
     async def spend(n):
         charged.append(n)
+        return True
     return spend
 
 

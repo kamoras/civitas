@@ -166,9 +166,12 @@ export default function BillPageView({
                 )}
                 {unavailable.length > 0 && (
                   <p className="text-sm text-signal-amber">
-                    Congress.gov did not return{" "}
-                    {unavailable.map((p) => PART_NAME[p] ?? p).join(", ")} just now; those parts are
-                    missing below, not empty. Reload in a few minutes.
+                    {/* Not asked, or not answered: the site's hourly share of
+                        Congress.gov can be spent, and the page then shows
+                        what it has stored (api/bills.py). */}
+                    We could not get {unavailable.map((p) => PART_NAME[p] ?? p).join(", ")} from
+                    Congress.gov just now; those parts are missing below, not empty. Reload in a few
+                    minutes.
                   </p>
                 )}
               </header>

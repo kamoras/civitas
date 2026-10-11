@@ -131,6 +131,19 @@ async def upstream_route_limit(request: Request) -> None:
 UpstreamRouteLimit = Annotated[None, Depends(upstream_route_limit)]
 
 
+async def try_spend_upstream(calls: int) -> bool:
+    """Charge `calls` upstream requests to this hour's public budget and
+    say whether they fit; refused, nothing is charged. For a route that
+    can answer from what it has stored when the budget is spent (a bill's
+    record), where spend_upstream's 503 would take the page down."""
+    if calls <= 0:
+        return True
+    decision = await throttle.run(
+        throttle.hit, _UPSTREAM_BUCKET, "all", limit=_UPSTREAM_CALLS_PER_HOUR, period=3600.0, cost=calls,
+    )
+    return decision.allowed
+
+
 async def spend_upstream(calls: int) -> None:
     """Charge `calls` upstream requests to this hour's public budget, or
     raise 503 when they don't fit. Call only for cache misses.
