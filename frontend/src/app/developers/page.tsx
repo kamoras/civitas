@@ -257,7 +257,8 @@ export default async function DevelopersPage() {
                   <code className={CODE}>total</code>, <code className={CODE}>page</code>,{" "}
                   <code className={CODE}>perPage</code> and <code className={CODE}>totalPages</code>
                   . A member&apos;s <code className={CODE}>rank</code> is their place in the whole
-                  chamber, whatever you filter by.
+                  chamber, whatever you filter by, as the site shows it: scores are compared rounded
+                  to a whole number, so members showing the same score share a rank.
                 </Item>
                 <Item label="Scores">
                   0 to 100, higher is a better representative.{" "}
@@ -282,7 +283,8 @@ export default async function DevelopersPage() {
                 <p>
                   Each answer carries <code className={CODE}>X-RateLimit-Limit</code>,{" "}
                   <code className={CODE}>X-RateLimit-Remaining</code> and{" "}
-                  <code className={CODE}>X-RateLimit-Reset</code> (a Unix time).{" "}
+                  <code className={CODE}>X-RateLimit-Reset</code> (a Unix time: when the quota is
+                  whole again, or on a 429 when the next request is let in).{" "}
                   <code className={CODE}>Cache-Control</code> says how long an answer can be reused.
                 </p>
                 <p>The OpenAPI 3 description, to generate a client from:</p>

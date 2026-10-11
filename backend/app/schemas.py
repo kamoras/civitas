@@ -638,7 +638,9 @@ class _PublicModel(CamelModel):
 
 
 _SITE_URL = Field(description="This record's page on Civitas")
-_RANK = Field(description="Place in the whole chamber by overall score, whatever the filters (ties share one: 1, 2, 2, 4)")
+_RANK = Field(description="Place in the whole chamber by overall score, whatever the filters, as the site shows it: "
+                          "scores are compared as displayed, rounded to a whole number, and members who show the "
+                          "same score share a rank (1, 2, 2, 4)")
 
 
 class PublicApiIndexSchema(_PublicModel):
@@ -727,8 +729,10 @@ class PublicSearchResultSchema(_PublicModel):
     url: str = Field(description="The document at its official source")
     site_url: str = _SITE_URL
     summary: str
-    comment_url: str = Field(description="Where to comment, for a rule whose comment period is open")
-    comments_close_on: str = Field(description="When that comment period closes, YYYY-MM-DD; empty when none")
+    comment_url: str = Field(description="Where to comment while the comment period is open (commentsCloseOn is "
+                                         "today or later, Eastern time); empty otherwise")
+    comments_close_on: str = Field(description="When the document's comment period closes or closed, YYYY-MM-DD; "
+                                               "empty when it has none")
     cited_by_count: int = Field(description="How many indexed documents cite this one")
     matched_by: list[Literal["semantic", "keyword"]] = Field(description="Which search found it: by meaning, by exact words, or both")
     distance: float | None = Field(description="Distance in meaning from the query; null when only the exact words matched")

@@ -508,6 +508,12 @@ function CommentsSection({
   );
 }
 
+// What the body section is headed, by how much of the document it holds
+// (ExploreDocumentDetail.bodyExtent). "Full text" over every body read as a
+// claim of completeness for Federal Register bodies cut at the stored
+// limit and for Supreme Court cases, whose body is a summary.
+const BODY_HEADINGS = { full: "FULL TEXT", excerpt: "EXCERPT", summary: "CASE SUMMARY" } as const;
+
 export default function ExploreDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -807,8 +813,25 @@ export default function ExploreDetailPage() {
                     id="full-text-heading"
                     className="mb-2 font-mono text-xs tracking-wider text-ink-lo"
                   >
-                    FULL TEXT
+                    {BODY_HEADINGS[doc.bodyExtent ?? "full"]}
                   </h2>
+                  {doc.bodyExtent && doc.bodyExtent !== "full" && (
+                    <p className="mb-2 text-xs text-ink-lo">
+                      {doc.bodyExtent === "summary"
+                        ? "The case as summarized, not the opinion itself."
+                        : "The document is longer than this."}{" "}
+                      {sourceUrl && (
+                        <a
+                          href={safeHref(sourceUrl) || "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-phos"
+                        >
+                          Read it whole at the {sourceLabel}
+                        </a>
+                      )}
+                    </p>
+                  )}
                   {/* tabIndex/role/aria-label: the box scrolls, so a keyboard
                       user has to be able to put focus in it. Without them the
                       full text of the document — the reason this page exists —

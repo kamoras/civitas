@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from app.api import public
 from app.api.router import api_router
 from app.database import get_db
-from app.models import ExploreDocument, MemberIdAlias, Representative, ScoreSnapshot, Senator
+from app.models import ExploreDocument, Justice, MemberIdAlias, Representative, ScoreSnapshot, Senator
 from app.pipeline.lexical_index import ensure_lexical_index
 from app.schemas import (
     PublicApiIndexSchema,
@@ -137,6 +137,53 @@ def test_rank_is_chamber_wide_whatever_the_filters(client, chamber, member, stat
     assert only["siteUrl"].endswith(f"/politicians/{member}")
 
 
+@pytest.mark.parametrize("model,chamber,extra", [(Senator, "senators", {}),
+                                                 (Representative, "representatives", {"district": 1})])
+def test_rank_is_the_one_the_site_shows(client, db_session, model, chamber, extra):
+    """Ranked as displayed: two members whose scores round to the same
+    whole number share a rank, the higher unrounded score listed first.
+    The Senate list ranked on the unrounded score (63 of 100 senators off
+    their site rank, 2026-10-11); the House list ordered a tie by name."""
+    db_session.add_all([
+        model(id="X000001", name="Aaa Placeholder", state="TX", party="R", **extra,
+              **{**SCORES, "score_funding_independence": 95}),
+        model(id="X000002", name="Zzz Placeholder", state="TX", party="R", **extra,
+              **{**SCORES, "score_funding_independence": 95.5}),
+    ])
+    db_session.commit()
+    rows = _body(client, f"/{chamber}")["entries"]
+    overall = [r["representationScore"]["overall"] for r in rows]
+    assert overall == sorted(overall, reverse=True)
+    assert [(r["id"], r["rank"]) for r in rows[:2]] == [("X000002", 1), ("X000001", 1)]
+    assert round(overall[0]) == round(overall[1]) and overall[0] > overall[1]
+
+
+@pytest.mark.parametrize("close,open_", [("2026-10-13", True), ("2026-10-11", True), ("2026-10-10", False), ("", False)])
+def test_comment_url_only_while_the_period_is_open(client, db_session, monkeypatch, close, open_):
+    """As documented: where to comment while the period is open, judged on
+    the Eastern date (time_utils.comment_period_today)."""
+    monkeypatch.setattr(public, "comment_period_today", lambda: "2026-10-11")
+    db_session.add(ExploreDocument(
+        doc_type="Proposed Rule", source="Federal Register", title="Smoke testing rule", summary="Smoke tests.",
+        body="Smoke testing.", date="2026-09-01", chamber="Regulatory", comments_close_on=close or None,
+        comment_url="https://www.regulations.gov/commenton/PLACEHOLDER-2026-0001-0001",
+    ))
+    db_session.commit()
+    ensure_lexical_index(db_session.get_bind())
+    (result,) = [r for r in _body(client, "/search", q="smoke testing")["results"] if r["title"] == "Smoke testing rule"]
+    assert result["commentsCloseOn"] == close
+    assert bool(result["commentUrl"]) is open_
+
+
+def test_every_endpoint_answers_with_the_rate_limit_headers(client, monkeypatch):
+    monkeypatch.setattr(public, "_spec", None)
+    for path in _body(client, "/openapi.json")["paths"]:
+        resp = client.get(path.replace("{senator_id}", "S000001").replace("{rep_id}", "R000001"),
+                          params={"q": "wildfire"} if path.endswith("/search") else None)
+        assert resp.status_code == 200, path
+        assert {"x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset"} <= set(resp.headers), path
+
+
 @pytest.mark.parametrize("path", ["/senators/nobody/history", "/representatives/nobody/history",
                                   "/senators/nobody", "/representatives/nobody"])
 def test_unknown_member_is_404_not_an_empty_record(client, path):
@@ -220,6 +267,21 @@ class TestCallerMistakes:
     def test_an_unknown_politician_is_a_404(self, client):
         r = client.get("/api/public/v1/search", params={"q": "tax", "politician_id": "nobody-here"})
         assert r.status_code == 404
+
+    def test_a_justice_id_from_a_result_filters_a_search(self, client, db_session):
+        """Every opinion result names its author's id in politicianId;
+        passed back as the filter it was refused as unknown (2026-10-11)."""
+        db_session.add_all([
+            Justice(id="jane_q_placeholder", name="Jane Q. Placeholder", last_name="Placeholder"),
+            ExploreDocument(doc_type="Supreme Court Opinion", source="Supreme Court", title="Wildfire v. Smoke",
+                            summary="Opinion of the Court.", body="Wildfire smoke opinion.", date="2026-06-01",
+                            chamber="Judicial", politician_id="jane_q_placeholder",
+                            politician_name="Jane Q. Placeholder"),
+        ])
+        db_session.commit()
+        ensure_lexical_index(db_session.get_bind())
+        body = _body(client, "/search", q="wildfire", politician_id="jane_q_placeholder")
+        assert [r["politicianId"] for r in body["results"]] == ["jane_q_placeholder"]
 
     def test_a_422_records_the_parameter_and_rule(self, client, monkeypatch):
         from app.api import public

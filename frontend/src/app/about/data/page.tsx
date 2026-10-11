@@ -317,8 +317,10 @@ export default function DataChapter() {
           Explore searches floor speeches, presidential actions, Federal Register rules and Supreme
           Court opinions. A floor speech is one member&apos;s own words, whole, under the heading
           the Congressional Record printed over them, or as remarks on the debate they joined; floor
-          business such as quorum calls and requests to schedule a vote is left out. Four rankings
-          are combined
+          business such as quorum calls and requests to schedule a vote is left out. A Federal
+          Register document is kept to its first 15,000 characters, and a Supreme Court case to the
+          Court&apos;s summary of its holding and the question it decided; each page says when it
+          shows less than the whole document and links to it. Four rankings are combined
           <Cite id="cormack2009" />:
         </P>
         <List>
@@ -333,7 +335,9 @@ export default function DataChapter() {
           </Item>
           <Item label="Recency">A newer document is usually the more useful answer.</Item>
           <Item label="Authority">
-            How often other federal documents cite this one, scored like PageRank.
+            How often other federal documents cite this one, by executive order number or Federal
+            Register citation, scored like PageRank. A regulation identifier number names a
+            rulemaking, not a document, and doesn&apos;t count.
           </Item>
         </List>
         <P>
