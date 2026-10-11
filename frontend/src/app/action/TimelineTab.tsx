@@ -295,8 +295,8 @@ export default function TimelineTab(handlers: Handlers) {
             Concerns tracked
           </dt>
           <dd className="mt-1.5 font-display text-2xl font-bold tabular-nums text-ink-hi">
-            {monitors.length}{" "}
-            <span className="text-sm font-normal text-ink-lo">{activeMonitors} active</span>
+            {monitors.length} {/* Parenthesised: run together, "1 0 active" read as one number. */}
+            <span className="text-sm font-normal text-ink-lo">({activeMonitors} active)</span>
           </dd>
         </div>
       </dl>

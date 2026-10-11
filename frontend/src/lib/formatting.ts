@@ -277,7 +277,9 @@ export function policyAreaLabel(code: string): string {
  * match, and a summary that is the headline cut short matches too.
  */
 export function restatesTitle(title: string, summary: string | null | undefined): boolean {
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  // Letters and digits in any script, so an accented name or a curly quote
+  // neither hides a repeat nor manufactures one.
+  const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
   const s = norm(summary ?? "");
   return s.length > 0 && norm(title).includes(s);
 }

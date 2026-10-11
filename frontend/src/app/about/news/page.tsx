@@ -34,8 +34,8 @@ export default function NewsChapter() {
     >
       <Summary>
         <Point>
-          News comes from seven newsrooms, checked hourly. The mix runs from center to lean-left,
-          with no right-of-center outlet at present: a limitation, stated.
+          News comes from six newsrooms, checked hourly. The mix runs from center to lean-left, with
+          no right-of-center outlet at present: a limitation, stated.
         </Point>
         <Point>
           A model is used to find a claim in an article, not to write one. Every news sentence you
@@ -56,11 +56,26 @@ export default function NewsChapter() {
 
       <Section id="action-center" title="How the Action Center picks stories">
         <P>
-          Eight feeds from seven newsrooms are read every hour: AP News, NPR (Politics and World,
-          counted as one), PBS NewsHour, BBC World, The Hill, Politico and Roll Call, with opinion
-          sections filtered out. Articles are kept if they&apos;re about U.S. policy, and grouped
-          into stories by headline similarity.
+          Seven feeds from six newsrooms are read every hour: NPR (Politics and World, counted as
+          one), PBS NewsHour, BBC World, The Hill, Politico and Roll Call, with opinion sections
+          filtered out. AP News was read through a mirror until October 2026, when the mirror was
+          found a month stale; AP&apos;s own site turns away automated readers, so it was dropped
+          rather than read around that. AP stories still arrive through PBS NewsHour. A feed that
+          fails, or has nothing new for longer than its own usual gaps, raises an alert to the
+          operator. Articles are kept if they&apos;re about U.S. policy, and grouped into stories by
+          headline similarity.
         </P>
+        <More label="How an article is judged to be about U.S. policy">
+          <P>
+            Each article is compared with 827 feed articles a person labelled as U.S. policy news or
+            not, and kept when the 41 it most resembles, weighted by how closely, are at least 80%
+            U.S. policy. Tested on articles published one to six weeks after the labelled ones, 89
+            to 97% of what it keeps is U.S. policy news, and it finds 76 to 87% of it. The rule it
+            replaced, closeness to two dozen written descriptions of policy topics, kept 61 to 67%
+            relevant articles: storm and flood coverage, foreign politics and crime passed, while
+            campaign coverage was dropped. Foreign news with no U.S. government role is not kept.
+          </P>
+        </More>
         <P>
           Stories are then ranked: 40% civic actionability (are officials named, does it resemble
           the government documents we index), 35% breadth (how many independent newsrooms cover it)
@@ -124,14 +139,15 @@ export default function NewsChapter() {
         </P>
         <P>
           One exception, labelled on the page as <strong className="text-ink-hi">Developing</strong>
-          : when the Senate or House passes a bill, or an agency publishes a significant rule,
-          before the news has covered it, a short draft is made from the primary record itself, in a
-          fixed template with nothing characterized: a vote&apos;s measure, result, tally and date,
-          or a rule&apos;s agency, title, abstract and publication date. It carries a note that
-          broader coverage hasn&apos;t confirmed it yet, and isn&apos;t posted anywhere else until
-          press coverage does. A vote the news already covers isn&apos;t drafted, and a draft gives
-          way once the reporting on its bill appears: it leaves the Action Center, and the
-          homepage&apos;s record of recent issues lists the reporting in its place.
+          : when the Senate or House passes a bill, or an agency publishes a significant rule (on
+          its publication day, not while it waits on public inspection), before the news has covered
+          it, a short draft is made from the primary record itself, in a fixed template with nothing
+          characterized: a vote&apos;s measure, result, tally and date, or a rule&apos;s agency,
+          title, abstract and publication date. It carries a note that broader coverage hasn&apos;t
+          confirmed it yet, and isn&apos;t posted anywhere else until press coverage does. A vote
+          the news already covers isn&apos;t drafted, and a draft gives way once the reporting on
+          its bill appears: it leaves the Action Center, and the homepage&apos;s record of recent
+          issues lists the reporting in its place.
         </P>
         <P>
           Each issue ends with what you can do about it, built from the record and never advocacy

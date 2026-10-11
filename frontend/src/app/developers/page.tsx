@@ -312,7 +312,13 @@ export default async function DevelopersPage() {
                   Add a custom connector (or remote MCP server) and give it the address above.
                 </Item>
                 <Item label="A configuration file">
-                  <pre className="mt-1 overflow-x-auto border border-white/[0.07] bg-white/[0.02] p-2 font-mono text-xs text-ink-hi">
+                  {/* Focusable: it scrolls sideways on a phone, and a
+                      scroll region a keyboard can't reach can't be read
+                      (axe scrollable-region-focusable, WCAG 2.1.1). */}
+                  <pre
+                    tabIndex={0}
+                    className="mt-1 overflow-x-auto border border-white/[0.07] bg-white/[0.02] p-2 font-mono text-xs text-ink-hi"
+                  >
                     {JSON.stringify(
                       { mcpServers: { civitas: { type: "http", url: MCP_URL } } },
                       null,

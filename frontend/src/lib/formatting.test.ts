@@ -267,6 +267,27 @@ describe("policyAreaLabel", () => {
 });
 
 describe("restatesTitle", () => {
+  it("catches a lede that is the headline with a period, in any case", () => {
+    expect(restatesTitle("Senate passes the bill", "Senate passes the bill.")).toBe(true);
+    expect(restatesTitle("Agency’s rule takes effect", "agency's rule takes effect")).toBe(true);
+  });
+
+  it("keeps a summary that says more", () => {
+    expect(restatesTitle("Senate passes the bill", "Senate passes the bill, 52 to 48.")).toBe(
+      false
+    );
+  });
+
+  it("is false for no summary", () => {
+    expect(restatesTitle("Senate passes the bill", "")).toBe(false);
+    expect(restatesTitle("Senate passes the bill", null)).toBe(false);
+  });
+
+  it("compares letters in any script, so accents can't fake or hide a repeat", () => {
+    expect(restatesTitle("Luján wins the seat", "Luján wins the seat.")).toBe(true);
+    expect(restatesTitle("Luján wins the seat", "Lujan wins the seat")).toBe(false);
+  });
+
   it("matches a summary that only repeats the headline", () => {
     expect(restatesTitle("Senate passes the bill", "Senate passes the bill.")).toBe(true);
     expect(restatesTitle("Senate passes the bill, AP says", "Senate passes the bill")).toBe(true);

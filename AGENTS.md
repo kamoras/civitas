@@ -63,7 +63,7 @@ locally on a single self-hosted device with zero cloud AI calls.
   Explore search; see `pipeline/lexical_index.py`
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
-- **News Feeds**: RSS parsing (AP, NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
+- **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
 - **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
 - **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
@@ -1003,8 +1003,9 @@ that office, comparison against predecessors is the only meaningful ranking.
 
 In addition to the main pipeline, the **Action Center pipeline** runs hourly to
 surface trending civic issues. It fetches RSS feeds from low-bias news sources,
-filters articles for U.S. policy relevance using embedding similarity, clusters
-related articles, incorporates trending topics from Google Trends and Bluesky,
+filters articles for U.S. policy relevance by a kNN vote against hand-labelled
+feed articles (`relevance_votes`; `docs/research/action-center-relevance.md`),
+clusters related articles, incorporates trending topics from Google Trends and Bluesky,
 and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
@@ -1040,6 +1041,10 @@ every stage downstream treats it as one story. Three mechanical signals:
   between actors, and a headline that names its own subject is what tells the
   two apart. A body cut at the description cap has its trailing fragment
   discarded first, since a fragment's entities are disjoint by construction.
+  For the same reason an abbreviation's period ("U.S.", "Rep.") is not a
+  sentence break, and photo credits and a broadcast sign-off ("… reports.")
+  are not items: before 2026-10 those made 16 single stories in 627 feed
+  articles read as lists.
 
 This has to happen here because once several stories share one article the
 boundary between them is not recoverable later — cluster coherence filtering
