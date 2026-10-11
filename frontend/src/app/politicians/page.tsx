@@ -17,6 +17,7 @@ import { formerOfficeBadge } from "@/lib/officeStatus";
 import { delegationOrder } from "@/lib/delegationOrder";
 import type { PoliticianCard } from "@/types/politicians";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
+import Photo from "@/components/Photo";
 
 type BranchFilter = "all" | "senate" | "house" | "president" | "scotus";
 type PartyFilter = "ALL" | "D" | "R" | "I";
@@ -93,6 +94,20 @@ function ScoreBar({ score: raw }: { score: number }) {
   );
 }
 
+function Initials({ name }: { name: string }) {
+  return (
+    <div className="w-10 h-10 border border-white/[0.07] flex items-center justify-center shrink-0">
+      <span className="font-mono text-xs text-ink-min">
+        {name
+          .split(" ")
+          .map((w) => w[0])
+          .slice(0, 2)
+          .join("")}
+      </span>
+    </div>
+  );
+}
+
 function PoliticianCardUI({ p }: { p: PoliticianCard }) {
   const subtitle = [
     p.role,
@@ -109,25 +124,17 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
     >
       <div className="flex items-start gap-3">
         {p.thumbnailUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- external, varied politician-photo hosts; not worth per-host next/image remotePatterns
-          <img
+          <Photo
             src={p.thumbnailUrl}
+            // Hundreds of cards: Photo's lazy loads each portrait as it
+            // scrolls into view (loading="lazy", decoding="async").
+            lazy
             alt={p.name}
-            // Hundreds of cards: load the portraits as they scroll into view.
-            loading="lazy"
-            decoding="async"
             className="w-10 h-10 object-cover shrink-0 opacity-80 group-hover:opacity-100 transition-opacity"
+            fallback={<Initials name={p.name} />}
           />
         ) : (
-          <div className="w-10 h-10 border border-white/[0.07] flex items-center justify-center shrink-0">
-            <span className="font-mono text-xs text-ink-min">
-              {p.name
-                .split(" ")
-                .map((w) => w[0])
-                .slice(0, 2)
-                .join("")}
-            </span>
-          </div>
+          <Initials name={p.name} />
         )}
 
         <div className="flex-1 min-w-0">
