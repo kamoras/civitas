@@ -74,8 +74,11 @@ function SectionBlock({ title, children }: { title: string; children: React.Reac
 export default function PoliticianProfileClient({
   profile,
   breakdown = null,
+  strip,
 }: {
   profile: PoliticianProfile;
+  /** The "this week" strip, rendered by the server page. */
+  strip?: React.ReactNode;
   /** The score breakdown, fetched with the profile (senators,
    *  representatives and presidents). */
   breakdown?: RepresentationScoreBreakdown | null;
@@ -101,6 +104,7 @@ export default function PoliticianProfileClient({
             <span className="mx-2">/</span>
             <span className="text-ink-lo">{branchLabel(branch)}</span>
           </div>
+          {strip}
 
           {/* Left-office banner — wording is branch-specific, see officeStatus.ts */}
           {formerOffice && (

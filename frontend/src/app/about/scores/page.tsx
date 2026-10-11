@@ -75,6 +75,16 @@ export default function ScoresChapter() {
           moves toward what the seat wants, and the funding measures exist because money
           concentrated in few hands is the main way representation drifts away from the majority.
         </P>
+        <Sub title="How a scorecard reads">
+          <P>
+            Each part on a member&apos;s scorecard opens with one plain sentence of what its score
+            found, such as how often the member breaks with the party against members of the same
+            party in seats that lean the same way. The sentence is a fixed template filled with the
+            same figures the score is computed from; no model writes it. The evidence follows, and
+            the parts of the score, their weights and their statistics are under &ldquo;How this is
+            computed&rdquo;.
+          </P>
+        </Sub>
         <Sub title="Thin records and missing data">
           <P>
             Where a part of a score rests on few observations, it is pulled toward a reference in

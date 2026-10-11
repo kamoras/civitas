@@ -207,6 +207,8 @@ export default function AlignmentColumn({
       tooltip={TOOLTIP}
       weight={weight}
       score={score}
+      finding={dimension?.finding}
+      method={dimension && <ComponentBars components={dimension.components} />}
       more={{ label: "Every recorded vote", onClick: onMore }}
     >
       {facts ? (
@@ -272,8 +274,6 @@ export default function AlignmentColumn({
         approval={approval}
         scored={facts?.approval?.groups.map((g) => g.group) ?? []}
       />
-
-      {dimension && <ComponentBars components={dimension.components} />}
     </ScoreColumn>
   );
 }

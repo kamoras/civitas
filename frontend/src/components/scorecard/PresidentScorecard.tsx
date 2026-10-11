@@ -117,7 +117,13 @@ function MandateColumn({
   const months = f?.comparedOverDays != null ? Math.round(f.comparedOverDays / 30.44) : null;
   const over = months != null ? `over their first ${months} months` : "over their terms";
   return (
-    <ScoreColumn title="Public Mandate" shareId="public-mandate" weight={weight} score={score}>
+    <ScoreColumn
+      title="Public Mandate"
+      shareId="public-mandate"
+      weight={weight}
+      score={score}
+      method={dim && <ComponentBars components={dim.components} />}
+    >
       <Measures>
         How the public rated the president in approval polls: the average over the term, and how it
         moved from where it started. Approval from the other party has collapsed as the parties
@@ -187,7 +193,6 @@ function MandateColumn({
           </Lede>
         )
       )}
-      {dim && <ComponentBars components={dim.components} />}
       <Facts
         rows={[
           ...(f?.recentApproval != null
@@ -213,7 +218,13 @@ function EffectivenessColumn({
   const f = dim?.facts as PresidentEffectivenessFacts | undefined;
   const jobs = f?.jobsPerYear != null && f.jobsMean != null && f.jobsMillions != null;
   return (
-    <ScoreColumn title="Effectiveness" shareId="effectiveness" weight={weight} score={score}>
+    <ScoreColumn
+      title="Effectiveness"
+      shareId="effectiveness"
+      weight={weight}
+      score={score}
+      method={dim && <ComponentBars components={dim.components} />}
+    >
       <Measures>
         The economy during the term: growth, jobs, unemployment and inflation (since 1947; growth
         and jobs before that), each against other presidents. The first year is left out, since it
@@ -278,7 +289,6 @@ function EffectivenessColumn({
           tone={tone(score)}
         />
       )}
-      {dim && <ComponentBars components={dim.components} />}
     </ScoreColumn>
   );
 }
@@ -299,6 +309,7 @@ function LegacyColumn({
       shareId="historical-legacy"
       weight={weight}
       score={score}
+      method={dim && <ComponentBars components={dim.components} />}
     >
       <Measures>
         How historians rank the presidency: C-SPAN&apos;s 2021 survey of about 140 historians,
@@ -330,7 +341,6 @@ function LegacyColumn({
           .
         </p>
       ))}
-      {dim && <ComponentBars components={dim.components} />}
     </ScoreColumn>
   );
 }

@@ -1538,6 +1538,14 @@ the pending list).
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they
   are seeing. The component is at `src/components/checker/MetricTooltip.tsx`.
+- A scored dimension leads with its `finding` (one template sentence from the
+  breakdown API, `services/score_findings.py`, outside `pipeline/` so its
+  wording never moves the analysis-code fingerprint); components, weights and
+  statistics go under the column's "How this is computed" disclosure. Keep a
+  finding subjectless and at about a Flesch-Kincaid grade 8 or lower.
+- The "this week" strip (`components/shared/ThisWeekStrip.tsx`) is an async
+  server component; a client page gets it as a `strip` prop from its server
+  `page.tsx`, never by fetching it on the client.
 - Large tab components are code-split with `next/dynamic` to reduce initial
   bundle size (e.g., Action Center tabs load on demand). Use in-memory
   `cachedFetch` from `src/lib/api.ts` for API calls that benefit from

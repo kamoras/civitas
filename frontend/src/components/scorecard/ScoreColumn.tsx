@@ -17,6 +17,8 @@ export default function ScoreColumn({
   tooltip,
   weight,
   score,
+  finding,
+  method,
   more,
   aside,
   children,
@@ -29,6 +31,11 @@ export default function ScoreColumn({
   /** Share of the overall score, 0–1; omitted when the config hasn't loaded. */
   weight?: number;
   score: number | null | undefined;
+  /** What the score found, in one plain sentence (the breakdown API's). */
+  finding?: string | null;
+  /** How the score is computed (its components and their statistics),
+   *  kept behind a disclosure under the evidence, with the weight. */
+  method?: ReactNode;
   more?: { label: string; onClick: () => void };
   /** In place of the score, for a column on record but not scored. */
   aside?: string;
@@ -46,11 +53,6 @@ export default function ScoreColumn({
           <h2 className="text-[19px] font-bold leading-tight text-ink-hi">
             {tooltip ? <MetricTooltip text={tooltip}>{title}</MetricTooltip> : title}
           </h2>
-          {weight != null && (
-            <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-              {Math.round(weight * 100)}% of the score
-            </p>
-          )}
         </div>
         {aside ? (
           <span className="shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
@@ -68,7 +70,31 @@ export default function ScoreColumn({
         )}
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 py-4">
+        {finding && (
+          <p className="font-display text-lg font-semibold leading-snug text-ink-hi">{finding}</p>
+        )}
         {children}
+        {(method || weight != null) && (
+          <details
+            {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+            className="group border-t border-white/[0.08] pt-4"
+          >
+            <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-mono text-xs uppercase tracking-[0.14em] text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden">
+              <span aria-hidden="true" className="inline-block group-open:rotate-90">
+                &#9656;
+              </span>
+              How this is computed
+            </summary>
+            <div className="flex flex-col gap-4 pt-2">
+              {weight != null && (
+                <p className="text-sm text-ink-lo">
+                  {Math.round(weight * 100)}% of the overall score.
+                </p>
+              )}
+              {method}
+            </div>
+          </details>
+        )}
         <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
           {more && (
             <button

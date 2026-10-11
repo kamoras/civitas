@@ -22,6 +22,11 @@ export interface ScoreBreakdownDimension {
    *  produced the score (score_calculator's *_core functions). Absent when
    *  the dimension had no data to score. */
   facts?: Record<string, unknown>;
+  /** Senators and representatives: one plain sentence saying what the
+   *  score found, a template around `facts` (services/score_findings.py).
+   *  Null when the facts can't support one; absent from a breakdown
+   *  served before findings existed. */
+  finding?: string | null;
 }
 
 /** Senator/representative: fundingIndependence, constituentAlignment, fundingDiversity, legislativeEffectiveness. */

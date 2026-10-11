@@ -36,8 +36,20 @@ const DONORS_SHOWN = 5;
 const TOOLTIP =
   "Where the money for the member's most recent completed election came from: many small donors, or PACs, a few big donors or one industry. Four parts, weighted 20 : 10 : 10 : 13. The PAC share of contributions and the share from donors giving $200 or less, each against what is typical (for a senator, a state that size; for a representative, the House median); how much of the outside money came from the top ten donors, against the chamber; and how concentrated the money is across industries, against the member's own party. A part that can't be measured is left out and the others are weighed without it.";
 
-function Lede({ facts }: { facts: FundingFacts }) {
+/** The figures behind the finding. After the finding (which states the
+ *  small-gift share, or the PAC share when the filings can't say), only
+ *  what it left out: the PAC share of the total. */
+function Lede({ facts, afterFinding }: { facts: FundingFacts; afterFinding: boolean }) {
   const expected = facts.smallDonorExpectedShare;
+  if (afterFinding) {
+    if (facts.smallDonorShare == null) return null;
+    return (
+      <p className="text-base leading-relaxed text-ink">
+        {percent(facts.pacShare)} of {formatCurrency(facts.contributions)} in contributions came
+        from PACs.
+      </p>
+    );
+  }
   if (facts.smallDonorShare == null) {
     return (
       <p className="text-base leading-relaxed text-ink">
@@ -96,10 +108,12 @@ export default function FundingColumn({
       tooltip={TOOLTIP}
       weight={weight}
       score={score}
+      finding={dimension?.finding}
+      method={dimension && <ComponentBars components={dimension.components} />}
       more={{ label: "All donors and industries", onClick: onMore }}
     >
       {facts ? (
-        <Lede facts={facts} />
+        <Lede facts={facts} afterFinding={!!dimension?.finding} />
       ) : (
         <p className="text-base text-ink-lo">No campaign finance filings on record yet.</p>
       )}
@@ -164,8 +178,6 @@ export default function FundingColumn({
           </ul>
         </Block>
       )}
-
-      {dimension && <ComponentBars components={dimension.components} />}
     </ScoreColumn>
   );
 }
