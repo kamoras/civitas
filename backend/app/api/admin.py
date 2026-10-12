@@ -20,7 +20,7 @@ from app import background, database, net_stats, ops_alerts, pipeline_chain
 from app.api.elections import ballot_state_codes
 from app.api.pipeline import _is_pipeline_running
 from app.api.pipeline_runner import run_pipeline_in_thread
-from app.api.visits import LOAD_TIMING_BUCKETS_MS, LOAD_TIMING_METRICS
+from app.api.visits import CONFIRMED_VISITS_SINCE, DEVICE_CLASSES, LOAD_TIMING_BUCKETS_MS, LOAD_TIMING_METRICS
 from app.config import settings
 from app.database import get_db, get_visits_db, off_loop
 from app.http_client import make_async_client
@@ -374,11 +374,20 @@ def _window_dates(days: int) -> list[str]:
 def admin_visitor_stats(
     days: int = Query(30, ge=1, le=366), db: Session = Depends(get_visits_db),
 ) -> list[dict]:
-    """Daily unique visitors and page views for the last N calendar days, oldest first.
+    """Daily visitors, first-paint loads and page views for the last N
+    calendar days, oldest first.
 
-    Unique visitors count SiteVisit rows (one per visitor per day, keyed by a
-    salted daily-rotating hash — see models.py), never raw IPs; page views sum
-    PageView's raw hit counter. Every day in the window is present, zero-filled:
+    ``confirmedVisitors`` counts SiteVisit rows (one per visitor per day, keyed
+    by a salted daily-rotating hash — see models.py), never raw IPs, and only
+    from CONFIRMED_VISITS_SINCE, when a visit began to count only once the
+    browser that opened the page had run it; it is null before then, where
+    the rows counted mostly automation. ``firstPaintLoads`` counts cold page
+    loads whose browser reported a first contentful paint (PageLoadTiming's
+    ``fcp`` cells, every device): a browser that drew the page while it was
+    in view, the closest thing to a person reading it that is counted
+    without identifying anyone. ``uniqueVisitors`` is the SiteVisit count
+    for every day, as stored. Page views sum PageView's raw hit counter.
+    Every day in the window is present, zero-filled:
     the dashboard draws this as a line, and a day with no rows skipped rather
     than reported as 0 would draw a straight segment across an outage instead
     of the dip that shows it.
@@ -396,8 +405,20 @@ def admin_visitor_stats(
         .group_by(PageView.date)
         .all()
     )
+    painted = dict(
+        db.query(PageLoadTiming.date, func.sum(PageLoadTiming.count))
+        .filter(PageLoadTiming.date >= dates[0], PageLoadTiming.metric == "fcp")
+        .group_by(PageLoadTiming.date)
+        .all()
+    )
     return [
-        {"date": d, "uniqueVisitors": int(visitors.get(d, 0)), "pageViews": int(views.get(d) or 0)}
+        {
+            "date": d,
+            "confirmedVisitors": int(visitors.get(d, 0)) if d >= CONFIRMED_VISITS_SINCE else None,
+            "firstPaintLoads": int(painted.get(d) or 0),
+            "uniqueVisitors": int(visitors.get(d, 0)),
+            "pageViews": int(views.get(d) or 0),
+        }
         for d in dates
     ]
 
@@ -439,20 +460,27 @@ def admin_load_times(
     contentful paint) and ``load`` (the load event). A day with no samples
     has null percentiles, not 0: nothing was measured, which is different
     from a page that loaded instantly. ``byPath`` ranks routes by p95 of the
-    load event over the window, slowest first.
+    load event over the window, slowest first. ``devices`` splits each day's
+    first-paint loads by the class the browser reported (desktop, tablet,
+    mobile, or ``unrecorded`` for a load counted before the split or from a
+    page that predates it), and ``deviceTotals`` sums the window.
     """
 
     dates = _window_dates(days)
     rows = (
         db.query(PageLoadTiming.date, PageLoadTiming.path, PageLoadTiming.metric,
-                 PageLoadTiming.bucket_ms, PageLoadTiming.count)
+                 PageLoadTiming.bucket_ms, PageLoadTiming.device, PageLoadTiming.count)
         .filter(PageLoadTiming.date >= dates[0])
         .all()
     )
 
+    device_keys = (*DEVICE_CLASSES, "unrecorded")
     per_day: dict[tuple[str, str], dict[int, int]] = {}
     per_path: dict[tuple[str, str], dict[int, int]] = {}
-    for date, path, metric, bucket, count in rows:
+    devices = {d: dict.fromkeys(device_keys, 0) for d in dates}
+    for date, path, metric, bucket, device, count in rows:
+        if metric == "fcp" and date in devices:
+            devices[date][device if device in DEVICE_CLASSES else "unrecorded"] += count
         day_hist = per_day.setdefault((date, metric), {})
         day_hist[bucket] = day_hist.get(bucket, 0) + count
         path_hist = per_path.setdefault((path, metric), {})
@@ -477,9 +505,11 @@ def admin_load_times(
     return {
         "metrics": list(LOAD_TIMING_METRICS),
         "days": [
-            {"date": d, **{m: _summary(per_day.get((d, m))) for m in LOAD_TIMING_METRICS}}
+            {"date": d, **{m: _summary(per_day.get((d, m))) for m in LOAD_TIMING_METRICS},
+             "devices": devices[d]}
             for d in dates
         ],
+        "deviceTotals": {k: sum(day[k] for day in devices.values()) for k in device_keys},
         "byPath": by_path,
     }
 

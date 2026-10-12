@@ -185,9 +185,9 @@ export function OverviewDashboard({
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label="Visitors today"
-          value={today ? today.uniqueVisitors.toLocaleString() : "—"}
-          note={today ? `${today.pageViews.toLocaleString()} page views` : undefined}
+          label="Confirmed visitors today"
+          value={today?.confirmedVisitors != null ? today.confirmedVisitors.toLocaleString() : "—"}
+          note={today ? `${today.firstPaintLoads.toLocaleString()} first-paint loads` : undefined}
         />
         <StatTile
           label="Page load p75 today"
@@ -217,14 +217,20 @@ export function OverviewDashboard({
           actions={<MoreLink onClick={() => goTo("traffic")}>Traffic</MoreLink>}
         >
           <LineChart
-            title="UNIQUE VISITORS PER DAY"
+            title="CONFIRMED VISITORS AND FIRST-PAINT LOADS PER DAY"
             xLabels={(visits ?? []).map((v) => formatDay(v.date))}
             series={[
               {
-                key: "visitors",
-                label: "Unique visitors",
+                key: "confirmed",
+                label: "Confirmed visitors",
                 color: SERIES[0],
-                values: (visits ?? []).map((v) => v.uniqueVisitors),
+                values: (visits ?? []).map((v) => v.confirmedVisitors),
+              },
+              {
+                key: "painted",
+                label: "First-paint loads",
+                color: SERIES[1],
+                values: (visits ?? []).map((v) => v.firstPaintLoads),
               },
             ]}
             formatValue={(v) => v.toLocaleString()}
