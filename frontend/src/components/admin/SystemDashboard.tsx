@@ -8,7 +8,7 @@ import { SERIES } from "./charts/palette";
 import { niceTicks } from "./charts/scale";
 import { formatBytes, formatRate, formatTime, formatUptime, parseUTC } from "./format";
 import { formatPct, type HostSample } from "./useHostHistory";
-import { Panel, StatusDot, UsageBar } from "./widgets";
+import { NotLoaded, Panel, StatusDot, UsageBar } from "./widgets";
 
 // --- Uptime Tracker ---
 export function UptimeTracker({
@@ -255,6 +255,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
 
 /** Database / LLM / vector index reachability — the "is anything down" list. */
 export function ServiceHealth({ d }: { d: AdminDashboard | null }) {
+  if (!d) return <NotLoaded />;
   return (
     <div className="space-y-2 text-sm font-mono">
       <div className="flex justify-between">
