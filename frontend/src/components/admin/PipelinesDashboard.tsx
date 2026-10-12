@@ -29,7 +29,7 @@ import {
 } from "./pipelineWidgets";
 import { RANGE_OPTIONS } from "./TrafficDashboard";
 import { dayWindow, durationPoints, runsPerDay, utcToday } from "./trends";
-import { Panel, Segmented, StatTile } from "./widgets";
+import { emptyText, Panel, Segmented, StatTile } from "./widgets";
 
 const PIPELINE_ORDER = ["senate", "house", "supplementary", "stock_trades", "election"] as const;
 
@@ -291,15 +291,21 @@ function PhaseTimings({ token }: { token: string }) {
   const [loadedKind, setLoadedKind] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const loading = loadedKind !== kind;
+  const [timingsFailed, setTimingsFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetchAdminPipelineTimings(token, kind, 20)
       .then((t) => {
-        if (!cancelled) setTimings(t);
+        if (cancelled) return;
+        setTimings(t);
+        setTimingsFailed(false);
       })
       .catch(() => {
-        if (!cancelled) setTimings(null);
+        if (!cancelled) {
+          setTimings(null);
+          setTimingsFailed(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadedKind(kind);
@@ -325,7 +331,11 @@ function PhaseTimings({ token }: { token: string }) {
 
       {!loading && runs.length === 0 ? (
         <div className="text-ink-min text-xs font-mono">
-          No phase timings recorded yet: they are written as each run completes its steps.
+          {emptyText(
+            true,
+            timingsFailed,
+            "No phase timings recorded yet: they are written as each run completes its steps."
+          )}
         </div>
       ) : (
         <div className={loading ? "opacity-50 transition-opacity" : "transition-opacity"}>
@@ -626,21 +636,26 @@ export function PipelinesDashboard({
   token: string;
   status: AdminPipelineStatus | null;
   dashboard: AdminDashboard | null;
-  history: PipelineHistoryRun[];
+  history: PipelineHistoryRun[] | null;
   onChanged: () => Promise<void> | void;
 }) {
   const [range, setRange] = useState(30);
   const [trend, setTrend] = useState<PipelineTrendRun[] | null>(null);
+  const [trendFailed, setTrendFailed] = useState(false);
   const [loadedRange, setLoadedRange] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // A failure keeps the last trend (or none): an empty list read as
+    // "0 runs, 0 failed" in the tiles above the charts.
     fetchAdminPipelineTrend(token, range)
       .then((t) => {
-        if (!cancelled) setTrend(t.runs);
+        if (cancelled) return;
+        setTrend(t.runs);
+        setTrendFailed(false);
       })
       .catch(() => {
-        if (!cancelled) setTrend([]);
+        if (!cancelled) setTrendFailed(true);
       })
       .finally(() => {
         if (!cancelled) setLoadedRange(range);
@@ -670,18 +685,18 @@ export function PipelinesDashboard({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
           label={`Runs in ${shownRange}d`}
-          value={finished.length.toLocaleString()}
-          note="all pipelines, finished"
+          value={trend ? finished.length.toLocaleString() : "—"}
+          note={trendFailed && !trend ? "couldn't load" : "all pipelines, finished"}
         />
         <StatTile
           label="Failed"
-          value={failed.toLocaleString()}
+          value={trend ? failed.toLocaleString() : "—"}
           tone={failed > 0 ? "text-signal-magenta" : "text-ink-hi"}
           note={finished.length ? `${Math.round((failed / finished.length) * 100)}% of runs` : "—"}
         />
         <StatTile
           label="Partial"
-          value={partial.toLocaleString()}
+          value={trend ? partial.toLocaleString() : "—"}
           tone={partial > 0 ? "text-signal-amber" : "text-ink-hi"}
           note="finished with some members failed"
         />
@@ -717,7 +732,7 @@ export function PipelinesDashboard({
             formatValue={(v) => String(v)}
             stale={stale}
             height={190}
-            emptyMessage={trend ? "No runs in this range." : "Loading…"}
+            emptyMessage={emptyText(!!trend, trendFailed, "No runs in this range.")}
           />
         </Panel>
       </div>
@@ -766,7 +781,7 @@ export function PipelinesDashboard({
                     </span>
                   ) : undefined
                 }
-                emptyMessage={trend ? "No finished runs in this range." : "Loading…"}
+                emptyMessage={emptyText(!!trend, trendFailed, "No finished runs in this range.")}
               />
             );
           })}

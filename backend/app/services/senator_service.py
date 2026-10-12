@@ -17,7 +17,7 @@ from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
 )
-from app.services._scorecard_common import pac_share_pct, party_line_counts, score_breakdown
+from app.services._scorecard_common import pac_share_pct, party_line_counts, score_breakdown, vote_search
 from app.services.constituent_survey import constituent_approval
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
@@ -498,6 +498,7 @@ def get_senator_votes(
     page: int = 1,
     per_page: int = 15,
     vote_filter: str = "all",
+    q: str | None = None,
 ) -> PaginatedVotesSchema | None:
     """Return paginated, filterable votes for a senator."""
     senator = db.query(Senator).filter(Senator.id == senator_id).first()
@@ -507,6 +508,9 @@ def get_senator_votes(
     base_q = db.query(KeyVote).filter(KeyVote.senator_id == senator_id)
     if category != "all":
         base_q = base_q.filter(KeyVote.vote_category == category)
+    # A reader's search narrows the list and its counts alike.
+    if q and q.strip():
+        base_q = base_q.filter(vote_search(KeyVote, q))
 
     count_all = base_q.count()
     count_yea = base_q.filter(KeyVote.vote == "Yea").count()
