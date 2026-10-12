@@ -214,7 +214,7 @@ the residual.
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
+| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
@@ -1038,6 +1038,41 @@ summary and facts are the sources' own words, checked verbatim
 source URLs (`_build_actions_from_data`), never written by the model. Results
 are stored in the `action_issues` table.
 
+Each issue's actions are fixed templates around stored data:
+
+- **The committee with jurisdiction**, one per chamber or none
+  (`app/committee_routing.py`, outside `app/pipeline/` so it is outside the
+  fingerprint like `live_results/`). Tier 2 and tier 3 together: each
+  committee's subjects as House Rule X / Senate Rule XXV list them
+  (`committee_jurisdictions.json`, `scripts/fetch_committee_jurisdictions.py`;
+  hubness-corrected, CSLS) blended with the votes of the nearest
+  hand-labelled issues (`committee_routing_examples.json`, an empty label
+  meaning no committee). It names a committee only when both signals pick
+  the same one and the combined share clears the threshold
+  (`committee_routing_calibration.json`, `scripts/calibrate_committee_routing.py`).
+  The threshold is chosen on the training issues by the Action Center's
+  precision rule (exact lower 95% bound ≥ 0.80, else the highest bound);
+  the held-out curve is written for reading, never chosen from. The rule is
+  not met yet (0.82 held out, bound 0.67), so the row is worded as a likely
+  match — keep that wording until a recalibration reports
+  `precision_rule_met_on_training: true` and the held-out bound agrees. The
+  test fails until the script is rerun after either data file changes. The rules' subjects alone were
+  measured at 0.38 held-out precision — do not drop the labelled votes to
+  "simplify". The chair and ranking member are read from the stored rosters
+  when the issue is served (`api/action._committee_leaders`).
+- **"Comment by <date>"** for a proposed or final rule (the Register's own
+  `type`) still open for comment whose title clears `EXPLORE_TITLE_MIN_SIM`
+  (`_open_comment_docs`). The API drops it once the period closes (#903's
+  open-only rule).
+
+The Today tab's open comment periods are ranked by salience, not deadline
+(`api/action.open_comments_salience`): documents a recent issue links, then
+rules before notices, then by the Federal Register's own reader count
+(`ExploreDocument.fr_page_views`, read once a day by the Action Center —
+`_refresh_open_comment_views` — not by the nightly Explore refresh, whose
+module is fingerprinted). Citations were measured and rejected as the
+signal: airworthiness directives carry hundreds of boilerplate ones.
+
 Feed descriptions are **stripped of HTML** as they are parsed
 (`news_feeds._strip_html`): the WordPress-backed feeds put real markup in
 `<description>`, and three consumers read that field as prose — the
@@ -1370,6 +1405,7 @@ the pending list).
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
+| Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
