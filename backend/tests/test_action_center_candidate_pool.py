@@ -96,7 +96,9 @@ def refresh(monkeypatch):
     monkeypatch.setattr(ac, "_find_related_explore_docs", lambda *a: [])
     monkeypatch.setattr(ac, "_find_related_senators", lambda *a: [])
     monkeypatch.setattr(ac, "_find_related_officials", lambda *a: [])
-    monkeypatch.setattr(ac, "_build_actions_from_data", lambda *a: [])
+    monkeypatch.setattr(ac, "_build_actions_from_data", lambda *a, **k: [])
+    monkeypatch.setattr(ac, "route_committees", lambda *a: [])
+    monkeypatch.setattr(ac, "_open_comment_docs", lambda *a: [])
     monkeypatch.setattr(ac, "_find_matching_issue", lambda *a, **k: None)
     return pool
 

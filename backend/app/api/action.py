@@ -24,6 +24,7 @@ from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
 from app.photos import issue_photo
 from app.pipeline.fetch.congress import expected_current_congress
+from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES
 from app.services.bill_record import parse_bill_id
 from app.time_utils import comment_period_today, utcnow
 from app.timeline_entries import without_repeat_leads
@@ -35,7 +36,7 @@ from app.models import (
     WeekSummary, MonthSummary, YearSummary,
 )
 from app.schemas import (
-    ActionIssueSchema, ActionItemSchema, RelatedBillSchema,
+    ActionIssueSchema, ActionItemSchema, CommitteeContactSchema, CommitteeLeaderSchema, RelatedBillSchema,
     RelatedExploreDoc, RelatedSenator,
     NationalMonitorSchema, NationalMonitorDetailSchema, MonitorUpdateSchema,
     TimelineEntrySchema,
@@ -270,6 +271,38 @@ def _current_member_facts(db: Session, member_ids: set[str]) -> dict[str, dict]:
     return facts
 
 
+# How the stored rosters (fetch/committee_leadership.py) title a committee's
+# chair and ranking member: congress-legislators writes "Chairman" or
+# "Chair" by committee.
+_CHAIR_TITLES = {"Chair", "Chairman"}
+_RANKING_TITLES = {"Ranking Member"}
+
+
+def _committee_leaders(db: Session, names: set[str]) -> dict[str, dict]:
+    """{committee name: {"chair", "ranking_member"}} from the sitting
+    members' stored committee assignments, as they stand now."""
+    if not names:
+        return {}
+    out: dict[str, dict] = {name: {} for name in names}
+    for model, chamber in ((Senator, "senate"), (Representative, "house")):
+        rows = db.query(model).filter(
+            model.is_current.is_(True),
+            or_(*[model.committees.contains(name) for name in names]),
+        ).all()
+        for m in rows:
+            for assignment in _parse_json_field(m.committees):
+                name = assignment.get("committeeName") if isinstance(assignment, dict) else None
+                if name not in out:
+                    continue
+                title = assignment.get("title")
+                role = ("chair" if title in _CHAIR_TITLES
+                        else "ranking_member" if title in _RANKING_TITLES else None)
+                if role and role not in out[name]:
+                    out[name][role] = CommitteeLeaderSchema(
+                        id=m.id, name=m.name, party=m.party, state=m.state, chamber=chamber)
+    return out
+
+
 def _build_issue_response(
     issue: ActionIssue, db: Session,
     explore_docs_map: dict[int, ExploreDocument] | None = None,
@@ -308,13 +341,34 @@ def _build_issue_response(
 
     raw_actions = _parse_json_field(issue.actions)
     action_items: list[dict] = []
+    committee_names = {
+        a["committee"]["name"] for a in raw_actions
+        if isinstance(a, dict) and a.get("type") == "contact_committee" and isinstance(a.get("committee"), dict)
+    }
+    leaders = _committee_leaders(db, committee_names)
+    today = str(comment_period_today())
     for a in raw_actions:
         if isinstance(a, dict) and "text" in a:
+            kind = a.get("type", "general")
+            # Open-only, as everywhere a comment link is shown (#903): an
+            # issue stays readable for good, its comment period doesn't.
+            if kind == "comment_period" and not (a.get("closesOn") and a["closesOn"] >= today):
+                continue
+            committee = None
+            if kind == "contact_committee" and isinstance(a.get("committee"), dict):
+                c = a["committee"]
+                committee = CommitteeContactSchema(
+                    code=c["code"], name=c["name"], chamber=c["chamber"], url=a.get("url"),
+                    **leaders.get(c["name"], {}),
+                )
             action_items.append(
                 ActionItemSchema(
                     text=a["text"],
-                    type=a.get("type", "general"),
+                    type=kind,
                     url=a.get("url"),
+                    doc_id=a.get("docId"),
+                    closes_on=a.get("closesOn"),
+                    committee=committee,
                 ).model_dump(by_alias=True)
             )
         elif isinstance(a, str):
@@ -651,25 +705,69 @@ async def get_action_issue(issue_id: str, response: Response, db: Session = Depe
     return _build_issue_response(issue, db, None)
 
 
+OPEN_COMMENTS_SHOWN = 8
+# An issue this recent that links a document (a related document or a
+# comment action) puts it first: the reader just saw the story it is about.
+OPEN_COMMENTS_ISSUE_DAYS = 14
+
+
+def _issue_linked_doc_ids(db: Session, since: str) -> set[int]:
+    ids: set[int] = set()
+    for explore_ids, actions in db.query(ActionIssue.related_explore_ids, ActionIssue.actions).filter(
+        ActionIssue.date >= since, ActionIssue.duplicate_of_id.is_(None),
+    ):
+        ids.update(i for i in _parse_json_field(explore_ids) if isinstance(i, int))
+        ids.update(a["docId"] for a in _parse_json_field(actions)
+                   if isinstance(a, dict) and isinstance(a.get("docId"), int))
+    return ids
+
+
+def open_comments_salience(doc, linked: set[int]) -> tuple:
+    """Sort key, most salient first: documents an issue links; then rules
+    (the Register's own type — proposed and final rules) before notices; then
+    by readers, as the Register counts them (fr_page_views); then deadline.
+
+    Sorting by deadline alone led with whatever closed soonest — on
+    2026-10-11, a waiver petition and five Paperwork Reduction Act
+    collections in the first ten. Citations were measured and not used: the
+    most-cited open documents were airworthiness directives (306 citations
+    each, all of them the boilerplate cross-references every directive
+    carries)."""
+    return (
+        doc.id not in linked,
+        doc.doc_type not in RULE_DOC_TYPES,
+        -(doc.fr_page_views or 0),
+        doc.comments_close_on,
+    )
+
+
 @router.get("/open-comments")
 def get_open_comments(response: Response, db: Session = Depends(get_db)):
-    """Return Federal Register documents with open public comment periods, sorted by deadline."""
+    """Federal Register documents with open public comment periods, most
+    salient first (open_comments_salience)."""
     # Comment-period deadlines move in days, not minutes — an hour of
     # staleness has no real effect on this list.
     response.headers["Cache-Control"] = "public, max-age=3600"
     today = comment_period_today()
-    docs = (
-        db.query(ExploreDocument)
+    # Columns, not rows: an open document's body runs to tens of kilobytes,
+    # and there are hundreds open at once.
+    open_docs = (
+        db.query(
+            ExploreDocument.id, ExploreDocument.title, ExploreDocument.agency_name,
+            ExploreDocument.comments_close_on, ExploreDocument.comment_url, ExploreDocument.doc_type,
+            ExploreDocument.date, ExploreDocument.summary, ExploreDocument.fr_page_views,
+        )
         .filter(
             ExploreDocument.comment_url.isnot(None),
             ExploreDocument.comment_url != "",
             ExploreDocument.comments_close_on.isnot(None),
             ExploreDocument.comments_close_on >= today,
         )
-        .order_by(ExploreDocument.comments_close_on)
-        .limit(8)
         .all()
     )
+    since = (date.fromisoformat(str(today)) - timedelta(days=OPEN_COMMENTS_ISSUE_DAYS)).isoformat()
+    linked = _issue_linked_doc_ids(db, since)
+    docs = sorted(open_docs, key=lambda d: open_comments_salience(d, linked))[:OPEN_COMMENTS_SHOWN]
     result = []
     # No policyAreas: nothing writes ExploreDocument.policy_areas (empty on
     # all 10,589 documents, 2026-10-09) and no page read it.
@@ -722,6 +820,7 @@ def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False):
         updated_at=m.updated_at.strftime("%Y-%m-%d"),
         last_article_date=m.last_article_date,
         update_count=len(m.updates) if m.updates else 0,
+        closed_on=m.updated_at.strftime("%Y-%m-%d") if m.status == MonitorStatus.CLOSED else None,
     )
     if not include_updates:
         return base.model_dump(by_alias=True)
@@ -745,9 +844,14 @@ def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False):
     return detail.model_dump(by_alias=True)
 
 
+# How far back the Ongoing tab lists monitors that closed.
+_RECENTLY_CLOSED_DAYS = 60
+
+
 @router.get("/monitors")
 async def list_monitors(response: Response, db: Session = Depends(get_db)):
-    """List all active and watching national monitors."""
+    """List all active and watching national monitors, and those closed
+    in the last _RECENTLY_CLOSED_DAYS days."""
     # Monitor creation/status changes on the pipeline's hourly cadence, not
     # continuously — matches the other Action Center list endpoints.
     response.headers["Cache-Control"] = "public, max-age=300"
@@ -758,7 +862,24 @@ async def list_monitors(response: Response, db: Session = Depends(get_db)):
         .order_by(NationalMonitor.updated_at.desc())
         .all()
     )
-    return {"monitors": [_monitor_to_schema(m) for m in monitors]}
+    # Closed recently, for a tab that would otherwise often be one stale
+    # card: a monitor's row is last written when it closes (nothing touches
+    # a closed one), so updated_at is the day it closed.
+    closed = (
+        db.query(NationalMonitor)
+        .options(selectinload(NationalMonitor.updates))
+        .filter(
+            NationalMonitor.status == MonitorStatus.CLOSED,
+            NationalMonitor.updated_at >= utcnow() - timedelta(days=_RECENTLY_CLOSED_DAYS),
+        )
+        .order_by(NationalMonitor.updated_at.desc())
+        .all()
+    )
+    return {
+        "monitors": [_monitor_to_schema(m) for m in monitors],
+        "recentlyClosed": [_monitor_to_schema(m) for m in closed],
+        "recentlyClosedDays": _RECENTLY_CLOSED_DAYS,
+    }
 
 
 @router.get("/monitors/{slug}")

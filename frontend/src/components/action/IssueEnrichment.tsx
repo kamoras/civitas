@@ -20,6 +20,7 @@
 
 import Link from "next/link";
 import {
+  describeDaysLeftOn,
   formatUtcDate,
   isNewFact,
   issueDateLabel,
@@ -270,7 +271,8 @@ interface ActionRow {
 
 /**
  * Every row a reader can act on, in one list: contact the members the coverage
- * names, follow the legislation, read or comment on the federal documents.
+ * names or the committee that handles the subject, follow the legislation,
+ * comment on a rule while its period is open, read the federal documents.
  *
  * Bills and track-legislation actions describe the same legislation (an action
  * is generated from a related bill), so a track action whose URL is already a
@@ -351,6 +353,48 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
     });
   }
 
+  // The committee with jurisdiction, one per chamber at most (backend
+  // app/committee_routing.py), and the two members who lead it. Worded as a
+  // likely match, not a fact: held out, about four in five named committees
+  // were right, and the rest are mostly stories no committee clearly handles.
+  for (const action of issue.actions ?? []) {
+    const c = action.type === "contact_committee" ? action.committee : null;
+    const href = c ? safeHref(c.url ?? action.url ?? null) : null;
+    if (!c || !href) continue;
+    const title = c.chamber === "house" ? "Rep." : "Sen.";
+    const leaders = [
+      ["Chair", c.chair],
+      ["Ranking member", c.rankingMember],
+    ] as const;
+    rows.push({
+      key: `committee-${c.code}`,
+      verb: "Contact",
+      what: c.name,
+      detail: (
+        <>
+          Likely the committee for this, matched by its jurisdiction
+          {leaders.map(([role, m]) =>
+            m ? (
+              <span key={role}>
+                {" · "}
+                {role}{" "}
+                <Link href={`/politicians/${m.id}`} className="underline underline-offset-2">
+                  {title} {m.name}
+                </Link>{" "}
+                <span className={`font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}>
+                  {m.party}-{m.state}
+                </span>
+              </span>
+            ) : null
+          )}
+        </>
+      ),
+      href,
+      internal: false,
+      label: "Committee ↗",
+    });
+  }
+
   const bills = issue.relatedBills ?? [];
   const billUrls = new Set(bills.map((b) => b.url));
   for (const bill of bills) {
@@ -382,7 +426,35 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       });
     });
 
-  for (const doc of issue.relatedExploreDocs ?? []) {
+  // "Comment by <date>": a rule about this story still open for comment.
+  // The API drops the action once the period closes; `today` re-checks it
+  // for a page cached across the deadline.
+  const docs = issue.relatedExploreDocs ?? [];
+  const commented = new Set<number>();
+  for (const action of issue.actions ?? []) {
+    if (action.type !== "comment_period" || !action.docId || !action.closesOn) continue;
+    if (action.closesOn < today || commented.has(action.docId)) continue;
+    commented.add(action.docId);
+    const doc = docs.find((d) => d.id === action.docId);
+    rows.push({
+      key: `comment-${action.docId}`,
+      verb: "Comment",
+      what: doc?.title ?? action.text,
+      detail: [
+        doc?.docType.replace(/_/g, " "),
+        action.text,
+        describeDaysLeftOn(action.closesOn, today),
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      href: `/explore/${action.docId}#comment`,
+      internal: true,
+      label: "Comment →",
+    });
+  }
+
+  for (const doc of docs) {
+    if (commented.has(doc.id)) continue;
     const commentOpen = !!(doc.commentUrl && doc.commentsCloseOn && doc.commentsCloseOn >= today);
     const kind = doc.docType.replace(/_/g, " ");
     rows.push({
@@ -390,7 +462,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       verb: commentOpen ? "Comment" : "Read",
       what: doc.title,
       detail: commentOpen
-        ? `${kind} · comments close ${formatUtcDate(doc.commentsCloseOn!, { month: "short", day: "numeric" })}`
+        ? `${kind} · comments close ${formatUtcDate(doc.commentsCloseOn!, { month: "short", day: "numeric" })} · ${describeDaysLeftOn(doc.commentsCloseOn!, today)}`
         : `${kind} · ${doc.date}`,
       href: commentOpen ? `/explore/${doc.id}#comment` : `/explore/${doc.id}`,
       internal: true,
