@@ -53,7 +53,11 @@ def latest(db: Session = Depends(get_db)) -> JSONResponse:
     day = congress_service.latest_day(db)
     if day is None:
         raise HTTPException(status_code=404, detail="No day of Congress recorded yet")
-    return cached_json(congress_service.day_report(db, day), max_age=_TTL_S)
+    report = congress_service.day_report(db, day)
+    # Only here: /congress is "what's happening now", a dated day report is
+    # that day's record.
+    report["recess"] = congress_service.recess(db, report)
+    return cached_json(report, max_age=_TTL_S)
 
 
 @router.get("/day/{day}")

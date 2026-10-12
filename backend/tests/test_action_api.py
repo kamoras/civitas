@@ -1,14 +1,17 @@
 """Tests for the /action/issues fallback logic in app/api/action.py."""
 
+import asyncio
 import json
+from datetime import datetime
 from unittest.mock import patch
 
 import numpy as np
 import pytest
+from fastapi import Response
 
-from app.api.action import _latest_current_issues
+from app.api.action import _latest_current_issues, list_monitors
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ActionIssueStatus
+from app.models import ActionIssue, ActionIssueStatus, MonitorStatus, NationalMonitor
 
 
 def _make_issue(date: str, rank: int, title: str, is_current: bool) -> ActionIssue:
@@ -1118,3 +1121,23 @@ def test_without_repeat_leads_keeps_either_order():
             (("2026-10-01", "x"), ("2026-10-02", "x"), ("2026-10-03", None), ("2026-10-04", None))]
     assert [r.date for r in without_repeat_leads(rows)] == ["2026-10-01", "2026-10-03", "2026-10-04"]
     assert [r.date for r in without_repeat_leads(rows[::-1])] == ["2026-10-04", "2026-10-03", "2026-10-01"]
+
+
+def test_ongoing_lists_monitors_closed_in_the_last_sixty_days(db_session, freeze_utcnow):
+    """The Ongoing tab was often one stale card; it also lists what closed
+    recently, with the day each closed."""
+    freeze_utcnow(datetime(2026, 10, 10, 12))
+    for slug, status, updated in (
+        ("watching-one", MonitorStatus.WATCHING, datetime(2026, 10, 8)),
+        ("closed-recently", MonitorStatus.CLOSED, datetime(2026, 9, 1)),
+        ("closed-long-ago", MonitorStatus.CLOSED, datetime(2026, 7, 1)),
+    ):
+        db_session.add(NationalMonitor(slug=slug, title=slug, status=status, created_at=datetime(2026, 5, 1),
+                                       updated_at=updated, last_article_date="2026-08-01"))
+    db_session.commit()
+
+    body = asyncio.run(list_monitors(Response(), db_session))
+
+    assert [m["slug"] for m in body["monitors"]] == ["watching-one"]
+    assert [(m["slug"], m["closedOn"]) for m in body["recentlyClosed"]] == [("closed-recently", "2026-09-01")]
+    assert body["monitors"][0]["closedOn"] is None

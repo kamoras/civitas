@@ -16,7 +16,7 @@ import LineChart from "./charts/LineChart";
 import { SERIES } from "./charts/palette";
 import { formatCompact, formatMs } from "./charts/scale";
 import { formatDay } from "./format";
-import { Panel, RankBars, Segmented, StatTile } from "./widgets";
+import { emptyText, Panel, RankBars, Segmented, StatTile } from "./widgets";
 
 export const RANGE_OPTIONS = [
   { value: 7, label: "7D" },
@@ -47,6 +47,8 @@ interface TrafficData {
   loadTimes: LoadTimes | null;
   topPages: TopPageEntry[];
   breakdown: VisitorBreakdown | null;
+  /** Requests that failed: their sections say so rather than "none". */
+  failed: Set<"days" | "loadTimes" | "topPages" | "breakdown">;
 }
 
 export function TrafficDashboard({ token }: { token: string }) {
@@ -62,14 +64,27 @@ export function TrafficDashboard({ token }: { token: string }) {
     let cancelled = false;
     // Each request settles on its own: a failing load-times endpoint must
     // not blank the visitor chart, which is the one people come here for.
+    const failed: TrafficData["failed"] = new Set();
     Promise.all([
-      fetchAdminVisitorStats(token, range).catch(() => [] as VisitorStatsDay[]),
-      fetchAdminLoadTimes(token, range).catch(() => null),
-      fetchAdminTopPages(token, range).catch(() => [] as TopPageEntry[]),
-      fetchAdminVisitorBreakdown(token).catch(() => null),
+      fetchAdminVisitorStats(token, range).catch(() => {
+        failed.add("days");
+        return [] as VisitorStatsDay[];
+      }),
+      fetchAdminLoadTimes(token, range).catch(() => {
+        failed.add("loadTimes");
+        return null;
+      }),
+      fetchAdminTopPages(token, range).catch(() => {
+        failed.add("topPages");
+        return [] as TopPageEntry[];
+      }),
+      fetchAdminVisitorBreakdown(token).catch(() => {
+        failed.add("breakdown");
+        return null;
+      }),
     ]).then(([days, loadTimes, topPages, breakdown]) => {
       if (cancelled) return;
-      setData({ days, loadTimes, topPages, breakdown });
+      setData({ days, loadTimes, topPages, breakdown, failed });
       setLoadedRange(range);
     });
     return () => {
@@ -81,7 +96,8 @@ export function TrafficDashboard({ token }: { token: string }) {
   const days = data?.days ?? [];
   const labels = days.map((d) => formatDay(d.date));
   const today = days[days.length - 1];
-  const visitorsTotal = days.reduce((s, d) => s + d.uniqueVisitors, 0);
+  const confirmedTotal = days.reduce((s, d) => s + (d.confirmedVisitors ?? 0), 0);
+  const paintedTotal = days.reduce((s, d) => s + d.firstPaintLoads, 0);
   const viewsTotal = days.reduce((s, d) => s + d.pageViews, 0);
 
   const lt = data?.loadTimes;
@@ -96,14 +112,19 @@ export function TrafficDashboard({ token }: { token: string }) {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label="Visitors today"
-          value={today ? today.uniqueVisitors.toLocaleString() : "—"}
-          note={`${formatCompact(visitorsTotal)} visitor-days in ${range}d`}
+          label="Confirmed visitors today"
+          value={today?.confirmedVisitors != null ? today.confirmedVisitors.toLocaleString() : "—"}
+          note={`browsers that ran the page they opened; ${formatCompact(confirmedTotal)} in ${range}d`}
+        />
+        <StatTile
+          label="First-paint loads today"
+          value={today ? today.firstPaintLoads.toLocaleString() : "—"}
+          note={`cold loads a browser painted in view; ${formatCompact(paintedTotal)} in ${range}d`}
         />
         <StatTile
           label="Page views today"
           value={today ? today.pageViews.toLocaleString() : "—"}
-          note={`${formatCompact(viewsTotal)} in ${range}d`}
+          note={`pages confirmed visitors opened (crawlers too before Oct 11); ${formatCompact(viewsTotal)} in ${range}d`}
         />
         <StatTile
           label="Page load p75 today"
@@ -114,43 +135,43 @@ export function TrafficDashboard({ token }: { token: string }) {
           }
           note={`${(ltDays[ltDays.length - 1]?.load.samples ?? 0).toLocaleString()} loads measured`}
         />
-        <StatTile
-          label="Server response p75 today"
-          value={
-            ltDays.length && ltDays[ltDays.length - 1].ttfb.p75 != null
-              ? formatMs(ltDays[ltDays.length - 1].ttfb.p75 as number)
-              : "—"
-          }
-          note="time to first byte"
-        />
       </div>
 
       <Panel title="Visitors">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Two charts, not one with two lines: page views run ~5-10x
-              unique visitors, so on a shared axis the visitor line would
-              flatten against the baseline. */}
+          {/* Page views on their own chart: they run well above the two
+              human measures, which would flatten against a shared axis. */}
           <LineChart
-            title="UNIQUE VISITORS PER DAY"
-            subtitle="one per IP per UTC day"
+            title="PEOPLE PER DAY"
+            subtitle="confirmed visitors: one per address per UTC day, counted once the browser ran the page; first-paint loads: cold loads painted in view (driven browsers excluded)"
             xLabels={labels}
             series={[
               {
-                key: "visitors",
-                label: "Unique visitors",
+                key: "confirmed",
+                label: "Confirmed visitors",
                 color: SERIES[0],
-                values: days.map((d) => d.uniqueVisitors),
+                values: days.map((d) => d.confirmedVisitors),
+              },
+              {
+                key: "painted",
+                label: "First-paint loads",
+                color: SERIES[1],
+                values: days.map((d) => d.firstPaintLoads),
               },
             ]}
             formatValue={(v) => v.toLocaleString()}
             formatTick={formatCompact}
             stale={stale}
             headline={
-              today ? (
-                <span className="text-lg">{today.uniqueVisitors.toLocaleString()}</span>
+              today?.confirmedVisitors != null ? (
+                <span className="text-lg">{today.confirmedVisitors.toLocaleString()}</span>
               ) : undefined
             }
-            emptyMessage={data ? "No visits recorded in this range." : "Loading…"}
+            emptyMessage={emptyText(
+              !!data,
+              !!data?.failed.has("days"),
+              "No visits recorded in this range."
+            )}
           />
           <LineChart
             title="PAGE VIEWS PER DAY"
@@ -172,7 +193,11 @@ export function TrafficDashboard({ token }: { token: string }) {
                 <span className="text-lg">{today.pageViews.toLocaleString()}</span>
               ) : undefined
             }
-            emptyMessage={data ? "No page views recorded in this range." : "Loading…"}
+            emptyMessage={emptyText(
+              !!data,
+              !!data?.failed.has("days"),
+              "No page views recorded in this range."
+            )}
           />
         </div>
       </Panel>
@@ -216,11 +241,11 @@ export function TrafficDashboard({ token }: { token: string }) {
               </span>
             ) : undefined
           }
-          emptyMessage={
-            data
-              ? "No load timings yet: browsers report them after each cold page load."
-              : "Loading…"
-          }
+          emptyMessage={emptyText(
+            !!data,
+            !!data?.failed.has("loadTimes"),
+            "No load timings yet: browsers report them after each cold page load."
+          )}
         />
         {lt && lt.byPath.length > 0 && (
           <div className="mt-6">
@@ -275,7 +300,9 @@ export function TrafficDashboard({ token }: { token: string }) {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="Top pages">
           {data && data.topPages.length === 0 ? (
-            <p className="text-xs font-mono text-ink-min">No page views in this range.</p>
+            <p className="text-xs font-mono text-ink-min">
+              {emptyText(true, data.failed.has("topPages"), "No page views in this range.")}
+            </p>
           ) : (
             <RankBars
               title={`MOST VIEWED: LAST ${range} DAYS`}
@@ -285,29 +312,55 @@ export function TrafficDashboard({ token }: { token: string }) {
             />
           )}
         </Panel>
-        <Panel title="Devices today">
+        <Panel title="Devices">
+          {lt && Object.values(lt.deviceTotals).some((n) => n > 0) && (
+            <div className="mb-4">
+              <RankBars
+                title={`FIRST-PAINT LOADS BY DEVICE: LAST ${range} DAYS`}
+                entries={(["mobile", "tablet", "desktop", "unrecorded"] as const)
+                  .map((k) => ({ name: k, count: lt.deviceTotals[k] }))
+                  .filter((e) => e.count > 0)}
+                unit="loads"
+                labelWidth="w-20"
+              />
+              <p className="mt-1 text-xs font-mono text-ink-min">
+                Class chosen by the page from its pointer and screen size; unrecorded is a load from
+                before the split.
+              </p>
+            </div>
+          )}
           {data?.breakdown &&
           (data.breakdown.browsers.length > 0 ||
             data.breakdown.os.length > 0 ||
             data.breakdown.devices.length > 0) ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-              <RankBars title="BROWSER" entries={data.breakdown.browsers} unit="visitors" />
-              <RankBars title="OS" entries={data.breakdown.os} unit="visitors" />
-              <RankBars title="DEVICE" entries={data.breakdown.devices} unit="visitors" />
-            </div>
+            <>
+              <div className="text-ink-lo text-xs font-mono tracking-wider mb-1.5">
+                CONFIRMED VISITORS TODAY, FROM THE USER-AGENT
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+                <RankBars title="BROWSER" entries={data.breakdown.browsers} unit="visitors" />
+                <RankBars title="OS" entries={data.breakdown.os} unit="visitors" />
+                <RankBars title="DEVICE" entries={data.breakdown.devices} unit="visitors" />
+              </div>
+            </>
           ) : (
-            <p className="text-xs font-mono text-ink-min">No visitors yet today.</p>
+            <p className="text-xs font-mono text-ink-min">
+              {emptyText(!!data, !!data?.failed.has("breakdown"), "No visitors yet today.")}
+            </p>
           )}
         </Panel>
       </div>
 
       <p className="text-ink-min text-xs font-mono">
-        Visitors are counted by a hash under a random salt that is deleted when its day ends: no IP
-        addresses are stored, and past days&apos; hashes can&apos;t be traced back to one.
-        Browser/OS/device are coarse categories only, never the raw User-Agent string. Page views
-        are raw counts grouped by route (all politician profiles count as one row). Load times are
-        kept only as a per-route daily histogram, with nothing that identifies the visit they came
-        from.
+        Confirmed visitors are counted by a hash under a random salt that is deleted when its day
+        ends: no IP addresses are stored, and past days&apos; hashes can&apos;t be traced back to
+        one. A visit counts only once the browser that opened the page has run it, so a client that
+        never runs the page is never counted; there is no confirmed figure before Oct 11, 2026, when
+        the stored count was mostly automation. First-paint loads come from the load-time histogram:
+        no hash, no address, no User-Agent, just a count per route, day, timing bucket and one of
+        three device classes the page reports. Browser/OS/device for visitors are coarse categories
+        only, never the raw User-Agent string. Page views are counts grouped by route (all
+        politician profiles count as one row).
       </p>
     </div>
   );

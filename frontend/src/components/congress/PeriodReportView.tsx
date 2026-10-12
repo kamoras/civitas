@@ -1,7 +1,10 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
+import FollowFeed from "@/components/shared/FollowFeed";
+import { TOPIC_FEEDS } from "@/lib/site";
 import type { MonthReport, PeriodDay, PeriodReport } from "@/types/congress";
 import {
   CHAMBER_NAME,
@@ -108,9 +111,16 @@ function BillList({
 export default function PeriodReportView({
   report,
   kind,
+  lead,
+  strip,
 }: {
   report: PeriodReport | MonthReport;
   kind: "week" | "month";
+  /** /congress during a recess: the masthead says Congress is out and
+   *  introduces this week as the last one with business. */
+  lead?: { title: string; body: ReactNode };
+  /** The "this week" strip, rendered by the server page. */
+  strip?: ReactNode;
 }) {
   const { senate, house } = report.totals;
   const title =
@@ -134,15 +144,31 @@ export default function PeriodReportView({
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
           <CongressTabs active="reports" />
-          <PageMasthead className="mb-6" eyebrow="What happened in Congress" title={title}>
-            <p>{report.sentence}</p>
+          <PageMasthead
+            className="mb-6"
+            eyebrow="What happened in Congress"
+            title={lead?.title ?? title}
+          >
+            {lead ? (
+              <>
+                {lead.body}
+                <h2 className="mt-4 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                  {title}
+                </h2>
+                <p className="mt-1">{report.sentence}</p>
+              </>
+            ) : (
+              <p>{report.sentence}</p>
+            )}
             {pending > 0 && (
               <p className="mt-1 font-sans text-sm text-ink-min">
                 {pending} session {pending === 1 ? "day is" : "days are"} still on the live floor
                 log; its passed and confirmed measures are added when the Daily Digest is published.
               </p>
             )}
+            <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
+          {strip}
           <PeriodNav
             active={kind}
             hrefs={{

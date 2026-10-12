@@ -254,9 +254,9 @@ describe("API shape guarantees", () => {
     expect(result.totalDays).toBe(4);
   });
 
-  it("fetchMonitors returns { monitors: [] } for an empty payload", async () => {
+  it("fetchMonitors returns empty lists for an empty payload", async () => {
     vi.stubGlobal("fetch", mockJson({}));
-    expect(await fetchMonitors()).toEqual({ monitors: [] });
+    expect(await fetchMonitors()).toEqual({ monitors: [], recentlyClosed: [] });
   });
 
   it("fetchBillsInFlight returns an empty bills list and a reducible stageCounts map", async () => {

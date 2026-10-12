@@ -21,10 +21,34 @@ export interface RelatedSenator {
   websiteUrl?: string | null;
 }
 
+export interface CommitteeLeader {
+  id: string;
+  name: string;
+  party: string;
+  state: string;
+  chamber: "senate" | "house";
+}
+
+/** A contact_committee action's committee (backend app/committee_routing.py),
+ *  with its chair and ranking member as the stored rosters name them now. */
+export interface CommitteeContact {
+  code: string;
+  name: string;
+  chamber: "senate" | "house";
+  url?: string | null;
+  chair?: CommitteeLeader | null;
+  rankingMember?: CommitteeLeader | null;
+}
+
 export interface ActionItem {
   text: string;
   type: string;
   url?: string | null;
+  /** comment_period: the Explore document and its closing date (served only while open). */
+  docId?: number | null;
+  closesOn?: string | null;
+  /** contact_committee */
+  committee?: CommitteeContact | null;
 }
 
 export interface RelatedBill {

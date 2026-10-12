@@ -11,16 +11,18 @@ import logging
 import re
 import threading
 import time
+from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.config_definitions import BillStage
+from app.config_definitions import BILL_STAGES, BillStage
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.photos import bioguide_photo
+from app.pipeline.congress_activity import eastern_today
 from app.schemas import (
     BillDetailSchema,
     BillInFlightSchema,
@@ -389,6 +391,7 @@ def get_bill_detail(db: Session, bill_id: str, congress: int | None = None) -> B
         policy_areas=_parse_policy_areas(sp.policy_areas),
         party_leaning=sp.party_leaning,
         related_issues=related,
+        stage_base_rate=stage_base_rate(db, sp.stage or BillStage.INTRODUCED, sp.congress),
     )
 
 
@@ -438,12 +441,21 @@ def get_bills_in_flight(
     if stage:
         filtered = [r for r in filtered if r.bill.stage == stage]
 
+    shown = moved_since = None
     if sort == "hot":
         # "Active in Congress right now" — bills currently referenced by a
         # live Action Center issue, most-mentioned first, ties broken by
         # how recently Congress acted on them.
-        filtered = [r for r in filtered if r.mention_count > 0]
-        filtered.sort(key=lambda r: (r.mention_count, r.latest_action_date), reverse=True)
+        mentioned = [r for r in filtered if r.mention_count > 0]
+        if mentioned:
+            shown, filtered = "mentioned", mentioned
+            filtered.sort(key=lambda r: (r.mention_count, r.latest_action_date), reverse=True)
+        else:
+            # Most days no live issue names a bill, and the tab read
+            # "nothing trending". What moved this week is the next best
+            # answer to "what is active now", and the response says which
+            # list it is.
+            shown, filtered, moved_since = "moved", *_moved_this_week(filtered)
     elif sort == "stale":
         # Oldest action first. Only meaningful within a single stage (a
         # committee bill idling for months is normal; the same idle time
@@ -467,7 +479,78 @@ def get_bills_in_flight(
         per_page=per_page,
         total_pages=total_pages,
         stage_counts=stage_counts,
+        in_motion=sum(n for s, n in stage_counts.items() if s not in _NOT_YET_MOVING),
+        shown=shown,
+        moved_since=moved_since,
     )
+
+
+# Every bill is introduced and, within days, referred to committee: neither
+# is evidence anyone has done anything with it (bill_stage.py's module
+# docstring), so "in motion" and "moved this week" start past them.
+_NOT_YET_MOVING = frozenset({BillStage.INTRODUCED, BillStage.REFERRED})
+# "This week": today and the six days before it, Eastern.
+_MOVED_WINDOW_DAYS = 7
+
+
+def _moved_this_week(rows: list[_Row]) -> tuple[list[_Row], str]:
+    """Bills past referral with a recorded action in the last seven days,
+    latest first, and the first day of that window."""
+    since = (eastern_today() - timedelta(days=_MOVED_WINDOW_DAYS - 1)).isoformat()
+    moved = [r for r in rows if r.latest_action_date >= since and r.bill.stage not in _NOT_YET_MOVING]
+    moved.sort(key=lambda r: r.latest_action_date, reverse=True)
+    return moved, since
+
+
+# Stages a bill has left behind once it reaches a later one, in pipeline
+# order. A veto comes after presentment, so a vetoed bill reached "To
+# President" and no further.
+def _reach(stage: str) -> int:
+    if stage == BillStage.VETOED:
+        return BILL_STAGES[BillStage.TO_PRESIDENT]["order"]
+    return BILL_STAGES.get(stage, BILL_STAGES[BillStage.INTRODUCED])["order"]
+
+
+def _pct(part: int, whole: int) -> str:
+    """'83%', '0.6%' below one percent, 'none' for zero."""
+    if not part:
+        return "none"
+    share = 100 * part / whole
+    if share < 0.1:
+        return "under 0.1%"
+    return f"{share:.1f}%" if share < 1 else f"{round(share)}%"
+
+
+def stage_base_rate(db: Session, stage: str, congress: int) -> dict | None:
+    """What happens to this Congress's bills at `stage`, from the stages
+    stored for every bill sitting members sponsored: the share at it, the
+    share that became law, and of those that got at least this far, the
+    share that became law. A base rate for the stage (GovTrack's prognosis
+    is the same idea), never a forecast for one bill: the sentence says so.
+    None for another Congress's bill (the counts are of the current one)
+    and for a bill whose outcome is already known."""
+    if congress != settings.CURRENT_CONGRESS or stage in (BillStage.ENACTED, BillStage.VETOED):
+        return None
+    # One pass over the cached collection, then a dozen stage codes.
+    counts = Counter(r.bill.stage for r in _collect_bills(db) if r.bill.congress == congress)
+    total = sum(counts.values())
+    if not total:
+        return None
+    here = _reach(stage)
+    at = counts[stage]
+    law = counts[BillStage.ENACTED]
+    reached = sum(n for s, n in counts.items() if _reach(s) >= here)
+    sentences = [
+        f"Of the {total:,} bills sitting members have sponsored this Congress, {_pct(at, total)} "
+        f"are at this stage and {_pct(law, total)} have become law."
+    ]
+    if reached < total:
+        sentences.append(
+            f"Of the {reached:,} that got at least this far, {_pct(law, reached)} have become law so far."
+        )
+    sentences.append("That describes bills at this stage, not where this one will go.")
+    return {"total": total, "atStage": at, "reachedStage": reached, "becameLaw": law,
+            "sentence": " ".join(sentences)}
 
 
 # A bill title that reads as a short title: "... Act" (a year suffix, "of

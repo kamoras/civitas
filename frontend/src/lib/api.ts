@@ -325,6 +325,8 @@ async function fetchPaginatedVotes(
     page?: number;
     perPage?: number;
     filter?: string;
+    /** Bill number, title or question to search for (server-side). */
+    q?: string;
   }
 ): Promise<PaginatedVotes> {
   const params = new URLSearchParams();
@@ -332,6 +334,7 @@ async function fetchPaginatedVotes(
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
   if (options?.filter) params.set("filter", options.filter);
+  if (options?.q) params.set("q", options.q);
   return requestJson(
     `${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/votes?${params}`,
     "Failed to load votes"
@@ -345,6 +348,7 @@ export async function fetchRepVotes(
     page?: number;
     perPage?: number;
     filter?: string;
+    q?: string;
   }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.House, repId, options);
@@ -357,6 +361,7 @@ export async function fetchSenatorVotes(
     page?: number;
     perPage?: number;
     filter?: string;
+    q?: string;
   }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.Senate, senatorId, options);
@@ -1223,6 +1228,9 @@ export function sendLoadTiming(t: {
   ttfb: number;
   fcp: number | null;
   load: number;
+  /** One of three words the page chose itself (LoadTimingBeacon's
+   *  deviceClass), never anything read from the User-Agent. */
+  device: "desktop" | "tablet" | "mobile" | null;
 }) {
   if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") return;
   const params = new URLSearchParams({
@@ -1231,6 +1239,7 @@ export function sendLoadTiming(t: {
     load: String(Math.round(t.load)),
   });
   if (t.fcp != null) params.set("fcp", String(Math.round(t.fcp)));
+  if (t.device) params.set("device", t.device);
   navigator.sendBeacon(`${API_BASE}/track-timing?${params}`);
 }
 
@@ -1494,6 +1503,13 @@ export async function fetchAdminSystemStats(token: string): Promise<HostStats> {
 
 export interface VisitorStatsDay {
   date: string;
+  /** Visitors whose browser ran the page they opened; null before that
+   *  counting began (CONFIRMED_VISITS_SINCE in backend/app/api/visits.py),
+   *  when the stored count was mostly automation. */
+  confirmedVisitors: number | null;
+  /** Cold page loads whose browser painted the page while it was in view. */
+  firstPaintLoads: number;
+  /** The stored count for every day, whatever counted it then. */
   uniqueVisitors: number;
   pageViews: number;
 }
@@ -1589,10 +1605,15 @@ export interface LoadTimeSummary {
 
 export type LoadTimeMetric = "ttfb" | "fcp" | "load";
 
+/** First-paint loads by the device class the page reported; "unrecorded"
+ *  is a load from before the split, or from a page that predates it. */
+export type DeviceCounts = Record<"desktop" | "tablet" | "mobile" | "unrecorded", number>;
+
 export interface LoadTimes {
   metrics: LoadTimeMetric[];
-  days: ({ date: string } & Record<LoadTimeMetric, LoadTimeSummary>)[];
+  days: ({ date: string; devices: DeviceCounts } & Record<LoadTimeMetric, LoadTimeSummary>)[];
   byPath: ({ path: string } & LoadTimeSummary)[];
+  deviceTotals: DeviceCounts;
 }
 
 export async function fetchAdminLoadTimes(token: string, days: number = 30): Promise<LoadTimes> {
@@ -1932,17 +1953,26 @@ export interface NationalMonitor {
   updatedAt: string;
   lastArticleDate: string | null;
   updateCount: number;
+  /** A closed monitor's closing day. */
+  closedOn?: string | null;
+}
+
+export interface MonitorList {
+  monitors: NationalMonitor[];
+  /** Monitors closed in the last `recentlyClosedDays` days. */
+  recentlyClosed: NationalMonitor[];
+  recentlyClosedDays: number;
 }
 
 export interface NationalMonitorDetail extends NationalMonitor {
   updates: MonitorUpdate[];
 }
 
-export async function fetchMonitors(): Promise<{ monitors: NationalMonitor[] }> {
+export async function fetchMonitors(): Promise<MonitorList> {
   const url = `${API_BASE}/action/monitors`;
-  return withShape<{ monitors: NationalMonitor[] }>(
+  return withShape<MonitorList>(
     await cachedFetch(url, TTL.MEDIUM),
-    { lists: ["monitors"] },
+    { lists: ["monitors", "recentlyClosed"] },
     url
   );
 }

@@ -970,6 +970,31 @@ def _rekey_legacy_visitor_hashes() -> None:
     logger.info("Re-keyed %d legacy visitor hashes under a discarded random key", n)
 
 
+_PAGE_LOAD_COPY_MIGRATION = "page_load_timings_to_device_split"
+
+
+def _copy_page_load_timings() -> None:
+    """One-time: carry the load-time histogram over to the device-split
+    table (PageLoadTiming, page_load_device_timings), as device "" — a load
+    counted before the split. The old table stays until a later release
+    drops it: during a start-first rollout the previous image still writes
+    to it, and a rollback reads it (expand, then contract)."""
+    with visits_engine.begin() as conn:
+        if conn.execute(
+            text("SELECT 1 FROM visits_migrations WHERE name = :n"), {"n": _PAGE_LOAD_COPY_MIGRATION},
+        ).first():
+            return
+        if inspect(conn).has_table("page_load_timings"):
+            conn.execute(text(
+                "INSERT OR IGNORE INTO page_load_device_timings (date, path, metric, bucket_ms, device, count) "
+                "SELECT date, path, metric, bucket_ms, '', count FROM page_load_timings"
+            ))
+        conn.execute(
+            text("INSERT INTO visits_migrations (name, applied_at) VALUES (:n, CURRENT_TIMESTAMP)"),
+            {"n": _PAGE_LOAD_COPY_MIGRATION},
+        )
+
+
 def _init_db_locked() -> None:
     from app import models  # noqa: F401
 
@@ -982,6 +1007,7 @@ def _init_db_locked() -> None:
     _ensure_indexes()
     _migrate_visits_data_to_own_db()
     _rekey_legacy_visitor_hashes()
+    _copy_page_load_timings()
 
     # The FTS5 keyword index over explore_documents, plus the triggers that
     # keep it in step with ordinary ORM writes. Created here rather than in

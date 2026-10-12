@@ -13,6 +13,7 @@ import GeneralRunoffNotice, { otherPrimaryLabel } from "@/components/elections/G
 import DistrictFinder from "@/components/elections/DistrictFinder";
 import DistrictMap from "@/components/elections/DistrictMap";
 import TownContestCard from "@/components/elections/TownContestCard";
+import FollowFeed from "@/components/shared/FollowFeed";
 import ContestBox from "@/components/elections/ballot/ContestBox";
 import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
@@ -51,7 +52,7 @@ import {
   tierCandidates,
 } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
-import { absoluteUrl } from "@/lib/site";
+import { absoluteUrl, stateFeed } from "@/lib/site";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
@@ -1820,6 +1821,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                     ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
                     : "FIND YOUR ELECTION OFFICE ↗"}
                 </a>
+                <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
               </div>
             </header>
 

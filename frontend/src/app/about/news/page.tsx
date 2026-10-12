@@ -152,11 +152,41 @@ export default function NewsChapter() {
         <P>
           Each issue ends with what you can do about it, built from the record and never advocacy
           for or against a position: contact the members of Congress the coverage names (through
-          their own contact form), follow the bills involved, and read or comment on the related
-          federal documents while their comment period is open. When the coverage names no member,
-          it points to the directory, where you pick your own state; the site never asks where you
-          live. A seat changing party on election night is the exception: its issue is the count, so
-          what you can do is follow that count on its state&apos;s page.
+          their own contact form), contact the committee that handles the subject, follow the bills
+          involved, comment on a rule about the story by its deadline, and read the related federal
+          documents. When the coverage names no member, it also points to the directory, where you
+          pick your own state; the site never asks where you live. A seat changing party on election
+          night is the exception: its issue is the count, so what you can do is follow that count on
+          its state&apos;s page.
+        </P>
+        <More label="How the committee is chosen">
+          <P>
+            Each chamber&apos;s committee is named from two measurements, and only when both pick
+            the same committee and do so strongly enough. The first compares the issue with each
+            committee&apos;s jurisdiction as the House and Senate rules list it (House Rule X,
+            Senate Rule XXV; the intelligence and Indian Affairs committees from their own published
+            statements). The second looks at the most similar of 460 past issues, each read and
+            labelled by hand with the committees that handle it, or with none. Their chair and
+            ranking member come from the committee rosters the site already keeps, as they stand
+            when you read the issue. Tested on issues newer than every labelled one it learned from,
+            the committee named was one of the right ones 82% of the time, and a committee was named
+            for about one issue in five; the rest say nothing rather than guess. That is short of
+            the bar the site sets for stating it as fact (being confident precision is at least
+            80%), and asking for more certainty didn&apos;t raise it, so the row says
+            &ldquo;likely&rdquo;. Most of the misses were stories no committee clearly handles. The
+            rules&apos; wording alone did much worse (38%): it dates from 1946 in places and reads
+            nothing like the news.
+          </P>
+          <P>
+            A comment action appears only for a proposed or final rule (the Federal Register&apos;s
+            own document type) still open for comment, whose title is as close to the issue&apos;s
+            as a related document&apos;s must be; it disappears when the period closes.
+          </P>
+        </More>
+        <P>
+          Only the day&apos;s top two issues are posted to the <A href="/feeds">feeds</A> and the
+          Bluesky account, and no more than two issue posts a day. Every issue still has its own
+          page and its place here.
         </P>
         <More label="Keeping the hourly refresh running">
           <P>
@@ -175,9 +205,12 @@ export default function NewsChapter() {
         <List>
           <Item label="Today">
             The day&apos;s issues, each with what you can do about it, and below them the federal
-            documents whose comment period is open, soonest deadline first, each linking to its page
-            in Explore and the comment form there. Every day still on the record can be paged
-            through, one at a time.
+            documents whose comment period is open, each linking to its page in Explore and the
+            comment form there. Those come in order of how much they matter, not which closes first:
+            any a recent issue links, then proposed and final rules by how many people have read
+            them (the Federal Register&apos;s own count), then notices, which are mostly paperwork
+            renewals and waiver requests. By deadline alone, six of the first ten were such notices
+            on 11 October 2026. Every day still on the record can be paged through, one at a time.
           </Item>
           <Item label="Ongoing">
             When a story keeps coming back, on five separate days within two weeks and from at least
@@ -191,7 +224,8 @@ export default function NewsChapter() {
             removed after a replay showed it let 17 of 18 off-topic stories through. Two monitors
             are merged only when their titles are near-identical, since a merge can&apos;t be
             undone. A monitor goes quiet (&ldquo;watching&rdquo;) after a week without coverage and
-            wakes when it returns; after a month it closes and leaves this tab, staying in the
+            wakes when it returns; after a month it closes, and is listed under this tab&apos;s
+            closed monitors for 60 days, with when it was tracked and when it closed, and in the
             Archive.
           </Item>
           <Item label="Archive">
@@ -228,8 +262,11 @@ export default function NewsChapter() {
         <P>
           Once a day&apos;s Record is final, Civitas posts that day&apos;s count summary and the
           numbers of bills passed, never their titles, since an official short title can read as
-          advocacy, and each week, the bills that became law. Posts go to the{" "}
-          <A href="/feeds">feeds</A> and the Bluesky account.
+          advocacy, and each week, the bills that became law. A day or week with no record vote and
+          nothing passed or confirmed, such as a pro forma session, isn&apos;t posted. On a weekend
+          before a week of business, a post says when each chamber next meets, from the
+          Record&apos;s own notice, and which bills passed one chamber the week before and go to the
+          other. Posts go to the <A href="/feeds">feeds</A> and the Bluesky account.
         </P>
       </Section>
 

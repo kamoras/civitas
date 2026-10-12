@@ -1114,6 +1114,10 @@ class RaceResult(Base):
     reporting_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unit_label: Mapped[str] = mapped_column(String(20), default="precincts")
+    # True: the reporting figure counts units the source marks FULLY
+    # reported; False: units that have reported any results (StateCount.
+    # units_complete). NULL on a row from before the column.
+    units_complete: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     official: Mapped[bool] = mapped_column(Boolean, default=False)
     # The party (as a partyGroup: DEM/REP/IND/...) that held this seat
     # going into the election, fixed at the first read so a member-table
@@ -1322,6 +1326,10 @@ class ExploreDocument(Base):
     agency_name: Mapped[str | None] = mapped_column(String, nullable=True)
     comment_url: Mapped[str | None] = mapped_column(String, nullable=True)
     comments_close_on: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The Federal Register's own reader count for the document (its API's
+    # page_views.count), refreshed nightly; None for other sources and until
+    # the first refresh. Ranks the Action Center's open comment periods.
+    fr_page_views: Mapped[int | None] = mapped_column(Integer, nullable=True)
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")
     external_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
 
@@ -2215,19 +2223,34 @@ class PageLoadTiming(VisitsBase):
     here that could single out a visitor, and the table is bounded by
     days x routes x 3 metrics x ~20 buckets regardless of traffic.
 
+    Since 2026-10 each counter is also split by a three-value device class
+    (desktop | tablet | mobile) that the BROWSER computes from CSS media
+    features and sends as one of those three words (LoadTimingBeacon's
+    deviceClass) — the endpoint still reads no header at all, so the class
+    costs no User-Agent. "" is a load counted before the split. A fourth
+    key column multiplies the bound by four, nothing more, and with no hash
+    or per-load key there is still nothing to join to a SiteVisit row.
+
+    The table was renamed for the split (page_load_timings had the old
+    four-column key, which SQLite can't widen in place): init_db copies the
+    old rows across once, as device "" (database._copy_page_load_timings),
+    and the old table is dropped by a later release — expand, then contract.
+
     A histogram rather than a running mean because the admin dashboard
     charts p50/p95: one slow outlier moves a mean, and a mean can't be
     turned back into percentiles later. Percentiles are interpolated inside
     the bucket (admin.py's _histogram_percentile), so their precision is the
     bucket width — plenty to see a regression, not a benchmark.
     """
-    __tablename__ = "page_load_timings"
+    __tablename__ = "page_load_device_timings"
 
     date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
     path: Mapped[str] = mapped_column(String(100), primary_key=True)
     metric: Mapped[str] = mapped_column(String(8), primary_key=True)  # ttfb | fcp | load
     # Upper bound of the bucket, in ms (a member of LOAD_TIMING_BUCKETS_MS).
     bucket_ms: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # desktop | tablet | mobile, or "" for a load counted before the split.
+    device: Mapped[str] = mapped_column(String(8), primary_key=True, default="")
     count: Mapped[int] = mapped_column(Integer, default=0)
 
 

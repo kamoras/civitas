@@ -9,13 +9,17 @@ vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/about/elections" }));
 
 /** The backend's results endpoint, answering with `liveStates` — or down. */
-function backend(liveStates: string[] | null) {
+function backend(liveStates: string[] | null, rankedChoiceStates?: string[]) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () =>
       liveStates === null
         ? Promise.reject(new Error("ECONNREFUSED"))
-        : { ok: true, status: 200, json: async () => ({ liveStates, races: [] }) }
+        : {
+            ok: true,
+            status: 200,
+            json: async () => ({ liveStates, rankedChoiceStates, races: [] }),
+          }
     )
   );
 }
@@ -50,6 +54,18 @@ describe("the elections methodology chapter", () => {
     expect(document.getElementById("election-night")).toHaveTextContent(
       /Three states publish a count we can read this way: Georgia, New Mexico and West Virginia\./
     );
+  });
+
+  it("names the ranked-choice states from the backend's list, and says why they aren't read", async () => {
+    backend(["GA"], ["ME", "AK"]);
+    const { unmount } = render(await ElectionsChapter());
+    expect(document.getElementById("election-night")).toHaveTextContent(
+      /Alaska and Maine decide their congressional races by ranked-choice voting: .* neither is read live\./
+    );
+    unmount();
+    backend(["GA"]);
+    render(await ElectionsChapter());
+    expect(document.body).not.toHaveTextContent(/decides? (its|their) congressional races/);
   });
 
   it("says the sync slows to hourly once counts settle, not five minutes throughout", async () => {

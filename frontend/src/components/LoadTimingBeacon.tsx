@@ -8,6 +8,29 @@ import { sendLoadTiming } from "@/lib/api";
 // already happened.
 let reported = false;
 
+// Phones' short side is 320-480 CSS px and tablets' 600 and up: 600dp is
+// Android's own phone/tablet line (the sw600dp resource qualifier), and the
+// smallest iPad is 744 wide.
+const TABLET_MIN_SHORT_SIDE_PX = 600;
+
+/**
+ * The device class the timing histogram is split by, decided here in the
+ * browser from what the page can already see (the primary pointer and the
+ * screen's short side) and sent as one of three words. Deciding it on the
+ * server would mean reading the User-Agent at an endpoint that reads nothing
+ * about its caller (AGENTS.md §8); three fixed words add nothing a visit
+ * could be traced by. A primary mouse or trackpad is desktop, a touch
+ * screen is a phone or a tablet by size. Null where media queries aren't
+ * available: no class is better than a guessed one.
+ */
+export function deviceClass(): "desktop" | "tablet" | "mobile" | null {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return null;
+  if (!window.matchMedia("(pointer: coarse)").matches) return "desktop";
+  return Math.min(window.screen.width, window.screen.height) < TABLET_MIN_SHORT_SIDE_PX
+    ? "mobile"
+    : "tablet";
+}
+
 /**
  * Reports this hard page load's timing once, after the load event, for the
  * admin dashboard's load-time charts. Soft (client-side) navigations have no
@@ -18,13 +41,17 @@ let reported = false;
  * a background tab's timers and rendering are throttled, so its "load time"
  * measures the browser's scheduling rather than the site, and a few of them
  * are enough to drag p95 somewhere nobody actually waited.
+ *
+ * A browser under automation (Playwright, Puppeteer, Selenium, which set
+ * navigator.webdriver) is skipped too: the dashboard counts these loads as
+ * its closest measure of people reading the site.
  */
 export default function LoadTimingBeacon() {
   useEffect(() => {
     if (reported) return;
     const path = window.location.pathname;
-    // The admin dashboard is not reader traffic.
-    if (path.startsWith("/admin")) return;
+    // The admin dashboard is not reader traffic, and neither is a driven browser.
+    if (path.startsWith("/admin") || navigator.webdriver) return;
 
     let hidden = document.visibilityState !== "visible";
     const onVisibility = () => {
@@ -49,6 +76,7 @@ export default function LoadTimingBeacon() {
           ttfb: nav.responseStart,
           fcp: fcp ? fcp.startTime : null,
           load: nav.loadEventEnd,
+          device: deviceClass(),
         });
       }, 0);
     };
