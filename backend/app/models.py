@@ -1326,6 +1326,10 @@ class ExploreDocument(Base):
     agency_name: Mapped[str | None] = mapped_column(String, nullable=True)
     comment_url: Mapped[str | None] = mapped_column(String, nullable=True)
     comments_close_on: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The Federal Register's own reader count for the document (its API's
+    # page_views.count), refreshed nightly; None for other sources and until
+    # the first refresh. Ranks the Action Center's open comment periods.
+    fr_page_views: Mapped[int | None] = mapped_column(Integer, nullable=True)
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")
     external_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
 
