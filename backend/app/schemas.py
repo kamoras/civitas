@@ -465,6 +465,13 @@ class PaginatedBillsSchema(CamelModel):
     per_page: int
     total_pages: int
     stage_counts: dict[str, int]
+    # Bills past introduction and referral among stage_counts (the "bills
+    # in motion" headline).
+    in_motion: int = 0
+    # sort=hot only: "mentioned" (named by a live Action Center issue) or,
+    # when no issue names one, "moved" (an action since moved_since).
+    shown: Literal["mentioned", "moved"] | None = None
+    moved_since: str | None = None
 
 
 class RelatedIssueSchema(CamelModel):
@@ -482,10 +489,20 @@ class RelatedIssueSchema(CamelModel):
     public_id: str | None = None
 
 
+class StageBaseRateSchema(CamelModel):
+    """What happens to this Congress's bills at a stage (bill_service.stage_base_rate)."""
+    total: int
+    at_stage: int
+    reached_stage: int
+    became_law: int
+    sentence: str
+
+
 class BillDetailSchema(BillInFlightSchema):
     policy_areas: list[PolicyAreaDetail] = []
     party_leaning: Literal["R", "D", "bipartisan"] | None = None
     related_issues: list[RelatedIssueSchema] = []
+    stage_base_rate: StageBaseRateSchema | None = None
 
 
 class ConstituentApprovalPartySchema(CamelModel):
@@ -966,10 +983,37 @@ class RelatedSenator(CamelModel):
     website_url: str | None = None
 
 
+class CommitteeLeaderSchema(CamelModel):
+    id: str
+    name: str
+    party: str
+    state: str
+    chamber: str
+
+
+class CommitteeContactSchema(CamelModel):
+    """A contact_committee action's committee (app/committee_routing.py),
+    with its chair and ranking member as the stored rosters name them now —
+    looked up when the issue is served, so a leadership change shows on
+    issues written before it."""
+    code: str
+    name: str
+    chamber: str
+    url: str | None = None
+    chair: CommitteeLeaderSchema | None = None
+    ranking_member: CommitteeLeaderSchema | None = None
+
+
 class ActionItemSchema(CamelModel):
     text: str
     type: str = "general"
     url: str | None = None
+    # comment_period: the Explore document and when its comment period
+    # closes (served only while open, the #903 rule).
+    doc_id: int | None = None
+    closes_on: str | None = None
+    # contact_committee
+    committee: CommitteeContactSchema | None = None
 
 
 class RelatedBillSchema(CamelModel):
@@ -1083,6 +1127,8 @@ class NationalMonitorSchema(CamelModel):
     updated_at: str
     last_article_date: str | None = None
     update_count: int = 0
+    # A closed monitor's closing day (its last write, when it closed).
+    closed_on: str | None = None
 
 
 class NationalMonitorDetailSchema(NationalMonitorSchema):

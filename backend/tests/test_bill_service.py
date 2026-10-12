@@ -5,13 +5,14 @@ Uses the shared in-memory-SQLite `db_session` fixture from conftest.py.
 """
 
 import json
+from datetime import datetime
 
 import pytest
 
 from app.config import settings
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.services.bill_service import (
-    clear_bill_collection_cache, get_bill_detail, get_bills_in_flight, short_title_index,
+    clear_bill_collection_cache, get_bill_detail, get_bills_in_flight, short_title_index, stage_base_rate,
 )
 from tests.conftest import TEST_CONGRESS
 
@@ -289,6 +290,89 @@ class TestHotSort:
         result = get_bills_in_flight(db_session, sort="recent")
 
         assert result.bills[0].mention_count == 1
+
+
+class TestHotFallsBackToMovedThisWeek:
+    """Most days no live issue names a bill and "Active now" was empty. It
+    then lists bills that moved this week, and says that is what it shows."""
+
+    @pytest.fixture(autouse=True)
+    def today(self, freeze_utcnow):
+        freeze_utcnow(datetime(2026, 10, 9, 16))  # noon Eastern, Friday
+
+    def test_moved_this_week_past_referral(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "REPORTED", latest_action_date="2026-10-03")  # first day
+        _make_sponsored_bill(db_session, senator.id, "S.2", "PASSED_CHAMBER", latest_action_date="2026-10-08")
+        _make_sponsored_bill(db_session, senator.id, "S.3", "REFERRED", latest_action_date="2026-10-08")  # automatic
+        _make_sponsored_bill(db_session, senator.id, "S.4", "REPORTED", latest_action_date="2026-10-02")  # 8 days ago
+
+        result = get_bills_in_flight(db_session, sort="hot")
+
+        assert (result.shown, result.moved_since) == ("moved", "2026-10-03")
+        assert [b.bill_id for b in result.bills] == ["S.2", "S.1"]
+
+    def test_a_named_bill_keeps_the_mentioned_list(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED")
+        _make_sponsored_bill(db_session, senator.id, "S.2", "REPORTED", latest_action_date="2026-10-08")
+        _make_action_issue(db_session, ["S.1"])
+
+        result = get_bills_in_flight(db_session, sort="hot")
+
+        assert (result.shown, result.moved_since) == ("mentioned", None)
+        assert [b.bill_id for b in result.bills] == ["S.1"]
+
+    def test_other_sorts_say_nothing_about_it(self, db_session):
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "REPORTED")
+        assert get_bills_in_flight(db_session).shown is None
+
+
+def test_in_motion_counts_bills_past_referral(db_session):
+    senator = _make_senator(db_session)
+    for n, stage in enumerate(("INTRODUCED", "REFERRED", "REFERRED", "IN_COMMITTEE", "ENACTED")):
+        _make_sponsored_bill(db_session, senator.id, f"S.{n}", stage)
+    assert get_bills_in_flight(db_session, per_page=1).in_motion == 2
+
+
+class TestStageBaseRate:
+    """A bill page states what happens to this Congress's bills at its
+    stage, computed from the stored stages; never a forecast for the bill."""
+
+    @pytest.fixture
+    def congress(self, db_session):
+        senator = _make_senator(db_session)
+        stages = ["REFERRED"] * 80 + ["IN_COMMITTEE"] * 8 + ["REPORTED"] * 6 + ["PASSED_CHAMBER"] * 3 \
+            + ["TO_PRESIDENT", "VETOED", "ENACTED"]
+        for n, stage in enumerate(stages):
+            _make_sponsored_bill(db_session, senator.id, f"S.{n}", stage)
+        _make_sponsored_bill(db_session, senator.id, "S.999", "ENACTED", congress=CURRENT - 1)  # another Congress
+        db_session.commit()
+        return db_session
+
+    def test_at_a_stage_and_beyond_it(self, congress):
+        rate = stage_base_rate(congress, "REPORTED", CURRENT)
+        # Reported or further: 6 + 3 + to president + vetoed + enacted.
+        assert (rate["total"], rate["atStage"], rate["reachedStage"], rate["becameLaw"]) == (100, 6, 12, 1)
+        assert rate["sentence"] == (
+            "Of the 100 bills sitting members have sponsored this Congress, 6% are at this stage and 1% have "
+            "become law. Of the 12 that got at least this far, 8% have become law so far. "
+            "That describes bills at this stage, not where this one will go."
+        )
+
+    def test_the_first_stage_has_no_further_comparison(self, congress):
+        rate = stage_base_rate(congress, "INTRODUCED", CURRENT)
+        assert rate["reachedStage"] == 100 and "got at least this far" not in rate["sentence"]
+
+    def test_none_once_the_outcome_is_known_or_for_another_congress(self, congress):
+        assert stage_base_rate(congress, "ENACTED", CURRENT) is None
+        assert stage_base_rate(congress, "VETOED", CURRENT) is None
+        assert stage_base_rate(congress, "REPORTED", CURRENT - 1) is None
+
+    def test_on_the_bill_detail(self, congress):
+        detail = get_bill_detail(congress, "S.90")  # a reported bill
+        assert detail.stage_base_rate.at_stage == 6
 
 
 class TestStaleSort:
