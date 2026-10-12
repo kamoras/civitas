@@ -562,6 +562,10 @@ async def fetch_general_results(
         page_url=page_url.format(id=eid),
         official=bool(meta.get("isOfficialResults")),
         unit_label=_unit_label(payload, source),
+        # A locality counts as reporting once it has posted any results:
+        # Utah's 2024 general read 29 of 29 counties on Nov 7 with 976,132
+        # presidential votes of the 1.49 million it certified.
+        units_complete=False,
         contests=general_contests(payload, _house_patterns(source)),
         # lastUpdated only — when the count last changed. asOf is when the
         # payload was rendered (a year past lastUpdated in Utah's 2024

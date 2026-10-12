@@ -633,9 +633,17 @@ export interface LiveRaceResult {
   totalUnits: number | null;
   /** "precincts" or "counties" — what the state counts reporting in. */
   unitLabel: string;
+  /** True: reportingUnits counts units the state marks fully reported;
+   * false: units that have posted any results. Null from a row written
+   * before the backend said which. Word it through reportingText. */
+  unitsComplete?: boolean | null;
   sourceName: string;
   sourceUrl: string | null;
   fetchedAt: string;
+  /** False when the state's latest good read didn't include this race (its
+   * contest renamed past the reader, or set aside): the count shown is the
+   * last one read at fetchedAt, not a live one. */
+  inLatestRead?: boolean;
   lastChangeAt: string;
   /** Null before any votes and on an exact tie. */
   leaderParty: string | null;
@@ -676,6 +684,7 @@ export interface ResultEvent {
     reportingUnits?: number | null;
     totalUnits?: number | null;
     unitLabel?: string;
+    unitsComplete?: boolean | null;
     heldBy?: string | null;
     official?: boolean;
   };
@@ -688,6 +697,11 @@ export interface LiveResults {
    * has no count here — which the page says, rather than drawing it as
    * a state where nothing has happened. */
   liveStates: string[];
+  /** States that decide federal generals by ranked-choice rounds when no one
+   * has a majority (Maine, Alaska). Never read live: an election-night
+   * count there is first choices, whose leader may not be who the rounds
+   * elect. Absent from an older backend. */
+  rankedChoiceStates?: string[];
   /** States electing a senator this cycle. */
   senateStates: string[];
   /** Each of those states' Senate races (regular first): a state electing

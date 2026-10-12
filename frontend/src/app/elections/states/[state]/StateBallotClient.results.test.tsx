@@ -242,6 +242,19 @@ describe("the state page in results mode", () => {
     );
   });
 
+  it("says why a ranked-choice state has no live count, not that it has no feed", async () => {
+    // As if Ohio decided its federal generals by ranked-choice rounds.
+    fetchLiveResults.mockResolvedValue(
+      live({ liveStates: ["GA"], rankedChoiceStates: ["OH"], races: [] })
+    );
+    render(<StateBallotClient ballot={ballot()} />);
+    await screen.findByRole("heading", { name: "No live count for Ohio here" });
+    expect(
+      screen.getByText(/decides its U.S. Senate and House races by ranked-choice/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/doesn.t publish a results feed/)).not.toBeInTheDocument();
+  });
+
   it("words the national directory as a directory, not as the state's count", async () => {
     // With no verified state link the lookup is USAGov's office finder: the
     // link can't promise the count is at the other end.

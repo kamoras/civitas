@@ -120,7 +120,7 @@ from app.pipeline.fetch.state_candidates_common import (
     surname,
 )
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
-from app.pipeline.fetch.election_results import ContestCount, StateCount, is_special_contest
+from app.pipeline.fetch.election_results import ContestCount, StateCount, UntrustedCount, is_special_contest
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -375,6 +375,22 @@ _PRECINCTS_RE = re.compile(r"Precincts\s+Fully:\s*([\d,]+)\s*/\s*([\d,]+)", re.I
 # would have read nothing all election night. The fields come first; the
 # title is only the fallback.
 _HIDDEN_RE = re.compile(r'id="hidElection(Type|Date)"[^>]*value="([^"]*)"', re.IGNORECASE)
+# The vendor's site-wide message panel. It printed "Testing in Progress" on
+# New Mexico's real 2024 general page four weeks out (Internet Archive,
+# 2024-10-08), over a count with votes in it -- 162 of 2,169 precincts
+# fully in, every candidate at a round 13,1xx or 26,2xx -- under the
+# general's own type and date, so the date check passes it. This vendor
+# carries no machine-readable test flag; the panel is its only mark, and it
+# is absent on every election-night and final capture of NM, MT and NE.
+_SITE_MESSAGE_RE = re.compile(r'<div[^>]*id="pnlSiteMessage"[^>]*>(.*?)</div>', re.IGNORECASE | re.DOTALL)
+_TEST_RE = re.compile(r"\btest", re.IGNORECASE)
+
+
+def _testing_message(html: str) -> str | None:
+    """The site message, when it says the page is a test."""
+    m = _SITE_MESSAGE_RE.search(html)
+    text = re.sub(r"<[^>]+>|\s+", " ", m.group(1)).strip() if m else ""
+    return text if _TEST_RE.search(text) else None
 
 
 def _general_held_on(html: str) -> str | None:
@@ -480,6 +496,8 @@ async def fetch_general_results(
         html = await fetch_text_with_retry(client, _rate_limiter, url, f"{state} general results {query['type']}")
         if html is None or _general_held_on(html) != election_day.isoformat():
             return None
+        if (message := _testing_message(html)) is not None:
+            raise UntrustedCount(f"{state} results page says {message!r}")
         urls.append(url)
         stamps.append(_updated_at(html))
         contests.extend(general_contests(html))

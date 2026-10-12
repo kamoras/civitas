@@ -30,6 +30,10 @@ import type { LiveRaceResult } from "@/types/election";
  * — checked before NO VOTES YET, since a count that fell to zero votes is
  * one of them (the overview counts it as "not counted" and points here). */
 export function statusTag(r: LiveRaceResult): { text: string; className: string } {
+  // The state's latest read didn't list this race: what's shown is the
+  // last count read, and no other tag may pass it off as live.
+  if (r.inLatestRead === false)
+    return { text: "NOT IN LATEST READ", className: "border-signal-amber/40 text-ink-hi" };
   const notShown = flipNotShownTag(r);
   if (notShown)
     return {
@@ -145,6 +149,9 @@ export function RaceResultCard({
       </ol>
       <p className="mt-4 text-sm text-ink-lo">
         {[
+          result.inLatestRead === false
+            ? `The state's latest read didn't include this race; this is its count as read at ${formatEasternTime(result.fetchedAt)}.`
+            : null,
           !result.votesCounted
             ? flipNotShownText(result)
               ? "No votes in the latest count."
