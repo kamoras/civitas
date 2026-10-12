@@ -8,9 +8,7 @@ votes this week), and the next deadlines to comment on federal rules.
 Every sentence is a template around stored figures; nothing is generated.
 """
 
-import calendar
 import json
-import re
 from collections import Counter
 from datetime import date, timedelta
 
@@ -26,7 +24,7 @@ from app.issue_ids import to_public_id
 from app.models import ActionIssue, CongressDay, ExploreDocument, RollCall
 from app.pipeline.congress_activity import eastern_today
 from app.retractions import retraction_for_issue
-from app.services.congress_service import CHAMBERS, bill_label, week_bounds
+from app.services.congress_service import CHAMBERS, bill_label, next_meeting, week_bounds
 from app.time_utils import comment_period_today
 
 router = APIRouter()
@@ -38,28 +36,6 @@ _TTL_S = 300
 _CHAMBER_NAME = {"senate": "Senate", "house": "House"}
 
 # ── Congress ──────────────────────────────────────────────────────
-
-_MONTHS = {name: i for i, name in enumerate(calendar.month_name) if name}
-# The Record's own wording for a next meeting: the Digest's "3:30 p.m.,
-# Tuesday, October 13" or the floor log's "...reconvene at 3:30 p.m.
-# Tuesday, October 13, 2026." Month names are the format, not a guess.
-_MEETING_DATE_RE = re.compile(r"\b(" + "|".join(_MONTHS) + r")\s+(\d{1,2})(?:,\s*(\d{4}))?")
-
-
-def meeting_date(text: str | None, written_on: date) -> date | None:
-    """The date in a next-meeting notice. A notice without a year names the
-    first such date after the day it was written (December's notice can
-    name a day in January)."""
-    m = _MEETING_DATE_RE.search(text or "")
-    if not m:
-        return None
-    month, day = _MONTHS[m.group(1)], int(m.group(2))
-    year = int(m.group(3)) if m.group(3) else written_on.year + (month < written_on.month)
-    try:
-        return date(year, month, day)
-    except ValueError:
-        return None
-
 
 def _long_date(d: date) -> str:
     return f"{d:%A}, {d:%B} {d.day}"
@@ -77,17 +53,7 @@ def _chamber(db: Session, chamber: str, today: date, monday: date, sunday: date)
         RollCall.chamber == chamber, RollCall.date >= monday.isoformat(), RollCall.date <= sunday.isoformat(),
     ).all()
     met |= {v.date for v in votes}
-    # The newest notice of the next meeting written on or before today: each
-    # day's Record (or the floor log, until the Digest arrives) names it.
-    notice = (
-        db.query(CongressDay)
-        .filter(CongressDay.chamber == chamber, CongressDay.next_meeting.isnot(None), CongressDay.date <= iso)
-        .order_by(CongressDay.date.desc())
-        .first()
-    )
-    nxt = meeting_date(notice.next_meeting, date.fromisoformat(notice.date)) if notice else None
-    if nxt is not None and nxt < today:
-        nxt = None  # a notice that has passed says nothing about what comes next
+    nxt, _ = next_meeting(db, chamber, today)
     return {
         "chamber": chamber,
         "inSessionToday": iso in met,

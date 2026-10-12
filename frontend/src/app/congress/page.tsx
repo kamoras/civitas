@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import { pageMetadata } from "@/lib/site";
+import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { fetchLatestDay } from "@/lib/congressServer";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
+import FollowFeed from "@/components/shared/FollowFeed";
 import DayReportView from "@/components/congress/DayReportView";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import { CongressTabs } from "@/components/congress/CongressNav";
@@ -14,6 +15,7 @@ export const metadata = pageMetadata({
   description:
     "Each day's record of the Senate and the House: bills passed, record votes with every member's vote, nominations confirmed and committee meetings, from the Congressional Record.",
   path: "/congress",
+  feed: TOPIC_FEEDS.congress,
 });
 
 export default async function CongressPage() {
@@ -41,6 +43,7 @@ export default async function CongressPage() {
               </Link>{" "}
               shows every bill moving through this Congress.
             </p>
+            <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
         </div>
       </main>

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { LiveResults, StateBallot } from "@/types/election";
 import { fetchRecord } from "@/lib/ssrPayload";
 import { stateBallotHref } from "@/lib/elections";
-import { absoluteUrl, pageMetadata } from "@/lib/site";
+import { absoluteUrl, pageMetadata, stateFeed } from "@/lib/site";
 import { describeStateBallot } from "@/lib/seo";
 import { pollsClosed, showsResults } from "@/lib/results";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
@@ -109,6 +109,7 @@ export async function generateMetadata({
     path,
     type: "article",
     images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+    feed: stateFeed(code, ballot.stateName ?? code),
   });
 }
 

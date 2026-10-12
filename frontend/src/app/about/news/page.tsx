@@ -158,6 +158,11 @@ export default function NewsChapter() {
           live. A seat changing party on election night is the exception: its issue is the count, so
           what you can do is follow that count on its state&apos;s page.
         </P>
+        <P>
+          Only the day&apos;s top two issues are posted to the <A href="/feeds">feeds</A> and the
+          Bluesky account, and no more than two issue posts a day. Every issue still has its own
+          page and its place here.
+        </P>
         <More label="Keeping the hourly refresh running">
           <P>
             Only one refresh runs at a time, even while a deploy briefly runs two copies of the
@@ -228,8 +233,11 @@ export default function NewsChapter() {
         <P>
           Once a day&apos;s Record is final, Civitas posts that day&apos;s count summary and the
           numbers of bills passed, never their titles, since an official short title can read as
-          advocacy, and each week, the bills that became law. Posts go to the{" "}
-          <A href="/feeds">feeds</A> and the Bluesky account.
+          advocacy, and each week, the bills that became law. A day or week with no record vote and
+          nothing passed or confirmed, such as a pro forma session, isn&apos;t posted. On a weekend
+          before a week of business, a post says when each chamber next meets, from the
+          Record&apos;s own notice, and which bills passed one chamber the week before and go to the
+          other. Posts go to the <A href="/feeds">feeds</A> and the Bluesky account.
         </P>
       </Section>
 

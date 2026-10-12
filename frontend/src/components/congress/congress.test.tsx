@@ -185,6 +185,18 @@ describe("congress formatting", () => {
 });
 
 describe("day report", () => {
+  it("offers the Congress feed, day and week alike", () => {
+    const { unmount } = render(<DayReportView report={day} />);
+    expect(
+      screen.getByRole("link", { name: "Follow Congress without an account" })
+    ).toHaveAttribute("href", "/feed/congress.xml");
+    unmount();
+    render(<PeriodReportView report={week} kind="week" />);
+    expect(
+      screen.getByRole("link", { name: "Follow Congress without an account" })
+    ).toBeInTheDocument();
+  });
+
   it("shows the day as the API computed it", () => {
     render(<DayReportView report={day} />);
     expect(
