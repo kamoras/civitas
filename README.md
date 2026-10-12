@@ -1418,6 +1418,17 @@ invalid parameter, an unknown id), server errors (5xx) and rate-limit
 refusals separately, and why requests were rejected — apart from the
 visitor figures, since a program calling the API is not a visitor.
 
+The Traffic tab leads with the two figures that measure people. **Confirmed
+visitors** are `SiteVisit` rows from 2026-10-11 (`CONFIRMED_VISITS_SINCE`),
+the first whole day a visit counted only once the browser that opened the page
+had run it; earlier days show no figure, since the stored count was then mostly
+automation. **First-paint loads** are cold page loads whose browser painted the
+page while it was in view, from the load-time histogram; a browser under
+automation (`navigator.webdriver`) reports none. That histogram is also split by
+a device class the page decides for itself (desktop, tablet or mobile, from its
+pointer and screen size) and sends as one of those three words, so the endpoint
+still reads no header about its caller (`PageLoadTiming`).
+
 A parameter an endpoint doesn't take is refused (422) rather than ignored,
 since an ignored misspelt filter returned unfiltered results that looked
 like an answer; a choice is read in any case and with hyphens or underscores
