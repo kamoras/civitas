@@ -225,7 +225,7 @@ Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
         # are undone — a cut can end the sentence on "Sens." or before the
         # object its predicate needs — and the feed would store the cut
         # text as the post. Whole, it fits Bluesky beside its link.
-        if len(post) > _post_budget(race):
+        if len(post) + len(_citation(item)) > _post_budget(race):
             logger.info("Composed post for item %s is too long to publish whole (%d chars)", item.id, len(post))
             continue
 
@@ -247,8 +247,20 @@ Return JSON: {{"actor": "<exact span>", "predicate": "<exact span>"}}"""
 def _race_url(race: Race) -> str:
     # 2026-08: race detail merged into the state ballot page — old
     # /elections/{race.id} links still redirect here, but new posts go
-    # straight to the merged page.
+    # straight to the merged page. The link, and so the Bluesky card, is
+    # always the state's ballot page, never the outlet's article: the post
+    # is there to bring a reader to that ballot. The article is the feed
+    # entry's source link, and the outlet is named in the text (_citation).
     return f"{broadcast.SITE_URL}/elections/states/{race.state}#race-{race.id}"
+
+
+def _citation(item: RaceCoverageItem) -> str:
+    """The outlet the sentence is copied from, after it. The link card is
+    Civitas's ballot page, so on Bluesky this is the only place the source
+    shows; until 2026-10 a race post named none, and a newsroom's sentence
+    ("Democrats have the wind at their backs in ...") read as Civitas's
+    own."""
+    return f" (via {item.source_name})"
 
 
 def _post_budget(race: Race) -> int:
@@ -421,7 +433,7 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
 
         # Marked in the same commit that stores the post (_publish commits).
         item.bsky_posted = True
-        _publish(db, text, race, item.url)
+        _publish(db, text + _citation(item), race, item.url)
         cooled_down.add(item.race_id)
         posted += 1
 

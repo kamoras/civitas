@@ -31,6 +31,36 @@ export const FEED_ALTERNATES = {
   "application/atom+xml": [{ url: FEED_PATH, title: "Civitas" }],
 };
 
+export interface Feed {
+  url: string;
+  title: string;
+}
+
+/** The topic feeds a page can name as its own (backend/app/broadcast.py
+ *  FEEDS; paths from api/feed.py feed_path). */
+export const TOPIC_FEEDS = {
+  issues: { url: "/feed/issues.xml", title: "Civitas: Action Center" },
+  congress: { url: "/feed/congress.xml", title: "Civitas: Congress" },
+  elections: { url: "/feed/elections.xml", title: "Civitas: Elections" },
+} satisfies Record<string, Feed>;
+
+/** A state's feed: its races and its members of Congress (api/feed.py
+ *  state_feed_path, titled as the feed titles itself). */
+export function stateFeed(code: string, name: string): Feed {
+  return { url: `/feed/states/${code.toUpperCase()}.xml`, title: `Civitas: ${name}` };
+}
+
+/**
+ * `alternates.types` for a page: its own, most specific feed first (a reader
+ * or browser extension given the page commonly offers the first link it
+ * finds), then everything.
+ */
+export function feedAlternates(feed?: Feed) {
+  return feed
+    ? { "application/atom+xml": [feed, ...FEED_ALTERNATES["application/atom+xml"]] }
+    : FEED_ALTERNATES;
+}
+
 /** Absolute URL for a site path ("/bills/S.1" → "https://…/bills/S.1"). */
 export function absoluteUrl(path: string): string {
   return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;
@@ -83,6 +113,7 @@ export function pageMetadata({
   type = "website",
   absoluteTitle = false,
   noindex = false,
+  feed,
 }: {
   title: string;
   description: string;
@@ -91,13 +122,16 @@ export function pageMetadata({
   type?: "website" | "article" | "profile";
   absoluteTitle?: boolean;
   noindex?: boolean;
+  /** The page's own feed (TOPIC_FEEDS, stateFeed), advertised ahead of
+   *  the everything feed. */
+  feed?: Feed;
 }): Metadata {
   const fullTitle = absoluteTitle ? title : `${title} | ${SITE_NAME}`;
   const desc = metaDescription(description);
   return {
     title: absoluteTitle ? { absolute: title } : title,
     description: desc,
-    alternates: { canonical: path, types: FEED_ALTERNATES },
+    alternates: { canonical: path, types: feedAlternates(feed) },
     openGraph: {
       title: fullTitle,
       description: desc,

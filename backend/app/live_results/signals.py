@@ -96,16 +96,69 @@ def race_label(race) -> str:
     return f"{state}'s {_ordinal(race.district)} Congressional District"
 
 
+# Each unit label a reader sets, said of one unit: "0 of 1 county", never
+# "all 1 counties" (Colorado's 5th District is one county).
+_ONE_UNIT = {
+    "precincts": "precinct",
+    "counties": "county",
+    "cities and towns": "city or town",
+    "counties and cities": "county or city",
+}
+
+
+def unit_noun(label: str | None, total: int) -> str:
+    label = label or "precincts"
+    return _ONE_UNIT.get(label, label) if total == 1 else label
+
+
+def _share(reporting: int, total: int) -> str:
+    """The reporting share, as a percentage that never rounds to a count it
+    isn't: Montana's 2024 Senate count read 724 of 727 precincts, which
+    plain rounding printed as 100%, beside a race still counting. Short of
+    every unit it is at most 99%; past none, at least "<1%"."""
+    pct = 100 * reporting / total
+    if 0 < pct < 1:
+        return "<1%"
+    return f"{min(round(pct), 99) if reporting < total else round(pct)}%"
+
+
 def reporting_line(d: dict) -> str:
-    """"60 of 100 precincts reporting (60%)", or "" unless the count states
-    both figures: a feed can give its units' total with no reporting
-    figure (Clarity's PR missing for a poll), and formatting that None
-    failed the whole state's sync on every pass."""
+    """How much of the count is in, in the source's own terms, or "" unless
+    the count states both figures: a feed can give its units' total with no
+    reporting figure (Clarity's PR missing for a poll), and formatting that
+    None failed the whole state's sync on every pass.
+
+    "60 of 100 precincts fully reported (60%)" where the source counts
+    fully reported units, "Results from 12 of 29 counties (41%)" where it
+    counts units with any results (unitsComplete, StateCount.units_complete).
+    Plain "reporting" said the first wrongly (0 of 656 beside 222,000 votes
+    read as nothing counted) and the second wrongly (29 of 29 beside a third
+    of the vote still to count read as complete). A row from before the
+    distinction keeps the old wording."""
     total, reporting = d.get("totalUnits"), d.get("reportingUnits")
     if not total or reporting is None:
         return ""
-    share = round(100 * reporting / total)
-    return f"{reporting:,} of {total:,} {d.get('unitLabel') or 'precincts'} reporting ({share}%)"
+    share = _share(reporting, total)
+    noun = unit_noun(d.get("unitLabel"), total)
+    complete = d.get("unitsComplete")
+    if complete is True:
+        return f"{reporting:,} of {total:,} {noun} fully reported ({share})"
+    if complete is False:
+        return f"Results from {reporting:,} of {total:,} {noun} ({share})"
+    return f"{reporting:,} of {total:,} {noun} reporting ({share})"
+
+
+def all_in_line(d: dict) -> str:
+    """Every unit in, as reporting_line counts them: "all 747 precincts
+    have fully reported", "results are in from all 29 counties"."""
+    total = d.get("totalUnits") or 0
+    noun = unit_noun(d.get("unitLabel"), total)
+    every = f"its one {noun}" if total == 1 else f"all {total:,} {noun}"
+    complete = d.get("unitsComplete")
+    if complete is False:
+        return f"results are in from {every}"
+    verb = "has" if total == 1 else "have"
+    return f"{every} {verb} fully reported" if complete else f"{every} {verb} reported"
 
 
 def _person(p: dict) -> str:

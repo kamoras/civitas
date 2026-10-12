@@ -79,7 +79,9 @@ export default async function FeedsPage() {
               </Point>
               <Point>
                 Follow everything, one topic or one state. Choosing a feed is your filter, so there
-                is nothing to set up here.
+                is nothing to set up here. A state&apos;s ballot page links its state&apos;s feed,
+                and the Congress pages the Congress feed. Give a feed reader a state, Congress or
+                issue page and it is offered that page&apos;s own feed first.
               </Point>
               <Point>
                 There is nothing to sign up for and no list of who follows. Reading a feed is the
@@ -171,17 +173,23 @@ export default async function FeedsPage() {
             <Section id="what" title="What is in a post">
               <P>
                 The same rules as everything else Civitas publishes. An issue post is a claim quoted
-                word for word from its sources, or their headline. A Congress post is the day&apos;s
-                counts from the official Record, filled into a fixed sentence, with bill numbers but
-                never their titles. A member spotlight is the one finding where their scorecard
-                stands furthest from their chamber&apos;s, in the scorecard&apos;s own fixed
-                sentence, then their score and rank. A race update names who did what, both parts
-                copied word for word from a news report about that race, never one already posted;
-                posts by members of the public are never restated, and there are at most four a day.
-                An election-night post is a state&apos;s own count (who leads, their share and how
-                much is in) in a fixed sentence, saying &ldquo;leads&rdquo; until the state lists
-                its count as official; Civitas never calls a race. Each links to the page with the
-                full record. More on how the news is handled is in{" "}
+                word for word from its sources, or their headline, for the day&apos;s top two issues
+                only, and at most two a day. A Congress post is the day&apos;s counts from the
+                official Record, filled into a fixed sentence, with bill numbers but never their
+                titles, for a day or week that had a record vote, a measure passed or a nomination
+                confirmed; a day of pro forma sessions isn&apos;t posted. Before a week of business,
+                a weekend post says when each chamber next meets, from the Record&apos;s own notice,
+                and which bills passed one chamber the week before and go to the other. A member
+                spotlight is the one finding where their scorecard stands furthest from their
+                chamber&apos;s, in the scorecard&apos;s own fixed sentence, then their score and
+                rank. A race update names who did what, both parts copied word for word from a news
+                report about that race, never one already posted, then names the outlet; it links to
+                the state&apos;s ballot page, and the entry carries the article as its source. Posts
+                by members of the public are never restated, and there are at most four a day. An
+                election-night post is a state&apos;s own count (who leads, their share and how much
+                is in) in a fixed sentence, saying &ldquo;leads&rdquo; until the state lists its
+                count as official; Civitas never calls a race. Each links to the page with the full
+                record. More on how the news is handled is in{" "}
                 <A href="/about/news">News &amp; Congress reports</A>.
               </P>
             </Section>

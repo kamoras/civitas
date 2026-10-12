@@ -93,6 +93,10 @@ LOAD_TIMING_BUCKETS_MS: tuple[int, ...] = (
     2500, 3000, 4000, 5000, 7500, 10000, 15000, 20000, 30000,
 )
 LOAD_TIMING_METRICS: tuple[str, ...] = ("ttfb", "fcp", "load")
+# The device classes a load-timing report may carry, computed in the browser
+# (frontend LoadTimingBeacon's deviceClass) — see PageLoadTiming.
+DeviceClass = Literal["desktop", "tablet", "mobile"]
+DEVICE_CLASSES: tuple[str, ...] = ("desktop", "tablet", "mobile")
 
 
 @dataclass(frozen=True)
@@ -116,6 +120,8 @@ class _TimingEvent:
     normalized_path: str
     # metric -> bucket upper bound (ms); only metrics the browser reported.
     buckets: tuple[tuple[str, int], ...]
+    # A DEVICE_CLASSES member, or "" when the report carried none.
+    device: str = ""
 
 
 @dataclass(frozen=True)
@@ -171,9 +177,9 @@ def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent | _ApiEvent"], db
                     db.execute(
                         sqlite_insert(PageLoadTiming).values(
                             date=event.date, path=event.normalized_path,
-                            metric=metric, bucket_ms=bucket, count=1,
+                            metric=metric, bucket_ms=bucket, device=event.device, count=1,
                         ).on_conflict_do_update(
-                            index_elements=["date", "path", "metric", "bucket_ms"],
+                            index_elements=["date", "path", "metric", "bucket_ms", "device"],
                             set_={"count": PageLoadTiming.count + 1},
                         )
                     )
@@ -547,6 +553,15 @@ def _track_ip(request: Request) -> str:
     return peer or "unknown"
 
 
+# The first whole UTC day counted by confirmation (#893, deployed the evening
+# of 2026-10-10 UTC): a page counts only once the browser that opened it has
+# run it. Earlier SiteVisit rows counted any client that asked for a page the
+# way a browser does, and automation was nearly all of them (on 2026-10-09 a
+# single crawler was ~7,000 of 7,357 visitors). The admin dashboard reports
+# no confirmed visitors before this day rather than a number that means
+# something else.
+CONFIRMED_VISITS_SINCE = "2026-10-11"
+
 # page        the proxy saw a browser ask for a page (Sec-Fetch-Dest:
 #             document; frontend/src/lib/visitSignal.ts)
 # router      the proxy saw a same-origin fetch from a page running in a
@@ -698,13 +713,17 @@ async def track_timing(
     ttfb: float | None = Query(None),
     fcp: float | None = Query(None),
     load: float | None = Query(None),
+    device: DeviceClass | None = Query(None),
 ) -> None:
     """Records one hard page load's Navigation Timing (milliseconds), sent by
     the browser's LoadTimingBeacon after the load event.
 
     Unlike track-visit this is called by the browser itself, through nginx's
     rate-limited /api/ location, and it reads nothing about the caller — no
-    IP, no User-Agent. The route is normalized exactly as track-visit's is and
+    IP, no User-Agent. The one thing it learns beyond the timings is `device`,
+    one of three words the browser chose from its own media features (see
+    PageLoadTiming); anything else is refused by validation, so the counter
+    has exactly those values. The route is normalized exactly as track-visit's is and
     each duration is reduced to its histogram bucket before it is queued (see
     PageLoadTiming), so an arbitrary client can at most add counts to a
     bounded set of (route, metric, bucket) cells — never grow the table with
@@ -723,6 +742,7 @@ async def track_timing(
         date=_today(),
         normalized_path=_normalize_path(path),
         buckets=buckets,
+        device=device or "",
     )
     try:
         _visit_queue.put_nowait(event)

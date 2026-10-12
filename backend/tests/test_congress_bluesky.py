@@ -18,8 +18,9 @@ def _report(senate_passed, house_passed=()):
         "sentence": "The Senate passed 3 bills, agreed to 4 resolutions and took 3 record votes. "
                     "The House met for 3 minutes and took no record votes.",
         "chambers": {
-            "senate": {"passed": [ev(b, b.startswith("SRES")) for b in senate_passed]},
-            "house": {"passed": [ev(b) for b in house_passed]},
+            "senate": {"passed": [ev(b, b.startswith("SRES")) for b in senate_passed],
+                       "counts": {"recordVotes": 3, "billsPassed": len(senate_passed)}},
+            "house": {"passed": [ev(b) for b in house_passed], "counts": {"recordVotes": 0}},
         },
     }
 
@@ -145,7 +146,8 @@ def test_a_day_posted_to_bluesky_before_the_feed_existed_is_not_posted_again(db_
 
 def _week(sentence="The Senate met 3 days and took 12 record votes. The House did not meet.", laws=()):
     return {"start": "2026-09-21", "end": "2026-09-27", "sentence": sentence,
-            "becameLaw": [{"billId": b} for b in laws]}
+            "totals": {"senate": {"recordVotes": 12}, "house": {"recordVotes": 0}},
+            "becameLaw": [{"billId": b} for b in laws], "passedOneChamber": []}
 
 
 def test_the_weekly_post_is_the_week_sentence_and_new_laws():
@@ -197,3 +199,134 @@ def test_the_pre_feed_marker_is_still_written_for_a_rollback(db_session, posting
     db_session.commit()
     cb.post_daily_congress(db_session, date(2026, 9, 25))
     assert api_cache_get(db_session, "bsky-congress", "2026-09-24", max_age_hours=24 * 30)
+
+
+# ── Days with nothing on the record ───────────────────────────────
+
+@pytest.mark.parametrize("counts,expected", [
+    ([{"recordVotes": 0, "billsPassed": 0}, {}], False),  # a pro forma session
+    ([{"recordVotes": 1}, {}], True),
+    ([{}, {"resolutionsPassed": 2}], True),
+    ([{"confirmed": 3}, {}], True),
+    ([{"confirmedLists": 1}, {}], True),
+    ([{"reported": 4, "committeeMeetings": 6}, {}], False),  # not floor business
+])
+def test_has_business(counts, expected):
+    assert cb.has_business(counts) is expected
+
+
+def test_a_day_with_nothing_on_the_record_is_skipped_for_the_one_before(db_session, posting, monkeypatch):
+    for iso in ("2026-10-08", "2026-10-09"):
+        _day(db_session, iso, "senate")
+        _day(db_session, iso, "house")
+    db_session.commit()
+
+    def report(db, day):
+        r = {**_report(["S.1"]), "date": day.isoformat()}
+        if day == date(2026, 10, 9):
+            r["chambers"]["senate"]["counts"] = {"recordVotes": 0, "billsPassed": 0}
+        return r
+
+    monkeypatch.setattr(cb, "day_report", report)
+    assert cb.post_daily_congress(db_session, date(2026, 10, 11)) == date(2026, 10, 8)
+    assert cb.post_daily_congress(db_session, date(2026, 10, 11)) is None
+    assert posting() == ["https://civitas-research.org/congress/2026-10-08"]
+
+
+def test_a_week_with_nothing_on_the_record_posts_only_if_a_bill_became_law(db_session, week_posting, monkeypatch):
+    _day(db_session, "2026-09-22", "senate")
+    db_session.commit()
+    idle = {**_week(), "totals": {"senate": {"recordVotes": 0}, "house": {}}}
+    monkeypatch.setattr(cb, "week_report", lambda db, day: {**idle, "start": day.isoformat()})
+    assert cb.post_weekly_congress(db_session, date(2026, 9, 28)) is None
+    monkeypatch.setattr(cb, "week_report", lambda db, day: {
+        **idle, "start": day.isoformat(), "becameLaw": [{"billId": "HR.1"}]})
+    assert cb.post_weekly_congress(db_session, date(2026, 9, 28)) == date(2026, 9, 21)
+
+
+# ── The look-ahead ────────────────────────────────────────────────
+
+_MON, _SUN = date(2026, 10, 12), date(2026, 10, 18)
+
+
+def test_the_lookahead_names_each_chamber_and_the_bills_waiting():
+    text, business = cb.compose_lookahead(_MON, _SUN, {
+        "senate": (date(2026, 10, 13), "Program for Tuesday: Senate will resume consideration of S. 5."),
+        "house": (date(2026, 11, 9), ""),
+    }, [{"billId": "S.12", "nextStep": "house"}, {"billId": "HR.7", "nextStep": "senate"},
+        {"billId": "S.12", "nextStep": "house"}])
+    assert business
+    assert text == (
+        "Next week in Congress, October 12–18. The Senate next meets Tuesday, October 13. "
+        "The House is out until Monday, November 9. Now before the Senate, from the House: H.R. 7. "
+        "Now before the House, from the Senate: S. 12."
+    )
+
+
+def test_a_week_of_pro_forma_sessions_is_not_business():
+    text, business = cb.compose_lookahead(_MON, _SUN, {
+        "senate": (date(2026, 10, 13), "Program for Tuesday: Senate will meet in a pro forma session."),
+        "house": (date(2026, 10, 16), "Program for Friday: House will meet in pro forma session at 9 a.m."),
+    }, [])
+    assert not business
+    assert "The Senate next meets Tuesday, October 13, in pro forma session." in text
+    assert cb._chamber_ahead("house", None, "", _MON, _SUN) == ("The House's next meeting is not on record yet.", False)
+    # No program, or "To be announced": not known to be business.
+    for program in ("", "Program for Monday: To be announced."):
+        assert cb._chamber_ahead("house", _MON, program, _MON, _SUN) == ("The House next meets Monday, October 12.", False)
+
+
+def test_a_long_lookahead_names_fewer_bills_to_go_out_whole():
+    passed = [{"billId": f"HR.{9000 + n}", "nextStep": "senate"} for n in range(9)]
+    passed += [{"billId": f"SJRES.{100 + n}", "nextStep": "house"} for n in range(9)]
+    text, _ = cb.compose_lookahead(_MON, _SUN, {
+        "senate": (date(2026, 10, 13), ""), "house": (date(2026, 10, 14), ""),
+    }, passed)
+    assert len(text) + 1 + len(cb._LOOKAHEAD_URL) <= 300
+    assert text.count(" more.") == 2
+
+
+def _notice(db, iso, chamber, when, program=""):
+    db.add(CongressDay(chamber=chamber, date=iso, in_session=True, is_final=True, source="digest",
+                       next_meeting=when, next_program=program))
+
+
+@pytest.fixture
+def lookahead(db_session, monkeypatch, link_cards):
+    monkeypatch.setattr(cb, "week_report", lambda db, day: {
+        "passedOneChamber": [{"billId": "S.4", "nextStep": "house"}]})
+    return lambda: [(p.kind, p.subject, p.url, p.text)
+                    for p in db_session.query(BroadcastPost).order_by(BroadcastPost.id)]
+
+
+def test_the_lookahead_posts_once_from_saturday(db_session, lookahead):
+    _notice(db_session, "2026-10-08", "senate", "10 a.m., Friday, October 9")
+    _notice(db_session, "2026-10-09", "senate", "3 p.m., Monday, October 12",
+            "Program for Monday: Senate will vote on S. 4.")
+    _notice(db_session, "2026-10-09", "house",
+            "The House is scheduled to reconvene at 2 p.m. Tuesday, October 13, 2026.")
+    db_session.commit()
+    assert cb.post_congress_lookahead(db_session, date(2026, 10, 9)) is None  # Friday: not yet
+    assert cb.post_congress_lookahead(db_session, date(2026, 10, 10)) == _MON
+    assert cb.post_congress_lookahead(db_session, date(2026, 10, 11)) is None  # once
+    [(kind, subject, url, text)] = lookahead()
+    assert (kind, subject, url) == (
+        "congress_ahead", "congress-ahead:2026-10-12", "https://civitas-research.org/congress")
+    assert text == (
+        "Next week in Congress, October 12–18. The Senate next meets Monday, October 12. "
+        "The House next meets Tuesday, October 13. Now before the House, from the Senate: S. 4."
+    )
+
+
+def test_the_lookahead_reads_the_program_from_the_digest_when_the_floor_log_has_none(db_session, lookahead):
+    # The floor log's notice (no program) is newer than the Digest's for the
+    # same meeting, which says it is pro forma: nothing ahead, nothing posted.
+    _notice(db_session, "2026-10-09", "senate", "3:30 p.m., Tuesday, October 13",
+            "Program for Tuesday: Senate will meet in a pro forma session.")
+    _notice(db_session, "2026-10-10", "senate",
+            "The Senate is scheduled to reconvene at 3:30 p.m. Tuesday, October 13, 2026.")
+    _notice(db_session, "2026-10-09", "house", "1:30 p.m., Tuesday, October 13",
+            "Program for Tuesday: House will meet in pro forma session at 1:30 p.m.")
+    db_session.commit()
+    assert cb.post_congress_lookahead(db_session, date(2026, 10, 11)) is None
+    assert lookahead() == []

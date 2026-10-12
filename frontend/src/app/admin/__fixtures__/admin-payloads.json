@@ -1,0 +1,458 @@
+{
+ "_source": "Shapes of GET /api/admin/dashboard, /pipeline/status and /pipeline/history captured from production 2026-10-12, trimmed (one row per pipeline, one step, one alert).",
+ "dashboard": {
+  "system": {
+   "database": "ok",
+   "ollama": "ok",
+   "ollamaModel": "LiquidAI/lfm2.5-1.2b-instruct",
+   "ollamaUrl": "http://llm:8080",
+   "dbSizeBytes": 1901133824,
+   "vectorDb": {
+    "status": "ok",
+    "totalVectors": 106967,
+    "sizeBytes": 228761600,
+    "collections": [
+     {
+      "name": "explore_documents",
+      "count": 106817
+     },
+     {
+      "name": "bills",
+      "count": 150
+     }
+    ],
+    "indexModelVersion": "minilm-l6-v2+4-windows-fit",
+    "chunksPerDocument": 8.585885378988827,
+    "indexRebuild": "",
+    "embeddingModel": "Snowflake/snowflake-arctic-embed-xs",
+    "embeddingModelVersion": "arctic-xs",
+    "embeddingDimensions": 384,
+    "learningStore": {
+     "totalEntries": 52872,
+     "bySource": {
+      "embedding": 25677,
+      "fec": 5011,
+      "nn": 7305,
+      "semantic": 14879
+     },
+     "byType": {
+      "bill_policy": 276,
+      "donor_type": 19920,
+      "industry": 32676
+     },
+     "avgConfidence": 0.888,
+     "confidenceDistribution": {
+      "0.5": 5,
+      "0.6": 6,
+      "0.7": 52,
+      "0.8": 7460,
+      "0.9": 40333,
+      "1.0": 5016
+     },
+     "newestEntry": "2026-10-11T11:38:16.485703",
+     "oldestEntry": "2026-10-11T05:15:57.056709"
+    }
+   }
+  },
+  "host": {
+   "cpuBusyTicks": 121339,
+   "cpuTotalTicks": 2286366,
+   "loadAvg": [
+    0.1,
+    0.1,
+    0.19
+   ],
+   "cpuCount": 4,
+   "memTotalBytes": 17006116864,
+   "memAvailableBytes": 12723437568,
+   "memUsedBytes": 4282679296,
+   "memUsedPct": 25.2,
+   "cpuTempC": 34.8,
+   "diskTotalBytes": 250904948736,
+   "diskUsedBytes": 83375321088,
+   "diskFreeBytes": 154709827584,
+   "diskUsedPct": 33.2,
+   "uptimeSeconds": 5724,
+   "netRxBytes": 251416705,
+   "netTxBytes": 2681070,
+   "apiNetRxRate": 346.7417535911254,
+   "apiNetTxRate": 553.3868390406022
+  },
+  "uptime": {
+   "processStartedAt": "2026-10-12T03:05:31.322686+00:00",
+   "firstPipelineRun": "2026-04-27T03:55:16.131371",
+   "totalRestarts": 179
+  },
+  "data": {
+   "senators": 101,
+   "senatorDonors": 9960,
+   "senatorIndustryDonations": 2005,
+   "senatorVotes": 19906,
+   "senatorLobbyingMatches": 6,
+   "senatorPromises": 4,
+   "senatorBills": 6851,
+   "representatives": 433,
+   "repDonors": 43149,
+   "repIndustryDonations": 8603,
+   "repVotes": 52579,
+   "repLobbyingMatches": 122,
+   "repPromises": 0,
+   "repBills": 12347,
+   "presidents": 47,
+   "justices": 9,
+   "justiceVotes": 1578,
+   "exploreDocuments": 12441,
+   "actionIssues": 546,
+   "nationalMonitors": 1,
+   "monitorUpdates": 303,
+   "timelineEntries": 167,
+   "scoreSnapshots": 53714,
+   "learnedClassifications": 52872,
+   "pipelineRuns": 179,
+   "apiCacheEntries": 103877,
+   "analysisCacheEntries": 124
+  },
+  "pipeline": {
+   "isRunning": false,
+   "nextScheduled": "2026-10-12T05:00:00+00:00",
+   "cronSchedule": "0 5 * * *",
+   "totalRuns": 179,
+   "successfulRuns": 161,
+   "failedRuns": 1,
+   "lastRun": {
+    "id": 179,
+    "startedAt": "2026-10-11T05:00:00.771659",
+    "completedAt": "2026-10-11T06:07:34.410719",
+    "status": "completed",
+    "currentPhase": "finalize",
+    "senatorsProcessed": 100,
+    "senatorsTotal": 100,
+    "senatorsFailed": 0,
+    "billsClassified": 26,
+    "llmCalls": 0,
+    "cacheHits": 0,
+    "cacheMisses": 0,
+    "elapsedSeconds": 4053.7,
+    "errorMessage": null,
+    "progressSteps": [
+     {
+      "key": "fetch_senators",
+      "phase": "fetch",
+      "label": "Fetch senator list",
+      "status": "done",
+      "startedAt": "2026-10-11T05:00:08.727024",
+      "completedAt": "2026-10-11T05:00:10.526569",
+      "detail": "100 found"
+     }
+    ],
+    "groundTruthFailures": []
+   }
+  },
+  "llm": {
+   "total_calls": 15,
+   "cache_hits": 11,
+   "cache_misses": 15,
+   "cache_hit_rate": 0.423,
+   "per_prompt": {
+    "action-v21": {
+     "hits": 11,
+     "misses": 14,
+     "hit_rate": 0.44
+    },
+    "period-review-v1": {
+     "hits": 0,
+     "misses": 1,
+     "hit_rate": 0.0
+    }
+   },
+   "estimated_cost": "free (local LLM)"
+  },
+  "opsAlerts": [
+   {
+    "condition": "source-stale:https://rollcall.com/feed/",
+    "resolvedAt": null,
+    "supersededAt": null,
+    "subject": "Stale news feed: Roll Call",
+    "body": "The news feed 'Roll Call' (https://rollcall.com/feed/) has had nothing new for 48 hours: its newest item is from 2026-10-09 21:12 UTC. Its longest gap in the last 60 days is 11.6 hours, so the bar is 48 hours. The latest fetch succeeded: the source is answering with old items.",
+    "at": "2026-10-11T21:15:04.571516",
+    "open": true
+   }
+  ]
+ },
+ "status": {
+  "isRunning": false,
+  "senateRowClearable": false,
+  "houseIsRunning": false,
+  "stockTradesIsRunning": false,
+  "supplementaryIsRunning": false,
+  "electionIsRunning": false,
+  "dataResetIsRunning": false,
+  "exploreIndexIsRebuilding": false,
+  "exploreIsRunning": false,
+  "pipelineChainIsRunning": false,
+  "supplementaryLastRun": {
+   "id": 86,
+   "startedAt": "2026-10-11T06:07:34.703230",
+   "completedAt": "2026-10-11T07:07:46.799645",
+   "status": "completed",
+   "currentPhase": "finalize",
+   "exploreDocsIngested": 1131,
+   "justicesScored": 9,
+   "justicesSkipped": false,
+   "committeeLeadershipRefreshed": true,
+   "committeeLeadershipSkipped": false,
+   "districtPviRefreshed": true,
+   "districtPviSkipped": false,
+   "presidentsUpdated": 47,
+   "elapsedSeconds": 3612.1,
+   "errorMessage": null,
+   "progressSteps": [
+    {
+     "key": "explore_documents",
+     "phase": "explore",
+     "label": "Ingest explore documents",
+     "status": "done",
+     "startedAt": "2026-10-11T06:07:34.710336",
+     "completedAt": "2026-10-11T07:07:02.461377",
+     "detail": "1131 ingested"
+    }
+   ]
+  },
+  "electionLastRun": {
+   "id": 58,
+   "startedAt": "2026-10-11T13:43:56.529506",
+   "completedAt": "2026-10-11T14:38:32.184337",
+   "status": "completed",
+   "currentPhase": "finalize",
+   "candidatesSynced": 4251,
+   "financialsRefreshed": 500,
+   "coverageItemsIngested": 1,
+   "elapsedSeconds": 3275.7,
+   "errorMessage": null,
+   "progressSteps": [
+    {
+     "key": "roster_sync",
+     "phase": "roster",
+     "label": "Sync candidate roster",
+     "status": "done",
+     "startedAt": "2026-10-11T13:43:56.548314",
+     "completedAt": "2026-10-11T13:46:57.645159",
+     "detail": "4251 candidates"
+    }
+   ]
+  },
+  "stockTradesLastRun": {
+   "id": 60,
+   "startedAt": "2026-10-11T11:39:34.564136",
+   "completedAt": "2026-10-11T13:43:56.515218",
+   "status": "completed",
+   "houseTradesIngested": 28,
+   "senateTradesIngested": 0,
+   "presidentTradesIngested": 0,
+   "elapsedSeconds": 7461.9,
+   "errorMessage": null,
+   "progressSteps": [
+    {
+     "key": "house_ptr",
+     "phase": "fetch",
+     "label": "Ingest House PTR filings",
+     "status": "done",
+     "startedAt": "2026-10-11T11:39:34.579867",
+     "completedAt": "2026-10-11T13:09:04.972061",
+     "detail": "28 rows"
+    }
+   ]
+  },
+  "houseLastRun": {
+   "id": 85,
+   "startedAt": "2026-10-11T07:07:46.820025",
+   "completedAt": "2026-10-11T11:39:34.277708",
+   "status": "completed",
+   "repsProcessed": 433,
+   "repsTotal": 433,
+   "repsFailed": 0,
+   "elapsedSeconds": 16307.5,
+   "errorMessage": null,
+   "groundTruthFailures": [],
+   "progressSteps": [
+    {
+     "key": "fetch_members",
+     "phase": "fetch",
+     "label": "Fetch House members",
+     "status": "done",
+     "startedAt": "2026-10-11T07:07:51.184093",
+     "completedAt": "2026-10-11T07:07:51.364745",
+     "detail": "439 found, 439 detailed"
+    }
+   ]
+  },
+  "lastRun": {
+   "id": 179,
+   "startedAt": "2026-10-11T05:00:00.771659",
+   "completedAt": "2026-10-11T06:07:34.410719",
+   "status": "completed",
+   "currentPhase": "finalize",
+   "senatorsProcessed": 100,
+   "senatorsTotal": 100,
+   "senatorsFailed": 0,
+   "billsClassified": 26,
+   "llmCalls": 0,
+   "cacheHits": 0,
+   "cacheMisses": 0,
+   "elapsedSeconds": 4053.7,
+   "errorMessage": null,
+   "progressSteps": [
+    {
+     "key": "fetch_senators",
+     "phase": "fetch",
+     "label": "Fetch senator list",
+     "status": "done",
+     "startedAt": "2026-10-11T05:00:08.727024",
+     "completedAt": "2026-10-11T05:00:10.526569",
+     "detail": "100 found"
+    }
+   ]
+  },
+  "actionRefresh": {
+   "isRunning": false,
+   "stage": null,
+   "stageDetail": null,
+   "startedAt": "2026-10-12T04:15:00.085633",
+   "lastCompletedAt": "2026-10-12T04:20:35.327985",
+   "lastIssuesCreated": 1,
+   "lastIssuesRetired": 1,
+   "lastStoriesGenerated": 0,
+   "lastBskyPosted": 0,
+   "lastElapsed": 335.3
+  }
+ },
+ "history": [
+  {
+   "id": 58,
+   "pipelineType": "election",
+   "startedAt": "2026-10-11T13:43:56.529506",
+   "completedAt": "2026-10-11T14:38:32.184337",
+   "status": "completed",
+   "elapsedSeconds": 3275.7,
+   "errorMessage": null,
+   "currentPhase": "finalize",
+   "candidatesSynced": 4251,
+   "financialsRefreshed": 500,
+   "coverageItemsIngested": 1,
+   "progressSteps": [
+    {
+     "key": "roster_sync",
+     "phase": "roster",
+     "label": "Sync candidate roster",
+     "status": "done",
+     "startedAt": "2026-10-11T13:43:56.548314",
+     "completedAt": "2026-10-11T13:46:57.645159",
+     "detail": "4251 candidates"
+    }
+   ]
+  },
+  {
+   "id": 60,
+   "pipelineType": "stock_trades",
+   "startedAt": "2026-10-11T11:39:34.564136",
+   "completedAt": "2026-10-11T13:43:56.515218",
+   "status": "completed",
+   "elapsedSeconds": 7461.9,
+   "errorMessage": null,
+   "houseTradesIngested": 28,
+   "senateTradesIngested": 0,
+   "presidentTradesIngested": 0,
+   "progressSteps": [
+    {
+     "key": "house_ptr",
+     "phase": "fetch",
+     "label": "Ingest House PTR filings",
+     "status": "done",
+     "startedAt": "2026-10-11T11:39:34.579867",
+     "completedAt": "2026-10-11T13:09:04.972061",
+     "detail": "28 rows"
+    }
+   ]
+  },
+  {
+   "id": 85,
+   "pipelineType": "house",
+   "startedAt": "2026-10-11T07:07:46.820025",
+   "completedAt": "2026-10-11T11:39:34.277708",
+   "status": "completed",
+   "elapsedSeconds": 16307.5,
+   "errorMessage": null,
+   "repsProcessed": 433,
+   "repsTotal": 433,
+   "repsFailed": 0,
+   "progressSteps": [
+    {
+     "key": "fetch_members",
+     "phase": "fetch",
+     "label": "Fetch House members",
+     "status": "done",
+     "startedAt": "2026-10-11T07:07:51.184093",
+     "completedAt": "2026-10-11T07:07:51.364745",
+     "detail": "439 found, 439 detailed"
+    }
+   ]
+  },
+  {
+   "id": 86,
+   "pipelineType": "supplementary",
+   "startedAt": "2026-10-11T06:07:34.703230",
+   "completedAt": "2026-10-11T07:07:46.799645",
+   "status": "completed",
+   "elapsedSeconds": 3612.1,
+   "errorMessage": null,
+   "currentPhase": "finalize",
+   "exploreDocsIngested": 1131,
+   "justicesScored": 9,
+   "justicesSkipped": false,
+   "committeeLeadershipRefreshed": true,
+   "committeeLeadershipSkipped": false,
+   "districtPviRefreshed": true,
+   "districtPviSkipped": false,
+   "presidentsUpdated": 47,
+   "progressSteps": [
+    {
+     "key": "explore_documents",
+     "phase": "explore",
+     "label": "Ingest explore documents",
+     "status": "done",
+     "startedAt": "2026-10-11T06:07:34.710336",
+     "completedAt": "2026-10-11T07:07:02.461377",
+     "detail": "1131 ingested"
+    }
+   ]
+  },
+  {
+   "id": 179,
+   "pipelineType": "senate",
+   "startedAt": "2026-10-11T05:00:00.771659",
+   "completedAt": "2026-10-11T06:07:34.410719",
+   "status": "completed",
+   "elapsedSeconds": 4053.7,
+   "errorMessage": null,
+   "currentPhase": "finalize",
+   "senatorsProcessed": 100,
+   "senatorsTotal": 100,
+   "senatorsFailed": 0,
+   "billsClassified": 26,
+   "llmCalls": 0,
+   "cacheHits": 0,
+   "cacheMisses": 0,
+   "progressSteps": [
+    {
+     "key": "fetch_senators",
+     "phase": "fetch",
+     "label": "Fetch senator list",
+     "status": "done",
+     "startedAt": "2026-10-11T05:00:08.727024",
+     "completedAt": "2026-10-11T05:00:10.526569",
+     "detail": "100 found"
+    }
+   ]
+  }
+ ]
+}

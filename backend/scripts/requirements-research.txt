@@ -16,7 +16,7 @@ et-xmlfile==2.0.0
 flatbuffers==25.12.19
 formulaic==1.2.2
 interface-meta==2.0.1
-onnxruntime==1.30.0
+onnxruntime==1.31.0
 openpyxl==3.1.5
 pandas==3.0.6
 patsy==1.0.3

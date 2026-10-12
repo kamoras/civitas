@@ -204,8 +204,21 @@ export default function StateResults({
           No live count for {stateName} here
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
-          {stateName}&apos;s election office doesn&apos;t publish a results feed this page can read,
-          so its count isn&apos;t shown or coloured here.{" "}
+          {results?.rankedChoiceStates?.includes(ballot.state) ? (
+            // The feed exists; reading it would mislead. A first-choice
+            // leader is not necessarily who the ranked-choice rounds elect.
+            <>
+              {stateName} decides its U.S. Senate and House races by ranked-choice voting: when no
+              candidate has a majority of first choices, the winner comes from rounds the state
+              tabulates after election night. An election-night count is first choices only, so it
+              isn&apos;t shown or coloured here.{" "}
+            </>
+          ) : (
+            <>
+              {stateName}&apos;s election office doesn&apos;t publish a results feed this page can
+              read, so its count isn&apos;t shown or coloured here.{" "}
+            </>
+          )}
           <OfficeLink
             href={lookupHref}
             stateName={stateName}

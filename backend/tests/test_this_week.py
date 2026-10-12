@@ -12,22 +12,23 @@ from app.database import get_db
 from app.issue_ids import to_public_id
 from app.main import app
 from app.models import ActionIssue, CongressDay, ExploreDocument, RollCall
+from app.services.congress_service import meeting_date
 
 
 class TestMeetingDate:
     def test_the_digest_wording(self):
-        assert tw.meeting_date("3:30 p.m., Tuesday, October 13", date(2026, 10, 9)) == date(2026, 10, 13)
+        assert meeting_date("3:30 p.m., Tuesday, October 13", date(2026, 10, 9)) == date(2026, 10, 13)
 
     def test_the_floor_log_wording_with_its_year(self):
         text = "The Senate is scheduled to reconvene at 3:30 p.m. Tuesday, October 13, 2026."
-        assert tw.meeting_date(text, date(2026, 10, 10)) == date(2026, 10, 13)
+        assert meeting_date(text, date(2026, 10, 10)) == date(2026, 10, 13)
 
     def test_a_december_notice_naming_january(self):
-        assert tw.meeting_date("12 noon, Monday, January 4", date(2026, 12, 18)) == date(2027, 1, 4)
+        assert meeting_date("12 noon, Monday, January 4", date(2026, 12, 18)) == date(2027, 1, 4)
 
     def test_no_date(self):
-        assert tw.meeting_date("Subject to the call of the Chair", date(2026, 10, 9)) is None
-        assert tw.meeting_date(None, date(2026, 10, 9)) is None
+        assert meeting_date("Subject to the call of the Chair", date(2026, 10, 9)) is None
+        assert meeting_date(None, date(2026, 10, 9)) is None
 
 
 def _day(chamber, day, in_session=True, next_meeting=None):
