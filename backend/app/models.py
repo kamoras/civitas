@@ -1375,6 +1375,13 @@ class ActionIssue(Base):
     related_explore_ids: Mapped[str] = mapped_column(Text, default="[]")
     related_senators: Mapped[str] = mapped_column(Text, default="[]")
     related_officials: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # Who the story is principally about (pipeline/analyze/story_actor.py):
+    # "president", "<branch>:<official id>" for the official named earliest
+    # in the headline, or "class:<category>" when the headline names none.
+    # Read by the daily actor cap and the admin's weekly concentration. NULL
+    # for a primary-source draft, and for a row the refresh hasn't labelled
+    # yet (it labels older rows on its next run).
+    principal_actor: Mapped[str | None] = mapped_column(String(60), nullable=True, default=None)
     # Source name per fact, aligned with `facts` by index. JSON "[]"
     # when an issue predates the claim layer, so the API can render
     # attribution where it exists without a migration backfilling

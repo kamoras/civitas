@@ -489,6 +489,13 @@ Every hour at :15
        │         PUBLISHED this run: on 2026-10-08 a two-story live blog
        │         ranked first, both stories were dropped as its duplicates,
        │         and it then published nothing, two runs running
+       │         Each published issue records its principal actor (the
+       │         official named first in its headline, else a kNN class:
+       │         story_actor.py); the admin charts their weekly Herfindahl
+       │         index. Measured only: a one-per-person daily cap and
+       │         demoting stories with no government actor were replayed
+       │         over every run since 2026-09-24, held out by date, and
+       │         found no replacement story to publish instead
        ▼
   5. EXTRACT ─── The model LOCATES an assertion in one article; it never
        │         writes the sentence. post_composer.py checks both spans

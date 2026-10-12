@@ -516,6 +516,7 @@ _ACTION_CENTER_PATHS = {
     "pipeline/analyze/claims.py",
     "pipeline/analyze/early_signal.py",
     "pipeline/analyze/post_composer.py",
+    "pipeline/analyze/story_actor.py",
 }
 _NOT_ANALYSIS_PATHS = {
     "pipeline/holdings_pipeline.py",

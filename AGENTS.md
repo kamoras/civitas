@@ -1115,6 +1115,26 @@ single-topic explainers and live blogs ("what to know", "live updates") are
 deliberately left out: the filter drops whole articles, so it is tuned for
 precision. `articles_dropped_digest` is the counter to watch.
 
+Each published issue records its **principal actor** (`ActionIssue.principal_actor`,
+`pipeline/analyze/story_actor.py`). That is the official named earliest in the
+headline, as `_find_related_officials` matched them. When the headline names
+none, it is a class from a kNN vote over the relevance gate's labelled
+examples, whose categories say who acts. The admin's Action Center tab charts
+the weekly Herfindahl index of those actors, the president's share and the
+share with no government actor (`GET /api/admin/actor-concentration`).
+This is measurement, not selection. On 2026-10-12, a replay of every run since
+the claim layer, held out by date, tested two rules:
+
+- a one-per-person daily cap
+- demoting stories with no government actor
+
+Neither found a single replacement story. Every story that passed the gates
+that day had already published, so the cap could only withhold real civic
+stories. Demotion either changed nothing or flagged civic stories. The
+figures are in `story_actor`'s docstring. Don't add a selection rule for
+balance without re-running that replay: it is the supply of stories that pass
+the gates, not their order, that sets the mix.
+
 After issues are committed, the Action Center pipeline also:
 - **Saves a timeline entry** for each day's #1 issue (permanent record for
   year-in-review tracking, stored in `timeline_entries` table)
@@ -1406,6 +1426,7 @@ the pending list).
 | Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
 | Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
+| Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |

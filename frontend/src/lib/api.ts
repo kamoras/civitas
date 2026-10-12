@@ -1655,6 +1655,33 @@ export async function fetchAdminActionMetrics(
   );
 }
 
+/** One ISO week of Action Center news issues by principal actor
+ *  (GET /api/admin/actor-concentration). */
+export interface ActorConcentrationWeek {
+  weekStart: string;
+  issues: number;
+  /** Herfindahl index of principal actors; null for a week with no issue. */
+  hhi: number | null;
+  top: { label: string; name: string; issues: number } | null;
+  president: number;
+  noGovernment: number;
+}
+
+export interface ActorConcentration {
+  weeks: ActorConcentrationWeek[];
+}
+
+export async function fetchAdminActorConcentration(
+  token: string,
+  weeks: number = 12
+): Promise<ActorConcentration> {
+  return requestJson(
+    `${API_BASE}/admin/actor-concentration?weeks=${weeks}`,
+    "Actor concentration failed",
+    { init: { headers: adminHeaders(token) } }
+  );
+}
+
 export interface PhaseTimingPhase {
   phase: string;
   seconds: number;
