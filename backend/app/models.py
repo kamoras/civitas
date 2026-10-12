@@ -1114,6 +1114,10 @@ class RaceResult(Base):
     reporting_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unit_label: Mapped[str] = mapped_column(String(20), default="precincts")
+    # True: the reporting figure counts units the source marks FULLY
+    # reported; False: units that have reported any results (StateCount.
+    # units_complete). NULL on a row from before the column.
+    units_complete: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     official: Mapped[bool] = mapped_column(Boolean, default=False)
     # The party (as a partyGroup: DEM/REP/IND/...) that held this seat
     # going into the election, fixed at the first read so a member-table
