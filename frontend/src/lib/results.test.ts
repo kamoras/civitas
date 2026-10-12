@@ -32,6 +32,7 @@ import {
   formatEasternTime,
   raceLabel,
   reportingText,
+  allInText,
   raceStatusText,
   resultFill,
   showsResults,
@@ -476,6 +477,64 @@ describe("labels", () => {
       "40 of 64 counties reporting (63%)"
     );
     expect(reportingText({ reportingUnits: null, totalUnits: null })).toBe("");
+  });
+
+  it("says fully reported, or results from, as the state counts its units", () => {
+    // New Mexico's 2024 general: 0 of 656 precincts fully in beside 222,000
+    // votes; Utah's: every county with results in, a third still to count.
+    expect(
+      reportingText({
+        reportingUnits: 0,
+        totalUnits: 656,
+        unitLabel: "precincts",
+        unitsComplete: true,
+      })
+    ).toBe("0 of 656 precincts fully reported (0%)");
+    expect(
+      reportingText({
+        reportingUnits: 29,
+        totalUnits: 29,
+        unitLabel: "counties",
+        unitsComplete: false,
+      })
+    ).toBe("Results from 29 of 29 counties (100%)");
+    // One county (Colorado's 5th District), said of one.
+    expect(
+      reportingText({
+        reportingUnits: 0,
+        totalUnits: 1,
+        unitLabel: "counties",
+        unitsComplete: true,
+      })
+    ).toBe("0 of 1 county fully reported (0%)");
+    // Never rounded to a count it isn't: Montana's 2024 Senate count at 724
+    // of 727 precincts read "100%" under plain rounding.
+    expect(
+      reportingText({
+        reportingUnits: 724,
+        totalUnits: 727,
+        unitLabel: "precincts",
+        unitsComplete: true,
+      })
+    ).toBe("724 of 727 precincts fully reported (99%)");
+    expect(
+      reportingText({
+        reportingUnits: 1,
+        totalUnits: 656,
+        unitLabel: "precincts",
+        unitsComplete: true,
+      })
+    ).toBe("1 of 656 precincts fully reported (<1%)");
+    expect(allInText({ totalUnits: 1, unitLabel: "counties", unitsComplete: true })).toBe(
+      "Its one county has fully reported"
+    );
+    expect(allInText({ totalUnits: 29, unitLabel: "counties", unitsComplete: false })).toBe(
+      "Results are in from all 29 counties"
+    );
+    expect(allInText({ totalUnits: 747, unitLabel: "precincts", unitsComplete: true })).toBe(
+      "All 747 precincts have fully reported"
+    );
+    expect(allInText({ totalUnits: null })).toBe("");
   });
 
   it("tells the time in Eastern, whatever the reader's zone", () => {

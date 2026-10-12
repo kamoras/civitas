@@ -692,7 +692,7 @@ class TestEnhancedVotingUnitsAndWriteIns:
                     {"name": [{"languageId": "en", "text": "Write-In"}], "voteCount": 2},
                 ]}}
         [contest] = ev.general_contests({"ballotItems": [item]})
-        assert contest.candidates == [("Mary Blank", "D", 40), ("Jo Doe", "R", 7)]
+        assert contest.candidates == [("Mary Blank", "D", 40), ("Jo Doe (Withdrawn)", "R", 7)]
 
 
 class TestUnnumberedHouseCollision:
@@ -741,7 +741,7 @@ class TestClaritySpecialSenate:
         summary = {"Contests": [{"C": "United States Senator", "CH": ["John Blank", "Ann Lee (Withdrawn)", "Blank", "Write-In"],
                                  "V": [5, 4, 3, 2], "P": ["DEM", "REP", "", ""]}]}
         [contest] = clarity.general_contests(summary)
-        assert contest.candidates == [("John Blank", "D", 5), ("Ann Lee", "R", 4)]
+        assert contest.candidates == [("John Blank", "D", 5), ("Ann Lee (Withdrawn)", "R", 4)]
 
 
     def test_the_contests_own_total_counts_the_dropped_rows(self):

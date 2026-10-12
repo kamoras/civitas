@@ -1,0 +1,61 @@
+{
+ "_source": "New Mexico's own TotalVote election-night page for its 2024 general (electionresults.sos.nm.gov/resultsSW.aspx?type=FED&map=CTY) as the Internet Archive captured it (web.archive.org/web/<captured>id_/<that url>). Kept per capture: the page's hidElectionType/hidElectionDate fields, its 'Results last updated' stamp, and the U.S. House District 2 block with its export, share, map and bar markup removed and the two candidates' names replaced; every figure as published. The first capture is from the day before the election.",
+ "steps": [
+  {
+   "captured": "20241105024638",
+   "hidElectionType": "General",
+   "hidElectionDate": "11/5/2024",
+   "lastUpdated": "10/29/2024 1:42 PM MT",
+   "contest": "<div class=\"wrapper-inside wrapper-border\"><div><div class=\"display-results-box-wrapper\"><div class=\"display-results-box-a\"><h1>United States Representative DISTRICT 2</h1></div><div class=\"wrapper-mobile\"><div class=\"section group\"><div class=\"col display-results-box-b\"></div><div class=\"col display-results-box-c\"><div class=\"precinct-fully\">Precincts Fully: 0 / 656</div><div class=\"precinct-separator\">|</div><div class=\"precinct-partial\">Partially: 0 / 656</div></div></div></div></div><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>DEM CANDIDATE</h1><h2 class=\"Democrat\">Democrat</h2></div><div class=\"col display-results-box-f\"><h1>0</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>REP CANDIDATE</h1><h2 class=\"Republican\">Republican</h2></div><div class=\"col display-results-box-f\"><h1>0</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-totalvotes\"><h2>total votes</h2></div><div class=\"col display-results-box-total\"><h2>0</h2></div></div></div></div>"
+  },
+  {
+   "captured": "20241106020417",
+   "hidElectionType": "General",
+   "hidElectionDate": "11/5/2024",
+   "lastUpdated": "11/5/2024 7:01 PM MT",
+   "contest": "<div class=\"wrapper-inside wrapper-border\"><div><div class=\"display-results-box-wrapper\"><div class=\"display-results-box-a\"><h1>United States Representative DISTRICT 2</h1></div><div class=\"wrapper-mobile\"><div class=\"section group\"><div class=\"col display-results-box-b\"></div><div class=\"col display-results-box-c\"><div class=\"precinct-fully\">Precincts Fully: 0 / 656</div><div class=\"precinct-separator\">|</div><div class=\"precinct-partial\">Partially: 0 / 656</div></div></div></div></div><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>DEM CANDIDATE</h1><h2 class=\"Democrat\">Democrat</h2></div><div class=\"col display-results-box-f\"><h1>0</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>REP CANDIDATE</h1><h2 class=\"Republican\">Republican</h2></div><div class=\"col display-results-box-f\"><h1>0</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-totalvotes\"><h2>total votes</h2></div><div class=\"col display-results-box-total\"><h2>0</h2></div></div></div></div>"
+  },
+  {
+   "captured": "20241106021250",
+   "hidElectionType": "General",
+   "hidElectionDate": "11/5/2024",
+   "lastUpdated": "11/5/2024 7:11 PM MT",
+   "contest": "<div class=\"wrapper-inside wrapper-border\"><div><div class=\"display-results-box-wrapper\"><div class=\"display-results-box-a\"><h1>United States Representative DISTRICT 2</h1></div><div class=\"wrapper-mobile\"><div class=\"section group\"><div class=\"col display-results-box-b\"></div><div class=\"col display-results-box-c\"><div class=\"precinct-fully\">Precincts Fully: 0 / 656</div><div class=\"precinct-separator\">|</div><div class=\"precinct-partial\">Partially: 1 / 656</div></div></div></div></div><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>DEM CANDIDATE</h1><h2 class=\"Democrat\">Democrat</h2></div><div class=\"col display-results-box-f\"><h1>3</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>REP CANDIDATE</h1><h2 class=\"Republican\">Republican</h2></div><div class=\"col display-results-box-f\"><h1>60</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-totalvotes\"><h2>total votes</h2></div><div class=\"col display-results-box-total\"><h2>63</h2></div></div></div></div>"
+  },
+  {
+   "captured": "20241106022011",
+   "hidElectionType": "General",
+   "hidElectionDate": "11/5/2024",
+   "lastUpdated": "11/5/2024 7:16 PM MT",
+   "contest": "<div class=\"wrapper-inside wrapper-border\"><div><div class=\"display-results-box-wrapper\"><div class=\"display-results-box-a\"><h1>United States Representative DISTRICT 2</h1></div><div class=\"wrapper-mobile\"><div class=\"section group\"><div class=\"col display-results-box-b\"></div><div class=\"col display-results-box-c\"><div class=\"precinct-fully\">Precincts Fully: 0 / 656</div><div class=\"precinct-separator\">|</div><div class=\"precinct-partial\">Partially: 40 / 656</div></div></div></div></div><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>DEM CANDIDATE</h1><h2 class=\"Democrat\">Democrat</h2></div><div class=\"col display-results-box-f\"><h1>4,746</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>REP CANDIDATE</h1><h2 class=\"Republican\">Republican</h2></div><div class=\"col display-results-box-f\"><h1>4,227</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-totalvotes\"><h2>total votes</h2></div><div class=\"col display-results-box-total\"><h2>8,973</h2></div></div></div></div>"
+  },
+  {
+   "captured": "20241106023031",
+   "hidElectionType": "General",
+   "hidElectionDate": "11/5/2024",
+   "lastUpdated": "11/5/2024 7:26 PM MT",
+   "contest": "<div class=\"wrapper-inside wrapper-border\"><div><div class=\"display-results-box-wrapper\"><div class=\"display-results-box-a\"><h1>United States Representative DISTRICT 2</h1></div><div class=\"wrapper-mobile\"><div class=\"section group\"><div class=\"col display-results-box-b\"></div><div class=\"col display-results-box-c\"><div class=\"precinct-fully\">Precincts Fully: 0 / 656</div><div class=\"precinct-separator\">|</div><div class=\"precinct-partial\">Partially: 58 / 656</div></div></div></div></div><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>DEM CANDIDATE</h1><h2 class=\"Democrat\">Democrat</h2></div><div class=\"col display-results-box-f\"><h1>6,674</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>REP CANDIDATE</h1><h2 class=\"Republican\">Republican</h2></div><div class=\"col display-results-box-f\"><h1>7,000</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-totalvotes\"><h2>total votes</h2></div><div class=\"col display-results-box-total\"><h2>13,674</h2></div></div></div></div>"
+  },
+  {
+   "captured": "20241106070109",
+   "hidElectionType": "General",
+   "hidElectionDate": "11/5/2024",
+   "lastUpdated": "11/5/2024 11:56 PM MT",
+   "contest": "<div class=\"wrapper-inside wrapper-border\"><div><div class=\"display-results-box-wrapper\"><div class=\"display-results-box-a\"><h1>United States Representative DISTRICT 2</h1></div><div class=\"wrapper-mobile\"><div class=\"section group\"><div class=\"col display-results-box-b\"></div><div class=\"col display-results-box-c\"><div class=\"precinct-fully\">Precincts Fully: 311 / 656</div><div class=\"precinct-separator\">|</div><div class=\"precinct-partial\">Partially: 345 / 656</div></div></div></div></div><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>DEM CANDIDATE</h1><h2 class=\"Democrat\">Democrat</h2></div><div class=\"col display-results-box-f\"><h1>133,422</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>REP CANDIDATE</h1><h2 class=\"Republican\">Republican</h2></div><div class=\"col display-results-box-f\"><h1>124,813</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-totalvotes\"><h2>total votes</h2></div><div class=\"col display-results-box-total\"><h2>258,235</h2></div></div></div></div>"
+  },
+  {
+   "captured": "20241106073309",
+   "hidElectionType": "General",
+   "hidElectionDate": "11/5/2024",
+   "lastUpdated": "11/6/2024 12:26 AM MT",
+   "contest": "<div class=\"wrapper-inside wrapper-border\"><div><div class=\"display-results-box-wrapper\"><div class=\"display-results-box-a\"><h1>United States Representative DISTRICT 2</h1></div><div class=\"wrapper-mobile\"><div class=\"section group\"><div class=\"col display-results-box-b\"></div><div class=\"col display-results-box-c\"><div class=\"precinct-fully\">Precincts Fully: 501 / 656</div><div class=\"precinct-separator\">|</div><div class=\"precinct-partial\">Partially: 155 / 656</div></div></div></div></div><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>DEM CANDIDATE</h1><h2 class=\"Democrat\">Democrat</h2></div><div class=\"col display-results-box-f\"><h1>134,856</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>REP CANDIDATE</h1><h2 class=\"Republican\">Republican</h2></div><div class=\"col display-results-box-f\"><h1>125,406</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-totalvotes\"><h2>total votes</h2></div><div class=\"col display-results-box-total\"><h2>260,262</h2></div></div></div></div>"
+  },
+  {
+   "captured": "20241127060054",
+   "hidElectionType": "General",
+   "hidElectionDate": "11/5/2024",
+   "lastUpdated": "11/26/2024 2:59 PM MT",
+   "contest": "<div class=\"wrapper-inside wrapper-border\"><div><div class=\"display-results-box-wrapper\"><div class=\"display-results-box-a\"><h1>United States Representative DISTRICT 2</h1></div><div class=\"wrapper-mobile\"><div class=\"section group\"><div class=\"col display-results-box-b\"></div><div class=\"col display-results-box-c\"><div class=\"precinct-fully\">Precincts Fully: 656 / 656</div><div class=\"precinct-separator\">|</div><div class=\"precinct-partial\">Partially: 0 / 656</div></div></div></div></div><div class=\"section group winner\"><div class=\"col display-results-box-d\"><h1><img alt=\"\" src=\"/Images/winner-icon2.png\" class=\"winner-icon\">DEM CANDIDATE</h1><h2 class=\"Democrat\">Democrat</h2></div><div class=\"col display-results-box-f\"><h1>138,177</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-d\"><h1>REP CANDIDATE</h1><h2 class=\"Republican\">Republican</h2></div><div class=\"col display-results-box-f\"><h1>127,145</h1></div></div><hr><div class=\"section group\"><div class=\"col display-results-box-totalvotes\"><h2>total votes</h2></div><div class=\"col display-results-box-total\"><h2>265,322</h2></div></div></div></div>"
+  }
+ ]
+}
