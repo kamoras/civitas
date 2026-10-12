@@ -41,7 +41,7 @@ from app import broadcast
 from app.models import BroadcastPost, ElectionResultEvent, Race, RaceResult
 from app.live_results import sync as er
 from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, strip_hashtags
-from app.live_results.signals import holders_word, party_letter, race_label, reporting_line
+from app.live_results.signals import all_in_line, holders_word, party_letter, race_label, reporting_line
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -168,7 +168,7 @@ def compose(kind: str, race: Race, d: dict, budget: int = MAX_POST_CHARS) -> str
     if kind == er.ALL_REPORTING:
         if not d.get("totalUnits"):
             return None  # the count no longer states its units; nothing to say "all" of
-        head = f"{label}: all {d['totalUnits']:,} {d['unitLabel']} have reported"
+        head = f"{label}: {all_in_line(d)}"
         tail = "Counting can continue after every unit reports"
         return _fit([head, shares, tail], [head, tail], budget=budget)
     return None

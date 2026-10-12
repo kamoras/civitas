@@ -398,7 +398,8 @@ links to its election office, never as a state where nothing has happened.
   nothing: Enhanced Voting `isProduction` and `_Demo` elections, Clarity
   `istestmode` / `showtestdatawatermark` (read as flags, not truthiness:
   every real 2026 Clarity election carries the watermark as the string
-  `"0"`), Tally `previewElections`, `_Preview` ids and `electionID`, and a
+  `"0"`), Tally `previewElections`, `_Preview` ids and `electionID`,
+  TotalVote's "Testing in Progress" site message (its only test mark), and a
   `versionID` that changes mid-read. The election is found by its statutory
   date; a demo, recount or runoff is never taken for the general (a runoff
   name that also says "general" — "General Election and Nonpartisan
@@ -416,15 +417,26 @@ links to its election office, never as a state where nothing has happened.
   hours (`check_stalled_feeds`), and a covered state with no count stored
   an hour after its polls close, whatever its reads said
   (`check_missing_counts`: a bot wall's 403, a results host that now
-  redirects to a landing page, or every contest dropped). A walled feed is
-  never worked around.
+  redirects to a landing page, or every contest dropped), and a race with a
+  stored count that a state's read no longer lists (`_dropped_races`; the
+  page tags it NOT IN LATEST READ). In the 14 days before election day a
+  daily job reads every covered state's staged feed as the sync will,
+  storing nothing, and alerts on no count, a refused one, or a race with no
+  contest (`live_results/readiness.py`). A walled feed is never worked
+  around, and a ranked-choice state (Maine, Alaska) is never read live: its
+  election-night count is first choices only.
 - Civitas never calls a race. A count is "leading" — "not final" until the
   source itself says official, and still "leading", never "wins", after. A
   flip needs half the reporting units in; where the units are places
-  (counties, a state's cities and towns), which "report" on their first
-  batch, it needs every place in and `COUNTY_FLIP_SETTLE` (6 h) since the
-  first votes ever (a momentary zero read doesn't restart it), or the
-  source's official flag. That bar gates only raising a flip: once said, it
+  (counties, a state's cities and towns), it needs every place in and
+  `COUNTY_FLIP_SETTLE` (6 h) since the first votes ever (a momentary zero
+  read doesn't restart it), or the source's official flag. "In" is the
+  vendor's word: an Enhanced Voting place counts on its first batch, a
+  Clarity county only once completely reported (so Clarity's states raise a
+  flip only when every county is complete, often weeks on). The reporting
+  figure says which — "N of M precincts fully reported" or "Results from N
+  of M counties" (`StateCount.units_complete`) — and never rounds a share
+  short of every unit to 100%. That bar gates only raising a flip: once said, it
   is undone only by the lead going back to the holder's party or a tie
   (`lead_is_back`). The results page marks exactly what has been announced
   (`RaceResult.flip_announced`), as the DEVELOPING issue and the Live

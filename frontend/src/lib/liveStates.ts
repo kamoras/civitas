@@ -15,21 +15,32 @@ const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
  * keeps that from standing for long. Match the pages' `revalidate`. */
 export const LIVE_STATES_REVALIDATE_S = 300;
 
-/** The state codes read live, A→Z; null when the backend couldn't be
- * asked (as under `next build`) or answered without a list. */
-export async function fetchLiveStates(): Promise<string[] | null> {
+async function fetchStateList(key: "liveStates" | "rankedChoiceStates"): Promise<string[] | null> {
   try {
     const res = await fetch(`${BACKEND}/api/elections/results`, {
       next: { revalidate: LIVE_STATES_REVALIDATE_S },
     });
     if (!res.ok) return null;
     const body: unknown = await res.json();
-    const live = (body as { liveStates?: unknown } | null)?.liveStates;
-    if (!Array.isArray(live)) return null;
-    return live.filter((s): s is string => typeof s === "string" && s in STATE_NAMES).sort();
+    const list = (body as Record<string, unknown> | null)?.[key];
+    if (!Array.isArray(list)) return null;
+    return list.filter((s): s is string => typeof s === "string" && s in STATE_NAMES).sort();
   } catch {
     return null;
   }
+}
+
+/** The state codes read live, A→Z; null when the backend couldn't be
+ * asked (as under `next build`) or answered without a list. */
+export function fetchLiveStates(): Promise<string[] | null> {
+  return fetchStateList("liveStates");
+}
+
+/** The states that decide federal generals by ranked-choice rounds (the
+ * backend's ranked_choice_states(), from each entry's law citation), A→Z;
+ * null as fetchLiveStates. */
+export function fetchRankedChoiceStates(): Promise<string[] | null> {
+  return fetchStateList("rankedChoiceStates");
 }
 
 const WORDS = [

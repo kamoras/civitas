@@ -514,17 +514,67 @@ export function raceLabel(r: {
   return r.district ? `${r.state}-${r.district}` : `${r.state} at-large`;
 }
 
-/** "40 of 64 counties reporting (63%)", or "" when the state gives no count. */
+/** A reporting share as a percentage never rounded to a count it isn't (the
+ * backend's signals._share): 724 of 727 is 99%, not 100%, and 1 of 656 is
+ * "<1%", not 0%. */
+function sharePct(reporting: number, total: number): string {
+  const raw = (100 * reporting) / total;
+  if (raw > 0 && raw < 1) return "<1%";
+  return `${reporting < total ? Math.min(Math.round(raw), 99) : Math.round(raw)}%`;
+}
+
+/** Each unit label the backend sends, said of one unit ("0 of 1 county",
+ * never "all 1 counties"): the backend's signals.unit_noun. */
+const ONE_UNIT: Record<string, string> = {
+  precincts: "precinct",
+  counties: "county",
+  "cities and towns": "city or town",
+  "counties and cities": "county or city",
+};
+
+function unitNoun(label: string | undefined, total: number): string {
+  const l = label ?? "precincts";
+  return total === 1 ? (ONE_UNIT[l] ?? l) : l;
+}
+
+/** How much of the count is in, in the state's own terms, or "" when the
+ * state gives no count: the backend's signals.reporting_line, word for
+ * word. "60 of 100 precincts fully reported (60%)" where the state counts
+ * fully reported units; "Results from 12 of 29 counties (41%)" where it
+ * counts units with any results. Plain "reporting" said the first wrongly
+ * (0 of 656 beside 222,000 votes) and the second wrongly (29 of 29 with a
+ * third of the vote still to count). */
 export function reportingText(r: {
   reportingUnits?: number | null;
   totalUnits?: number | null;
   unitLabel?: string;
+  unitsComplete?: boolean | null;
 }): string {
   if (!r.totalUnits || r.reportingUnits == null) return "";
-  const pct = Math.round((100 * r.reportingUnits) / r.totalUnits);
-  return `${r.reportingUnits.toLocaleString("en-US")} of ${r.totalUnits.toLocaleString("en-US")} ${
-    r.unitLabel ?? "precincts"
-  } reporting (${pct}%)`;
+  const pct = sharePct(r.reportingUnits, r.totalUnits);
+  const n = r.reportingUnits.toLocaleString("en-US");
+  const of = r.totalUnits.toLocaleString("en-US");
+  const noun = unitNoun(r.unitLabel, r.totalUnits);
+  if (r.unitsComplete === true) return `${n} of ${of} ${noun} fully reported (${pct})`;
+  if (r.unitsComplete === false) return `Results from ${n} of ${of} ${noun} (${pct})`;
+  return `${n} of ${of} ${noun} reporting (${pct})`;
+}
+
+/** Every unit in, as reportingText counts them: the backend's
+ * signals.all_in_line. "" when the state gives no unit count. */
+export function allInText(r: {
+  totalUnits?: number | null;
+  unitLabel?: string;
+  unitsComplete?: boolean | null;
+}): string {
+  if (!r.totalUnits) return "";
+  const noun = unitNoun(r.unitLabel, r.totalUnits);
+  const every =
+    r.totalUnits === 1 ? `its one ${noun}` : `all ${r.totalUnits.toLocaleString("en-US")} ${noun}`;
+  if (r.unitsComplete === false) return `Results are in from ${every}`;
+  const verb = r.totalUnits === 1 ? "has" : "have";
+  const head = `${every[0].toUpperCase()}${every.slice(1)} ${verb}`;
+  return r.unitsComplete ? `${head} fully reported` : `${head} reported`;
 }
 
 function sentence(...parts: string[]): string {
@@ -581,9 +631,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
         text: sentence(
           // A state that gives no unit count still says every unit is in:
           // "All 0 precincts" would read as a count with nothing in it.
-          d.totalUnits
-            ? `All ${d.totalUnits.toLocaleString("en-US")} ${d.unitLabel ?? "precincts"} have reported`
-            : "Every reporting unit is in",
+          allInText(d) || "Every reporting unit is in",
           shares,
           "Counting can continue after every unit reports"
         ),
@@ -733,9 +781,18 @@ function leadsPhrase(party: string | null | undefined, plural = false): string {
 function progressPhrase(r: LiveRaceResult): string {
   if (r.official) return "official count";
   const share = reportingShare(r);
-  if (share == null) return "";
-  const pct = `${Math.round(100 * share)}% in`;
-  return share < 0.5 ? `${pct}, early` : pct;
+  if (share == null || r.reportingUnits == null || !r.totalUnits) return "";
+  // Worded as reportingText words the figure: units fully in, units with
+  // any results, or (a row from before the backend said which) "in".
+  const pct = sharePct(r.reportingUnits, r.totalUnits);
+  const units = r.unitLabel ?? "precincts";
+  const phrase =
+    r.unitsComplete === true
+      ? `${pct} of ${units} fully reported`
+      : r.unitsComplete === false
+        ? `results from ${pct} of ${units}`
+        : `${pct} in`;
+  return share < 0.5 ? `${phrase}, early` : phrase;
 }
 
 /** One race's standing in words, as its map fill says it: "no votes yet",
