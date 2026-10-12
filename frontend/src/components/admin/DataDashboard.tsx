@@ -3,6 +3,7 @@
 import type { AdminDashboard } from "@/lib/api";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { formatBytes, formatTime } from "./format";
+import { NotLoaded } from "./widgets";
 
 // --- Data Inventory ---
 const INVENTORY_SECTIONS: { label: string; keys: { key: string; label: string }[] }[] = [
@@ -108,7 +109,9 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
         {d ? (
           <DataInventory data={d.data} />
         ) : (
-          <p className="p-4 text-xs font-mono text-ink-min">Loading…</p>
+          <div className="p-4">
+            <NotLoaded />
+          </div>
         )}
       </div>
 

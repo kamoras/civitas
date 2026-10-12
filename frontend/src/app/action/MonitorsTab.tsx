@@ -119,7 +119,15 @@ function MonitorRow({
               <span className={`uppercase tracking-[0.1em] ${active ? "text-phos-mid" : ""}`}>
                 {statusLabel}
               </span>
-              <span>Updated {shortDate(monitor.lastArticleDate || monitor.updatedAt)}</span>
+              {monitor.closedOn ? (
+                <span>
+                  Tracked {shortDate(monitor.createdAt)} –{" "}
+                  {shortDate(monitor.lastArticleDate || monitor.createdAt)} · closed{" "}
+                  {shortDate(monitor.closedOn)}
+                </span>
+              ) : (
+                <span>Updated {shortDate(monitor.lastArticleDate || monitor.updatedAt)}</span>
+              )}
               <span>
                 {monitor.updateCount} update{monitor.updateCount !== 1 ? "s" : ""}
               </span>
@@ -250,15 +258,18 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
   }
 
   const monitors = request.data?.monitors ?? [];
-  const offList = initialSlug && !monitors.some((m) => m.slug === initialSlug) ? initialSlug : null;
+  const closed = request.data?.recentlyClosed ?? [];
+  const closedDays = request.data?.recentlyClosedDays ?? 60;
+  const listed = [...monitors, ...closed];
+  const offList = initialSlug && !listed.some((m) => m.slug === initialSlug) ? initialSlug : null;
 
   return (
     <div>
       <p className="mb-6 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
         Concerns that keep coming back across days of coverage, detected automatically. Each one
         gathers the dated updates that fed it, with a source for every entry. One with no new
-        coverage for a week is marked watching until coverage returns; after a month it closes and
-        moves to the Archive.
+        coverage for a week is marked watching until coverage returns; after a month it closes. A
+        closed one stays listed here for {closedDays} days, and in the Archive.
       </p>
 
       {offList && <OffListMonitor slug={offList} />}
@@ -283,6 +294,22 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
           </ul>
         )}
       </section>
+
+      {/* With one stale card the tab read as abandoned; what closed recently
+          is part of the record of what was tracked. */}
+      {closed.length > 0 && (
+        <section aria-labelledby="monitors-closed-heading" className="mt-10">
+          <h2 id="monitors-closed-heading" className={SECTION_HEADING}>
+            <span>Closed in the last {closedDays} days</span>
+            <span aria-hidden="true">{closed.length}</span>
+          </h2>
+          <ul>
+            {closed.map((m) => (
+              <MonitorRow key={m.slug} monitor={m} initiallyOpen={m.slug === initialSlug} />
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

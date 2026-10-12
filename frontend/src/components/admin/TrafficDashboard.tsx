@@ -16,7 +16,7 @@ import LineChart from "./charts/LineChart";
 import { SERIES } from "./charts/palette";
 import { formatCompact, formatMs } from "./charts/scale";
 import { formatDay } from "./format";
-import { Panel, RankBars, Segmented, StatTile } from "./widgets";
+import { emptyText, Panel, RankBars, Segmented, StatTile } from "./widgets";
 
 export const RANGE_OPTIONS = [
   { value: 7, label: "7D" },
@@ -47,6 +47,8 @@ interface TrafficData {
   loadTimes: LoadTimes | null;
   topPages: TopPageEntry[];
   breakdown: VisitorBreakdown | null;
+  /** Requests that failed: their sections say so rather than "none". */
+  failed: Set<"days" | "loadTimes" | "topPages" | "breakdown">;
 }
 
 export function TrafficDashboard({ token }: { token: string }) {
@@ -62,14 +64,27 @@ export function TrafficDashboard({ token }: { token: string }) {
     let cancelled = false;
     // Each request settles on its own: a failing load-times endpoint must
     // not blank the visitor chart, which is the one people come here for.
+    const failed: TrafficData["failed"] = new Set();
     Promise.all([
-      fetchAdminVisitorStats(token, range).catch(() => [] as VisitorStatsDay[]),
-      fetchAdminLoadTimes(token, range).catch(() => null),
-      fetchAdminTopPages(token, range).catch(() => [] as TopPageEntry[]),
-      fetchAdminVisitorBreakdown(token).catch(() => null),
+      fetchAdminVisitorStats(token, range).catch(() => {
+        failed.add("days");
+        return [] as VisitorStatsDay[];
+      }),
+      fetchAdminLoadTimes(token, range).catch(() => {
+        failed.add("loadTimes");
+        return null;
+      }),
+      fetchAdminTopPages(token, range).catch(() => {
+        failed.add("topPages");
+        return [] as TopPageEntry[];
+      }),
+      fetchAdminVisitorBreakdown(token).catch(() => {
+        failed.add("breakdown");
+        return null;
+      }),
     ]).then(([days, loadTimes, topPages, breakdown]) => {
       if (cancelled) return;
-      setData({ days, loadTimes, topPages, breakdown });
+      setData({ days, loadTimes, topPages, breakdown, failed });
       setLoadedRange(range);
     });
     return () => {
@@ -152,7 +167,11 @@ export function TrafficDashboard({ token }: { token: string }) {
                 <span className="text-lg">{today.confirmedVisitors.toLocaleString()}</span>
               ) : undefined
             }
-            emptyMessage={data ? "No visits recorded in this range." : "Loading…"}
+            emptyMessage={emptyText(
+              !!data,
+              !!data?.failed.has("days"),
+              "No visits recorded in this range."
+            )}
           />
           <LineChart
             title="PAGE VIEWS PER DAY"
@@ -174,7 +193,11 @@ export function TrafficDashboard({ token }: { token: string }) {
                 <span className="text-lg">{today.pageViews.toLocaleString()}</span>
               ) : undefined
             }
-            emptyMessage={data ? "No page views recorded in this range." : "Loading…"}
+            emptyMessage={emptyText(
+              !!data,
+              !!data?.failed.has("days"),
+              "No page views recorded in this range."
+            )}
           />
         </div>
       </Panel>
@@ -218,11 +241,11 @@ export function TrafficDashboard({ token }: { token: string }) {
               </span>
             ) : undefined
           }
-          emptyMessage={
-            data
-              ? "No load timings yet: browsers report them after each cold page load."
-              : "Loading…"
-          }
+          emptyMessage={emptyText(
+            !!data,
+            !!data?.failed.has("loadTimes"),
+            "No load timings yet: browsers report them after each cold page load."
+          )}
         />
         {lt && lt.byPath.length > 0 && (
           <div className="mt-6">
@@ -277,7 +300,9 @@ export function TrafficDashboard({ token }: { token: string }) {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="Top pages">
           {data && data.topPages.length === 0 ? (
-            <p className="text-xs font-mono text-ink-min">No page views in this range.</p>
+            <p className="text-xs font-mono text-ink-min">
+              {emptyText(true, data.failed.has("topPages"), "No page views in this range.")}
+            </p>
           ) : (
             <RankBars
               title={`MOST VIEWED: LAST ${range} DAYS`}
@@ -319,7 +344,9 @@ export function TrafficDashboard({ token }: { token: string }) {
               </div>
             </>
           ) : (
-            <p className="text-xs font-mono text-ink-min">No visitors yet today.</p>
+            <p className="text-xs font-mono text-ink-min">
+              {emptyText(!!data, !!data?.failed.has("breakdown"), "No visitors yet today.")}
+            </p>
           )}
         </Panel>
       </div>

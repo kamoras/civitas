@@ -325,6 +325,8 @@ async function fetchPaginatedVotes(
     page?: number;
     perPage?: number;
     filter?: string;
+    /** Bill number, title or question to search for (server-side). */
+    q?: string;
   }
 ): Promise<PaginatedVotes> {
   const params = new URLSearchParams();
@@ -332,6 +334,7 @@ async function fetchPaginatedVotes(
   if (options?.page) params.set("page", String(options.page));
   if (options?.perPage) params.set("per_page", String(options.perPage));
   if (options?.filter) params.set("filter", options.filter);
+  if (options?.q) params.set("q", options.q);
   return requestJson(
     `${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/votes?${params}`,
     "Failed to load votes"
@@ -345,6 +348,7 @@ export async function fetchRepVotes(
     page?: number;
     perPage?: number;
     filter?: string;
+    q?: string;
   }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.House, repId, options);
@@ -357,6 +361,7 @@ export async function fetchSenatorVotes(
     page?: number;
     perPage?: number;
     filter?: string;
+    q?: string;
   }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.Senate, senatorId, options);
@@ -1948,17 +1953,26 @@ export interface NationalMonitor {
   updatedAt: string;
   lastArticleDate: string | null;
   updateCount: number;
+  /** A closed monitor's closing day. */
+  closedOn?: string | null;
+}
+
+export interface MonitorList {
+  monitors: NationalMonitor[];
+  /** Monitors closed in the last `recentlyClosedDays` days. */
+  recentlyClosed: NationalMonitor[];
+  recentlyClosedDays: number;
 }
 
 export interface NationalMonitorDetail extends NationalMonitor {
   updates: MonitorUpdate[];
 }
 
-export async function fetchMonitors(): Promise<{ monitors: NationalMonitor[] }> {
+export async function fetchMonitors(): Promise<MonitorList> {
   const url = `${API_BASE}/action/monitors`;
-  return withShape<{ monitors: NationalMonitor[] }>(
+  return withShape<MonitorList>(
     await cachedFetch(url, TTL.MEDIUM),
-    { lists: ["monitors"] },
+    { lists: ["monitors", "recentlyClosed"] },
     url
   );
 }
