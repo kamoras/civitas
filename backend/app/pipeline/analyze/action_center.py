@@ -13,6 +13,7 @@ Flow:
   8. Persist as ActionIssue rows for the current date
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -55,6 +56,7 @@ from app.models import (
 )
 from app.pipeline.analyze import action_metrics
 from app.pipeline.analyze import action_thresholds
+from app.committee_routing import route_committees
 from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight
 from app.pipeline.analyze.early_signal import (
     CONFIRMATION_WINDOW_HOURS,
@@ -76,6 +78,9 @@ from app.pipeline.analyze.post_composer import compose
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline import lease
+from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES, fetch_fr_metadata
+from app.http_client import make_async_client
 from app.pipeline.fetch.news_feeds import (
     MAX_SUMMARY_CHARS,
     NewsArticle,
@@ -89,7 +94,7 @@ from app.pipeline.vector_store import (
 )
 from app.pipeline.analyze.lobbying_records import bill_mentions, names_bill
 from app.services.bill_service import bill_title_lists, names_phrase, short_title_index
-from app.time_utils import utcnow
+from app.time_utils import comment_period_today, utcnow
 from app.timeline_entries import without_repeat_leads
 
 _US_EAST = ZoneInfo("America/New_York")
@@ -1040,13 +1045,39 @@ def _build_actions_from_data(
     source_names: list[str],
     related_senators: list[dict],
     policy_areas: list[str] | None = None,
+    committees: list[dict] | None = None,
+    comment_docs: list[dict] | None = None,
 ) -> list[dict]:
     """Build action items from real data — no LLM hallucinations.
 
     Senator contact is handled by the frontend SenatorChips component when
-    senators are named. Here we only emit actions we have real URLs for.
+    senators are named. Here we only emit actions we have real URLs for:
+    every text is a fixed template around a stored name, date or number.
     """
     actions: list[dict] = []
+
+    # An open comment period on a rule about this story (_open_comment_docs).
+    # The API serves it only while the period is open (api/action.py).
+    for doc in comment_docs or []:
+        close = date.fromisoformat(doc["comments_close_on"])
+        actions.append({
+            "text": f"Comment by {close.strftime('%B')} {close.day}",
+            "type": "comment_period",
+            "url": f"/explore/{doc['id']}#comment",
+            "docId": doc["id"],
+            "closesOn": doc["comments_close_on"],
+        })
+
+    # The committee with jurisdiction in each chamber (committee_routing).
+    # Its chair and ranking member are looked up when the issue is served,
+    # so they are the current ones.
+    for committee in committees or []:
+        actions.append({
+            "text": f"Contact the {committee['name']}",
+            "type": "contact_committee",
+            "url": committee["url"],
+            "committee": {k: committee[k] for k in ("code", "name", "chamber")},
+        })
 
     # Bill tracking — only when we have a real Congress.gov URL. The text
     # deliberately doesn't name a destination: the frontend links these to
@@ -1065,7 +1096,8 @@ def _build_actions_from_data(
     # issue, it asked readers to contact their senators about a French
     # protest, a Brazilian election and a campaign's fundraising total
     # (2026-10-08: the issues with no policy area were those stories).
-    if not related_senators and (policy_areas or resolved_bills):
+    # Not when a committee or a comment period gives something specific.
+    if not related_senators and not (committees or comment_docs) and (policy_areas or resolved_bills):
         actions.append({
             "text": f"Contact your senators or representative about {title}",
             "type": "contact_senator",
@@ -2283,6 +2315,22 @@ def _classify_issue_policy_areas(title: str, summary: str) -> list[str]:
 # pattern tight enough to survive this threshold).
 _EXPLORE_DOC_MAX_DISTANCE = 0.85
 
+# Title-to-title similarity (all-MiniLM-L6-v2) a document needs to an
+# issue's title to be linked to it (_find_related_explore_docs,
+# _open_comment_docs). Min-error on the 299 links stored on issues since
+# 2026-09-01, each read and labelled by hand (2026-10-08): 0.49. The
+# earlier 0.33 came
+# from a sample whose unrelated pairs all scored 0.13-0.18 (floor
+# speeches), but the federal register supplies unrelated documents
+# that score well above that — Coast Guard safety zones in Miami on a
+# story about a Florida golf club (0.34-0.38), an executive order on
+# "Made in America" advertising on a story about political ads
+# (0.43-0.45). 189 of the 299 stored links were unrelated; at 0.49, 6
+# unrelated are kept and 58 related are lost. The loss is the cheap
+# side: a missing link shows nothing, a wrong one misleads, and two
+# wrong ones also passed the publication gate below as an anchor.
+EXPLORE_TITLE_MIN_SIM = 0.49
+
 # Paperwork Reduction Act information-collection notices and Federal
 # Advisory Committee Act meeting notices use fixed, legally-templated
 # title phrasing (5 CFR 1320 / 41 CFR 102-3) and are — by the nature of
@@ -2355,18 +2403,7 @@ def _find_related_explore_docs(
     except Exception:
         sims = np.zeros(len(passed))
 
-    # Min-error on the 299 links stored on issues since 2026-09-01, each
-    # read and labelled by hand (2026-10-08): 0.49. The earlier 0.33 came
-    # from a sample whose unrelated pairs all scored 0.13-0.18 (floor
-    # speeches), but the federal register supplies unrelated documents
-    # that score well above that — Coast Guard safety zones in Miami on a
-    # story about a Florida golf club (0.34-0.38), an executive order on
-    # "Made in America" advertising on a story about political ads
-    # (0.43-0.45). 189 of the 299 stored links were unrelated; at 0.49, 6
-    # unrelated are kept and 58 related are lost. The loss is the cheap
-    # side: a missing link shows nothing, a wrong one misleads, and two
-    # wrong ones also passed the publication gate below as an anchor.
-    min_sim = 0.49
+    min_sim = EXPLORE_TITLE_MIN_SIM
 
     scored = sorted(
         zip(passed, sims),
@@ -2441,6 +2478,96 @@ def _find_related_explore_docs(
             break
 
     return unique
+
+
+MAX_COMMENT_ACTIONS = 2
+_open_rule_title_embs: dict[int, np.ndarray] = {}
+
+
+def open_comment_filter():
+    """The #903 rule for "open for comment": a comment link, and a closing
+    date on or after today in the deadline's zone."""
+    return (
+        (ExploreDocument.comment_url.isnot(None))
+        & (ExploreDocument.comment_url != "")
+        & (ExploreDocument.comments_close_on >= comment_period_today())
+    )
+
+
+def _open_comment_docs(title: str, related_docs: list[dict], db: Session) -> list[dict]:
+    """Rules open for comment that are about this issue, as
+    {"id", "title", "comments_close_on"}: the issue's related documents that
+    are open, then open rules whose titles clear the same title-similarity
+    bar related documents do (EXPLORE_TITLE_MIN_SIM). The related-document
+    search ranks every document type, so an open rule rarely reaches its top
+    three on its own."""
+    rows = db.query(
+        ExploreDocument.id, ExploreDocument.title, ExploreDocument.comments_close_on, ExploreDocument.doc_type,
+    ).filter(open_comment_filter()).all()
+    open_by_id = {r.id: r for r in rows}
+    picked = [open_by_id[d["id"]] for d in related_docs if d["id"] in open_by_id]
+    picked_ids = {r.id for r in picked}
+    rules = [r for r in rows if r.doc_type in RULE_DOC_TYPES and r.id not in picked_ids]
+    if rules and len(picked) < MAX_COMMENT_ACTIONS:
+        # Embeddings of open rules' titles outlive a run (titles don't
+        # change); dropped once a rule closes.
+        for stale in set(_open_rule_title_embs) - {r.id for r in rules}:
+            del _open_rule_title_embs[stale]
+        missing = [r for r in rules if r.id not in _open_rule_title_embs]
+        if missing:
+            for r, emb in zip(missing, _embed_texts_sim([r.title for r in missing])):
+                _open_rule_title_embs[r.id] = emb
+        title_emb = _embed_texts_sim([title])[0]
+        scored = sorted(((float(title_emb @ _open_rule_title_embs[r.id]), r) for r in rules),
+                        key=lambda x: -x[0])
+        for sim, r in scored:
+            if sim < EXPLORE_TITLE_MIN_SIM or len(picked) >= MAX_COMMENT_ACTIONS:
+                break
+            logger.info("Open comment period linked: sim=%.3f '%s'", sim, r.title[:60])
+            picked.append(r)
+    return [{"id": r.id, "title": r.title, "comments_close_on": r.comments_close_on}
+            for r in picked[:MAX_COMMENT_ACTIONS]]
+
+
+# The Today tab ranks open comment periods by how many people have read
+# them (api/action.get_open_comments), from the Federal Register's own
+# counter. Read here, once a day, rather than in the nightly Explore
+# refresh: that module is inside the analysis-code fingerprint, and adding a
+# field there would clear the learning store for a display ranking.
+_FR_VIEWS_CACHE_TIER = "action"
+_FR_VIEWS_CACHE_KEY = "fr_page_views_refreshed"
+FR_VIEWS_REFRESH_HOURS = 24
+
+
+def _refresh_open_comment_views(db: Session) -> int:
+    """Store the Register's reader count on every open Federal Register
+    document, at most once per FR_VIEWS_REFRESH_HOURS. Returns how many rows
+    changed. A failed request changes nothing and is retried next hour."""
+    if api_cache_get(db, _FR_VIEWS_CACHE_TIER, _FR_VIEWS_CACHE_KEY, max_age_hours=FR_VIEWS_REFRESH_HOURS):
+        return 0
+    rows = db.query(ExploreDocument).filter(
+        open_comment_filter(), ExploreDocument.external_id.like("fr-reg-%"),
+    ).all()
+    by_number = {r.external_id.removeprefix("fr-reg-"): r for r in rows}
+
+    async def _fetch():
+        async with make_async_client(headers={"User-Agent": BOT_USER_AGENT}) as client:
+            return await fetch_fr_metadata(client, list(by_number), ["document_number", "page_views"])
+
+    got = asyncio.run(_fetch()) if by_number else ({}, set())
+    if got is None:
+        return 0
+    changed = 0
+    for number, doc in got[0].items():
+        views = (doc.get("page_views") or {}).get("count")
+        row = by_number.get(number)
+        if row is not None and isinstance(views, int) and row.fr_page_views != views:
+            row.fr_page_views = views
+            changed += 1
+    db.commit()
+    api_cache_set(db, _FR_VIEWS_CACHE_TIER, _FR_VIEWS_CACHE_KEY, {"documents": len(by_number), "changed": changed},
+                  normal_ttl_hours=FR_VIEWS_REFRESH_HOURS)
+    return changed
 
 
 CONGRESS_API_BASE = "https://api.congress.gov/v3"
@@ -4618,6 +4745,11 @@ def _run_refresh(db: Session) -> int:
         check_federal_register_signals(db, today)
     except Exception:
         logger.exception("check_federal_register_signals failed (non-fatal)")
+    try:
+        _refresh_open_comment_views(db)
+    except Exception:
+        logger.exception("Open comment period reader counts failed (non-fatal)")
+        db.rollback()
     # Expiry must run on every exit path (mirrors _persist_metrics's own
     # "called on every exit path" discipline below) — a quiet news day
     # still needs to retire developing issues whose deadline has passed,
@@ -5057,9 +5189,25 @@ def _run_refresh(db: Session) -> int:
             action_metrics.increment("issues_skipped_no_action_surface")
             continue
 
-        # 10. Build data-driven actions (no LLM hallucinations)
+        # 10. Build data-driven actions (no LLM hallucinations). After the
+        # gate: a comment period or a committee is something to do about an
+        # issue, not evidence that it is one.
+        try:
+            comment_docs = _open_comment_docs(title, related_docs, db)
+        except Exception:
+            logger.exception("Open comment period lookup failed (non-fatal)")
+            comment_docs = []
+        related_explore_ids += [d["id"] for d in comment_docs if d["id"] not in related_explore_ids]
+        try:
+            committees = route_committees(title, summary)
+        except Exception:
+            logger.exception("Committee routing failed (non-fatal)")
+            committees = []
+        action_metrics.increment("issues_with_committee", bool(committees))
+        action_metrics.increment("issues_with_comment_period", bool(comment_docs))
         actions = _build_actions_from_data(
             title, resolved_bills, source_urls, source_names, related_senators, policy_areas,
+            committees=committees, comment_docs=comment_docs,
         )
 
         # Track the date of the newest article driving this cluster so the

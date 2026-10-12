@@ -966,10 +966,37 @@ class RelatedSenator(CamelModel):
     website_url: str | None = None
 
 
+class CommitteeLeaderSchema(CamelModel):
+    id: str
+    name: str
+    party: str
+    state: str
+    chamber: str
+
+
+class CommitteeContactSchema(CamelModel):
+    """A contact_committee action's committee (app/committee_routing.py),
+    with its chair and ranking member as the stored rosters name them now —
+    looked up when the issue is served, so a leadership change shows on
+    issues written before it."""
+    code: str
+    name: str
+    chamber: str
+    url: str | None = None
+    chair: CommitteeLeaderSchema | None = None
+    ranking_member: CommitteeLeaderSchema | None = None
+
+
 class ActionItemSchema(CamelModel):
     text: str
     type: str = "general"
     url: str | None = None
+    # comment_period: the Explore document and when its comment period
+    # closes (served only while open, the #903 rule).
+    doc_id: int | None = None
+    closes_on: str | None = None
+    # contact_committee
+    committee: CommitteeContactSchema | None = None
 
 
 class RelatedBillSchema(CamelModel):
