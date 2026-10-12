@@ -722,6 +722,7 @@ def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False):
         updated_at=m.updated_at.strftime("%Y-%m-%d"),
         last_article_date=m.last_article_date,
         update_count=len(m.updates) if m.updates else 0,
+        closed_on=m.updated_at.strftime("%Y-%m-%d") if m.status == MonitorStatus.CLOSED else None,
     )
     if not include_updates:
         return base.model_dump(by_alias=True)
@@ -745,9 +746,14 @@ def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False):
     return detail.model_dump(by_alias=True)
 
 
+# How far back the Ongoing tab lists monitors that closed.
+_RECENTLY_CLOSED_DAYS = 60
+
+
 @router.get("/monitors")
 async def list_monitors(response: Response, db: Session = Depends(get_db)):
-    """List all active and watching national monitors."""
+    """List all active and watching national monitors, and those closed
+    in the last _RECENTLY_CLOSED_DAYS days."""
     # Monitor creation/status changes on the pipeline's hourly cadence, not
     # continuously — matches the other Action Center list endpoints.
     response.headers["Cache-Control"] = "public, max-age=300"
@@ -758,7 +764,24 @@ async def list_monitors(response: Response, db: Session = Depends(get_db)):
         .order_by(NationalMonitor.updated_at.desc())
         .all()
     )
-    return {"monitors": [_monitor_to_schema(m) for m in monitors]}
+    # Closed recently, for a tab that would otherwise often be one stale
+    # card: a monitor's row is last written when it closes (nothing touches
+    # a closed one), so updated_at is the day it closed.
+    closed = (
+        db.query(NationalMonitor)
+        .options(selectinload(NationalMonitor.updates))
+        .filter(
+            NationalMonitor.status == MonitorStatus.CLOSED,
+            NationalMonitor.updated_at >= utcnow() - timedelta(days=_RECENTLY_CLOSED_DAYS),
+        )
+        .order_by(NationalMonitor.updated_at.desc())
+        .all()
+    )
+    return {
+        "monitors": [_monitor_to_schema(m) for m in monitors],
+        "recentlyClosed": [_monitor_to_schema(m) for m in closed],
+        "recentlyClosedDays": _RECENTLY_CLOSED_DAYS,
+    }
 
 
 @router.get("/monitors/{slug}")
