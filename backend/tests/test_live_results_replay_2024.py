@@ -295,6 +295,26 @@ class TestNewMexicoTotalVote2024:
         assert not any(k == er.FLIP for k, _ in _events(db))
 
 
+    async def test_the_vendors_test_run_on_the_real_page_is_refused(self, db_session, feed, monkeypatch, freeze_utcnow):
+        """Four weeks out the real general page carried test votes under the
+        general's own date, marked only by "Testing in Progress"."""
+        s = self.SERIES["testing_capture"]
+        page = (f'<html><body><input type="hidden" id="hidElectionType" value="{s["hidElectionType"]}" />'
+                f'<input type="hidden" id="hidElectionDate" value="{s["hidElectionDate"]}" />'
+                f'<span>Results last updated:</span><span>{s["lastUpdated"]}</span>{s["siteMessage"]}'
+                f'{s["contest"]}</body></html>')
+        _house(db_session, "NM", 2, "D")
+        db_session.commit()
+        feed.serve(self.URL, page)
+        out = await _sync(db_session, feed, monkeypatch, "NM", freeze_utcnow, datetime(2024, 11, 6, 2, 5))
+        assert out["status"] == "untrusted" and "Testing in Progress" in out["reason"]
+        assert db_session.query(RaceResult).count() == 0
+        # Without the panel the same page is read: the panel is the only mark.
+        feed.serve(self.URL, page.replace(s["siteMessage"], ""))
+        out = await _sync(db_session, feed, monkeypatch, "NM", freeze_utcnow, datetime(2024, 11, 6, 2, 10))
+        assert out["status"] == "ok"
+
+
 class TestUtahEnhancedVoting2024:
     FIX = _json("ut_general_2024_enhanced_voting.json")
     INDEX = "https://electionresults.utah.gov/results/public/api/jurisdictions/Utah"

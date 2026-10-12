@@ -1123,7 +1123,9 @@ wrong number on election night is worse than none:
 - Test, preview or mismatched data raises `UntrustedCount` and stores nothing
   (Enhanced Voting `isProduction`, Clarity `istestmode`/`showtestdatawatermark`
   — read as flags: the watermark is the string `"0"` on real elections —
-  Tally `previewElections`, `_Preview` ids and `electionID`; a general's date
+  Tally `previewElections`, `_Preview` ids and `electionID`, TotalVote's
+  "Testing in Progress" site message — New Mexico's real 2024 general page
+  carried test votes under the general's own date four weeks out; a general's date
   listing no general — several unsingled entries, or only a runoff, recount
   or special — `pick_general`, unless the entries are copies of one election
   by the vendor's own id); a feed that goes backwards in time or
@@ -1137,8 +1139,11 @@ wrong number on election night is worse than none:
   exactly as the sync will and alerts on no count, a refused one, or a race
   with no contest (`live_results/readiness.py`; it stores nothing and stops
   the day before). Washington's House labels changed between primary and
-  general in 2026, and on 2026-10-12 New Mexico's and Montana's results hosts
-  redirected every page to their Secretary of State's landing page.
+  general in 2026; and on 2026-10-12 New Mexico's and Montana's results hosts
+  sent their current-election page to their Secretary of State's landing page
+  (Montana's says results come "after 8:00 on November 3"), where in 2024 both
+  served the staged general a month ahead. Those two will alert daily until
+  their hosts serve the general — the honest state of the feed.
 - A race the state's feed stops listing mid-count (a renamed contest, one set
   aside as impossible) keeps its last count, tagged NOT IN LATEST READ on the
   page (`inLatestRead`), and pages someone (`sync._dropped_races`): the

@@ -398,7 +398,8 @@ links to its election office, never as a state where nothing has happened.
   nothing: Enhanced Voting `isProduction` and `_Demo` elections, Clarity
   `istestmode` / `showtestdatawatermark` (read as flags, not truthiness:
   every real 2026 Clarity election carries the watermark as the string
-  `"0"`), Tally `previewElections`, `_Preview` ids and `electionID`, and a
+  `"0"`), Tally `previewElections`, `_Preview` ids and `electionID`,
+  TotalVote's "Testing in Progress" site message (its only test mark), and a
   `versionID` that changes mid-read. The election is found by its statutory
   date; a demo, recount or runoff is never taken for the general (a runoff
   name that also says "general" — "General Election and Nonpartisan

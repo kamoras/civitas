@@ -5,9 +5,12 @@ polls have closed: check_missing_counts pages someone an hour after that,
 too late to fix a moved host or a renamed contest before the count is the
 story. Feeds do break between a state's last verified read and the night
 itself: three weeks before the 2026 general (read 2026-10-12) both New
-Mexico's and Montana's election-night hosts redirected every page,
-results included, to their Secretary of State's landing page, where two
-weeks earlier New Mexico's had served its staged general.
+Mexico's and Montana's election-night hosts sent their current-election
+page to their Secretary of State's landing page (Montana's says results
+come "after 8:00 on November 3"), where two weeks earlier New Mexico's had
+served its staged general and in 2024 both served it a month ahead. A
+state whose host stays dark until the night is alerted every day until it
+serves the general: that is the honest state of its feed.
 
 So for the READINESS_DAYS before election day, once a day, every covered
 state is read exactly as the sync reads it and the problems are raised as
