@@ -100,7 +100,8 @@ const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
   },
   {
     what: "Congress, day by day",
-    detail: "What each chamber did, from the Congressional Record",
+    detail:
+      "What each chamber did, from the Congressional Record; during a recess, the last week of business. Each bill's page gives how often bills at its stage became law this Congress",
     href: "/congress",
   },
   {

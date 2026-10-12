@@ -12,6 +12,7 @@ import re
 from collections import defaultdict
 from datetime import date, timedelta
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import CongressDay, CongressEvent, RepSponsoredBill, RollCall, SponsoredBill
@@ -410,6 +411,67 @@ def next_meeting(db: Session, chamber: str, today: date) -> tuple[date | None, s
         "",
     )
     return when, program
+
+
+# What counts as business, for "Congress is out": floor action — a record
+# vote, or a measure or nomination the Digest records as passed, failed or
+# confirmed. A pro forma sitting is not, and neither is a committee report
+# filed during one: the House files them through a recess (three in the
+# week of 2026-10-05, when neither chamber voted or passed anything), and
+# counting them opened that week of zeros as "the last week of business".
+_BUSINESS_KINDS = ("passed", "failed", "confirmed")
+
+
+def last_business_day(db: Session, on_or_before: date) -> date | None:
+    """The latest day, up to `on_or_before`, either chamber took a record
+    vote or passed, failed or confirmed anything on the floor."""
+    iso = on_or_before.isoformat()
+    voted = db.query(func.max(RollCall.date)).filter(RollCall.date <= iso).scalar()
+    acted = db.query(func.max(CongressEvent.date)).filter(
+        CongressEvent.date <= iso, CongressEvent.kind.in_(_BUSINESS_KINDS),
+    ).scalar()
+    best = max((d for d in (voted, acted) if d), default=None)
+    return date.fromisoformat(best) if best else None
+
+
+def _long_date(d: date) -> str:
+    return f"{d:%A, %B} {d.day}"
+
+
+def recess(db: Session, report: dict) -> dict | None:
+    """For the latest day's report: when neither chamber did business that
+    day (a pro forma sitting, a two-minute House session), what /congress
+    leads with instead of a day of zeros — that Congress is out, since
+    when, when each chamber next sits as the record gives it, and the week
+    of the last business to show. None when the day had business, or a
+    chamber's day is still on the live floor log (it may yet have some)."""
+    day = date.fromisoformat(report["date"])
+    chambers = report["chambers"]
+    if any(chambers[c]["status"] == "live" for c in CHAMBERS):
+        return None
+    last = last_business_day(db, day)
+    if last == day:
+        return None
+    sentences = [
+        "Neither chamber has taken a record vote or passed or confirmed anything since "
+        f"{_long_date(last)}." if last else "Neither chamber has taken a record vote or passed anything on record."
+    ]
+    nxt = []
+    for c in CHAMBERS:
+        when = chambers[c]["nextMeeting"]
+        if not when:
+            continue
+        pro_forma = "pro forma" in (chambers[c]["nextProgram"] or "").lower()
+        nxt.append(f"the {_CHAMBER_NAME[c]} at {when}" + (", in a pro forma session" if pro_forma else ""))
+    if nxt:
+        sentences.append(f"Next sittings on the record: {'; '.join(nxt)}.")
+    return {
+        "headline": "Congress is out",
+        "sentence": " ".join(sentences),
+        "lastBusinessDay": last.isoformat() if last else None,
+        # The week to open: the last one with business, else the latest day's.
+        "week": week_bounds(last or day)[0].isoformat(),
+    }
 
 
 def day_report(db: Session, day: date) -> dict:

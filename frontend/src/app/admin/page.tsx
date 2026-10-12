@@ -49,6 +49,20 @@ const TABS = [
 
 type Tab = (typeof TABS)[number]["id"];
 
+interface LoadErrors {
+  dashboard: string | null;
+  history: string | null;
+}
+
+function isUnauthorized(reason: unknown): boolean {
+  return reason instanceof Error && reason.message === "Unauthorized";
+}
+
+function failure(r: PromiseSettledResult<unknown>): string | null {
+  if (r.status === "fulfilled") return null;
+  return r.reason instanceof Error ? r.reason.message : String(r.reason);
+}
+
 function isTab(v: string | null): v is Tab {
   return TABS.some((t) => t.id === v);
 }
@@ -138,8 +152,12 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
 function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<AdminPipelineStatus | null>(null);
-  const [history, setHistory] = useState<PipelineHistoryRun[]>([]);
+  // null until the first successful load: "not loaded" is not "no runs".
+  const [history, setHistory] = useState<PipelineHistoryRun[] | null>(null);
   const [loading, setLoading] = useState(true);
+  // Why the last load of each failed (null once it succeeds). Shown on the
+  // page, so a failing request names itself instead of leaving panels empty.
+  const [loadErrors, setLoadErrors] = useState<LoadErrors>({ dashboard: null, history: null });
   // Every run that finished since the banner was last clear — two
   // pipelines can end between polls, and each deserves its line.
   const [finishedRuns, setFinishedRuns] = useState<FinishedRun[]>([]);
@@ -197,23 +215,28 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
 
   // Deliberately not `async`: every state write lands in a `.then`/`.finally`
   // callback, so nothing here can run synchronously inside the effect that
-  // kicks off the first load. The three requests are one unit — a dashboard
-  // showing fresh counts next to stale history is worse than showing neither.
+  // kicks off the first load. Each request lands on its own: this used to be
+  // one Promise.all, so a single failed request (history, say) discarded the
+  // other two and swallowed the error. The System tab then showed blank
+  // services, Pipelines "No pipeline runs recorded." and Data & ML "Loading…"
+  // forever, with nothing on the page saying a request had failed. A section
+  // whose request fails keeps its last good figures, under an error that says
+  // so.
   const loadDashboard = useCallback(() => {
-    Promise.all([
+    Promise.allSettled([
       fetchAdminDashboard(token),
       fetchAdminPipelineHistory(token),
       fetchAdminPipelineStatus(token),
     ])
       .then(([d, h, s]) => {
-        setDashboard(d);
-        setHistory(h);
-        setPipelineStatus(s);
-      })
-      .catch((e: unknown) => {
-        if (e instanceof Error && e.message === "Unauthorized") {
+        if (d.status === "rejected" && isUnauthorized(d.reason)) {
           onLogout();
+          return;
         }
+        if (d.status === "fulfilled") setDashboard(d.value);
+        if (h.status === "fulfilled") setHistory(h.value);
+        if (s.status === "fulfilled") setPipelineStatus(s.value);
+        setLoadErrors({ dashboard: failure(d), history: failure(h) });
       })
       .finally(() => setLoading(false));
   }, [token, onLogout]);
@@ -361,6 +384,27 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
             The pipeline service is restarting (a deploy). The figures below are from before it
             stopped and will refresh when it is back, usually within a minute.
           </p>
+        )}
+
+        {(loadErrors.dashboard || loadErrors.history) && (
+          <div
+            role="alert"
+            className="mb-6 border border-signal-magenta/40 bg-signal-magenta/10 p-4 text-sm"
+          >
+            {loadErrors.dashboard && (
+              <p>
+                The dashboard summary didn&apos;t load ({loadErrors.dashboard}).{" "}
+                {d ? "Its figures are from the last load that worked." : "Its figures are missing."}
+              </p>
+            )}
+            {loadErrors.history && (
+              <p>
+                The run history didn&apos;t load ({loadErrors.history}).{" "}
+                {history ? "It shows the last load that worked." : "It is missing."}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-ink-lo">Retried with the next refresh.</p>
+          </div>
         )}
 
         {/* Completion banner: one line per run that finished. Partial is

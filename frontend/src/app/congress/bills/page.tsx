@@ -14,7 +14,8 @@ import BillStageGroup from "@/components/bills/BillStageGroup";
 import BillRow from "@/components/bills/BillRow";
 import { fetchBillsInFlight } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
-import type { BillInFlight } from "@/types/bill";
+import type { BillInFlight, PaginatedBills } from "@/types/bill";
+import { formatUtcDate } from "@/lib/formatting";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 type ChamberFilter = "all" | "senate" | "house";
@@ -22,6 +23,8 @@ type PartyFilter = "ALL" | "D" | "R" | "I";
 type ViewMode = "hot" | "all";
 
 const EMPTY_BILLS: BillInFlight[] = [];
+const shortDay = (iso: string) =>
+  formatUtcDate(iso, { weekday: "long", month: "long", day: "numeric" });
 const PER_PAGE = 50;
 
 function BillsPageContent() {
@@ -32,6 +35,7 @@ function BillsPageContent() {
   const initialQ = searchParams.get("q") || "";
 
   const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
+  const [inMotion, setInMotion] = useState(0);
 
   const [mode, setMode] = useState<ViewMode>(initialQ ? "all" : "hot");
   const [stage, setStage] = useState<string | null>(null);
@@ -57,7 +61,9 @@ function BillsPageContent() {
     let cancelled = false;
     fetchBillsInFlight({ sort: "recent", page: 1, perPage: 1 })
       .then((res) => {
-        if (!cancelled) setStageCounts(res.stageCounts);
+        if (cancelled) return;
+        setStageCounts(res.stageCounts);
+        setInMotion(res.inMotion ?? 0);
       })
       .catch(() => {});
     return () => {
@@ -68,14 +74,6 @@ function BillsPageContent() {
   const chamberParam = chamber === "all" ? undefined : chamber;
   const partyParam = party === "ALL" ? undefined : party;
   const qParam = debouncedSearch || undefined;
-
-  // REFERRED (2026-07) is the automatic, universal first step every bill
-  // gets within days of introduction — not evidence anyone's done
-  // anything with it, so it's excluded from "in motion" the same as
-  // INTRODUCED (see bill_stage.py's module docstring).
-  const totalMoving = Object.entries(stageCounts)
-    .filter(([code]) => code !== "INTRODUCED" && code !== "REFERRED")
-    .reduce((sum, [, count]) => sum + count, 0);
 
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
@@ -89,7 +87,7 @@ function BillsPageContent() {
             title="Bills in motion"
           >
             <p>
-              Where {totalMoving.toLocaleString()} bills sit in the legislative pipeline right now.
+              Where {inMotion.toLocaleString()} bills sit in the legislative pipeline right now.
             </p>
             {/* Verified live (2026-08 review): this total is genuinely
                 correct — it's the pipeline breakdown below MINUS
@@ -297,6 +295,8 @@ function HotBillsList({
     bills: BillInFlight[];
     total: number;
     totalPages: number;
+    shown: PaginatedBills["shown"];
+    movedSince: string | null;
     error: string | null;
   } | null>(null);
   /* Page is stored against the filter signature it belongs to, so changing a
@@ -343,6 +343,8 @@ function HotBillsList({
           bills: isFirstPage || prev?.sig !== filterSig ? res.bills : [...prev.bills, ...res.bills],
           total: res.total,
           totalPages: res.totalPages,
+          shown: res.shown ?? null,
+          movedSince: res.movedSince ?? null,
           error: null,
         }));
       })
@@ -354,6 +356,8 @@ function HotBillsList({
           bills: prev?.sig === filterSig ? prev.bills : [],
           total: prev?.sig === filterSig ? prev.total : 0,
           totalPages: prev?.sig === filterSig ? prev.totalPages : 0,
+          shown: prev?.sig === filterSig ? prev.shown : null,
+          movedSince: prev?.sig === filterSig ? prev.movedSince : null,
           error: err instanceof Error ? err.message : "Failed to load bills",
         }));
       });
@@ -373,10 +377,15 @@ function HotBillsList({
   if (error) {
     return <div className="text-center py-16 font-mono text-xs text-signal-red">{error}</div>;
   }
+  const moved = current?.shown === "moved";
+  const since = current?.movedSince ? shortDay(current.movedSince) : "a week ago";
   if (results.length === 0) {
     return (
       <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest space-y-3">
-        <p>NOTHING CURRENTLY TRENDING IN ACTION CENTER FOR THIS FILTER</p>
+        <p>
+          NO ACTION CENTER ISSUE NAMES A BILL, AND NONE MOVED PAST REFERRAL SINCE{" "}
+          {since.toUpperCase()} FOR THIS FILTER
+        </p>
         <button
           onClick={onViewAll}
           className="font-mono text-xs text-signal-cyan hover:underline tracking-widest"
@@ -389,6 +398,13 @@ function HotBillsList({
 
   return (
     <>
+      {/* Which list this is: most days no live issue names a bill, and the
+          backend then serves what moved this week (bill_service). */}
+      <p className="mb-2 max-w-3xl text-sm leading-relaxed text-ink-lo">
+        {moved
+          ? `No Action Center issue names a bill right now, so this lists bills that moved this week: a recorded action since ${since}, past referral to committee, latest first.`
+          : "Bills named in today's Action Center issues, most-named first."}
+      </p>
       <p className="font-mono text-xs text-ink-min mb-3 tracking-widest">
         SHOWING {results.length.toLocaleString()} OF {total.toLocaleString()} BILL
         {total !== 1 ? "S" : ""}

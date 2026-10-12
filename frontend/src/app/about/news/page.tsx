@@ -224,7 +224,8 @@ export default function NewsChapter() {
             removed after a replay showed it let 17 of 18 off-topic stories through. Two monitors
             are merged only when their titles are near-identical, since a merge can&apos;t be
             undone. A monitor goes quiet (&ldquo;watching&rdquo;) after a week without coverage and
-            wakes when it returns; after a month it closes and leaves this tab, staying in the
+            wakes when it returns; after a month it closes, and is listed under this tab&apos;s
+            closed monitors for 60 days, with when it was tracked and when it closed, and in the
             Archive.
           </Item>
           <Item label="Archive">
