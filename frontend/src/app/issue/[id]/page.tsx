@@ -22,7 +22,7 @@ import {
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
 import ShareButtons from "@/components/action/ShareButtons";
-import { absoluteUrl, pageMetadata } from "@/lib/site";
+import { TOPIC_FEEDS, absoluteUrl, pageMetadata } from "@/lib/site";
 import { articleJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
@@ -128,6 +128,7 @@ export async function generateMetadata({
     // coverage confirms it, and may expire unconfirmed. It stays readable
     // here, but isn't offered to search engines as a finished story.
     noindex: issue.status === "developing",
+    feed: TOPIC_FEEDS.issues,
   });
 }
 

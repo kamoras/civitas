@@ -64,7 +64,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
-- **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
+- **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns, and those closed in the last 60 days), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
 - **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
 All services, models, and data run on-device. No data leaves the server.
@@ -214,7 +214,7 @@ the residual.
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills |
+| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
@@ -817,7 +817,12 @@ What this rules in and out:
   are pulled, and a topic or state is chosen by which URL a reader
   subscribes to, so there is no subscriber list to keep. A push channel
   that would need one (email, web push, per-server webhooks) is out, for
-  the same reason as an address box.
+  the same reason as an address box. A page offers its most specific
+  feed first — `pageMetadata({ feed })` in `src/lib/site.ts` (a state's
+  ballot page its state's feed, `/congress` the Congress feed, an issue
+  page the Action Center feed) — and the state ballot and Congress pages
+  link it visibly (`FollowFeed`); a new page with a feed of its own should
+  do the same.
 - **In, server-side only:** the Census geocoder and Google Civic's
   `voterInfoQuery`, called from the pipeline (and, for the town selector,
   from the API, cached 12 hours) with **our own** fixed,
@@ -878,9 +883,23 @@ can't tell a prefetch from a click.
 Page-load timings (`POST /api/track-timing`, `PageLoadTiming`) are counted too,
 and deliberately carry even less: the browser reports one cold load's Navigation
 Timing, and the server keeps only a counter per (day, route template, metric,
-bucket) — no hash, no User-Agent, no exact duration. The endpoint reads nothing
-about the caller at all. Keep it that way: a timing row that could be joined to
-a `SiteVisit` would turn a performance histogram into a per-visitor log.
+bucket, device class) — no hash, no User-Agent, no exact duration. The endpoint
+reads nothing about the caller at all. The device class (desktop, tablet,
+mobile; 2026-10) is decided by the page from its own pointer and screen size
+(`deviceClass` in `LoadTimingBeacon.tsx`) and sent as one of those three words,
+which validation enforces — reading the User-Agent there would have been the
+first header the endpoint ever read. A browser under automation
+(`navigator.webdriver`) sends nothing. Keep it that way: a timing row that could
+be joined to a `SiteVisit` would turn a performance histogram into a per-visitor
+log.
+
+The admin dashboard's headline traffic figures are the two that measure people:
+**confirmed visitors** (`SiteVisit` from `CONFIRMED_VISITS_SINCE`, the first
+whole day a visit counted only once the browser ran the page; null before it,
+when the stored count was mostly automation) and **first-paint loads** (cold
+loads whose browser reported a first contentful paint, from the timing
+histogram). Raw `uniqueVisitors` stays in `GET /api/admin/visitor-stats` for
+history, but is not shown as a visitor count.
 
 Public API and MCP use (`ApiRequestCount`) is counted the same way: one
 counter per (day, endpoint, channel, status), recorded by the public
@@ -1038,6 +1057,41 @@ summary and facts are the sources' own words, checked verbatim
 source URLs (`_build_actions_from_data`), never written by the model. Results
 are stored in the `action_issues` table.
 
+Each issue's actions are fixed templates around stored data:
+
+- **The committee with jurisdiction**, one per chamber or none
+  (`app/committee_routing.py`, outside `app/pipeline/` so it is outside the
+  fingerprint like `live_results/`). Tier 2 and tier 3 together: each
+  committee's subjects as House Rule X / Senate Rule XXV list them
+  (`committee_jurisdictions.json`, `scripts/fetch_committee_jurisdictions.py`;
+  hubness-corrected, CSLS) blended with the votes of the nearest
+  hand-labelled issues (`committee_routing_examples.json`, an empty label
+  meaning no committee). It names a committee only when both signals pick
+  the same one and the combined share clears the threshold
+  (`committee_routing_calibration.json`, `scripts/calibrate_committee_routing.py`).
+  The threshold is chosen on the training issues by the Action Center's
+  precision rule (exact lower 95% bound ≥ 0.80, else the highest bound);
+  the held-out curve is written for reading, never chosen from. The rule is
+  not met yet (0.82 held out, bound 0.67), so the row is worded as a likely
+  match — keep that wording until a recalibration reports
+  `precision_rule_met_on_training: true` and the held-out bound agrees. The
+  test fails until the script is rerun after either data file changes. The rules' subjects alone were
+  measured at 0.38 held-out precision — do not drop the labelled votes to
+  "simplify". The chair and ranking member are read from the stored rosters
+  when the issue is served (`api/action._committee_leaders`).
+- **"Comment by <date>"** for a proposed or final rule (the Register's own
+  `type`) still open for comment whose title clears `EXPLORE_TITLE_MIN_SIM`
+  (`_open_comment_docs`). The API drops it once the period closes (#903's
+  open-only rule).
+
+The Today tab's open comment periods are ranked by salience, not deadline
+(`api/action.open_comments_salience`): documents a recent issue links, then
+rules before notices, then by the Federal Register's own reader count
+(`ExploreDocument.fr_page_views`, read once a day by the Action Center —
+`_refresh_open_comment_views` — not by the nightly Explore refresh, whose
+module is fingerprinted). Citations were measured and rejected as the
+signal: airworthiness directives carry hundreds of boilerplate ones.
+
 Feed descriptions are **stripped of HTML** as they are parsed
 (`news_feeds._strip_html`): the WordPress-backed feeds put real markup in
 `<description>`, and three consumers read that field as prose — the
@@ -1080,6 +1134,26 @@ single-topic explainers and live blogs ("what to know", "live updates") are
 deliberately left out: the filter drops whole articles, so it is tuned for
 precision. `articles_dropped_digest` is the counter to watch.
 
+Each published issue records its **principal actor** (`ActionIssue.principal_actor`,
+`pipeline/analyze/story_actor.py`). That is the official named earliest in the
+headline, as `_find_related_officials` matched them. When the headline names
+none, it is a class from a kNN vote over the relevance gate's labelled
+examples, whose categories say who acts. The admin's Action Center tab charts
+the weekly Herfindahl index of those actors, the president's share and the
+share with no government actor (`GET /api/admin/actor-concentration`).
+This is measurement, not selection. On 2026-10-12, a replay of every run since
+the claim layer, held out by date, tested two rules:
+
+- a one-per-person daily cap
+- demoting stories with no government actor
+
+Neither found a single replacement story. Every story that passed the gates
+that day had already published, so the cap could only withhold real civic
+stories. Demotion either changed nothing or flagged civic stories. The
+figures are in `story_actor`'s docstring. Don't add a selection rule for
+balance without re-running that replay: it is the supply of stories that pass
+the gates, not their order, that sets the mix.
+
 After issues are committed, the Action Center pipeline also:
 - **Saves a timeline entry** for each day's #1 issue (permanent record for
   year-in-review tracking, stored in `timeline_entries` table)
@@ -1098,6 +1172,21 @@ After issues are committed, the Action Center pipeline also:
   the Archive and at its link; deleted instead if it never gathered three
   updates). Long-running stories went up to 28 days
   between issues on that history. The lifecycle runs on every refresh
+
+**What gets posted is a volume decision, measured like any other.** The
+posting modules publish less than the site shows, on purpose: the day's top
+two issues by rank and at most two issue posts a day
+(`bluesky_poster.MAX_ISSUE_POSTS_PER_DAY`); a Congress day or week only when
+something was on the record — a record vote, a measure passed, a nomination
+confirmed (`congress_bluesky.has_business`) — and a weekend look-ahead only
+when the Record's program shows business ahead. On 2026-10-10 the account
+had about 40 followers and 88.5% of its last 1,021 posts drew no
+interaction; posting everything was what taught readers to skip it. Change
+one of these rules with a replay against the stored history, as their
+docstrings do, not because one day's output looks thin. An issue that isn't
+posted still keeps its page: the issue cleanup deletes only developing
+issues nobody confirmed (`_cleanup_old_unposted_issues`), since the sitemap
+lists every confirmed issue.
 
 **Election night and after** (`election_phase.py`, `live_results/sync.py`).
 The site's election is not simply the *next* one: from election day (Eastern
@@ -1123,7 +1212,9 @@ wrong number on election night is worse than none:
 - Test, preview or mismatched data raises `UntrustedCount` and stores nothing
   (Enhanced Voting `isProduction`, Clarity `istestmode`/`showtestdatawatermark`
   — read as flags: the watermark is the string `"0"` on real elections —
-  Tally `previewElections`, `_Preview` ids and `electionID`; a general's date
+  Tally `previewElections`, `_Preview` ids and `electionID`, TotalVote's
+  "Testing in Progress" site message — New Mexico's real 2024 general page
+  carried test votes under the general's own date four weeks out; a general's date
   listing no general — several unsingled entries, or only a runoff, recount
   or special — `pick_general`, unless the entries are copies of one election
   by the vendor's own id); a feed that goes backwards in time or
@@ -1132,9 +1223,34 @@ wrong number on election night is worse than none:
 - A covered state with no count stored an hour after its polls close sends
   an ops alert whatever its reads said (`check_missing_counts`): a walled or
   moved feed fails visibly, never as a quiet night and never worked around.
-  A primary's contest labels are not proof of the general's — check each
-  vendor's staged general feed before election night (Washington's House
-  labels changed between the two in 2026).
+  A primary's contest labels are not proof of the general's: for the 14 days
+  before election day a daily job reads every covered state's staged feed
+  exactly as the sync will and alerts on no count, a refused one, or a race
+  with no contest (`live_results/readiness.py`; it stores nothing and stops
+  the day before). Washington's House labels changed between primary and
+  general in 2026; and on 2026-10-12 New Mexico's and Montana's results hosts
+  sent their current-election page to their Secretary of State's landing page
+  (Montana's says results come "after 8:00 on November 3"), where in 2024 both
+  served the staged general a month ahead. Those two will alert daily until
+  their hosts serve the general — the honest state of the feed.
+- A race the state's feed stops listing mid-count (a renamed contest, one set
+  aside as impossible) keeps its last count, tagged NOT IN LATEST READ on the
+  page (`inLatestRead`), and pages someone (`sync._dropped_races`): the
+  state's other races keep its feed looking healthy, so nothing else would.
+- The reporting figure is worded as the source counts it
+  (`StateCount.units_complete`, `signals.reporting_line`, frontend
+  `reportingText`): "N of M precincts fully reported" where it counts units
+  FULLY in — Clarity's county roll-up ("Percent Completely Reported";
+  Colorado's 8th read 0 of 3 counties all night in 2024 beside 230,000
+  votes), TotalVote's "Precincts Fully", Tally's precinctsReporting — and
+  "Results from N of M counties" where a unit counts on its first batch
+  (Enhanced Voting: Utah read 29 of 29 counties two days in with a third of
+  the vote still to count). A share short of every unit never rounds to 100%.
+- A ranked-choice state (Maine, Alaska: `ranked_choice_general` in
+  `state_candidate_sources.json`) is never read live: its election-night
+  count is first choices, whose leader is not necessarily who the rounds
+  elect, so "leads" and a change of party read from it could be the opposite
+  of the result. Its page says so (`rankedChoiceStates`).
 - Civitas never calls a race. A count is "leading" — "not final" until the
   source itself says official, and still "leading", never "wins", after (an
   official count's leader can face a runoff: Georgia's general needs a
@@ -1144,8 +1260,12 @@ wrong number on election night is worse than none:
   `broadcast.publish` to the Elections feed and Bluesky) — is
   a fixed template around the source's figures, never model text. A flip needs
   half the reporting units in. Where the units are places (counties, cities
-  and towns), which "report" on their first batch, it needs every place in and
-  `COUNTY_FLIP_SETTLE` since the first votes instead. Where the units are
+  and towns) it needs every place in and `COUNTY_FLIP_SETTLE` since the first
+  votes instead: an Enhanced Voting county or town "reports" on its first
+  batch, and a Clarity county counts only once completely reported, so in
+  Clarity's states (CO, IA, SC, WV) a change of party is raised only when every
+  county says it is complete — in Colorado's 2024 count, weeks after
+  election night (the map still shows who leads meanwhile). Where the units are
   places, or the source gives no reporting figure, the source's official flag
   also suffices; beside a precinct count that states one, it does not. That
   bar gates only *raising* a flip: once said, a flip is undone only by the
@@ -1370,6 +1490,8 @@ the pending list).
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
+| Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
+| Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
@@ -1614,7 +1736,9 @@ state in the query string is exposed to them.
   updates. `/action?tab=timeline` froze there for the whole session — every
   tab click swapped the panel but left the URL reading `?tab=timeline`, and a
   refresh re-froze it. Use `window.history.replaceState` for search-param-only
-  updates instead; Next patches the History API, copies its internal state
+  updates instead (every page that keeps view state in the query string does
+  now, `/compare`'s pair included — it was the last `router.replace`, found
+  2026-10); Next patches the History API, copies its internal state
   onto the entry (so passing `null` is safe and popstate still works), and
   dispatches `ACTION_RESTORE` to keep `usePathname`/`useSearchParams` in sync
   without performing a navigation.
@@ -1631,6 +1755,19 @@ state in the query string is exposed to them.
   (`/action?tab=issues`) for all in-app links. Bare `/action` stays fine as a
   public entry point: a cold load has no client cache to restore from. Do not
   "tidy" that query string away.
+
+#### Empty defaults are content (2026-10)
+
+A default view that renders zeros or "nothing found" on an ordinary day is a
+defect, not an empty state. Say what the site does know, from stored data,
+decided by the backend: `/congress` on a day without business leads with the
+recess and the last week of business (`recess` on `/api/congress/latest`),
+the bills page's "Active now" falls back to bills that moved this week and
+says so (`shown`/`movedSince`), a bill page states its stage's base rate
+(`stageBaseRate` — worded as what happens to bills at the stage, never a
+forecast for the bill), the Ongoing tab lists recently closed monitors, and
+`/compare` offers pairs that need no picking. Never fill the gap with model
+text or a visitor's input (§7, §8).
 
 ### Testing
 

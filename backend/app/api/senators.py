@@ -115,10 +115,11 @@ def get_votes(
     page: int = Query(1, ge=1),
     per_page: int = Query(15, ge=1, le=100),
     filter: str = Query("all", pattern="^(all|yea|nay|against-party)$"),
+    q: str | None = Query(None, max_length=100, description="Bill number, title or question to search for"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Return paginated votes for a senator."""
-    result = get_senator_votes(db, resolve_member_id(db, senator_id), category, page, per_page, filter)
+    result = get_senator_votes(db, resolve_member_id(db, senator_id), category, page, per_page, filter, q)
     if result is None:
         raise HTTPException(status_code=404, detail="Senator not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)

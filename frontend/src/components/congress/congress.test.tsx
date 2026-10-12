@@ -14,6 +14,7 @@ import type {
   RollCallSummary,
   VoteDetail,
 } from "@/types/congress";
+import type { BillDetail } from "@/types/bill";
 import { longDate, shortDate } from "@/lib/congress";
 
 vi.mock("@/components/layout/Navbar", () => ({ default: () => <header /> }));
@@ -185,6 +186,18 @@ describe("congress formatting", () => {
 });
 
 describe("day report", () => {
+  it("offers the Congress feed, day and week alike", () => {
+    const { unmount } = render(<DayReportView report={day} />);
+    expect(
+      screen.getByRole("link", { name: "Follow Congress without an account" })
+    ).toHaveAttribute("href", "/feed/congress.xml");
+    unmount();
+    render(<PeriodReportView report={week} kind="week" />);
+    expect(
+      screen.getByRole("link", { name: "Follow Congress without an account" })
+    ).toBeInTheDocument();
+  });
+
   it("shows the day as the API computed it", () => {
     render(<DayReportView report={day} />);
     expect(
@@ -337,6 +350,22 @@ describe("week report", () => {
     render(<PeriodReportView report={week} kind="week" />);
     expect(await violations()).toEqual([]);
   });
+
+  it("leads a recess with Congress being out and names the week shown", async () => {
+    render(
+      <PeriodReportView
+        report={week}
+        kind="week"
+        lead={{ title: "Congress is out", body: <p>Neither chamber has voted since then.</p> }}
+      />
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Congress is out" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Week of September 21, 2026" })
+    ).toBeTruthy();
+    expect(screen.getByText(week.sentence)).toBeTruthy();
+    expect(await violations()).toEqual([]);
+  });
 });
 
 const record: BillRecord = {
@@ -474,5 +503,33 @@ describe("bill page", () => {
     );
     await screen.findByRole("link", { name: "Rob Delgado" });
     expect(await violations()).toEqual([]);
+  });
+
+  it("states the backend's base rate for the bill's stage, as given", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
+    const sentence =
+      "Of the 100 bills sitting members have sponsored this Congress, 6% are at this stage and 1% have become law.";
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={record}
+        detail={
+          {
+            billId: "S.4668",
+            title: record.title,
+            stage: "REPORTED",
+            congress: 119,
+            isLaw: false,
+            relatedIssues: [],
+            policyAreas: [],
+            stageBaseRate: { total: 100, atStage: 6, reachedStage: 12, becameLaw: 1, sentence },
+          } as unknown as BillDetail
+        }
+        stageName="Reported by Committee"
+      />
+    );
+    expect(screen.getByText(sentence)).toBeTruthy();
+    await screen.findByRole("link", { name: "Rob Delgado" });
   });
 });

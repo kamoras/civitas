@@ -96,7 +96,11 @@ def refresh(monkeypatch):
     monkeypatch.setattr(ac, "_find_related_explore_docs", lambda *a: [])
     monkeypatch.setattr(ac, "_find_related_senators", lambda *a: [])
     monkeypatch.setattr(ac, "_find_related_officials", lambda *a: [])
-    monkeypatch.setattr(ac, "_build_actions_from_data", lambda *a: [])
+    monkeypatch.setattr(ac, "_build_actions_from_data", lambda *a, **k: [])
+    monkeypatch.setattr(ac, "route_committees", lambda *a: [])
+    monkeypatch.setattr(ac, "_open_comment_docs", lambda *a: [])
+    monkeypatch.setattr(ac, "_principal_actor", lambda *a: "class:us_gov")
+    monkeypatch.setattr(ac, "label_principal_actors", lambda db: 0)
     monkeypatch.setattr(ac, "_find_matching_issue", lambda *a, **k: None)
     return pool
 
@@ -185,3 +189,8 @@ def test_an_issue_names_and_links_the_outlet_of_every_line_it_quotes(db_session,
     assert issue.summary_source == "Outlet 0"
     assert issue.summary_source_url == "https://example.com/claim-a"
     assert json.loads(issue.fact_source_urls) == ["https://example.com/a-fact"]
+
+
+def test_each_published_issue_records_its_principal_actor(db_session, refresh):
+    action_center._run_refresh(db_session)
+    assert {i.principal_actor for i in db_session.query(ActionIssue).all()} == {"class:us_gov"}

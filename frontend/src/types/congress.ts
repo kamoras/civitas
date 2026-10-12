@@ -94,6 +94,17 @@ export interface DayReport {
   previousDay: string | null;
   nextDay: string | null;
   syncedAt: string | null;
+  /** /api/congress/latest only: set when neither chamber did business on
+   * the latest day (a pro forma sitting); what /congress leads with. */
+  recess?: Recess | null;
+}
+
+export interface Recess {
+  headline: string;
+  sentence: string;
+  lastBusinessDay: string | null;
+  /** The Monday of the week to open: the last one with business. */
+  week: string;
 }
 
 export interface PeriodTotals extends DayCounts {

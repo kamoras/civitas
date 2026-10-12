@@ -133,8 +133,12 @@ _ANNOTATION_RE = re.compile(r"\([^)]*\)|\*|(?i:\bincumbent\b)")
 # The same, for a name shown as printed: a parenthetical with more of the
 # name after it is the nickname the ballot prints ("Tobias (Toby) Doe" --
 # North Carolina's and Colorado's lists), not a marker beside the name, so
-# only a trailing one is an annotation. surname() still drops both.
-_DISPLAY_ANNOTATION_RE = re.compile(r"\([^)]*\)(?!\s*[^\W\d_])|\*|(?i:\bincumbent\b)")
+# only a trailing one is an annotation. surname() still drops both. A
+# withdrawal is the one marker kept: "Jane Doe (Withdrawn)" is a candidate
+# who left the race too late to leave the ballot, and shown as plain "Jane
+# Doe" a live count read as an active candidate's -- leading, if they led.
+_DISPLAY_ANNOTATION_RE = re.compile(r"\((?!\s*(?i:withdr))[^)]*\)(?!\s*[^\W\d_])|\*|(?i:\bincumbent\b)")
+WITHDRAWN_MARK_RE = re.compile(r"\(\s*withdr[a-z]*\s*\)", re.IGNORECASE)
 
 
 def parse_office(contest_name: str) -> tuple[str, int | None] | None:

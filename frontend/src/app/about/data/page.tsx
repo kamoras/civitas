@@ -375,7 +375,10 @@ export default function DataChapter() {
           </Item>
           <Item label="Load times">
             A tally of how long pages take to load, in broad ranges, with nothing about who loaded
-            them.
+            them. The page also says whether it was opened on a desktop, a tablet or a phone, worked
+            out in your browser from its screen size and whether it uses touch, and sent as one of
+            those three words; your browser identification string is not read. Automated browsers
+            send nothing.
           </Item>
           <Item label="API use">
             A count per day of requests to the <A href="/developers">public API and MCP server</A>,

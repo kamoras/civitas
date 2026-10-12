@@ -119,6 +119,17 @@ async function openContest(name: RegExp) {
 }
 
 describe("the ballot page", () => {
+  it("offers the state's own feed, with no account", () => {
+    const b = ballot();
+    render(<StateBallotClient ballot={b} />);
+    const name = b.stateName ?? b.state;
+    expect(screen.getByRole("link", { name: `Follow ${name} without an account` })).toHaveAttribute(
+      "href",
+      `/feed/states/${b.state}.xml`
+    );
+    expect(screen.getByRole("link", { name: "about feeds" })).toHaveAttribute("href", "/feeds");
+  });
+
   it("lays the ballot out as contests, federal first, with no drawer open", () => {
     render(<StateBallotClient ballot={ballot()} />);
     const index = screen.getByRole("navigation", { name: "Contests on this ballot" });

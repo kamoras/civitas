@@ -20,7 +20,7 @@ from app import background, database, net_stats, ops_alerts, pipeline_chain
 from app.api.elections import ballot_state_codes
 from app.api.pipeline import _is_pipeline_running
 from app.api.pipeline_runner import run_pipeline_in_thread
-from app.api.visits import LOAD_TIMING_BUCKETS_MS, LOAD_TIMING_METRICS
+from app.api.visits import CONFIRMED_VISITS_SINCE, DEVICE_CLASSES, LOAD_TIMING_BUCKETS_MS, LOAD_TIMING_METRICS
 from app.config import settings
 from app.database import get_db, get_visits_db, off_loop
 from app.http_client import make_async_client
@@ -77,6 +77,7 @@ from app.pipeline import (
     vector_store,
 )
 from app.pipeline.analyze import document_authority
+from app.pipeline.analyze import story_actor
 from app.pipeline.analyze.action_center import get_action_refresh_state
 from app.pipeline.analyze.bill_learning import get_health_metrics
 from app.pipeline.analyze.ollama_client import get_llm_stats
@@ -374,11 +375,20 @@ def _window_dates(days: int) -> list[str]:
 def admin_visitor_stats(
     days: int = Query(30, ge=1, le=366), db: Session = Depends(get_visits_db),
 ) -> list[dict]:
-    """Daily unique visitors and page views for the last N calendar days, oldest first.
+    """Daily visitors, first-paint loads and page views for the last N
+    calendar days, oldest first.
 
-    Unique visitors count SiteVisit rows (one per visitor per day, keyed by a
-    salted daily-rotating hash — see models.py), never raw IPs; page views sum
-    PageView's raw hit counter. Every day in the window is present, zero-filled:
+    ``confirmedVisitors`` counts SiteVisit rows (one per visitor per day, keyed
+    by a salted daily-rotating hash — see models.py), never raw IPs, and only
+    from CONFIRMED_VISITS_SINCE, when a visit began to count only once the
+    browser that opened the page had run it; it is null before then, where
+    the rows counted mostly automation. ``firstPaintLoads`` counts cold page
+    loads whose browser reported a first contentful paint (PageLoadTiming's
+    ``fcp`` cells, every device): a browser that drew the page while it was
+    in view, the closest thing to a person reading it that is counted
+    without identifying anyone. ``uniqueVisitors`` is the SiteVisit count
+    for every day, as stored. Page views sum PageView's raw hit counter.
+    Every day in the window is present, zero-filled:
     the dashboard draws this as a line, and a day with no rows skipped rather
     than reported as 0 would draw a straight segment across an outage instead
     of the dip that shows it.
@@ -396,8 +406,20 @@ def admin_visitor_stats(
         .group_by(PageView.date)
         .all()
     )
+    painted = dict(
+        db.query(PageLoadTiming.date, func.sum(PageLoadTiming.count))
+        .filter(PageLoadTiming.date >= dates[0], PageLoadTiming.metric == "fcp")
+        .group_by(PageLoadTiming.date)
+        .all()
+    )
     return [
-        {"date": d, "uniqueVisitors": int(visitors.get(d, 0)), "pageViews": int(views.get(d) or 0)}
+        {
+            "date": d,
+            "confirmedVisitors": int(visitors.get(d, 0)) if d >= CONFIRMED_VISITS_SINCE else None,
+            "firstPaintLoads": int(painted.get(d) or 0),
+            "uniqueVisitors": int(visitors.get(d, 0)),
+            "pageViews": int(views.get(d) or 0),
+        }
         for d in dates
     ]
 
@@ -439,20 +461,27 @@ def admin_load_times(
     contentful paint) and ``load`` (the load event). A day with no samples
     has null percentiles, not 0: nothing was measured, which is different
     from a page that loaded instantly. ``byPath`` ranks routes by p95 of the
-    load event over the window, slowest first.
+    load event over the window, slowest first. ``devices`` splits each day's
+    first-paint loads by the class the browser reported (desktop, tablet,
+    mobile, or ``unrecorded`` for a load counted before the split or from a
+    page that predates it), and ``deviceTotals`` sums the window.
     """
 
     dates = _window_dates(days)
     rows = (
         db.query(PageLoadTiming.date, PageLoadTiming.path, PageLoadTiming.metric,
-                 PageLoadTiming.bucket_ms, PageLoadTiming.count)
+                 PageLoadTiming.bucket_ms, PageLoadTiming.device, PageLoadTiming.count)
         .filter(PageLoadTiming.date >= dates[0])
         .all()
     )
 
+    device_keys = (*DEVICE_CLASSES, "unrecorded")
     per_day: dict[tuple[str, str], dict[int, int]] = {}
     per_path: dict[tuple[str, str], dict[int, int]] = {}
-    for date, path, metric, bucket, count in rows:
+    devices = {d: dict.fromkeys(device_keys, 0) for d in dates}
+    for date, path, metric, bucket, device, count in rows:
+        if metric == "fcp" and date in devices:
+            devices[date][device if device in DEVICE_CLASSES else "unrecorded"] += count
         day_hist = per_day.setdefault((date, metric), {})
         day_hist[bucket] = day_hist.get(bucket, 0) + count
         path_hist = per_path.setdefault((path, metric), {})
@@ -477,9 +506,11 @@ def admin_load_times(
     return {
         "metrics": list(LOAD_TIMING_METRICS),
         "days": [
-            {"date": d, **{m: _summary(per_day.get((d, m))) for m in LOAD_TIMING_METRICS}}
+            {"date": d, **{m: _summary(per_day.get((d, m))) for m in LOAD_TIMING_METRICS},
+             "devices": devices[d]}
             for d in dates
         ],
+        "deviceTotals": {k: sum(day[k] for day in devices.values()) for k in device_keys},
         "byPath": by_path,
     }
 
@@ -1867,6 +1898,105 @@ def _coerce_counts(raw) -> dict[str, int] | None:
         str(k): v for k, v in raw.items()
         if isinstance(v, int) and not isinstance(v, bool)
     }
+
+
+_ACTOR_CLASS_NAMES = {
+    "us_gov": "U.S. government (no official named)",
+    "us_election": "U.S. elections",
+    "us_foreign": "U.S. foreign policy",
+    "us_policy_issue": "U.S. policy issue",
+    "us_courts": "U.S. courts",
+    "foreign_politics": "Foreign politics",
+    "foreign_conflict": "Foreign conflict",
+    "business": "Business",
+    "crime": "Crime",
+    "human_interest": "Human interest",
+    "science_health": "Science and health",
+    "sports_ent": "Sports and entertainment",
+    "disaster": "Disaster",
+    "other": "Other",
+}
+
+
+def _actor_names(labels: set[str], db: Session) -> dict[str, str]:
+    """A readable name for each principal-actor label (story_actor)."""
+    names: dict[str, str] = {}
+    by_branch: dict[str, list[str]] = {}
+    for label in labels:
+        if label == story_actor.PRESIDENT:
+            president = db.query(President.name).filter(President.is_current.is_(True)).scalar()
+            names[label] = f"President {president}" if president else "The president"
+        elif label.startswith("class:"):
+            names[label] = _ACTOR_CLASS_NAMES.get(label[6:], label[6:])
+        else:
+            branch, _, ident = label.partition(":")
+            by_branch.setdefault(branch, []).append(ident)
+    for branch, model in (("senate", Senator), ("house", Representative), ("scotus", Justice)):
+        ids = by_branch.get(branch)
+        if ids:
+            for ident, name in db.query(model.id, model.name).filter(model.id.in_(ids)).all():
+                names[f"{branch}:{ident}"] = name
+    for label in labels:
+        names.setdefault(label, label)
+    return names
+
+
+@router.get("/actor-concentration", dependencies=[Depends(require_admin)])
+def admin_actor_concentration(
+    weeks: Annotated[int, Query(ge=1, le=52)] = 12, db: Session = Depends(get_db),
+) -> dict:
+    """Principal-actor concentration of the Action Center's news issues, per
+    ISO week (Monday first), oldest first, the current week last.
+
+    Each issue counts once, in the week of its ``date`` (the last day a
+    refresh published it), by its ``principal_actor`` (story_actor: the
+    official named first in its headline, else the kind of story). ``hhi``
+    is the Herfindahl index of those actors, the sum of squared shares: 1.0
+    when one actor leads every issue, lower as the lead spreads; null for a
+    week with no labelled issue. ``top`` is the most frequent actor and its
+    count, ``president`` the issues the sitting president leads, and
+    ``noGovernment`` the issues whose class is one in which no government
+    acts (business, crime, a disaster...). Primary-source drafts (roll calls,
+    rules) are left out: their subject is the record, not a story choice.
+    """
+    today = datetime.now(_UTC).date()
+    monday = today - timedelta(days=today.weekday())
+    starts = [monday - timedelta(weeks=n) for n in range(weeks - 1, -1, -1)]
+    rows = (
+        db.query(ActionIssue.date, ActionIssue.principal_actor)
+        .filter(
+            ActionIssue.source_type.is_(None),
+            ActionIssue.principal_actor.is_not(None),
+            ActionIssue.date >= starts[0].isoformat(),
+        )
+        .all()
+    )
+    by_week: dict[str, list[str]] = {s.isoformat(): [] for s in starts}
+    for day, actor in rows:
+        try:
+            d = datetime.strptime(day, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        key = (d - timedelta(days=d.weekday())).isoformat()
+        if key in by_week:
+            by_week[key].append(actor)
+    names = _actor_names({a for actors in by_week.values() for a in actors}, db)
+    out = []
+    for start, actors in by_week.items():
+        counts: dict[str, int] = {}
+        for a in actors:
+            counts[a] = counts.get(a, 0) + 1
+        top = max(counts, key=counts.get) if counts else None
+        hhi = story_actor.herfindahl(actors)
+        out.append({
+            "weekStart": start,
+            "issues": len(actors),
+            "hhi": round(hhi, 3) if hhi is not None else None,
+            "top": {"label": top, "name": names[top], "issues": counts[top]} if top else None,
+            "president": counts.get(story_actor.PRESIDENT, 0),
+            "noGovernment": sum(n for a, n in counts.items() if not story_actor.has_government_actor(a)),
+        })
+    return {"weeks": out}
 
 
 @router.get("/action-metrics", dependencies=[Depends(require_admin)])
