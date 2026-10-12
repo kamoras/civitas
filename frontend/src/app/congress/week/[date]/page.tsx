@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { absoluteUrl, pageMetadata } from "@/lib/site";
+import { TOPIC_FEEDS, absoluteUrl, pageMetadata } from "@/lib/site";
 import { ISO_DATE, fetchWeek } from "@/lib/congressServer";
 import { longDate } from "@/lib/congress";
 import PeriodReportView from "@/components/congress/PeriodReportView";
@@ -34,6 +34,7 @@ export async function generateMetadata({
     description: report?.sentence ?? "What the Senate and the House did this week.",
     // Canonical is the week's Monday: any day of the week serves the same page.
     path: `/congress/week/${start}`,
+    feed: TOPIC_FEEDS.congress,
     images: [
       { url: absoluteUrl(`/api/og?congressWeek=${start}`), width: 1200, height: 630, alt: title },
     ],

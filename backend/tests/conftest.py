@@ -930,20 +930,31 @@ def freeze_utcnow(monkeypatch):
             if (getattr(module, "__dict__", None) or {}).get(name) is original:
                 monkeypatch.setattr(module, name, replacement)
 
+    # What each name is bound to now, so a second call moves the clock: it
+    # used to look only for the real function, find none left after the
+    # first call, and leave the clock where the first call put it.
+    bound = {"utcnow": real, "election_today": real_election_today}
+
     def freeze(when):
         def frozen():
             return when
 
-        rebind("utcnow", real, frozen)
+        rebind("utcnow", bound["utcnow"], frozen)
+        bound["utcnow"] = frozen
         # The election date is the same clock read in Eastern time
         # (election_phase.election_today): a test pinned to a September
         # instant that reaches active_election() otherwise moves to the
         # results window, then the next cycle, as the real calendar does.
         # Unless the test (or an autouse fixture) already pinned the
         # election date itself -- that pin is the date it means.
-        if election_phase.election_today is real_election_today:
+        if election_phase.election_today is bound["election_today"]:
             today = election_phase.eastern_date(when)
-            rebind("election_today", real_election_today, lambda: today)
+
+            def frozen_today():
+                return today
+
+            rebind("election_today", bound["election_today"], frozen_today)
+            bound["election_today"] = frozen_today
         return when
 
     return freeze

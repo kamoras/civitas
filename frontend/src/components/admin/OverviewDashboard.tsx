@@ -20,7 +20,7 @@ import { formatCompact, formatMs } from "./charts/scale";
 import { formatDay, formatDuration, formatTime, statusClass } from "./format";
 import { ServiceHealth } from "./SystemDashboard";
 import { formatPct } from "./useHostHistory";
-import { Panel, StatTile, UsageBar } from "./widgets";
+import { emptyText, NotLoaded, Panel, StatTile, UsageBar } from "./widgets";
 
 /** The sub-dashboard a row links through to. */
 export type GoToTab = (tab: "traffic" | "pipelines" | "system") => void;
@@ -69,7 +69,7 @@ function OpsAlertItem({ a }: { a: OpsAlert }) {
  *  closes when the code that raised it sees its condition gone
  *  (ops_alerts.resolve_ops_alert), so "Active" is what's wrong right now. */
 export function OpsAlerts({ alerts }: { alerts: OpsAlert[] | undefined }) {
-  if (!alerts) return <p className="text-xs font-mono text-ink-min">Loading…</p>;
+  if (!alerts) return <NotLoaded />;
   if (alerts.length === 0)
     return <p className="text-xs font-mono text-ink-min">No alerts recorded.</p>;
   const active = alerts.filter((a) => a.open);
@@ -127,19 +127,26 @@ export function OverviewDashboard({
   const [visits, setVisits] = useState<VisitorStatsDay[] | null>(null);
   const [loadTimes, setLoadTimes] = useState<LoadTimes | null>(null);
   const [trend, setTrend] = useState<PipelineTrendRun[] | null>(null);
+  // A failed request keeps the last figures it had (or none): it used to
+  // become an empty list, which read as "no visits" and "0 of 0 runs".
+  const [loadFailed, setLoadFailed] = useState({ visits: false, loadTimes: false, trend: false });
 
   useEffect(() => {
     let cancelled = false;
+    const settle = <T,>(key: keyof typeof loadFailed, p: Promise<T>, set: (v: T) => void) =>
+      p
+        .then((v) => {
+          if (cancelled) return;
+          set(v);
+          setLoadFailed((f) => ({ ...f, [key]: false }));
+        })
+        .catch(() => {
+          if (!cancelled) setLoadFailed((f) => ({ ...f, [key]: true }));
+        });
     const load = () => {
-      fetchAdminVisitorStats(token, 14)
-        .then((v) => !cancelled && setVisits(v))
-        .catch(() => !cancelled && setVisits((prev) => prev ?? []));
-      fetchAdminLoadTimes(token, 1)
-        .then((l) => !cancelled && setLoadTimes(l))
-        .catch(() => {});
-      fetchAdminPipelineTrend(token, 7)
-        .then((t) => !cancelled && setTrend(t.runs))
-        .catch(() => !cancelled && setTrend((prev) => prev ?? []));
+      settle("visits", fetchAdminVisitorStats(token, 14), setVisits);
+      settle("loadTimes", fetchAdminLoadTimes(token, 1), setLoadTimes);
+      settle("trend", fetchAdminPipelineTrend(token, 7), (t) => setTrend(t.runs));
     };
     load();
     // Refreshed on the same cadence as the pipeline table beside these
@@ -185,20 +192,38 @@ export function OverviewDashboard({
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label="Visitors today"
-          value={today ? today.uniqueVisitors.toLocaleString() : "—"}
-          note={today ? `${today.pageViews.toLocaleString()} page views` : undefined}
+          label="Confirmed visitors today"
+          value={today?.confirmedVisitors != null ? today.confirmedVisitors.toLocaleString() : "—"}
+          note={
+            today
+              ? `${today.firstPaintLoads.toLocaleString()} first-paint loads`
+              : loadFailed.visits
+                ? "couldn't load"
+                : undefined
+          }
         />
         <StatTile
           label="Page load p75 today"
           value={loadToday?.p75 != null ? formatMs(loadToday.p75) : "—"}
-          note={`${(loadToday?.samples ?? 0).toLocaleString()} loads measured`}
+          note={
+            loadTimes
+              ? `${(loadToday?.samples ?? 0).toLocaleString()} loads measured`
+              : loadFailed.loadTimes
+                ? "couldn't load"
+                : undefined
+          }
         />
         <StatTile
           label="Failed runs, 7 days"
           value={trend ? failed.toLocaleString() : "—"}
           tone={failed > 0 ? "text-signal-magenta" : "text-ink-hi"}
-          note={trend ? `of ${finished.length} finished` : undefined}
+          note={
+            trend
+              ? `of ${finished.length} finished`
+              : loadFailed.trend
+                ? "couldn't load"
+                : undefined
+          }
         />
         <StatTile
           label="Next scheduled run"
@@ -217,20 +242,26 @@ export function OverviewDashboard({
           actions={<MoreLink onClick={() => goTo("traffic")}>Traffic</MoreLink>}
         >
           <LineChart
-            title="UNIQUE VISITORS PER DAY"
+            title="CONFIRMED VISITORS AND FIRST-PAINT LOADS PER DAY"
             xLabels={(visits ?? []).map((v) => formatDay(v.date))}
             series={[
               {
-                key: "visitors",
-                label: "Unique visitors",
+                key: "confirmed",
+                label: "Confirmed visitors",
                 color: SERIES[0],
-                values: (visits ?? []).map((v) => v.uniqueVisitors),
+                values: (visits ?? []).map((v) => v.confirmedVisitors),
+              },
+              {
+                key: "painted",
+                label: "First-paint loads",
+                color: SERIES[1],
+                values: (visits ?? []).map((v) => v.firstPaintLoads),
               },
             ]}
             formatValue={(v) => v.toLocaleString()}
             formatTick={formatCompact}
             height={130}
-            emptyMessage={visits ? "No visits recorded yet." : "Loading…"}
+            emptyMessage={emptyText(!!visits, loadFailed.visits, "No visits recorded yet.")}
           />
         </Panel>
 

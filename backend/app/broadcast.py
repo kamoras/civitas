@@ -49,8 +49,9 @@ SITE_URL = "https://civitas-research.org"
 # BroadcastPost.kind.
 KINDS: dict[str, str] = {
     "issue": "Action Center issues, in their sources' own words",
-    "congress_day": "What Congress did on a session day, once its record is final",
+    "congress_day": "What Congress did on a session day with a record vote or a measure passed, once its record is final",
     "congress_week": "What Congress did in a week, and the bills that became law",
+    "congress_ahead": "When each chamber meets in the coming week, and the bills waiting on it",
     "spotlight": "One member of Congress a day, with their scores",
     "race": "News about a race on the November ballot",
     "result": "Election-night counts, in each state's own figures",
@@ -98,8 +99,9 @@ FEEDS: dict[str, Feed] = {
         Feed("all", "Civitas", "Everything Civitas publishes.", tuple(KINDS)),
         Feed("issues", "Civitas: Action Center", KINDS["issue"] + ".", ("issue",)),
         Feed("congress", "Civitas: Congress",
-             "What Congress did each session day and each week, from the official record.",
-             ("congress_day", "congress_week")),
+             "What Congress did on each session day that had business, each week, and what the coming week holds, "
+             "from the official record.",
+             ("congress_day", "congress_week", "congress_ahead")),
         Feed("members", "Civitas: Member spotlight", KINDS["spotlight"] + ".", ("spotlight",)),
         Feed("elections", "Civitas: Elections",
              "News about races on the November ballot, and the count on election night.",
@@ -294,8 +296,13 @@ def source_was_published(db: Session, source_url: str) -> bool:
 
 def text_was_published(db: Session, text: str) -> bool:
     """Whether these exact words were ever published (as `publish` stores
-    them, hashtags stripped)."""
-    return db.query(BroadcastPost.id).filter(BroadcastPost.text == strip_hashtags(text)).first() is not None
+    them, hashtags stripped), alone or as the start of a post: a race post
+    cites its outlet after the sentence, and the same wire sentence from a
+    second outlet is the same news."""
+    t = strip_hashtags(text)
+    return db.query(BroadcastPost.id).filter(
+        or_(BroadcastPost.text == t, BroadcastPost.text.startswith(t + " ", autoescape=True)),
+    ).first() is not None
 
 
 def subjects_published_since(db: Session, kind: str, since: datetime) -> list[str]:

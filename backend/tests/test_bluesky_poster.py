@@ -319,6 +319,67 @@ class TestProcessIssuesMetrics:
         assert db_session.query(BroadcastPost).count() == 1
 
 
+class TestOnlyTheDaysTopIssuesArePosted:
+    """At most MAX_ISSUE_POSTS_PER_DAY issue posts an Eastern day, taken
+    from the top of the day's ranking (bluesky_poster's docstring)."""
+
+    _LEDES = {1: "The Senate confirmed a cabinet nominee.", 2: "A court blocked a tariff order.",
+              3: "Governors met on wildfire funding.", 4: "The Fed held rates steady."}
+
+    def _issues(self, db, ranks):
+        from app.models import ActionIssue
+
+        rows = [ActionIssue(date="2026-10-10", rank=r, is_current=True, title=f"Issue ranked {r}",
+                            summary=self._LEDES[r], facts="[]") for r in ranks]
+        db.add_all(rows)
+        db.commit()
+        return rows
+
+    def test_the_top_two_by_rank_are_posted_and_the_rest_wait(self, db_session, freeze_utcnow):
+        from datetime import datetime
+
+        from app.models import BroadcastPost
+        from app.pipeline.analyze import bluesky_poster
+
+        freeze_utcnow(datetime(2026, 10, 10, 15, 0))
+        rows = self._issues(db_session, [3, 1, 4, 2])
+        assert bluesky_poster.process_issues_for_bluesky(rows, db_session) == 2
+        assert sorted(p.title for p in db_session.query(BroadcastPost)) == ["Issue ranked 1", "Issue ranked 2"]
+        # Not posted is not handled: still flagged, in case it rises today.
+        assert [r.bsky_posted_at is None for r in rows] == [True, False, True, False]
+
+    def test_a_repost_counts_toward_the_days_budget(self, db_session, freeze_utcnow):
+        from datetime import datetime
+
+        from app.pipeline.analyze import bluesky_poster
+
+        freeze_utcnow(datetime(2026, 10, 10, 15, 0))
+        first = self._issues(db_session, [1])
+        assert bluesky_poster.process_issues_for_bluesky(first, db_session) == 1
+        first[0].bsky_posted_at = None  # flagged for a repost by new reporting
+        first[0].summary = "A new development in the issue ranked 1, with new words entirely."
+        db_session.commit()
+        second = self._issues(db_session, [2])
+        assert bluesky_poster.process_issues_for_bluesky(first + second, db_session) == 1  # one left today
+        assert second[0].bsky_posted_at is None
+        assert bluesky_poster.process_issues_for_bluesky(second, db_session) == 0
+
+    def test_the_day_is_the_eastern_day(self, db_session, freeze_utcnow):
+        from datetime import datetime
+
+        from app.models import BroadcastPost
+        from app.pipeline.analyze import bluesky_poster
+
+        # 04:30 UTC on the 11th is 00:30 Eastern: a post at 03:30 UTC was
+        # the day before, one at 04:10 today.
+        freeze_utcnow(datetime(2026, 10, 11, 4, 30))
+        for n, at in enumerate((datetime(2026, 10, 11, 3, 30), datetime(2026, 10, 11, 4, 10))):
+            db_session.add(BroadcastPost(kind="issue", subject=f"issue:x{n}", title="t", text=f"t{n}",
+                                         url="u", published_at=at))
+        db_session.commit()
+        assert bluesky_poster.process_issues_for_bluesky(self._issues(db_session, [1, 2]), db_session) == 1
+
+
 class TestComposeNewPost:
     """The issue post is the verified lede, verbatim — not model prose.
 

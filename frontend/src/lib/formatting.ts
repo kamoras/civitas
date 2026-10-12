@@ -216,7 +216,19 @@ export function commentDaysLeft(closeDate: string, now: number | Date = Date.now
  */
 export function describeDaysLeft(closeDate: string, asOf: number): string {
   if (Number.isNaN(Date.parse(`${closeDate}T00:00:00Z`))) return "";
-  const diff = commentDaysLeft(closeDate, asOf);
+  return phraseDaysLeft(commentDaysLeft(closeDate, asOf));
+}
+
+/** describeDaysLeft for a caller holding today's date in the deadline zone
+ *  (`commentPeriodToday()`) rather than a clock reading. */
+export function describeDaysLeftOn(closeDate: string, today: string): string {
+  const close = Date.parse(`${closeDate}T00:00:00Z`);
+  const day = Date.parse(`${today}T00:00:00Z`);
+  if (Number.isNaN(close) || Number.isNaN(day)) return "";
+  return phraseDaysLeft(Math.max(0, Math.round((close - day) / 86_400_000)));
+}
+
+function phraseDaysLeft(diff: number): string {
   if (diff <= 0) return "closes today";
   if (diff === 1) return "1 day left";
   return `${diff} days left`;

@@ -43,7 +43,9 @@ from app.pipeline.fetch.election_results import (
 from app.pipeline.fetch.congress import congress_first_year
 from app.pipeline.fetch.poll_close import last_poll_close, polls_closed
 from app.pipeline.fetch.state_candidates import _match_candidate, _race_id_for, given_name_contradicts
-from app.pipeline.fetch.state_candidates_common import PARTY_CODE_MAP, fec_party, last_name_matches, surname
+from app.pipeline.fetch.state_candidates_common import (
+    PARTY_CODE_MAP, WITHDRAWN_MARK_RE, fec_party, last_name_matches, surname,
+)
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
@@ -74,15 +76,18 @@ FLIP_REVERSED = "flip_reversed"
 # never what the page shows.
 FLIP_MIN_REPORTING_SHARE = 0.5
 # Where the units are places rather than precincts — counties, or a
-# state's cities and towns — "reporting" means a place has posted its first
-# batch, not that its count is in: Colorado's Clarity feed shows 2 of
-# CO-8's 3 counties reporting within minutes of the first dump, and its
-# counties keep counting for days. Half the places says nothing there, so
-# such a flip needs every place in AND this long since the race's first
-# votes, or the source's official flag. Editorial, like the share above:
-# it keeps a flip off the first dumps of the evening (a Colorado race with
-# first votes at 7:30 PM MT qualifies at 1:30 AM at the earliest), not off
-# election night — the wording everywhere is "leads", "not final".
+# state's cities and towns — half of them says little either way. An
+# Enhanced Voting county or town counts as reporting once it posts its first
+# batch (Georgia's 2nd read 20 of 30 counties with the challenger's party
+# ahead an hour after its 2024 polls closed; the holder's party won by 13
+# points), so such a flip needs every place in AND this long since the
+# race's first votes, or the source's official flag. A Clarity county counts
+# only once it calls itself completely reported, and on election night that
+# comes and goes (Colorado's 3rd swung between 1 and 6 of 27 counties in 2024)
+# — so there the bar is met only when every county is complete, often weeks
+# on. Editorial, like the share above: it keeps a flip off the first dumps of
+# the evening, never off a count that has settled — and the wording
+# everywhere is "leads", "not final".
 COUNTY_FLIP_SETTLE = timedelta(hours=6)
 
 _MEMBER_PARTY = {"D": "DEM", "R": "REP", "I": "IND"}
@@ -239,8 +244,11 @@ def _tallies(race: Race, contest: ContestCount) -> list[dict]:
             "sourceParty": party,
             # The matched candidate's name as the state's ballot prints it
             # where there is one: a results feed can carry an honorific
-            # (Arkansas's prefixes "Congressman") the ballot doesn't.
-            "name": (match.ballot_name if match and match.ballot_name else name),
+            # (Arkansas's prefixes "Congressman") the ballot doesn't. Never
+            # over a withdrawal the feed marks: that row is someone who left
+            # the race, and must read as that.
+            "name": (match.ballot_name if match and match.ballot_name and not WITHDRAWN_MARK_RE.search(name)
+                     else name),
             "party": stated or (_party_group(match.party) if match else _party_group(party)),
             "votes": votes,
             "candidateId": match.id if match else None,
@@ -371,6 +379,7 @@ def event_detail(result: RaceResult, **extra) -> dict:
         "reportingUnits": result.reporting_units,
         "totalUnits": result.total_units,
         "unitLabel": result.unit_label,
+        "unitsComplete": result.units_complete,
         "heldBy": result.held_by_party,
         "official": result.official,
         **extra,
@@ -510,6 +519,7 @@ def apply_count(
     result.reporting_units = contest.reporting_units
     result.total_units = contest.total_units
     result.unit_label = state.unit_label
+    result.units_complete = state.units_complete
     result.official = state.official
     result.source_name = state.source_name
     result.source_url = state.page_url
@@ -730,10 +740,45 @@ def _apply_state(db: Session, state: str, election_day: date, read: StateRead) -
         if not applied.held:
             results.append(applied)
     db.flush()
+    # Every race stored this pass, a held one (votes fell) included.
+    dropped = _dropped_races(db, state, election_day, {rid for rid, cs in by_race.items() if len(cs) == 1})
     return {
         "status": "ok", "races": len(results), "contests": len(count.contests),
-        "events": events, "results": results,
+        "events": events, "results": results, **({"dropped": dropped} if dropped else {}),
     }
+
+
+def _dropped_races(db: Session, state: str, election_day: date, applied_ids: set[str]) -> list[str]:
+    """Races with a stored count that this read of the state's feed did not
+    update: the contest was renamed past the reader, dropped as impossible,
+    or now collides with another. Its last count stays stored and shown,
+    with the time it was read and a tag saying it was not in the latest
+    read (api/elections.py inLatestRead) — not presented as live — and the
+    first time each set of races goes missing pages someone
+    (alert_dropped_races, sent once the state's transaction has committed),
+    since nothing else would: the state's other races keep its feed looking
+    healthy."""
+    stored = [
+        rid for (rid,) in db.query(RaceResult.race_id).join(Race, Race.id == RaceResult.race_id)
+        .filter(Race.state == state, RaceResult.election_date == election_day.isoformat())
+    ]
+    dropped = sorted(rid for rid in stored if rid not in applied_ids)
+    if dropped:
+        logger.warning("%s: races with a stored count missing from this read: %s", state, dropped)
+    return dropped
+
+
+def alert_dropped_races(state: str, election_day: date, dropped: list[str]) -> None:
+    """Page someone about _dropped_races — outside the sync's transaction:
+    an alert is recorded through its own session, which would wait on the
+    write lock the uncommitted pass holds."""
+    send_ops_alert(
+        f"Live results: {state} feed no longer lists a race",
+        f"{', '.join(dropped)} had a count but {state}'s latest read did not update it. The page keeps "
+        "its last count, tagged as not in the latest read. Check the contest's label in the feed "
+        "(renamed?) and the sync log (an impossible count, or two contests mapped to one race).",
+        dedupe_key=f"results-dropped-{state}-{election_day.isoformat()}-{','.join(dropped)}",
+    )
 
 
 async def sync_state(db: Session, client: httpx.AsyncClient, state: str, election_day: date) -> dict:
@@ -769,6 +814,8 @@ async def sync_live_results(db: Session, client: httpx.AsyncClient, election_day
             db.flush()
             outcome["issues"] = update_developing_issues(db, outcome.pop("results", []))
             db.commit()
+            if outcome.get("dropped"):
+                alert_dropped_races(state, election_day, outcome["dropped"])
         except Exception:
             db.rollback()
             logger.exception("Live results sync failed for %s", state)

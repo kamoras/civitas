@@ -12,7 +12,12 @@ import {
   A,
 } from "@/components/about/AboutPage";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
-import { countWord, fetchLiveStates, stateNameList } from "@/lib/liveStates";
+import {
+  countWord,
+  fetchLiveStates,
+  fetchRankedChoiceStates,
+  stateNameList,
+} from "@/lib/liveStates";
 
 // The live-count state list below is read from the backend (fetchLiveStates),
 // every five minutes (LIVE_STATES_REVALIDATE_S). A literal: Next reads it
@@ -27,7 +32,7 @@ export const metadata = pageMetadata({
 });
 
 export default async function ElectionsChapter() {
-  const live = await fetchLiveStates();
+  const [live, rankedChoice] = await Promise.all([fetchLiveStates(), fetchRankedChoiceStates()]);
   return (
     <AboutPage
       href="/about/elections"
@@ -380,6 +385,22 @@ export default async function ElectionsChapter() {
             )}{" "}
             Every other state&apos;s page says it has no live count here and links to the office
             that publishes one; it is never drawn as a state where nothing has happened.
+            {rankedChoice && rankedChoice.length > 0 && (
+              <>
+                {" "}
+                {stateNameList(rankedChoice)}{" "}
+                {rankedChoice.length === 1 ? "decides its" : "decide their"} congressional races by
+                ranked-choice voting: when no one has a majority of first choices the winner comes
+                from rounds counted after election night, so a first-choice count could show the
+                wrong candidate ahead, and{" "}
+                {rankedChoice.length === 1
+                  ? "it is not"
+                  : rankedChoice.length === 2
+                    ? "neither is"
+                    : "none is"}{" "}
+                read live.
+              </>
+            )}
           </P>
         </Sub>
         <Sub title="What we won’t show">
@@ -413,10 +434,14 @@ export default async function ElectionsChapter() {
             once it has, never &ldquo;wins&rdquo;: an official count&apos;s leader can still face a
             runoff (Georgia requires a majority), a recount or a court. A seat is only described as
             changing party once half its reporting areas are in; where a state reports by county or
-            town, each of which &ldquo;reports&rdquo; with its first batch of ballots, it takes
-            every county or town in and six hours since the first votes, or the state&apos;s
-            official count. Once said, it stands until the lead itself goes back to the seat&apos;s
-            party or ties: a count that dips below that bar with the same candidate ahead is not a
+            town, it takes every county or town in and six hours since the first votes, or the
+            state&apos;s official count. Some states count a county as in with its first batch of
+            ballots; others only once its count is complete, which can take weeks, and there the map
+            shows who leads meanwhile without calling it a change of party. How much is in is said
+            the state&apos;s way too: &ldquo;fully reported&rdquo; where it counts areas whose count
+            is complete, &ldquo;results from&rdquo; where an area counts once it has reported
+            anything. Once said, it stands until the lead itself goes back to the seat&apos;s party
+            or ties: a count that dips below that bar with the same candidate ahead is not a
             reversal. A House seat in a state whose congressional map was redrawn for this election
             has no previous holder to compare against (the district with the same number is a
             different district), so it is never described as changing party. Nor is a seat whose

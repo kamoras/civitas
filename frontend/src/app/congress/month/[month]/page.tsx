@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { pageMetadata } from "@/lib/site";
+import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { ISO_MONTH, fetchMonth } from "@/lib/congressServer";
 import { monthLabel } from "@/lib/congress";
 import PeriodReportView from "@/components/congress/PeriodReportView";
@@ -31,6 +31,7 @@ export async function generateMetadata({
     title: `Congress in ${monthLabel(month)}`,
     description: report?.sentence ?? `What the Senate and the House did in ${monthLabel(month)}.`,
     path: `/congress/month/${month}`,
+    feed: TOPIC_FEEDS.congress,
   });
 }
 

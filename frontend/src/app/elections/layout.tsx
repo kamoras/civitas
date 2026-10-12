@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { LiveResults, RaceSummary } from "@/types/election";
-import { pageMetadata } from "@/lib/site";
+import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { describeElections } from "@/lib/seo";
 import { everyLiveStateVoting, showsResults } from "@/lib/results";
 
@@ -58,7 +58,11 @@ async function fetchMode(now: number): Promise<"campaign" | "election_day" | "re
 // /elections/[raceId] route only redirects. See lib/site.ts.
 export async function generateMetadata(): Promise<Metadata> {
   const [cycleYear, mode] = await Promise.all([fetchCycleYear(), fetchMode(Date.now())]);
-  return pageMetadata({ ...describeElections(cycleYear, mode), path: "/elections" });
+  return pageMetadata({
+    ...describeElections(cycleYear, mode),
+    path: "/elections",
+    feed: TOPIC_FEEDS.elections,
+  });
 }
 
 export default function ElectionsLayout({ children }: { children: React.ReactNode }) {

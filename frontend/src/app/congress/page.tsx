@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import { pageMetadata } from "@/lib/site";
-import { fetchLatestDay } from "@/lib/congressServer";
+import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
+import { fetchLatestDay, fetchWeek } from "@/lib/congressServer";
+import { dayHref, longDate } from "@/lib/congress";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
+import FollowFeed from "@/components/shared/FollowFeed";
 import DayReportView from "@/components/congress/DayReportView";
+import PeriodReportView from "@/components/congress/PeriodReportView";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import { CongressTabs } from "@/components/congress/CongressNav";
 
@@ -14,6 +17,7 @@ export const metadata = pageMetadata({
   description:
     "Each day's record of the Senate and the House: bills passed, record votes with every member's vote, nominations confirmed and committee meetings, from the Congressional Record.",
   path: "/congress",
+  feed: TOPIC_FEEDS.congress,
 });
 
 export default async function CongressPage() {
@@ -23,6 +27,34 @@ export default async function CongressPage() {
   // a revalidation. The fetch itself is still cached for five minutes.
   await connection();
   const report = await fetchLatestDay();
+  // A day neither chamber did business (a pro forma sitting) read "met for
+  // 2 minutes" above eight zeros: lead with the recess and open the last
+  // week that had business instead. The backend decides (report.recess).
+  const week = report?.recess ? await fetchWeek(report.recess.week) : null;
+  if (report?.recess && week) {
+    return (
+      <PeriodReportView
+        report={week}
+        kind="week"
+        strip={<ThisWeekStrip variant="compact" />}
+        lead={{
+          title: report.recess.headline,
+          body: (
+            <p>
+              {report.recess.sentence}{" "}
+              <Link
+                href={dayHref(report.date)}
+                className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+              >
+                The latest sitting, {longDate(report.date)}
+              </Link>
+              .
+            </p>
+          ),
+        }}
+      />
+    );
+  }
   if (report) return <DayReportView report={report} strip={<ThisWeekStrip variant="compact" />} />;
   return (
     <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
@@ -41,6 +73,7 @@ export default async function CongressPage() {
               </Link>{" "}
               shows every bill moving through this Congress.
             </p>
+            <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
         </div>
       </main>
