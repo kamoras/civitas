@@ -595,6 +595,30 @@ class TestLiveResults:
         assert "UT" in data["redrawnStates"] and "MO" not in data["redrawnStates"]
         assert data["pollsClose"]["GA"] == "2026-11-04T00:00:00Z"  # 7 PM ET
 
+    def test_what_the_reporting_figure_counts_and_whether_the_latest_read_had_it(self, db_session):
+        """unitsComplete says how to word the reporting figure; a race the
+        state's latest good read skipped is marked, and ranked-choice states
+        are listed so their pages can say why there is no live count."""
+        from app.models import LiveResultRead, RaceResult
+
+        self._seed(db_session)
+        row = db_session.get(RaceResult, "2026-HOUSE-GA-2")
+        row.units_complete = False
+        db_session.add(LiveResultRead(state="GA", election_date="2026-11-03", status="ok",
+                                      checked_at=datetime(2026, 11, 4, 3, 1), last_ok_at=datetime(2026, 11, 4, 3, 1)))
+        db_session.flush()
+        with self._results_window():
+            data = _body(elections.live_results(None, db_session))
+        [race] = data["races"]
+        assert race["unitsComplete"] is False and race["inLatestRead"] is True
+        assert data["rankedChoiceStates"] == ["AK", "ME"]
+        assert not set(data["rankedChoiceStates"]) & set(data["liveStates"])
+        db_session.get(LiveResultRead, ("GA", "2026-11-03")).last_ok_at = datetime(2026, 11, 4, 3, 10)
+        db_session.flush()
+        with self._results_window():
+            [race] = _body(elections.live_results(None, db_session))["races"]
+        assert race["inLatestRead"] is False
+
     def test_senate_races_lists_each_seat_a_state_elects(self, db_session):
         """A state electing both its senators lists both races, counted or
         not, so the map can say the uncounted one has no count — and the

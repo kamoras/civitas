@@ -55,6 +55,16 @@ describe("statusTag", () => {
     for (const r of [race({ official: true }), race({ official: true, flip: true }), TIE])
       expect(statusTag({ ...r, official: true }).text).not.toBe("OFFICIAL");
   });
+
+  it("never passes a count the state's latest read skipped off as live", () => {
+    expect(statusTag(race({ inLatestRead: false })).text).toBe("NOT IN LATEST READ");
+    expect(statusTag(race({ inLatestRead: false, flip: true })).text).toBe("NOT IN LATEST READ");
+    expect(statusTag(race({ inLatestRead: true })).text).toBe("LEADING");
+    render(<RaceResultCard result={race({ inLatestRead: false })} />);
+    expect(
+      screen.getByText(/The state's latest read didn't include this race/)
+    ).toBeInTheDocument();
+  });
 });
 
 describe("HouseResultRow", () => {

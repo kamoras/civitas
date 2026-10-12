@@ -1,0 +1,483 @@
+{
+ "_source": "Utah's own Enhanced Voting feed for its 2024 general (electionresults.utah.gov, election general11052024). 'two_days_in': the election record and ballot items as the Internet Archive captured them on 2024-11-07 01:23Z (web.archive.org/web/20241107012310id_/.../general11052024 and 20241107012311id_/.../ballot-items); 'final': the vendor's current /data (read 2026-10-12). Trimmed to the U.S. Senate and U.S. House 1 contests and each locality's isProduction flag; candidate names replaced with placeholders, every figure as published.",
+ "two_days_in": {
+  "election": {
+   "id": "01000000-b67c-d632-55b3-08dcc8fc24d5",
+   "name": [
+    {
+     "languageId": "en",
+     "text": "2024 General Election"
+    }
+   ],
+   "electionDate": "2024-11-05",
+   "isProduction": true,
+   "isOfficialResults": false,
+   "lastUpdated": "2024-11-07T01:02:02.1967417Z"
+  },
+  "localityElections": [
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   }
+  ],
+  "ballotItems": [
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "U.S. Senate "
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 964952,
+    "reportingStatus": {
+     "reportingUnits": 29,
+     "totalUnits": 29
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "IAP CANDIDATE 1"
+        }
+       ],
+       "voteCount": 49115,
+       "party": {
+        "abbreviation": "IAP"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "REP CANDIDATE 2"
+        }
+       ],
+       "voteCount": 608268,
+       "party": {
+        "abbreviation": "REP"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "DEM CANDIDATE 3"
+        }
+       ],
+       "voteCount": 307458,
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "UNA CANDIDATE 4"
+        }
+       ],
+       "voteCount": 111,
+       "party": {
+        "abbreviation": "UNA"
+       },
+       "isWriteIn": true,
+       "isQualifiedWriteIn": true
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "U.S. House 1 "
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 255235,
+    "reportingStatus": {
+     "reportingUnits": 8,
+     "totalUnits": 8
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "DEM CANDIDATE 1"
+        }
+       ],
+       "voteCount": 81290,
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "LIB CANDIDATE 2"
+        }
+       ],
+       "voteCount": 10801,
+       "party": {
+        "abbreviation": "LIB"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "REP CANDIDATE 3"
+        }
+       ],
+       "voteCount": 163144,
+       "party": {
+        "abbreviation": "REP"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "final": {
+  "election": {
+   "id": "01000000-b67c-d632-55b3-08dcc8fc24d5",
+   "name": [
+    {
+     "languageId": "en",
+     "text": "2024 General Election"
+    }
+   ],
+   "electionDate": "2024-11-05",
+   "isProduction": true,
+   "isOfficialResults": true,
+   "lastUpdated": "2024-11-22T22:37:41.7811251Z"
+  },
+  "localityElections": [
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   },
+   {
+    "isProduction": true
+   }
+  ],
+  "ballotItems": [
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "U.S. Senate "
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 1463509,
+    "reportingStatus": {
+     "reportingUnits": 29,
+     "totalUnits": 29
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "IAP CANDIDATE 1"
+        }
+       ],
+       "voteCount": 83972,
+       "party": {
+        "abbreviation": "IAP"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "REP CANDIDATE 2"
+        }
+       ],
+       "voteCount": 914700,
+       "party": {
+        "abbreviation": "REP"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "DEM CANDIDATE 3"
+        }
+       ],
+       "voteCount": 464515,
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "UNA CANDIDATE 4"
+        }
+       ],
+       "voteCount": 322,
+       "party": {
+        "abbreviation": "UNA"
+       },
+       "isWriteIn": true,
+       "isQualifiedWriteIn": true
+      }
+     ]
+    }
+   },
+   {
+    "name": [
+     {
+      "languageId": "en",
+      "text": "U.S. House 1 "
+     }
+    ],
+    "contestType": "Candidate",
+    "voteTotal": 365895,
+    "reportingStatus": {
+     "reportingUnits": 8,
+     "totalUnits": 8
+    },
+    "summaryResults": {
+     "ballotOptions": [
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "DEM CANDIDATE 1"
+        }
+       ],
+       "voteCount": 117319,
+       "party": {
+        "abbreviation": "DEM"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "LIB CANDIDATE 2"
+        }
+       ],
+       "voteCount": 17601,
+       "party": {
+        "abbreviation": "LIB"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      },
+      {
+       "name": [
+        {
+         "languageId": "en",
+         "text": "REP CANDIDATE 3"
+        }
+       ],
+       "voteCount": 230975,
+       "party": {
+        "abbreviation": "REP"
+       },
+       "isWriteIn": false,
+       "isQualifiedWriteIn": false
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

@@ -723,3 +723,37 @@ class TestElectionResultsSync:
         settled = self._election("results", utcnow() - timedelta(days=2))
         assert self._run(settled, minute=12) == []
         assert len(self._run(settled, minute=0)) == 1
+
+
+class TestElectionResultsReadiness:
+    """The daily feed check: the two weeks before election day, never on it."""
+
+    def _run(self, phase, today):
+        from datetime import date
+
+        from app import scheduler
+        from app.election_phase import ActiveElection
+
+        calls = []
+
+        async def fake_check(db, client, day, on):
+            calls.append((day, on))
+            return {}
+
+        election = ActiveElection(date(2026, 11, 3), phase, None, None)
+        with patch("app.background.threading.Thread", _SyncThread), \
+             patch("app.election_phase.active_election", return_value=election), \
+             patch("app.election_phase.election_today", return_value=today), \
+             patch("app.live_results.readiness.check_feed_readiness", fake_check), \
+             patch("app.scheduler.SessionLocal", return_value=MagicMock()), \
+             patch("app.scheduler.lease.run_tracked", side_effect=lambda tier, tracker, work, who=None: __import__("asyncio").run(work())):
+            scheduler._election_results_readiness()
+        return calls
+
+    def test_runs_only_in_the_window_before_election_day(self):
+        from datetime import date
+
+        assert self._run("campaign", date(2026, 10, 25)) == [(date(2026, 11, 3), date(2026, 10, 25))]
+        assert self._run("campaign", date(2026, 10, 1)) == []
+        assert self._run("election_day", date(2026, 11, 3)) == []
+        assert self._run("results", date(2026, 11, 5)) == []
