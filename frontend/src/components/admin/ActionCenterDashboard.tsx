@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { useNow } from "@/hooks/useNow";
 import {
   fetchAdminActionMetrics,
+  fetchAdminActorConcentration,
   fetchAdminPipelineTrend,
   type ActionMetrics,
+  type ActorConcentration,
   type ActionMetricsRun,
   type ActionRefreshState,
   type AdminPipelineStatus,
@@ -156,6 +158,88 @@ const hourLabel = (ms: number) =>
   });
 
 const counterLabel = (k: string) => k.replace(/_/g, " ");
+
+/** Weekly principal-actor concentration of the published issues: is the
+ *  feed drifting toward one person? */
+export function ActorConcentrationPanel({ token }: { token: string }) {
+  const [data, setData] = useState<ActorConcentration | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetchAdminActorConcentration(token, 12)
+      .then((d) => !cancelled && setData(d))
+      .catch(() => !cancelled && setFailed(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const weeks = data?.weeks ?? [];
+  const current = weeks[weeks.length - 1];
+  const labels = weeks.map((w) => `wk of ${w.weekStart.slice(5)}`);
+  const share = (n: number, of: number) => (of ? n / of : null);
+  return (
+    <Panel title="Who leads the issues">
+      <p className="mb-4 text-xs font-mono text-ink-min">
+        Each published news issue&apos;s principal actor is the official named first in its
+        headline, or the kind of story when it names none. The Herfindahl index is the sum of
+        squared shares: 1.0 when one actor leads every issue of the week, lower as the lead spreads.
+        No selection rule acts on it: a daily cap per person and demoting stories with no government
+        actor were both measured and removed real civic stories with nothing to replace them, so
+        this is watched rather than enforced.
+      </p>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <LineChart
+          title="ACTOR CONCENTRATION PER WEEK"
+          subtitle="Herfindahl index of principal actors, and the share of issues the president leads"
+          xLabels={labels}
+          series={[
+            {
+              key: "hhi",
+              label: "Herfindahl index",
+              color: SERIES[0],
+              values: weeks.map((w) => w.hhi),
+            },
+            {
+              key: "president",
+              label: "President's share",
+              color: SERIES[1],
+              values: weeks.map((w) => share(w.president, w.issues)),
+            },
+            {
+              key: "nogov",
+              label: "No government actor",
+              color: SERIES[3],
+              values: weeks.map((w) => share(w.noGovernment, w.issues)),
+            },
+          ]}
+          formatValue={(v) => v.toFixed(2)}
+          emptyMessage={
+            data ? "No labelled issues yet." : failed ? "Couldn't load concentration." : "Loading…"
+          }
+        />
+        <div className="text-xs font-mono">
+          {current && current.top ? (
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
+              <dt className="text-ink-lo">THIS WEEK</dt>
+              <dd className="text-ink-hi tabular-nums">{current.issues} issues</dd>
+              <dt className="text-ink-lo">HERFINDAHL</dt>
+              <dd className="text-ink-hi tabular-nums">{current.hhi?.toFixed(2) ?? "—"}</dd>
+              <dt className="text-ink-lo">MOST FREQUENT</dt>
+              <dd className="text-ink-hi">
+                {current.top.name} ({current.top.issues})
+              </dd>
+              <dt className="text-ink-lo">NO GOVERNMENT ACTOR</dt>
+              <dd className="text-ink-hi tabular-nums">{current.noGovernment}</dd>
+            </dl>
+          ) : (
+            <p className="text-ink-min">No issues this week yet.</p>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
 
 export function ActionCenterDashboard({
   token,
@@ -391,6 +475,8 @@ export function ActionCenterDashboard({
           </div>
         </div>
       </Panel>
+
+      <ActorConcentrationPanel token={token} />
     </div>
   );
 }

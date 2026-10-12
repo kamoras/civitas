@@ -74,6 +74,7 @@ from app.pipeline.analyze.grounding import (
     proposal_stated_as_fact,
 )
 from app.pipeline.analyze import claims as claim_layer
+from app.pipeline.analyze import story_actor
 from app.pipeline.analyze.post_composer import compose
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
@@ -5222,6 +5223,10 @@ def _run_refresh(db: Session) -> int:
             if newest_pub is not None else today
         )
 
+        # Who the issue is principally about (story_actor), for the admin's
+        # weekly actor concentration.
+        actor = _principal_actor(title, summary, related_officials)
+
         # Find the matching existing issue across all recent issues (2-day
         # lookback, any rank). Same STORY → same row, regardless of rank
         # yo-yoing or a brief displacement — see _find_matching_issue's
@@ -5262,6 +5267,7 @@ def _run_refresh(db: Session) -> int:
         slot = issues_created + 1
         if match:
             _matched_issue_ids.add(match.id)
+            match.principal_actor = actor
             if match.status == ActionIssueStatus.DEVELOPING:
                 _promote_developing_issue(
                     match, _new_values, slot, today, primary_article_date, facts, title,
@@ -5278,7 +5284,7 @@ def _run_refresh(db: Session) -> int:
             action_metrics.increment("issues_matched_existing")
         else:
             # Brand new topic — give it a permanent row and post to Bluesky.
-            new_row = ActionIssue(date=today, rank=slot, is_current=True, **_new_values)
+            new_row = ActionIssue(date=today, rank=slot, is_current=True, principal_actor=actor, **_new_values)
             db.add(new_row)
             _new_issues.append(new_row)
             action_metrics.increment("issues_new_topic")
@@ -5364,6 +5370,14 @@ def _run_refresh(db: Session) -> int:
         _save_timeline_entry(today, db)
         generate_period_summaries(today, db)
 
+    # Rows published before principal actors were recorded get theirs here,
+    # where the model is loaded; after the first run there are none left.
+    try:
+        label_principal_actors(db)
+    except Exception:
+        logger.exception("Labelling issues' principal actors failed")
+        db.rollback()
+
     # The homepage feed's duplicates, marked here where the model is loaded
     # (mark_recent_duplicates). Every run, not only when issues were
     # created: a retirement or a re-rank changes which rows it reads.
@@ -5426,6 +5440,42 @@ def _run_refresh(db: Session) -> int:
         last_elapsed=round(elapsed, 1),
     )
     return issues_created
+
+
+def _principal_actor(title: str, summary: str, officials: list[dict]) -> str:
+    """The issue's principal actor (story_actor): the official named first in
+    its headline, else the class voted by the relevance gate's labelled
+    examples. The story is embedded only when its headline names no official."""
+    named = story_actor.headline_official(title, officials)
+    if named is not None:
+        return named
+    return story_actor.story_class(
+        _embed_texts_sim([f"{title}. {summary}"])[0],
+        _relevance_reference(), [e["category"] for e in relevance_examples()],
+    )
+
+
+def label_principal_actors(db: Session) -> int:
+    """Record the principal actor (story_actor) of every news issue that has
+    none yet: the rows from before the column existed. Officials are matched
+    afresh, under today's rules, as a new issue's would be."""
+    rows = (
+        db.query(ActionIssue)
+        .filter(ActionIssue.principal_actor.is_(None), ActionIssue.source_type.is_(None))
+        .all()
+    )
+    if not rows:
+        return 0
+    for row in rows:
+        try:
+            facts = json.loads(row.facts or "[]")
+        except (TypeError, ValueError):
+            facts = []
+        officials = _find_related_officials(row.title, row.summary or "", facts, db)
+        row.principal_actor = _principal_actor(row.title, row.summary or "", officials)
+    db.commit()
+    logger.info("Labelled the principal actor of %d earlier issues", len(rows))
+    return len(rows)
 
 
 def _cleanup_old_unposted_issues(db: Session) -> int:

@@ -77,6 +77,7 @@ from app.pipeline import (
     vector_store,
 )
 from app.pipeline.analyze import document_authority
+from app.pipeline.analyze import story_actor
 from app.pipeline.analyze.action_center import get_action_refresh_state
 from app.pipeline.analyze.bill_learning import get_health_metrics
 from app.pipeline.analyze.ollama_client import get_llm_stats
@@ -1897,6 +1898,105 @@ def _coerce_counts(raw) -> dict[str, int] | None:
         str(k): v for k, v in raw.items()
         if isinstance(v, int) and not isinstance(v, bool)
     }
+
+
+_ACTOR_CLASS_NAMES = {
+    "us_gov": "U.S. government (no official named)",
+    "us_election": "U.S. elections",
+    "us_foreign": "U.S. foreign policy",
+    "us_policy_issue": "U.S. policy issue",
+    "us_courts": "U.S. courts",
+    "foreign_politics": "Foreign politics",
+    "foreign_conflict": "Foreign conflict",
+    "business": "Business",
+    "crime": "Crime",
+    "human_interest": "Human interest",
+    "science_health": "Science and health",
+    "sports_ent": "Sports and entertainment",
+    "disaster": "Disaster",
+    "other": "Other",
+}
+
+
+def _actor_names(labels: set[str], db: Session) -> dict[str, str]:
+    """A readable name for each principal-actor label (story_actor)."""
+    names: dict[str, str] = {}
+    by_branch: dict[str, list[str]] = {}
+    for label in labels:
+        if label == story_actor.PRESIDENT:
+            president = db.query(President.name).filter(President.is_current.is_(True)).scalar()
+            names[label] = f"President {president}" if president else "The president"
+        elif label.startswith("class:"):
+            names[label] = _ACTOR_CLASS_NAMES.get(label[6:], label[6:])
+        else:
+            branch, _, ident = label.partition(":")
+            by_branch.setdefault(branch, []).append(ident)
+    for branch, model in (("senate", Senator), ("house", Representative), ("scotus", Justice)):
+        ids = by_branch.get(branch)
+        if ids:
+            for ident, name in db.query(model.id, model.name).filter(model.id.in_(ids)).all():
+                names[f"{branch}:{ident}"] = name
+    for label in labels:
+        names.setdefault(label, label)
+    return names
+
+
+@router.get("/actor-concentration", dependencies=[Depends(require_admin)])
+def admin_actor_concentration(
+    weeks: Annotated[int, Query(ge=1, le=52)] = 12, db: Session = Depends(get_db),
+) -> dict:
+    """Principal-actor concentration of the Action Center's news issues, per
+    ISO week (Monday first), oldest first, the current week last.
+
+    Each issue counts once, in the week of its ``date`` (the last day a
+    refresh published it), by its ``principal_actor`` (story_actor: the
+    official named first in its headline, else the kind of story). ``hhi``
+    is the Herfindahl index of those actors, the sum of squared shares: 1.0
+    when one actor leads every issue, lower as the lead spreads; null for a
+    week with no labelled issue. ``top`` is the most frequent actor and its
+    count, ``president`` the issues the sitting president leads, and
+    ``noGovernment`` the issues whose class is one in which no government
+    acts (business, crime, a disaster...). Primary-source drafts (roll calls,
+    rules) are left out: their subject is the record, not a story choice.
+    """
+    today = datetime.now(_UTC).date()
+    monday = today - timedelta(days=today.weekday())
+    starts = [monday - timedelta(weeks=n) for n in range(weeks - 1, -1, -1)]
+    rows = (
+        db.query(ActionIssue.date, ActionIssue.principal_actor)
+        .filter(
+            ActionIssue.source_type.is_(None),
+            ActionIssue.principal_actor.is_not(None),
+            ActionIssue.date >= starts[0].isoformat(),
+        )
+        .all()
+    )
+    by_week: dict[str, list[str]] = {s.isoformat(): [] for s in starts}
+    for day, actor in rows:
+        try:
+            d = datetime.strptime(day, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        key = (d - timedelta(days=d.weekday())).isoformat()
+        if key in by_week:
+            by_week[key].append(actor)
+    names = _actor_names({a for actors in by_week.values() for a in actors}, db)
+    out = []
+    for start, actors in by_week.items():
+        counts: dict[str, int] = {}
+        for a in actors:
+            counts[a] = counts.get(a, 0) + 1
+        top = max(counts, key=counts.get) if counts else None
+        hhi = story_actor.herfindahl(actors)
+        out.append({
+            "weekStart": start,
+            "issues": len(actors),
+            "hhi": round(hhi, 3) if hhi is not None else None,
+            "top": {"label": top, "name": names[top], "issues": counts[top]} if top else None,
+            "president": counts.get(story_actor.PRESIDENT, 0),
+            "noGovernment": sum(n for a, n in counts.items() if not story_actor.has_government_actor(a)),
+        })
+    return {"weeks": out}
 
 
 @router.get("/action-metrics", dependencies=[Depends(require_admin)])
