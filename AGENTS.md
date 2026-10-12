@@ -878,9 +878,23 @@ can't tell a prefetch from a click.
 Page-load timings (`POST /api/track-timing`, `PageLoadTiming`) are counted too,
 and deliberately carry even less: the browser reports one cold load's Navigation
 Timing, and the server keeps only a counter per (day, route template, metric,
-bucket) — no hash, no User-Agent, no exact duration. The endpoint reads nothing
-about the caller at all. Keep it that way: a timing row that could be joined to
-a `SiteVisit` would turn a performance histogram into a per-visitor log.
+bucket, device class) — no hash, no User-Agent, no exact duration. The endpoint
+reads nothing about the caller at all. The device class (desktop, tablet,
+mobile; 2026-10) is decided by the page from its own pointer and screen size
+(`deviceClass` in `LoadTimingBeacon.tsx`) and sent as one of those three words,
+which validation enforces — reading the User-Agent there would have been the
+first header the endpoint ever read. A browser under automation
+(`navigator.webdriver`) sends nothing. Keep it that way: a timing row that could
+be joined to a `SiteVisit` would turn a performance histogram into a per-visitor
+log.
+
+The admin dashboard's headline traffic figures are the two that measure people:
+**confirmed visitors** (`SiteVisit` from `CONFIRMED_VISITS_SINCE`, the first
+whole day a visit counted only once the browser ran the page; null before it,
+when the stored count was mostly automation) and **first-paint loads** (cold
+loads whose browser reported a first contentful paint, from the timing
+histogram). Raw `uniqueVisitors` stays in `GET /api/admin/visitor-stats` for
+history, but is not shown as a visitor count.
 
 Public API and MCP use (`ApiRequestCount`) is counted the same way: one
 counter per (day, endpoint, channel, status), recorded by the public
