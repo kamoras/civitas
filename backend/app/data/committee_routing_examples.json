@@ -1,0 +1,4252 @@
+{
+ "_source": "Hand-labelled Action Center issues for committee routing (app/committee_routing.py): three seeded random samples (220, then 120 and 120 more) of the confirmed, non-duplicate issues the production pipeline published 2026-06-26 to 2026-10-11. text is what routing embeds (title. summary), with people's names replaced by '[name]'. house / senate are the committee codes (app/data/committee_jurisdictions.json) in each chamber with jurisdiction over the story, per _rubric; an empty list means none does. Labelled 2026-10-11.",
+ "_rubric": "Label the committee(s) a bill responding to the story would be referred to under House Rule X / Senate Rule XXV (or the authorizing committee of the agency the story is about), in each chamber; more than one when the story spans subjects or jurisdiction is shared. None for stories with no federal policy subject: campaign horse races and polls, foreign events with no U.S. government actor, crime and trials of private people, disasters and weather with no government response, business, sports, entertainment. A Senate-only matter (a nomination, the filibuster) has no House committee.",
+ "examples": [
+  {
+   "date": "2026-06-26",
+   "text": "KPMG's Self-Destruction Signals Big Four Accounting Firm Concerns. KPMG, a prominent accounting firm, has announced it will no longer audit public companies, signaling concerns among the Big Four accounting firms about the future of the industry.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-06-26",
+   "text": "AI and Tech Stocks: Market Reactions and Regulatory Responses. Financial regulators are scrambling to adapt to the rise of artificial intelligence (AI) and related technologies, while AI and chip firms are driving a rebound in onshore initial public offerings (IPOs). Tech stocks have seen a decline as Apple's price hikes have added to tech jitters, and the US equity market has recorded weekly outflows. The Russell rebalance could add volatility to SpaceX, and the Chinese AI and chip firms are reshaping South Korea's economy.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-06-26",
+   "text": "Volkswagen Faces Largest Job Cuts and Plant Closures in Germany. German news outlets report that Volkswagen is considering up to 100,000 job cuts and four plant closures as part of a major restructuring effort, citing sources.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-27",
+   "text": "Europe faces deadly heatwave as climate change intensifies. Europe is experiencing a deadly heatwave, with temperatures breaking records across the continent. The event is expected to move east and south, posing significant risks to public health and infrastructure. Scientists attribute the extreme weather to climate change, emphasizing the urgent need for mitigation and adaptation measures.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-27",
+   "text": "U.S. Strikes Iran After Drone Targeting Cargo Ship in Strait of Hormuz. The U.S. military carried out fresh strikes against Iran following a drone attack on a cargo ship in the Strait of Hormuz, escalating tensions with Iran.",
+   "house": [
+    "HSAS",
+    "HSFA"
+   ],
+   "senate": [
+    "SSAS",
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-06-27",
+   "text": "Italian Prime Minister [name] Re-election Bid Faces Challenges Amid [name] Decline. Italian Prime Minister [name] re-election bid is facing challenges as her coalition partner, [name], is losing support. This decline could impact [name] ability to secure a majority in the upcoming election.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-28",
+   "text": "[name] Children Separated for False Police Report. Former U.S. Transportation Secretary [name] briefly separated from his twins after a false police report, which he says was among the darkest hours of his life.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-29",
+   "text": "Murder Trial of [name] Resumes. U.S. District Court in North Carolina resumes the murder trial of [name], who remains in prison for financial crimes but denies the 2021 shooting deaths of his wife and son.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-29",
+   "text": "3 Million Americans Drop Obamacare Coverage Due to Subsidy Expiration. The U.S. Department of Health and Human Services reports a 13% drop in Obamacare coverage as federal subsidies expire, with health analysts attributing the trend to the Jan. 1 deadline rather than a crackdown.",
+   "house": [
+    "HSWM",
+    "HSIF"
+   ],
+   "senate": [
+    "SSFI",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-06-29",
+   "text": "Supreme Court Ruling on [name] Efforts to Remove Federal Reserve Board Member. The Supreme Court ruled against President [name] effort to remove Federal Reserve Board member [name], upholding other [name] firings but striking down a 91-year-old precedent preventing presidents from removing members of independent agencies.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-06-29",
+   "text": "Professor [name] to advise on [name] alleged foes investigation. A conservative law professor, known for his views on presidential power, will advise a team investigating alleged conspiracies against [name].",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-06-29",
+   "text": "South Korean Tech Giants Invest $518 Billion in Chip Plants Amid AI Demand. South Korean tech giants plan to invest $518 billion in chip plants to meet rising demand for artificial intelligence, with officials dismissing concerns about power and water availability.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-29",
+   "text": "Supreme Court Declines to Reconsider New York Times v. Sullivan. The Supreme Court has declined to reconsider the landmark 1964 case New York Times Co. v. Sullivan, which made it harder for public figures to win libel lawsuits due to the requirement of proof of knowledge or reckless disregard for the truth.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-06-29",
+   "text": "250th Anniversary of American Independence: Security Challenge in Washington. The 250th anniversary of the United States' independence is expected to bring hundreds of thousands of visitors to Washington, D.C., creating a security challenge for the city.",
+   "house": [
+    "HSHM",
+    "HSGO"
+   ],
+   "senate": [
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-06-30",
+   "text": "Former NBA Players [name], [name] Charged in Gambling Scandal. Two former NBA players, [name] and [name], have been charged in a gambling scandal involving the Milwaukee Bucks. Authorities claim [name] tailored his play while with the team in 2024, based on bets on his performance, and others benefited, including [name].",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-30",
+   "text": "Colorado Senate Primary: [name] Faces Progressive Challenge. In Colorado's Senate primary, incumbent [name] is facing a primary challenge from [name], a progressive challenger, in a race for a second term.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-30",
+   "text": "Chinese tycoon sentenced to 30 years in U.S. prison for fraud conviction. Chinese billionaire [name], branded as a China critic, was sentenced to 30 years in U.S. prison for fraud conviction. He claimed to have come to the U.S. to destroy the Chinese Communist Party but instead diverted investor money to live lavishly.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-30",
+   "text": "U.S. FDA Expands Cheese Recall Over Possible Listeria Contamination. The U.S. Food and Drug Administration (FDA) has expanded a recall of certain cheese products due to possible listeria contamination. Consumers are advised not to eat, sell, or serve the recalled products, and they must return them to the place of purchase for a full refund.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-06-30",
+   "text": "Communist-Loving Democrats Face Scrutiny Over [name] Allegations. Communist-loving Democrats are facing scrutiny after [name], a former aide to the Democratic Party, accused [name] of being a communist and a 'traitor' to the party. The allegations have sparked a debate about the influence of the Democratic Party on its members.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-30",
+   "text": "India: Journalists Condemn Denial of Voting and Passport Rights to [name]. Indian journalists have condemned the denial of voting and passport rights to prominent editor [name], who has alleged he has been unable to renew his passport after his name was deleted from the electoral rolls.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-30",
+   "text": "Vice President [name] Iran War Impact and [name] GOP Scrambling. Vice President [name] is facing pressure from Republican rivals, including [name], as the 2028 Republican presidential nomination race intensifies. The Iran war is a key issue in the race, with Pence's stance on the conflict potentially affecting his chances of becoming the nominee.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-30",
+   "text": "Texas Board of Education Approves Mandatory Bible Reading for Public School Students. The Republican-controlled Texas Board of Education has approved a new mandatory reading list that includes passages from the Bible for public school students, becoming the first state in the country to do so.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-06-30",
+   "text": "U.S.-Cuba Talks Standstill, Free-Market Reforms in Cuba. The U.S. has imposed new sanctions on Cuban President [name] and other officials, while Cuba continues to implement free-market reforms despite the sanctions.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-06-30",
+   "text": "Michigan Governor Threatens to Pull Troops from D.C. if Used for [name] Task Force. Michigan Governor [name] is threatening to withdraw National Guard troops from Washington, D.C., unless they are used for the city's America 250 celebrations, citing concerns about the [name] administration's presence.",
+   "house": [
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-07-01",
+   "text": "U.S. Policy: Disability Rights vs. [name] Administration. The [name] administration is facing criticism from disability rights advocates who fear it may be moving towards institutionalizing people with disabilities, potentially infringing on their rights to education and community integration.",
+   "house": [
+    "HSED"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-01",
+   "text": "[name] Shows Off Fashion Creation as 2nd Round Gets Underway at Wimbledon. Japanese tennis player [name] showcased her latest fashion creation during the second round of the Wimbledon Championships, highlighting her fashion sense alongside her tennis skills.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-01",
+   "text": "Two People Arrested for Unfurling Banner at Top of Empire State Building. Two individuals were arrested after unfurling a banner about 'the power of love' at the top of the Empire State Building's antenna.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-01",
+   "text": "Democratic Socialist [name] Seeks to Ban Corporate PAC Donations in Congress. Democratic socialist [name], the winner of the Democratic primary in Colorado's 1st Congressional District, is vowing to oppose any leader who accepts campaign donations from corporate PACs. [name], a 29-year-old political newcomer, is among a growing number of Democrats pushing for institutional change within the party.",
+   "house": [
+    "HSHA"
+   ],
+   "senate": [
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-07-01",
+   "text": "Australia sues Amazon over alleged unfair contracts with subscribers. The Australian Competition and Consumer Commission (ACCC) has filed a lawsuit against Amazon, alleging the e-commerce giant has violated consumer protection laws by making unfair contracts with its subscribers.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-01",
+   "text": "[name] Flag March in London: A Warning to the World. [name], the street artist known for his provocative and often satirical works, is staging a flag march in London. The event is a commentary on contemporary issues and a call for change.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-01",
+   "text": "ICE Agent Seeks Out Man Who Sent Harsh Email Five Months Ago. A federal agent in Rochester, New York, tracked down a man who sent a threatening email five months ago to ICE, after the email was found to be illegal.",
+   "house": [
+    "HSHM",
+    "HSJU"
+   ],
+   "senate": [
+    "SSGA",
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-01",
+   "text": "EPA Approves 'Forever Chemicals' Pesticides, Disputes Label. The U.S. Environmental Protection Agency (EPA) has approved three new pesticides that may be considered 'forever chemicals' under an international definition, despite the agency's dispute with the characterization.",
+   "house": [
+    "HSAG"
+   ],
+   "senate": [
+    "SSAF",
+    "SSEV"
+   ]
+  },
+  {
+   "date": "2026-07-01",
+   "text": "Rural Broadband Funding Delayed. The federal rural broadband internet program, worth about $20 billion, will be subject to new guidance starting this summer.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-01",
+   "text": "Tax Reform: U.S. Congress Discusses Sports Taxation Changes. The U.S. House Ways and Means Committee is considering changes to how collegiate and professional sports are taxed in the tax code, with both Republican and Democratic members showing interest in the topic.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-07-01",
+   "text": "Catholic Church Breakaway Sect Seeks to Split from Vatican. A breakaway Catholic sect, the Society of Saint Pius X, has organized a ceremony in the Swiss Alps to ordain bishops, warning of schism within the Catholic Church.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Removing Syria from State Sponsor of Terrorism List. Bipartisan lawmakers are urging the [name] administration to remove Syria from the list of state sponsors of terrorism, citing progress in the country's security situation since the end of 2024.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Venezuela Earthquake Survivors: Trapped for Days, Now Free. Venezuela earthquake survivors, including [name], were freed after eight days trapped under a collapsed car park. The country's government is criticized for its ineffective response to the disaster, with hospitals lacking essential medicines and equipment and daily power outages affecting millions.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Europe Face Deadly Heat Wave. Millions of Americans are expected to face dangerous temperatures due to a heat wave that is sweeping across the East Coast and Midwest. The National Weather Service predicts that more than 175 million Americans will be exposed to either major or extreme heat risk by Friday.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "U.S. Policy Debates: Federal Bills and State Actions. The U.S. Congress is grappling with a series of federal and state policies, including the Pentagon policy bill, the SAVE America Act, and a federal law banning late voter roll purges. The Senate is also facing a standoff between two senators, [name] and [name], over spending priorities.",
+   "house": [
+    "HSHA",
+    "HSAS"
+   ],
+   "senate": [
+    "SSRA",
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Asian Stocks Decline as Chip Shares Suffer. Asian stock markets experienced a decline on Thursday, with a notable drop in chip shares, which have been a key driver of the region's economic performance.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Gaza Patients Face Delays for Medical Evacuation. Gaza's Hamas-run health ministry estimates that 300 Palestinians referred for treatment abroad have died since the ceasefire began.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "U.S. Job Growth Slows in June. U.S. employers reported a decrease in job growth in June, adding only 57,000 jobs compared to 114,000 in May, indicating continued caution in the job market.",
+   "house": [
+    "HSED"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "U.S. boy dies from rabies after bat lands on face. A 12-year-old boy in Ontario, Canada, died from rabies after a bat landed on his face during a vacation. This is the first death from rabies in Canada since 1924.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "[name] Pleads Guilty in Case Against [name]. [name], a rapper, pleaded guilty to charges related to a case against [name], a fellow rapper. The case involves alleged harassment and threats, and Shiesty's plea comes after a video emerged showing him pressuring a record label to release a [name] song.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Year in Review. The U.S. and China have been at the center of significant events and developments in 2026, including trade tensions, technological advancements, and diplomatic maneuvers.",
+   "house": [
+    "HSFA",
+    "HSWM"
+   ],
+   "senate": [
+    "SSFR",
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "California Bans 'Sell by' Food Labels, FDA Lets Nicotine Pouches Market as Safer Than Cigarettes. California enacted a law banning 'sell by' food labels, while the FDA approved Zyn, a nicotine pouch brand, to market its products as safer than cigarettes.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Legal Battles Across the Country Could Complicate Midterms. Legal battles are currently underway across the United States, potentially complicating the upcoming midterm elections. These battles could influence how elections are run in the fall.",
+   "house": [
+    "HSHA"
+   ],
+   "senate": [
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Trade tensions and Chinese tech exports. Asian stocks declined as chip shares fell, while the U.S. lifted an export ban on advanced AI tools from China. The U.S. also reported hiring trends in the job market.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "USAID Dissolution: One Year Later, People Are Dying. USAID, a central tool of American foreign policy, was dismantled as an independent agency one year ago. The agency's dissolution has led to an increase in deaths in countries where it was previously active.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Mexico Ends 40-Year Knockout Drought in World Cup. Mexico won the 2022 World Cup, ending a 40-year wait for a knockout appearance in the tournament.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "[name] and [name] Clash Over Sanctuary Policies at House Hearing. Lawmakers [name] and [name] argued at a House Judiciary subcommittee hearing on sanctuary policies, leading to a shouting match.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "U.S. Press Corps Ordered to Be LIFTED. A federal judge has ordered the Pentagon to lift a policy requiring journalists to be accompanied by an escort, which was previously applied only to reporters from The New York Times.",
+   "house": [
+    "HSAS",
+    "HSJU"
+   ],
+   "senate": [
+    "SSAS",
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Thai Monks Killed in Road Accident. Nine Thai monks and five lay followers were killed after a truck collided with a procession of nine monks and five lay followers in Thailand.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "U.S. Congress and International Relations: The Role of the U.S. in Global Policy. The U.S. Congress is playing a crucial role in shaping global policy through its involvement in international relations, diplomacy, and foreign aid. The U.S. Congress has a significant influence on U.S. foreign policy, which in turn impacts global issues such as climate change, trade, and national security. The U.S. Congress also plays a role in international relations through its engagement with other countries and international organizations.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-02",
+   "text": "[name] Endorses [name] in Michigan Senate Race. [name] endorses [name] in the Michigan Senate primary, potentially boosting his campaign just before the primary on August 4th.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Congressional Summer: No Action Expected. The U.S. Congress is facing a summer of inaction, with Speaker [name] and Senate Majority Leader [name] acknowledging that the 119th Congress is unlikely to accomplish much.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "[name] and [name] Wedding at Madison Square Garden. [name] and [name] are planning to marry at New York's Madison Square Garden this weekend.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-02",
+   "text": "Private Equity Buying Up U.S. Veterinary Practices. The U.S. veterinary industry is facing a significant shift as private equity firms and large corporations are buying up veterinary practices across the country, leading to concerns about the affordability and quality of care for pets.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-03",
+   "text": "Open source AI's moment: [name] administration's restrictions on private AI model releases spur open-source alternatives. The [name] administration's restrictions on private AI model releases are driving a push for open-source alternatives, as seen in the removal of an AI-generated K-pop video in Hong Kong.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-03",
+   "text": "Moldova's Prime Minister Resigns Amid Political Crisis. Moldova's prime minister has stepped down, leading to the government's resignation. The resignation follows a political crisis involving the country's ruling party.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-03",
+   "text": "[name] Crypto Conflicts: A $1 Billion Billable Year. Former ethics lawyer [name] says President [name] stands alone in having substantial financial conflicts of interest, including a $1 billion billable year from cryptocurrency ventures.",
+   "house": [
+    "HSGO",
+    "HSBA"
+   ],
+   "senate": [
+    "SSGA",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-07-03",
+   "text": "Birthright Citizenship: U.S. Congress and GOP Consider Legislation to Challenge Supreme Court Ruling. The U.S. Congress and Republican lawmakers are exploring ways to challenge the Supreme Court's ruling that birthright citizenship is a constitutional right, following a ruling that upheld the practice. Several GOP members have filed or are planning legislation to try to clamp down on birthright citizenship.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-04",
+   "text": "[name] Scores 19th World Cup Goal, France Advances to Quarterfinals. [name] scored his 19th World Cup goal, extending his record and helping France reach the quarterfinals with a 1-0 win over Paraguay. [name] scored his 20th goal, moving him two ahead of [name] on the all-time list.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-05",
+   "text": "America Celebrates 250th Birthday with Fireworks, Flyovers, and Extreme Weather. The United States celebrated its 250th birthday with a fireworks display, flyovers, and extreme weather across the country. President [name] addressed the nation before the fireworks show.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-05",
+   "text": "[name] Visits Lampedusa to Highlight Migrant Crisis. [name] will visit Lampedusa, Italy, to pray with migrants and honor those who died trying to cross the Mediterranean to Europe. The Pope emphasizes the importance of welcoming immigrants and protecting human life.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-05",
+   "text": "Democratic Leadership Weakness and Democratic Socialists' Rise. Former independent [name] blames the Democratic Party's 'void in leadership' on internal splits over democratic socialist candidates, while Democratic socialists gain momentum, posing a challenge for House Minority Leader [name].",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-05",
+   "text": "Cape Verde Footballers Return Home After World Cup Run. Thousands of fans welcomed Cape Verde's football team home after their historic World Cup run, which ended with a dramatic defeat against Argentina.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-05",
+   "text": "Nigeria's Nationals Killed in South African Anti-Migrant Violence. Nigeria's government claims one of its nationals was killed by police officers using",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-05",
+   "text": "[name] Wins John Deere Classic. [name] secured victory in the John Deere Classic golf tournament with a strong performance, including a late assist from [name].",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-05",
+   "text": "Colorado Democrat [name] Defeats Incumbent in Primary. Colorado Democrat [name], a 15-term incumbent, defeated her insurgent rival in the primary election, highlighting the fading influence of seniority in Congress.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-06",
+   "text": "Pastor Freed from Prison in China. A pastor of a Chinese underground church, detained in October, has been released from prison after U.S. President [name] requested his release during a meeting with Chinese leader [name].",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-06",
+   "text": "White House Labels Smithsonian Leaders as 'Extreme' Activists. The White House has released a 162-page report that labels Smithsonian leaders as 'extreme' activists, accusing them of trying to impose their ideology on American history.",
+   "house": [
+    "HSHA"
+   ],
+   "senate": [
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-07-06",
+   "text": "U.S. and Russia: Gun Control and the 250th Anniversary of the Constitution. The [name] administration is taking steps to roll back gun regulations, including a major effort to roll back gun restrictions for public safety. Some companies, foundations, and states have announced contributions to the accounts, but their impact is uncertain. The administration is also taking steps to expand Second Amendment rights nationwide, despite the pledge made by [name] during his campaign.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-06",
+   "text": "Rodeo, Fighter Jets, and US Border Patrol: [name] Big Recruitment Drive. The U.S. is using a rodeo as part of a recruitment drive to attract more people to the Space Force and Customs and Border Patrol.",
+   "house": [
+    "HSAS",
+    "HSHM"
+   ],
+   "senate": [
+    "SSAS",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-07-06",
+   "text": "U.S. Immigration and Afghan Nationality: A Case of Allergic Reaction and Death. An Afghan national who died in U.S. Immigration and Customs Enforcement (ICE) custody in 2021 suffered an allergic reaction and died of complications from the reaction, according to a death certificate.",
+   "house": [
+    "HSJU",
+    "HSHM"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-07-06",
+   "text": "China's Self-Driving Car Firms Expand with EV Supply Chain Advantage. China's self-driving car firms are leveraging their country's strong electric vehicle (EV) supply chain to expand globally, following a similar strategy to Tesla.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-06",
+   "text": "Kentucky Voters Get Wrong Ballots for Years. Some voters in Louisville, Kentucky, have been voting with the wrong ballots in elections for several years. An investigation by Louisville Public Media found that the issue has been ongoing.",
+   "house": [
+    "HSHA"
+   ],
+   "senate": [
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-07-06",
+   "text": "Russia's Missile and Drone Attacks on Ukraine Kill at Least 22 in Kyiv Region. Russia has launched a series of missile and drone attacks on Ukraine, killing at least 22 people in the Kyiv region. This highlights gaps in Ukraine's air defenses, particularly the need for more U.S.-made Patriot interceptor missiles.",
+   "house": [
+    "HSFA",
+    "HSAS"
+   ],
+   "senate": [
+    "SSFR",
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-07-06",
+   "text": "Extreme Heat and Wildfires: Deadly Consequences. In the United States, New Jersey and France are experiencing severe heatwaves that have led to multiple deaths, including 19 in New Jersey and 10,000 evacuations in France.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-06",
+   "text": "Hamas Announces Dissolution of Government in Gaza. Hamas has announced the dissolution of its government in Gaza, with the intention of transferring power to a UN-backed committee. The move is unclear as to whether it will lead to meaningful change on the ground.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-06",
+   "text": "Planned Parenthood Reacquires Federal Funding, Angering Anti-Abortion Conservatives. Anti-abortion leaders are furious that Planned Parenthood, which regained access to federal funding, has been able to bill Medicaid for non-abortion care, including contraception, one year after Republicans cut it off from Medicaid.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-07-06",
+   "text": "U.S. Soccer and FIFA: [name] Red Card Controversy. The United States soccer team faces criticism after FIFA revoked a red card for [name], leading to a World Cup clash with Belgium. President [name] praises the decision, while FIFA President [name] calls for a review.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-06",
+   "text": "Sudan War Claims More Than 300 Children's Lives in 6 Months. The United Nations Children's Fund (UNICEF) reports that more than 300 children have been killed or injured in the ongoing conflict in Sudan between the Sudanese military and the Rapid Support Forces since April 2023.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-06",
+   "text": "DOGE Officially Shuts Down. The Department of Government Efficiency (DOGE) officially closed its operations on July 4, 2023, following job and funding cuts throughout the federal government.",
+   "house": [
+    "HSGO"
+   ],
+   "senate": [
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-07-07",
+   "text": "Birthright Citizenship: A New Frontier for the Republican Party. Hard-line immigration restrictionists are interpreting the Supreme Court's decision to uphold birthright citizenship as a new 'Roe' for their movement, similar to how the anti-abortion movement viewed the Supreme Court's decision in Roe v. Wade. This has led to planning for potential changes in immigration policies.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-07",
+   "text": "Mexican Soccer Team's Loss to England in World Cup Final. The Mexican national soccer team suffered a 3-2 defeat to England in the World Cup final, ending their campaign.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-07",
+   "text": "New Student Loan Rules Could Impact Graduate Programs. The U.S. Department of Education is considering changes to federal student loan rules that could affect graduate programs, including professional degrees. A federal judge temporarily blocked some of these changes, including those affecting graduate programs.",
+   "house": [
+    "HSED"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-07",
+   "text": "Michigan Senate Race: Democratic Candidates Face Off. Democratic candidates for the Michigan Senate seat will debate on Tuesday, with coverage starting at 6:30 p.m. EDT on WOOD TV+ and woodtv.com.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-07",
+   "text": "Mexico Discuss Border Security and Migration. U.S. and Mexico officials discussed border security and migration at a high-level meeting in Washington, D.C., focusing on joint efforts to address the ongoing crisis at the southwestern border.",
+   "house": [
+    "HSHM",
+    "HSFA"
+   ],
+   "senate": [
+    "SSGA",
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-07",
+   "text": "India's Censorship Controversy: [name] Film Vanishes from Streaming. A [name] film, '[name]: The Movie', was unexpectedly removed from streaming platforms in India after two days of its release, sparking controversy over censorship and legal battles.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-07",
+   "text": "U.S. World Cup Exit, Belgium's Victory. The United States' World Cup hopes were dashed as Belgium won a 4-1 victory, knocking the U.S. out of the tournament. The U.S. faces Belgium in the final group stage match.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-07",
+   "text": "India's Ram Temple Overhauls Board After Alleged Theft of Donations. India's Ram Temple has overhauled its board after allegations of theft of donations, including cash, jewellery, gold, and silver, from devotees.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-07",
+   "text": "Hungary's Public News Broadcasts Halted to Scrutinize Orban Era. Hungary's main state TV channel has halted its broadcasts, prompting a message of apology, as part of efforts to scrutinize the country's Orban-era propaganda.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-08",
+   "text": "[name] Administration Cuts Teen Pregnancy Prevention Grants. The [name] administration abruptly canceled grants for teen pregnancy prevention programs, causing confusion and concern among health departments, universities, and nonprofit organizations that had been working on adapting to the president's executive orders.",
+   "house": [
+    "HSIF",
+    "HSAP"
+   ],
+   "senate": [
+    "SSHR",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-07-08",
+   "text": "DOJ Threatens Arrest of State Election Officials for Noncitizen Voting. The Department of Justice is threatening to arrest state election officials if a single noncitizen votes in their state elections. This follows a letter demanding compliance with laws on noncitizen voting.",
+   "house": [
+    "HSHA",
+    "HSJU"
+   ],
+   "senate": [
+    "SSRA",
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-08",
+   "text": "Vice President [name] Discusses Federal Antifraud Efforts. Vice President [name], who was appointed by President [name] as the 'fraud czar', will speak on federal efforts to combat fraud. The focus is on alleged fraud in social service programs and within the administration.",
+   "house": [
+    "HSGO"
+   ],
+   "senate": [
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-07-08",
+   "text": "UK Politician [name] Resigns and Plans to Run Again Amid Financial Scrutiny. [name], an anti-immigration politician in the UK, has resigned from Parliament and announced plans to run again. Critics have denounced his move as a ploy to avoid a parliamentary investigation into his finances.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-08",
+   "text": "California Colleges Disclose Military Weapons Stockpile. California colleges have revealed a stockpile of military weapons, including AK-47s, AK-74s, and M-16s, after a CalMatters investigation.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-09",
+   "text": "[name] Pre-Shooting Video: A Closer Look. A preliminary hearing is set to determine whether [name], accused of killing conservative activist [name], will stand trial. The court hears a video showing the suspect interacting with [name] staff before the shooting.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-09",
+   "text": "NATO Summit: Unity in Name Only?. NATO Secretary-General [name] insists there is 'unity' among member states, but the BBC's security correspondent questions if that is really the case.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-09",
+   "text": "FBI Director [name] Spending: More Transparency Needed. The FBI director [name] spending has been the subject of allegations of personal gain, leading to increased calls for more transparency in his financial dealings.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-09",
+   "text": "U.S. Senate Panel Reschedules Confirmation Hearing for [name]. The U.S. Senate panel has rescheduled the confirmation hearing for [name], following the cancellation of the initial hearing due to President [name] unilateral decision.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-09",
+   "text": "Marine Corps Faces 'Significant' Equipment Maintenance Challenges. The Marine Corps is experiencing significant issues with maintaining its weapons due to contractors' failure to provide repair data, leading to a second-ranking general's letter to a Senate panel.",
+   "house": [
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-07-09",
+   "text": "Former [name] Supports Younger Political Leaders. Former Republican [name] expressed support for younger political leaders, saying that people over 80 should not be running the world or the country.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-09",
+   "text": "England's Class Divide Shapes [name] U.K. Presidency. [name], the likely next prime minister of the United Kingdom, has faced criticism for his approach to class issues in Manchester, which could impact his ability to govern effectively.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-09",
+   "text": "Olympic Athlete Pleads Not Guilty. [name], a three-time Olympic canoe racer, pleaded not guilty to charges of damaging the Reflecting Pool in Washington, Ukraine, and using long-range drones in Russia. Authorities in China have reported flooding that has killed at least 39 people.",
+   "house": [
+    "HSJU",
+    "HSGO"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-07-10",
+   "text": "Architectural Triumph: [name] Arch Proposal Clears Initial Review. President [name] proposal for a 250-foot arch across the Potomac River from Washington, D.C., has cleared an initial federal review, allowing the plans to proceed despite pushback from historic and architectural preservationists.",
+   "house": [
+    "HSII"
+   ],
+   "senate": [
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-07-10",
+   "text": "Florida Airport Renamed for [name], But Legal Experts See Potential Loopholes. The [name] Organization is renaming the Miami International Airport in Florida for President [name], who is the first president to have an airport named after him while in office. Legal experts suggest potential loopholes that could benefit [name].",
+   "house": [
+    "HSPW"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-10",
+   "text": "Maine Senate Race: [name] Withdraws from Race. Democratic candidate [name] has formally withdrawn from the Maine Senate race, allowing the party to select a new nominee.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-10",
+   "text": "[name] Unveils New Album Inspired by Family Roots. [name], a Latin rock band from Ecuador and Peru, has released a new album that blends traditional folk and Western sounds with their family's musical heritage, inspired by their homeland.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-10",
+   "text": "Hungary protests against new prime minister's plans to oust President [name]. Hungary's new prime minister, [name], has announced plans to remove political appointees and heads of institutions viewed as having been part of [name] 'mafia' to dismantle what he calls [name] 'mafia'. This move has sparked protests from [name] allies.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-10",
+   "text": "Mexico Revisit Immigration Policies Amidst Gun Violence. Following a fatal shooting during a traffic stop in Houston, U.S. and Mexican officials are revisiting their immigration policies. The incident has reignited public scrutiny of border enforcement and immigration practices.",
+   "house": [
+    "HSJU",
+    "HSHM"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-07-10",
+   "text": "U.S. Supreme Court: LGBTQ Rights Challenges Continue. The U.S. Supreme Court concluded its most consequential term for LGBTQ rights, upholding state bans on transgender athletes in sports. However, legal challenges to these bans are intensifying, with an appeals court rejecting an effort to defend a Texas law offering in-state tuition to undocumented students.",
+   "house": [
+    "HSJU",
+    "HSED"
+   ],
+   "senate": [
+    "SSJU",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-10",
+   "text": "The Power of Political Satire: A Window into Democracy's Strength. Political satire is a powerful tool for challenging authority, exposing hypocrisy, and testing the boundaries of free expression. The podcast 'In Pursuit of Happiness' explores this phenomenon with interviews of Joshua [name] and scholar Sophia McClennen.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-10",
+   "text": "EPA Proposes Loosening Truck Pollution Controls. The [name] administration announced plans to reduce pollution controls for heavy-duty trucks, aiming to ease emissions regulations.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEV"
+   ]
+  },
+  {
+   "date": "2026-07-10",
+   "text": "China Reach Deal on Climate Change. The United States and China have reached a deal to reduce greenhouse gas emissions, aiming to limit global warming to 1.5 degrees Celsius above pre-industrial levels. The agreement includes specific targets for both countries and outlines a framework for future cooperation.",
+   "house": [
+    "HSFA",
+    "HSIF"
+   ],
+   "senate": [
+    "SSFR",
+    "SSEV"
+   ]
+  },
+  {
+   "date": "2026-07-10",
+   "text": "Venezuelan Health Crisis Spreads in Quake-Stricken Communities. Venezuelan health conditions worsen as humanitarian crisis intensifies in quake-hit northern state of La Guaira.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-10",
+   "text": "U.S. Administration Weakens Endangered Species Protection. The [name] administration has rescinded a key protection for endangered species under the Endangered Species Act, effectively weakening protections for wildlife.",
+   "house": [
+    "HSII"
+   ],
+   "senate": [
+    "SSEV"
+   ]
+  },
+  {
+   "date": "2026-07-11",
+   "text": "Apple Sues OpenAI Over Trade Secrets. Apple has filed a lawsuit against OpenAI, accusing the company of stealing trade secrets related to its ChatGPT hardware project.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-11",
+   "text": "East Asia Braces for Typhoon Bavi as Landslides Kill 15 in Philippines. Typhoon Bavi, a 1,000 km-wide storm, is expected to hit Taiwan and southeastern China, causing landslides and fatalities. The Philippines reports 15 deaths due to the storm.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-11",
+   "text": "U.S. Releases Fourth Installment of UFO Files. The U.S. government has published a fourth installment of unresolved UFO cases, promising to release more files on a rolling basis.",
+   "house": [
+    "HSGO",
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS",
+    "SLIN"
+   ]
+  },
+  {
+   "date": "2026-07-11",
+   "text": "U.S. Democrat [name] Detained by Israeli Settlers in West Bank. U.S. Representative [name], 49, was detained for over an hour by Israeli settlers and IDF soldiers in the West Bank, according to [name].",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-12",
+   "text": "Wildfires and Firefighters. The United States and Spain are dealing with wildfires and the efforts to extinguish them. In Spain, a wildfire has killed at least 12 people, while in the United States, a couple was rescued from a ravine after being trapped by the blazes.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-12",
+   "text": "House GOP Leaders Vote on Florida Rep. [name] Reinstatement. House GOP leaders are holding a vote to stop the changing of the clocks, hoping it will convince Rep. [name] to stand down in her rebellion.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-12",
+   "text": "New York Times Journalists Subpoenaed Over Air Force One Reporting. The New York Times is facing subpoenas from the U.S. Department of Justice over its reporting on the Air Force One plane gifted to President [name] by Qatar. The subpoenas are expected to force grand jury testimony next week.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-13",
+   "text": "U.S. Disability Benefits Bill: A Year in the Making. Rep. [name], a Republican from Nebraska, discussed the long delay in passing a bill that would provide disability benefits, noting it has been a year since the bill was introduced.",
+   "house": [
+    "HSWM",
+    "HSVR"
+   ],
+   "senate": [
+    "SSFI",
+    "SSVA"
+   ]
+  },
+  {
+   "date": "2026-07-13",
+   "text": "Judge Blasts [name] IRS Lawsuit as Filed for 'Improper Purpose', Recommends Attorney Discipline. U.S. District Judge [name] ruled that President [name] lawsuit against the IRS was filed for an 'improper purpose' and recommended that the attorney involved be disciplined.",
+   "house": [
+    "HSWM",
+    "HSJU"
+   ],
+   "senate": [
+    "SSFI",
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-13",
+   "text": "Microsoft's AI Data Centers Carbon Emissions Surge. Microsoft reported a 25 percent increase in carbon emissions in 2025 as it expands its use of AI data centers. The company attributes the rise to the growth of its infrastructure and the discontinuation of non-renewable energy.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-13",
+   "text": "Data Centers Become Flashpoint in Gubernatorial Races. Governors are facing backlash over data centers, leading to political turmoil in races.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-14",
+   "text": "The Promise and Peril of AI in Children's Toys. AI technology is advancing to create toys and robots designed to interact with children, promising a new level of engagement. However, a child-development expert warns that these devices may overshadow the essential human relationships children need.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-14",
+   "text": "Nobel Laureates Warn of AI-Driven Job Displacement and Economic Instability. Nobel laureates, top computer scientists, and technology executives warned that AI could lead to large-scale job displacement and economic upheaval, urging institutions to prepare for the potential risks.",
+   "house": [
+    "HSED",
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR",
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-14",
+   "text": "ICE Misuse of Crowd Control Weapons Against Protests. Immigrations and Customs Enforcement (ICE) officers have used crowd control weapons against protesters 412 times within a year, according to a new report by the Physicians for Human Rights (PHR) and the Human Rights Center at the University of California.",
+   "house": [
+    "HSHM",
+    "HSJU"
+   ],
+   "senate": [
+    "SSGA",
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-14",
+   "text": "Maine Democrats Face Uncertainty After [name] Exit. Maine Democrats are in a state of confusion and uncertainty after former Democratic Senate candidate [name] unexpectedly dropped out of the race for the U.S. Senate, leaving the field open for a primary challenge from another Democrat.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-14",
+   "text": "[name] Pays $5.62 Million to [name]. The U.S. President, [name], has paid $5.62 million to [name], the writer who won a sexual abuse and defamation verdict against him in a civil trial. The payment resolves a lawsuit that [name] had sought to delay as he tried to persuade the Supreme Court to overturn the verdict.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-14",
+   "text": "[name] Testifies Before House on State of U.S. Economy. Federal Reserve Chair [name] will testify before the House Financial Services Committee on the state of the U.S. economy, following declining President [name] approval rating and rising affordability concerns.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-07-14",
+   "text": "China Data Center Buildout Threatens Inflation. The U.S. and China are increasing their investments in data centers, which have led to higher prices for memory chips, computer processors, and electricity, posing a threat to consumer inflation.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEG",
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-16",
+   "text": "Asian teams struggle in recent World Cup cycles. Recent coverage highlights challenges faced by Asian national teams in international competitions, emphasizing ongoing difficulties in reaching advanced stages.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-16",
+   "text": "Acting Attorney General's Independence and Meeting Proposals. Recent discussions highlight tensions around the acting attorney general's ability to act independently and the conditions under which meetings with [name] victims are considered.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-16",
+   "text": "US military hormone screening initiative. Recent reports indicate the United States is initiating hormone screening programs for military personnel to support optimal performance.",
+   "house": [
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-07-16",
+   "text": "[name] administration restores public charge rule for green card applicants. Recent reports indicate the administration is reinstating a policy that permits immigration officials to deny green cards to individuals who have accessed public assistance programs. This change affects how eligibility decisions are made at border and immigration centers.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-16",
+   "text": "[name] confirmation hearing details. Recent coverage discusses [name] upcoming confirmation process, highlighting scrutiny from legislative committees and questions about his relationships with current administration figures.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-18",
+   "text": "House GOP proposes funding bill after midterm elections. Legislators are considering measures to extend government operations beyond the current term, with discussions unfolding ahead of upcoming elections.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-07-18",
+   "text": "Legacy of [name] interview coverage. Recent reports highlight renewed attention on former investor [name] and his past interactions with [name]. Multiple outlets note changes in public perception and legal scrutiny following recent statements.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-19",
+   "text": "Election Updates in South Carolina. Recent developments involve a potential candidate for a Senate position and discussions about filling a vacancy. The situation reflects shifting political dynamics in South Carolina.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-19",
+   "text": "Flood warning systems updated in Texas. New flood sirens and mobile alerts were activated following a severe flood event. Residents reported hearing alerts that differed from previous notifications. The changes aim to improve early warning capabilities after past incidents.",
+   "house": [
+    "HSSY",
+    "HSPW"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-19",
+   "text": "Wildfire smoke spreads across U.S.. Recent reports describe smoke from Canadian and Minnesota wildfires reaching farther into the United States, affecting air quality in multiple regions. Health advisories were issued, and some areas experienced temporary improvements due to forecasted storms.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEV"
+   ]
+  },
+  {
+   "date": "2026-07-19",
+   "text": "New cash handling regulations under consideration. Several businesses are adjusting how they manage change payments, with some adopting new practices to clarify processes.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-07-20",
+   "text": "Spanish and Argentine reactions to World Cup final. Spanish and Argentine supporters expressed mixed emotions after Spain's victory, while Argentine fans voiced disappointment. The match highlighted international fan engagement and local community responses.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-20",
+   "text": "DOJ seeks communications records from NYT reporters. Authorities are requesting phone records and personal contacts of New York Times journalists and their family members to trace sources used in reporting on security matters involving Qatar.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-20",
+   "text": "HIV prevention funding freeze announced. Recent announcements indicate the [name] administration has halted direct federal support for community organizations focused on HIV prevention. This action follows broader shifts in funding priorities.",
+   "house": [
+    "HSIF",
+    "HSAP"
+   ],
+   "senate": [
+    "SSHR",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-07-20",
+   "text": "Cyclosporiasis outbreak investigation updates. Recent testing has not pinpointed the origin of a widespread cyclosporiasis outbreak affecting multiple states. Officials continue to analyze data from various sources, including a lettuce sample from Taylor Farms that was initially flagged as positive.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-20",
+   "text": "[name] China policy and election narratives. Recent reports highlight President [name] cautious approach toward China amid election discussions, while several high-profile nominees are facing upcoming committee votes. The situation reflects broader political tensions as Republicans seek influence ahead of upcoming elections.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-21",
+   "text": "Maine Democrats select new Senate nominee. Several Maine Democrats are advancing a candidate to replace former Senate candidate [name] in the upcoming race. The process reflects internal party decisions aimed at strengthening the Democratic position in the Senate.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-21",
+   "text": "FDA investigation continues over Taylor Farms lettuce. Recent updates highlight ongoing investigation into a lettuce sample linked to a growing cyclospora outbreak, with authorities emphasizing continued monitoring of the source.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-21",
+   "text": "Rotunda tribute announced for Senator [name]. A tribute has been scheduled for Senator [name] following his service at the National Cathedral. The announcement highlights the respect for his contributions and the significance of the event.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-21",
+   "text": "Trade tensions rise between North American nations. Recent statements highlight increased tariff discussions between the United States and Canada, focusing on trade imbalances and market impacts.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-07-21",
+   "text": "Smithsonian leadership challenged White House report. A museum official responded to a recent White House document criticizing the institution's leadership, emphasizing differing perspectives on historical interpretation.",
+   "house": [
+    "HSHA"
+   ],
+   "senate": [
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-07-22",
+   "text": "[name] approval rating trends in 2026 midterms. Recent articles discuss shifting public sentiment around President [name] approval, highlighting renewed campaign activity and political developments in key states.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-22",
+   "text": "[name] imposes 50% tariffs on Canadian goods. Recent statements describe the administration imposing 50% tariffs on Canadian imports, citing concerns over trade practices. The announcements highlight tensions between the two countries over perceived unfair competition.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-07-22",
+   "text": "[name] attends dignified transfer of fallen service members. Several officials, including a former congresswoman, criticized President [name] comments about military deaths in the Middle East. Defense officials confirmed the transfer of four service members, while congressional leaders discussed funding for war costs.",
+   "house": [
+    "HSAS",
+    "HSAP"
+   ],
+   "senate": [
+    "SSAS",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-07-22",
+   "text": "[name] -backed candidates win Arizona primaries. Several Republican candidates supported by President [name] achieved victories in their primaries across Arizona, reflecting strong support in key regions. The results highlight shifting dynamics in the state's political landscape.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-22",
+   "text": "Congressional scheduling adjustments. Recent developments involve adjustments to committee assignments and legislative priorities within the House. Key figures are being reassigned to align with new strategic goals.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-22",
+   "text": "New York City may not arrest [name]; federal action urged. Mayor [name] stated he lacks the legal authority to arrest Israeli Prime Minister [name], while urging federal authorities to take action. This position contrasts with previous statements about potential enforcement.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-22",
+   "text": "Senate Budget Committee convenes after panel leadership change. A senior lawmaker discussed concerns about leadership transitions within the Senate budget committee, highlighting procedural discussions during a meeting.",
+   "house": [],
+   "senate": [
+    "SSBU"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Capitol agenda: GOP defectors threaten budget vote. Recent developments involve GOP members attempting to influence a budget vote amid legislative tensions. One article notes a specific chamber majority effort, while another describes the House's adoption of a budget resolution.",
+   "house": [
+    "HSBU"
+   ],
+   "senate": [
+    "SSBU"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Chinese AI advancements impact U.S. tech strategy. Recent developments in Chinese AI are influencing discussions about U.S. technological leadership and funding priorities. The articles highlight concerns over emerging capabilities and potential shifts in research investment.",
+   "house": [
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Republicans introduce crypto legislation with ethical clause. Republican lawmakers have drafted a bill incorporating a crypto ethics provision and are considering a vote soon. The document includes specific language aimed at regulating emerging technologies.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK",
+    "SSAF"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Yemen Houthis target Saudi tankers; Iran tensions rise. Recent reports indicate the Houthi group has engaged in attacks on Saudi tankers, escalating concerns about maritime security in the Red Sea. These actions coincide with increased U.S. military operations targeting Iran-linked vessels. The situation reflects ongoing regional tensions involving multiple actors.",
+   "house": [
+    "HSAS",
+    "HSFA"
+   ],
+   "senate": [
+    "SSAS",
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Chinese AI advancements impact U.S. tech strategy. Recent articles highlight breakthroughs in Chinese AI models and their influence on U.S. policy considerations. The White House is considering reallocating funding, while some lawmakers express skepticism about the proposed measures.",
+   "house": [
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Republicans introduce crypto legislation with ethical clause. Republican lawmakers have drafted a bill incorporating a crypto ethics provision and are considering a vote soon. The document includes specific language aimed at regulating emerging technologies.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK",
+    "SSAF"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Senate panel delays hearing on [name] nominees. Lawmakers postponed a public hearing after a senator highlighted concerns about background checks for three nominees. The decision followed discussions about potential security issues.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-23",
+   "text": "GOP budget blueprint adopted in House. House members passed a budget resolution emphasizing military spending related to the Iran conflict, while Democrats highlighted domestic cost concerns. The vote reflected party-line divisions and focused on reconciliation efforts.",
+   "house": [
+    "HSBU"
+   ],
+   "senate": [
+    "SSBU"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Chinese AI advancements impact U.S. tech strategy. Recent developments in Chinese AI models are influencing discussions about technological leadership and policy responses in Washington. The articles highlight concerns over emerging capabilities and their implications for existing frameworks.",
+   "house": [
+    "HSSY",
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Defense Secretary Defends Iran Funding. Two recent reports cover defense officials discussing war funding and budget proposals. One highlights a hearing where the secretary addressed questions about Iran conflict costs, while another notes legislative action passing significant military funding.",
+   "house": [
+    "HSAS",
+    "HSAP"
+   ],
+   "senate": [
+    "SSAS",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Republicans introduce crypto legislation with ethical clause. Republican lawmakers have drafted a bill incorporating a crypto ethics provision and are considering a vote soon. The document includes specific language aimed at regulating emerging technologies.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK",
+    "SSAF"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Republicans introduce crypto legislation with ethical clause. Republican lawmakers have drafted a bill incorporating a crypto ethics provision and are considering a vote soon. The document includes specific language aimed at regulating emerging technologies.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK",
+    "SSAF"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "CDC nominee endorsed by Senate health leader. Dr. [name] received support from Senate Health Committee Chair [name], though a vote on her CDC appointment was delayed.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-23",
+   "text": "Chinese AI advancements impact U.S. tech strategy. Recent developments in Chinese AI models are influencing discussions about U.S. technological leadership. The articles highlight concerns over emerging capabilities and their potential effects on existing industry dynamics.",
+   "house": [
+    "HSSY",
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-24",
+   "text": "Wildfires prompt mass evacuations in French region. Authorities have ordered the evacuation of tens of thousands of people from a French area affected by wildfires that have spread across the Cap Ferret peninsula. The situation remains active with ongoing efforts to manage the blaze.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-24",
+   "text": "China imposes export restrictions on EU firms. Recent developments involve new trade measures affecting European companies linked to Russia-related sanctions. The articles detail specific entities being targeted and the timing of these actions.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-24",
+   "text": "OpenAI breach concerns technology sector. Recent articles discuss a breach at OpenAI affecting Hugging Face systems, raising concerns about AI safety and regulatory attention. Officials from both organizations addressed the situation, emphasizing the need for improved oversight.",
+   "house": [
+    "HSIF",
+    "HSHM"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-25",
+   "text": "[name] considers AI risk bill. A lawmaker discusses a potential bill addressing concerns about artificial intelligence risks.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-25",
+   "text": "OpenAI breach concerns technology sector. Recent articles note concerns about AI systems accessing data from a technology startup. The incident has prompted discussions about safety measures and regulatory steps.",
+   "house": [
+    "HSIF",
+    "HSHM"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-25",
+   "text": "Grant cancellations tied to political considerations. Recent filings indicate federal grants were removed from certain projects due to political factors reported by a state-level official.",
+   "house": [
+    "HSGO",
+    "HSAP"
+   ],
+   "senate": [
+    "SSGA",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-07-25",
+   "text": "[name] considers AI risk bill. A lawmaker discusses a potential bill aimed at managing AI-related dangers. The discussion centers on introducing measures to address emerging technological challenges.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-25",
+   "text": "Recent discussions on AI transparency. Articles cover comparisons of open-source versus open-weight AI systems, highlighting technical distinctions and implications for developers.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-25",
+   "text": "Seaplane incident near Seattle. A seaplane carrying eleven people crashed into an island north of Seattle, and all individuals on board were successfully rescued. The event involved multiple agencies coordinating a response.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-25",
+   "text": "[name] Senate GOP budget blueprint expectations. Several lawmakers discussed upcoming budget plans and timelines, emphasizing coordination across chambers.",
+   "house": [
+    "HSBU"
+   ],
+   "senate": [
+    "SSBU"
+   ]
+  },
+  {
+   "date": "2026-07-25",
+   "text": "Senate GOP responds to [name] -[name] firing debate. Senators from the Republican side are challenging the proposed firing process, emphasizing procedural concerns and legal implications.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-25",
+   "text": "[name] tariffs announced for over 80 countries. Recent reports detail new tariff measures affecting nearly all U.S. imports, replacing previous agreements that were invalidated by the Supreme Court.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-07-25",
+   "text": "House members prepare for tough questions. Lawmakers are expected to face challenging inquiries ahead of upcoming debates.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-26",
+   "text": "Border czar vetting update following Maine incident. A senior official from the Department of Homeland Security stated that the review of an ICE officer involved in a recent shooting is underway. The process involves internal assessments of background checks and compliance procedures.",
+   "house": [
+    "HSHM"
+   ],
+   "senate": [
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-07-26",
+   "text": "Firefighters manage wildfires in France and Spain. Multiple countries experienced significant evacuations due to wildfires, with tens of thousands displaced across both France and Spain. Authorities reported large-scale evacuations and casualties in affected areas.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-26",
+   "text": "[name] Urges GOP Senators to End Filibuster. Recent statements emphasize the need for Republican senators to conclude the filibuster process to advance legislative priorities ahead of upcoming deadlines.",
+   "house": [],
+   "senate": [
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-07-26",
+   "text": "[name] faces reconciliation pressure ahead of summer. Senate Majority Leader [name] is navigating increased demands from President [name] as he prepares for upcoming legislative priorities.",
+   "house": [
+    "HSBU"
+   ],
+   "senate": [
+    "SSBU"
+   ]
+  },
+  {
+   "date": "2026-07-26",
+   "text": "Public perception of Iran conflict challenges. Recent surveys show a significant portion of respondents believe the [name] administration faced greater challenges in managing the Iran war than anticipated. The poll highlights concerns about the administration's handling of the situation.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-26",
+   "text": "U.S. policy discussions on Iran strategy. Recent statements highlight ongoing debates about maintaining sanctions and military actions toward Iran. Senators are emphasizing continued pressure while acknowledging challenges in enforcement.",
+   "house": [
+    "HSFA",
+    "HSAS"
+   ],
+   "senate": [
+    "SSFR",
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-07-26",
+   "text": "[name] new tariffs affect trading partners. Recent announcements detail expanded tariff measures affecting nearly all U.S. imports, replacing previous agreements. The changes aim to address trade imbalances and protect domestic industries.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-07-26",
+   "text": "[name] new tariffs affect global trade. Recent announcements describe new tariffs impacting nearly all U.S. imports from over 80 countries. These changes replace previous tariffs that were invalidated by the Supreme Court. The policy aims to reshape trade relationships with several nations.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-07-27",
+   "text": "Shein faces $99 million loss amid tariff impacts. A major fashion retailer reports a significant financial setback linked to recent trade policy changes affecting its sales.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-07-28",
+   "text": "ICE expands detention center operations. Federal agents increased staffing at a major detention facility in Texas, maintaining operations despite human rights concerns. The decision reflects ongoing efforts to manage immigration enforcement.",
+   "house": [
+    "HSJU",
+    "HSHM"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-07-28",
+   "text": "Texas Republican Ethics Investigation. A Texas legislator faces an ethics probe after a watchdog reported stock trades. The situation involves ongoing scrutiny of campaign finance practices.",
+   "house": [
+    "HSHA"
+   ],
+   "senate": [
+    "SSGA",
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-07-28",
+   "text": "Japan earthquake impact and tsunami advisory. A significant earthquake struck Kyushu island, causing no reported damage to major public facilities or infrastructure, including three nuclear power plants. Authorities have lifted the tsunami advisory following the event.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-28",
+   "text": "South Dakota primary runoff details. South Dakota Republicans are deciding whether to nominate Governor [name] or to select businessman [name] for the November ballot. The decision will influence the state's representation in the upcoming elections.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-28",
+   "text": "Senate agenda tightens ahead of midterm elections. Congressional priorities are expanding as upcoming elections approach, with discussions shifting toward legislative actions and party strategies.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-28",
+   "text": "[name] Urges Senate Action on SAVE America Act. Recent statements from the president and Senate leader emphasize the need to advance legislation amid political pressure. Officials are calling for measures to pass key bills.",
+   "house": [
+    "HSHA"
+   ],
+   "senate": [
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-07-29",
+   "text": "Texas Republican under ethics probe; Colorado lawmaker faces criticism. A Texas legislator faces an ethics investigation after a campaign finance watchdog reviewed his stock trades. The situation involves scrutiny of financial disclosures within a legislative context.",
+   "house": [
+    "HSHA"
+   ],
+   "senate": [
+    "SSGA",
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-07-29",
+   "text": "White House discusses potential military funding bill. Recent discussions involve a potential legislative effort to increase defense spending and address agricultural support. Sources mention coordination between administration officials and Senate leaders regarding funding priorities.",
+   "house": [
+    "HSAP",
+    "HSAS",
+    "HSAG"
+   ],
+   "senate": [
+    "SSAP",
+    "SSAS",
+    "SSAF"
+   ]
+  },
+  {
+   "date": "2026-07-29",
+   "text": "Witness released from immigration detention after ICE shooting. A person who was detained by immigration authorities following a fatal shooting at an ICE facility was set free. The article does not detail the circumstances of the detention or the legal process involved.",
+   "house": [
+    "HSJU",
+    "HSHM"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-07-29",
+   "text": "Michigan Democratic Senate race intensifies. Michigan voters are closely watching a tight Democratic primary as candidates engage in a heated contest ahead of the August primary.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-29",
+   "text": "[name] and [name] meet [name]; tensions persist in Ukraine and Iran. Leaders from Ukraine and Israel discussed ongoing conflicts with U.S. officials, highlighting continued diplomatic efforts amid prolonged tensions.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-29",
+   "text": "Iran resumes missile attacks as U.S. and Saudis strike Tehran-backed militias in Iraq. Multiple sources report Iran launching missile strikes targeting U.S. forces in Iraq while the United States and Saudi Arabia coordinate attacks on militant groups. The articles highlight increased military coordination and the ongoing impact on regional stability.",
+   "house": [
+    "HSAS",
+    "HSFA"
+   ],
+   "senate": [
+    "SSAS",
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-07-29",
+   "text": "[name] invokes 5th Amendment in GOP-led hearing. Dr. [name] referenced the Fifth Amendment during a Republican-led committee discussion about his pandemic response, emphasizing legal boundaries around questioning.",
+   "house": [
+    "HSGO",
+    "HSIF"
+   ],
+   "senate": [
+    "SSGA",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-29",
+   "text": "VA secretary’s role in veterans bill failure. House Republicans criticized the VA leader for missteps in a veterans-related legislation, highlighting tensions over oversight responsibilities.",
+   "house": [
+    "HSVR"
+   ],
+   "senate": [
+    "SSVA"
+   ]
+  },
+  {
+   "date": "2026-07-30",
+   "text": "Federal Reserve rate decisions and economic outlook. Three Federal Reserve officials voted in favor of raising interest rates despite inflation concerns and rising energy prices linked to the Iran conflict. The discussion centered on balancing economic pressures with policy goals.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-07-30",
+   "text": "Lawmakers seek improved AI workforce data. Representatives from both sides discussed the need for clearer information on how artificial intelligence is affecting jobs. A bipartisan group emphasized the importance of reliable statistics to support policy discussions.",
+   "house": [
+    "HSED"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-30",
+   "text": "AI perceptions in public opinion surveys. Recent surveys indicate growing concern about AI's negative effects, with a notable shift in public sentiment toward recognizing harm over potential benefits.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-07-30",
+   "text": "GOP governors support reconciliation bill; Senate moves forward. Several governors are endorsing a proposed reconciliation measure, while senators in the Senate are advancing it with strong support. The situation reflects ongoing efforts to shape legislative priorities.",
+   "house": [
+    "HSBU"
+   ],
+   "senate": [
+    "SSBU"
+   ]
+  },
+  {
+   "date": "2026-07-30",
+   "text": "[name] shifts focus to online safety legislation. Senate Commerce chair announced a pivot from AI bills to online safety measures. Lawmakers are seeking clearer data on AI's effects on jobs.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-07-31",
+   "text": "Senate committee votes to block part of [name] Education Department breakup. A bipartisan effort emerged to halt certain actions by the Education Department, with specific legislative measures discussed in recent coverage.",
+   "house": [
+    "HSED"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-07-31",
+   "text": "[name] comments on IRS settlement, defense. President [name] stated the anti-weaponization fund in the IRS settlement is no longer valid, while defending its status. Multiple lawmakers discussed implications for taxpayer protections and government accountability.",
+   "house": [
+    "HSWM",
+    "HSJU"
+   ],
+   "senate": [
+    "SSFI",
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-07-31",
+   "text": "Deal announced for Hamas disarmament and Gaza withdrawal. Recent statements indicate a new agreement involving Hamas and Israel, with calls for Israeli troop withdrawal first. The announcement comes amid ongoing political tensions and security concerns.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-01",
+   "text": "[name] criticizes [name] over Reflecting Pool case. President [name] expressed disagreement with Attorney [name] decision to drop the vandalism case against [name], citing concerns about the evidence.",
+   "house": [
+    "HSJU",
+    "HSGO"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-01",
+   "text": "Bipartisan senators urge funding for Ebola-affected women. Senators from both parties requested increased support for family planning resources targeting women during the Ebola outbreak in the Democratic Republic of Congo. The letters emphasized the need for timely aid to affected populations.",
+   "house": [
+    "HSFA",
+    "HSAP"
+   ],
+   "senate": [
+    "SSFR",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-01",
+   "text": "[name] campaign trail in Texas. A former MLB player is seeking a legislative seat in a Republican-held Texas district, highlighting shifting political dynamics in the region.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-01",
+   "text": "Senate agenda updates and tax bill progress. Recent articles highlight the Senate's focus on funding decisions, bipartisan tax modernization efforts, and legislative negotiations around fiscal measures. Key developments include a stopgap funding proposal and discussions on tax administration reforms.",
+   "house": [
+    "HSAP",
+    "HSWM"
+   ],
+   "senate": [
+    "SSAP",
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-08-01",
+   "text": "Senators discuss potential block to [name] spending changes. Several senators are evaluating options to prevent certain modifications to [name] grant allocations, with leadership facing challenges in reaching agreement before the upcoming recess.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-02",
+   "text": "Policy discussions on legislative approaches. Recent statements from lawmakers and officials address concerns about funding restrictions for certain weapons programs. Senators emphasized legislative steps are necessary, while officials clarified positions on budgetary limits.",
+   "house": [
+    "HSAS",
+    "HSAP"
+   ],
+   "senate": [
+    "SSAS",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-02",
+   "text": "Russian missile strikes impact Kyiv casualties. A series of ballistic missiles hit five districts in Kyiv, resulting in nine deaths. The situation has prompted discussions about defense capabilities and international responses.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-02",
+   "text": "Senate funding deal avoids shutdown. Senate leaders negotiated a funding agreement to prevent a government shutdown, with focus on securing legislative priorities ahead of the upcoming recess.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-03",
+   "text": "Senate funding deal avoids shutdown. Senate leaders negotiated a funding agreement to prevent government closure during the upcoming campaign season. The deal aims to secure necessary resources while addressing political tensions.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-03",
+   "text": "Senate funding patch delays grant changes. Recent developments involve a bipartisan funding agreement that would affect how federal grants are managed, while another article notes political tensions ahead of a recess.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-03",
+   "text": "Senate funding patch delays grant overhaul. Recent developments involve a legislative measure affecting how federal grants are managed. The article details a bipartisan agreement to fund government operations through early December while restricting certain [name] -era grant policies.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-03",
+   "text": "[name] signs executive order on Military Spouse Commission. A defense official confirmed the new commission will be established, citing recent legislative discussions. The announcement highlights efforts to formalize support for military families.",
+   "house": [
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-08-04",
+   "text": "Senators urge [name] administration on AI access. Senators are asking the [name] administration to clarify its approach to advanced AI models. The discussion centers on transparency and regulatory steps.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-08-04",
+   "text": "Michigan reports first U.S. deaths from cyclosporiasis outbreak. Health officials in Michigan announced the first U.S. fatalities linked to a recent cyclosporiasis outbreak. Multiple states are involved in legal actions against the [name] administration over tariff policies. In Ukraine, officials reported Russia dropping eight glide bombs.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-04",
+   "text": "[name] supports daylight saving time bill. President [name] emphasized continued backing for legislation aimed at making daylight saving time permanent, aligning with recent legislative efforts in the House. Multiple officials cited public demand for the change, though some lawmakers expressed reservations about implementation details.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-08-04",
+   "text": "FBI personnel changes linked to [name] investigation. Three FBI agents were dismissed following a lawsuit alleging retaliation against those who pursued the [name] administration. The decision reflects broader actions within the bureau's leadership during the ongoing legal proceedings.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-08-04",
+   "text": "[name] administration revokes visa of Brazil's ambassador. The [name] administration has removed the visa of Brazil's ambassador to the United States amid ongoing diplomatic tensions with President [name]. Officials cited delays in the process to allow Brazilian leadership more opportunity to respond.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-08-04",
+   "text": "Stopgap funding bill advances in Senate. Senate voted to pass a stopgap funding bill to avoid a government shutdown ahead of the upcoming midterms. The vote came after bipartisan efforts to limit debate on a legislative vehicle for continuing resolution.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-05",
+   "text": "National Guard funding estimate released. A cost projection of approximately $1.4 billion has been provided for the National Guard's deployment through 2029. The figure reflects planning discussions initiated by Massachusetts Democratic Senator [name].",
+   "house": [
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-08-05",
+   "text": "[name] -endorsed [name] wins GOP primary for Missouri House seat. Missouri House candidate [name] secured victory in the GOP primary for the open 6th Congressional District after defeating a competitive field, with support from outgoing Representative [name].",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-05",
+   "text": "House Democrats target 12 Republican seats in midterms. Democratic campaign officials are focusing on adding twelve Republican-held districts to their midterm election strategy, emphasizing specific geographic areas and political figures.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-05",
+   "text": "Democrats urge investigation of Reflecting Pool issues. Representatives from New Mexico and Rhode Island are requesting a review of recent developments concerning the Lincoln Memorial Reflecting Pool. The call focuses on potential concerns related to maintenance and historical preservation.",
+   "house": [
+    "HSII"
+   ],
+   "senate": [
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-08-05",
+   "text": "Five states held primary elections Tuesday. Five states conducted primary elections on Tuesday, with outcomes influencing upcoming congressional control. The results reflect competitive races between progressive and moderate Democratic candidates while highlighting [name] continued influence over GOP figures.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-05",
+   "text": "Judge questions [name] administration's handling of seditious case. A federal judge has expressed concerns over the Justice Department's approach in a recent seditious conspiracy case, highlighting disagreements about the evidence and legal standards applied.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-08-06",
+   "text": "Hemp policy delays government funding. An internal GOP dispute over intoxicating hemp products is causing delays in the passage of a government funding bill. The situation highlights coordination challenges between different political offices.",
+   "house": [
+    "HSAP",
+    "HSAG"
+   ],
+   "senate": [
+    "SSAP",
+    "SSAF"
+   ]
+  },
+  {
+   "date": "2026-08-06",
+   "text": "AI bill progress in Congress. Recent developments involve a House Republican member advocating for a vote on an AI-related legislation following reported breaches. The discussion centers on legislative steps and concerns about cybersecurity.",
+   "house": [
+    "HSIF",
+    "HSHM"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-08-06",
+   "text": "US Senate committee votes to hold [name] in contempt. A Senate committee has decided to refer former CDC director Dr. [name] to court over his responses during a recent pandemic hearing. The decision follows ongoing discussions about accountability for public health communications.",
+   "house": [
+    "HSGO",
+    "HSIF"
+   ],
+   "senate": [
+    "SSGA",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-06",
+   "text": "Farm bill and SNAP disputes in legislative debates. Democrats criticized the GOP farm bill proposal amid disagreements over food stamp cost-sharing. The Senate Agriculture Committee voted against the legislation, highlighting ongoing partisan divisions in agricultural policy.",
+   "house": [
+    "HSAG"
+   ],
+   "senate": [
+    "SSAF"
+   ]
+  },
+  {
+   "date": "2026-08-06",
+   "text": "[name] addresses weapons supply concerns. The president clarified that classified information about weapons production has been handled privately, emphasizing security priorities.",
+   "house": [
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-08-06",
+   "text": "DCCC targets 12 new seats in midterm elections. The Democratic Congressional Campaign Committee has increased its list of desired seats by 12 Republican-held districts, aiming to secure a higher total in upcoming elections.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-06",
+   "text": "[name] budget hearing criticism. Senators expressed concern over the committee's shift in focus, with specific remarks from a committee chair about budget priorities. Lawmakers discussed implications for congressional oversight. The situation reflects ongoing tensions between legislative committees and budget processes.",
+   "house": [],
+   "senate": [
+    "SSBU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-06",
+   "text": "[name] administration purchases offshore wind leases. Recent announcements detail a $1.2 billion transaction involving offshore wind projects across multiple states. The deal involves specific lease agreements and construction timelines mentioned in the articles.",
+   "house": [
+    "HSII"
+   ],
+   "senate": [
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-08-07",
+   "text": "Senate seeks path to finalize college athlete policy bill. Lawmakers are working to finalize legislation governing compensation and recruitment for college athletes. The process involves negotiations across party lines as the chamber prepares for a recess.",
+   "house": [
+    "HSED",
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-07",
+   "text": "Senators discuss exit strategy ahead of recess. Several senators are addressing timing concerns as they consider when to end their session, with focus on upcoming legislative timelines and internal coordination.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-07",
+   "text": "Appeals court rules on White House ballroom construction. A federal court has affirmed that the [name] administration needs congressional approval before proceeding with the construction of a new ballroom on the former White House East Wing site. The decision follows recent legal challenges regarding executive authority and legislative oversight.",
+   "house": [
+    "HSPW",
+    "HSGO"
+   ],
+   "senate": [
+    "SSEV",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-07",
+   "text": "[name] declines backing [name] for Senate term. President [name] stated he did not support Senate Majority Leader [name] candidacy for another term, emphasizing personal boundaries around political discussions.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-07",
+   "text": "[name] considers removing Fed governor [name]. Recent developments involve the president exploring options to remove Federal Reserve Governor [name], following a Supreme Court decision that allowed her to retain her position while she contests the allegations.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-08-07",
+   "text": "GOP senators caution on [name] messaging. Several Republican lawmakers expressed concerns about how the president's campaign strategy is being portrayed, emphasizing the need for clearer voter engagement.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-08",
+   "text": "[name] confirmed as [name] attorney general. Recent developments involve [name] being appointed as the new attorney general, with discussions about Senate confirmation progress. The announcement highlights the ongoing legislative process surrounding his confirmation.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-08-08",
+   "text": "AI tax proposal and worker protection plan. Two separate developments involve discussions around AI regulation and funding for workers affected by technological changes. One article mentions a proposed tax on major AI firms to support displaced employees, while another notes a Republican lawmaker advocating for a vote following reported breaches.",
+   "house": [
+    "HSWM",
+    "HSED"
+   ],
+   "senate": [
+    "SSFI",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-08",
+   "text": "Senate approves funding bill to avoid shutdown. Legislators passed a measure aimed at preventing a government funding lapse before the upcoming election. The decision involved key political figures and focused on maintaining fiscal stability.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-08",
+   "text": "Senate passes funding bill to avert October shutdown. Two legislative bodies moved quickly to secure continued financial support, aiming to prevent a government funding lapse. The passage involved specific voting numbers and timing details.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-08",
+   "text": "[name] orders new immigration rules; Iran seeks Strait restrictions. Recent statements indicate the administration is proposing changes to immigration policy while Iran expresses intentions to restrict U.S. maritime access through the Strait of Hormuz.",
+   "house": [
+    "HSJU",
+    "HSFA"
+   ],
+   "senate": [
+    "SSJU",
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-08-08",
+   "text": "Senate considers exit after GOP-[name] deal. Several senators are discussing a proposed legislation aimed at imposing new tariffs on Russian energy imports. The discussion centers on the bill's potential impact and the role of key officials in shaping its direction.",
+   "house": [
+    "HSWM",
+    "HSFA"
+   ],
+   "senate": [
+    "SSFI",
+    "SSFR",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-08-08",
+   "text": "[name] supports [name] confirmation. Senator [name] expressed intent to support [name] confirmation as attorney general, reflecting internal Republican negotiations.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-08-08",
+   "text": "Senate hearing on college sports bill. A hearing was held in Washington regarding a proposed sports legislation. Sen. [name] discussed the bill with Sen. [name]. The event focused on the Senate’s September calendar updates.",
+   "house": [
+    "HSED",
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-09",
+   "text": "Michigan Democrats seek unity after Senate primary tensions. Michigan Democrats are discussing strategies to strengthen unity following a contentious Senate primary. The conversation highlights concerns about regional representation and the role of key figures in shaping political narratives.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-09",
+   "text": "Court rules on White House construction and Fed appointments. A federal appeals court determined that President [name] cannot proceed with his $400 million White House ballroom project without congressional consent. The decision also referenced actions related to the Federal Reserve Board of Governors and a Thai student involved in a shooting incident.",
+   "house": [
+    "HSPW",
+    "HSGO",
+    "HSBA"
+   ],
+   "senate": [
+    "SSEV",
+    "SSGA",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-08-10",
+   "text": "[name] appoints new White House counsel. A senior official has been named to assist the president with legal matters, following recent staff changes.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-10",
+   "text": "Alabama redistricting and voter response. Alabama is conducting a second primary election following changes to its district map, which has led to confusion among voters. A new poll indicates growing public support for shifting toward proportional representation in the country.",
+   "house": [
+    "HSHA",
+    "HSJU"
+   ],
+   "senate": [
+    "SSRA",
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-08-10",
+   "text": "Executive order on childhood vaccines. A new executive order was signed by the president to revise childhood vaccination guidelines. The announcement emphasized updated recommendations and involved discussions with health officials.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-10",
+   "text": "[name] confirmed as [name] attorney general. Recent coverage reports [name] was appointed as the second confirmed attorney general following a close Senate vote. The confirmation followed a contentious process with some Republican senators opposing the nomination. The decision reflects shifting dynamics within the Republican leadership.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-08-10",
+   "text": "Bipartisan legislation introduced on Russia sanctions bill. Lawmakers from both parties passed companion legislation related to sanctions targeting Russia, reflecting renewed legislative focus on international policy.",
+   "house": [
+    "HSFA",
+    "HSWM"
+   ],
+   "senate": [
+    "SSFR",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-08-11",
+   "text": "North Carolina Republican nominee selected for ballot replacement. A North Carolina Republican committee chose state Rep. [name] to replace Rep. [name] on the ballot. The decision follows internal committee deliberations and public announcements about the upcoming election.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-11",
+   "text": "U.S. vaccine policy changes under new executive order. Recent statements indicate a shift in how childhood vaccination schedules are approached, with officials emphasizing changes to the MMR shot administration. The American Academy of Pediatrics has voiced concerns about the new recommendations.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-11",
+   "text": "Republican Strategies Ahead of [name] Election Push. Several lawmakers are discussing potential responses to upcoming legislative efforts tied to the president's election agenda. The focus appears on preparing for possible legislative actions and internal party dynamics.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-11",
+   "text": "[name] executive order impacts childhood vaccination schedules. Recent developments involve a new executive order suggesting separate visits for childhood vaccinations. This change reflects shifting guidance on how vaccines are administered.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-11",
+   "text": "Russia reports former US Marine in poor health. A former U.S. Marine was released from custody in Russia following claims of being in a catatonic state. The announcement included statements about his condition and the circumstances surrounding his release.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-08-11",
+   "text": "Minnesota gubernatorial primary results. Voters in Minnesota are casting ballots on Tuesday to determine the next governor, with Sen. [name] leading the Democratic primary against Gov. [name]. The state's political landscape remains closely contested between progressive and moderate candidates.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-12",
+   "text": "[name] remarks on legal constraints. President discussed constitutional limits on seeking a third presidential term, emphasizing legal boundaries he has mentioned in recent comments.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-08-12",
+   "text": "[name] Announces Departure from Press Secretary Role. A White House official has announced plans for [name] to leave her position as press secretary, with President [name] stating the move will allow her to concentrate on family matters.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-13",
+   "text": "Judge dismisses [name] administration lawsuit over Harvard allegations. A federal judge ruled against a lawsuit claiming the [name] administration violated civil rights laws by mishandling claims of antisemitism at Harvard University. The decision emphasized the need for clear evidence of ongoing violations.",
+   "house": [
+    "HSED",
+    "HSJU"
+   ],
+   "senate": [
+    "SSHR",
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-08-13",
+   "text": "[name] Secret Air Transport During Turkey Earthquake. Recent reports detail President [name] relocation from Air Force One to a catering truck following a major earthquake in Colombia. Sources cited officials and former Secret Service personnel discussing the move amid diminishing hopes for survivors.",
+   "house": [
+    "HSHM",
+    "HSGO"
+   ],
+   "senate": [
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-13",
+   "text": "CDC Director Appointment Discussion. Senator [name] expressed confidence that CDC Director [name] will uphold scientific guidance despite recent executive directives. The conversation focused on maintaining vaccine schedule integrity and resisting policy shifts.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-13",
+   "text": "[name] discusses [name] and produce donations. Senator [name] is engaging with Health and Human Services regarding the cyclosporiasis outbreak and potential connections to donations from a major produce supplier. The discussion centers on possible influences on the administration's response.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-13",
+   "text": "Countries accused of routing goods to evade tariffs. Multiple nations were cited in recent coverage for facilitating the movement of goods through alternative routes to evade U.S. tariffs imposed in 2018. The articles noted specific transshipment activities involving several countries.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-08-13",
+   "text": "Secret Air Force One movements during international events. Several recent reports detail how President [name] was moved from Air Force One in Turkey, with officials citing security concerns and diplomatic considerations. The stories highlight differing accounts from White House sources and congressional critics regarding the circumstances and motivations behind the aircraft changes.",
+   "house": [
+    "HSHM",
+    "HSGO"
+   ],
+   "senate": [
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-13",
+   "text": "[name] addresses ethics concerns in Florida primary. A Florida Republican leader emphasizes his commitment to integrity despite recent controversies, reinforcing his stance on personal conduct and public service.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-14",
+   "text": "Primary voters' mixed signals on Democratic platform. Recent polling shows a range of opinions among voters in Michigan, Minnesota, and Wisconsin regarding the Democratic Party's direction ahead of midterm elections. Political analysts are noting the complexity of voter priorities in these states.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-14",
+   "text": "[name] administration introduces new drone tariffs. Recent announcements describe measures targeting drone imports and highlighting international cooperation to manage supply chains. The administration emphasized security concerns while outlining specific import restrictions.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-08-14",
+   "text": "[name] seeks Supreme Court approval for ballroom work. Recent discussions involve the president requesting judicial clearance to resume construction at the White House ballroom, citing legal steps in an appeal.",
+   "house": [
+    "HSPW",
+    "HSGO"
+   ],
+   "senate": [
+    "SSEV",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-14",
+   "text": "[name] seeks court approval for ballroom events. Recent discussions involve a request from the president to the Supreme Court regarding the continuation of certain ceremonial events. Officials have emphasized the need for coordination between the administration and legislative bodies.",
+   "house": [
+    "HSPW",
+    "HSGO"
+   ],
+   "senate": [
+    "SSEV",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-14",
+   "text": "Energy infrastructure updates across states. Recent announcements detail the cancellation of a [name] -era initiative to accelerate power line construction in several Midwestern states. Officials from the [name] administration have stated that the Energy Department will not proceed with designating specific regions as National Interest areas.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-08-14",
+   "text": "EPA faces lawsuit over chemical approvals. Environmental groups challenged the administration's decision to approve two unnamed chemicals used in semiconductors, citing potential health risks. The EPA's action sparked legal action from community organizations.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEV"
+   ]
+  },
+  {
+   "date": "2026-08-15",
+   "text": "[name] family crypto firm gets banking approval. A U.S.-based crypto company linked to the [name] family received preliminary approval from the OCC for a national trust bank charter. The announcement highlights recent developments in private financial ventures tied to political figures.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-08-16",
+   "text": "DSA candidates to form 'commie caucus' if elected. A New York Republican official stated that Democratic candidates linked to the Democratic Socialists of America could form a 'commie caucus' if elected to Congress following the midterm elections.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-17",
+   "text": "Florida congressional race updates. Ten Republicans are competing for the seat left vacant after [name] ' election, prompting discussions about local representation and party dynamics in southwest Florida.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-17",
+   "text": "[name] vaccine policy discussion. Senator [name] criticized the administration's vaccine scheduling changes, linking them to declining public support. The conversation focused on perceived risks and political implications.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-17",
+   "text": "Congressional ethics legislation under review. Two representatives are set to introduce new ethics measures, focusing on transparency and accountability in legislative processes.",
+   "house": [
+    "HSHA"
+   ],
+   "senate": [
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-08-17",
+   "text": "Republican financial concerns post-[name] term. Recent surveys indicate a portion of Republican voters feel economically disadvantaged since the second [name] administration began. Polls show 24 percent of 2024 [name] voters believe their financial situation has worsened, while Democrats are perceived as more effective in managing the economy.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-17",
+   "text": "[name] Threat to Oman Over Iran Negotiations. Recent statements highlight tensions as a 60-day window for peace talks with Iran is approaching its end. Officials from Oman and Iran are reportedly engaging through intermediaries to reopen the Strait of Hormuz.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-08-17",
+   "text": "[name] approval poll shifts slightly. A recent survey shows a modest decline in public approval for President [name] job performance. The poll measured opinions of 1,166 respondents across a two-week period, highlighting changing attitudes among Americans.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-17",
+   "text": "Family reactions to USS Lincoln deployment conditions. Several families expressed concern about the length of time the USS Abraham Lincoln was deployed, with one individual calling the remarks about the conditions 'shameful.' The comments highlight personal experiences rather than official policy decisions.",
+   "house": [
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-08-17",
+   "text": "Supreme Court rejects [name] challenge to E Jean [name] case. Recent developments involve a court decision that dismisses a legal challenge brought by a survivor of sexual abuse. The ruling reinforces existing legal standards regarding accountability and public accountability.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-17",
+   "text": "Teen lifeguard and boy honored at White House after viral video. A teenage lifeguard and the child he rescued received recognition following a widely shared video. The event highlighted public attention to youth involvement in emergency response.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-18",
+   "text": "Sanctions announced against ICC president. Official statements from a U.S. official mention new measures targeting a senior official of the International Criminal Court. The announcement follows discussions involving high-level political figures and legal advisors.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-08-18",
+   "text": "New sanctions announced targeting ICC figures. Recent statements indicate the [name] administration is planning to remove key individuals from the International Court of Justice through new measures.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-08-19",
+   "text": "[name] administration considers Ethiopian deportations. Recent developments involve the [name] administration exploring options to remove Ethiopians from the United States. A judge has cleared the path for the administration to cancel Temporary Protected Status for individuals from Ethiopia.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-08-19",
+   "text": "Progressive Senate candidate nominated in Florida. Democratic voters in Florida have elevated another progressive Senate candidate, while Republican Rep. [name] secured the nomination for Florida's first Black governor. The primary season remains competitive with multiple candidates representing diverse backgrounds.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-19",
+   "text": "Missouri court approves new [name] -aligned districts for November elections. A Missouri judge permitted recently drawn congressional districts supported by President [name] to be used in the upcoming November election. The decision affects how the state will be represented in the legislature.",
+   "house": [
+    "HSJU",
+    "HSHA"
+   ],
+   "senate": [
+    "SSJU",
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-08-20",
+   "text": "[name] nominates White House adviser to FDA. President [name] announced the nomination of [name] to lead the Food and Drug Administration. The move follows recent discussions about agency leadership and staffing changes.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-20",
+   "text": "[name] highlights White House construction projects. Recent reports describe President [name] touring new White House construction sites, emphasizing durability and quality. The tours focused on the ballroom and helipad, with specific technical details about materials and load capacity mentioned.",
+   "house": [
+    "HSPW",
+    "HSGO"
+   ],
+   "senate": [
+    "SSEV",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-21",
+   "text": "U.S. ally Oman faces diplomatic pressure over Iran deal. Recent developments involve tensions between Oman and Iran as the two Gulf states discuss new shipping arrangements in the Strait of Hormuz. Oman's position appears to balance regional interests amid shifting dynamics.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-21",
+   "text": "Capitol agenda: Democrats’ probes. Recent articles discuss potential Democratic investigations if they regain control, highlighting concerns about accountability and legislative focus.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-21",
+   "text": "Transgender officer dismissed from CIA. A former CIA officer who identified as transgender was removed from her position after reports of political pressure within the White House during the [name] administration. The article highlights her experience of being targeted and the impact on her career.",
+   "house": [
+    "HLIG"
+   ],
+   "senate": [
+    "SLIN"
+   ]
+  },
+  {
+   "date": "2026-08-21",
+   "text": "[name] lifts ground beef tariffs temporarily. President [name] announced a 90-day pause on higher tariffs affecting ground beef imports, allowing up to 300,000 metric tons to enter without additional tariffs.",
+   "house": [
+    "HSWM",
+    "HSAG"
+   ],
+   "senate": [
+    "SSFI",
+    "SSAF"
+   ]
+  },
+  {
+   "date": "2026-08-21",
+   "text": "[name] Announces Beef Price Reduction Plan. President [name] discussed a proposal to lower beef prices amid rising costs, with some lawmakers expressing concern.",
+   "house": [
+    "HSAG"
+   ],
+   "senate": [
+    "SSAF"
+   ]
+  },
+  {
+   "date": "2026-08-21",
+   "text": "[name] defends beef import plan amid GOP criticism. President [name] stated he was responding to public demand for lower beef prices, emphasizing the goal of reducing costs for consumers. Lawmakers and ranchers expressed concern about the potential impact on domestic producers and market stability.",
+   "house": [
+    "HSAG",
+    "HSWM"
+   ],
+   "senate": [
+    "SSAF",
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-08-21",
+   "text": "[name] defends beef import plan amid GOP criticism. President [name] stated he was responding to public demand for lower beef prices, emphasizing the goal of reducing costs for consumers. Lawmakers and ranchers expressed concern about the potential impact on domestic producers and market stability.",
+   "house": [
+    "HSAG",
+    "HSWM"
+   ],
+   "senate": [
+    "SSAF",
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-08-21",
+   "text": "U.S. debt and Census data link. Recent articles discuss a high U.S. debt figure and a new Census report highlighting noncitizen voting trends. Experts are noting connections between the report and a think tank associated with the president.",
+   "house": [
+    "HSGO",
+    "HSHA"
+   ],
+   "senate": [
+    "SSGA",
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-08-21",
+   "text": "ICE deportation flights to Haiti increase. Authorities initiated deportations for Haitians after removing protections, involving multiple agencies and flights. The operation focused on individuals who had previously been granted temporary status.",
+   "house": [
+    "HSJU",
+    "HSHM"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-21",
+   "text": "[name] defends beef import plan after GOP criticism. Presidential comments focus on temporary tariff adjustments, emphasizing cost reduction for consumers. Officials cited public demand and economic impact in statements.",
+   "house": [
+    "HSAG",
+    "HSWM"
+   ],
+   "senate": [
+    "SSAF",
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-08-24",
+   "text": "White House ballroom construction approved despite legal review. Recent decisions allow construction at the White House ballroom, overriding a prior appellate court decision. The action reflects ongoing coordination between executive and judicial branches.",
+   "house": [
+    "HSPW",
+    "HSGO"
+   ],
+   "senate": [
+    "SSEV",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-24",
+   "text": "[name] Economic Strategy Affects China and Iran. Recent statements indicate heightened strategic competition between the United States and Iran, with economic measures targeting Iran's oil exports. Iran's leadership emphasized the memorandum as a key diplomatic tool, while U.S. officials reiterated their approach to pressure Tehran.",
+   "house": [
+    "HSFA",
+    "HSBA"
+   ],
+   "senate": [
+    "SSFR",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-08-24",
+   "text": "U.S.-Canada trade tensions escalate. Canada's officials expressed concerns over the breakdown of trade talks with the U.S., emphasizing economic uncertainty and public sentiment. The Canadian government issued statements urging dialogue while highlighting the impact on businesses and consumers.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-08-24",
+   "text": "US-Canada trade war developments. Recent articles discuss escalating tensions and economic impacts between the United States and Canada following broken trade talks. Businesses in both nations report increased uncertainty, while political figures express concerns over tariff implications.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-08-24",
+   "text": "Democrats push for Iran war cost disclosure. Several lawmakers are urging President [name] and Defense Secretary [name] to provide clearer information about the financial impact of the Iran conflict, highlighting a shift in expectations around transparency.",
+   "house": [
+    "HSAS",
+    "HSAP"
+   ],
+   "senate": [
+    "SSAS",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-24",
+   "text": "Iran's President on U.S. Memorandum and Middle East tensions. Iran's top security official stated that any international support for new U.S. economic actions would be viewed as an act of war, while the president emphasized a memorandum of understanding as a potential resolution path.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-08-24",
+   "text": "Iowa Senate race focuses on cancer rates. Candidates are highlighting the state's rising cancer diagnosis numbers as a central issue in the tight race.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-25",
+   "text": "[name] addresses [name] lake renaming claim. Ontario Premier [name] clarified that Canada did not endorse or support the proposed renaming of a lake to honor the U.S., emphasizing the distinction between Canadian policy and U.S. actions.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-25",
+   "text": "U.S. sanctions on Iran intensify tensions. Recent statements emphasize that expanded U.S. sanctions against Iran are likely to heighten diplomatic friction. Officials from the [name] administration have described the measures as part of a broader strategy to increase pressure without resorting to direct military conflict. The comments suggest a focus on economic leverage rather than immediate resolution.",
+   "house": [
+    "HSFA",
+    "HSBA"
+   ],
+   "senate": [
+    "SSFR",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-08-25",
+   "text": "South Carolina Senate GOP Senate Runoff. The recent election in South Carolina saw Sen. [name] secure a victory amid strong support from President [name], while Rep. [name] faced increased scrutiny from local officials. The outcome reflects shifting political dynamics in the state.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-25",
+   "text": "[name] seeks primary win in Oklahoma governor's runoff. A former state senator and state budget secretary is competing against a state Attorney General in a GOP runoff for party nomination. The article notes [name] criticism of [name].",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-25",
+   "text": "FEMA crew violated Hatch Act during Hurricane recovery. An internal watchdog reported that a FEMA team ignored orders related to [name] signage when assisting with Hurricane Milton recovery in 2024. The findings highlight compliance issues during emergency operations.",
+   "house": [
+    "HSGO",
+    "HSHM",
+    "HSPW"
+   ],
+   "senate": [
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-25",
+   "text": "Wildfire evacuations near Reno and Indonesia. Multiple news outlets reported widespread evacuations as a wildfire expanded near Reno, Nevada. Authorities emphasized safety measures and urged residents to leave affected areas. The situation involved local officials coordinating with emergency services.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-26",
+   "text": "Judge allows Postal Service to proceed with [name] voting order. A federal judge in Boston lifted a nationwide restriction on the Postal Service related to President [name] attempt to limit mail-in voting during the midterm elections. The decision allows continued operations but sets conditions for future implementation.",
+   "house": [
+    "HSGO",
+    "HSHA"
+   ],
+   "senate": [
+    "SSGA",
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-08-26",
+   "text": "[name] case court decision. A federal appeals court rejected removing charges against Rep. [name], with the panel divided over allegations related to interactions with immigration personnel.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-26",
+   "text": "[name] Saudi nuclear agreement and congressional review. The administration shared a nuclear cooperation deal with Saudi Arabia, prompting congressional review under the Atomic Energy Act. The move follows recent diplomatic discussions involving the U.S. and Saudi leadership.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-08-27",
+   "text": "Inside Scoop on Pentagon and Pro-[name] Links. Recent articles discuss a Utah software engineer's controversial comments and insights into the dynamics within [name] inner circle. The pieces highlight concerns about influence and resistance from certain allies.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-27",
+   "text": "[name] declares national emergency on foreign grid equipment. President [name] issued an executive order citing foreign equipment as a threat to national security, aiming to restrict its use within the U.S. power system.",
+   "house": [
+    "HSIF",
+    "HSHM"
+   ],
+   "senate": [
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-08-28",
+   "text": "White House, hemp lobbyists bet on shutdown politics to delay ‘diet weed’ ban. Lawmakers note that the [name] administration is using a one-month delay to advance new regulations related to hemp products.",
+   "house": [
+    "HSAG",
+    "HSIF",
+    "HSAP"
+   ],
+   "senate": [
+    "SSAF",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-08-28",
+   "text": "[name] campaign strategy and [name] role. Recent statements indicate Rep. [name] will prioritize local elections over national campaigns, while Texas lawmakers discuss strategies following primary outcomes.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-28",
+   "text": "[name] administration faces legal action from Anthropic. A court ruled that the [name] administration unlawfully retaliated against the AI company Anthropic, highlighting tensions between government and private technology firms.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-08-28",
+   "text": "Abortion pill manufacturers face scrutiny. Senator [name] has raised concerns about abortion pill makers not adhering to FDA safety rules, particularly regarding online sales. The discussion centers on regulatory compliance and industry practices.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-08-29",
+   "text": "Right-wing commentator detained by ICE. A British individual linked to political figures has been detained by immigration authorities, highlighting ongoing tensions around immigration enforcement and public figures' involvement.",
+   "house": [
+    "HSJU",
+    "HSHM"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-08-29",
+   "text": "House Democrat introduces legislation to counter executive order. A Michigan representative is proposing a measure aimed at undoing a recent executive action related to water naming. The article highlights legislative efforts to address the policy shift.",
+   "house": [
+    "HSII"
+   ],
+   "senate": [
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-08-30",
+   "text": "GOP memo on [name] midterm strategy. Recent articles discuss concerns about the administration's approach during the upcoming midterm elections, emphasizing potential challenges for the Republican Party.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-08-30",
+   "text": "U.S. sanctions announced for Iran transactions. The [name] administration is imposing new sanctions on a bank to restrict Iran-related financial activities. Treasury Secretary [name] emphasized the need to signal accountability to Iran-linked actors during upcoming international meetings.",
+   "house": [
+    "HSFA",
+    "HSBA"
+   ],
+   "senate": [
+    "SSFR",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-08-30",
+   "text": "[name] comments on potential demolition threats. Representative [name] expressed concerns that legal disputes over the Kennedy Center might influence President [name] plans to demolish the building. She highlighted the ongoing litigation and its possible impact on future actions.",
+   "house": [
+    "HSPW"
+   ],
+   "senate": [
+    "SSEV"
+   ]
+  },
+  {
+   "date": "2026-08-31",
+   "text": "[name] deal and Venezuelan oil reserves. Recent reports discuss details about a proposed agreement involving Venezuela's oil resources and its implications for U.S. interests. The articles highlight uncertainty around timelines and payment structures.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-09-01",
+   "text": "Funding bill at the top of the agenda. The House is prioritizing a new funding bill ahead of the midterm elections, aiming to avoid a government shutdown and address ongoing legislative tensions.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-09-01",
+   "text": "Florida bans Flock cameras on highways. Florida's transportation agency has instructed local law enforcement to stop using Flock Safety's automated license plate reader systems on state roads. The decision follows recent public concern over privacy and surveillance impacts.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-01",
+   "text": "[name] economic D-day for Iran faces challenges. China has stated it will not participate in voluntary economic measures with Iran, which may influence the situation's trajectory.",
+   "house": [
+    "HSFA",
+    "HSBA"
+   ],
+   "senate": [
+    "SSFR",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-09-01",
+   "text": "No negotiations with Canada resuming. The U.S. Trade Representative stated there are no ongoing negotiations with Canada following the collapse of previous talks and the implementation of new tariffs. This position was communicated to international partners and domestic stakeholders.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-09-02",
+   "text": "Army Secretary Resignation Amplifies Pentagon Tensions. Recent developments at the Pentagon following the resignation of Army Secretary [name] have raised concerns about leadership stability and ongoing tensions between military officials and defense leadership. The article highlights the timing of [name] departure and its implications for military modernization efforts.",
+   "house": [
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-09-02",
+   "text": "Congress clears funding patch to avert pre-election shutdown. Lawmakers passed a stopgap funding measure to prevent a government shutdown before the midterm elections, addressing concerns over agency operations and political messaging.",
+   "house": [
+    "HSAP"
+   ],
+   "senate": [
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-09-02",
+   "text": "U.S. strikes Iran again in Gulf region. Iran responded to recent U.S. military actions by launching attacks across the Gulf, targeting American allies and bases. The U.S. government emphasized continued pressure on Tehran amid ongoing tensions.",
+   "house": [
+    "HSAS",
+    "HSFA"
+   ],
+   "senate": [
+    "SSAS",
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-09-03",
+   "text": "[name] supports data centers amid public pushback. The article discusses how President [name] is promoting data centers amid growing public concern. Sources mention efforts to counter opposition and highlight the importance of infrastructure investment.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEG",
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-03",
+   "text": "Republicans consider skipping GOP convention. Republican candidates and lawmakers are evaluating whether to attend the upcoming GOP midterm convention amid shifting political dynamics and concerns about [name] influence.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-03",
+   "text": "[name] administration reviews California coastal management. Recent developments involve a federal review of California's coastal management program, with officials emphasizing the need to balance environmental concerns and economic interests. The administration is seeking clarity on how to proceed with regulatory actions affecting offshore drilling.",
+   "house": [
+    "HSII"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-03",
+   "text": "No immediate plans to punish rogue House Democrats for bailing out GOP. Recent discussions among House Democrats focused on reviewing rules that govern conduct for the upcoming term, with some members considering changes after a bipartisan meeting. Minority Leader [name] emphasized the need for accountability, while others discussed procedural adjustments. The situation remains unresolved as leadership contests unfold.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-03",
+   "text": "Democrats call for Homeland Security funding to support election security. Lawmakers expressed serious concern about protecting elections from cyber threats and misinformation, urging officials to assist state and local election officials.",
+   "house": [
+    "HSHM",
+    "HSHA",
+    "HSAP"
+   ],
+   "senate": [
+    "SSGA",
+    "SSRA",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-09-04",
+   "text": "Record diesel prices impact transportation costs. Recent articles note a significant rise in U.S. diesel prices, affecting transportation expenses across multiple industries. The increase is linked to ongoing geopolitical tensions involving Iran.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-09-04",
+   "text": "Capitol agenda updates. The article discusses Speaker [name] actions and the potential impact on upcoming priorities. It mentions specific legislative efforts and internal party dynamics around data centers and sanctions.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-04",
+   "text": "U.S. economy adds 162,000 jobs in August. Recent data shows the U.S. added 162,000 jobs during August, exceeding expectations and influencing discussions about potential interest rate adjustments. The reporting highlights a notable increase in employment figures.",
+   "house": [
+    "HSED"
+   ],
+   "senate": [
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-09-05",
+   "text": "House Democrats urge faster ballot counting; Virginia senator faces FBI scrutiny. A top Democrat in the House Administration Committee urged states to accelerate ballot counting to counter misinformation about election results. The comments focus on encouraging speed without endorsing specific procedural changes.",
+   "house": [
+    "HSHA"
+   ],
+   "senate": [
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-09-06",
+   "text": "U.S.-Venezuela oil agreement sparks opposition concerns. Venezuelan opposition members expressed concern over new oil agreements with the United States, fearing they could weaken democratic progress in Caracas.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-09-06",
+   "text": "Immigration court developments and new locations. New locations for immigration courts are being established amid increased scrutiny of due process rights for immigrants. The changes aim to streamline deportation processes while raising questions about access to legal representation.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-09-06",
+   "text": "Expansion of mass deportations with noncriminals. Immigration enforcement saw a significant increase, with over 50,000 arrests reported in a short period as officials targeted individuals without criminal records. The operation reflects ongoing efforts to meet quota targets set during the [name] administration.",
+   "house": [
+    "HSJU",
+    "HSHM"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-09-06",
+   "text": "[name] trial outcomes in different jurisdictions. Recent reports detail varied legal developments regarding the [name] case across multiple countries. One article discusses a trial outcome in another nation, while another covers a mistrial in the United States following a jury deadlock. The situation highlights differing judicial approaches to similar allegations.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-06",
+   "text": "Nepal flood rescue updates. Rescuers in Nepal successfully extracted three individuals from a hydropower tunnel following devastating floods. The operation occurred after days of waiting, with specific details about the location and timing provided in the reports.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-07",
+   "text": "Australia introduces social media regulation measures. A government announcement outlines new rules requiring major tech platforms to adjust their algorithms. Industry representatives have expressed concerns about compliance costs.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-07",
+   "text": "Retirement age adjustments announced. Several officials have updated retirement eligibility rules, affecting workers across different sectors. The changes aim to balance workforce needs with individual planning.",
+   "house": [
+    "HSWM",
+    "HSED"
+   ],
+   "senate": [
+    "SSFI",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-09-07",
+   "text": "Iranian school memorial becomes war memorial. A school in Iran has been transformed into a memorial for children killed in recent attacks, marking a shift in how the country honors victims of the conflict with the United States and Israel.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-08",
+   "text": "Public Backlash Against Data Centers Grows. Politicians are responding to growing public concern over data centers, with citizens expressing increasing opposition in recent discussions.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEG",
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-08",
+   "text": "U.S. imposes sanctions on Iranian airlines and foreign firms. The administration announced new sanctions targeting Iranian airlines and several foreign companies linked to the Islamic Revolutionary Guard Corps. These measures are part of a broader economic pressure campaign aimed at influencing Iran's behavior.",
+   "house": [
+    "HSFA",
+    "HSBA"
+   ],
+   "senate": [
+    "SSFR",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-09-08",
+   "text": "Gas prices hit record high amid Iran conflict. Recent articles note that average gas prices hit a new Labor Day record, reaching $4.14 per gallon. This marks a significant increase over previous years, driven by factors including the Iran war and refinery disruptions. The rise in fuel costs reflects broader economic pressures affecting consumers.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-09-08",
+   "text": "Republican convention aims to energize voters ahead of midterms. Several political figures are emphasizing new strategies to energize voters as the midterm elections approach. The focus appears on rallying efforts and messaging ahead of the election cycle.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-08",
+   "text": "U.S. sanctions expand against Iran's aviation sector. Recent actions by the [name] administration targeted 36 entities linked to Iran's aviation industry, aiming to restrict its use in moving weapons and cargo. The statements focus on isolating Tehran's sector through economic pressure.",
+   "house": [
+    "HSFA",
+    "HSBA"
+   ],
+   "senate": [
+    "SSFR",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-09-09",
+   "text": "U.S. imposes new restrictions on Canadian imports. Recent developments involve the United States introducing restrictions on Canadian alcohol, dairy products, and motorbikes. These measures are part of an ongoing trade conflict that began with Canadian counter-tariffs on U.S. goods. The announcements reflect continued pressure from the trade dispute.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-09-09",
+   "text": "U.S. military destroys five Iranian oil tankers; Smithsonian head resigns. Recent developments involve military actions targeting Iranian vessels and a resignation announcement from a Smithsonian official. The articles highlight escalating tensions in the Strait of Hormuz and leadership changes within the U.S. institution.",
+   "house": [
+    "HSAS",
+    "HSHA"
+   ],
+   "senate": [
+    "SSAS",
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-09-09",
+   "text": "Fact-checking [name] stories about his own 9/11 response. The article examines claims made by President [name] regarding his actions during the September 11, 2001 attacks, focusing on whether he provided factual accounts and what sources cited. The discussion centers on specific statements and their verification against available records.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-09",
+   "text": "Bipartisan coalition urges AI framework release. Organizations from both political sides requested the release of the [name] administration's AI security framework, highlighting concerns over transparency. The call emphasizes the need for public access to parameters before broader deployment.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-09",
+   "text": "Republicans gather in Dallas for midterm convention. Several Republican lawmakers and officials are attending a two-day midterm convention in Dallas, aiming to showcase party unity and campaign momentum ahead of the election cycle.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-10",
+   "text": "[name] $5K Dividend Proposal. President [name] announced a plan to distribute $5,000 to every adult American if Republicans retain control of the House and Senate in midterms. The announcement was made during a press conference and emphasized immediate disbursement to citizens.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-09-10",
+   "text": "What happens if we do die? Congressional continuity plans face challenges. The articles discuss concerns about how Congress would function if many members were killed, focusing on the process of special elections and the potential for months-long vacancies. They highlight the challenges of maintaining legislative operations under such circumstances.",
+   "house": [
+    "HSHA",
+    "HSRU"
+   ],
+   "senate": [
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-09-10",
+   "text": "Supreme Court rejects [name] -backed congressional map in Missouri. The U.S. Supreme Court dismissed a federal court order requiring Missouri to adopt a congressional map favored by Republicans, citing a pending ballot initiative. This decision affects how the state will draw districts for the upcoming midterm elections.",
+   "house": [
+    "HSJU",
+    "HSHA"
+   ],
+   "senate": [
+    "SSJU",
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-09-11",
+   "text": "Deportation from terrorist removal court marks first case. An Afghan woman was removed from the United States in the first Alien Terrorist Removal Court case, occurring on the anniversary of 9/11. The decision followed a legal process involving multiple officials and highlighted ongoing efforts to enforce removal orders.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-09-11",
+   "text": "[name] questioned Texas official over [name] dividend support. Several officials discussed a controversial proposal to distribute $5,000 checks to adults if Republicans win midterms. The conversation centered on financial implications and political messaging.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-09-12",
+   "text": "AI 'doomsday' warnings resurface. A former researcher has raised concerns about AI potentially destroying humanity, prompting renewed discussion in legislative circles. The conversation highlights fears about rapid AI development and its possible risks.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-12",
+   "text": "House votes on data center cost legislation. House members are considering a bill aimed at requiring tech companies to cover infrastructure costs linked to data centers. The decision reflects growing concern among some Republicans about rising energy expenses and midterm pressures.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEG",
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-13",
+   "text": "Anthropic CEO Discusses AI Development Pace. Two prominent tech leaders emphasized the need to temper AI advancement to ensure safety and alignment. [name] highlighted the importance of building safeguards before capabilities reach critical thresholds.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-14",
+   "text": "[name] Announces $5K Dividend Checks for Americans. Presidential remarks linked a new payment plan to recent congressional outcomes, emphasizing distribution to eligible recipients.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-09-14",
+   "text": "[name] lifts tariff on Irish whiskey. President [name] announced a reduction in tariffs affecting whiskey from the U.K., including products from Northern Ireland, responding to concerns about trade balance.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-09-14",
+   "text": "Congress Urges Continued AI Oversight. Representatives from the House Minority Leader's office are urging continued presence in Washington to discuss potential regulations on artificial intelligence. The discussion centers on addressing concerns raised by industry insiders about AI's risks to society.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-14",
+   "text": "State and city lawsuits challenge public charge rule. Multiple states and Washington, D.C. are bringing legal actions against the Department of Homeland Security to contest a rule that complicates green card access for immigrants relying on public benefits. The lawsuits aim to clarify how the public charge determination process should operate.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-09-14",
+   "text": "[name] downplays AI regulation concerns. The president emphasized the need for some oversight while avoiding specific rules, highlighting worries about rapid development and unchecked influence from external actors.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-15",
+   "text": "[name] targets Supreme Court justices over mail ballot rules. The Supreme Court ruled against efforts to limit mail-in voting, allowing states to continue using existing processes. This decision impacts how elections will be administered ahead of midterm elections.",
+   "house": [
+    "HSHA",
+    "HSJU"
+   ],
+   "senate": [
+    "SSRA",
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-09-15",
+   "text": "AI Development Concerns in Washington D.C.. Recent discussions in Washington DC focus on public worries about the pace of AI advancement and potential risks it may pose to society. Experts are examining how rapid progress could affect safety and regulation.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-15",
+   "text": "Democrats bridge party lines on sanctions legislation. Two Democratic lawmakers supported a bill granting tariff powers to the president regarding Russian energy imports and reinforcing sanctions against Iran. The legislation moved through the House, addressing key procedural steps for the Russia Sanctions Act.",
+   "house": [
+    "HSFA",
+    "HSWM"
+   ],
+   "senate": [
+    "SSFR",
+    "SSBK",
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-09-15",
+   "text": "College sports bill opposition brews despite [name], [name] optimism. Senate members from Texas and Washington are discussing potential passage of a college athletics regulation bill, though outcomes remain uncertain. The discussion centers on balancing federal oversight with state authority, with some lawmakers expressing reservations about the legislation's impact on transgender athlete policies.",
+   "house": [
+    "HSED",
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-09-15",
+   "text": "Inflation risks from Iran conflict. The Congressional Budget Office estimates that the ongoing conflict with Iran could increase inflation by at least $2 billion per month, with costs expected to rise over time. The analysis focuses on economic impacts rather than political motivations.",
+   "house": [
+    "HSBU",
+    "HSAS"
+   ],
+   "senate": [
+    "SSBU",
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-09-16",
+   "text": "House recesses early; Federal Reserve board set to announce interest rates. Lawmakers in the House are concluding their legislative session ahead of upcoming elections, which influences their ability to address certain issues. The Federal Reserve announced a quarter-point increase in interest rates, affecting borrowing costs for mortgages, auto loans, and credit cards over time.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-09-16",
+   "text": "[name] AI ignorance is 'truly embarrassing'. Sen. [name] criticized Washington for not regulating artificial intelligence, emphasizing the risks posed by advanced models. He highlighted the lack of congressional action and the urgency of addressing potential existential threats.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-17",
+   "text": "Florida congresswoman runs for reelection; immigration debate intensifies. A Florida congresswoman has announced her candidacy for reelection, while immigration policy discussions remain under pressure from recent enforcement actions. The conversation highlights tensions between political ambition and evolving immigration regulations.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-09-17",
+   "text": "Republican critic voices concerns over House departure. A Republican member expressed frustration over the House's early exit, emphasizing accountability for legislative responsibilities. The comment focused on procedural expectations and personal integrity within Congress.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-17",
+   "text": "US interest rates increased for first time in three years. Authorities raised interest rates for the first time in three years, marking a shift in monetary policy amid inflation concerns. The decision followed opposition from President [name], who had previously advocated for rate cuts. Market reactions included a decline in U.S. stocks as investors adjusted to the new rate environment.",
+   "house": [
+    "HSBA"
+   ],
+   "senate": [
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-09-18",
+   "text": "China fears drive AI divide. The articles discuss public and political divisions in the U.S. about whether the country should prioritize AI development over international competition, highlighting differing opinions among voters and lawmakers.",
+   "house": [
+    "HSSY",
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-18",
+   "text": "European Union's outreach to Canada. The European Union has initiated discussions with Canada regarding potential alignment in trade and regulatory matters. Canadian officials referenced specific concerns about compliance and market access.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-18",
+   "text": "House passes Russia sanctions bill. The House approved a comprehensive Russia sanctions measure, marking a shift in congressional support for measures aimed at limiting Moscow's access to financial and energy resources. The legislation follows months of negotiation and faced opposition from certain Democrats concerned about tariff implications. The bill is expected to be signed by President [name] shortly after passage.",
+   "house": [
+    "HSFA",
+    "HSWM"
+   ],
+   "senate": [
+    "SSFR",
+    "SSBK"
+   ]
+  },
+  {
+   "date": "2026-09-18",
+   "text": "Pentagon briefing tensions over Iran policy. Lawmakers discussed unclear guidance from the Pentagon on the [name] administration’s National Defense Strategy and Iran war strategy. Senators expressed frustration over limited clarity during a closed-door session. Experts from Qatar and the U.N. voiced concerns about potential war crimes linked to recent strikes in Iran.",
+   "house": [
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-09-18",
+   "text": "Republican candidate in Florida runs ads criticizing [name] immigration enforcement. A Florida Republican representative is publicly opposing President [name] immigration enforcement policies through campaign advertising. The ad features the candidate addressing [name] directly, emphasizing concerns about the administration's approach.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-19",
+   "text": "Pentagon’s death count omission in Middle East conflict. Recent reports indicate the Pentagon’s public records excluded two deaths of U.S. service members from the Middle East during the Iran war. Officials cited operational details about the missions, and no formal investigation or legal action was taken against the department for this oversight.",
+   "house": [
+    "HSAS"
+   ],
+   "senate": [
+    "SSAS"
+   ]
+  },
+  {
+   "date": "2026-09-19",
+   "text": "Escalating Russian Hybrid Attacks Warn European Leaders. French, Polish, and European officials express concern over Russian hybrid tactics targeting Europe. The leaders emphasize heightened vigilance and defense measures. Recent statements highlight a shared alarm about ongoing aggression.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-19",
+   "text": "Protests outside Kennedy Center. Citizens gathered outside the Kennedy Center to voice concerns about potential actions by the administration, reflecting public reaction to recent developments.",
+   "house": [
+    "HSPW"
+   ],
+   "senate": [
+    "SSEV"
+   ]
+  },
+  {
+   "date": "2026-09-19",
+   "text": "Russia parliamentary vote in annexed regions. Russia is organizing a parliamentary election in areas it claims were taken from Ukraine following its invasion. The event marks the first such vote since the conflict began more than four years ago. Participants will select new lawmakers for the Ukrainian parliament, Duma. The timing reflects ongoing political adjustments in the region.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-20",
+   "text": "AI Singularity Debate. Experts discuss potential AI surpassing human intelligence and the implications for global competition. Multiple voices express caution, with some suggesting the pace may differ from earlier predictions.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-20",
+   "text": "[name] criticizes [name] on AI risks. Former President [name] expressed strong criticism of President [name] regarding the federal government's approach to artificial intelligence, highlighting concerns about potential existential risks. The conversation focused on warnings from some tech industry figures about AI's dangers.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-21",
+   "text": "Senate considers college sports legislation. Lawmakers are focusing on a bill aimed at establishing national compensation rules for college athletes, amid ongoing debates about sports funding and athlete rights.",
+   "house": [
+    "HSED",
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-09-21",
+   "text": "[name] Triumphal Arch Proposal. Two sources report that President [name] is proposing a military-style complex near the Washington D.C. triumphal arch, emphasizing security and surveillance capabilities. The articles note discussions about drone presence and sniper positions, while one mentions a federal court review of the project's legality.",
+   "house": [
+    "HSII"
+   ],
+   "senate": [
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-09-22",
+   "text": "White House launches '[name] TV' after ban on major news outlets. The administration created a YouTube channel to share President [name] most significant moments, following restrictions on three major news organizations. A journalist reported being denied entry to the White House, highlighting ongoing tensions over press access. The House Oversight committee is pressing the administration for clarification on the ban's legal basis and response procedures.",
+   "house": [
+    "HSJU",
+    "HSGO"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-09-22",
+   "text": "Capitol agenda: Nvidia’s clout tested as AI debate shifts. Articles discuss growing tension between Nvidia and lawmakers over AI regulations, highlighting concerns about export controls and the company's public stance on technological risks.",
+   "house": [
+    "HSFA",
+    "HSIF"
+   ],
+   "senate": [
+    "SSBK",
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-22",
+   "text": "Lawmakers call for quick end to Iran war to lower prices. Recent statements emphasize the need for an immediate conclusion to the Iran conflict to alleviate rising energy costs. Officials from Michigan and Iowa have called for measures such as temporary export restrictions and emergency fuel relief programs.",
+   "house": [
+    "HSIF",
+    "HSFA"
+   ],
+   "senate": [
+    "SSEG",
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-09-22",
+   "text": "Lawmakers oppose [name] NIH grant control plan. Lawmakers are opposing efforts by the [name] administration to increase political control over NIH grantmaking. The Senate Appropriations Committee chair, [name], emphasized that such actions conflict with congressional intent. Administrative officials stated the Office of Management and Budget should not influence grant decisions, highlighting tensions over politicization of science funding.",
+   "house": [
+    "HSIF",
+    "HSAP"
+   ],
+   "senate": [
+    "SSHR",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-09-23",
+   "text": "Judge examines [name] news outlet restrictions. A federal judge is reviewing whether the administration's decision to block three major news organizations from the White House constitutes a constitutional overreach. The case centers on claims of First Amendment concerns and the scope of executive power regarding media access.",
+   "house": [
+    "HSJU",
+    "HSGO"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-09-23",
+   "text": "[name] UNGA address on Iran policy. President [name] highlighted international and domestic achievements during his speech to the U.N. General Assembly, emphasizing a strong stance on the Iran conflict and linking future negotiations to upcoming elections.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-09-23",
+   "text": "[name] testimony request and GOP senator's comments. [name] addressed a request from a GOP senator to testify alongside his son, [name], before Congress. The response focused on the nature of the request and the [name] family's involvement without elaborating on political implications or personal stakes.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-23",
+   "text": "[name] polling challenges midterm expectations. Recent surveys indicate strong public dissatisfaction with President [name] performance, influencing voter preferences ahead of the midterm elections. Polls show a notable shift in support toward Democratic candidates.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-23",
+   "text": "Ban Artificial Superintelligence Act Unveiled. Senators [name] and Rep. [name] introduced legislation aimed at restricting the development of AI systems that could surpass human intelligence or pose existential risks. The proposal includes bans on recursive self-improvement and prohibitions on AI creating weapons or evading oversight.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-09-23",
+   "text": "Republican senators face midterm strategy dilemma. Republican senators are navigating internal conflict over whether to prioritize legislative action or focus on campaign strategies amid economic pressures. The discussions center on balancing immediate concerns with long-term legislative goals.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-09-24",
+   "text": "[name] says ICE isn’t ‘going anywhere’ amid immigration enforcement scrutiny. ICE has wasted tens of millions of dollars with 'uninformed' detention plans.",
+   "house": [
+    "HSHM",
+    "HSJU",
+    "HSAP"
+   ],
+   "senate": [
+    "SSGA",
+    "SSJU",
+    "SSAP"
+   ]
+  },
+  {
+   "date": "2026-09-27",
+   "text": "OpenAI bots meddled with multiple US government agency sites. OpenAI said its bots accessed public data from a range of institutions during test exercises.",
+   "house": [
+    "HSHM",
+    "HSGO"
+   ],
+   "senate": [
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-09-28",
+   "text": "[name] -Xi summit: What wasn't said might matter the most. [name] -Xi summit: what wasn't said might matter the most.",
+   "house": [
+    "HSFA"
+   ],
+   "senate": [
+    "SSFR"
+   ]
+  },
+  {
+   "date": "2026-09-28",
+   "text": "US, China agree to cut tariffs on $60B worth of products. U.S. and Chinese governments unveiled $30 billion each worth of products subject to lower tariffs.",
+   "house": [
+    "HSWM"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-09-29",
+   "text": "Supreme Court lets [name] continue deporting people to 3rd countries while justices consider policy. Supreme Court lets [name] continue deporting people to 3rd countries while justices consider policy.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-09-29",
+   "text": "The Senate passes the Protect College Sports Act, but the bill's future is unclear. Protect College Sports Act is on the brink of passing in the Senate.",
+   "house": [
+    "HSED",
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM",
+    "SSHR"
+   ]
+  },
+  {
+   "date": "2026-09-30",
+   "text": "South Korea to invest up to $200B in Alaska LNG pipeline, US power plants, [name] announces. [name] announces $54 billion South Korean investment in Alaska natural gas pipeline.",
+   "house": [
+    "HSIF",
+    "HSII"
+   ],
+   "senate": [
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-09-30",
+   "text": "[name] says top tech firms have signed accord to 'self-police' AI development. [name] on Tuesday said that he and a large group of leaders of artificial intelligence companies had signed a voluntary accord.",
+   "house": [
+    "HSIF",
+    "HSSY"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-10-01",
+   "text": "A judge permanently dismisses former Olympian's Reflecting Pool charges. Judge permanently dismisses [name] administration's case charging ex-Olympian with Reflecting Pool vandalism.",
+   "house": [
+    "HSJU",
+    "HSGO"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-10-01",
+   "text": "[name]: Family of US woman killed by ICE agent sues [name] officials. [name] family sues U.S. government and immigration officials.",
+   "house": [
+    "HSJU",
+    "HSHM"
+   ],
+   "senate": [
+    "SSJU",
+    "SSGA"
+   ]
+  },
+  {
+   "date": "2026-10-02",
+   "text": "Medicare de-fangs new drug pricing model. Medicare de-fangs new drug pricing model.",
+   "house": [
+    "HSWM",
+    "HSIF"
+   ],
+   "senate": [
+    "SSFI"
+   ]
+  },
+  {
+   "date": "2026-10-03",
+   "text": "[name] botched execution renews death penalty scrutiny. [name], who survived despite being subject to two doses of lethal injection.",
+   "house": [
+    "HSJU"
+   ],
+   "senate": [
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-10-04",
+   "text": "[name] backs data centers in Ohio amid tight Senate race. President [name] defended data centers at a midterm campaign rally in Vandalia, Ohio Saturday.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEG",
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-10-05",
+   "text": "[name] raises $18M in third quarter. [name] raised $18 million in the third quarter of 2026 across his campaign and his joint fundraising committees.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-10-05",
+   "text": "[name] names national intelligence chief [name] as new AI czar. [name] names national intelligence chief [name] as new AI czar.",
+   "house": [
+    "HLIG",
+    "HSIF"
+   ],
+   "senate": [
+    "SLIN",
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-10-05",
+   "text": "Brazil votes, with [name] facing [name] son. Polls suggest the election will be a closely run contest between the left-wing incumbent and his right-wing rival.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-10-05",
+   "text": "Permanent daylight saving time: Why this Republican senator disagrees with it, despite [name] support. Sen. [name] isn't supporting permanent daylight saving time.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSCM"
+   ]
+  },
+  {
+   "date": "2026-10-06",
+   "text": "French police fire tear gas as more than 250,000 protest nationwide for school funding. French police fire tear gas as more than 250,000 protest nationwide for school funding.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-10-07",
+   "text": "What voters in 6 key states could tell us about the 2026 midterms. Morning Edition is heading to Maine, Texas, North Carolina, Georgia, Ohio and Michigan to hear what voters say is shaping their choices ahead of the midterm elections.",
+   "house": [],
+   "senate": []
+  },
+  {
+   "date": "2026-10-07",
+   "text": "[name] to propose relaxing oil and gas methane rules. [name] administration will propose to loosen restrictions that rein in methane from oil and gas production.",
+   "house": [
+    "HSIF"
+   ],
+   "senate": [
+    "SSEV"
+   ]
+  },
+  {
+   "date": "2026-10-07",
+   "text": "DNC files lawsuit alleging [name] taxpayer-funded ads are illegal propaganda. DNC files lawsuit alleging [name] taxpayer-funded ads are illegal propaganda.",
+   "house": [
+    "HSGO",
+    "HSHA"
+   ],
+   "senate": [
+    "SSGA",
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-10-08",
+   "text": "[name] defends [name] taxpayer-funded ads — but says it’s ‘good’ MAGA Inc. is paying now. [name] defended President [name] use of taxpayer funded political-themed ads ahead of the election.",
+   "house": [
+    "HSGO",
+    "HSHA"
+   ],
+   "senate": [
+    "SSGA",
+    "SSRA"
+   ]
+  },
+  {
+   "date": "2026-10-09",
+   "text": "[name] administration relaxes rules around political events for [name], other Senate-approved DOJ appointees. [name] administration relaxes rules around political events for [name], other Senate-approved DOJ appointees.",
+   "house": [
+    "HSGO",
+    "HSJU"
+   ],
+   "senate": [
+    "SSGA",
+    "SSJU"
+   ]
+  },
+  {
+   "date": "2026-10-09",
+   "text": "Russia will supply US and global markets with diesel, [name] says. Russia will supply US and global markets with diesel.",
+   "house": [
+    "HSFA",
+    "HSIF"
+   ],
+   "senate": [
+    "SSFR",
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-10-09",
+   "text": "[name] proposes Camp David-style presidential retreat at his private Florida golf club. [name] wants a new Camp David-like retreat at his Florida golf club.",
+   "house": [
+    "HSGO",
+    "HSPW"
+   ],
+   "senate": [
+    "SSGA",
+    "SSEV"
+   ]
+  },
+  {
+   "date": "2026-10-10",
+   "text": "[name] announces deal for Russian diesel as [name] calls it a gift to [name]. [name] announces deal for Russian diesel as [name] calls it a gift to [name].",
+   "house": [
+    "HSFA",
+    "HSIF"
+   ],
+   "senate": [
+    "SSFR",
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-10-11",
+   "text": "[name] says U.S. to get diesel from Russia, relaxing pressure on Moscow to ease prices before midterms. [name] says U.S. to get diesel from Russia.",
+   "house": [
+    "HSFA",
+    "HSIF"
+   ],
+   "senate": [
+    "SSFR",
+    "SSEG"
+   ]
+  },
+  {
+   "date": "2026-10-11",
+   "text": "Bipartisan group of senators calls on [name] to 'reverse course' on Russian diesel plan. Bipartisan group of senators calls on [name] to 'reverse course' on Russian diesel plan.",
+   "house": [
+    "HSFA",
+    "HSIF"
+   ],
+   "senate": [
+    "SSFR",
+    "SSEG"
+   ]
+  }
+ ]
+}
