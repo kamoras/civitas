@@ -8,10 +8,14 @@ the one canonical copy (mirrors the ``pagination``/``score_trends`` shared
 helpers).
 """
 
+import re
+import string
 from typing import Any
 
+from sqlalchemy import ColumnElement, String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.models import RollCall
 from app.pipeline.analyze.party_line_record import load_record
 from app.pipeline.analyze.score_calculator import explain_scores, funding_share_base, party_line_tally
 from app.pipeline.transform.normalize_votes import stored_vote
@@ -28,6 +32,35 @@ def pac_share_pct(entity: Any) -> float:
     each page dividing for itself."""
     base = funding_share_base({"totalContributions": entity.total_contributions, "totalRaised": entity.total_raised})
     return (entity.total_from_pacs or 0) / base * 100 if base > 0 else 0.0
+
+def vote_search(model: Any, q: str) -> ColumnElement[bool]:
+    """The condition for a member's stored votes (KeyVote / RepKeyVote)
+    matching a reader's search: the bill number as typed in any spelling
+    ("HR 123", "h.r.123", "hr12" while typing — matched as a prefix with
+    the dots and spaces left out, so "S 1" doesn't find "S. Res. 15", and
+    only when it has a digit), or the
+    text anywhere in the bill's title, the vote's description or its roll
+    call's question and title. Applied after the member's own (indexed)
+    filter, so it reads that member's few hundred rows, and the roll calls
+    once, as a subquery."""
+    text = q.strip()
+    ref = (RollCall.chamber + "-" + cast(RollCall.congress, String) + "-" + cast(RollCall.session, String)
+           + "-" + cast(RollCall.number, String))
+    asked = select(ref).where(or_(RollCall.question.contains(text, autoescape=True),
+                                  RollCall.title.contains(text, autoescape=True)))
+    conditions = [
+        model.bill_name.contains(text, autoescape=True),
+        model.description.contains(text, autoescape=True),
+        model.roll_call.in_(asked),
+    ]
+    number = re.sub(r"[^A-Za-z0-9]", "", text).upper()
+    if any(c.isdigit() for c in number):  # a bill number has one; "S" alone would match every Senate bill
+        bare = func.replace(func.replace(func.upper(model.bill_id), ".", ""), " ", "")
+        if number.isdigit():  # "123" alone: the number, of any bill type
+            bare = func.ltrim(bare, string.ascii_uppercase)
+        conditions.append(bare.startswith(number, autoescape=True))
+    return or_(*conditions)
+
 
 def _vote_dict(v: Any) -> dict:
     return stored_vote(v.id, v.bill_id, v.voted_with_party)

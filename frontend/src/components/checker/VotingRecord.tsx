@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import {
   KeyVote,
   PaginatedVotes,
@@ -17,6 +17,8 @@ import Pagination from "@/components/shared/Pagination";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 
 const VOTES_PER_PAGE = 15;
+// The search box asks the server once typing pauses this long.
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface VotingRecordProps {
   senatorId: string;
@@ -117,11 +119,14 @@ function PaginatedVoteList({
   category,
   voteCount,
   chamber = "senate",
+  q,
 }: {
   senatorId: string;
-  category: "recent" | "key";
+  category: "recent" | "key" | "all";
   voteCount: number;
   chamber?: "senate" | "house";
+  /** A search over bill number, title and question, run by the server. */
+  q?: string;
 }) {
   // `filter` is the one last asked for, `shownFilter` the one the votes on
   // screen were fetched with.
@@ -138,10 +143,10 @@ function PaginatedVoteList({
     (p: number, f: VoteFilterType) => {
       const fetcher = chamber === "house" ? fetchRepVotes : fetchSenatorVotes;
       request(f, () =>
-        fetcher(senatorId, { category, page: p, perPage: VOTES_PER_PAGE, filter: f })
+        fetcher(senatorId, { category, page: p, perPage: VOTES_PER_PAGE, filter: f, q })
       );
     },
-    [request, senatorId, category, chamber]
+    [request, senatorId, category, chamber, q]
   );
 
   useEffect(() => {
@@ -180,9 +185,26 @@ function PaginatedVoteList({
 
   const counts: VoteCounts = data.counts;
 
+  if (q && counts.all === 0) {
+    return (
+      <p className={`text-sm text-ink-lo ${loading ? "opacity-60" : ""}`} role="status">
+        No vote on record matches this search. Try a bill number (such as H.R. 1) or a word from its
+        title.
+      </p>
+    );
+  }
+
   return (
     <div className={loading ? "opacity-60 transition-opacity" : ""}>
-      {voteCount > VOTES_PER_PAGE && (
+      {/* Not naming the query: while the next one loads, these counts are
+          still the last one's. */}
+      {q && (
+        <p className="mb-2 text-xs text-ink-lo" role="status">
+          {counts.all.toLocaleString()} {counts.all === 1 ? "vote matches" : "votes match"} this
+          search
+        </p>
+      )}
+      {(voteCount > VOTES_PER_PAGE || (q && counts.all > VOTES_PER_PAGE)) && (
         <div className="flex items-center gap-1.5 mb-3 flex-wrap">
           <VoteFilter
             label="ALL"
@@ -255,6 +277,14 @@ export default function VotingRecord({
     votedAgainstPartyCount = 0,
   } = votingRecord;
 
+  const searchId = useId();
+  const [query, setQuery] = useState("");
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQ(query.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [query]);
+
   // Every figure here is the API's: the party-line counts are the ones
   // Constituent Alignment scores (each measure once, breaks toward the
   // other party only), so this panel and the column beside it agree.
@@ -306,38 +336,65 @@ export default function VotingRecord({
       alwaysVisible={statBoxes}
     >
       <div className="space-y-6 mt-4">
-        <p className="text-xs text-ink-lo">
-          Each vote links to its bill.{" "}
-          <span className="font-mono text-signal-magenta">AGAINST PARTY</span> marks a vote with the
-          other side on a roll call the parties split on, including votes against the party from its
-          own flank and repeat votes on one bill, which the counts above leave out.
-        </p>
-        {keyVoteCount > 0 && (
-          <div>
-            <div className="text-xs text-ink-lo mb-2 font-mono tracking-widest">
-              KEY VOTES: LONG-TERM SUMMARY
-            </div>
-            <PaginatedVoteList
-              senatorId={senatorId}
-              category="key"
-              voteCount={keyVoteCount}
-              chamber={chamber}
+        {totalVotes > VOTES_PER_PAGE && (
+          <div className="flex flex-col gap-1">
+            <label htmlFor={searchId} className="font-mono text-xs tracking-widest text-ink-lo">
+              SEARCH THESE VOTES
+            </label>
+            <input
+              id={searchId}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Bill number, title or question"
+              className="w-full max-w-md border border-white/15 bg-white/[0.03] px-3 py-2 font-mono text-sm text-ink-hi placeholder:text-ink-min focus:border-phos/40 focus:outline-none"
             />
           </div>
         )}
+        {q ? (
+          <PaginatedVoteList
+            senatorId={senatorId}
+            category="all"
+            voteCount={totalVotes}
+            chamber={chamber}
+            q={q}
+          />
+        ) : (
+          <>
+            <p className="text-xs text-ink-lo">
+              Each vote links to its bill.{" "}
+              <span className="font-mono text-signal-magenta">AGAINST PARTY</span> marks a vote with
+              the other side on a roll call the parties split on, including votes against the party
+              from its own flank and repeat votes on one bill, which the counts above leave out.
+            </p>
+            {keyVoteCount > 0 && (
+              <div>
+                <div className="text-xs text-ink-lo mb-2 font-mono tracking-widest">
+                  KEY VOTES: LONG-TERM SUMMARY
+                </div>
+                <PaginatedVoteList
+                  senatorId={senatorId}
+                  category="key"
+                  voteCount={keyVoteCount}
+                  chamber={chamber}
+                />
+              </div>
+            )}
 
-        {recentVoteCount > 0 && (
-          <div>
-            <div className="text-xs text-ink-lo mb-2 font-mono tracking-widest">
-              RECENT VOTES ({recentVoteCount})
-            </div>
-            <PaginatedVoteList
-              senatorId={senatorId}
-              category="recent"
-              voteCount={recentVoteCount}
-              chamber={chamber}
-            />
-          </div>
+            {recentVoteCount > 0 && (
+              <div>
+                <div className="text-xs text-ink-lo mb-2 font-mono tracking-widest">
+                  RECENT VOTES ({recentVoteCount})
+                </div>
+                <PaginatedVoteList
+                  senatorId={senatorId}
+                  category="recent"
+                  voteCount={recentVoteCount}
+                  chamber={chamber}
+                />
+              </div>
+            )}
+          </>
         )}
       </div>
     </CollapsibleSection>

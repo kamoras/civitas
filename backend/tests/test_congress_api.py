@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import CongressEvent, RollCall
+from app.models import CongressDay, CongressEvent, RollCall
 from app.pipeline import congress_activity as ca
 from app.services import congress_service as cs
 from tests.congress_activity_helpers import _digest_responses, _fake_get
@@ -312,3 +312,59 @@ def test_routine_lists_are_named_not_counted():
     assert cs._chamber_sentence("senate", day) == "The Senate confirmed 7 nominations and routine lists."
     counts.update(confirmed=0)
     assert cs._chamber_sentence("senate", day) == "The Senate confirmed routine lists of nominations."
+
+
+class TestRecess:
+    """/congress on a day neither chamber did business led with "met for
+    2 minutes" above eight zeros. It leads with "Congress is out" instead,
+    names the last day of business and opens that week."""
+
+    @pytest.fixture(autouse=True)
+    def today(self, freeze_utcnow):
+        freeze_utcnow(datetime(2026, 10, 2, 16))
+
+    @pytest.fixture
+    def pro_forma_day(self, week_of_sept_21):
+        db = week_of_sept_21
+        db.add(CongressDay(chamber="senate", date="2026-10-01", in_session=True, is_final=True, source="digest",
+                           convened_at="1:30:01 p.m.", adjourned_at="1:30:39 p.m.",
+                           adjournment_text="The Senate met at 1:30:01 p.m. in pro forma session.",
+                           next_meeting="3:30 p.m., Tuesday, October 6",
+                           next_program="Program for Tuesday: Senate will meet in a pro forma session."))
+        db.add(CongressDay(chamber="house", date="2026-10-01", in_session=True, is_final=True, source="digest",
+                           convened_at="12:30 p.m.", adjourned_at="12:32 p.m.",
+                           next_meeting="1:30 p.m., Tuesday, October 6"))
+        db.commit()
+        return db
+
+    def test_a_day_without_business_leads_with_the_recess(self, client, pro_forma_day):
+        body = client.get("/api/congress/latest").json()
+        assert body["date"] == "2026-10-01"
+        assert body["recess"] == {
+            "headline": "Congress is out",
+            "sentence": "Neither chamber has taken a record vote or passed or confirmed anything since "
+                        "Thursday, September 24. Next sittings on the record: the Senate at 3:30 p.m., Tuesday, "
+                        "October 6, in a pro forma session; the House at 1:30 p.m., Tuesday, October 6.",
+            "lastBusinessDay": "2026-09-24",
+            "week": "2026-09-21",
+        }
+
+    def test_a_committee_report_filed_in_a_pro_forma_sitting_is_not_business(self, client, pro_forma_day):
+        pro_forma_day.add(CongressEvent(chamber="house", date="2026-10-01", kind="reported", seq=1, source="digest",
+                                        text="H.R. 1, to do a thing (H. Rept. 119-1).", bill_id="HR.1"))
+        pro_forma_day.commit()
+        assert client.get("/api/congress/latest").json()["recess"]["lastBusinessDay"] == "2026-09-24"
+
+    def test_a_day_with_business_has_no_recess(self, client, pro_forma_day):
+        pro_forma_day.add(RollCall(chamber="senate", congress=119, session=2, number=250, date="2026-10-01",
+                                   question="On the Nomination", result="Confirmed", yeas=51, nays=45))
+        pro_forma_day.commit()
+        assert client.get("/api/congress/latest").json()["recess"] is None
+
+    def test_a_day_still_on_the_live_floor_log_is_not_called_a_recess(self, client, pro_forma_day):
+        pro_forma_day.query(CongressDay).filter_by(date="2026-10-01", chamber="house").update({"is_final": False})
+        pro_forma_day.commit()
+        assert client.get("/api/congress/latest").json()["recess"] is None
+
+    def test_a_dated_day_report_is_that_days_record(self, client, pro_forma_day):
+        assert "recess" not in client.get("/api/congress/day/2026-10-01").json()

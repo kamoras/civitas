@@ -64,7 +64,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
-- **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
+- **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns, and those closed in the last 60 days), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
 - **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
 All services, models, and data run on-device. No data leaves the server.
@@ -1650,7 +1650,9 @@ state in the query string is exposed to them.
   updates. `/action?tab=timeline` froze there for the whole session — every
   tab click swapped the panel but left the URL reading `?tab=timeline`, and a
   refresh re-froze it. Use `window.history.replaceState` for search-param-only
-  updates instead; Next patches the History API, copies its internal state
+  updates instead (every page that keeps view state in the query string does
+  now, `/compare`'s pair included — it was the last `router.replace`, found
+  2026-10); Next patches the History API, copies its internal state
   onto the entry (so passing `null` is safe and popstate still works), and
   dispatches `ACTION_RESTORE` to keep `usePathname`/`useSearchParams` in sync
   without performing a navigation.
@@ -1667,6 +1669,19 @@ state in the query string is exposed to them.
   (`/action?tab=issues`) for all in-app links. Bare `/action` stays fine as a
   public entry point: a cold load has no client cache to restore from. Do not
   "tidy" that query string away.
+
+#### Empty defaults are content (2026-10)
+
+A default view that renders zeros or "nothing found" on an ordinary day is a
+defect, not an empty state. Say what the site does know, from stored data,
+decided by the backend: `/congress` on a day without business leads with the
+recess and the last week of business (`recess` on `/api/congress/latest`),
+the bills page's "Active now" falls back to bills that moved this week and
+says so (`shown`/`movedSince`), a bill page states its stage's base rate
+(`stageBaseRate` — worded as what happens to bills at the stage, never a
+forecast for the bill), the Ongoing tab lists recently closed monitors, and
+`/compare` offers pairs that need no picking. Never fill the gap with model
+text or a visitor's input (§7, §8).
 
 ### Testing
 

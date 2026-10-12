@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
@@ -195,6 +195,116 @@ function SenatorSelector({
   );
 }
 
+/**
+ * Comparisons that need no picking: both senators of a state, or the member
+ * already chosen against their state's senators. Navigation over data the
+ * site has, never an input (AGENTS.md §8).
+ */
+function ComparePresets({
+  chosen,
+  onPair,
+}: {
+  /** The one member chosen so far, if exactly one side is filled. */
+  chosen: { member: Senator; chamber: Chamber } | null;
+  onPair: (left: Senator, right: Senator, lCh: Chamber, rCh: Chamber) => void;
+}) {
+  const [states, setStates] = useState<StateInfo[]>([]);
+  const [state, setState] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  // Keyed by the member they were fetched for, so a list fetched for an
+  // earlier choice never shows beside a later one.
+  const [fetched, setFetched] = useState<{ for: string; list: Senator[] } | null>(null);
+
+  useEffect(() => {
+    fetchStates()
+      .then(setStates)
+      .catch(() => {});
+  }, []);
+
+  // The chosen member's state's senators, other than the member.
+  const chosenId = chosen?.member.id;
+  const chosenState = chosen?.member.state;
+  useEffect(() => {
+    if (!chosenState || !chosenId) return;
+    let live = true;
+    fetchSenatorsByState(chosenState)
+      .then((list) => {
+        if (live) setFetched({ for: chosenId, list: list.filter((s) => s.id !== chosenId) });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [chosenId, chosenState]);
+
+  const colleagues = fetched && fetched.for === chosenId ? fetched.list : [];
+
+  const pairState = (code: string) => {
+    setState(code);
+    setFailed(false);
+    if (!code) return;
+    setBusy(true);
+    fetchSenatorsByState(code)
+      .then((list) => {
+        if (list.length >= 2) onPair(list[0], list[1], "senate", "senate");
+        else setFailed(true);
+      })
+      .catch(() => setFailed(true))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <div className="panel mb-4 flex flex-col gap-3 p-4">
+      <div className="font-mono text-xs tracking-widest text-ink-lo">QUICK COMPARISONS</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="preset-state" className="font-mono text-xs text-ink">
+          Both senators from
+        </label>
+        <select
+          id="preset-state"
+          value={state}
+          onChange={(e) => pairState(e.target.value)}
+          className="bg-white/[0.03] border border-white/15 text-ink-hi px-3 py-2 font-mono text-xs focus:outline-none focus:border-signal-cyan/40"
+        >
+          <option value="">Select a state</option>
+          {states
+            .filter((s) => s.senatorCount >= 2)
+            .map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.code} · {s.name}
+              </option>
+            ))}
+        </select>
+        {busy && <span className="font-mono text-xs text-ink-min">LOADING…</span>}
+        {failed && (
+          <span role="alert" className="font-mono text-xs text-signal-red">
+            Could not load that state&apos;s senators.
+          </span>
+        )}
+      </div>
+      {chosen && colleagues.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-xs text-ink">
+            {chosen.member.name} against {chosen.chamber === "senate" ? "the other" : "a"}{" "}
+            {chosen.member.state} senator:
+          </span>
+          {colleagues.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => onPair(chosen.member, s, chosen.chamber, "senate")}
+              className={`font-mono text-xs px-3 py-1.5 border transition-colors ${BOXED_CONTROL.unselected}`}
+            >
+              <span className={`mr-2 ${PARTY_COLORS[s.party]}`}>[{s.party}]</span>
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ComparisonTable({
   left,
   right,
@@ -371,7 +481,6 @@ function ComparisonTable({
 }
 
 function ComparePageInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [leftSenator, setLeftSenator] = useState<Senator | null>(null);
   const [rightSenator, setRightSenator] = useState<Senator | null>(null);
@@ -435,10 +544,33 @@ function ComparePageInner() {
         params.set("rightId", right.id);
         params.set("rightChamber", rCh);
       }
-      router.replace(params.toString() ? `?${params}` : "/compare", { scroll: false });
+      // Not router.replace: on this statically prerendered route it does
+      // nothing once the page was loaded with a query string, so the address
+      // bar froze on the first pair (AGENTS.md, "Client-side URL state").
+      window.history.replaceState(null, "", params.toString() ? `?${params}` : "/compare");
     },
-    [router]
+    []
   );
+  // Bumped when a preset fills both sides, so the pickers remount showing
+  // the new pair rather than the state each was last left on.
+  const [presetVersion, setPresetVersion] = useState(0);
+  const handlePair = useCallback(
+    (left: Senator, right: Senator, lCh: Chamber, rCh: Chamber) => {
+      setLeftSenator(left);
+      setRightSenator(right);
+      setLeftChamber(lCh);
+      setRightChamber(rCh);
+      setPresetVersion((v) => v + 1);
+      updateUrl(left, right, lCh, rCh);
+    },
+    [updateUrl]
+  );
+  const chosen =
+    leftSenator && !rightSenator
+      ? { member: leftSenator, chamber: leftChamber }
+      : rightSenator && !leftSenator
+        ? { member: rightSenator, chamber: rightChamber }
+        : null;
 
   const handleLeft = useCallback(
     (s: Senator | null, ch: Chamber) => {
@@ -487,8 +619,9 @@ function ComparePageInner() {
             title="Compare legislators"
           >
             <p>
-              Select two legislators to compare their representation scores, funding sources, and
-              constituent alignment side by side. Presidents compare on the{" "}
+              Pick two legislators, or start from a quick comparison, to see their representation
+              scores, funding sources, and constituent alignment side by side. Presidents compare on
+              the{" "}
               <Link
                 href="/compare/presidents"
                 className="underline decoration-white/30 underline-offset-4 hover:text-phos"
@@ -499,8 +632,11 @@ function ComparePageInner() {
             </p>
           </PageMasthead>
 
+          <ComparePresets chosen={chosen} onPair={handlePair} />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <SenatorSelector
+              key={`left-${presetVersion}`}
               side="left"
               onSelect={handleLeft}
               selectedId={leftSenator?.id}
@@ -508,6 +644,7 @@ function ComparePageInner() {
               initialState={leftSenator?.state}
             />
             <SenatorSelector
+              key={`right-${presetVersion}`}
               side="right"
               onSelect={handleRight}
               selectedId={rightSenator?.id}

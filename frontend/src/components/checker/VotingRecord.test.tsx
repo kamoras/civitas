@@ -168,6 +168,42 @@ describe("VotingRecord", () => {
     }
   });
 
+  it("searches every vote on the server and says how many match", async () => {
+    fetchSenatorVotes.mockResolvedValueOnce(votes("all", "First bill"));
+    await openList();
+
+    fetchSenatorVotes.mockResolvedValue(
+      votes("all", "Highway bill", {
+        total: 2,
+        totalPages: 1,
+        counts: { all: 2, yea: 2, nay: 0, againstParty: 0 },
+      })
+    );
+    await userEvent.type(screen.getByLabelText("SEARCH THESE VOTES"), "hr 7");
+
+    expect(await screen.findByText("Highway bill")).toBeInTheDocument();
+    expect(screen.getByText("2 votes match this search")).toBeInTheDocument();
+    // One request for what was typed once typing paused, across key and recent alike.
+    expect(fetchSenatorVotes).toHaveBeenLastCalledWith("S1", {
+      category: "all",
+      page: 1,
+      perPage: 15,
+      filter: "all",
+      q: "hr 7",
+    });
+    expect(fetchSenatorVotes).toHaveBeenCalledTimes(2);
+
+    fetchSenatorVotes.mockResolvedValue(
+      votes("all", "unused", {
+        votes: [],
+        total: 0,
+        counts: { all: 0, yea: 0, nay: 0, againstParty: 0 },
+      })
+    );
+    await userEvent.type(screen.getByLabelText("SEARCH THESE VOTES"), "zzz");
+    expect(await screen.findByText(/No vote on record matches this search/)).toBeInTheDocument();
+  });
+
   it("links a vote stored before its roll call was recorded to the site's bill page", async () => {
     const early: KeyVote = { ...vote("S.1071"), billId: "S.1071", rollCall: null };
     const nomination: KeyVote = { ...vote("PN12-3"), billId: "PN12-3", rollCall: null };

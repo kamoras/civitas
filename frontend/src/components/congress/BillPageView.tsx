@@ -168,6 +168,14 @@ export default function BillPageView({
                     : <span className="text-ink">{record.latestAction.text}</span>
                   </p>
                 )}
+                {/* A base rate for the stage, worded and counted by the
+                    backend (bill_service.stage_base_rate): what happens to
+                    bills here, never a forecast for this one. */}
+                {detail?.stageBaseRate && (
+                  <p className="max-w-3xl border-l-2 border-white/20 pl-3 text-sm leading-relaxed text-ink-lo">
+                    {detail.stageBaseRate.sentence}
+                  </p>
+                )}
                 {unavailable.length > 0 && (
                   <p className="text-sm text-signal-amber">
                     {/* Not asked, or not answered: the site's hourly share of
