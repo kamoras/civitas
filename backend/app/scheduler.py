@@ -642,6 +642,43 @@ def _election_results_sync() -> None:
     _start_job(_run, name="election-results-sync")
 
 
+def _election_results_readiness() -> None:
+    """Once a day in the two weeks before election day, whether every
+    covered state's live-results feed can still be read
+    (live_results/readiness.py) — a no-op the rest of the year."""
+    from app.election_phase import active_election, election_today
+    from app.live_results.readiness import readiness_due
+
+    election = active_election()
+    today = election_today()
+    if election.shows_results or not readiness_due(election.election_day, today):
+        return
+
+    def _run():
+        from app.http_client import make_async_client
+        from app.live_results.readiness import check_feed_readiness
+        from app.live_results.sync import results_tracker
+
+        async def _check():
+            db = SessionLocal()
+            try:
+                async with make_async_client() as client:
+                    return await check_feed_readiness(db, client, election.election_day, today)
+            finally:
+                db.close()
+
+        # Under the live sync's tracker and lease: the sync is a no-op until
+        # election day, and a data reset sees this read as it would the sync.
+        try:
+            problems = lease.run_tracked(lease.RESULTS_SYNC, results_tracker(), _check, who="Live results readiness")
+            if problems is not None:  # None: refused or cut off, logged by run_tracked
+                logger.info("Live results readiness: %s", problems or "every covered state ready")
+        except Exception:
+            logger.exception("Live results readiness check failed")
+
+    _start_job(_run, name="election-results-readiness")
+
+
 def _congress_activity_sync() -> None:
     """The /congress record: new roll calls, today's floor logs and the
     Daily Digest (pipeline/congress_activity.py). Half-hourly all year:
@@ -764,6 +801,15 @@ def start_scheduler() -> None:
         _election_results_sync,
         CronTrigger(minute="*/5", timezone="UTC"),
         id="election_results_sync",
+        replace_existing=True,
+    )
+
+    # Whether every covered state's results feed still reads — daily in the
+    # two weeks before election day, a no-op otherwise (checked inside).
+    scheduler.add_job(
+        _election_results_readiness,
+        CronTrigger(hour="14", minute="20", timezone="UTC"),
+        id="election_results_readiness",
         replace_existing=True,
     )
 

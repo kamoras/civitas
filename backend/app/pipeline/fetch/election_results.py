@@ -71,6 +71,19 @@ class StateCount:
     official: bool
     unit_label: str = "precincts"
     contests: list[ContestCount] = field(default_factory=list)
+    # What the reporting figure counts. True: units the source marks as
+    # FULLY reported -- Clarity's county roll-up ("Percent Completely
+    # Reported"; Colorado's 2024 general showed CO-8 at 0 of 3 counties all
+    # night beside 230,000 votes), TotalVote's "Precincts Fully" (New
+    # Mexico's 2024 general: 0 of 656 beside 222,000 votes) and Tally's
+    # precinctsReporting (it counts partly reported precincts separately).
+    # False: units that have reported ANY results -- Enhanced Voting's
+    # localities (Utah's 2024 general read 29 of 29 counties two days in,
+    # with two thirds of its final vote counted). "0 of 656 precincts
+    # reporting" beside 222,000 votes, or "29 of 29 counties reporting" with
+    # a third still to count, each reads as the opposite of what the source
+    # meant, so the wording follows this (signals.reporting_line).
+    units_complete: bool = True
     # When the source says it last updated (naive UTC), and its own version
     # id where it keeps one — what the sync compares to refuse a feed that
     # has gone BACKWARDS (a cache or a mirror serving an older copy). A
@@ -233,9 +246,25 @@ def _reader_for(source: dict):
     return _readers().get(strategy)
 
 
+def ranked_choice_states() -> set[str]:
+    """States that decide federal generals by ranked-choice rounds when no
+    candidate has a majority (their entry's `ranked_choice_general`, the
+    law that says so): Maine and Alaska."""
+    return {s for s in configured_states() if (source_for_state(s) or {}).get("ranked_choice_general")}
+
+
 def live_results_states() -> set[str]:
-    """Every state this module can read a live count for."""
-    return {s for s in configured_states() if (src := source_for_state(s)) and _reader_for(src)}
+    """Every state this module can read a live count for. Never a
+    ranked-choice state: its election-night count is first choices, and the
+    leader of those is not necessarily who the rounds elect, so "leads" and
+    a change of party read from it could be the opposite of the result. No
+    reader here tabulates rounds; such a state's page says why it has no
+    live count instead (ranked_choice_states)."""
+    rcv = ranked_choice_states()
+    return {
+        s for s in configured_states()
+        if s not in rcv and (src := source_for_state(s)) and _reader_for(src)
+    }
 
 
 async def fetch_state_count(

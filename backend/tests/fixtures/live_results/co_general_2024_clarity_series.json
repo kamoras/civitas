@@ -1,0 +1,743 @@
+{
+ "_source": "Colorado's own Clarity feed for its 2024 general (EID 122598): sum.json as the Internet Archive captured it at each listed version on election night (web.archive.org/web/<captured>id_/https://results.enr.clarityelections.com/CO/122598/<version>/json/sum.json), and the final version still hosted by the vendor (read 2026-10-12). Trimmed to three House contests and one state contest that shares a district label; candidate names replaced with placeholders, every other figure as published. electionsettings: the vendor's current file, trimmed.",
+ "electionsettings": {
+  "settings": {
+   "electiondetails": {
+    "electiondate": "11/5/2024",
+    "istestmode": false,
+    "showtestdatawatermark": null,
+    "participatingcounties": [
+     "Adams|122601|355842|11/26/2024 12:52:24 PM MST|16",
+     "Alamosa|122602|355731|11/22/2024 3:23:54 PM MST|16",
+     "Arapahoe|122600|355822|11/26/2024 10:52:59 AM MST|16"
+    ],
+    "internalname": "2024 General"
+   }
+  },
+  "pagesettings": {
+   "global settings": {
+    "percent reported": "Percent Completely Reported"
+   },
+   "web": {
+    "legend_notcompletelyreported_state_countiesreporting": "County is reporting results but has not completely reported",
+    "legend_completelyreported_state_countiesreporting": "County has reported results"
+   }
+  }
+ },
+ "versions": [
+  {
+   "version": 350435,
+   "captured": "20241105230730",
+   "Contests": [
+    {
+     "C": "Representative to the 119th United States Congress - District 3",
+     "CH": [
+      "Candidate A-3",
+      "Candidate B-3",
+      "Candidate C-3",
+      "Candidate D-3"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "LBR",
+      "UNI"
+     ],
+     "V": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "PR": 0,
+     "TP": 27,
+     "T": 0
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 5",
+     "CH": [
+      "Candidate A-5",
+      "Candidate B-5",
+      "Candidate C-5",
+      "Candidate D-5",
+      "Candidate E-5",
+      "Candidate F-5"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "ACN",
+      "FWD",
+      "LBR",
+      "UAF"
+     ],
+     "V": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "PR": 0,
+     "TP": 1,
+     "T": 0
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8",
+      "Candidate C-8",
+      "Candidate D-8"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "APV",
+      "UNI"
+     ],
+     "V": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 0
+    },
+    {
+     "C": "State Board of Education Member - Congressional District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8"
+     ],
+     "P": [
+      "DEM",
+      "REP"
+     ],
+     "V": [
+      0,
+      0
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 0
+    }
+   ]
+  },
+  {
+   "version": 351262,
+   "captured": "20241106020819",
+   "Contests": [
+    {
+     "C": "Representative to the 119th United States Congress - District 3",
+     "CH": [
+      "Candidate A-3",
+      "Candidate B-3",
+      "Candidate C-3",
+      "Candidate D-3"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "LBR",
+      "UNI"
+     ],
+     "V": [
+      521,
+      2036,
+      69,
+      5
+     ],
+     "PR": 1,
+     "TP": 27,
+     "T": 2631
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 5",
+     "CH": [
+      "Candidate A-5",
+      "Candidate B-5",
+      "Candidate C-5",
+      "Candidate D-5",
+      "Candidate E-5",
+      "Candidate F-5"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "ACN",
+      "FWD",
+      "LBR",
+      "UAF"
+     ],
+     "V": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "PR": 0,
+     "TP": 1,
+     "T": 0
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8",
+      "Candidate C-8",
+      "Candidate D-8"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "APV",
+      "UNI"
+     ],
+     "V": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 0
+    },
+    {
+     "C": "State Board of Education Member - Congressional District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8"
+     ],
+     "P": [
+      "DEM",
+      "REP"
+     ],
+     "V": [
+      0,
+      0
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 0
+    }
+   ]
+  },
+  {
+   "version": 351362,
+   "captured": "20241106021830",
+   "Contests": [
+    {
+     "C": "Representative to the 119th United States Congress - District 3",
+     "CH": [
+      "Candidate A-3",
+      "Candidate B-3",
+      "Candidate C-3",
+      "Candidate D-3"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "LBR",
+      "UNI"
+     ],
+     "V": [
+      12201,
+      15528,
+      784,
+      170
+     ],
+     "PR": 2,
+     "TP": 27,
+     "T": 28683
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 5",
+     "CH": [
+      "Candidate A-5",
+      "Candidate B-5",
+      "Candidate C-5",
+      "Candidate D-5",
+      "Candidate E-5",
+      "Candidate F-5"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "ACN",
+      "FWD",
+      "LBR",
+      "UAF"
+     ],
+     "V": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "PR": 0,
+     "TP": 1,
+     "T": 0
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8",
+      "Candidate C-8",
+      "Candidate D-8"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "APV",
+      "UNI"
+     ],
+     "V": [
+      28891,
+      41253,
+      1047,
+      549
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 71740
+    },
+    {
+     "C": "State Board of Education Member - Congressional District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8"
+     ],
+     "P": [
+      "DEM",
+      "REP"
+     ],
+     "V": [
+      27696,
+      41782
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 69478
+    }
+   ]
+  },
+  {
+   "version": 351526,
+   "captured": "20241106023209",
+   "Contests": [
+    {
+     "C": "Representative to the 119th United States Congress - District 3",
+     "CH": [
+      "Candidate A-3",
+      "Candidate B-3",
+      "Candidate C-3",
+      "Candidate D-3"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "LBR",
+      "UNI"
+     ],
+     "V": [
+      74305,
+      64204,
+      3072,
+      907
+     ],
+     "PR": 5,
+     "TP": 27,
+     "T": 142488
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 5",
+     "CH": [
+      "Candidate A-5",
+      "Candidate B-5",
+      "Candidate C-5",
+      "Candidate D-5",
+      "Candidate E-5",
+      "Candidate F-5"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "ACN",
+      "FWD",
+      "LBR",
+      "UAF"
+     ],
+     "V": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "PR": 0,
+     "TP": 1,
+     "T": 0
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8",
+      "Candidate C-8",
+      "Candidate D-8"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "APV",
+      "UNI"
+     ],
+     "V": [
+      108147,
+      103426,
+      3313,
+      2093
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 216979
+    },
+    {
+     "C": "State Board of Education Member - Congressional District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8"
+     ],
+     "P": [
+      "DEM",
+      "REP"
+     ],
+     "V": [
+      103821,
+      106564
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 210385
+    }
+   ]
+  },
+  {
+   "version": 351576,
+   "captured": "20241106023929",
+   "Contests": [
+    {
+     "C": "Representative to the 119th United States Congress - District 3",
+     "CH": [
+      "Candidate A-3",
+      "Candidate B-3",
+      "Candidate C-3",
+      "Candidate D-3"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "LBR",
+      "UNI"
+     ],
+     "V": [
+      108426,
+      112316,
+      5150,
+      1303
+     ],
+     "PR": 6,
+     "TP": 27,
+     "T": 227195
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 5",
+     "CH": [
+      "Candidate A-5",
+      "Candidate B-5",
+      "Candidate C-5",
+      "Candidate D-5",
+      "Candidate E-5",
+      "Candidate F-5"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "ACN",
+      "FWD",
+      "LBR",
+      "UAF"
+     ],
+     "V": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "PR": 0,
+     "TP": 1,
+     "T": 0
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8",
+      "Candidate C-8",
+      "Candidate D-8"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "APV",
+      "UNI"
+     ],
+     "V": [
+      108147,
+      103426,
+      3313,
+      2093
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 216979
+    },
+    {
+     "C": "State Board of Education Member - Congressional District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8"
+     ],
+     "P": [
+      "DEM",
+      "REP"
+     ],
+     "V": [
+      103821,
+      106564
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 210385
+    }
+   ]
+  },
+  {
+   "version": 352921,
+   "captured": "20241106054752",
+   "Contests": [
+    {
+     "C": "Representative to the 119th United States Congress - District 3",
+     "CH": [
+      "Candidate A-3",
+      "Candidate B-3",
+      "Candidate C-3",
+      "Candidate D-3"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "LBR",
+      "UNI"
+     ],
+     "V": [
+      159171,
+      168924,
+      7933,
+      2026
+     ],
+     "PR": 1,
+     "TP": 27,
+     "T": 338054
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 5",
+     "CH": [
+      "Candidate A-5",
+      "Candidate B-5",
+      "Candidate C-5",
+      "Candidate D-5",
+      "Candidate E-5",
+      "Candidate F-5"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "ACN",
+      "FWD",
+      "LBR",
+      "UAF"
+     ],
+     "V": [
+      95323,
+      124921,
+      1906,
+      748,
+      2857,
+      1893
+     ],
+     "PR": 0,
+     "TP": 1,
+     "T": 227648
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8",
+      "Candidate C-8",
+      "Candidate D-8"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "APV",
+      "UNI"
+     ],
+     "V": [
+      116967,
+      112899,
+      3584,
+      2278
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 235728
+    },
+    {
+     "C": "State Board of Education Member - Congressional District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8"
+     ],
+     "P": [
+      "DEM",
+      "REP"
+     ],
+     "V": [
+      112167,
+      116389
+     ],
+     "PR": 0,
+     "TP": 3,
+     "T": 228556
+    }
+   ]
+  },
+  {
+   "version": 367167,
+   "captured": "20251125204556",
+   "Contests": [
+    {
+     "C": "Representative to the 119th United States Congress - District 3",
+     "CH": [
+      "Candidate A-3",
+      "Candidate B-3",
+      "Candidate C-3",
+      "Candidate D-3"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "LBR",
+      "UNI"
+     ],
+     "V": [
+      182147,
+      201951,
+      10734,
+      2721
+     ],
+     "PR": 27,
+     "TP": 27,
+     "T": 397553
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 5",
+     "CH": [
+      "Candidate A-5",
+      "Candidate B-5",
+      "Candidate C-5",
+      "Candidate D-5",
+      "Candidate E-5",
+      "Candidate F-5"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "ACN",
+      "FWD",
+      "LBR",
+      "UAF"
+     ],
+     "V": [
+      147972,
+      197924,
+      4006,
+      1627,
+      6458,
+      4094
+     ],
+     "PR": 1,
+     "TP": 1,
+     "T": 362081
+    },
+    {
+     "C": "Representative to the 119th United States Congress - District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8",
+      "Candidate C-8",
+      "Candidate D-8"
+     ],
+     "P": [
+      "DEM",
+      "REP",
+      "APV",
+      "UNI"
+     ],
+     "V": [
+      160871,
+      163320,
+      5741,
+      3677
+     ],
+     "PR": 3,
+     "TP": 3,
+     "T": 333609
+    },
+    {
+     "C": "State Board of Education Member - Congressional District 8",
+     "CH": [
+      "Candidate A-8",
+      "Candidate B-8"
+     ],
+     "P": [
+      "DEM",
+      "REP"
+     ],
+     "V": [
+      152772,
+      168810
+     ],
+     "PR": 3,
+     "TP": 3,
+     "T": 321582
+    }
+   ]
+  }
+ ]
+}

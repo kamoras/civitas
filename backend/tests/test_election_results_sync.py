@@ -99,6 +99,17 @@ class TestApplyCount:
         kinds, _ = _apply(db_session, race, _contest(200, 150, 100), official=True)
         assert kinds == [er.OFFICIAL]
 
+    def test_a_withdrawn_candidates_row_keeps_the_feeds_mark(self, db_session):
+        """Matched to their Candidate row, a candidate the feed marks as
+        withdrawn still reads as withdrawn, not as the ballot's plain name."""
+        race = _setup(db_session)
+        contest = ContestCount(office="H", district=2, candidates=[("Dana Smith", "D", 100),
+                                                                   ("Ray Jones (Withdrawn)", "R", 90)],
+                               reporting_units=5, total_units=100)
+        _, result = _apply(db_session, race, contest)
+        rows = {t["candidateId"]: t["name"] for t in json.loads(result.tallies)}
+        assert rows == {"H6GA02001": "Dana Smith", "H6GA02002": "Ray Jones (Withdrawn)"}
+
     def test_an_exact_tie_has_no_leader(self, db_session):
         race = _setup(db_session)
         _, result = _apply(db_session, race, _contest(100, 100, 50))
@@ -123,7 +134,7 @@ class TestFlip:
         assert issue.title == "Republican leads Georgia's 2nd Congressional District count in a seat Democrats hold"
         facts = json.loads(issue.facts)
         assert facts[0] == "Ray Jones (R): 1,000 votes, 52.6%"
-        assert "60 of 100 precincts reporting (60%)" in facts
+        assert "60 of 100 precincts fully reported (60%)" in facts
         assert facts[-1] == "The seat is held by a Democrat going into this election"
         assert json.loads(issue.actions)[0]["url"] == "/elections/states/GA#race-2026-HOUSE-GA-2"
         assert issue.confirmation_deadline > utcnow()

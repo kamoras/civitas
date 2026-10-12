@@ -1178,7 +1178,9 @@ wrong number on election night is worse than none:
 - Test, preview or mismatched data raises `UntrustedCount` and stores nothing
   (Enhanced Voting `isProduction`, Clarity `istestmode`/`showtestdatawatermark`
   — read as flags: the watermark is the string `"0"` on real elections —
-  Tally `previewElections`, `_Preview` ids and `electionID`; a general's date
+  Tally `previewElections`, `_Preview` ids and `electionID`, TotalVote's
+  "Testing in Progress" site message — New Mexico's real 2024 general page
+  carried test votes under the general's own date four weeks out; a general's date
   listing no general — several unsingled entries, or only a runoff, recount
   or special — `pick_general`, unless the entries are copies of one election
   by the vendor's own id); a feed that goes backwards in time or
@@ -1187,9 +1189,34 @@ wrong number on election night is worse than none:
 - A covered state with no count stored an hour after its polls close sends
   an ops alert whatever its reads said (`check_missing_counts`): a walled or
   moved feed fails visibly, never as a quiet night and never worked around.
-  A primary's contest labels are not proof of the general's — check each
-  vendor's staged general feed before election night (Washington's House
-  labels changed between the two in 2026).
+  A primary's contest labels are not proof of the general's: for the 14 days
+  before election day a daily job reads every covered state's staged feed
+  exactly as the sync will and alerts on no count, a refused one, or a race
+  with no contest (`live_results/readiness.py`; it stores nothing and stops
+  the day before). Washington's House labels changed between primary and
+  general in 2026; and on 2026-10-12 New Mexico's and Montana's results hosts
+  sent their current-election page to their Secretary of State's landing page
+  (Montana's says results come "after 8:00 on November 3"), where in 2024 both
+  served the staged general a month ahead. Those two will alert daily until
+  their hosts serve the general — the honest state of the feed.
+- A race the state's feed stops listing mid-count (a renamed contest, one set
+  aside as impossible) keeps its last count, tagged NOT IN LATEST READ on the
+  page (`inLatestRead`), and pages someone (`sync._dropped_races`): the
+  state's other races keep its feed looking healthy, so nothing else would.
+- The reporting figure is worded as the source counts it
+  (`StateCount.units_complete`, `signals.reporting_line`, frontend
+  `reportingText`): "N of M precincts fully reported" where it counts units
+  FULLY in — Clarity's county roll-up ("Percent Completely Reported";
+  Colorado's 8th read 0 of 3 counties all night in 2024 beside 230,000
+  votes), TotalVote's "Precincts Fully", Tally's precinctsReporting — and
+  "Results from N of M counties" where a unit counts on its first batch
+  (Enhanced Voting: Utah read 29 of 29 counties two days in with a third of
+  the vote still to count). A share short of every unit never rounds to 100%.
+- A ranked-choice state (Maine, Alaska: `ranked_choice_general` in
+  `state_candidate_sources.json`) is never read live: its election-night
+  count is first choices, whose leader is not necessarily who the rounds
+  elect, so "leads" and a change of party read from it could be the opposite
+  of the result. Its page says so (`rankedChoiceStates`).
 - Civitas never calls a race. A count is "leading" — "not final" until the
   source itself says official, and still "leading", never "wins", after (an
   official count's leader can face a runoff: Georgia's general needs a
@@ -1199,8 +1226,12 @@ wrong number on election night is worse than none:
   `broadcast.publish` to the Elections feed and Bluesky) — is
   a fixed template around the source's figures, never model text. A flip needs
   half the reporting units in. Where the units are places (counties, cities
-  and towns), which "report" on their first batch, it needs every place in and
-  `COUNTY_FLIP_SETTLE` since the first votes instead. Where the units are
+  and towns) it needs every place in and `COUNTY_FLIP_SETTLE` since the first
+  votes instead: an Enhanced Voting county or town "reports" on its first
+  batch, and a Clarity county counts only once completely reported, so in
+  Clarity's states (CO, IA, SC, WV) a change of party is raised only when every
+  county says it is complete — in Colorado's 2024 count, weeks after
+  election night (the map still shows who leads meanwhile). Where the units are
   places, or the source gives no reporting figure, the source's official flag
   also suffices; beside a precinct count that states one, it does not. That
   bar gates only *raising* a flip: once said, a flip is undone only by the

@@ -7,7 +7,7 @@ import json
 import logging
 import pathlib
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, not_
@@ -1462,7 +1462,13 @@ def _phase_json(election: ActiveElection) -> dict:
     }
 
 
-def _result_json(result: RaceResult, race: Race) -> dict:
+# A race read more than this before its state's latest good read was not in
+# that read (sync._dropped_races): every race a read stores is stamped
+# within the same pass, seconds apart.
+NOT_IN_READ_AFTER = timedelta(minutes=2)
+
+
+def _result_json(result: RaceResult, race: Race, state_last_ok: datetime | None = None) -> dict:
     """One race's count, as the source shows it — see RaceResult."""
     tallies = json.loads(result.tallies or "[]")
     counted = result.votes_counted or 0
@@ -1480,9 +1486,16 @@ def _result_json(result: RaceResult, race: Race) -> dict:
         "reportingUnits": result.reporting_units,
         "totalUnits": result.total_units,
         "unitLabel": result.unit_label,
+        # Whether reportingUnits counts units fully reported (True) or
+        # units with any results (False); null on a row from before.
+        "unitsComplete": result.units_complete,
         "sourceName": result.source_name,
         "sourceUrl": result.source_url,
         "fetchedAt": result.fetched_at.isoformat() + "Z",
+        # False when the state's latest good read didn't include this race
+        # (its contest renamed past the reader, or set aside): the count
+        # shown is the last one read, not a live one.
+        "inLatestRead": not (state_last_ok and result.fetched_at < state_last_ok - NOT_IN_READ_AFTER),
         "lastChangeAt": result.last_change_at.isoformat() + "Z",
         # Null before any votes and on an exact tie.
         "leaderParty": leader.get("party") if leader else None,
@@ -1533,7 +1546,7 @@ def live_results(
     covered race's numbers, the newest updates, and which states are read
     live at all — so a state with no feed reads as uncovered, not as a
     state where nothing has happened. Empty outside the results window."""
-    from app.pipeline.fetch.election_results import live_results_states
+    from app.pipeline.fetch.election_results import live_results_states, ranked_choice_states
 
     election = active_election(db)
     st = state.upper() if state else None
@@ -1544,7 +1557,10 @@ def live_results(
         q = db.query(RaceResult, Race).join(Race, Race.id == RaceResult.race_id).filter(RaceResult.election_date == day)
         if st:
             q = q.filter(Race.state == st)
-        races = [_result_json(r, race) for r, race in q.all()]
+        last_ok = dict(
+            db.query(LiveResultRead.state, LiveResultRead.last_ok_at).filter(LiveResultRead.election_date == day).all()
+        )
+        races = [_result_json(r, race, last_ok.get(race.state)) for r, race in q.all()]
         races.sort(key=lambda r: (r["state"], r["office"] != "S", r["district"] or 0))
         eq = (
             db.query(ElectionResultEvent, Race).join(Race, Race.id == ElectionResultEvent.race_id)
@@ -1589,6 +1605,10 @@ def live_results(
         "cycleYear": election.cycle,
         "phase": _phase_json(election),
         "liveStates": live,
+        # States that decide federal generals by ranked-choice rounds: never
+        # read live (a first-choice leader may not be who the rounds elect),
+        # and their pages say so rather than that no feed exists.
+        "rankedChoiceStates": sorted(ranked_choice_states()),
         # When each live state's last polls close (UTC). Nothing of its
         # count is read, stored or shown before then (fetch/poll_close.py).
         "pollsClose": {st: last_poll_close(st, election.election_day).isoformat() + "Z" for st in live},
