@@ -85,6 +85,20 @@ export default function NewsChapter() {
           over as a repeat only of one that actually published in that run: a briefing that named
           two stories once crowded both out and then published nothing itself.
         </P>
+        <More label="Who the stories are about">
+          <P>
+            Each issue records who it is principally about: the official named first in its
+            headline, or the kind of story when it names none. We watch how concentrated that is
+            week by week. In early October 2026, 37 of the last 90 issues led with the president. We
+            tested two corrections against every hourly run since late September, on days the rules
+            weren&apos;t tuned on: allowing one person to lead at most one issue a day, and ranking
+            stories with no government actor last. Neither found a story to publish instead. Every
+            story that passed our checks that day had already been published, so the cap would only
+            have withheld real reporting, such as a proposed methane rule. We don&apos;t use either.
+            The mix reflects which stories pass the checks, and that is what we&apos;d change to
+            change it.
+          </P>
+        </More>
         <More label="How stories are grouped, and why it errs toward keeping them apart">
           <P>
             Headlines are compared after removing what every headline that day has in common, so
