@@ -3,6 +3,8 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
+import FollowFeed from "@/components/shared/FollowFeed";
+import { TOPIC_FEEDS } from "@/lib/site";
 import type { MonthReport, PeriodDay, PeriodReport } from "@/types/congress";
 import {
   CHAMBER_NAME,
@@ -164,6 +166,7 @@ export default function PeriodReportView({
                 log; its passed and confirmed measures are added when the Daily Digest is published.
               </p>
             )}
+            <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
           {strip}
           <PeriodNav

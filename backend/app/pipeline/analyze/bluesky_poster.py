@@ -10,6 +10,20 @@ The pipeline resets bsky_posted_at=None when a topic gets new articles
 (primary_article_date advanced), so the poster never needs to evaluate
 whether to re-post — that decision is already made upstream.
 
+Only the day's top issues are posted: the first MAX_ISSUE_POSTS_PER_DAY of
+the day's postable issues in the Action Center's own rank order, and no
+more than that many issue posts (reposts included) per Eastern day. Every
+issue still gets its page and its place on the Action Center; the feed and
+the account carry the day's leading stories. Posting every flagged issue
+made 6.5 issue posts a day over the account's first 103 posting days (3.6 a
+day from 2026-09-13 to 10-10, up to 23 in a day), and 82% of the account's
+posts drew no interaction; the same history under this rule is 1.9 a day
+(199 of 665 posts, 46 of 90 in the recent window). An issue not posted
+stays flagged, so one that rises into the top two later in the day still
+can be. Since the issue cleanup no longer keys on publishing for a
+confirmed issue (action_center._cleanup_old_unposted_issues), its page
+outlives not being posted.
+
 The post is the issue's verified lede, verbatim (or its real headline), not
 model prose — see _compose_new_post. When the newest article driving an
 issue is from a prior day, the post opens with "Yesterday:" or "On <date>:".
@@ -23,7 +37,7 @@ BSKY_APP_PASSWORD) decide only whether the post also goes there.
 import json
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
@@ -38,6 +52,19 @@ from app.time_utils import utcnow
 logger = logging.getLogger(__name__)
 
 MAX_POST_CHARS = 240     # leaves room for the appended URL (~40 chars → total ~280)
+
+# The day's top issues, by rank, that may be posted, and the most issue
+# posts in one Eastern day (module docstring).
+MAX_ISSUE_POSTS_PER_DAY = 2
+
+_US_EAST = ZoneInfo("America/New_York")
+
+
+def _eastern_day_start(now: datetime) -> datetime:
+    """Midnight Eastern on the day of `now`, both naive UTC (how posts are
+    stamped)."""
+    eastern = now.replace(tzinfo=timezone.utc).astimezone(_US_EAST)
+    return eastern.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
 
 # A repost whose body shares at least this fraction of its words with an
 # already-published post is treated as a near-duplicate and suppressed. Set
@@ -160,13 +187,17 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
 
     The pipeline already decides which issues deserve a post by setting
     bsky_posted_at=None (new topic or topic with genuinely new articles).
-    This function just executes those posts.
+    This function executes those posts, for the day's top issues only
+    (module docstring): `issues` are the day's postable issues, and only
+    the first MAX_ISSUE_POSTS_PER_DAY by rank are considered.
     """
-    _US_EAST = ZoneInfo("America/New_York")
-    today = datetime.now(tz=_US_EAST).strftime("%Y-%m-%d")
-
     now = utcnow()
+    today = now.replace(tzinfo=timezone.utc).astimezone(_US_EAST).strftime("%Y-%m-%d")
     posted = 0
+    budget = MAX_ISSUE_POSTS_PER_DAY - len(
+        broadcast.subjects_published_since(db, "issue", _eastern_day_start(now))
+    )
+    top = sorted(issues, key=lambda i: (i.rank is None, i.rank or 0))[:MAX_ISSUE_POSTS_PER_DAY]
 
     # Bodies of every post published in the last few days, so a repost (or a
     # near-identical second trending topic) that would say the same thing as a
@@ -184,9 +215,11 @@ def process_issues_for_bluesky(issues: list, db: Session) -> int:
         if row[0]
     ]
 
-    for issue in issues:
+    for issue in top:
         if issue.bsky_posted_at is not None:
             continue  # pipeline didn't flag this issue for posting
+        if posted >= budget:
+            break  # the day's issue posts are spent
 
         text = _compose_new_post(issue, today)
         if not text:

@@ -65,11 +65,30 @@ class TestPostRaceCoverageUpdates:
             assert election_bluesky.post_race_coverage_updates(db_session) == 1
 
         post = db_session.query(BroadcastPost).one()
-        assert (post.kind, post.state, post.text, post.bsky_status) == ("race", "GA", "Brennan holds a narrow lead.", "off")
+        # The outlet is named in the text: the link card is the ballot page.
+        assert (post.kind, post.state, post.text, post.bsky_status) == (
+            "race", "GA", "Brennan holds a narrow lead. (via AP News)", "off")
+        assert (post.url, post.source_url) == (
+            "https://civitas-research.org/elections/states/GA#race-2026-SEN-GA", "https://apnews.com/a1")
         assert (post.title, post.subject) == ("Update on the GA Senate race", "race:2026-SEN-GA")
         assert item.bsky_posted_at is not None
         assert item.bsky_posted is True  # actually published, counts toward the daily budget
         assert bluesky_outbox == []
+
+    def test_the_same_sentence_from_a_second_outlet_is_not_posted_again(self, db_session, monkeypatch,
+                                                                         bluesky_outbox):
+        _stub_relevance(monkeypatch)
+        monkeypatch.setattr(election_bluesky, "RACE_COOLDOWN_HOURS", 0)
+        _race(db_session)
+        _candidate(db_session)
+        _item(db_session)
+        db_session.commit()
+        with patch.object(election_bluesky, "_generate_post_text", return_value="Brennan holds a narrow lead."):
+            assert election_bluesky.post_race_coverage_updates(db_session) == 1
+            _item(db_session, source_name="NPR", url="https://npr.org/a1")
+            db_session.commit()
+            assert election_bluesky.post_race_coverage_updates(db_session) == 0
+        assert db_session.query(BroadcastPost).count() == 1
 
     def test_grounding_failure_marks_considered_but_not_posted(self, db_session, monkeypatch):
         _stub_relevance(monkeypatch)
@@ -396,7 +415,7 @@ class TestOnlyVettedSourcesArePosted:
     @pytest.mark.parametrize("source_type, source_name, title, posted", [
         pytest.param("bluesky", "@kaseylz.bsky.social", "VOTE JANE DOE!", [],
                      id="an_arbitrary_social_post_is_never_eligible"),
-        pytest.param("news", "Roll Call", "A real article about the race", ["some sentence."],
+        pytest.param("news", "Roll Call", "A real article about the race", ["some sentence. (via Roll Call)"],
                      id="a_news_item_still_posts"),
     ])
     def test_only_a_vetted_source_is_restated(self, db_session, monkeypatch, source_type, source_name, title, posted):

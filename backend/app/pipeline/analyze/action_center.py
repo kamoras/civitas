@@ -5448,12 +5448,22 @@ def _cleanup_old_unposted_issues(db: Session) -> int:
     "readers have a URL for this". Near-duplicate suppression
     deliberately leaves it NULL: nothing was published, so there is no
     permalink to protect.
+
+    Only DEVELOPING issues are ever deleted. A confirmed issue has a
+    permalink whether or not it was posted: the sitemap lists every one,
+    current or retired, as the issue archive (api/sitemap.py), and the
+    Action Center linked it the day it ran. While nearly every issue was
+    posted this rule rarely bit; since only the day's top two are posted
+    (bluesky_poster.MAX_ISSUE_POSTS_PER_DAY), it would have 404'd most of
+    the archive two weeks on. A developing issue that was never confirmed
+    or published is noindex and in no sitemap, so it can go.
     """
     cutoff = (utcnow() - timedelta(days=14)).strftime("%Y-%m-%d")
     deleted = (
         db.query(ActionIssue)
         .filter(
             ActionIssue.date < cutoff,
+            ActionIssue.status == ActionIssueStatus.DEVELOPING,
             ActionIssue.bsky_posted_at.is_(None),
             ActionIssue.bsky_last_post_text.is_(None),
         )

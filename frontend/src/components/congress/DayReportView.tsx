@@ -3,6 +3,8 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
+import FollowFeed from "@/components/shared/FollowFeed";
+import { TOPIC_FEEDS } from "@/lib/site";
 import type { ChamberDay, CongressEvent, DayReport } from "@/types/congress";
 import { CHAMBER_NAME, dayHref, longDate, monthHref, shortDate, weekHref } from "@/lib/congress";
 import { CongressTabs, PeriodNav } from "./CongressNav";
@@ -220,6 +222,7 @@ export default function DayReportView({
             title={longDate(report.date)}
           >
             <p>{report.sentence}</p>
+            <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
           {strip}
           <PeriodNav

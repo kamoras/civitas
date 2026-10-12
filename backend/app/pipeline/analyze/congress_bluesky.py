@@ -20,6 +20,24 @@ data reset.
 The weekly post is the week report's sentence (congress_service.week_report)
 and the bills that became law that week, by number. It replaced a weekly
 recap the local model wrote from the Action Center timeline.
+
+A day or a week in which no record vote was taken and nothing passed or
+was confirmed is not posted (has_business). Of the 371 final session days
+on record on 2026-10-11, 83 were such days (36 of 156 in 2026, and four of
+the seven days posted from 2026-09-24 to 10-09): a pro forma session, or a
+few minutes with nothing on the record. "The Senate met in pro forma
+session for 0 minutes" told a reader nothing, and posts like it taught
+readers to scroll past the account (Congress daily posts: 35 posts, 5
+likes, 2026-10-10).
+
+The look-ahead post, once a weekend, says when each chamber next meets
+(the Congressional Record's own notice, congress_service.next_meeting) and
+which bills passed one chamber the week before and go to the other next
+(the week report's passedOneChamber): template text around those, nothing
+generated. It is not posted unless the Record's program says some chamber
+meets that week for business (_chamber_ahead): replayed over the 92
+weekends on record to 2026-10-10, 34 would have posted, and the 58 others
+were recesses and weeks of pro forma sessions.
 """
 
 import logging
@@ -30,7 +48,10 @@ from sqlalchemy.orm import Session
 from app import broadcast
 from app.models import CongressDay
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.services.congress_service import bill_label, day_report, week_bounds, week_report
+from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS
+from app.services.congress_service import (
+    CHAMBERS, bill_label, day_report, next_meeting, week_bounds, week_report,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +67,18 @@ _WEEK_CACHE_TIER = "bsky-congress-week"
 _ELIGIBLE_DAYS = 3
 # Bill numbers named in a post before it says "and N more".
 _MAX_BILLS_NAMED = 4
+# The look-ahead names fewer: it carries both chambers' next meetings and
+# up to two bill lists in Bluesky's 300 characters, link included.
+_MAX_BILLS_AHEAD = 3
+# The look-ahead goes out from Saturday (weekday 5): by then the week's
+# last session day has written its notice of the next meeting.
+_LOOKAHEAD_FROM_WEEKDAY = 5
+_CHAMBER_NAME = {"senate": "Senate", "house": "House"}
+# The Congress hub: its "this week" strip says when each chamber meets.
+_LOOKAHEAD_URL = f"{broadcast.SITE_URL}/congress"
+# The counts (congress_service._counts) that say a day did something a post
+# can report: a record vote, a measure passed, a nomination confirmed.
+_BUSINESS = ("recordVotes", "billsPassed", "resolutionsPassed", "confirmed", "confirmedLists")
 _WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 _MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August",
            "September", "October", "November", "December"]
@@ -55,8 +88,15 @@ def _day_label(day: date) -> str:
     return f"{_WEEKDAYS[day.weekday()]}, {_MONTHS[day.month - 1]} {day.day}"
 
 
-def _bill_list(bills: list[str]) -> str:
-    labels = [bill_label(b) for b in bills[:_MAX_BILLS_NAMED]]
+def has_business(counts: list[dict]) -> bool:
+    """Whether a day or week (one count dict per chamber) did anything a
+    post can report. The rest are pro forma sessions and short sittings
+    with nothing on the record."""
+    return any(c.get(k) for c in counts for k in _BUSINESS)
+
+
+def _bill_list(bills: list[str], limit: int = _MAX_BILLS_NAMED) -> str:
+    labels = [bill_label(b) for b in bills[:limit]]
     more = len(bills) - len(labels)
     return ", ".join(labels) + (f" and {more} more" if more else "")
 
@@ -126,6 +166,10 @@ def post_daily_congress(db: Session, today: date) -> date | None:
         if _already_published(db, subject, _CACHE_TIER, key):
             continue
         report = day_report(db, day)
+        if not has_business([report["chambers"][c]["counts"] for c in CHAMBERS]):
+            # Re-read every half-hour run while the day is eligible; debug, not info.
+            logger.debug("Congress day %s not posted: no record vote, and nothing passed or confirmed", key)
+            continue
         if not page_shows(url, report["sentence"]):
             logger.info("Congress post for %s waits: its page doesn't show the final record yet", key)
             return None
@@ -171,10 +215,83 @@ def post_weekly_congress(db: Session, today: date) -> date | None:
     if not _week_is_final(db, start, end) or _already_published(db, subject, _WEEK_CACHE_TIER, key):
         return None
     report = week_report(db, start)
+    if not has_business(list(report["totals"].values())) and not report["becameLaw"]:
+        logger.debug("Congress week of %s not posted: no record vote, and nothing passed or confirmed", key)
+        return None
     if not page_shows(url, report["sentence"]):
         logger.info("Congress week post for %s waits: its page doesn't show the final record yet", key)
         return None
     broadcast.publish(db, kind="congress_week", subject=subject, title=f"Congress, week of {_week_label(start, end)}",
                       text=compose_week_post(report), url=url)
     api_cache_set(db, _WEEK_CACHE_TIER, key, {"posted": True}, normal_ttl_hours=24 * 30)
+    return start
+
+
+def _chamber_ahead(chamber: str, when: date | None, program: str, start: date, end: date) -> tuple[str, bool]:
+    """One chamber's sentence in the look-ahead, and whether the Record
+    says it meets that week for business: a program is printed, and it is
+    neither a pro forma session nor "To be announced"."""
+    name = _CHAMBER_NAME[chamber]
+    if when is None:
+        return f"The {name}'s next meeting is not on record yet.", False
+    if when > end:
+        return f"The {name} is out until {_day_label(when)}.", False
+    if when < start:
+        # A weekend sitting; the meeting after it isn't on record yet.
+        return f"The {name} next meets {_day_label(when)}.", False
+    # The Digest's own words ("Senate will meet in a pro forma session",
+    # "House will meet in Pro Forma session at 9 a.m.", "Program for Monday:
+    # To be announced."), read as congress_service reads a day's
+    # adjournment text. No program (a floor log's notice) is not known to
+    # be business either: on 2026-10-09 the House's had none, and the House
+    # met for two minutes.
+    words = program.lower()
+    if "pro forma" in words:
+        return f"The {name} next meets {_day_label(when)}, in pro forma session.", False
+    return f"The {name} next meets {_day_label(when)}.", bool(words) and "to be announced" not in words
+
+
+def compose_lookahead(start: date, end: date, chambers: dict[str, tuple[date | None, str]],
+                      passed_one: list[dict]) -> tuple[str, bool]:
+    """The look-ahead's text, and whether either chamber meets that week
+    for business. `chambers` is next_meeting's answer per chamber;
+    `passed_one` the week report's passedOneChamber for the week before."""
+    sentences, business = [], False
+    for c in CHAMBERS:
+        sentence, meets = _chamber_ahead(c, *chambers[c], start, end)
+        sentences.append(sentence)
+        business = business or meets
+    head = f"Next week in Congress, {_week_label(start, end)}. " + " ".join(sentences)
+    # Passed one chamber last week; the other takes it up next.
+    waiting = {c: list(dict.fromkeys(e["billId"] for e in passed_one if e.get("nextStep") == c)) for c in CHAMBERS}
+    other = {"senate": "House", "house": "Senate"}
+    for limit in range(_MAX_BILLS_AHEAD, 0, -1):
+        text = head + "".join(
+            f" Now before the {_CHAMBER_NAME[c]}, from the {other[c]}: {_bill_list(bills, limit)}."
+            for c, bills in waiting.items() if bills
+        )
+        # Whole on Bluesky, link included, rather than cut there.
+        if len(text) + 1 + len(_LOOKAHEAD_URL) <= BSKY_MAX_CHARS:
+            break
+    return text, business
+
+
+def post_congress_lookahead(db: Session, today: date) -> date | None:
+    """Publish the coming week's look-ahead, once, from the Saturday
+    before it. Returns that week's Monday when published."""
+    if today.weekday() < _LOOKAHEAD_FROM_WEEKDAY:
+        return None
+    start = today + timedelta(days=7 - today.weekday())
+    end = start + timedelta(days=6)
+    subject = f"congress-ahead:{start.isoformat()}"
+    if broadcast.was_published(db, subject):
+        return None
+    chambers = {c: next_meeting(db, c, today) for c in CHAMBERS}
+    passed_one = week_report(db, start - timedelta(days=7))["passedOneChamber"]
+    text, business = compose_lookahead(start, end, chambers, passed_one)
+    if not business:
+        return None
+    broadcast.publish(db, kind="congress_ahead", subject=subject,
+                      title=f"Next week in Congress, {_week_label(start, end)}",
+                      text=text, url=_LOOKAHEAD_URL)
     return start

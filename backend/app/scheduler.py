@@ -22,7 +22,7 @@ from app.pipeline.election_pipeline import (
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_congress_sync_running, run_congress_sync
-from app.pipeline.analyze.congress_bluesky import post_daily_congress, post_weekly_congress
+from app.pipeline.analyze.congress_bluesky import post_congress_lookahead, post_daily_congress, post_weekly_congress
 from app.time_utils import utcnow
 from app.background import WritesHeld, start_writer
 from app.pipeline import lease
@@ -719,6 +719,9 @@ def _congress_activity_sync() -> None:
                 week = post_weekly_congress(db, eastern_today())
                 if week:
                     logger.info("Published the Congress week of %s", week)
+                ahead = post_congress_lookahead(db, eastern_today())
+                if ahead:
+                    logger.info("Published the Congress look-ahead for the week of %s", ahead)
             except Exception:
                 logger.exception("Congress Bluesky post failed")
             finally:
