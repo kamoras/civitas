@@ -50,6 +50,19 @@ export function UsageBar({
   );
 }
 
+/** What a panel shows when its request failed and nothing has loaded: never
+ *  an empty or zero state, which reads as a finding ("no runs", "0 B",
+ *  "unavailable"). The page's error banner says which request failed. */
+export function NotLoaded() {
+  return <p className="text-xs font-mono text-ink-min">Not loaded.</p>;
+}
+
+/** Empty-state text for a panel fed by one request: an empty answer is a
+ *  finding ("no visits"), a failed one is not, and must not read as one. */
+export function emptyText(loaded: boolean, failed: boolean, empty: string): string {
+  return failed ? "Couldn't load this: the request failed." : loaded ? empty : "Loading…";
+}
+
 /** A titled panel — the unit every sub-dashboard is built from. */
 export function Panel({
   title,

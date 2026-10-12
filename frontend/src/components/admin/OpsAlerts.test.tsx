@@ -64,10 +64,10 @@ describe("OpsAlerts", () => {
     expect(screen.getByText("Nothing is wrong right now.")).toBeInTheDocument();
   });
 
-  it("says when there are none, and when they haven't loaded", () => {
+  it("says when there are none, and when they didn't load", () => {
     const { rerender } = render(<OpsAlerts alerts={[]} />);
     expect(screen.getByText("No alerts recorded.")).toBeInTheDocument();
     rerender(<OpsAlerts alerts={undefined} />);
-    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.getByText("Not loaded.")).toBeInTheDocument();
   });
 });
