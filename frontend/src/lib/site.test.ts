@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_OG_IMAGE, FEED_PATH, absoluteUrl, metaDescription, pageMetadata } from "./site";
+import {
+  DEFAULT_OG_IMAGE,
+  FEED_PATH,
+  TOPIC_FEEDS,
+  absoluteUrl,
+  metaDescription,
+  pageMetadata,
+  stateFeed,
+} from "./site";
 
 describe("metaDescription", () => {
   it("leaves short text alone, collapsing whitespace", () => {
@@ -42,6 +50,27 @@ describe("pageMetadata", () => {
     const m = pageMetadata({ title: "t", description: "d", path: "/x" });
     expect(m.alternates?.types).toEqual({
       "application/atom+xml": [{ url: FEED_PATH, title: "Civitas" }],
+    });
+  });
+
+  it("puts a page's own feed ahead of the everything feed", () => {
+    const m = pageMetadata({
+      title: "t",
+      description: "d",
+      path: "/x",
+      feed: stateFeed("ga", "Georgia"),
+    });
+    expect(m.alternates?.types).toEqual({
+      "application/atom+xml": [
+        { url: "/feed/states/GA.xml", title: "Civitas: Georgia" },
+        { url: FEED_PATH, title: "Civitas" },
+      ],
+    });
+    expect(
+      pageMetadata({ title: "t", description: "d", path: "/x", feed: TOPIC_FEEDS.congress })
+        .alternates?.types
+    ).toMatchObject({
+      "application/atom+xml": [{ url: "/feed/congress.xml" }, { url: FEED_PATH }],
     });
   });
 

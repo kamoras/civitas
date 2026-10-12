@@ -7,6 +7,7 @@ rows, by rule; nothing is generated. A sentence is a template filled with
 counts, so it can say "passed 3 bills" and never characterise them.
 """
 
+import calendar
 import re
 from collections import defaultdict
 from datetime import date, timedelta
@@ -355,6 +356,61 @@ def latest_day(db: Session) -> date | None:
     today = eastern_today().isoformat()
     past = [d for d in session_days(db) if d <= today]
     return date.fromisoformat(past[-1]) if past else None
+
+
+# ── The next meeting ──────────────────────────────────────────────
+
+_MONTHS = {name: i for i, name in enumerate(calendar.month_name) if name}
+# The Record's own wording for a next meeting: the Digest's "3:30 p.m.,
+# Tuesday, October 13" or the floor log's "...reconvene at 3:30 p.m.
+# Tuesday, October 13, 2026." Month names are the format, not a guess.
+_MEETING_DATE_RE = re.compile(r"\b(" + "|".join(_MONTHS) + r")\s+(\d{1,2})(?:,\s*(\d{4}))?")
+
+
+def meeting_date(text: str | None, written_on: date) -> date | None:
+    """The date in a next-meeting notice. A notice without a year names the
+    first such date after the day it was written (December's notice can
+    name a day in January)."""
+    m = _MEETING_DATE_RE.search(text or "")
+    if not m:
+        return None
+    month, day = _MONTHS[m.group(1)], int(m.group(2))
+    year = int(m.group(3)) if m.group(3) else written_on.year + (month < written_on.month)
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+def next_meeting(db: Session, chamber: str, today: date) -> tuple[date | None, str]:
+    """When `chamber` next meets, from the newest notice written on or
+    before `today` (each day's Record, or the floor log until the Digest
+    arrives, names it), and that meeting's program as the Digest prints it
+    ("Program for Tuesday: Senate will meet in a pro forma session."), ""
+    when no notice of that meeting gives one. (None, "") when no notice
+    names a day from `today` on: a notice that has passed says nothing
+    about what comes next."""
+    notices = (
+        db.query(CongressDay)
+        .filter(CongressDay.chamber == chamber, CongressDay.next_meeting.isnot(None),
+                CongressDay.date <= today.isoformat())
+        .order_by(CongressDay.date.desc())
+        .limit(5)
+        .all()
+    )
+    if not notices:
+        return None, ""
+    when = meeting_date(notices[0].next_meeting, date.fromisoformat(notices[0].date))
+    if when is None or when < today:
+        return None, ""
+    # The floor log names the meeting without its program; the Digest of
+    # the same or an earlier day may give it.
+    program = next(
+        (n.next_program for n in notices
+         if n.next_program and meeting_date(n.next_meeting, date.fromisoformat(n.date)) == when),
+        "",
+    )
+    return when, program
 
 
 # What counts as business, for "Congress is out": floor action — a record

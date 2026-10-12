@@ -1,4 +1,4 @@
-import { pageMetadata } from "@/lib/site";
+import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 
 // Canonical is bare /action: ?tab= and ?issue= are views of this one page,
 // not separate documents (the in-app ?tab=issues links are a router-cache
@@ -8,6 +8,7 @@ export const metadata = pageMetadata({
   description:
     "Nonpartisan summaries of today's top national issues, the bills and officials involved, ongoing national monitors, and concrete actions you can take.",
   path: "/action",
+  feed: TOPIC_FEEDS.issues,
 });
 
 export default function ActionLayout({ children }: { children: React.ReactNode }) {

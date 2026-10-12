@@ -817,7 +817,12 @@ What this rules in and out:
   are pulled, and a topic or state is chosen by which URL a reader
   subscribes to, so there is no subscriber list to keep. A push channel
   that would need one (email, web push, per-server webhooks) is out, for
-  the same reason as an address box.
+  the same reason as an address box. A page offers its most specific
+  feed first — `pageMetadata({ feed })` in `src/lib/site.ts` (a state's
+  ballot page its state's feed, `/congress` the Congress feed, an issue
+  page the Action Center feed) — and the state ballot and Congress pages
+  link it visibly (`FollowFeed`); a new page with a feed of its own should
+  do the same.
 - **In, server-side only:** the Census geocoder and Google Civic's
   `voterInfoQuery`, called from the pipeline (and, for the town selector,
   from the API, cached 12 hours) with **our own** fixed,
@@ -1167,6 +1172,21 @@ After issues are committed, the Action Center pipeline also:
   the Archive and at its link; deleted instead if it never gathered three
   updates). Long-running stories went up to 28 days
   between issues on that history. The lifecycle runs on every refresh
+
+**What gets posted is a volume decision, measured like any other.** The
+posting modules publish less than the site shows, on purpose: the day's top
+two issues by rank and at most two issue posts a day
+(`bluesky_poster.MAX_ISSUE_POSTS_PER_DAY`); a Congress day or week only when
+something was on the record — a record vote, a measure passed, a nomination
+confirmed (`congress_bluesky.has_business`) — and a weekend look-ahead only
+when the Record's program shows business ahead. On 2026-10-10 the account
+had about 40 followers and 88.5% of its last 1,021 posts drew no
+interaction; posting everything was what taught readers to skip it. Change
+one of these rules with a replay against the stored history, as their
+docstrings do, not because one day's output looks thin. An issue that isn't
+posted still keeps its page: the issue cleanup deletes only developing
+issues nobody confirmed (`_cleanup_old_unposted_issues`), since the sitemap
+lists every confirmed issue.
 
 **Election night and after** (`election_phase.py`, `live_results/sync.py`).
 The site's election is not simply the *next* one: from election day (Eastern

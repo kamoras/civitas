@@ -2807,7 +2807,10 @@ class TestCleanupOldUnpostedIssues:
     (already correct) to confirm it stays on the canonical clock."""
 
     @pytest.mark.parametrize("age_days, posted_days_ago, post_fields, deleted", [
-        pytest.param(20, None, {}, True, id="old_unposted_issue_is_deleted"),
+        pytest.param(20, None, {}, True, id="old_unposted_developing_issue_is_deleted"),
+        # A confirmed issue has a permalink in the sitemap's archive whether
+        # or not it was posted, and most aren't (only the day's top two).
+        pytest.param(20, None, {"status": "confirmed"}, False, id="old_unposted_confirmed_issue_is_kept"),
         pytest.param(20, 19, {}, False, id="old_but_posted_issue_is_preserved"),
         pytest.param(2, None, {}, False, id="recent_unposted_issue_is_preserved"),
         # bsky_posted_at is NULL for two different reasons: never published,
@@ -2829,7 +2832,8 @@ class TestCleanupOldUnpostedIssues:
 
         date = (utcnow() - timedelta(days=age_days)).strftime("%Y-%m-%d")
         posted_at = None if posted_days_ago is None else utcnow() - timedelta(days=posted_days_ago)
-        db_session.add(ActionIssue(date=date, rank=1, title="Issue", bsky_posted_at=posted_at, **post_fields))
+        fields = {"status": "developing", **post_fields}
+        db_session.add(ActionIssue(date=date, rank=1, title="Issue", bsky_posted_at=posted_at, **fields))
         db_session.commit()
 
         assert _cleanup_old_unposted_issues(db_session) == int(deleted)
