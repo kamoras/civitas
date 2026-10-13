@@ -748,6 +748,12 @@ Corollaries that follow from the same rule, all enforced in code:
   research" — the same null-is-not-zero discipline `Candidate.last_financials_sync`
   applies per field, applied at the collection level.
 - Removed measures are rendered as removed for a grace window, not deleted.
+- The same line holds for the weekly source crawl's robots.txt: a bot
+  wall's challenge there is a wall, never "no rules" (RFC 9309 would read a
+  plain 4xx that way), so nothing is crawled past it
+  (`state_source_crawler.WALLED`). Walls already investigated go in
+  `state_candidate_sources.json`'s `_robots_walls` with their evidence, so
+  the crawl's ops alert names only a new wall or an unreachable file.
 - The source is the state's own document, but not always the state's own
   server. Where a state's whole site sits behind a bot wall (Georgia's
   Cloudflare, Nevada's Imperva), the reader raises `SourceBlocked` and the
@@ -1542,6 +1548,13 @@ the pending list).
 - FastAPI for HTTP, SQLAlchemy 2.0 ORM (mapped_column style), Pydantic v2 for schemas
 - `async def` for API routes and fetch functions; the nightly pipeline itself runs synchronously in a background thread of the pipeline process
 - Logging via `logging.getLogger(__name__)` — structured, no print statements
+- **TLS verification is never loosened.** A site that sends an incomplete
+  certificate chain (Alaska's, Alabama's and Virginia's election sites,
+  2026-10) is repaired the way browsers do it: `make_async_client`'s client
+  fetches the missing intermediate from the certificate's own AIA address,
+  checks its signature, and adds it to `TLS_CONTEXT`, whose partial chains
+  are off so the chain must still end at a certifi root. Never
+  `verify=False`, and never a root taken from the network.
 - All pipeline modules use dependency injection for DB sessions
 - Never store secrets in source code — all credentials come from `.env` via `pydantic-settings`
 - Use parameterized queries via SQLAlchemy ORM; never concatenate user input into SQL
