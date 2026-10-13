@@ -41,7 +41,7 @@ from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
 
 from app.atomic_write import write_text_atomic
 from app.file_cache import Stamp, read_json, read_json_preferring, reload_if_moved, new_reload_lock
-from app.http_client import is_bot_challenge
+from app.http_client import is_bot_challenge, make_async_client
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS
 from app.time_utils import utcnow
 
@@ -188,7 +188,7 @@ async def _get_completing_chain(client: httpx.AsyncClient, url: str) -> httpx.Re
     )
     context = ssl.create_default_context(cafile=certifi.where())
     context.load_verify_locations(cadata=intermediate.public_bytes(serialization.Encoding.PEM).decode())
-    async with httpx.AsyncClient(verify=context) as completing:
+    async with make_async_client(verify=context) as completing:
         return await completing.get(
             url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True, headers=BROWSER_HEADERS,
         )
