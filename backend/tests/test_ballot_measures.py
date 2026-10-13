@@ -444,16 +444,49 @@ async def test_link_verification_shows_a_link_that_resolves(monkeypatch, tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_link_verification_does_not_pass_a_bot_challenge(monkeypatch, tmp_path):
-    """Imperva serves its challenge with a 200. A wall that refuses the
-    check leaves the state unverified (AGENTS.md section 7), not shown."""
-    ballot_lookup, _ = _link_files(
-        monkeypatch, tmp_path, {"MA": {"url": "https://ma.example/lookup"}},
-    )
+async def test_link_verification_shows_a_walled_lookup_as_unconfirmed(monkeypatch, tmp_path):
+    """Imperva serves its challenge with a 200, Akamai a bare 403. A wall
+    that refuses the check is never verified or worked around (AGENTS.md
+    section 7), but the state publishes the URL and it opens for a person:
+    it is shown as the state's own lookup, marked unconfirmed, with the
+    national directory as the backup."""
+    ballot_lookup, volume = _link_files(monkeypatch, tmp_path, {
+        "MA": {"url": "https://ma.example/lookup", "label": "Where do I vote?"},
+        "NH": {"url": "https://nh.example/viphome"},
+    })
     challenge = (200, None, {"x-iinfo": "1-2-3"}, b"<script src='/_Incapsula_Resource?x'></script>")
-    client = _answering(**{"https://ma.example/lookup": challenge})
+    client = _answering(**{
+        "https://ma.example/lookup": challenge,
+        "https://nh.example/viphome": (403, None, {}, b"<h1>Access Denied</h1>"),
+    })
+    result = await ballot_lookup.refresh_link_verification(client)
+    assert (result["verified"], result["blocked"], result["failed"]) == (0, 2, 0)
+    stored = json.loads(volume.read_text())["states"]["MA"]
+    assert stored["verified_at"] is None and stored["blocked_at"]
+    shown = ballot_lookup.lookup_for_state("MA")
+    assert shown["isStateSpecific"] is True and shown["unconfirmed"] is True
+    assert shown["url"] == "https://ma.example/lookup"
+    assert shown["verifiedAt"] is None
+    assert shown["fallback"]["url"] == "https://nat.example"
+    assert ballot_lookup.lookup_for_state("NH")["unconfirmed"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_walled_lookup_that_turns_dead_falls_back(monkeypatch, tmp_path):
+    """A 404 from a host that answered is the state retiring the page: an
+    earlier refusal must not keep it on screen."""
+    ballot_lookup, volume = _link_files(
+        monkeypatch, tmp_path,
+        {"AZ": {"url": "https://az.example/portal"}},
+        volume_states={"AZ": {"url": "https://az.example/portal", "blocked_at": "2026-10-01T00:00:00"}},
+    )
+    assert ballot_lookup.lookup_for_state("AZ")["unconfirmed"] is True
+    client = _answering(**{"https://az.example/portal": (404, None, {}, b"")})
     assert (await ballot_lookup.refresh_link_verification(client))["failed"] == 1
-    assert ballot_lookup.lookup_for_state("MA")["isStateSpecific"] is False
+    assert json.loads(volume.read_text())["states"]["AZ"]["blocked_at"] is None
+    shown = ballot_lookup.lookup_for_state("AZ")
+    assert shown["isStateSpecific"] is False and shown["unconfirmed"] is False
+    assert shown["url"] == "https://nat.example"
 
 
 @pytest.mark.asyncio
