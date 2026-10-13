@@ -49,7 +49,7 @@ export default async function ElectionsChapter() {
       <Summary>
         <Point>
           A ballot page shows what&apos;s the same across a whole state, plus your district once you
-          pick it on a map or by county. It never asks for your address.
+          pick it on a map, by county, or by city or town. It never asks for your address.
         </Point>
         <Point>
           Every page says what it leaves out, and links to your election office for the rest.
@@ -133,13 +133,17 @@ export default async function ElectionsChapter() {
           Census blocks. Districts are shaded by partisan lean, and in the redrawn states that is
           the lean of the new district on the ballot (Cook&apos;s 2026 figures for the new lines),
           not of the old seat with the same number. A district with no lean of its own on file is
-          left unshaded rather than given its state&apos;s colour. A text filter over county names,
-          candidates&apos; names and district numbers works too. It goes by county, not by city or
-          town, and a district that matches what you typed lists the matching county first, by its
-          full name: some counties share a name with a city elsewhere in the state (typing a big
-          city&apos;s name can find a rural county of the same name), and the label shows which one
-          matched. On the map, Tab reaches one district and the arrow keys move between them. All of
-          it runs on data already on the page: nothing is typed into a lookup, sent or stored.
+          left unshaded rather than given its state&apos;s colour. A text filter works too: type
+          your city, town or county, a candidate&apos;s name or a district number. Each district
+          lists the cities, towns and communities in it, from the same Census block files as the
+          state legislative lists below (a place with fewer than 50 residents inside a district is
+          left off it), and a district that matches what you typed lists the matching place or
+          county first, by its full name: a city can share its name with a county elsewhere in the
+          state, and the label shows which one matched. Type a place&apos;s full name and the page
+          says which districts it is in; a city split between districts says so, since there your
+          street decides which one is yours. On the map, Tab reaches one district and the arrow keys
+          move between them. All of it runs on data already on the page: nothing is typed into a
+          lookup, sent or stored.
         </P>
         <P>
           In a state whose lines were redrawn after its members were elected (those going into the

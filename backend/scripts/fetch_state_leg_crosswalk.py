@@ -83,7 +83,7 @@ import sys
 import urllib.parse
 import urllib.request
 import zipfile
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -294,14 +294,18 @@ def crosswalk(
     blocks: Mapping[str, tuple[int, tuple]],
     names: Mapping[tuple[str, str], tuple[str, str]],
     assignment: Iterable[tuple[str, str]],
+    key: Callable[[str], str | None] = district_key,
 ) -> dict[str, list[str]]:
     """District key -> its names: county subdivisions, then places, then
     counties, each group by population inside the district, largest
-    first. `assignment` streams (block GEOID, BEF district code)."""
+    first. `assignment` streams (block GEOID, BEF district code); `key`
+    turns a code into the district's key, None for a code that is no
+    seat (scripts/build_district_place_crosswalk.py passes congressional
+    district codes)."""
     overlap: collections.Counter = collections.Counter()
     unit_pop: collections.Counter = collections.Counter()
     for geoid, code in assignment:
-        district = district_key(code)
+        district = key(code)
         block = blocks.get(geoid)
         if district is None or block is None:
             continue
@@ -421,7 +425,10 @@ def bef_rows(zip_path: Path, state: str, fips: str) -> Iterator[tuple[str, str]]
                 yield parts[0], parts[5]
 
 
-def build_state(state: str, cache: Path) -> dict[str, list[str]]:
+def state_units(state: str, cache: Path) -> tuple[dict, dict]:
+    """(blocks, names) for one state, as read_geo returns them, with
+    today's names and the places and towns created since 2020 moved in.
+    Also read by scripts/build_district_place_crosswalk.py."""
     fips, folder = _STATES[state]
     pl = download(_PL.format(folder=folder, st=state.lower()), cache)
     strong_mcd = state in _STRONG_MCD_STATES
@@ -447,7 +454,12 @@ def build_state(state: str, cache: Path) -> dict[str, list[str]]:
         moved = reassign(blocks, points, polygons)
         print(f"   {state}: {len(created)} place(s)/town(s) since 2020, "
               f"{len(polygons)} found on TIGERweb, {moved} blocks moved into them")
-    del points
+    return blocks, names
+
+
+def build_state(state: str, cache: Path) -> dict[str, list[str]]:
+    fips = _STATES[state][0]
+    blocks, names = state_units(state, cache)
     out: dict[str, list[str]] = {}
     for chamber, prefix in _CHAMBER_FILES.items():
         bef = download(_BEF.format(chamber=prefix), cache)
