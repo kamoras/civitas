@@ -1,6 +1,6 @@
 """How long the stock-trades run's time-boxed steps may take — the
-annual-holdings phases and the re-read of stored trades — and what the holdings
-phases are.
+annual-holdings phases, the re-read of stored trades and the member-photo
+choice — and what the holdings phases are.
 
 Kept apart from the pipelines so the operator watchdogs that need these
 numbers (ops_alerts.stock_trades_overrun_budget) don't import the whole
@@ -44,3 +44,8 @@ PHASE_CEILING = PREP_BUDGET + FETCH_BUDGET + PROBE_BUDGET
 # read, across all three sources (stock_pipeline._reread_trades). The rest
 # wait for the next night.
 PTR_REREAD_BUDGET = timedelta(minutes=10)
+
+# How long a night may spend choosing member photos
+# (pipeline/fetch/member_photos.py): a first run measures ~530 pairs in about
+# four minutes; later nights only new, changed and month-old ones.
+MEMBER_PHOTOS_BUDGET = timedelta(minutes=8)

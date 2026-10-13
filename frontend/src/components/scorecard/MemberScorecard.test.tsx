@@ -422,6 +422,38 @@ describe("MemberScorecard", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("links the donor-vote overlaps from the funding column, only when there are some", async () => {
+    const { unmount } = renderCard();
+    expect(screen.queryByRole("button", { name: /lines up with votes/ })).not.toBeInTheDocument();
+    unmount();
+    const match = {
+      lobbyistOrg: "Example Industry Association",
+      industry: "LOBBYISTS",
+      lobbyingSpend: 0,
+      donationToSenator: 5000,
+      billsInfluenced: [],
+      senatorVoteAligned: true,
+      description: "",
+    };
+    render(
+      <main>
+        <MemberScorecard
+          member={{ ...member, lobbyingMatches: [match] }}
+          chamber="house"
+          breakdown={breakdown}
+          district={2}
+        />
+      </main>
+    );
+    const funding = document.getElementById("funding-independence")!;
+    await userEvent.click(
+      within(funding).getByRole("button", {
+        name: /See how this money lines up with votes \(1 link\)/,
+      })
+    );
+    expect(screen.getByRole("dialog", { name: "Donor and vote links" })).toBeInTheDocument();
+  });
+
   it("has no structural accessibility violations, closed or with a drawer open", async () => {
     renderCard();
     await screen.findByText("H.R. 8800");

@@ -85,7 +85,7 @@ export default function ScorecardHeader({
           <Photo
             src={thumbnailUrl}
             alt={member.name}
-            className={`h-24 w-20 shrink-0 border-2 object-cover sm:h-28 sm:w-24 ${PARTY_BORDER[member.party]}`}
+            className={`h-24 w-20 shrink-0 border-2 object-cover object-[center_25%] sm:h-28 sm:w-24 ${PARTY_BORDER[member.party]}`}
             fallback={initials}
           />
         ) : (

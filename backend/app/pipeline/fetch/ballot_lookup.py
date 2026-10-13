@@ -83,49 +83,64 @@ def lookup_for_state(state: str) -> dict[str, Any]:
     """The best available official-ballot link for `state`.
 
     Always returns something usable: a verified per-state entry when one
-    exists, otherwise the national directory. `isStateSpecific` tells the
-    frontend which it got, so the page can word the link accurately
-    instead of promising a state lookup it doesn't have.
+    exists; the state's own URL marked `unconfirmed`, with the national
+    directory as `fallback`, when the state's site refuses the check (a bot
+    wall: the page opens for a person, and the state publishes the URL,
+    but nothing automated can confirm it is up); otherwise the national
+    directory. `isStateSpecific` tells the frontend which it got, so the
+    page can word the link accurately instead of promising a state lookup
+    it doesn't have.
     """
     data = _load()
     fallback = data.get("national_fallback") or {}
     entry = (data.get("states") or {}).get(state.upper())
+    national = {
+        "url": fallback.get("url", "https://www.usa.gov/election-office"),
+        "label": fallback.get("label", "Find your state or local election office"),
+        "sourceName": fallback.get("source_name", "USAGov"),
+    }
 
-    if entry and entry.get("verified_at") and entry.get("url"):
+    if entry and entry.get("url") and (entry.get("verified_at") or entry.get("blocked_at")):
+        unconfirmed = not entry.get("verified_at")
         return {
             "url": entry["url"],
             "label": entry.get("label") or "Official state ballot lookup",
             "sourceName": entry.get("source_name") or "",
             "isStateSpecific": True,
-            "verifiedAt": entry["verified_at"],
+            "verifiedAt": entry.get("verified_at"),
+            "unconfirmed": unconfirmed,
+            "fallback": national if unconfirmed else None,
         }
 
-    return {
-        "url": fallback.get("url", "https://www.usa.gov/election-office"),
-        "label": fallback.get("label", "Find your state or local election office"),
-        "sourceName": fallback.get("source_name", "USAGov"),
-        "isStateSpecific": False,
-        "verifiedAt": None,
-    }
+    return {**national, "isStateSpecific": False, "verifiedAt": None, "unconfirmed": False, "fallback": None}
 
 
-def _is_the_page(requested: str, response: httpx.Response) -> bool:
-    """Whether `response` is the page `requested` names, not a stand-in.
+VERIFIED, BLOCKED, DEAD = "verified", "blocked", "dead"
 
-    Two stand-ins answer below 400 and would otherwise pass: a bot
-    wall's challenge (Imperva serves its script with a 200; AGENTS.md
-    section 7 — a state whose wall refuses the check is unverifiable, not
-    worked around), and a retired lookup redirected to its site's
-    homepage, which "resolves" while no longer being the lookup.
+# A refusal, not an answer about the page: a wall that will not talk to an
+# automated client (Akamai's "Access Denied" 403 carries no challenge
+# script, so is_bot_challenge alone misses it).
+_REFUSALS = (401, 403, 429)
+
+
+def _check(requested: str, response: httpx.Response) -> str:
+    """Whether `response` is the page `requested` names (VERIFIED), a bot
+    wall refusing the check (BLOCKED), or anything else (DEAD).
+
+    Two stand-ins answer below 400 and must not verify: a bot wall's
+    challenge (Imperva serves its script with a 200; AGENTS.md section 7 —
+    a state whose wall refuses the check is unverifiable, never worked
+    around), and a retired lookup redirected to its site's homepage, which
+    "resolves" while no longer being the lookup. A 404 from a host that
+    answered is DEAD: the state moved or retired the page.
     """
-    if response.status_code >= 400 or is_bot_challenge(response):
-        return False
+    if is_bot_challenge(response) or response.status_code in _REFUSALS:
+        return BLOCKED
+    if response.status_code >= 400:
+        return DEAD
     asked, landed = httpx.URL(requested), response.url
-    return not (
-        landed.host == asked.host
-        and asked.path.strip("/")
-        and not landed.path.strip("/")
-    )
+    homepage = landed.host == asked.host and asked.path.strip("/") and not landed.path.strip("/")
+    return DEAD if homepage else VERIFIED
 
 
 async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]:
@@ -140,7 +155,11 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
     fresh `verified_at` and becomes renderable; one that does not has its
     `verified_at` CLEARED, so a link that rots between runs stops being
     shown rather than continuing to be served on the strength of a check
-    that passed weeks ago.
+    that passed weeks ago. A URL whose site refuses the check (a bot wall)
+    gets `blocked_at` instead: shown as the state's own lookup, worded as
+    unconfirmed, with the national directory beside it. A URL that fails
+    any other way (a 404, a redirect to the homepage, no answer) clears
+    both and falls back.
 
     The national fallback is never checked or gated — it is the thing we
     fall back TO, and gating it would leave a state page with no escape
@@ -152,9 +171,9 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
         code for code, entry in (_load().get("states") or {}).items() if entry.get("verified_at")
     }
     if not states:
-        return {"checked": 0, "verified": 0, "failed": 0}
+        return {"checked": 0, "verified": 0, "blocked": 0, "failed": 0}
 
-    verified = failed = 0
+    verified = blocked = failed = 0
     now = utcnow().isoformat()
     for code, entry in states.items():
         url = entry.get("url")
@@ -173,12 +192,16 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
                 url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True,
                 headers=BROWSER_HEADERS,
             )
-            ok = _is_the_page(url, response)
+            result = _check(url, response)
         except Exception:
-            ok = False
-        if ok:
+            result = DEAD
+        entry["blocked_at"] = now if result == BLOCKED else None
+        if result == VERIFIED:
             entry["verified_at"] = now
             verified += 1
+        elif result == BLOCKED:
+            entry["verified_at"] = None
+            blocked += 1
         else:
             # Clear rather than leave stale — see docstring.
             if code in was_shown:
@@ -195,4 +218,4 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
     except Exception:
         logger.exception("Could not persist verified ballot lookup links")
 
-    return {"checked": verified + failed, "verified": verified, "failed": failed}
+    return {"checked": verified + blocked + failed, "verified": verified, "blocked": blocked, "failed": failed}

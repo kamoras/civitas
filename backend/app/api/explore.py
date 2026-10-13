@@ -42,7 +42,10 @@ async def search_explore(
     _rl: PublicReadLimit,
     q: str | None = Query(
         None, min_length=2, max_length=200,
-        description="Search query. Optional with politician_id: that member's documents, newest first",
+        description=(
+            "Search query. Optional with politician_id (that member's documents, newest first) "
+            "or with commentable=true (every open comment period, closing soonest first)"
+        ),
     ),
     doc_type: str | None = Query(None, description="Filter by document type"),
     chamber: str | None = Query(None, description="Filter by chamber"),
@@ -80,12 +83,13 @@ async def search_explore(
 
     if q is None:
         # A profile's "view all documents" link: the member's whole record,
-        # not a search of it.
-        if not politician_id:
-            raise HTTPException(status_code=422, detail="q is required without politician_id")
+        # not a search of it. Or "every open comment period" (the homepage's
+        # and the Action Center's link): a list, which needs no query.
+        if not politician_id and not commentable:
+            raise HTTPException(status_code=422, detail="q is required without politician_id or commentable")
         outcome = await off_loop(db, lambda session: browse_documents(
-            session, resolve_member_id(session, politician_id), limit=limit, doc_type=doc_type,
-            chamber=canonical_chamber, commentable=commentable,
+            session, resolve_member_id(session, politician_id) if politician_id else None,
+            limit=limit, doc_type=doc_type, chamber=canonical_chamber, commentable=commentable,
         ))
         return JSONResponse(
             content={"query": "", "results": outcome["results"], "count": outcome["count"],

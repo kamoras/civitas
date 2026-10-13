@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.api import bills as bills_api
 from app.database import get_db
 from app.main import app
-from app.models import RollCall, RollCallPosition, Senator, SponsoredBill
+from app.models import Representative, RollCall, RollCallPosition, Senator, SponsoredBill
 from app.services import bill_record as br
 
 # Congress.gov's answer for S. 4668 (119th), trimmed to what is shaped.
@@ -380,6 +380,28 @@ def test_a_successor_of_the_same_surname_is_not_linked_to_the_predecessors_votes
     db_session.commit()
     pages = {rc.number: br.vote_detail(db_session, rc)["members"][0]["page"] for rc in db_session.query(RollCall)}
     assert pages == {624: None, 254: "/politicians/darline-graham"}
+
+
+def test_a_house_vote_names_each_member_in_full_with_their_district(db_session):
+    """The Clerk prints "Joyce (PA)", with no first name or district; a
+    reader looking for their own representative needs both."""
+    db_session.add(Representative(id="pat-quill", bioguide_id="Q000001", name="Pat Quill", state="PA",
+                                  district=7, party="R", is_current=True))
+    rc = RollCall(chamber="house", congress=119, session=2, number=280, date="2026-07-22", question="On Passage")
+    db_session.add(rc)
+    db_session.flush()
+    db_session.add_all([
+        RollCallPosition(roll_call_id=rc.id, member_id="Q000001", last_name="Quill (PA)", first_name="",
+                         party="R", state="PA", position="Yea"),
+        RollCallPosition(roll_call_id=rc.id, member_id="Z000009", last_name="Former", first_name="",
+                         party="D", state="PA", position="Nay"),
+    ])
+    db_session.commit()
+    members = {m["lastName"]: m for m in br.vote_detail(db_session, rc)["members"]}
+    assert (members["Quill (PA)"]["name"], members["Quill (PA)"]["district"]) == ("Pat Quill", 7)
+    assert members["Quill (PA)"]["page"] == "/politicians/pat-quill"
+    # A member the site has no page for keeps the Clerk's name alone.
+    assert (members["Former"]["name"], members["Former"]["district"]) == (None, None)
 
 
 def test_party_counts_read_positions_as_the_tally_does():

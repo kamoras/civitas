@@ -154,6 +154,8 @@ export default function MemberScorecard({
               score={scores.fundingIndependence}
               weight={weights?.fundingIndependence}
               onMore={() => setView("donors")}
+              donorVoteLinks={member.lobbyingMatches?.length ?? 0}
+              onDonorVotes={() => setView("donorVotes")}
             />
             <AlignmentColumn
               memberId={member.id}

@@ -167,8 +167,9 @@ export default function DataChapter() {
               a visitor&apos;s.
             </Fact>
             <Fact label="State election offices · USAGov">
-              Each state&apos;s own voter lookup, linked only after a nightly check that it still
-              opens; otherwise USAGov&apos;s directory of election offices.
+              Each state&apos;s own voter lookup, linked after a nightly check that it still opens,
+              or, where the state&apos;s site turns the check away, linked as unconfirmed beside
+              USAGov&apos;s directory of election offices; otherwise USAGov&apos;s directory alone.
             </Fact>
             <Fact label="News & trends">
               RSS feeds from six newsrooms, Google Trends and Bluesky, for the Action Center.
@@ -184,7 +185,7 @@ export default function DataChapter() {
 
       <Section id="ai" title="How AI is used, and where it isn’t">
         <P>
-          Two kinds of model run here, each for what it&apos;s suited to. Neither ever produces a
+          Three kinds of model run here, each for what it&apos;s suited to. None ever produces a
           score: every score is a published formula.
         </P>
         <Sub title="Embedding models: sorting records into categories">
@@ -212,6 +213,17 @@ export default function DataChapter() {
               how thresholds quietly stop meaning anything.
             </P>
           </More>
+        </Sub>
+        <Sub title="A face detector: choosing a member's photo">
+          <P>
+            Each member has two official photos, one on their Congress.gov record and one in the
+            Biographical Directory, and either can be a full-length or painted portrait rather than
+            a head-and-shoulders shot. Once a night a small face detector (YuNet, run with OpenCV)
+            measures how large the face is in each, and the record&apos;s photo is kept unless its
+            face is small and the directory&apos;s is clearly larger. The two cut-offs were fitted
+            to a side-by-side comparison of every current member&apos;s two photos. It picks between
+            official photos; it never identifies anyone.
+          </P>
         </Sub>
         <Sub title="A language model: locating text, a few short write-ups">
           <P>
@@ -400,11 +412,17 @@ export default function DataChapter() {
         </P>
         <P>
           Your browser asks nothing of any other host. Every picture comes from this server: the
-          members&apos; official portraits (from bioguide.congress.gov), the justices&apos; photos
-          (from Oyez) and a news photo on an Action Center issue (from the outlet that licensed it)
-          are fetched by this server, which keeps a copy and serves it to you, so those sites never
-          see who is looking. The fonts, scripts, maps and styles are hosted here too. Links to
-          sources are only followed if you click them.
+          members&apos; official photos (the one on each member&apos;s Congress.gov record, from
+          www.congress.gov, used only when Congress.gov credits it: most read &ldquo;Image courtesy
+          of the Member&rdquo;, the rest name the Senate photographer or Historical Office, the
+          House collection, the Pictorial Directory or the GPO Member Guide; or the Biographical
+          Directory&apos;s portrait from bioguide.congress.gov, for a member whose record has no
+          credited photo, or whose record photo a face detector run on this server finds is not a
+          head-and-shoulders shot where the portrait is), the justices&apos; photos (from Oyez) and
+          a news photo on an Action Center issue (from the outlet that licensed it) are fetched by
+          this server, which keeps a copy and serves it to you, so those sites never see who is
+          looking. The fonts, scripts, maps and styles are hosted here too. Links to sources are
+          only followed if you click them.
         </P>
         <Sub title="The one company between you and this server" id="cloudflare">
           <P>
@@ -451,7 +469,7 @@ export default function DataChapter() {
           <Fact label="Frontend">Next.js 16, React 19, TypeScript, Tailwind CSS</Fact>
           <Fact label="Models">
             Snowflake Arctic-XS and all-MiniLM-L6-v2 (embeddings); LFM2.5-1.2B-Instruct via
-            llama.cpp
+            llama.cpp; YuNet via OpenCV (face detection, for member photos)
           </Fact>
           <Fact label="Search">sqlite-vec for embeddings, SQLite FTS5 for keywords</Fact>
           <Fact label="Deployment">

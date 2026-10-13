@@ -16,8 +16,9 @@ from fastapi import HTTPException
 from app.api.action import _build_issue_response
 from app.api.photos import get_photo_source
 from app.api.politicians import get_politician, list_politicians
-from app.models import ActionIssue, Justice, Senator
+from app.models import ActionIssue, ApiCache, Justice, Senator
 from app.photos import PHOTO_SOURCE_HOSTS
+from app.pipeline.fetch.congress import member_detail_cache_key
 from app.services.justice_service import get_all_justices, get_justice_leaderboard
 
 APP = Path(__file__).resolve().parents[1] / "app"
@@ -116,10 +117,70 @@ def test_the_frontend_route_allows_the_same_hosts():
     assert frontend == PHOTO_SOURCE_HOSTS
 
 
+def _member_record(db, bioguide_id, depiction):
+    record = {"bioguideId": bioguide_id}
+    if depiction is not None:
+        record["depiction"] = depiction
+    db.add(ApiCache(tier="congress", cache_key=f"member-detail-{bioguide_id}", data_json=json.dumps(record)))
+    db.commit()
+
+
+_HEADSHOT = "https://www.congress.gov/img/member/x000001_200.jpg"
+_BIOGUIDE = "https://bioguide.congress.gov/photo/X000001.jpg"
+
+
+def test_a_member_photo_is_the_congress_gov_records_headshot(db_session):
+    """bioguide's file is for some members a full-length painted portrait;
+    the record's depiction is the head-and-shoulders photo."""
+    _member_record(db_session, "X000001", {"attribution": "Image courtesy of the Member", "imageUrl": _HEADSHOT})
+    assert get_photo_source("bioguide", "X000001", db=db_session) == {"url": _HEADSHOT}
+
+
+@pytest.mark.parametrize("depiction", [
+    None,                                                                    # the record has none
+    {"imageUrl": _HEADSHOT},                                                 # no attribution
+    {"attribution": "  ", "imageUrl": _HEADSHOT},                            # blank attribution
+    {"attribution": "<p></p>", "imageUrl": _HEADSHOT},                       # markup, no words
+    {"attribution": "Image courtesy of the Member",
+     "imageUrl": "https://www.congress.gov/img/other/x000001_200.jpg"},     # not the member-image path
+    {"attribution": "Image courtesy of the Member",
+     "imageUrl": "https://images.example.org/img/member/x000001_200.jpg"},  # another host
+    {"attribution": "Image courtesy of the Member",
+     "imageUrl": "http://www.congress.gov/img/member/x000001_200.jpg"},     # not https
+    "not-a-dict",
+])
+def test_a_member_photo_falls_back_to_bioguide(db_session, depiction):
+    _member_record(db_session, "X000001", depiction)
+    assert get_photo_source("bioguide", "X000001", db=db_session) == {"url": _BIOGUIDE}
+
+
+def test_a_member_with_no_stored_record_gets_bioguides_portrait(db_session):
+    """A bill sponsor from before the pipeline's time has no record."""
+    assert get_photo_source("bioguide", "X000001", db=db_session) == {"url": _BIOGUIDE}
+
+
+def test_a_depiction_attribution_with_markup_counts(db_session):
+    attribution = '<a href="https://www.senate.gov/">Courtesy U.S. Senate Historical Office</a>'
+    _member_record(db_session, "X000001", {"attribution": attribution, "imageUrl": _HEADSHOT})
+    assert get_photo_source("bioguide", "X000001", db=db_session) == {"url": _HEADSHOT}
+
+
+@pytest.mark.parametrize("photo_id", ["x000001", "X00001", "../X000001", "X000001.jpg"])
+def test_a_member_photo_needs_a_bioguide_id(db_session, photo_id):
+    with pytest.raises(HTTPException) as err:
+        get_photo_source("bioguide", photo_id, db=db_session)
+    assert err.value.status_code == 404
+
+
+def test_the_member_photo_key_is_the_one_the_fetcher_writes():
+    assert member_detail_cache_key("X000001") == "member-detail-X000001"
+
+
 # A literal image URL on another host, anywhere the API or its services
 # build responses. The pipeline's fetchers (which read sources) are the
-# only place one belongs; app/api/photos.py hands stored ones to the
-# photo route, never to a page.
+# only place one belongs, besides app/photos.py, which names a member
+# photo's source for the photo route; app/api/photos.py hands those to the
+# route, never to a page.
 _ABSOLUTE_IMAGE_URL = re.compile(
     r"""https?://[^\s"'`]+?\.(?:jpe?g|png|gif|webp|avif|svg)\b|bioguide\.congress\.gov/(?:bioguide/)?photo""",
     re.I,
@@ -130,7 +191,7 @@ def test_no_api_code_builds_a_third_party_image_url():
     offenders = [
         f"{path.relative_to(APP)}: {m.group(0)}"
         for path in APP.rglob("*.py")
-        if "pipeline" not in path.relative_to(APP).parts
+        if "pipeline" not in path.relative_to(APP).parts and path != APP / "photos.py"
         for m in _ABSOLUTE_IMAGE_URL.finditer(path.read_text())
     ]
     assert offenders == []

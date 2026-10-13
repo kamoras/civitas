@@ -326,7 +326,11 @@ async function politicianImage(
             alt={name}
             width={280}
             height={280}
-            style={{ objectFit: "cover", border: `2px solid ${accent}` }}
+            style={{
+              objectFit: "cover",
+              objectPosition: "center 25%",
+              border: `2px solid ${accent}`,
+            }}
           />
         )}
         <div style={{ display: "flex", flexDirection: "column" }}>
