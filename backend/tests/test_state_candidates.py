@@ -4,6 +4,7 @@ safety rules (never guess, never hide, never fabricate).
 """
 
 import json
+from datetime import timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -109,14 +110,21 @@ class TestCrawlAdoption:
     async def test_sites_with_unreadable_robots_txt_are_reported(self, db_session, monkeypatch):
         """A refusal for an unreadable robots.txt looks, in the outcomes,
         like a state with nothing to find — so it is an ops alert, naming
-        the host, and a stale refusal from an earlier pass is not."""
+        the host and the class of failure, and a stale refusal from an
+        earlier pass is not. A wall documented in _robots_walls is not
+        repeated; an undocumented one is named as new."""
         from app.pipeline.fetch import state_source_crawler as crawler
 
         self._patch(monkeypatch, [])
-        crawler._unreadable_refusals.add("https://stale.example.gov")
+        crawler._robots_refusals["https://stale.example.gov"] = "no answer"
+        known = next(h for h in sc._sources_file()["_robots_walls"] if not h.startswith("_"))
 
         async def refused_discover(client, state, cycle, rules=None):
-            crawler._unreadable_refusals.add("https://sos.example.gov")
+            crawler._robots_refusals.update({
+                "https://sos.example.gov": "HTTP 503",
+                "https://walled.example.gov": crawler.BOT_WALL,
+                f"https://{known}": crawler.BOT_WALL,
+            })
             return None
 
         monkeypatch.setattr(sc, "discover_source", refused_discover)
@@ -129,9 +137,11 @@ class TestCrawlAdoption:
         await sc.crawl_for_new_sources(db_session, None, 2026)
         robots = [body for condition, body in alerts if condition == "election-source-crawl-robots"]
         assert len(robots) == 1
-        assert "sos.example.gov: robots.txt unreadable" in robots[0]
+        assert "sos.example.gov: robots.txt unreachable (HTTP 503)" in robots[0]
+        assert "walled.example.gov: bot wall (new" in robots[0]
+        assert known not in robots[0]
         assert "stale.example.gov" not in robots[0]
-        assert not crawler._unreadable_refusals
+        assert not crawler._robots_refusals
 
     @pytest.mark.asyncio
     async def test_rejects_a_source_naming_people_who_are_not_in_the_race(
@@ -409,7 +419,7 @@ class TestCrawlFailuresAreContained:
         monkeypatch.setattr(sc, "discovered_states", lambda: set())
         alerts = []
         monkeypatch.setattr(sc, "report_file_problems",
-                            lambda subject, lead, problems, key: alerts.extend(problems))
+                            lambda subject, lead, problems, key, **_: alerts.extend(problems))
         return alerts
 
     @pytest.mark.asyncio
@@ -1003,6 +1013,26 @@ class TestAlertsAndCadence:
         sc.report_file_problems("s", "l", ["WV: raised X", "TX: raised Y"], "k")
         assert keys[0] == keys[1] and keys[2] != keys[0]
 
+    def test_an_unchanged_set_of_failures_alerts_once_not_daily(self, monkeypatch):
+        """The robots alert: a site unreachable for weeks is one alert until
+        it clears or the set changes — a changed class is a change."""
+        keys = []
+        monkeypatch.setattr("app.ops_alerts.send_ops_alert",
+                            lambda subject, body, dedupe_key=None, condition=None: keys.append(dedupe_key))
+        now = sc.utcnow()
+        sc.report_file_problems("s", "l", ["a.gov: robots.txt unreachable (HTTP 503)"], "k", per_day=False)
+        monkeypatch.setattr(sc, "utcnow", lambda: now + timedelta(days=7))
+        sc.report_file_problems("s", "l", ["a.gov: robots.txt unreachable (HTTP 503)"], "k", per_day=False)
+        sc.report_file_problems("s", "l", ["a.gov: robots.txt unreachable (no answer)"], "k", per_day=False)
+        assert keys[0] == keys[1] and keys[2] != keys[0]
+        assert now.date().isoformat() not in keys[0]
+
+    def test_every_documented_wall_says_why(self):
+        walls = sc._sources_file()["_robots_walls"]
+        for host, evidence in walls.items():
+            assert "measured" in evidence.lower() or host.startswith("_"), host
+            assert "://" not in host and "/" not in host
+
     def test_a_weekly_crawl_does_not_slip_to_the_eighth_night(self):
         from datetime import datetime
 
@@ -1025,7 +1055,7 @@ class TestTheCrawlAlwaysReports:
         alerts = []
         monkeypatch.setattr(sc, "_crawl_due_states", loop)
         monkeypatch.setattr(sc, "report_file_problems",
-                            lambda subject, lead, problems, key: alerts.extend(problems))
+                            lambda subject, lead, problems, key, **_: alerts.extend(problems))
         with pytest.raises(RuntimeError):
             await sc.crawl_for_new_sources(db_session, None, 2026)
         assert alerts == ["AA: disk full", "BB: Source discovery raised ValueError: inner"]
@@ -1041,7 +1071,7 @@ class TestSyncRaisesAreReported:
         monkeypatch.setattr(sc, "_discovered_source", lambda st: None)
         alerts = []
         monkeypatch.setattr(sc, "report_file_problems",
-                            lambda subject, lead, problems, key: alerts.extend(problems))
+                            lambda subject, lead, problems, key, **_: alerts.extend(problems))
         results = await sc.sync_confirmed_candidates(db_session, None, 2026)
         assert results["TX"]["status"] == "fetch_failed"
         assert alerts == ["TX: Confirmed-candidate fetch raised TypeError: refactor slip"]

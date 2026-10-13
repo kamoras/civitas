@@ -75,7 +75,8 @@ from app.pipeline.fetch.state_candidate_sources import (
 from app.pipeline.fetch import state_election_dates as election_dates
 from app.pipeline.fetch.state_candidate_filings import fetch_ballot_candidates
 from app.pipeline.fetch.state_source_crawler import (
-    take_unreadable_refusals,
+    BOT_WALL,
+    take_robots_refusals,
     ELECTION_DOMAINS,
     discover_filings,
     discover_source,
@@ -939,7 +940,7 @@ async def crawl_for_new_sources(
     outcomes: dict[str, str] = {}
     problems: list[str] = []
     raised_token = _RAISED.set([])
-    take_unreadable_refusals()  # only this pass's
+    take_robots_refusals()  # only this pass's
     try:
         await _crawl_due_states(db, client, cycle, hand_verified, outcomes, problems)
     finally:
@@ -956,10 +957,12 @@ async def crawl_for_new_sources(
         # a state with nothing to find.
         report_file_problems(
             "Election source crawl skipped sites whose robots.txt couldn't be read",
-            "Nothing was read from these sites this pass: their robots.txt answered with a "
-            "server error or not at all, which the crawler takes as \"read nothing here\".",
-            [f"{origin.split('://', 1)[-1]}: robots.txt unreadable" for origin in take_unreadable_refusals()],
-            "election-source-crawl-robots",
+            "Nothing was read from these sites this pass. A bot wall answered robots.txt with a "
+            "challenge, which is never crawled past; \"unreachable\" is a server error or no "
+            "answer, which the crawler takes as \"read nothing here\" (RFC 9309 §2.3.1.4). "
+            "Walls documented in state_candidate_sources.json's _robots_walls are not listed.",
+            robots_problems(take_robots_refusals()),
+            "election-source-crawl-robots", per_day=False,
         )
         _RAISED.reset(raised_token)
     return outcomes
@@ -1104,11 +1107,33 @@ async def _crawl_results_source(
     return f"adopted ({matched}/{len(records)} matched)"
 
 
-def report_file_problems(subject: str, lead: str, problems: list[str], key: str) -> None:
+def robots_problems(refusals: dict[str, str]) -> list[str]:
+    """One line per site the crawl couldn't read, naming the class of
+    failure — leaving out the bot walls already documented, with their
+    evidence, in state_candidate_sources.json's _robots_walls: those are
+    known, and an alert about them every week would bury a new one."""
+    known = _sources_file().get("_robots_walls") or {}
+    lines = []
+    for origin, why in refusals.items():
+        host = origin.split("://", 1)[-1]
+        if why == BOT_WALL and host in known:
+            logger.info("%s: robots.txt behind its documented bot wall — not read", host)
+        elif why == BOT_WALL:
+            lines.append(f"{host}: bot wall (new — not among the documented walls)")
+        else:
+            lines.append(f"{host}: robots.txt unreachable ({why})")
+    return lines
+
+
+def report_file_problems(
+    subject: str, lead: str, problems: list[str], key: str, *, per_day: bool = True,
+) -> None:
     """One ops alert (once a day per `key`) for failures a pass contained
     rather than raised — so a state that went dark, or a change that was
     never written, reaches someone instead of only the log. A pass with
-    none resolves the open alert for `key`."""
+    none resolves the open alert for `key`. With `per_day` False, the same
+    set of problem lines alerts once until it resolves or changes, never
+    again just because a day passed."""
     from app.ops_alerts import resolve_ops_alert, send_ops_alert
 
     if not problems:
@@ -1117,11 +1142,11 @@ def report_file_problems(subject: str, lead: str, problems: list[str], key: str)
     try:
         # Once a day per set of failing states, not per day: the first
         # alert of a day must not silence a different failure later in it.
-        failing = sorted({p.split(":", 1)[0] for p in problems})
+        failing = sorted({p.split(":", 1)[0] for p in problems}) if per_day else sorted(problems)
         digest = hashlib.sha1("|".join(failing).encode()).hexdigest()[:12]
         send_ops_alert(
             subject, lead + "\n" + "\n".join(problems),
-            dedupe_key=f"{key}-{utcnow().date().isoformat()}-{digest}",
+            dedupe_key=f"{key}-{utcnow().date().isoformat()}-{digest}" if per_day else f"{key}-{digest}",
             condition=key,
         )
     except Exception:

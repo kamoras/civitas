@@ -10,6 +10,8 @@ import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
 import JusticeScorecard from "@/components/scorecard/JusticeScorecard";
 import { formerOfficeNotice } from "@/lib/officeStatus";
 import { issueDateLabel } from "@/lib/formatting";
+import { stateBallotHref } from "@/lib/elections";
+import { STATE_NAMES } from "@/lib/stateCodes";
 import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
 import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import type { Senator } from "@/types/senator";
@@ -104,7 +106,6 @@ export default function PoliticianProfileClient({
             <span className="mx-2">/</span>
             <span className="text-ink-lo">{branchLabel(branch)}</span>
           </div>
-          {strip}
 
           {/* Left-office banner — wording is branch-specific, see officeStatus.ts */}
           {formerOffice && (
@@ -138,6 +139,10 @@ export default function PoliticianProfileClient({
               the fallback below always catches it. */}
           {scorecard && (
             <div className="mb-6">
+              {/* "Is my member up, and against whom?" was four clicks away
+                  (Elections, the state, the House box, the district), and
+                  on a redrawn map under a different district number. */}
+              {profile.onBallot && <OnBallotLine race={profile.onBallot} />}
               {isMember && (
                 // Keyed by member: moving between two profiles reuses this
                 // page, and every part of the scorecard that loads or keeps
@@ -188,6 +193,12 @@ export default function PoliticianProfileClient({
               )}
             </div>
           )}
+
+          {/* After the scorecard, by the reasoning above: who this is comes
+              first. Above it, the strip took a quarter of a phone's first
+              screen and put the member's score below the fold for a reader
+              arriving from a search result. */}
+          {strip}
 
           {/* Active Issues */}
           {activeIssues.length > 0 && (
@@ -305,5 +316,28 @@ export default function PoliticianProfileClient({
       <BackToTop />
       <Footer />
     </div>
+  );
+}
+
+/** The member's race on this election's ballot, one link away: their own
+ * seat or another office, by the backend's crosswalk match. */
+export function OnBallotLine({ race }: { race: NonNullable<PoliticianProfile["onBallot"]> }) {
+  const state = STATE_NAMES[race.state] ?? race.state;
+  const office =
+    race.office === "S"
+      ? "U.S. Senate"
+      : race.district == null || race.district === 0
+        ? "U.S. House, at-large"
+        : `U.S. House, District ${race.district}`;
+  return (
+    <p className="mb-3 border border-white/15 bg-surface px-3 py-2 font-mono text-xs tracking-[0.08em] text-ink-lo">
+      ON THE {race.cycleYear} BALLOT · {office.toUpperCase()}, {state.toUpperCase()} ·{" "}
+      <Link
+        href={`${stateBallotHref(race.state)}#race-${race.raceId}`}
+        className="inline-block min-h-[24px] text-signal-cyan hover:text-phos"
+      >
+        WHO&apos;S RUNNING AND WHO FUNDS THEM →
+      </Link>
+    </p>
   );
 }
