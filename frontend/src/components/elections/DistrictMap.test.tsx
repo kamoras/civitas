@@ -456,6 +456,26 @@ describe("DistrictMap", () => {
     expect(preview).toHaveTextContent(/^CT-5 · no race on file$/);
   });
 
+  it("puts one district in the Tab order and moves between them with the arrow keys", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => CT }));
+    const races = [1, 2, 3, 4].map((d) => race(d, 6));
+    render(<DistrictMap state="CT" races={races} picked={null} onPick={vi.fn()} />);
+
+    const one = await screen.findByRole("button", { name: "CT-1" });
+    const tabbable = screen
+      .getAllByRole("button")
+      .filter((b) => b.getAttribute("tabindex") === "0");
+    expect(tabbable).toEqual([one]);
+    one.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByRole("button", { name: "CT-2" })).toHaveFocus();
+    await userEvent.keyboard("{End}");
+    expect(screen.getByRole("button", { name: "CT-4" })).toHaveFocus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(one).toHaveFocus();
+    expect(screen.getByRole("button", { name: "CT-1" })).toHaveAttribute("tabindex", "0");
+  });
+
   describe("a count for a district with no ballot race", () => {
     const counted = {
       raceId: "2026-HOUSE-CT-5",
@@ -525,6 +545,11 @@ describe("DistrictMap", () => {
         />
       );
       const five = await screen.findByRole("button", { name: /^CT-5: / });
+      // In the arrow-key ring (roving tabindex): End from the Tab stop
+      // reaches it, a shape with nothing to open never.
+      screen.getByRole("button", { name: /^CT-1/ }).focus();
+      await userEvent.keyboard("{End}");
+      expect(five).toHaveFocus();
       expect(five.getAttribute("tabindex")).toBe("0");
       expect(five).toHaveAttribute("aria-pressed", "false");
       expect(five.getAttribute("style")).toContain("cursor: pointer");

@@ -1,4 +1,4 @@
-import type { GeneralRunoff, OtherPrimary } from "@/types/election";
+import type { GeneralRunoff, OtherPrimary, TopPrimary } from "@/types/election";
 
 /** "December 12" from "2026-12-12", read as a calendar date (no clock). */
 function dayWords(iso: string): string {
@@ -42,6 +42,60 @@ export default function GeneralRunoffNotice({ runoffs }: { runoffs?: GeneralRuno
         </p>
       ))}
     </div>
+  );
+}
+
+const COUNT_WORDS: Record<number, string> = { 2: "two", 3: "three", 4: "four" };
+
+/**
+ * An all-party primary (California's and Washington's top two, Alaska's
+ * top four): without it, a California district with two Democrats
+ * (or two Republicans) for one seat reads as a listing error. Read from a
+ * cited legal fact (election_rules.json); the page only words it.
+ */
+export function TopPrimaryNotice({
+  rules,
+  stateName,
+}: {
+  rules?: TopPrimary[] | null;
+  stateName: string;
+}) {
+  if (!rules?.length) return null;
+  return (
+    <div className="mb-6 flex flex-col gap-2" data-testid="top-primary">
+      {rules.map((r) => {
+        const n = COUNT_WORDS[r.advance] ?? String(r.advance);
+        const scope = r.offices === "*" ? "" : `For ${officeWords(r.offices)}, `;
+        return (
+          <p
+            key={`${String(r.offices)}-${r.advance}`}
+            className="font-mono text-xs leading-relaxed text-ink-lo"
+          >
+            {`${scope}${stateName} held a top-${n} primary: every candidate, of every party, ran on one primary ballot, and the ${n} with the most votes went on to November whatever their party. So one party can have more than one candidate in a November contest.`}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Ranked-choice voting (Maine, Alaska), said before election day: it
+ * changes how the ballot is marked, not only how it is counted. The
+ * results pages say the counting half from election night (StateResults).
+ */
+export function RankedChoiceNotice({
+  rankedChoice,
+  stateName,
+}: {
+  rankedChoice?: boolean;
+  stateName: string;
+}) {
+  if (!rankedChoice) return null;
+  return (
+    <p className="mb-6 font-mono text-xs leading-relaxed text-ink-lo" data-testid="ranked-choice">
+      {`${stateName} decides its U.S. Senate and House contests by ranked-choice voting. You can rank the candidates in order of preference; ranking more than one is optional. If no one wins a majority of first choices, the last-place candidate is dropped and those ballots go to their next choice, round by round, until one candidate has a majority. The state counts those rounds after election night.`}
+    </p>
   );
 }
 
