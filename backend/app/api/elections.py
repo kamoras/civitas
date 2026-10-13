@@ -197,7 +197,9 @@ def _election_rules(state: str, cycle: int, key: str) -> list[dict]:
     decided by a plurality (Georgia's majority rule; Louisiana's House
     contests held as an all-party open primary), with the runoff's date.
     "otherPrimaries" -- contests whose primary was not the state's one
-    primary date (Alabama's postponed House districts). [] when the file
+    primary date (Alabama's postponed House districts). "topPrimary" --
+    an all-party primary that sent its top two (four) to November whatever
+    their party (California, Washington; Alaska). [] when the file
     is missing: the page then says nothing rather than guessing."""
     global _election_rules_cache
     if _election_rules_cache is None:
@@ -774,6 +776,65 @@ def _race_full(
     }
 
 
+def _other_chamber_record(
+    cand: Candidate, race: Race, reps_by_district: dict[int, Representative], senators: list[Senator],
+) -> dict | None:
+    """{id, score, chamber, seat} for a sitting member of the OTHER chamber
+    running in this race (a House member running for the Senate), or None.
+
+    Only by the bioguide->FEC crosswalk (`member_bioguide`), an identity
+    match, never a surname: this is their record, but not this seat's, so
+    it is served apart from incumbentRecord, which marks the seat's holder
+    and the page words as incumbency. Kept to current members of this
+    state's delegation (what state_ballot loaded), and only before the
+    Congress this election seats sits, as _incumbent_link's seat labels
+    are: after that the tables may hold the winners."""
+    if not cand.member_bioguide or elected_congress_sits(race.cycle_year):
+        return None
+    if race.office == "S":
+        rep = next((r for r in reps_by_district.values() if r.bioguide_id == cand.member_bioguide), None)
+        if rep is not None:
+            return {"id": rep.id, "score": compute_overall_score(rep), "chamber": "house",
+                    "seat": _seat_label(race.state, rep.district)}
+        return None
+    sen = next((s for s in senators if s.bioguide_id == cand.member_bioguide), None)
+    if sen is not None:
+        return {"id": sen.id, "score": compute_overall_score(sen), "chamber": "senate", "seat": None}
+    return None
+
+
+def member_on_ballot(db: Session, bioguide_id: str | None) -> dict | None:
+    """The race on the site's election ballot that a member of Congress is
+    a candidate in, or None: {raceId, cycleYear, state, office, district}.
+
+    By the bioguide->FEC crosswalk (`member_bioguide`) only, and only when
+    the candidate survives _confirmed_or_all, the same filter every ballot
+    listing applies: a member who lost their primary, or whose state's
+    certified list leaves them off, is not "on the ballot" here either.
+    None also when nothing ties them to a candidacy, which is not a claim
+    that they aren't running: the profile then says nothing."""
+    if not bioguide_id:
+        return None
+    # ponytail: member_bioguide is unindexed, so this scans candidates (a
+    # few thousand rows, one profile view, cached); index it if that grows.
+    cycle = active_election(db).cycle
+    rows = (
+        db.query(Candidate)
+        .join(Race, Candidate.race_id == Race.id)
+        .filter(Candidate.member_bioguide == bioguide_id, Race.cycle_year == cycle)
+        .options(selectinload(Candidate.race).selectinload(Race.candidates))
+        .all()
+    )
+    for cand in rows:
+        race = cand.race
+        complete = _race_complete(_ballot_marker(db, race.state, race.cycle_year), race.state, race.id)
+        listed = _confirmed_or_all(race.candidates, race.state, complete)
+        if any(c.member_bioguide == bioguide_id for c in listed):
+            return {"raceId": race.id, "cycleYear": race.cycle_year, "state": race.state,
+                    "office": race.office, "district": race.district}
+    return None
+
+
 def _ballot_candidate(
     cand: Candidate, race: Race, reps_by_district: dict[int, Representative], senators: list[Senator],
     namesake_fields: list[list[Candidate]], stale_incumbent_ids: frozenset[str],
@@ -783,7 +844,11 @@ def _ballot_candidate(
     page reads from incumbentChallenge, though the FEC codes them a
     challenger (after a special election)."""
     link = _incumbent_link(cand, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids)
-    summary = {**_candidate_summary(cand, stale_incumbent_ids), "incumbentRecord": link}
+    summary = {
+        **_candidate_summary(cand, stale_incumbent_ids),
+        "incumbentRecord": link,
+        "memberRecord": None if link else _other_chamber_record(cand, race, reps_by_district, senators),
+    }
     holds_this_seat = link is not None and cand.member_bioguide and (
         race.office == "S"
         or link.get("district") in (None, race.district)
@@ -1354,6 +1419,17 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # districts 1, 2, 6 and 7; Louisiana's House, whose primary IS
         # November 3), so the header doesn't give them the wrong one.
         "otherPrimaries": _election_rules(state, cycle, "otherPrimaries"),
+        # Where the primary was all-party (top-two, Alaska's top-four), so
+        # two candidates of one party in November is the rule, not an
+        # error the reader has to puzzle out.
+        "topPrimary": _election_rules(state, cycle, "topPrimary"),
+        # The state decides its federal generals by ranked-choice rounds
+        # (its law, cited as ranked_choice_general in
+        # state_candidate_sources.json: the same fact the results pages
+        # read through ranked_choice_states). Said before election day
+        # too, since it changes how the ballot is marked, not only how it
+        # is counted.
+        "rankedChoice": bool((source_for_state(state) or {}).get("ranked_choice_general")),
         "senateRaces": senate_races,
         # Only meaningful (and only computed) when this state's seat
         # genuinely ISN'T up this cycle — gated on the calendar

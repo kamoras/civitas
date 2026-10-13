@@ -270,7 +270,10 @@ async def fetch_fr_rulemaking(
                     body_parts.append(f"Dates: {dates_text}")
                 body = "\n\n".join(body_parts)
 
-            comment_url = doc.get("comment_url") or None
+            # The Federal Register hands out some regulations.gov links as
+            # http://; the same page is served over https, and a reader's
+            # comment should not start on plain http.
+            comment_url = re.sub(r"^http://", "https://", doc.get("comment_url") or "", flags=re.I) or None
             comments_close = doc.get("comments_close_on") or None
 
             identifiers: list[str] = []

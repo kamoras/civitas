@@ -69,6 +69,29 @@ describe("districtAreaLabel", () => {
   it("does not truncate when exactly at the max", () => {
     expect(districtAreaLabel(["A County", "B County"], 3)).toBe("A, B");
   });
+
+  it("leads with the places a filter matched, whole, so a hidden match is visible", () => {
+    // A county sharing its name with a city: the label must say it was
+    // the county that matched, not leave it behind "& 2 more".
+    const counties = [
+      "Anderson County",
+      "Cherokee County",
+      "Leon County",
+      "Houston County",
+      "Polk County",
+    ];
+    expect(districtAreaLabel(counties, 3, true, "houston")).toBe(
+      "Houston County, Anderson, Cherokee & 2 more"
+    );
+    expect(districtAreaLabel(counties, 3, true, "")).toBe("Anderson, Cherokee, Leon & 2 more");
+  });
+
+  it("shows every matched place even past the max", () => {
+    const towns = ["Northfield city", "North Branch city", "Ada city", "Northome city"];
+    expect(districtAreaLabel(towns, 1, false, "north")).toBe(
+      "Northfield city, North Branch city, Northome city & 1 more"
+    );
+  });
 });
 
 describe("parseUtc", () => {

@@ -225,6 +225,73 @@ class TestLooksFederal:
         ]) is True
 
 
+# Trimmed from real robots.txt responses, 2026-10-13.
+CLOUDFLARE_CHALLENGE = (
+    '<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title>'
+    '<meta name="robots" content="noindex,nofollow"></head><body>'
+    '<script src="/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1"></script></body></html>'
+)
+NH_503 = "<html><body><h1>503 Service Unavailable</h1>\nNo server is available to handle this request.\n</body></html>\n"
+ALASKA_ROBOTS = (
+    "User-agent: *\nDisallow: /wp-admin/\nAllow: /wp-admin/admin-ajax.php\n\n"
+    "Sitemap: https://www.elections.alaska.gov/sitemap.xml\n"
+)
+
+
+class TestRobotsThroughTheRealFetch:
+    """The robots.txt read as the sweep makes it — fetch_with_retry and
+    the project's client, over a mock transport — so redirects and walls
+    are handled where they really are."""
+
+    @staticmethod
+    def _client(monkeypatch, routes):
+        import httpx
+
+        from app.http_client import make_async_client
+
+        def handler(request):
+            status, text, headers = routes.get(str(request.url), (404, "", {}))
+            return httpx.Response(status, text=text, headers=headers)
+
+        monkeypatch.setattr(crawler, "_robots", {})
+        monkeypatch.setattr(crawler, "_robots_last_read", {})
+        monkeypatch.setattr(crawler, "_robots_refusals", {})
+        monkeypatch.setattr(crawler, "_robots_failure", {})
+        return make_async_client(transport=httpx.MockTransport(handler))
+
+    @pytest.mark.asyncio
+    async def test_a_redirected_robots_file_is_read_and_obeyed(self, monkeypatch):
+        """elections.alaska.gov/robots.txt 301s to www (§2.3.1.2: follow at
+        least five); the rules read there govern the origin asked."""
+        async with self._client(monkeypatch, {
+            "https://elections.alaska.gov/robots.txt": (
+                301, "", {"location": "https://www.elections.alaska.gov/robots.txt"}),
+            "https://www.elections.alaska.gov/robots.txt": (200, ALASKA_ROBOTS, {"content-type": "text/plain"}),
+        }) as client:
+            assert await crawler._allowed(client, "https://elections.alaska.gov/wp-admin/x") is False
+            assert await crawler._allowed(client, "https://elections.alaska.gov/wp-admin/admin-ajax.php") is True
+            assert await crawler._allowed(client, "https://elections.alaska.gov/elections/") is True
+
+    @pytest.mark.asyncio
+    async def test_five_redirects_are_followed(self, monkeypatch):
+        routes = {f"https://x.gov/r{i}": (302, "", {"location": f"https://x.gov/r{i + 1}"}) for i in range(5)}
+        routes["https://x.gov/robots.txt"] = (301, "", {"location": "https://x.gov/r0"})
+        routes["https://x.gov/r5"] = (200, "User-agent: *\nDisallow: /private/\n", {})
+        async with self._client(monkeypatch, routes) as client:
+            assert await crawler._allowed(client, "https://x.gov/private/a") is False
+            assert await crawler._allowed(client, "https://x.gov/public") is True
+
+    @pytest.mark.asyncio
+    async def test_a_wall_behind_a_redirect_is_a_wall(self, monkeypatch):
+        """ohiosos.gov's shape: a 301 to www, whose robots.txt is a challenge."""
+        async with self._client(monkeypatch, {
+            "https://x.gov/robots.txt": (301, "", {"location": "https://www.x.gov/robots.txt"}),
+            "https://www.x.gov/robots.txt": (403, CLOUDFLARE_CHALLENGE, {"cf-mitigated": "challenge"}),
+        }) as client:
+            assert await crawler._allowed(client, "https://x.gov/results") is False
+        assert crawler.take_robots_refusals() == {"https://x.gov": crawler.BOT_WALL}
+
+
 class TestRobots:
     """A weekly sweep of fifty government sites is what robots.txt is
     for, and a crawler that ignores it earns a block that takes the whole
@@ -246,7 +313,8 @@ class TestRobots:
         monkeypatch.setattr(crawler, "fetch_with_retry", fake_fetch)
         monkeypatch.setattr(crawler, "_robots", {})
         monkeypatch.setattr(crawler, "_robots_last_read", {})
-        monkeypatch.setattr(crawler, "_unreadable_refusals", set())
+        monkeypatch.setattr(crawler, "_robots_refusals", {})
+        monkeypatch.setattr(crawler, "_robots_failure", {})
 
     @staticmethod
     def _routes(monkeypatch, routes, calls):
@@ -265,7 +333,8 @@ class TestRobots:
         monkeypatch.setattr(crawler, "fetch_with_retry", fake_fetch)
         monkeypatch.setattr(crawler, "_robots", {})
         monkeypatch.setattr(crawler, "_robots_last_read", {})
-        monkeypatch.setattr(crawler, "_unreadable_refusals", set())
+        monkeypatch.setattr(crawler, "_robots_refusals", {})
+        monkeypatch.setattr(crawler, "_robots_failure", {})
 
     @pytest.mark.asyncio
     async def test_a_disallowed_path_is_not_read(self, monkeypatch):
@@ -372,10 +441,39 @@ class TestRobots:
         """Not for the portal probe's guesses, which mostly don't exist."""
         self._serve(monkeypatch, status=None)
         assert await crawler._allowed(None, "https://guess.x.gov/api", probe=True) is False
-        assert crawler.take_unreadable_refusals() == []
+        assert crawler.take_robots_refusals() == {}
         assert await crawler._allowed(None, "https://x.gov/results") is False
-        assert crawler.take_unreadable_refusals() == ["https://x.gov"]
-        assert crawler.take_unreadable_refusals() == []
+        assert crawler.take_robots_refusals() == {"https://x.gov": "no answer"}
+        assert crawler.take_robots_refusals() == {}
+
+    @pytest.mark.asyncio
+    async def test_a_bot_challenge_is_a_wall_not_a_missing_file(self, monkeypatch):
+        """RFC 9309 reads a 4xx as "no rules", but a challenge is the site
+        saying no to robots: nothing is read past it, and it is reported as
+        a wall. The 403 below is Cloudflare's, trimmed from a state
+        election site's robots.txt (2026-10-13)."""
+        calls = []
+        self._routes(monkeypatch, {"https://x.gov/robots.txt": (403, CLOUDFLARE_CHALLENGE, {
+            "cf-mitigated": "challenge", "content-type": "text/html; charset=UTF-8", "server": "cloudflare",
+        })}, calls)
+        assert await crawler._allowed(None, "https://x.gov/elections/results") is False
+        assert crawler._robots["https://x.gov"][0] is crawler.WALLED
+        assert crawler.take_robots_refusals() == {"https://x.gov": crawler.BOT_WALL}
+
+    @pytest.mark.asyncio
+    async def test_a_plain_403_is_still_no_rules(self, monkeypatch):
+        calls = []
+        self._routes(monkeypatch, {"https://x.gov/robots.txt": (403, "<h1>Forbidden</h1>", {})}, calls)
+        assert await crawler._allowed(None, "https://x.gov/elections/results") is True
+
+    @pytest.mark.asyncio
+    async def test_a_server_error_is_asked_twice_and_named(self, monkeypatch):
+        """sos.nh.gov's robots.txt (2026-10-13): a load balancer's 503."""
+        calls = []
+        self._routes(monkeypatch, {"https://x.gov/robots.txt": (503, NH_503, {"content-type": "text/html"})}, calls)
+        assert await crawler._allowed(None, "https://x.gov/elections") is False
+        assert calls == ["https://x.gov/robots.txt"] * 2
+        assert crawler.take_robots_refusals() == {"https://x.gov": "HTTP 503"}
 
     @pytest.mark.asyncio
     async def test_path_parameters_are_part_of_the_path(self, monkeypatch):

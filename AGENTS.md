@@ -748,6 +748,12 @@ Corollaries that follow from the same rule, all enforced in code:
   research" — the same null-is-not-zero discipline `Candidate.last_financials_sync`
   applies per field, applied at the collection level.
 - Removed measures are rendered as removed for a grace window, not deleted.
+- The same line holds for the weekly source crawl's robots.txt: a bot
+  wall's challenge there is a wall, never "no rules" (RFC 9309 would read a
+  plain 4xx that way), so nothing is crawled past it
+  (`state_source_crawler.WALLED`). Walls already investigated go in
+  `state_candidate_sources.json`'s `_robots_walls` with their evidence, so
+  the crawl's ops alert names only a new wall or an unreachable file.
 - The source is the state's own document, but not always the state's own
   server. Where a state's whole site sits behind a bot wall (Georgia's
   Cloudflare, Nevada's Imperva), the reader raises `SourceBlocked` and the
@@ -809,9 +815,13 @@ What this rules in and out:
   precinct-exact answer. Where a district needs to be findable, give it
   place names a person already knows and let them filter: counties, and
   the cities, towns and communities in it, for a U.S. House seat
-  (`county_district_crosswalk.json`, `congressional_district_places.json`
-  by `scripts/build_district_place_crosswalk.py`, on both the election
-  lines and the sitting Congress's), towns, communities
+  (`county_district_crosswalk.json` and the "120" map of
+  `congressional_district_places.json`, the coming election's lines, for
+  the ballot pages; `county_district_crosswalk_sitting.json` and the "119"
+  map, the lines the sitting members were elected on, for "who represents
+  me" on `/politicians` — in a redrawn state the same number is a
+  different district, so each surface names its map and never borrows the
+  other's; places by `scripts/build_district_place_crosswalk.py`), towns, communities
   (incorporated places and Census Designated Places) and counties for a
   state legislative one (`state_leg_district_crosswalk.json`, a block-level
   join documented in `scripts/fetch_state_leg_crosswalk.py`). Building
@@ -1103,6 +1113,15 @@ it markup for an image-led item), the LLM prompt, and the digest detector
 below. Block tags become `"; "` so item boundaries survive, and the
 500-character cap measures prose rather than tags.
 
+Each feed's publication times are kept for 60 days
+(`ops_alerts.check_source_freshness`), and a feed silent for a day past its
+longest gap in that window raises an ops alert. A day, not a multiple: on
+Roll Call's own 130-day record (weekends of 64-72 hours, holiday weekends
+82-88) twice the longest gap let a dead feed go a week unnoticed, the gap
+plus a day under five days, and neither raised a false alert. A feed with
+under a week of history has not shown a weekend yet, so the longest gap
+among feeds of its kind that have a week stands in.
+
 Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
 outlet's recurring briefing ("Up First", "Morning news brief", "The week in
 politics") is a single RSS item covering three to five unrelated stories, and
@@ -1253,7 +1272,9 @@ wrong number on election night is worse than none:
   `state_candidate_sources.json`) is never read live: its election-night
   count is first choices, whose leader is not necessarily who the rounds
   elect, so "leads" and a change of party read from it could be the opposite
-  of the result. Its page says so (`rankedChoiceStates`).
+  of the result. Its page says so (`rankedChoiceStates`), and before
+  election day the ballot page says the voter can rank (the state ballot's
+  `rankedChoice`, read from the same citation — never a second copy of it).
 - Civitas never calls a race. A count is "leading" — "not final" until the
   source itself says official, and still "leading", never "wins", after (an
   official count's leader can face a runoff: Georgia's general needs a
@@ -1545,6 +1566,13 @@ the pending list).
 - FastAPI for HTTP, SQLAlchemy 2.0 ORM (mapped_column style), Pydantic v2 for schemas
 - `async def` for API routes and fetch functions; the nightly pipeline itself runs synchronously in a background thread of the pipeline process
 - Logging via `logging.getLogger(__name__)` — structured, no print statements
+- **TLS verification is never loosened.** A site that sends an incomplete
+  certificate chain (Alaska's, Alabama's and Virginia's election sites,
+  2026-10) is repaired the way browsers do it: `make_async_client`'s client
+  fetches the missing intermediate from the certificate's own AIA address,
+  checks its signature, and adds it to `TLS_CONTEXT`, whose partial chains
+  are off so the chain must still end at a certifi root. Never
+  `verify=False`, and never a root taken from the network.
 - All pipeline modules use dependency injection for DB sessions
 - Never store secrets in source code — all credentials come from `.env` via `pydantic-settings`
 - Use parameterized queries via SQLAlchemy ORM; never concatenate user input into SQL
@@ -1663,6 +1691,11 @@ the pending list).
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they
   are seeing. The component is at `src/components/checker/MetricTooltip.tsx`.
+- An About chapter's top-level parts are `Section`s, direct children of
+  `AboutPage`: that is how its "On this page" list finds them (four or
+  more), so a part wrapped in a fragment or another component drops out of
+  it. A new score gets a plain line in `/about/scores`' short version,
+  held to a Flesch-Kincaid grade of 8 or below.
 - A scored dimension leads with its `finding` (one template sentence from the
   breakdown API, `services/score_findings.py`, outside `pipeline/` so its
   wording never moves the analysis-code fingerprint); components, weights and

@@ -116,7 +116,8 @@ class TestFetchFrRulemaking:
         assert len(results) == 1
         r = results[0]
         assert r["doc_type"] == "Proposed Rule"
-        assert r["comment_url"] == "http://www.regulations.gov/commenton/USCIS-2025-0370-0001"
+        # The feed's http:// link is stored as https (same page, no plain-http hop).
+        assert r["comment_url"] == "https://www.regulations.gov/commenton/USCIS-2025-0370-0001"
         assert r["comments_close_on"] == "2026-04-24"
         assert r["agency_name"] == "Homeland Security Department"
 

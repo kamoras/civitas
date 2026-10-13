@@ -259,6 +259,37 @@ describe("the contest drawer", () => {
     ).toBeInTheDocument();
   });
 
+  it("links a member of the other chamber running here, as what they are now", async () => {
+    const senate = houseRace({
+      id: "2026-SEN-OH",
+      office: "S",
+      district: null,
+      counties: null,
+      candidates: [
+        candidate({ id: "dem1", name: "Greg Lindqvist", party: "DEM" }),
+        candidate({
+          id: "rep1",
+          name: "Eric Conway",
+          party: "REP",
+          memberRecord: { id: "eric-conway", score: 61, chamber: "house", seat: "OH-2" },
+        }),
+      ],
+    });
+    render(<StateBallotClient ballot={ballot({ senateRaces: [senate] })} />);
+    const drawer = await openContest(/U\.S\. Senator/);
+    expect(
+      drawer.getByRole("link", { name: /house member, OH-2 · representation score 61/ })
+    ).toHaveAttribute("href", "/politicians/eric-conway");
+    await userEvent.click(drawer.getByRole("tab", { name: "Record" }));
+    expect(drawer.getByRole("link", { name: /House member, OH-2 · score 61/ })).toHaveAttribute(
+      "href",
+      "/politicians/eric-conway"
+    );
+    // Never worded as this seat's incumbent.
+    expect(drawer.queryByText(/INCUMBENT/)).toBeNull();
+    expect(drawer.getAllByText("not linked")).toHaveLength(1);
+  });
+
   it("switches a race's research with the arrow keys", async () => {
     render(<StateBallotClient ballot={twoContests()} />);
     const drawer = await openContest(/U\.S\. Senator/);
@@ -796,7 +827,7 @@ describe("statewide executive offices", () => {
     );
     const drawer = await openContest(/Statewide offices/);
     expect(
-      drawer.getByText(/No statewide executive offices are on OH's 2026-11-03 ballot/)
+      drawer.getByText(/No statewide executive offices are on OH's November 3, 2026 ballot/)
     ).toBeInTheDocument();
     expect(drawer.queryByText(/no federal campaign-finance filings/)).not.toBeInTheDocument();
   });
@@ -1261,6 +1292,50 @@ describe("ballot measures", () => {
     republishedBy: null,
     asOf: null,
   };
+
+  it("lists a long ballot's measures to jump to, landing focus on the chosen one", async () => {
+    const measures = [1, 2, 3, 4, 5].map((n) => ({
+      ...measure,
+      id: `OH-2026-11-03-${n}`,
+      number: String(n),
+      title: `Issue ${n}`,
+    }));
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures,
+          measureCoverage: {
+            status: "covered",
+            sourceName: "Ohio SoS",
+            checkedAt: null,
+            lastAttemptAt: null,
+          },
+        })}
+      />
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const nav = drawer.getByRole("navigation", { name: "Jump to a measure" });
+    await userEvent.click(within(nav).getByRole("button", { name: "4: Issue 4" }));
+    expect(drawer.getByRole("heading", { level: 3, name: "4" })).toHaveFocus();
+  });
+
+  it("offers no jump list for a short ballot", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "covered",
+            sourceName: "Ohio SoS",
+            checkedAt: null,
+            lastAttemptAt: null,
+          },
+        })}
+      />
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.queryByRole("navigation", { name: "Jump to a measure" })).toBeNull();
+  });
 
   it("says when the measures shown are from the last successful read after a failure", async () => {
     // The regression: with any measures on file the section showed them as
