@@ -9,6 +9,7 @@ bill page, and extract_text() of the LR19CA Slip Law, fetched live
 """
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,26 @@ def test_elections_page_lists_initiatives_and_the_amendment():
         "https://nebraskalegislature.gov/bills/view_bill.php?DocumentID=59458&docnum=LR19CA&leg=109",
     ]
     assert ne.read_elections_page(FIXTURE["elections_page"], 2028) is None
+
+
+def test_the_faq_redesign_lists_the_same_ballot():
+    """By 2026-10-11 the page named each initiative with its number in
+    parentheses under "Which initiatives will be on the 2026 General
+    election ballot?" — lower-case "election", which the old exact-case
+    marker skipped, so the initiatives vanished without the unrecognised-
+    paragraph refusal ever seeing them, and only the implausible-shrink
+    guard (1 vs 4) kept the ballot from publishing short."""
+    listing = ne.read_elections_page(FIXTURE["elections_page_2026_10"], 2026)
+    assert listing == ne.read_elections_page(FIXTURE["elections_page"], 2026)
+    assert listing["initiatives"] == {"440", "441", "442"}
+    # The hearing schedule names initiatives too, but for no election year.
+    assert ne.read_elections_page(FIXTURE["elections_page_2026_10"], 2028) is None
+
+
+def test_an_faq_initiative_list_without_numbers_refuses():
+    page = re.sub(r" \((44\d)\)<br>", "<br>", FIXTURE["elections_page_2026_10"])
+    assert page != FIXTURE["elections_page_2026_10"]
+    assert ne.read_elections_page(page, 2026) is None
 
 
 def test_pamphlet_initiatives_verbatim():
