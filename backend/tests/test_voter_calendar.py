@@ -89,7 +89,7 @@ def test_a_passed_deadline_says_so_and_names_what_is_still_open(calendar):
     # Never dropped from the list.
     assert [i["status"] for i in cal["items"]][:1] == ["closed"]
     done = voter_calendar.calendar_for_state("WA", ELECTION, _utc(2026, 11, 5))
-    assert done["registrationSummary"].endswith("Registration for this election has closed.")
+    assert done["registrationSummary"].endswith("No way to register for this election is still open.")
     assert done["next"] is None
 
 

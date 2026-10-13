@@ -148,6 +148,11 @@ def test_the_endpoint(db_session, freeze_utcnow, monkeypatch):
     assert body["election"]["daysUntil"] == 23
     assert body["election"]["phase"] == "campaign"
     assert "DC" in body["election"]["states"] and len(body["election"]["states"]) == 51
+    # Each state's next voter deadline from the bundled calendar, soonest first.
+    deadlines = body["election"]["deadlines"]
+    assert len(deadlines) == 51
+    assert [d["closesOn"] for d in deadlines] == sorted(d["closesOn"] for d in deadlines)
+    assert all(d["closesOn"] >= "2026-10-11" and d["sentence"] for d in deadlines)
     assert body["commentDeadlines"] == []
     assert body["congress"]["sentence"] == (
         "The Senate's next meeting is not on record yet. The House's next meeting is not on record yet."

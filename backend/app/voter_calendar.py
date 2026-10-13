@@ -174,7 +174,7 @@ def _registration_summary(items: list[dict]) -> str | None:
         return f"{left}."
     gone = "; ".join(f"{i['label']} closed {short_date(date.fromisoformat(i['closesOn']))}" for i in closed)
     if not still:
-        return f"{gone}. Registration for this election has closed."
+        return f"{gone}. No way to register for this election is still open."
     return f"{gone}. Still open: {left}."
 
 
