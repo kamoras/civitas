@@ -72,7 +72,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
                 src={bill.sponsorThumbnailUrl}
                 lazy
                 alt=""
-                className="h-4 w-4 border border-white/[0.07] object-cover"
+                className="h-4 w-4 border border-white/[0.07] object-cover object-[center_25%]"
               />
             )}
             <span className={`px-1 border text-xs ${party.className}`}>{party.label}</span>

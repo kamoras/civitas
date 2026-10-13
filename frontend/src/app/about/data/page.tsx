@@ -400,11 +400,16 @@ export default function DataChapter() {
         </P>
         <P>
           Your browser asks nothing of any other host. Every picture comes from this server: the
-          members&apos; official portraits (from bioguide.congress.gov), the justices&apos; photos
-          (from Oyez) and a news photo on an Action Center issue (from the outlet that licensed it)
-          are fetched by this server, which keeps a copy and serves it to you, so those sites never
-          see who is looking. The fonts, scripts, maps and styles are hosted here too. Links to
-          sources are only followed if you click them.
+          members&apos; official photos (the one on each member&apos;s Congress.gov record, from
+          www.congress.gov, used only when Congress.gov credits it: most read &ldquo;Image courtesy
+          of the Member&rdquo;, the rest name the Senate photographer or Historical Office, the
+          House collection, the Pictorial Directory or the GPO Member Guide; for a member whose
+          record has no credited photo, the Biographical Directory&apos;s portrait from
+          bioguide.congress.gov), the justices&apos; photos (from Oyez) and a news photo on an
+          Action Center issue (from the outlet that licensed it) are fetched by this server, which
+          keeps a copy and serves it to you, so those sites never see who is looking. The fonts,
+          scripts, maps and styles are hosted here too. Links to sources are only followed if you
+          click them.
         </P>
         <Sub title="The one company between you and this server" id="cloudflare">
           <P>

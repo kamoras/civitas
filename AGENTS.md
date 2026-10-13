@@ -932,8 +932,20 @@ outright under a full directory page. Every photo is now served from this
 site at `/photo/<kind>/<id>` (2026-10): the API hands out those paths
 (`app/photos.py`; JSON-LD makes them absolute), and the frontend route
 (`app/photo/[kind]/[id]/route.ts`, `lib/photos.ts`) fetches the picture
-server-side — a bioguide portrait by its id, a stored source (Oyez, the
-outlet) looked up by kind and id through `GET /api/photo-sources/…`. It
+server-side, from a source the backend names by kind and id through
+`GET /api/photo-sources/…`: a justice's or issue's stored URL (Oyez, the
+outlet), and for a member (`bioguide`) the headshot on the member's
+Congress.gov record (`depiction`, read from the record the pipeline stored
+in `api_cache`), else bioguide.congress.gov's portrait for the id
+(`bioguide_photo_source`). The record's headshot comes first because
+bioguide's file is, for some members, a full-length painted committee-chair
+portrait, which cropped to an avatar is mostly background (2026-10). It is
+used only on Congress.gov's `/img/member/` path and only with the
+attribution Congress.gov gives it; a depiction without one falls back to
+bioguide, so the credit on `/about/data#privacy` stays true. Many
+headshots are taller than 4:5 (up to 2:3), so member avatars crop at
+`object-[center_25%]` (the OG card at `objectPosition: "center 25%"`),
+which keeps the head in a square where a centred crop clips it. It
 takes an id, never a URL, so it is not an open proxy; add a kind there for
 a new picture, never a URL parameter. An issue's photo URL still comes from
 an RSS item, so each kind is fetched only from its own hosts

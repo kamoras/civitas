@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 /**
  * A photo from the site's own `/photo/…` route (lib/photos.ts), or
  * `fallback` when there is none to show: the route answers 404 for a
- * member bioguide has no portrait for, and a broken-image icon is not a
+ * member with no official photo, and a broken-image icon is not a
  * picture of anyone.
  */
 export default function Photo({

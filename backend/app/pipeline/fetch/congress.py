@@ -355,11 +355,17 @@ async def fetch_representatives(
     return members
 
 
+def member_detail_cache_key(bioguide_id: str) -> str:
+    """The api_cache key (tier "congress") of a member's Congress.gov
+    record; app/photos.py reads the official photo from it."""
+    return f"member-detail-{bioguide_id}"
+
+
 async def fetch_member_detail(
     client: httpx.AsyncClient, db: Session, bioguide_id: str
 ) -> dict | None:
     """Fetch detailed member info including terms and sponsored legislation."""
-    cache_key = f"member-detail-{bioguide_id}"
+    cache_key = member_detail_cache_key(bioguide_id)
     cached = api_cache_get(db, "congress", cache_key)
     if cached is not None:
         return cached

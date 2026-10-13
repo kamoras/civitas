@@ -279,7 +279,7 @@ export default function PoliticianProfileClient({
                   <Photo
                     src={identity.thumbnailUrl}
                     alt={identity.name}
-                    className="w-12 h-12 object-cover border border-white/[0.07] shrink-0"
+                    className="w-12 h-12 object-cover object-[center_25%] border border-white/[0.07] shrink-0"
                   />
                 ) : null}
                 <div>
