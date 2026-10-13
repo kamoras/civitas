@@ -759,3 +759,21 @@ class TestElectionResultsReadiness:
         assert self._run("campaign", date(2026, 10, 1)) == []
         assert self._run("election_day", date(2026, 11, 3)) == []
         assert self._run("results", date(2026, 11, 5)) == []
+
+
+def test_the_congress_sync_sends_held_posts_even_when_its_own_posting_fails():
+    """The window's opening reaches Bluesky from the half-hourly Congress
+    sync, which keeps running through the nightly pipeline (the hourly
+    Action Center run stands down for it), and a Congress post that fails
+    to compose doesn't take the held posts with it."""
+    from app import scheduler
+
+    with patch("app.background.threading.Thread", _SyncThread), \
+         patch("app.scheduler.is_congress_sync_running", return_value=False), \
+         patch("app.scheduler.run_congress_sync", AsyncMock(
+             return_value={"rollCalls": {}, "floorLogs": 0, "digests": 0})), \
+         patch("app.scheduler.SessionLocal", return_value=MagicMock()), \
+         patch("app.scheduler.post_daily_congress", side_effect=RuntimeError("compose failed")), \
+         patch("app.scheduler.deliver_pending", return_value=1) as deliver:
+        scheduler._congress_activity_sync()
+    deliver.assert_called_once()

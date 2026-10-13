@@ -27,9 +27,29 @@ Delivery to Bluesky is at most once per attempt and bounded:
     "Yesterday: …" (bluesky_poster._staleness_prefix); delivered a day late
     it would say something false. The feed entry keeps its own
     `published` time, so the same words stay true there.
+
+Timing. The kinds in SCHEDULED_KINDS — the spotlight and the Congress
+posts, whose words name their own date and stay true for days — go to
+Bluesky inside the hours U.S. users are most active
+(app/data/bluesky_post_windows.json, measured by
+scripts/fetch_bluesky_activity.py). One written outside them is held, as a
+`pending` row, until the next window opens that Eastern day, and sent by
+`deliver_pending` (half-hourly from the Congress sync, which runs through
+the nightly pipeline, and hourly from the Action Center run); when no window is left that day it is sent at
+once, so a held post never crosses into the next day's posts. A held post
+whose window was missed (the pipeline process down) goes in the next window,
+even the next day, rather than being dropped: its words carry their own
+date. Because the hold is the row itself, a deploy can't lose it. Every
+other kind is news (issues, race updates, election-night counts) and goes
+out the moment it is written. The feed entry is never held: a feed is
+pulled, so its reader already chooses when to read it, and holding it would
+only make it late. Only Bluesky's chronological Following feed rewards
+arriving while people are looking.
 """
 
+import json
 import logging
+import pathlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -70,6 +90,18 @@ NO_RETRY_KINDS = frozenset({"result"})
 # qualifies, but long enough that the run which just failed to send a post
 # doesn't try it again seconds later.
 RETRY_AFTER = timedelta(minutes=45)
+
+# Kinds whose Bluesky send waits for the posting window (module docstring).
+# Each names its own date or none at all, so its words are as true at the
+# window as when written; news kinds are never here.
+SCHEDULED_KINDS = frozenset({"spotlight", "congress_day", "congress_week", "congress_ahead"})
+# How long a held post whose window was missed stays sendable: a hold is
+# hours, so this is only reached by the pipeline process being down for
+# days, after which the post stays in the feed and isn't sent.
+HELD_MAX_AGE = timedelta(days=2)
+
+_WINDOWS_PATH = pathlib.Path(__file__).resolve().parent / "data" / "bluesky_post_windows.json"
+_windows_cache: list[tuple[int, int]] | None = None
 
 # How far back the hourly pass fills in a card the page didn't give at
 # publish time (a fetch that failed, or a post from before cards were kept):
@@ -119,6 +151,48 @@ def _post_day(moment: datetime) -> str:
     return moment.replace(tzinfo=timezone.utc).astimezone(_POST_DAY_TZ).date().isoformat()
 
 
+def _windows() -> list[tuple[int, int]]:
+    """The posting windows, as [start, end) Eastern hours; an end at or
+    before its start runs past midnight. Empty when the file can't be read,
+    and then nothing is held."""
+    global _windows_cache
+    if _windows_cache is None:
+        try:
+            _windows_cache = [(w["start"], w["end"]) for w in json.loads(_WINDOWS_PATH.read_text())["windows"]]
+        except (OSError, ValueError, KeyError, TypeError):
+            logger.warning("Bluesky posting windows unreadable (%s); scheduled posts go out at once", _WINDOWS_PATH)
+            _windows_cache = []
+    return _windows_cache
+
+
+def _hour_in_window(hour: int) -> bool:
+    return any(start <= hour < end if start < end else hour >= start or hour < end for start, end in _windows())
+
+
+def in_window(moment: datetime) -> bool:
+    """Whether a naive-UTC moment falls in a posting window (Eastern, so
+    the window follows daylight saving)."""
+    return _hour_in_window(moment.replace(tzinfo=timezone.utc).astimezone(_POST_DAY_TZ).hour)
+
+
+def release_at(kind: str, written: datetime) -> datetime:
+    """When a post of `kind` written at `written` (naive UTC) goes to
+    Bluesky: at once for a news kind, inside a window, or when no window is
+    left that Eastern day; otherwise when the next window opens that day."""
+    if kind not in SCHEDULED_KINDS or not _windows() or in_window(written):
+        return written
+    local = written.replace(tzinfo=timezone.utc).astimezone(_POST_DAY_TZ)
+    for hour in range(local.hour + 1, 24):
+        if _hour_in_window(hour):
+            opens = local.replace(hour=hour, minute=0, second=0, microsecond=0)
+            return opens.astimezone(timezone.utc).replace(tzinfo=None)
+    return written
+
+
+def _held(post: BroadcastPost) -> bool:
+    return release_at(post.kind, post.published_at) > post.published_at
+
+
 def publish(
     db: Session,
     *,
@@ -137,7 +211,8 @@ def publish(
     whatever Bluesky does with it. Commits the session (the caller's pending
     changes with it) before any network call. `bluesky=False` keeps a post
     to the feed — one that only makes sense beside an earlier post Bluesky
-    never took.
+    never took. A scheduled kind written outside the posting windows is
+    stored `pending` and sent by `deliver_pending` (module docstring).
     """
     if kind not in KINDS:
         raise ValueError(f"unknown broadcast kind {kind!r}")
@@ -158,7 +233,11 @@ def publish(
     db.commit()
     capture_card(db, post)
     if post.bsky_status == "pending":
-        _deliver_to_bluesky(db, post)
+        if _held(post):
+            logger.info("Bluesky send of %s %r held until %s UTC (posting window)",
+                        kind, post.title[:80], release_at(kind, post.published_at).isoformat(timespec="minutes"))
+        else:
+            _deliver_to_bluesky(db, post)
     return post
 
 
@@ -229,7 +308,13 @@ def _deliver_to_bluesky(db: Session, post: BroadcastPost) -> bool:
 
 
 def deliver_pending(db: Session) -> int:
-    """Retry today's posts that Bluesky didn't take. Returns how many went out.
+    """Send held posts whose window is open, and retry today's posts that
+    Bluesky didn't take. Returns how many went out.
+
+    A held post (a scheduled kind written outside the windows) goes only
+    inside a window — the next one, even the next day, if its own was
+    missed — for up to HELD_MAX_AGE; every other post only on the Eastern
+    day it was written (module docstring).
 
     Stops after two refusals in a row: each try is a fresh login, and a
     Bluesky refusing twice an hour after the last tries is still down —
@@ -240,7 +325,7 @@ def deliver_pending(db: Session) -> int:
     tries ran out."""
     if not _bluesky_configured():
         return 0
-    today = datetime.now(_POST_DAY_TZ).date().isoformat()
+    today = _post_day(utcnow())
     rows = (
         db.query(BroadcastPost)
         .filter(
@@ -252,15 +337,19 @@ def deliver_pending(db: Session) -> int:
             ),
             BroadcastPost.subject.notin_(withdrawn_subjects()),
             BroadcastPost.kind.notin_(NO_RETRY_KINDS),
-            # Bounds the scan; the Eastern-day check below is the rule.
-            BroadcastPost.published_at >= utcnow() - timedelta(days=1),
+            # Bounds the scan; the checks below are the rule.
+            BroadcastPost.published_at >= utcnow() - HELD_MAX_AGE,
         )
         .order_by(BroadcastPost.id)
         .all()
     )
     sent = refused = 0
+    open_now = in_window(utcnow())
     for post in rows:
-        if _post_day(post.published_at) != today:
+        if _held(post):
+            if not open_now:
+                continue
+        elif _post_day(post.published_at) != today:
             continue
         if _deliver_to_bluesky(db, post):
             sent += 1
