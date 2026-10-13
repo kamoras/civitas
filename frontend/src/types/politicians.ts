@@ -89,4 +89,15 @@ export interface PoliticianProfile {
   chamberRank?: { rank: number; of: number } | null;
   activeIssues: PoliticianActiveIssue[];
   governmentRecord: GovernmentRecord;
+  /** The race this member is a candidate in on the site's election ballot
+   * (backend member_on_ballot): their own seat or another office. Null
+   * when nothing ties them to one, which is not a claim they aren't
+   * running. Optional for an older backend. */
+  onBallot?: {
+    raceId: string;
+    cycleYear: number;
+    state: string;
+    office: "S" | "H";
+    district: number | null;
+  } | null;
 }
