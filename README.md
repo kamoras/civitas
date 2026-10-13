@@ -875,6 +875,22 @@ python backend/scripts/build_county_district_crosswalk.py
 python backend/scripts/build_district_topology.py
 ```
 
+**Who represents a county today is a different question.** The election
+crosswalk answers "which district do I vote in"; in a redrawn state it gives
+the new district, whose number names a different place from the one its
+sitting member won. `/politicians` answers "who represents me" from a second
+file on the lines the sitting members were elected on,
+`county_district_crosswalk_sitting.json` (every state on the 119th-Congress
+block file, `build_county_district_crosswalk.py --sitting`). Pick a state,
+type a county, and the House cards narrow to the districts covering it
+("Districts as of the current Congress"); the ballot page's finder says "2026
+election districts". Each file states the Congress whose lines it holds, and
+`GET /api/politicians/house-districts?state=XX` serves the one matching the
+Congress in office, so on Jan 3, 2027 the election file (the 120th's lines)
+takes over without a rebuild. With no file for the sitting Congress the
+finder is hidden rather than showing another Congress's map. Rebuild the
+sitting file when the election file moves to the next cycle.
+
 ### Race coverage: what counts as coverage
 
 A story is attached to a race by candidate name, and a bare surname is never

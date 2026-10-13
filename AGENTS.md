@@ -808,7 +808,11 @@ What this rules in and out:
   picker); linking out to the official lookup for a reader who wants a
   precinct-exact answer. Where a district needs to be findable, give it
   place names a person already knows and let them filter: counties for a
-  U.S. House seat (`county_district_crosswalk.json`), towns, communities
+  U.S. House seat (`county_district_crosswalk.json`, the coming
+  election's lines, for the ballot pages; `county_district_crosswalk_sitting.json`,
+  the lines the sitting members were elected on, for "who represents me"
+  on `/politicians` — in a redrawn state the same number is a different
+  district, so each surface names its map and never borrows the other's), towns, communities
   (incorporated places and Census Designated Places) and counties for a
   state legislative one (`state_leg_district_crosswalk.json`, a block-level
   join documented in `scripts/fetch_state_leg_crosswalk.py`). Building

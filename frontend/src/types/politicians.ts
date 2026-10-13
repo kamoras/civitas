@@ -90,3 +90,14 @@ export interface PoliticianProfile {
   activeIssues: PoliticianActiveIssue[];
   governmentRecord: GovernmentRecord;
 }
+
+/** GET /api/politicians/house-districts: a state's House districts by
+ *  county, on the lines of the Congress in office (the ones its sitting
+ *  members were elected on). `available` is false when no bundled file
+ *  holds that Congress's lines; `districts` is then empty. */
+export interface HouseDistrictsByCounty {
+  state: string;
+  congress: number;
+  available: boolean;
+  districts: { district: number; counties: string[] }[];
+}

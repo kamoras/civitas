@@ -144,6 +144,21 @@ def test_source_note_names_each_state_map_and_reason():
     assert "build_county_district_crosswalk.py" in note
 
 
+def test_congress_seated_by_a_cycle():
+    # The 2024 election seated the 119th Congress, 2026 seats the 120th.
+    assert cw.congress_seated_by("2024") == cw.SITTING_CONGRESS == 119
+    assert cw.congress_seated_by(cw.CYCLE) == 120
+
+
+def test_bundled_files_name_their_congress():
+    data = _SCRIPTS.parent / "app" / "data"
+    election = json.loads((data / "county_district_crosswalk.json").read_text())
+    sitting = json.loads((data / "county_district_crosswalk_sitting.json").read_text())
+    assert election["congress"] == cw.congress_seated_by(cw.CYCLE)
+    assert sitting["congress"] == cw.SITTING_CONGRESS
+    assert len(sitting["districts"]) == len(election["districts"]) == 435
+
+
 def test_parse_threshold_reads_mapshaper_stats():
     log = "[simplify] Simplification statistics\n   Simplification threshold: 2293.9253 meters\n"
     assert topo.parse_threshold(log) == "2293.9253m"

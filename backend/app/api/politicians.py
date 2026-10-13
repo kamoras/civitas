@@ -22,6 +22,7 @@ whole grace period. Presidents are never removed by any of that.
 """
 import json
 import logging
+import pathlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -29,6 +30,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
+from app.config import settings
 from app.database import get_db
 from app.member_ids import resolve_member_id
 from app.issue_ids import to_public_id
@@ -430,6 +432,61 @@ def _get_gov_record(politician_id: str, db: Session) -> dict:
             for d in recent
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# House districts by county, on the lines sitting members were elected on
+# ---------------------------------------------------------------------------
+
+_DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "data"
+# Each declares the Congress whose lines it holds: the sitting Congress's
+# (scripts/build_county_district_crosswalk.py --sitting) and the coming
+# election's, which becomes the sitting map once that Congress convenes.
+_CROSSWALK_FILES = ("county_district_crosswalk_sitting.json", "county_district_crosswalk.json")
+_crosswalks: dict[int, dict[str, list[str]]] | None = None
+
+
+def counties_on_lines_of(congress: int) -> dict[str, list[str]] | None:
+    """"ST-N" -> county names on the district lines of `congress`, or None
+    when no bundled file holds that Congress's lines (never another
+    Congress's map in its place: in a redrawn state the district of the
+    same number is a different district)."""
+    global _crosswalks
+    if _crosswalks is None:
+        _crosswalks = {}
+        for name in _CROSSWALK_FILES:
+            try:
+                doc = json.loads((_DATA_DIR / name).read_text())
+                _crosswalks[int(doc["congress"])] = doc["districts"]
+            except Exception:
+                logger.exception("%s unavailable", name)
+    return _crosswalks.get(congress)
+
+
+@router.get("/politicians/house-districts")
+def house_districts_by_county(
+    state: str = Query(..., min_length=2, max_length=2),
+) -> JSONResponse:
+    """Which counties each of a state's House districts covers, on the
+    lines of the Congress in office — the districts its sitting members
+    represent, not the coming election's (the state ballot page has
+    those). A reader finds their member by a county they know; nothing
+    about them is asked or sent (AGENTS.md section 8)."""
+    st = state.upper()
+    if st not in STATE_NAMES:
+        raise HTTPException(status_code=404, detail="Unknown state")
+    congress = settings.CURRENT_CONGRESS
+    lines = counties_on_lines_of(congress)
+    prefix = f"{st}-"
+    districts = (
+        sorted(
+            ({"district": int(k[len(prefix):]), "counties": v} for k, v in lines.items() if k.startswith(prefix)),
+            key=lambda d: d["district"],
+        )
+        if lines is not None
+        else []
+    )
+    return _cached_json({"state": st, "congress": congress, "available": lines is not None, "districts": districts})
 
 
 @router.get("/politicians/{politician_id}")
