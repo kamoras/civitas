@@ -10,8 +10,10 @@
 # pandas (+ openpyxl, which its read_excel loads for .xlsx), statsmodels,
 # rdata and pyreadr (the R-format replication datasets), onnxruntime
 # (evaluate_embedding_models.py's ONNX comparison), time-machine
-# (frozen_clock_plugin.py, the test suite run on another date). The rest is
-# what those pull in beyond requirements.txt.
+# (frozen_clock_plugin.py, the test suite run on another date), websockets
+# (fetch_bluesky_activity.py's Jetstream sampling; its pin is requirements.txt's,
+# where uvicorn already brings it). The rest is what those pull in beyond
+# requirements.txt.
 et-xmlfile==2.0.0
 flatbuffers==25.12.19
 formulaic==1.2.2

@@ -54,7 +54,16 @@ DIRECT = {
 }
 # The research scripts' own imports beyond DIRECT (openpyxl: pandas loads it
 # by name in read_excel for .xlsx; time-machine: frozen_clock_plugin.py).
-RESEARCH_DIRECT = {"onnxruntime", "openpyxl", "pandas", "pyreadr", "rdata", "statsmodels", "time-machine"}
+RESEARCH_DIRECT = {
+    "onnxruntime",
+    "openpyxl",
+    "pandas",
+    "pyreadr",
+    "rdata",
+    "statsmodels",
+    "time-machine",
+    "websockets",
+}
 
 
 def _target(machine: str) -> dict[str, str]:
