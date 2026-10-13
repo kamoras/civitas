@@ -110,5 +110,7 @@ export interface HouseDistrictsByCounty {
   state: string;
   congress: number;
   available: boolean;
-  districts: { district: number; counties: string[] }[];
+  /** `places`: the cities, towns and communities in the district on the
+   * same lines (null when no place list holds them). */
+  districts: { district: number; counties: string[]; places?: string[] | null }[];
 }
