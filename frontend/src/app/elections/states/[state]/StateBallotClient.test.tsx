@@ -259,6 +259,37 @@ describe("the contest drawer", () => {
     ).toBeInTheDocument();
   });
 
+  it("links a member of the other chamber running here, as what they are now", async () => {
+    const senate = houseRace({
+      id: "2026-SEN-OH",
+      office: "S",
+      district: null,
+      counties: null,
+      candidates: [
+        candidate({ id: "dem1", name: "Greg Lindqvist", party: "DEM" }),
+        candidate({
+          id: "rep1",
+          name: "Eric Conway",
+          party: "REP",
+          memberRecord: { id: "eric-conway", score: 61, chamber: "house", seat: "OH-2" },
+        }),
+      ],
+    });
+    render(<StateBallotClient ballot={ballot({ senateRaces: [senate] })} />);
+    const drawer = await openContest(/U\.S\. Senator/);
+    expect(
+      drawer.getByRole("link", { name: /house member, OH-2 · representation score 61/ })
+    ).toHaveAttribute("href", "/politicians/eric-conway");
+    await userEvent.click(drawer.getByRole("tab", { name: "Record" }));
+    expect(drawer.getByRole("link", { name: /House member, OH-2 · score 61/ })).toHaveAttribute(
+      "href",
+      "/politicians/eric-conway"
+    );
+    // Never worded as this seat's incumbent.
+    expect(drawer.queryByText(/INCUMBENT/)).toBeNull();
+    expect(drawer.getAllByText("not linked")).toHaveLength(1);
+  });
+
   it("switches a race's research with the arrow keys", async () => {
     render(<StateBallotClient ballot={twoContests()} />);
     const drawer = await openContest(/U\.S\. Senator/);

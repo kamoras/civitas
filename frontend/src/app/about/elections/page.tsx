@@ -259,7 +259,11 @@ export default async function ElectionsChapter() {
             <Item label="Incumbents">
               Nine sitting members running again were not marked as incumbents, because someone else
               in the race carried the FEC&apos;s open-seat code. A member the state&apos;s ballot
-              lists is now trusted as running.
+              lists is now trusted as running. A member of Congress running for the other chamber (a
+              House member running for the Senate) was listed with no link to their record; the race
+              now links it, named as what they are now (&ldquo;House member, GA-6&rdquo;), never as
+              the seat&apos;s incumbent. A member&apos;s own profile now links to the race they are
+              on the ballot in.
             </Item>
             <Item label="Parties">
               Where a state prints a party Civitas has no code for (California&apos;s Peace and

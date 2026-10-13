@@ -3,7 +3,7 @@ import type { BallotCandidate } from "@/types/election";
 import { cashOnHandDisplay, displayScore, formatCurrency } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
-import { candidateName, incumbencyLabel, raisedLabel } from "@/lib/elections";
+import { candidateName, incumbencyLabel, memberRecordLabel, raisedLabel } from "@/lib/elections";
 
 /**
  * A race as a comparison, not a list.
@@ -108,6 +108,20 @@ export default function RaceMoneyBars({
                 representation score{" "}
                 <span className={getScoreColor(displayScore(c.incumbentRecord.score))}>
                   {displayScore(c.incumbentRecord.score)}
+                </span>{" "}
+                →
+              </Link>
+            )}
+            {!c.incumbentRecord && c.memberRecord && (
+              // Their record, not this seat's: named as what they are now.
+              <Link
+                href={`/politicians/${c.memberRecord.id}`}
+                className="mt-1.5 inline-block font-mono text-[11px] text-ink-lo hover:text-phos"
+              >
+                {memberRecordLabel(c.memberRecord).replace(/^./, (ch) => ch.toLowerCase())} ·
+                representation score{" "}
+                <span className={getScoreColor(displayScore(c.memberRecord.score))}>
+                  {displayScore(c.memberRecord.score)}
                 </span>{" "}
                 →
               </Link>
