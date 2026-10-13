@@ -366,6 +366,51 @@ export interface StatewideCoverage {
   ballotList?: boolean;
 }
 
+/** One voter deadline or window, as the state states it. Every sentence
+ * is the backend's; the page only lays them out. */
+export interface VoterDeadline {
+  kind:
+    | "registration"
+    | "same_day_registration"
+    | "early_voting"
+    | "absentee_request"
+    | "ballot_return";
+  method: "online" | "mail" | "in_person" | "any" | null;
+  basis: "postmarked" | "received" | "submitted" | null;
+  label: string;
+  /** The rule in the state's terms ("15 days before Election Day"). */
+  rule: string;
+  date: string;
+  endDate: string | null;
+  time: string | null;
+  endTime: string | null;
+  daysBefore: number | null;
+  countedDate: string | null;
+  adjustment: string | null;
+  status: "upcoming" | "open" | "closed";
+  daysLeft: number | null;
+  /** "today", "tomorrow", "6 days"; null once closed. */
+  countdown: string | null;
+  sentence: string;
+  closesOn: string;
+  source: { publisher: string | null; url: string; type: "official" | "statute" };
+  verification: {
+    status: "verified" | "statute" | "unverified";
+    checkedOn?: string;
+    detail?: string;
+  };
+}
+
+export interface VoterCalendar {
+  timeZone: string;
+  localToday: string;
+  note: string | null;
+  next: VoterDeadline | null;
+  /** What registration has closed and what is still open, once any has. */
+  registrationSummary: string | null;
+  items: VoterDeadline[];
+}
+
 /** Where to go for the parts of the ballot this page cannot show. */
 export interface OfficialLookup {
   url: string;
@@ -466,6 +511,11 @@ export interface StateBallot {
    * November judicial contests. */
   judicialCoverage: JudicialCoverage;
   officialLookup: OfficialLookup;
+  /** Registration, early voting and mail-ballot deadlines, each with where
+   * it stands on the state's own clock (backend app/voter_calendar.py).
+   * Null when there is no calendar for this election; absent from an
+   * older API. */
+  voterCalendar?: VoterCalendar | null;
   /** What this page deliberately does not cover, enumerated by the
    * backend so the limitation renders as content rather than a footnote. */
   omits: string[];

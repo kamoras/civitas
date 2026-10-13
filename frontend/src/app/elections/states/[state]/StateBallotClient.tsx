@@ -9,6 +9,7 @@ import CoverageFeed from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
+import VoterCalendar from "@/components/elections/VoterCalendar";
 import GeneralRunoffNotice, { otherPrimaryLabel } from "@/components/elections/GeneralRunoffNotice";
 import DistrictFinder from "@/components/elections/DistrictFinder";
 import DistrictMap from "@/components/elections/DistrictMap";
@@ -1824,6 +1825,13 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
               </div>
             </header>
+
+            {/* Before the ballot: a reader who isn't registered by the
+              deadline can't vote on any of it. Gone in the results window,
+              when every deadline has passed. */}
+            {!resultsMode && ballot.voterCalendar && (
+              <VoterCalendar calendar={ballot.voterCalendar} stateName={stateName} />
+            )}
 
             {resultsMode && (
               <>

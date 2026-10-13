@@ -37,12 +37,26 @@ export interface CommentDeadline {
   citedBy: number;
 }
 
+/** A state's next voter deadline, for the "this week" strip. */
+export interface StateNextDeadline {
+  state: string;
+  sentence: string;
+  countdown: string | null;
+  status: "upcoming" | "open" | "closed";
+  daysLeft: number | null;
+  kind: string;
+  closesOn: string;
+}
+
 export interface ThisWeek {
   election: {
     date: string;
     phase: "campaign" | "election_day" | "results";
     daysUntil: number;
     states: string[];
+    /** Each state's next voter deadline, soonest first; absent from an
+     * older API. */
+    deadlines?: StateNextDeadline[];
   };
   congress: {
     weekStart: string;

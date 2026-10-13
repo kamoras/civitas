@@ -93,6 +93,27 @@ export default async function ElectionsChapter() {
         </P>
       </Section>
 
+      <Section id="deadlines" title="Voter deadlines">
+        <P>
+          Each state page starts with that state&apos;s deadlines for this election: when you can
+          register online, by mail and in person (and on Election Day itself, where the state allows
+          it), when early voting opens and closes, and when a mail ballot must be asked for and sent
+          back. The next one shows a countdown. The homepage lists every state&apos;s next deadline,
+          soonest first.
+        </P>
+        <P>
+          Every date comes from the state&apos;s own election office or its election law, never from
+          a third-party site, and each one links to its source. When a rule says &ldquo;15 days
+          before the election,&rdquo; we show the rule and the date it works out to. Each source is
+          checked again when the list is rebuilt. When a state&apos;s site blocks automated checks,
+          we use its law instead, or say the date couldn&apos;t be confirmed.
+        </P>
+        <P>
+          Deadlines are counted on the state&apos;s own clock. A deadline that has passed stays on
+          the page and says so, with the ways to register that are still open.
+        </P>
+      </Section>
+
       <Section id="not-your-ballot" title="Why it isn’t “your ballot”">
         <P>
           A ballot is defined by the exact set of contests a voter is eligible for. Precincts split

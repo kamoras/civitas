@@ -108,6 +108,36 @@ describe("ThisWeekStrip", () => {
     expect(await violations()).toEqual([]);
   });
 
+  it("full: each state's next voter deadline, nearest five first, every state behind a disclosure", async () => {
+    const codes = ["AK", "AL", "AZ", "AR", "CA", "CO"];
+    const deadlines = codes.map((state, i) => ({
+      state,
+      sentence: `Online registration closes Oct ${13 + i}`,
+      countdown: i === 0 ? "today" : i === 1 ? "tomorrow" : `${i} days`,
+      status: "open" as const,
+      daysLeft: i,
+      kind: "registration",
+      closesOn: `2026-10-${13 + i}`,
+    }));
+    render(
+      <main>
+        <FullStrip data={{ ...data, election: { ...data.election, deadlines } }} />
+      </main>
+    );
+    const first = screen.getByRole("link", { name: "Alaska" });
+    expect(first).toHaveAttribute("href", "/elections/states/AK#voter-deadlines");
+    expect(first.closest("li")).toHaveTextContent(
+      "Alaska: Online registration closes Oct 13last day"
+    );
+    expect(screen.getByRole("link", { name: "Alabama" }).closest("li")).toHaveTextContent(
+      "1 day left"
+    );
+    const more = screen.getByText("Every state's next deadline").closest("details")!;
+    expect(more.open).toBe(false);
+    expect(within(more).getByRole("link", { name: "Colorado", hidden: true })).toBeInTheDocument();
+    expect(await violations()).toEqual([]);
+  });
+
   it("full: says so when nothing is open for comment", () => {
     render(<FullStrip data={{ ...data, commentDeadlines: [] }} />);
     expect(screen.getByText("No federal rule is open for comment right now.")).toBeInTheDocument();
