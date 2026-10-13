@@ -433,6 +433,15 @@ export interface StateBallot {
   /** Contests whose primary was not `primaryDate` (Alabama's postponed
    * House districts). Optional for an older backend. */
   otherPrimaries?: OtherPrimary[];
+  /** An all-party primary sent its top `advance` to November whatever
+   * their party (California and Washington two, Alaska four), so one
+   * party holding several places is the rule. Optional for an older
+   * backend. */
+  topPrimary?: TopPrimary[];
+  /** The state decides its U.S. Senate and House generals by
+   * ranked-choice rounds (Maine, Alaska), from the law its source entry
+   * cites. Optional for an older backend: absent reads as false. */
+  rankedChoice?: boolean;
   senateRaces: RaceWithCandidates[];
   /** Only set (and only meaningful) when senateRaces is empty — the
    * Senate's three-class rotation (U.S. Const. art. I §3) means most
@@ -752,6 +761,13 @@ export interface GeneralRunoff {
   openPrimary: boolean;
   /** ISO date of the runoff. */
   runoffDate: string;
+}
+
+export interface TopPrimary {
+  /** "S", "H", or "*" for every contest on the ballot. */
+  offices: ("S" | "H")[] | "*";
+  /** How many the all-party primary sent to November. */
+  advance: number;
 }
 
 /** Contests whose primary had its own date (backend election_rules.json). */

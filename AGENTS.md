@@ -1250,7 +1250,9 @@ wrong number on election night is worse than none:
   `state_candidate_sources.json`) is never read live: its election-night
   count is first choices, whose leader is not necessarily who the rounds
   elect, so "leads" and a change of party read from it could be the opposite
-  of the result. Its page says so (`rankedChoiceStates`).
+  of the result. Its page says so (`rankedChoiceStates`), and before
+  election day the ballot page says the voter can rank (the state ballot's
+  `rankedChoice`, read from the same citation — never a second copy of it).
 - Civitas never calls a race. A count is "leading" — "not final" until the
   source itself says official, and still "leading", never "wins", after (an
   official count's leader can face a runoff: Georgia's general needs a
