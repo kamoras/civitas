@@ -756,7 +756,12 @@ Corollaries that follow from the same rule, all enforced in code:
   state's own would; a state page that was read and refused never falls
   back to one, since that would publish past the refusal; and the card
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
-  past the wall itself is not an option: it is the state saying no. That
+  past the wall itself is not an option: it is the state saying no.
+  A wall is not a dead link, though. A state's voter lookup the nightly
+  link check is refused on (`ballot_lookup._check` → `blocked_at`) is still
+  linked, worded as unconfirmed ("This site blocks automated checks, so we
+  can't confirm it's up") with USAGov's directory beside it; only a link
+  that answers 404, or lands on its site's homepage, falls back alone. That
   is enforced in the HTTP layer for every source: the client forgets the
   cookies a challenge response sets (`http_client.is_bot_challenge`), and
   `fetch_with_retry` never retries a challenge. Until 2026-10 a retry sent
@@ -1500,7 +1505,7 @@ the pending list).
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
-| Official-ballot link table + liveness gating | `backend/app/pipeline/fetch/ballot_lookup.py` |
+| Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |

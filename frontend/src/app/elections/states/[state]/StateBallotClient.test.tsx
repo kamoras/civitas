@@ -256,7 +256,9 @@ describe("the ballot page", () => {
     expect(own).toHaveTextContent("ARIZONA'S OFFICIAL VOTER LOOKUP");
     expect(screen.getByText(/This site blocks automated checks/)).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Find your state or local election office (opens in new tab)" })
+      screen.getByRole("link", {
+        name: "Find your state or local election office (opens in new tab)",
+      })
     ).toHaveAttribute("href", "https://www.usa.gov/election-office");
   });
 
