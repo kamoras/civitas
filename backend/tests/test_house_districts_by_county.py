@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.api import politicians
 from app.config import settings
+from app.district_places import places_on_lines_of
 
 
 def _body(resp) -> dict:
@@ -22,6 +23,16 @@ def test_sitting_congress_reads_its_own_lines(monkeypatch):
     numbers = [d["district"] for d in body["districts"]]
     assert numbers == sorted(numbers) and len(numbers) == 38
     assert all(d["counties"] for d in body["districts"])
+
+
+def test_each_district_lists_its_places_on_the_same_lines(monkeypatch):
+    # A reader types a city or town as often as a county: each district
+    # carries the places on the very lines its counties are from.
+    for congress in (119, 120):
+        monkeypatch.setattr(settings, "CURRENT_CONGRESS", congress)
+        body = _body(politicians.house_districts_by_county(state="TX"))
+        assert all(d["places"] == places_on_lines_of(congress)[f"TX-{d['district']}"] for d in body["districts"])
+        assert all(d["places"] for d in body["districts"])
 
 
 def test_redrawn_state_differs_between_the_two_congresses(monkeypatch):

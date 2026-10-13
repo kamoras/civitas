@@ -915,8 +915,12 @@ the new district, whose number names a different place from the one its
 sitting member won. `/politicians` answers "who represents me" from a second
 file on the lines the sitting members were elected on,
 `county_district_crosswalk_sitting.json` (every state on the 119th-Congress
-block file, `build_county_district_crosswalk.py --sitting`). Pick a state,
-type a county, and the House cards narrow to the districts covering it
+block file, `build_county_district_crosswalk.py --sitting`), with the
+cities, towns and communities from the `"119"` map of
+`congressional_district_places.json`. Pick a state, type a city, town or
+county, and the House cards narrow to the districts covering it (a place
+typed in full says which districts it is in, and that it is split when it
+is in more than one)
 ("Districts as of the current Congress"); the ballot page's finder says "2026
 election districts". Each file states the Congress whose lines it holds, and
 `GET /api/politicians/house-districts?state=XX` serves the one matching the
