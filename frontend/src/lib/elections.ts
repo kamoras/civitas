@@ -242,6 +242,13 @@ export function isActiveCandidate(c: CandidateSummary): boolean {
   );
 }
 
+/** "House member, GA-6" / "Senator": what a candidate's memberRecord
+ * says they are now, beside a record that isn't this seat's. */
+export function memberRecordLabel(r: { chamber: "house" | "senate"; seat: string | null }): string {
+  if (r.chamber === "senate") return "Senator";
+  return r.seat ? `House member, ${r.seat}` : "House member";
+}
+
 /** FEC's incumbency codes, in words. */
 const FEC_INCUMBENCY: Record<string, string> = {
   I: "INCUMBENT",

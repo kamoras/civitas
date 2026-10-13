@@ -5,7 +5,7 @@ import Link from "next/link";
 import RaceFullDetail from "@/components/elections/RaceFullDetail";
 import CoverageFeed from "@/components/elections/CoverageFeed";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
-import { candidateName, isActiveCandidate } from "@/lib/elections";
+import { candidateName, isActiveCandidate, memberRecordLabel } from "@/lib/elections";
 import { displayScore } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 import type { RaceCoverageItem, RaceWithCandidates } from "@/types/election";
@@ -14,21 +14,22 @@ type Tab = "money" | "record" | "news";
 
 /** Voting records for the candidates the API links one for: a member
  * running for re-election, matched to their own record, with their
- * Representation Score and a link to their full scorecard. Everyone else is
+ * Representation Score and a link to their full scorecard; and a member of
+ * the other chamber running here (a House member running for the Senate),
+ * by the bioguide crosswalk, named as what they are now. Everyone else is
  * listed too, marked "not linked" — never "no scorecard" or "no record":
- * the API links only an FEC incumbent it matches unambiguously and never
- * guesses, so a member of Congress running for another office (a House
- * member running for the Senate), or one it stops linking once the new
- * Congress sits, has a scorecard this panel doesn't link. */
+ * the API links only matches it is certain of and never guesses, so a
+ * member it can't tie, or one it stops linking once the new Congress
+ * sits, has a scorecard this panel doesn't link. */
 function RecordPanel({ race }: { race: RaceWithCandidates }) {
   const active = race.candidates.filter(isActiveCandidate);
-  const withRecord = active.filter((c) => c.incumbentRecord);
+  const withRecord = active.filter((c) => c.incumbentRecord || c.memberRecord);
   return (
     <div>
       <p className="mb-3 text-[13px] text-ink-lo">
-        A member of Congress running for re-election is linked to their Representation Score and
-        full scorecard when the match to their record is certain. Others who serve in Congress, such
-        as a House member running for the Senate, aren&apos;t linked here; find them under{" "}
+        A member of Congress in this race is linked to their Representation Score and full scorecard
+        when the match to their record is certain: one running for re-election, or one who serves in
+        the other chamber now. Anyone not linked here may still be under{" "}
         <Link href="/politicians" className="underline hover:text-phos">
           Politicians
         </Link>
@@ -54,6 +55,17 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
                 score{" "}
                 <span className={getScoreColor(displayScore(c.incumbentRecord.score))}>
                   {displayScore(c.incumbentRecord.score)}
+                </span>{" "}
+                · scorecard →
+              </Link>
+            ) : c.memberRecord ? (
+              <Link
+                href={`/politicians/${c.memberRecord.id}`}
+                className="shrink-0 text-right font-mono text-xs text-ink-lo hover:text-phos"
+              >
+                {memberRecordLabel(c.memberRecord)} · score{" "}
+                <span className={getScoreColor(displayScore(c.memberRecord.score))}>
+                  {displayScore(c.memberRecord.score)}
                 </span>{" "}
                 · scorecard →
               </Link>

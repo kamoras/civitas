@@ -1726,7 +1726,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const federalRaces = [...ballot.senateRaces, ...ballot.houseRaces];
   const federalCandidates = federalRaces.flatMap((r) => r.candidates.filter(isActiveCandidate));
   const thirdParty = federalCandidates.filter((c) => majorPartyOf(c) === null).length;
-  const withRecords = federalCandidates.filter((c) => c.incumbentRecord).length;
+  const withRecords = federalCandidates.filter((c) => c.incumbentRecord || c.memberRecord).length;
   const contestCount = countBallotContests(contests, ballot);
 
   function detailFor(contest: BallotContest) {

@@ -123,6 +123,21 @@ export interface BallotCandidate extends CandidateSummary {
    * unambiguous match to their scorecard was found — never populated as
    * a guess. */
   incumbentRecord: IncumbentRecord | null;
+  /** A sitting member of the OTHER chamber running here (a House member
+   * running for the Senate), tied by the bioguide crosswalk: their own
+   * record, but not this seat's, so never worded as incumbency. Null when
+   * incumbentRecord is set or nothing ties them. Optional for an older
+   * backend. */
+  memberRecord?: MemberRecord | null;
+}
+
+export interface MemberRecord {
+  id: string;
+  /** Weighted overall Representation Score, 0-100 (as IncumbentRecord). */
+  score: number;
+  chamber: "house" | "senate";
+  /** House: the district held, as the page names it ("TX-35"). */
+  seat: string | null;
 }
 
 /** One federal race with EVERY candidate — coverage is aggregated
