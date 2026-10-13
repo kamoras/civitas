@@ -17,6 +17,9 @@ import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
 import { ordinal } from "@/components/scorecard/format";
 
+/** Cosponsors listed before the "All N cosponsors" disclosure. */
+const COSPONSORS_SHOWN = 8;
+
 const PART_NAME: Record<string, string> = {
   bill: "the bill's details",
   summaries: "the summary",
@@ -125,7 +128,6 @@ export default function BillPageView({
               {" / "}
               <span aria-current="page">{label}</span>
             </nav>
-            {strip}
 
             <div
               id="overview"
@@ -208,13 +210,33 @@ export default function BillPageView({
                       Cosponsors · {record.cosponsors.length}
                     </span>
                     {record.cosponsors.length ? (
-                      <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
-                        {record.cosponsors.map((p) => (
-                          <li key={p.bioguideId ?? p.name}>
-                            <Person p={p} />
-                          </li>
-                        ))}
-                      </ul>
+                      // The first few, and the rest behind a native
+                      // disclosure: a bill with ninety cosponsors put ninety
+                      // links between a keyboard reader and the votes (124
+                      // Tab presses to the vote's state filter).
+                      <>
+                        <ul className="flex flex-col gap-1">
+                          {record.cosponsors.slice(0, COSPONSORS_SHOWN).map((p) => (
+                            <li key={p.bioguideId ?? p.name}>
+                              <Person p={p} />
+                            </li>
+                          ))}
+                        </ul>
+                        {record.cosponsors.length > COSPONSORS_SHOWN && (
+                          <details>
+                            <summary className="cursor-pointer font-mono text-xs text-ink-lo hover:text-phos">
+                              All {record.cosponsors.length} cosponsors
+                            </summary>
+                            <ul className="mt-1 flex flex-col gap-1">
+                              {record.cosponsors.slice(COSPONSORS_SHOWN).map((p) => (
+                                <li key={p.bioguideId ?? p.name}>
+                                  <Person p={p} />
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                      </>
                     ) : (
                       <span className="text-ink-lo">None</span>
                     )}
@@ -257,6 +279,11 @@ export default function BillPageView({
                 )}
               </aside>
             </div>
+
+            {/* Below the bill, not above it: a reader opened this page for
+                the bill, and on a phone the strip pushed its title down by a
+                third of the screen. */}
+            {strip && <div className="mt-10">{strip}</div>}
 
             <nav
               aria-label="On this page"

@@ -189,6 +189,10 @@ export default function DistrictMap({
   const [topo, setTopo] = useState<Topo | null>(null);
   const [failed, setFailed] = useState(false);
   const [hovered, setHovered] = useState<number | null>(null);
+  // The one district shape in the Tab order (roving tabindex): a big
+  // state's 38 shapes were 38 Tab stops between the reader and the county
+  // filter. Arrow keys move between districts in number order.
+  const [active, setActive] = useState<number | null>(null);
 
   // A single at-large district is one shape filling the frame: nothing to
   // choose between, so no map. Alaska's also spans the antimeridian.
@@ -231,6 +235,33 @@ export default function DistrictMap({
 
   const pickedDistrict = picked ? (races.find((r) => r.id === picked)?.district ?? null) : null;
   const focus = hovered ?? pickedDistrict;
+  const pickable = [...new Set(shapes)]
+    .filter((d) => byDistrict.has(d) || (pickCounts && !!results?.get(d)))
+    .sort((a, b) => a - b);
+  const tabStop =
+    active != null && pickable.includes(active)
+      ? active
+      : pickedDistrict != null && pickable.includes(pickedDistrict)
+        ? pickedDistrict
+        : (pickable[0] ?? null);
+  const ARROW_STEP: Record<string, number> = {
+    ArrowRight: 1,
+    ArrowDown: 1,
+    ArrowLeft: -1,
+    ArrowUp: -1,
+  };
+  const moveFocus = (from: number, key: string, svg: SVGSVGElement | null) => {
+    const i = pickable.indexOf(from);
+    const n = pickable.length;
+    const next =
+      key === "Home"
+        ? pickable[0]
+        : key === "End"
+          ? pickable[n - 1]
+          : pickable[(i + ARROW_STEP[key] + n) % n];
+    setActive(next);
+    svg?.querySelector<SVGElement>(`[data-district="${next}"]`)?.focus();
+  };
   const focusRace = focus != null ? byDistrict.get(focus) : undefined;
   const focusName = focus == null ? "" : focus === 0 ? `${state} at-large` : `${state}-${focus}`;
   const answered = feedAnswered ?? (!!results && results.size > 0);
@@ -376,18 +407,32 @@ export default function DistrictMap({
                   // A shape with nothing to open is not a button, and is out
                   // of the tab order; hovering it still previews it.
                   role={pickId ? "button" : "img"}
-                  tabIndex={pickId ? 0 : -1}
+                  tabIndex={pickId && district === tabStop ? 0 : -1}
+                  data-district={district}
                   aria-label={label}
                   aria-pressed={pickId ? isPicked : undefined}
                   onMouseEnter={() => setHovered(district)}
                   onMouseLeave={() => setHovered(null)}
-                  onFocus={() => setHovered(district)}
+                  onFocus={() => {
+                    setHovered(district);
+                    setActive(district);
+                  }}
                   onBlur={() => setHovered(null)}
                   onClick={() => pickId && onPick(pickId)}
                   onKeyDown={(e: KeyboardEvent) => {
                     if (pickId && (e.key === "Enter" || e.key === " ")) {
                       e.preventDefault();
                       onPick(pickId);
+                    } else if (
+                      pickId &&
+                      (e.key in ARROW_STEP || e.key === "Home" || e.key === "End")
+                    ) {
+                      e.preventDefault();
+                      moveFocus(
+                        district,
+                        e.key,
+                        (e.currentTarget as unknown as SVGElement).ownerSVGElement
+                      );
                     }
                   }}
                   style={{
@@ -427,7 +472,8 @@ export default function DistrictMap({
           </span>
         ) : (
           <span className="text-ink-min">
-            Hover or tab to a district to preview its race. Nothing is sent or stored.
+            Hover or tab to a district, then use the arrow keys, to preview its race. Nothing is
+            sent or stored.
           </span>
         )}
       </div>

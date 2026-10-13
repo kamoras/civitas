@@ -1,6 +1,46 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import GeneralRunoffNotice, { otherPrimaryLabel } from "./GeneralRunoffNotice";
+import GeneralRunoffNotice, {
+  otherPrimaryLabel,
+  RankedChoiceNotice,
+  TopPrimaryNotice,
+} from "./GeneralRunoffNotice";
+
+describe("TopPrimaryNotice", () => {
+  it("explains that one party can hold both November places", () => {
+    render(<TopPrimaryNotice rules={[{ offices: "*", advance: 2 }]} stateName="California" />);
+    expect(screen.getByText(/California held a top-two primary/)).toBeInTheDocument();
+    expect(screen.getByText(/whatever their party/)).toBeInTheDocument();
+  });
+
+  it("words a top four and a scoped rule", () => {
+    render(<TopPrimaryNotice rules={[{ offices: ["H"], advance: 4 }]} stateName="Alaska" />);
+    expect(
+      screen.getByText(/^For the U\.S\. House contests, Alaska held a top-four primary/)
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing without a rule", () => {
+    const { container } = render(<TopPrimaryNotice rules={[]} stateName="Colorado" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("RankedChoiceNotice", () => {
+  it("tells the voter they can rank, and when the rounds are counted", () => {
+    render(<RankedChoiceNotice rankedChoice stateName="Maine" />);
+    expect(
+      screen.getByText(/Maine decides its U\.S\. Senate and House contests by ranked-choice/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ranking more than one is optional/)).toBeInTheDocument();
+    expect(screen.getByText(/after election night/)).toBeInTheDocument();
+  });
+
+  it("says nothing for a plurality state or an older API", () => {
+    const { container } = render(<RankedChoiceNotice stateName="Ohio" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
 
 describe("GeneralRunoffNotice", () => {
   it("says an open primary is one, with its runoff date", () => {

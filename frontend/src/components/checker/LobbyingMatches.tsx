@@ -12,14 +12,16 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
 
   return (
     <div>
+      {/* About a sixth-grade reading level (Flesch-Kincaid 5.7, from 8.8),
+          keeping every caveat: the name match, the missing direction, and
+          no claim of cause. */}
       <div className="text-xs text-ink-lo mb-3">
-        Industries that make up a large share of this member&apos;s classifiable donor money,
-        matched to votes on legislation in that industry&apos;s policy area. Lobbying Disclosure Act
-        reports are looked up under the largest donor&apos;s name, or its sponsoring
-        organization&apos;s when the donor is a PAC; where a report names a bill the member voted
-        on, the filing is linked with the client it was filed for, which can be a separate company
-        sharing the name. A filing records lobbying on a bill, not which way; none of this shows
-        that money changed a vote.
+        Industries that gave this member a large share of their money, beside the member&apos;s
+        votes on bills in that industry&apos;s area. Lobbying reports are looked up under the
+        largest donor&apos;s name, or the name of the company behind it when the donor is a PAC.
+        Where a report names a bill the member voted on, it is linked. A report can belong to a
+        different company with the same name. It shows lobbying on a bill, not which side. None of
+        this shows that money changed a vote.
       </div>
       <div className="space-y-4">
         {matches.map((match, i) => {

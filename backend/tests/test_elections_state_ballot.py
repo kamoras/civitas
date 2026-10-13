@@ -9,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import elections
+from app.api.politicians import get_politician
 from app.models import (
     BallotMeasure,
     Candidate,
@@ -451,6 +452,64 @@ class TestIncumbentRecordLink:
         cand = _body(elections.state_ballot("GA", db_session))["houseRaces"][0]["candidates"][0]
         assert (cand["incumbentRecord"]["id"], cand["incumbentRecord"]["district"]) == ("R-MCBRIDE", 6)
         assert cand["incumbentChallenge"] == "C"
+
+    def test_a_house_member_running_for_the_senate_gets_their_house_record_apart(self, db_session):
+        """Their record, by the crosswalk, served as memberRecord: never as
+        incumbentRecord, which would call them the Senate seat's holder."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA00001", "2026-SEN-GA", "MCBRIDE, LUCY",
+                   incumbent_challenge="C", member_bioguide="M000001")
+        _representative(db_session, "R-MCBRIDE", "Lucy McBride", "GA", 6, bioguide_id="M000001")
+        db_session.commit()
+
+        cand = _body(elections.state_ballot("GA", db_session))["senateRaces"][0]["candidates"][0]
+        assert cand["incumbentRecord"] is None
+        assert cand["incumbentChallenge"] == "C"
+        assert {k: cand["memberRecord"][k] for k in ("id", "chamber", "seat")} == {
+            "id": "R-MCBRIDE", "chamber": "house", "seat": "GA-6",
+        }
+
+    def test_no_member_record_without_the_crosswalk(self, db_session):
+        """A surname alone never ties a candidate to another chamber's member."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA00001", "2026-SEN-GA", "MCBRIDE, LUCY", incumbent_challenge="C")
+        _representative(db_session, "R-MCBRIDE", "Lucy McBride", "GA", 6, bioguide_id="M000001")
+        db_session.commit()
+
+        cand = _body(elections.state_ballot("GA", db_session))["senateRaces"][0]["candidates"][0]
+        assert cand["memberRecord"] is None
+
+    def test_a_member_on_the_ballot_is_found_from_their_profile(self, db_session):
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA00001", "2026-SEN-GA", "MCBRIDE, LUCY",
+                   incumbent_challenge="C", member_bioguide="M000001")
+        db_session.commit()
+
+        assert elections.member_on_ballot(db_session, "M000001") == {
+            "raceId": "2026-SEN-GA", "cycleYear": 2026, "state": "GA", "office": "S", "district": None,
+        }
+        assert elections.member_on_ballot(db_session, "M999999") is None
+        assert elections.member_on_ballot(db_session, None) is None
+
+    def test_the_profile_names_the_race(self, db_session):
+        _senator(db_session, "lucy-mcbride", "Lucy McBride", "GA", bioguide_id="M000001")
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA00001", "2026-SEN-GA", "MCBRIDE, LUCY",
+                   incumbent_challenge="I", member_bioguide="M000001")
+        db_session.commit()
+
+        assert _body(get_politician("lucy-mcbride", db_session))["onBallot"]["raceId"] == "2026-SEN-GA"
+
+    def test_a_member_whose_primary_others_won_is_not_on_the_ballot(self, db_session):
+        """Confirmed nominees exist and the member is not one of them: the
+        same filter every ballot listing applies keeps them off."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H6GA06001", "2026-HOUSE-GA-6", "MCBRIDE, LUCY",
+                   incumbent_challenge="I", member_bioguide="M000001")
+        _candidate(db_session, "H6GA06002", "2026-HOUSE-GA-6", "ROE, PAT", confirmed_general=True)
+        db_session.commit()
+
+        assert elections.member_on_ballot(db_session, "M000001") is None
 
     def test_house_incumbent_whose_own_surname_carries_a_generational_suffix_still_links(self, db_session):
         """Real Missouri data: FEC's "ONDREY JR, ROBERT FRANK" attaches
@@ -1249,6 +1308,27 @@ def test_a_state_whose_november_needs_a_majority_says_so(db_session):
         {"offices": "*", "openPrimary": False, "runoffDate": "2026-12-01"},
     ]
     assert _body(elections.state_ballot("CO", db_session))["generalRunoffs"] == []
+
+
+def test_an_all_party_primary_and_ranked_choice_are_said_before_election_day(db_session):
+    """California and Washington sent their top two to November whatever
+    their party, Alaska its top four; Alaska and Maine decide federal
+    generals by ranked choice. Each is served from its cited source, and a
+    state with a party primary and a plurality November says nothing."""
+    for race_id, st in (("2026-HOUSE-CA-4", "CA"), ("2026-HOUSE-AK-0", "AK"),
+                        ("2026-HOUSE-ME-1", "ME"), ("2026-SEN-CO", "CO")):
+        _race(db_session, race_id, st, office="H" if "HOUSE" in race_id else "S")
+    db_session.commit()
+
+    ca = _body(elections.state_ballot("CA", db_session))
+    ak = _body(elections.state_ballot("AK", db_session))
+    me = _body(elections.state_ballot("ME", db_session))
+    co = _body(elections.state_ballot("CO", db_session))
+    assert ca["topPrimary"] == [{"offices": "*", "advance": 2}]
+    assert ak["topPrimary"] == [{"offices": "*", "advance": 4}]
+    assert (ca["rankedChoice"], ak["rankedChoice"], me["rankedChoice"]) == (False, True, True)
+    assert co["topPrimary"] == [] and co["rankedChoice"] is False
+    assert me["topPrimary"] == []
 
 
 def test_contests_with_their_own_primary_date_are_named(db_session):

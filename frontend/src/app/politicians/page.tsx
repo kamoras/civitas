@@ -18,63 +18,16 @@ import { delegationOrder } from "@/lib/delegationOrder";
 import type { PoliticianCard } from "@/types/politicians";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import Photo from "@/components/Photo";
+import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
 
 type BranchFilter = "all" | "senate" | "house" | "president" | "scotus";
 type PartyFilter = "ALL" | "D" | "R" | "I";
 
-const US_STATES = [
-  "AL",
-  "AK",
-  "AZ",
-  "AR",
-  "CA",
-  "CO",
-  "CT",
-  "DE",
-  "FL",
-  "GA",
-  "HI",
-  "ID",
-  "IL",
-  "IN",
-  "IA",
-  "KS",
-  "KY",
-  "LA",
-  "ME",
-  "MD",
-  "MA",
-  "MI",
-  "MN",
-  "MS",
-  "MO",
-  "MT",
-  "NE",
-  "NV",
-  "NH",
-  "NJ",
-  "NM",
-  "NY",
-  "NC",
-  "ND",
-  "OH",
-  "OK",
-  "OR",
-  "PA",
-  "RI",
-  "SC",
-  "SD",
-  "TN",
-  "TX",
-  "UT",
-  "VT",
-  "VA",
-  "WA",
-  "WV",
-  "WI",
-  "WY",
-  "DC",
-];
+// By full name, as a reader looks for their state: a list of postal codes
+// asks them to recall which of MI, MN, MS and MO is theirs.
+const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
+  STATE_NAMES[a].localeCompare(STATE_NAMES[b])
+);
 
 function partyDot(party: string) {
   const cls = party === "D" ? "bg-dem-blue" : party === "R" ? "bg-signal-red" : "bg-ind-purple";
@@ -255,6 +208,7 @@ function PoliticiansPageContent() {
   ];
 
   const activeCount = filtered.filter((p) => p.activeIssueCount > 0).length;
+  const houseSeats = filtered.filter((p) => p.branch === "house").length;
 
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
@@ -334,9 +288,9 @@ function PoliticiansPageContent() {
                   className="font-mono text-xs bg-surface-base border border-white/[0.07] text-ink-lo px-2 py-1 outline-none"
                 >
                   <option value="">ALL STATES</option>
-                  {US_STATES.map((s) => (
+                  {STATES_BY_NAME.map((s) => (
                     <option key={s} value={s}>
-                      {s}
+                      {STATE_NAMES[s]}
                     </option>
                   ))}
                 </select>
@@ -376,19 +330,22 @@ function PoliticiansPageContent() {
               {/* A House district is a number few people know. The state's
                   ballot page finds it from the county a reader lives in, with
                   nothing typed or sent (AGENTS.md section 8). Those are the
-                  lines of the coming election, which in a redrawn state are
-                  not the ones the sitting member was elected on, so the
-                  link says which lines it shows. */}
-              {state && state !== "DC" && branch !== "senate" && (
+                  lines of the election that page covers, which in a redrawn
+                  state are not the ones the sitting member was elected on,
+                  so the link says so (without a year that goes stale when
+                  the page moves to the next cycle). A one-seat state has no
+                  district to find. */}
+              {state && branch !== "senate" && houseSeats > 1 && (
                 <p className="mb-4 text-sm text-ink-lo">
                   Don&apos;t know your House district?{" "}
                   <Link
                     href={`${stateBallotHref(state)}#ballot-house`}
                     className="underline underline-offset-2 hover:text-phos"
                   >
-                    Find it by county on the {state} ballot page
-                  </Link>{" "}
-                  (2026 district lines).
+                    Find it by county on the {STATE_NAMES[state] ?? state} ballot page
+                  </Link>
+                  . It maps the lines of the election it covers, which can differ from the ones your
+                  current member was elected on.
                 </p>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

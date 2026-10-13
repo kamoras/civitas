@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { billPageHref } from "@/lib/congress";
 
 /**
  * The homepage masthead: overprint wordmark, the statement of what this is,
@@ -22,8 +23,11 @@ export default function Masthead() {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
-    // /explore reads ?q= on mount and runs the search itself.
-    router.push(`/explore?q=${encodeURIComponent(q)}`);
+    // The slip says it takes a bill number: one ("H.R. 7008", "s 4668")
+    // opens that bill's page, which full-text search ranked below unrelated
+    // documents that merely share the digits. Anything else is a search;
+    // /explore reads ?q= on mount and runs it itself.
+    router.push(billPageHref(q) ?? `/explore?q=${encodeURIComponent(q)}`);
   };
 
   return (
