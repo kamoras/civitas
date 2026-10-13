@@ -75,7 +75,9 @@ export default async function FeedsPage() {
                 Every post Civitas publishes goes into these feeds first: Action Center issues, what
                 Congress did each day and week, the daily member spotlight, news about races on the
                 ballot and, on election night, the count as each state reports it. The Bluesky
-                account posts the same posts, when Bluesky accepts them.
+                account posts the same posts, when Bluesky accepts them. The spotlight and the
+                Congress posts written overnight reach Bluesky later that day, in the hours U.S.
+                users are most active; a feed has them at once.
               </Point>
               <Point>
                 Follow everything, one topic or one state. Choosing a feed is your filter, so there

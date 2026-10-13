@@ -1517,7 +1517,7 @@ the pending list).
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |
 | Action Center API | `backend/app/api/action.py` |
-| Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`) decide what and when |
+| Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`) decide what and when; the hours a non-news post reaches Bluesky are `app/data/bluesky_post_windows.json` (`scripts/fetch_bluesky_activity.py`, `broadcast.SCHEDULED_KINDS`) |
 | Representative API routes | `backend/app/api/representatives.py` |
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
 | Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline tabs], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |

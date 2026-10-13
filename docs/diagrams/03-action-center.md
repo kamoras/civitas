@@ -61,7 +61,7 @@ flowchart TB
     TIMELINE["<b>9. TIMELINE</b><br/>record daily TimelineEntry<br/>at week/month/year boundaries,<br/>LLM writes the period summary"]
     TIMELINE --> POST
 
-    POST["<b>10. BLUESKY</b><br/>new/updated issue posts: the verified lede, verbatim<br/>daily member spotlight (a template of the scores)<br/>repost + like matching posts from AP, NPR, PBS<br/>(≥ 0.78, under 24h old, max 3/run)"]
+    POST["<b>10. BLUESKY</b><br/>new/updated issue posts: the verified lede, verbatim<br/>daily member spotlight (a template of the scores;<br/>sent to Bluesky in the posting window)<br/>repost + like matching posts from AP, NPR, PBS<br/>(≥ 0.78, under 24h old, max 3/run)"]
 ```
 
 The daily spotlight also runs on the two early-abort paths (no articles

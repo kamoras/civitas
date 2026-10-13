@@ -25,6 +25,7 @@ from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_
 from app.pipeline.analyze.congress_bluesky import post_congress_lookahead, post_daily_congress, post_weekly_congress
 from app.time_utils import utcnow
 from app.background import WritesHeld, start_writer
+from app.broadcast import deliver_pending
 from app.pipeline import lease
 
 if TYPE_CHECKING:
@@ -724,6 +725,18 @@ def _congress_activity_sync() -> None:
                     logger.info("Published the Congress look-ahead for the week of %s", ahead)
             except Exception:
                 logger.exception("Congress Bluesky post failed")
+                db.rollback()
+            # Posts held for the posting window go out when it opens
+            # (broadcast.deliver_pending): from here as well as the hourly
+            # Action Center run, which stands down while the nightly
+            # pipeline runs. This sync doesn't, so the window's opening
+            # never waits on a long night.
+            try:
+                sent = deliver_pending(db)
+                if sent:
+                    logger.info("Sent %d held or retried Bluesky post(s)", sent)
+            except Exception:
+                logger.exception("Sending held Bluesky posts failed")
             finally:
                 db.close()
 

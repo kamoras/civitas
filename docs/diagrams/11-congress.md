@@ -121,6 +121,10 @@ ended is eligible. Either post waits until the page it links to shows the
 report it quotes (`page_shows`: the page's description is the report's
 sentence): the link card and the feed summary are read from that page, and
 right after the Digest lands its cached render is still the earlier record.
+Every Congress post is in the Congress feed as soon as it is published; the
+Bluesky send waits for the posting window (`broadcast.SCHEDULED_KINDS`,
+`app/data/bluesky_post_windows.json`) when it is written outside it, and goes
+when the window opens that Eastern day (README, "When posts reach Bluesky").
 
 **Became law.** The week and month reports list Congress.gov's own list of
 the Congress's laws (`GET /law/{congress}`, read by the hourly bill refresh,

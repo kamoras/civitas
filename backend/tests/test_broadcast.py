@@ -1,5 +1,6 @@
 """app/broadcast.py: every post is stored first, then delivered to Bluesky."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -282,3 +283,122 @@ def test_the_backfill_leaves_old_and_withdrawn_posts_alone(db_session, link_card
         link_cards[url] = _CARD
     assert broadcast.fill_missing_cards(db_session) == 0
     assert old.card_image is None and withdrawn.card_image is None
+
+
+# Posting windows (broadcast.SCHEDULED_KINDS, release_at). 09:00-22:00
+# Eastern here; the shipped file's hours are checked separately below.
+_WINDOWS = [(9, 22)]
+_EDT = timedelta(hours=4)  # 2026-10 dates are on daylight time
+
+
+@pytest.fixture()
+def windows(monkeypatch):
+    monkeypatch.setattr(broadcast, "_windows_cache", _WINDOWS)
+
+
+def _eastern(day, hour, minute=0):
+    """A naive-UTC instant at an Eastern wall time in October 2026 (EDT)."""
+    return datetime(2026, 10, day, hour, minute) + _EDT
+
+
+@pytest.mark.parametrize("kind", sorted(set(broadcast.KINDS) - broadcast.SCHEDULED_KINDS))
+def test_news_is_never_held_for_a_window(db_session, bluesky_configured, windows, freeze_utcnow, kind):
+    freeze_utcnow(_eastern(13, 3))
+    post = _publish(db_session, kind=kind, subject=f"{kind}:x")
+    assert (post.bsky_status, len(bluesky_configured)) == ("sent", 1)
+
+
+def test_time_sensitive_kinds_are_not_scheduled():
+    assert broadcast.SCHEDULED_KINDS <= set(broadcast.KINDS)
+    assert not broadcast.SCHEDULED_KINDS & {"issue", "race", "result"}
+
+
+def test_a_scheduled_post_waits_for_the_window_and_the_feed_does_not(db_session, bluesky_configured, windows,
+                                                                     freeze_utcnow):
+    written = freeze_utcnow(_eastern(13, 3))
+    post = _publish(db_session, kind="congress_day", subject="congress-day:x")
+    # In the feed now, with the time it was written; Bluesky waits.
+    assert (post.bsky_status, post.published_at, bluesky_configured) == ("pending", written, [])
+
+    freeze_utcnow(_eastern(13, 8, 15))
+    assert broadcast.deliver_pending(db_session) == 0
+    freeze_utcnow(_eastern(13, 9, 15))
+    assert broadcast.deliver_pending(db_session) == 1
+    assert (post.bsky_status, len(bluesky_configured)) == ("sent", 1)
+
+
+def test_a_scheduled_post_inside_the_window_goes_at_once(db_session, bluesky_configured, windows, freeze_utcnow):
+    freeze_utcnow(_eastern(13, 12))
+    assert _publish(db_session, kind="spotlight", subject="member:x").bsky_status == "sent"
+
+
+def test_with_no_window_left_that_day_it_goes_at_once(db_session, bluesky_configured, windows, freeze_utcnow):
+    """Never held into the next day's posts."""
+    freeze_utcnow(_eastern(13, 23))
+    assert _publish(db_session, kind="congress_ahead", subject="congress-ahead:x").bsky_status == "sent"
+
+
+def test_a_missed_window_sends_at_the_next_one_not_never(db_session, bluesky_configured, windows, freeze_utcnow):
+    """The pipeline process was down for the whole window: the post goes in
+    the next one, the next morning, and only once."""
+    freeze_utcnow(_eastern(13, 3))
+    post = _publish(db_session, kind="congress_week", subject="congress-week:x")
+    freeze_utcnow(_eastern(13, 23, 15))
+    assert broadcast.deliver_pending(db_session) == 0
+    freeze_utcnow(_eastern(14, 9, 15))
+    assert broadcast.deliver_pending(db_session) == 1
+    assert broadcast.deliver_pending(db_session) == 0
+    assert (post.bsky_status, len(bluesky_configured)) == ("sent", 1)
+
+
+def test_a_held_post_is_not_sent_once_too_old(db_session, bluesky_configured, windows, freeze_utcnow):
+    written = freeze_utcnow(_eastern(13, 3))
+    post = _publish(db_session, kind="spotlight", subject="member:x")
+    freeze_utcnow(written + broadcast.HELD_MAX_AGE + timedelta(hours=8))  # inside a window
+    assert broadcast.in_window(broadcast.utcnow())
+    assert broadcast.deliver_pending(db_session) == 0
+    assert post.bsky_status == "pending"
+
+
+def test_a_held_post_bluesky_refuses_is_retried_in_the_window(db_session, bluesky_configured, windows,
+                                                               freeze_utcnow):
+    freeze_utcnow(_eastern(13, 3))
+    post = _publish(db_session, kind="congress_day", subject="congress-day:x")
+    bluesky_configured.ok = False
+    freeze_utcnow(_eastern(13, 9, 15))
+    assert broadcast.deliver_pending(db_session) == 0
+    bluesky_configured.ok = True
+    freeze_utcnow(_eastern(13, 10, 15))
+    assert broadcast.deliver_pending(db_session) == 1
+    assert (post.bsky_status, post.bsky_attempts) == ("sent", 2)
+
+
+def test_the_window_follows_daylight_saving(windows):
+    # 03:00 Eastern; the window opens at 09:00 Eastern on both dates.
+    assert broadcast.release_at("spotlight", datetime(2026, 10, 13, 7)) == datetime(2026, 10, 13, 13)  # EDT
+    assert broadcast.release_at("spotlight", datetime(2026, 11, 13, 8)) == datetime(2026, 11, 13, 14)  # EST
+
+
+def test_a_window_past_midnight(monkeypatch):
+    monkeypatch.setattr(broadcast, "_windows_cache", [(20, 2)])
+    assert broadcast.in_window(_eastern(13, 1))
+    assert broadcast.in_window(_eastern(13, 21))
+    assert not broadcast.in_window(_eastern(13, 2))
+
+
+def test_an_unreadable_windows_file_holds_nothing(monkeypatch, tmp_path):
+    monkeypatch.setattr(broadcast, "_windows_cache", None)
+    monkeypatch.setattr(broadcast, "_WINDOWS_PATH", tmp_path / "missing.json")
+    assert broadcast.release_at("spotlight", _eastern(13, 3)) == _eastern(13, 3)
+
+
+def test_the_shipped_windows_are_the_measured_above_average_hours(monkeypatch):
+    """bluesky_post_windows.json as fetch_bluesky_activity.py writes it: the
+    windows are exactly the Eastern hours whose English post volume is above
+    the mean hour, every hour sampled."""
+    monkeypatch.setattr(broadcast, "_windows_cache", None)
+    data = json.loads(broadcast._WINDOWS_PATH.read_text())
+    assert data["_source"] and data["timezone"] == "America/New_York"
+    assert all(n > 0 for n in data["samplesPerEasternHour"]) and len(data["samplesPerEasternHour"]) == 24
+    above = {h for h, v in enumerate(data["hourlyRelativeVolume"]["englishPosts"]) if v > 1}
+    assert above and {h for h in range(24) if broadcast._hour_in_window(h)} == above

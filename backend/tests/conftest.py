@@ -413,6 +413,9 @@ def bluesky_outbox(monkeypatch):
         return outbox.ok
 
     monkeypatch.setattr(broadcast, "publish_post", send)
+    # Every hour a posting window, so no send is held by the real clock's
+    # hour (broadcast.release_at); a test of the hold sets its own windows.
+    monkeypatch.setattr(broadcast, "_windows_cache", [(0, 24)])
     return outbox
 
 
