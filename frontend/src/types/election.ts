@@ -174,6 +174,12 @@ export interface RaceWithCandidates {
    * out. Null (not []) if this district isn't in the bundled crosswalk —
    * never a guess. */
   counties: string[] | null;
+  /** House races only: the cities, towns and communities in this district
+   * on the lines it is elected on, largest first, from the Census
+   * Bureau's block files (congressional_district_places.json). A place
+   * listed by several districts is split between them. Null for a Senate
+   * race or a district the file doesn't cover — never a guess. */
+  places?: string[] | null;
   candidates: BallotCandidate[];
 }
 

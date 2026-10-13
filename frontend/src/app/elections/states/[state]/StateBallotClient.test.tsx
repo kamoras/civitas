@@ -578,7 +578,7 @@ describe("U.S. Representative", () => {
     const drawer = await openContest(/U\.S\. Representative/);
     expect(drawer.getByRole("link", { name: /house\.gov/ })).toBeInTheDocument();
     expect(
-      drawer.getByLabelText("Filter districts by county, candidate, or district number")
+      drawer.getByLabelText("Filter districts by city, town, county, candidate or district number")
     ).toBeInTheDocument();
   });
 
@@ -617,16 +617,58 @@ describe("U.S. Representative", () => {
     expect(
       drawer.getByRole("link", { name: "Texas voter portal (opens in new tab)" })
     ).toHaveAttribute("href", "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do");
-    const input = drawer.getByLabelText("Filter districts by county or district number");
+    const input = drawer.getByLabelText(
+      "Filter districts by city, town, county or district number"
+    );
     await userEvent.type(input, "zzz");
     expect(
-      drawer.getByText(
-        /goes by county, not city or town: try your county’s name or a district number/
-      )
+      drawer.getByText(/Try the name of your city, town or county, or a district number/)
     ).toBeInTheDocument();
     expect(drawer.queryByText(/surname/)).not.toBeInTheDocument();
     // Never an address field.
     expect(drawer.queryByLabelText(/address|zip/i)).not.toBeInTheDocument();
+  });
+
+  it("finds a district by a city or town in it, and says when a city is split", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          houseRaces: [1, 2, 3, 4].map((d) =>
+            houseRace({
+              id: `d${d}`,
+              district: d,
+              counties: [`County ${d}`],
+              // Rivertown spans districts 2 and 4; Oakdale is whole in 3.
+              places: [
+                ...(d === 2 || d === 4 ? ["Rivertown city"] : []),
+                ...(d === 3 ? ["Oakdale"] : []),
+                `Hamlet ${d}`,
+              ],
+            })
+          ),
+        })}
+      />
+    );
+    const drawer = await openContest(/U\.S\. Representative/);
+    const input = drawer.getByRole("searchbox");
+    await userEvent.type(input, "rivertown");
+    expect(document.querySelector("[data-place-summary]")).toHaveTextContent(
+      /^Rivertown is in districts 2 and 4: it is split/
+    );
+    expect(drawer.getByRole("status")).toHaveTextContent(
+      /2 of 4 districts match rivertown\. Rivertown is in districts 2 and 4/
+    );
+    // The row says it matched the city, ahead of its counties.
+    expect(drawer.getAllByText(/^Rivertown city, County/)).toHaveLength(2);
+    await userEvent.clear(input);
+    await userEvent.type(input, "Oakdale");
+    expect(document.querySelector("[data-place-summary]")).toHaveTextContent(
+      "Oakdale is in district 3."
+    );
+    // A place nobody lists names no district.
+    await userEvent.clear(input);
+    await userEvent.type(input, "Elsewhere");
+    expect(document.querySelector("[data-place-summary]")).toBeNull();
   });
 
   it("words new lines around the sitting member on the next cycle's ballot, before Jan 3", async () => {
@@ -1585,6 +1627,60 @@ describe("ballot measures", () => {
     const drawer = await openContest(/Statewide ballot measures/);
     expect(drawer.queryByRole("status")).not.toBeInTheDocument();
     expect(drawer.getByText(/last read successfully 2026-09-28/)).toBeInTheDocument();
+  });
+
+  const threeMeasures = () =>
+    ballot({
+      measures: [1, 2, 3].map((n) => ({
+        ...measure,
+        id: `OH-${n}`,
+        number: String(n),
+        title: `Issue ${n}`,
+      })),
+      measureCoverage: {
+        status: "covered",
+        sourceName: "Ohio SoS",
+        checkedAt: "2026-09-28T00:00:00Z",
+        lastAttemptAt: "2026-09-28T00:00:00Z",
+      },
+    });
+
+  it("opens the drawer at a measure from its row in the ballot box, focus on its heading", async () => {
+    render(<StateBallotClient ballot={threeMeasures()} />);
+    const box = within(screen.getByTestId("ballot-columns"));
+    await userEvent.click(box.getByRole("button", { name: /^3\s*Issue 3$/ }));
+    const drawer = within(screen.getByRole("dialog"));
+    expect(drawer.getByRole("heading", { name: "Statewide ballot measures" })).toBeInTheDocument();
+    expect(document.activeElement).toBe(drawer.getByRole("heading", { name: "3" }));
+    expect(window.location.hash).toBe("#measure-OH-3");
+    // Closing returns the reader to the ballot, the hash cleared.
+    await userEvent.click(drawer.getByRole("button", { name: "ALL CONTESTS" }));
+    expect(window.location.hash).toBe("");
+  });
+
+  it("gives the phone's index one button per measure", async () => {
+    render(<StateBallotClient ballot={threeMeasures()} />);
+    const index = within(screen.getByTestId("ballot-index"));
+    const group = within(index.getByRole("group", { name: "Open a measure" }));
+    await userEvent.click(group.getByRole("button", { name: "2: Issue 2" }));
+    const drawer = within(screen.getByRole("dialog"));
+    expect(document.activeElement).toBe(drawer.getByRole("heading", { name: "2" }));
+  });
+
+  it("opens at the measure a #measure- link names", async () => {
+    window.history.replaceState(null, "", "/elections/states/OH#measure-OH-2");
+    render(<StateBallotClient ballot={threeMeasures()} />);
+    const drawer = within(await screen.findByRole("dialog"));
+    expect(document.activeElement).toBe(drawer.getByRole("heading", { name: "2" }));
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("opens the measures at their top from the section's own button", async () => {
+    render(<StateBallotClient ballot={threeMeasures()} />);
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(document.activeElement).toBe(
+      drawer.getByRole("heading", { name: "Statewide ballot measures" })
+    );
   });
 });
 

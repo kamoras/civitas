@@ -297,12 +297,20 @@ export function contestHash(contest: BallotContest, houseRaceId: string | null =
 
 /** Which contest a `#race-{id}` link (old /elections/{raceId} redirects,
  * Bluesky posts) or a `#ballot-{key}` link points at, and for a House
- * link, which district. */
+ * link, which district. A `#measure-{id}` link (a measure row on the
+ * ballot, or a link to one) opens the measures at that measure. */
 export function contestForHash(
   hash: string,
   contests: BallotContest[],
   ballot: StateBallot
-): { key: string; houseRaceId: string | null } | null {
+): { key: string; houseRaceId: string | null; measureId?: string | null } | null {
+  const measure = hash.match(/^#measure-(.+)$/)?.[1];
+  if (measure) {
+    const id = decodeURIComponent(measure);
+    return contests.some((c) => c.key === "measures") && ballot.measures.some((m) => m.id === id)
+      ? { key: "measures", houseRaceId: null, measureId: id }
+      : null;
+  }
   const race = hash.match(/^#race-(.+)$/)?.[1];
   if (race) {
     if (ballot.houseRaces.some((r) => r.id === race)) return { key: "house", houseRaceId: race };

@@ -819,12 +819,15 @@ What this rules in and out:
   explicit, unremembered navigation choices (the town selector, the state
   picker); linking out to the official lookup for a reader who wants a
   precinct-exact answer. Where a district needs to be findable, give it
-  place names a person already knows and let them filter: counties for a
-  U.S. House seat (`county_district_crosswalk.json`, the coming
-  election's lines, for the ballot pages; `county_district_crosswalk_sitting.json`,
-  the lines the sitting members were elected on, for "who represents me"
-  on `/politicians` — in a redrawn state the same number is a different
-  district, so each surface names its map and never borrows the other's), towns, communities
+  place names a person already knows and let them filter: counties, and
+  the cities, towns and communities in it, for a U.S. House seat
+  (`county_district_crosswalk.json` and the "120" map of
+  `congressional_district_places.json`, the coming election's lines, for
+  the ballot pages; `county_district_crosswalk_sitting.json` and the "119"
+  map, the lines the sitting members were elected on, for "who represents
+  me" on `/politicians` — in a redrawn state the same number is a
+  different district, so each surface names its map and never borrows the
+  other's; places by `scripts/build_district_place_crosswalk.py`), towns, communities
   (incorporated places and Census Designated Places) and counties for a
   state legislative one (`state_leg_district_crosswalk.json`, a block-level
   join documented in `scripts/fetch_state_leg_crosswalk.py`). Building
@@ -1763,6 +1766,11 @@ the pending list).
   Focus through `focusTabWhenSelected` (`src/lib/tabFocus.ts`): it waits for
   the incoming tab to render as selected (a URL-derived selection can land a
   frame late) and drops the focus if another tab was selected first.
+- **A drawer opened at one of its items moves focus in the drawer's own
+  effect** (the ballot page's `ContestDrawer` `focusId`, from a measure row
+  or a `#measure-{id}` link). React runs a child's effects before its
+  parent's, so an item that focused itself would have its focus and scroll
+  undone by the drawer's "start at the top" effect a moment later.
 
 #### Search metadata (2026-09)
 
