@@ -1764,6 +1764,11 @@ the pending list).
   Focus through `focusTabWhenSelected` (`src/lib/tabFocus.ts`): it waits for
   the incoming tab to render as selected (a URL-derived selection can land a
   frame late) and drops the focus if another tab was selected first.
+- **A drawer opened at one of its items moves focus in the drawer's own
+  effect** (the ballot page's `ContestDrawer` `focusId`, from a measure row
+  or a `#measure-{id}` link). React runs a child's effects before its
+  parent's, so an item that focused itself would have its focus and scroll
+  undone by the drawer's "start at the top" effect a moment later.
 
 #### Search metadata (2026-09)
 

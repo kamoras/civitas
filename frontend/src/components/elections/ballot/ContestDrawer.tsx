@@ -29,6 +29,7 @@ export default function ContestDrawer({
   onNavigate,
   onClose,
   shareAnchor,
+  focusId = null,
   children,
 }: {
   contest: BallotContest;
@@ -40,16 +41,28 @@ export default function ContestDrawer({
   onClose: () => void;
   /** The fragment (no "#") that reopens this contest, for its share link. */
   shareAnchor: string;
+  /** The id of one item inside the contest to open at (a ballot measure's
+   * card) instead of its top: scrolled to, with focus on its heading. */
+  focusId?: string | null;
   children: ReactNode;
 }) {
   const panel = useModalDialog(onClose);
   const heading = useRef<HTMLHeadingElement>(null);
 
-  // Each contest starts at its top, with its title announced.
+  // Each contest starts at its top, with its title announced — or, opened
+  // from one of its items (a measure row on the ballot), at that item, with
+  // its heading announced. Here rather than in the item's own effect:
+  // children's effects run first, so this one would undo it.
   useEffect(() => {
+    const target = focusId ? document.getElementById(focusId) : null;
+    if (target && panel.current?.contains(target)) {
+      target.scrollIntoView?.({ block: "start" });
+      (target.querySelector<HTMLElement>("h3[tabindex]") ?? target).focus();
+      return;
+    }
     heading.current?.focus();
     panel.current?.querySelector("[data-drawer-body]")?.scrollTo?.({ top: 0 });
-  }, [contest.key, panel]);
+  }, [contest.key, focusId, panel]);
 
   return (
     <div className="fixed inset-0 z-[60] flex justify-end">
