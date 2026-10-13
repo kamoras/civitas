@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { BillRecordVote, PartySplit, VoteDetail, VoteMember } from "@/types/congress";
 import { CHAMBER_NAME, resultTone, shortDate } from "@/lib/congress";
 import { PARTY_COLORS } from "@/lib/partyStyles";
+import { houseSeatLabel } from "@/lib/elections";
 
 const PARTY_NAME: Record<string, string> = {
   R: "Republicans",
@@ -90,7 +91,13 @@ export default function VotePanel({
     () => (detail ? [...new Set(detail.members.map((m) => m.state))].sort() : []),
     [detail]
   );
-  const members = detail ? detail.members.filter((m) => !state || m.state === state) : [];
+  // One state's House members in district order, so a reader who knows
+  // their district finds their member without reading every name.
+  const members = detail
+    ? detail.members
+        .filter((m) => !state || m.state === state)
+        .sort((a, b) => (state ? (a.district ?? 999) - (b.district ?? 999) : 0))
+    : [];
 
   if (!votes.length) {
     return (
@@ -191,7 +198,8 @@ export default function VotePanel({
                     </span>
                     <ul className="flex flex-col gap-1 text-sm">
                       {group.map((m) => {
-                        const name = m.firstName ? `${m.firstName} ${m.lastName}` : m.lastName;
+                        const name =
+                          m.name ?? (m.firstName ? `${m.firstName} ${m.lastName}` : m.lastName);
                         return (
                           <li
                             key={`${m.lastName}-${m.state}-${m.firstName}`}
@@ -207,7 +215,8 @@ export default function VotePanel({
                             <span
                               className={`whitespace-nowrap font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}
                             >
-                              {m.party}-{m.state}
+                              {m.party}-
+                              {m.district != null ? houseSeatLabel(m.state, m.district) : m.state}
                             </span>
                           </li>
                         );
