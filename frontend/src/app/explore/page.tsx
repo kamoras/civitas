@@ -20,6 +20,7 @@ import { chamberColor, chamberBg, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
+import { billPageHref } from "@/lib/congress";
 
 type ChamberFilter = "all" | "Senate" | "House" | "Executive" | "Judicial" | "Regulatory";
 
@@ -215,7 +216,11 @@ function ExplorePageInner() {
   // effect, so the input is right on the first paint instead of one frame late.
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const [chamber, setChamber] = useState<ChamberFilter>("all");
-  const [commentableOnly, setCommentableOnly] = useState(false);
+  // ?comment=open: "every open comment period" (the homepage's and the
+  // Action Center's link), which lists them with or without a query.
+  const [commentableOnly, setCommentableOnly] = useState(
+    () => searchParams.get("comment") === "open"
+  );
   // A member's record with no query is listed newest first; the toggle says so.
   const [sortOrder, setSortOrder] = useState<"relevance" | "date">(() =>
     !searchParams.get("q")?.trim() && searchParams.get("politician_id") ? "date" : "relevance"
@@ -234,11 +239,15 @@ function ExplorePageInner() {
   );
   const [submitted, setSubmitted] = useState<SubmittedSearch | null>(() => {
     const initialQ = searchParams.get("q")?.trim();
+    const openComments = searchParams.get("comment") === "open";
     if (initialQ) {
-      return { query: initialQ, chamber: "all", commentableOnly: false, sort: "relevance" };
+      return { query: initialQ, chamber: "all", commentableOnly: openComments, sort: "relevance" };
     }
-    return searchParams.get("politician_id")
-      ? { query: "", chamber: "all", commentableOnly: false, sort: "date" }
+    if (searchParams.get("politician_id")) {
+      return { query: "", chamber: "all", commentableOnly: openComments, sort: "date" };
+    }
+    return openComments
+      ? { query: "", chamber: "all", commentableOnly: true, sort: "relevance" }
       : null;
   });
 
@@ -277,6 +286,7 @@ function ExplorePageInner() {
   // What the results are *of*, which is not what is in the box: typing a new
   // term must not silently relabel the results still showing from the old one.
   const resultsFor = submitted?.query ?? "";
+  const billHref = resultsFor ? billPageHref(resultsFor) : null;
   // Whose record the results are limited to. The name comes from the results
   // themselves; the filter is shown either way.
   const politicianName = politicianId
@@ -287,10 +297,11 @@ function ExplorePageInner() {
   // shows the same thing. History API, not router.replace(): on this
   // statically prerendered route a same-route replace() is a no-op once the
   // page was opened with a query string (AGENTS.md, "Client-side URL state").
-  const writeUrl = useCallback((q: string, member: string | undefined) => {
+  const writeUrl = useCallback((q: string, member: string | undefined, openComments: boolean) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (member) params.set("politician_id", member);
+    if (openComments) params.set("comment", "open");
     const search = params.toString();
     window.history.replaceState(null, "", search ? `?${search}` : window.location.pathname);
   }, []);
@@ -298,11 +309,11 @@ function ExplorePageInner() {
   const runSearch = useCallback(
     (q: string, ch: ChamberFilter, commentOnly: boolean, sort: "relevance" | "date") => {
       const trimmed = q.trim();
-      // An empty box lists the filtered member's record; with no member it
-      // asks for nothing.
-      if (!trimmed && !politicianId) return;
+      // An empty box lists the filtered member's record, or every open
+      // comment period; with neither it asks for nothing.
+      if (!trimmed && !politicianId && !commentOnly) return;
       setSubmitted({ query: trimmed, chamber: ch, commentableOnly: commentOnly, sort });
-      writeUrl(trimmed, politicianId);
+      writeUrl(trimmed, politicianId, commentOnly);
     },
     [politicianId, writeUrl]
   );
@@ -310,9 +321,11 @@ function ExplorePageInner() {
   const clearPolitician = () => {
     setPoliticianId(undefined);
     const trimmed = submitted?.query ?? "";
-    writeUrl(trimmed, undefined);
-    // A browse has nothing left to show without its member.
-    if (!trimmed) setSubmitted(null);
+    const openComments = submitted?.commentableOnly ?? false;
+    writeUrl(trimmed, undefined, openComments);
+    // A browse has nothing left to show without its member, unless it is
+    // the list of open comment periods.
+    if (!trimmed && !openComments) setSubmitted(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -327,7 +340,7 @@ function ExplorePageInner() {
 
   const handleChamberChange = (ch: ChamberFilter) => {
     setChamber(ch);
-    if (searched && (query.trim() || politicianId)) {
+    if (searched && (query.trim() || politicianId || commentableOnly)) {
       runSearch(query, ch, commentableOnly, sortOrder);
     }
   };
@@ -335,14 +348,19 @@ function ExplorePageInner() {
   const handleCommentToggle = () => {
     const next = !commentableOnly;
     setCommentableOnly(next);
-    if (searched && (query.trim() || politicianId)) {
+    // On with an empty box: every open comment period, closing soonest
+    // first. Off again with nothing else asked: back to the empty page.
+    if (query.trim() || politicianId || next) {
       runSearch(query, chamber, next, sortOrder);
+    } else {
+      setSubmitted(null);
+      writeUrl("", undefined, false);
     }
   };
 
   const handleSortChange = (s: "relevance" | "date") => {
     setSortOrder(s);
-    if (searched && (query.trim() || politicianId)) {
+    if (searched && (query.trim() || politicianId || commentableOnly)) {
       runSearch(query, chamber, commentableOnly, s);
     }
   };
@@ -568,6 +586,20 @@ function ExplorePageInner() {
             </div>
           )}
 
+          {/* A bill number searched as text ranks documents that only share
+              its digits above the bill; its own page has the status,
+              sponsor and every member's vote. */}
+          {!loading && searched && billHref && (
+            <Link
+              href={billHref}
+              className="mb-4 block border border-phos/40 bg-phos/5 px-4 py-3 text-sm text-ink-hi hover:border-phos"
+            >
+              <span className="font-mono text-xs uppercase tracking-[0.12em] text-phos">Bill</span>{" "}
+              Open the page for {resultsFor.trim()}: where it stands, who sponsored it, and how each
+              member voted →
+            </Link>
+          )}
+
           {/* Results */}
           {!loading && searched && results.length > 0 && (
             <div aria-live="polite">
@@ -581,18 +613,28 @@ function ExplorePageInner() {
                     {results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;
                     {resultsFor}&rdquo;
                   </>
-                ) : (
+                ) : politicianId ? (
                   <>
                     {results.length === RESULT_LIMIT ? "The most recent " : ""}
                     {results.length} document{results.length !== 1 ? "s" : ""} from {politicianName}
                   </>
+                ) : (
+                  <>
+                    {results.length === RESULT_LIMIT ? "The " : ""}
+                    {results.length} open comment period{results.length !== 1 ? "s" : ""}
+                    {results.length === RESULT_LIMIT ? " closing soonest" : ""}
+                  </>
                 )}
-                {commentableOnly && (
+                {submitted?.commentableOnly && (resultsFor || politicianId) && (
                   <span className="text-phos-mid ml-2">· open for comment only</span>
                 )}
                 <span className="text-ink-min ml-2">
                   · sorted by{" "}
-                  {!resultsFor || submitted?.sort === "date" ? "newest first" : "relevance"}
+                  {!resultsFor && !politicianId
+                    ? "closing date"
+                    : !resultsFor || submitted?.sort === "date"
+                      ? "newest first"
+                      : "relevance"}
                 </span>
               </h2>
               <div className="space-y-3">
@@ -609,8 +651,10 @@ function ExplorePageInner() {
               <p className="text-ink-lo text-base mb-2">
                 {resultsFor ? (
                   <>No results found for &ldquo;{resultsFor}&rdquo;</>
-                ) : (
+                ) : politicianId ? (
                   <>No documents on record for this member</>
+                ) : (
+                  <>No comment periods are open right now</>
                 )}
               </p>
               <p className="text-ink-lo text-xs">

@@ -323,3 +323,19 @@ async def test_browse_applies_the_chamber_filter(indexed_db):
     body = json.loads((await _search(indexed_db, q=None, politician_id="P1", chamber="regulatory")).body)
 
     assert [r["id"] for r in body["results"]] == [rule.id]
+
+
+async def test_no_query_with_commentable_lists_open_comment_periods_closing_soonest(indexed_db, monkeypatch):
+    """The homepage's "Every open comment period" link: a list a reader can
+    pick a rule from. It needed a search term before, so the link opened an
+    empty page."""
+    monkeypatch.setattr(explore_search, "comment_period_today", lambda: "2026-10-12")
+    url = "https://www.regulations.gov/commenton/X-1"
+    later = _add(indexed_db, title="Later", date="2026-09-01", comment_url=url, comments_close_on="2026-11-30")
+    sooner = _add(indexed_db, title="Sooner", date="2026-08-01", comment_url=url, comments_close_on="2026-10-13")
+    _add(indexed_db, title="Closed", comment_url=url, comments_close_on="2026-10-01")
+    _add(indexed_db, title="No comment link", comments_close_on="2026-12-01")
+
+    body = json.loads((await _search(indexed_db, q=None, commentable=True)).body)
+
+    assert [r["id"] for r in body["results"]] == [sooner.id, later.id]

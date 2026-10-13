@@ -533,3 +533,76 @@ describe("bill page", () => {
     await screen.findByRole("link", { name: "Rob Delgado" });
   });
 });
+
+describe("bill page: finding one's own members", () => {
+  const person = (i: number) => ({
+    name: `Rep. Member${i}, Pat [D-OH-${i}]`,
+    party: "D",
+    state: "OH",
+    district: i,
+    bioguideId: `B${i}`,
+    isOriginalCosponsor: null,
+    sponsorshipDate: null,
+    page: null,
+  });
+
+  it("lists a few cosponsors and puts the rest behind one disclosure", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
+    const cosponsors = Array.from({ length: 12 }, (_, i) => person(i + 1));
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={{ ...record, cosponsors, unavailable: [] }}
+        detail={null}
+        stageName={null}
+      />
+    );
+    const more = screen.getByText("All 12 cosponsors");
+    expect(more.tagName).toBe("SUMMARY");
+    // The four past the first eight are inside the closed disclosure.
+    expect(more.closest("details")!.querySelectorAll("li")).toHaveLength(4);
+  });
+
+  it("names a House member in full with their district, in district order within a state", async () => {
+    const house = vote({ chamber: "house", number: 280, question: "On Passage" });
+    const member = (lastName: string, name: string, district: number) => ({
+      lastName,
+      firstName: "",
+      party: "R",
+      state: "PA",
+      position: "Yea",
+      bucket: "yea" as const,
+      page: `/politicians/${lastName.toLowerCase()}`,
+      name,
+      district,
+    });
+    const houseDetail: VoteDetail = {
+      ...house,
+      parties: [{ party: "R", yea: 2, nay: 0, present: 0, notVoting: 0 }],
+      members: [
+        member("Adams (PA)", "Jo Adams", 9),
+        member("Baker", "Lee Baker", 2),
+        { ...member("Cole", "Sam Cole", 4), state: "OH" },
+      ],
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => houseDetail }));
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={{
+          ...record,
+          votes: [{ ...record.votes[0], ...house, parties: houseDetail.parties }],
+        }}
+        detail={null}
+        stageName={null}
+      />
+    );
+    expect(await screen.findByRole("link", { name: "Jo Adams" })).toBeTruthy();
+    expect(screen.getByText("R-PA-9")).toBeTruthy();
+    await userEvent.selectOptions(screen.getByLabelText("State"), "PA");
+    const names = screen.getAllByRole("link", { name: /Adams|Baker/ }).map((a) => a.textContent);
+    expect(names).toEqual(["Lee Baker", "Jo Adams"]);
+  });
+});

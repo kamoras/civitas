@@ -1310,6 +1310,27 @@ def test_a_state_whose_november_needs_a_majority_says_so(db_session):
     assert _body(elections.state_ballot("CO", db_session))["generalRunoffs"] == []
 
 
+def test_an_all_party_primary_and_ranked_choice_are_said_before_election_day(db_session):
+    """California and Washington sent their top two to November whatever
+    their party, Alaska its top four; Alaska and Maine decide federal
+    generals by ranked choice. Each is served from its cited source, and a
+    state with a party primary and a plurality November says nothing."""
+    for race_id, st in (("2026-HOUSE-CA-4", "CA"), ("2026-HOUSE-AK-0", "AK"),
+                        ("2026-HOUSE-ME-1", "ME"), ("2026-SEN-CO", "CO")):
+        _race(db_session, race_id, st, office="H" if "HOUSE" in race_id else "S")
+    db_session.commit()
+
+    ca = _body(elections.state_ballot("CA", db_session))
+    ak = _body(elections.state_ballot("AK", db_session))
+    me = _body(elections.state_ballot("ME", db_session))
+    co = _body(elections.state_ballot("CO", db_session))
+    assert ca["topPrimary"] == [{"offices": "*", "advance": 2}]
+    assert ak["topPrimary"] == [{"offices": "*", "advance": 4}]
+    assert (ca["rankedChoice"], ak["rankedChoice"], me["rankedChoice"]) == (False, True, True)
+    assert co["topPrimary"] == [] and co["rankedChoice"] is False
+    assert me["topPrimary"] == []
+
+
 def test_contests_with_their_own_primary_date_are_named(db_session):
     """Alabama postponed four House districts' primaries to Aug 11; the
     header's one primary date (May 19) is not theirs."""

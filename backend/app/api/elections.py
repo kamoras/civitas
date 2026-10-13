@@ -196,7 +196,9 @@ def _election_rules(state: str, cycle: int, key: str) -> list[dict]:
     decided by a plurality (Georgia's majority rule; Louisiana's House
     contests held as an all-party open primary), with the runoff's date.
     "otherPrimaries" -- contests whose primary was not the state's one
-    primary date (Alabama's postponed House districts). [] when the file
+    primary date (Alabama's postponed House districts). "topPrimary" --
+    an all-party primary that sent its top two (four) to November whatever
+    their party (California, Washington; Alaska). [] when the file
     is missing: the page then says nothing rather than guessing."""
     global _election_rules_cache
     if _election_rules_cache is None:
@@ -1414,6 +1416,17 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # districts 1, 2, 6 and 7; Louisiana's House, whose primary IS
         # November 3), so the header doesn't give them the wrong one.
         "otherPrimaries": _election_rules(state, cycle, "otherPrimaries"),
+        # Where the primary was all-party (top-two, Alaska's top-four), so
+        # two candidates of one party in November is the rule, not an
+        # error the reader has to puzzle out.
+        "topPrimary": _election_rules(state, cycle, "topPrimary"),
+        # The state decides its federal generals by ranked-choice rounds
+        # (its law, cited as ranked_choice_general in
+        # state_candidate_sources.json: the same fact the results pages
+        # read through ranked_choice_states). Said before election day
+        # too, since it changes how the ballot is marked, not only how it
+        # is counted.
+        "rankedChoice": bool((source_for_state(state) or {}).get("ranked_choice_general")),
         "senateRaces": senate_races,
         # Only meaningful (and only computed) when this state's seat
         # genuinely ISN'T up this cycle — gated on the calendar

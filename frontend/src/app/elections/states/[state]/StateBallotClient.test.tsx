@@ -531,7 +531,11 @@ describe("U.S. Representative", () => {
     ).toHaveAttribute("href", "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do");
     const input = drawer.getByLabelText("Filter districts by county or district number");
     await userEvent.type(input, "zzz");
-    expect(drawer.getByText(/Try a county name or a district number/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(
+        /goes by county, not city or town: try your county’s name or a district number/
+      )
+    ).toBeInTheDocument();
     expect(drawer.queryByText(/surname/)).not.toBeInTheDocument();
     // Never an address field.
     expect(drawer.queryByLabelText(/address|zip/i)).not.toBeInTheDocument();
@@ -781,7 +785,7 @@ describe("statewide executive offices", () => {
     );
     const drawer = await openContest(/Statewide offices/);
     expect(
-      drawer.getByText(/No statewide executive offices are on OH's 2026-11-03 ballot/)
+      drawer.getByText(/No statewide executive offices are on OH's November 3, 2026 ballot/)
     ).toBeInTheDocument();
     expect(drawer.queryByText(/no federal campaign-finance filings/)).not.toBeInTheDocument();
   });
@@ -1246,6 +1250,50 @@ describe("ballot measures", () => {
     republishedBy: null,
     asOf: null,
   };
+
+  it("lists a long ballot's measures to jump to, landing focus on the chosen one", async () => {
+    const measures = [1, 2, 3, 4, 5].map((n) => ({
+      ...measure,
+      id: `OH-2026-11-03-${n}`,
+      number: String(n),
+      title: `Issue ${n}`,
+    }));
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures,
+          measureCoverage: {
+            status: "covered",
+            sourceName: "Ohio SoS",
+            checkedAt: null,
+            lastAttemptAt: null,
+          },
+        })}
+      />
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const nav = drawer.getByRole("navigation", { name: "Jump to a measure" });
+    await userEvent.click(within(nav).getByRole("button", { name: "4: Issue 4" }));
+    expect(drawer.getByRole("heading", { level: 3, name: "4" })).toHaveFocus();
+  });
+
+  it("offers no jump list for a short ballot", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "covered",
+            sourceName: "Ohio SoS",
+            checkedAt: null,
+            lastAttemptAt: null,
+          },
+        })}
+      />
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.queryByRole("navigation", { name: "Jump to a measure" })).toBeNull();
+  });
 
   it("says when the measures shown are from the last successful read after a failure", async () => {
     // The regression: with any measures on file the section showed them as
