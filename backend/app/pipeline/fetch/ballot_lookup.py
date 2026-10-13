@@ -183,6 +183,11 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
             # BROWSER_HEADERS: honest identity, complete request — the shape
             # several state WAFs require before they answer anyone (see
             # http_utils). A wall that still refuses is left refusing.
+            # `client` is make_async_client's, which completes a chain
+            # missing its intermediate the way a browser does (AIA) and
+            # fails every other certificate fault (app/http_client.py) —
+            # Alaska's polling-place page read as dead from 2026-10 for
+            # want of that alone.
             response = await client.get(
                 url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True,
                 headers=BROWSER_HEADERS,
