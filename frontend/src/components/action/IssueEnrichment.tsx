@@ -334,19 +334,29 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       label: url ? "Contact ↗" : "Scorecard →",
     });
   }
-  // No member to contact: point at the directory — except on a count issue
-  // (a seat changing party on election night), where there is no coverage
-  // to have named anyone and the useful action is the count itself.
-  if (members.length === 0 && followResultsActions(issue).length === 0) {
+  // The reader's own members, always — except on a count issue (a seat
+  // changing party on election night), where there is no coverage to have
+  // named anyone and the useful action is the count itself. A named
+  // member's office takes messages from its own constituents (a House
+  // contact form refuses an address outside the district), so when the
+  // only contact row was a member from another state, a reader anywhere
+  // else had nothing on the page they could complete.
+  if (followResultsActions(issue).length === 0) {
     rows.push({
       key: "directory",
       verb: "Contact",
-      what: "Find your senators and representative",
+      what:
+        members.length === 0
+          ? "Find your senators and representative"
+          : "Or contact your own senators and representative",
       // What the reader gets by following the link, not why there is no
       // named member: over a third of issues land here, and "No member was
       // named in the coverage" read as an apology in the one place the
       // page offers something to do.
-      detail: "Pick your state: each member's page has their phone number and contact form",
+      detail:
+        members.length === 0
+          ? "Pick your state: each member's page has their phone number and contact form"
+          : "Offices answer their own constituents. Pick your state for your members' phone numbers and contact forms",
       href: "/politicians",
       internal: true,
       label: "Directory →",

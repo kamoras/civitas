@@ -123,6 +123,21 @@ export interface BallotCandidate extends CandidateSummary {
    * unambiguous match to their scorecard was found — never populated as
    * a guess. */
   incumbentRecord: IncumbentRecord | null;
+  /** A sitting member of the OTHER chamber running here (a House member
+   * running for the Senate), tied by the bioguide crosswalk: their own
+   * record, but not this seat's, so never worded as incumbency. Null when
+   * incumbentRecord is set or nothing ties them. Optional for an older
+   * backend. */
+  memberRecord?: MemberRecord | null;
+}
+
+export interface MemberRecord {
+  id: string;
+  /** Weighted overall Representation Score, 0-100 (as IncumbentRecord). */
+  score: number;
+  chamber: "house" | "senate";
+  /** House: the district held, as the page names it ("TX-35"). */
+  seat: string | null;
 }
 
 /** One federal race with EVERY candidate — coverage is aggregated
@@ -427,6 +442,12 @@ export interface OfficialLookup {
    * each, rather than promising a state lookup it doesn't have. */
   isStateSpecific: boolean;
   verifiedAt: string | null;
+  /** The state's own URL, which its site's bot wall stops the link check
+   * from confirming: shown as the state's lookup, with a note and
+   * `fallback` (the national directory) beside it. Absent from an older
+   * API, read as false. */
+  unconfirmed?: boolean;
+  fallback?: { url: string; label: string; sourceName: string } | null;
 }
 
 /** Every federal race on one state's ballot this cycle, plus its
@@ -484,6 +505,15 @@ export interface StateBallot {
   /** Contests whose primary was not `primaryDate` (Alabama's postponed
    * House districts). Optional for an older backend. */
   otherPrimaries?: OtherPrimary[];
+  /** An all-party primary sent its top `advance` to November whatever
+   * their party (California and Washington two, Alaska four), so one
+   * party holding several places is the rule. Optional for an older
+   * backend. */
+  topPrimary?: TopPrimary[];
+  /** The state decides its U.S. Senate and House generals by
+   * ranked-choice rounds (Maine, Alaska), from the law its source entry
+   * cites. Optional for an older backend: absent reads as false. */
+  rankedChoice?: boolean;
   senateRaces: RaceWithCandidates[];
   /** Only set (and only meaningful) when senateRaces is empty — the
    * Senate's three-class rotation (U.S. Const. art. I §3) means most
@@ -808,6 +838,13 @@ export interface GeneralRunoff {
   openPrimary: boolean;
   /** ISO date of the runoff. */
   runoffDate: string;
+}
+
+export interface TopPrimary {
+  /** "S", "H", or "*" for every contest on the ballot. */
+  offices: ("S" | "H")[] | "*";
+  /** How many the all-party primary sent to November. */
+  advance: number;
 }
 
 /** Contests whose primary had its own date (backend election_rules.json). */

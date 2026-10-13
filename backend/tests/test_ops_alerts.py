@@ -53,7 +53,7 @@ class TestCheckPipelineOverrunAllFourPipelines:
         pytest.param(SupplementaryPipelineRun, 9, "Supplementary", id="supplementary_over_its_8h_budget"),
         # Confirmed live run took ~90min (2026-07-15) — 2h budget, not
         # House/Supplementary's 8h.
-        pytest.param(StockTradesPipelineRun, 3, "Stock trades", id="stock_over_its_tighter_2h_budget"),
+        pytest.param(StockTradesPipelineRun, 4, "Stock trades", id="stock_over_its_tighter_2h_budget"),
     ])
     def test_overrunning_its_budget_alerts(self, db_session, model, hours_ago, label):
         db_session.add(model(started_at=utcnow() - timedelta(hours=hours_ago), status=PipelineStatus.RUNNING))
@@ -73,7 +73,7 @@ class TestCheckPipelineOverrunAllFourPipelines:
 
     def test_multiple_overrunning_pipelines_each_alert_independently(self, db_session):
         db_session.add(PipelineRun(started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING))
-        db_session.add(StockTradesPipelineRun(started_at=utcnow() - timedelta(hours=3), status=PipelineStatus.RUNNING))
+        db_session.add(StockTradesPipelineRun(started_at=utcnow() - timedelta(hours=4), status=PipelineStatus.RUNNING))
         db_session.commit()
         mock_alert = _check(db_session)
         assert mock_alert.call_count == 2

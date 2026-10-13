@@ -274,6 +274,46 @@ describe("the ballot page", () => {
     render(<StateBallotClient ballot={ballot({ omits: ["County and municipal offices"] })} />);
     expect(screen.getAllByText("County and municipal offices").length).toBeGreaterThan(0);
   });
+
+  it("links a walled state's own lookup, says it can't be checked, and gives the backup", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          state: "AZ",
+          stateName: "Arizona",
+          officialLookup: {
+            url: "https://my.arizona.vote/PortalList.aspx",
+            label: "Arizona Voter Information Portal",
+            sourceName: "Arizona Secretary of State",
+            isStateSpecific: true,
+            verifiedAt: null,
+            unconfirmed: true,
+            fallback: {
+              url: "https://www.usa.gov/election-office",
+              label: "Find your state or local election office",
+              sourceName: "USAGov",
+            },
+          },
+        })}
+      />
+    );
+    const own = screen.getByRole("link", {
+      name: "Arizona Voter Information Portal (opens in new tab)",
+    });
+    expect(own).toHaveAttribute("href", "https://my.arizona.vote/PortalList.aspx");
+    expect(own).toHaveTextContent("ARIZONA'S OFFICIAL VOTER LOOKUP");
+    expect(screen.getByText(/This site blocks automated checks/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "Find your state or local election office (opens in new tab)",
+      })
+    ).toHaveAttribute("href", "https://www.usa.gov/election-office");
+  });
+
+  it("gives a verified lookup no caveat", () => {
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(screen.queryByText(/This site blocks automated checks/)).not.toBeInTheDocument();
+  });
 });
 
 describe("the contest drawer", () => {
@@ -305,6 +345,37 @@ describe("the contest drawer", () => {
     expect(
       within(screen.getByRole("dialog")).getByRole("heading", { name: "U.S. Senator" })
     ).toBeInTheDocument();
+  });
+
+  it("links a member of the other chamber running here, as what they are now", async () => {
+    const senate = houseRace({
+      id: "2026-SEN-OH",
+      office: "S",
+      district: null,
+      counties: null,
+      candidates: [
+        candidate({ id: "dem1", name: "Greg Lindqvist", party: "DEM" }),
+        candidate({
+          id: "rep1",
+          name: "Eric Conway",
+          party: "REP",
+          memberRecord: { id: "eric-conway", score: 61, chamber: "house", seat: "OH-2" },
+        }),
+      ],
+    });
+    render(<StateBallotClient ballot={ballot({ senateRaces: [senate] })} />);
+    const drawer = await openContest(/U\.S\. Senator/);
+    expect(
+      drawer.getByRole("link", { name: /house member, OH-2 · representation score 61/ })
+    ).toHaveAttribute("href", "/politicians/eric-conway");
+    await userEvent.click(drawer.getByRole("tab", { name: "Record" }));
+    expect(drawer.getByRole("link", { name: /House member, OH-2 · score 61/ })).toHaveAttribute(
+      "href",
+      "/politicians/eric-conway"
+    );
+    // Never worded as this seat's incumbent.
+    expect(drawer.queryByText(/INCUMBENT/)).toBeNull();
+    expect(drawer.getAllByText("not linked")).toHaveLength(1);
   });
 
   it("switches a race's research with the arrow keys", async () => {
@@ -548,7 +619,11 @@ describe("U.S. Representative", () => {
     ).toHaveAttribute("href", "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do");
     const input = drawer.getByLabelText("Filter districts by county or district number");
     await userEvent.type(input, "zzz");
-    expect(drawer.getByText(/Try a county name or a district number/)).toBeInTheDocument();
+    expect(
+      drawer.getByText(
+        /goes by county, not city or town: try your county’s name or a district number/
+      )
+    ).toBeInTheDocument();
     expect(drawer.queryByText(/surname/)).not.toBeInTheDocument();
     // Never an address field.
     expect(drawer.queryByLabelText(/address|zip/i)).not.toBeInTheDocument();
@@ -798,7 +873,7 @@ describe("statewide executive offices", () => {
     );
     const drawer = await openContest(/Statewide offices/);
     expect(
-      drawer.getByText(/No statewide executive offices are on OH's 2026-11-03 ballot/)
+      drawer.getByText(/No statewide executive offices are on OH's November 3, 2026 ballot/)
     ).toBeInTheDocument();
     expect(drawer.queryByText(/no federal campaign-finance filings/)).not.toBeInTheDocument();
   });
@@ -1263,6 +1338,50 @@ describe("ballot measures", () => {
     republishedBy: null,
     asOf: null,
   };
+
+  it("lists a long ballot's measures to jump to, landing focus on the chosen one", async () => {
+    const measures = [1, 2, 3, 4, 5].map((n) => ({
+      ...measure,
+      id: `OH-2026-11-03-${n}`,
+      number: String(n),
+      title: `Issue ${n}`,
+    }));
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures,
+          measureCoverage: {
+            status: "covered",
+            sourceName: "Ohio SoS",
+            checkedAt: null,
+            lastAttemptAt: null,
+          },
+        })}
+      />
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    const nav = drawer.getByRole("navigation", { name: "Jump to a measure" });
+    await userEvent.click(within(nav).getByRole("button", { name: "4: Issue 4" }));
+    expect(drawer.getByRole("heading", { level: 3, name: "4" })).toHaveFocus();
+  });
+
+  it("offers no jump list for a short ballot", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          measures: [measure],
+          measureCoverage: {
+            status: "covered",
+            sourceName: "Ohio SoS",
+            checkedAt: null,
+            lastAttemptAt: null,
+          },
+        })}
+      />
+    );
+    const drawer = await openContest(/Statewide ballot measures/);
+    expect(drawer.queryByRole("navigation", { name: "Jump to a measure" })).toBeNull();
+  });
 
   it("says when the measures shown are from the last successful read after a failure", async () => {
     // The regression: with any measures on file the section showed them as

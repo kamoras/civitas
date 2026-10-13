@@ -10,17 +10,27 @@ helpers).
 
 import re
 import string
+from datetime import date, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import ColumnElement, String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import RollCall
 from app.pipeline.analyze.party_line_record import load_record
 from app.pipeline.analyze.score_calculator import explain_scores, funding_share_base, party_line_tally
 from app.pipeline.transform.normalize_votes import stored_vote
 from app.services.bill_record import roll_call_summaries
 from app.services.score_findings import add_findings
+from app.time_utils import CONGRESS_TZ, utcnow
+
+# The votes list's date ranges (`period` on the votes endpoints).
+VOTE_PERIOD_PATTERN = "^(all|congress|month)$"
+# "month" is the last 30 days, not the calendar month: a calendar month is
+# empty for its first days, and for every day of a recess month, when a
+# reader asking what a member voted on lately still wants the answer.
+VOTE_PERIOD_MONTH_DAYS = 30
 
 
 
@@ -32,6 +42,20 @@ def pac_share_pct(entity: Any) -> float:
     each page dividing for itself."""
     base = funding_share_base({"totalContributions": entity.total_contributions, "totalRaised": entity.total_raised})
     return (entity.total_from_pacs or 0) / base * 100 if base > 0 else 0.0
+
+def vote_period_start(period: str) -> str | None:
+    """The first date (YYYY-MM-DD, the stored votes' format) a votes list
+    over `period` includes, or None for every vote: "month" the last
+    VOTE_PERIOD_MONTH_DAYS days, counted on the Capitol's calendar;
+    "congress" from January 3 of the Congress in office (the 20th
+    Amendment; settings.CURRENT_CONGRESS, the scored window's Congress)."""
+    if period == "month":
+        today = utcnow().replace(tzinfo=timezone.utc).astimezone(CONGRESS_TZ).date()
+        return (today - timedelta(days=VOTE_PERIOD_MONTH_DAYS)).isoformat()
+    if period == "congress":
+        return date(1789 + (settings.CURRENT_CONGRESS - 1) * 2, 1, 3).isoformat()
+    return None
+
 
 def vote_search(model: Any, q: str) -> ColumnElement[bool]:
     """The condition for a member's stored votes (KeyVote / RepKeyVote)

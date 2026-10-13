@@ -249,7 +249,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
               })}
             </ul>
           )}
-          <Link href="/explore" className={`font-mono text-xs ${LINK}`}>
+          <Link href="/explore?comment=open" className={`font-mono text-xs ${LINK}`}>
             Every open comment period &rarr;
           </Link>
         </div>

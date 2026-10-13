@@ -134,6 +134,7 @@ async def fetch_with_retry(
     retry_on_4xx: bool = True,
     no_retry_statuses: tuple[int, ...] = (),
     expected_statuses: tuple[int, ...] = (),
+    bot_challenge_ok: bool = False,
     timeout: float = DEFAULT_FETCH_TIMEOUT_S,
     log_label: str = "",
     request_url: str | None = None,
@@ -174,6 +175,11 @@ async def fetch_with_retry(
     published yet, while None there must keep meaning the fetch itself
     broke. Checked before `no_retry_statuses`, so a status in both wins
     here.
+
+    `bot_challenge_ok` returns a bot wall's challenge as-is (still never
+    retried) instead of None, for a caller that must tell "walled" from
+    "no answer" — robots.txt, where both mean "read nothing" but only one
+    is worth an alert (state_source_crawler._robots_for).
     """
     await rate_limiter.acquire()
     actual_url = request_url or url
@@ -201,6 +207,9 @@ async def fetch_with_retry(
                 continue
 
             if is_bot_challenge(resp):
+                if bot_challenge_ok:
+                    logger.info("%s: %s — bot challenge (HTTP %d)", label, url, resp.status_code)
+                    return resp
                 # Not retried: a retry is how a wall gets passed (AGENTS.md
                 # §7). The caller sees a failed fetch, as for any refusal.
                 logger.warning("%s: %s — bot challenge (HTTP %d), not retried", label, url, resp.status_code)
