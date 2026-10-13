@@ -1684,6 +1684,11 @@ the pending list).
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they
   are seeing. The component is at `src/components/checker/MetricTooltip.tsx`.
+- An About chapter's top-level parts are `Section`s, direct children of
+  `AboutPage`: that is how its "On this page" list finds them (four or
+  more), so a part wrapped in a fragment or another component drops out of
+  it. A new score gets a plain line in `/about/scores`' short version,
+  held to a Flesch-Kincaid grade of 8 or below.
 - A scored dimension leads with its `finding` (one template sentence from the
   breakdown API, `services/score_findings.py`, outside `pipeline/` so its
   wording never moves the analysis-code fingerprint); components, weights and
