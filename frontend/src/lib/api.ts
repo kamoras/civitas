@@ -8,7 +8,7 @@ import {
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
-import type { PoliticianCard } from "@/types/politicians";
+import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { LiveResults, PviMap, TownBallot, TownEntry } from "@/types/election";
 import type { SignalOverlap } from "@/types/scoreBreakdown";
@@ -2097,6 +2097,15 @@ export async function fetchPoliticianDirectory(params?: {
   const query = qs.toString() ? `?${qs.toString()}` : "";
   const url = `${API_BASE}/politicians${query}`;
   return asList(await cachedFetch(url, TTL.SHORT), url);
+}
+
+/** A state's House districts by county on the sitting Congress's lines —
+ *  how /politicians finds a reader's member from a county they know. */
+export async function fetchHouseDistrictsByCounty(state: string): Promise<HouseDistrictsByCounty> {
+  return cachedFetch(
+    `${API_BASE}/politicians/house-districts?state=${encodeURIComponent(state)}`,
+    TTL.SHORT
+  );
 }
 
 export interface FeedbackSubmission {

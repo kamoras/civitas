@@ -149,6 +149,14 @@ export default async function ElectionsChapter() {
           a previous holder.
         </P>
         <P>
+          To find who represents you today, use the Politicians directory instead: pick your state,
+          then type your county. It uses the districts as of the current Congress, the lines
+          today&apos;s members were elected on (the Census Bureau&apos;s 119th-Congress file), not
+          the 2026 lines. In the nine redrawn states the two give different answers, and each page
+          says which map it shows. When the new Congress is sworn in on January 3, the directory
+          moves to the 2026 lines on its own.
+        </P>
+        <P>
           State legislative districts are far smaller than a county, so each one lists the places it
           covers: the towns themselves in the states where towns are the local government (New
           England, New York, New Jersey, Pennsylvania, Michigan, Minnesota, Wisconsin), every city
