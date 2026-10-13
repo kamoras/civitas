@@ -87,7 +87,11 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   // index as two pages; an earlier Congress's bill keeps its ?congress=.
   const path = billCanonicalPath(billId, record?.congress ?? detail!.congress);
   if (detail) {
-    return pageMetadata({ ...describeBill(detail), path, type: "article" });
+    return pageMetadata({
+      ...describeBill(detail, record?.billLabel ?? detail.billId),
+      path,
+      type: "article",
+    });
   }
   return pageMetadata({
     title: record!.title

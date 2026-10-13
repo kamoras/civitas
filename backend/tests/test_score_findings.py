@@ -34,7 +34,12 @@ class TestAlignment:
     def test_never_broke(self):
         s = sf.alignment_finding(_alignment(0.0, 0.05, breaks=0), "senate")
         assert s == ("Never broke with the party on a party-line vote, though Democrats in states that lean "
-                     "the same way break on 5%.")
+                     "the same way break on 5.0%.")
+
+    def test_never_broke_norm_matches_the_detail_line(self):
+        # The detail line prints the norm to one decimal; the sentence must not round it away.
+        s = sf.alignment_finding(_alignment(0.0, 0.025, breaks=0), "senate")
+        assert s.endswith("break on 2.5%.")
 
     def test_too_few_votes(self):
         assert sf.alignment_finding(_alignment(None, None, breaks=None, votes=3), "house").startswith("Too few")

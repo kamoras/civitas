@@ -104,7 +104,6 @@ export default function PoliticianProfileClient({
             <span className="mx-2">/</span>
             <span className="text-ink-lo">{branchLabel(branch)}</span>
           </div>
-          {strip}
 
           {/* Left-office banner — wording is branch-specific, see officeStatus.ts */}
           {formerOffice && (
@@ -188,6 +187,12 @@ export default function PoliticianProfileClient({
               )}
             </div>
           )}
+
+          {/* After the scorecard, by the reasoning above: who this is comes
+              first. Above it, the strip took a quarter of a phone's first
+              screen and put the member's score below the fold for a reader
+              arriving from a search result. */}
+          {strip}
 
           {/* Active Issues */}
           {activeIssues.length > 0 && (
