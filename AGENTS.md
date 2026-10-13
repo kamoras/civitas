@@ -1106,6 +1106,15 @@ it markup for an image-led item), the LLM prompt, and the digest detector
 below. Block tags become `"; "` so item boundaries survive, and the
 500-character cap measures prose rather than tags.
 
+Each feed's publication times are kept for 60 days
+(`ops_alerts.check_source_freshness`), and a feed silent for a day past its
+longest gap in that window raises an ops alert. A day, not a multiple: on
+Roll Call's own 130-day record (weekends of 64-72 hours, holiday weekends
+82-88) twice the longest gap let a dead feed go a week unnoticed, the gap
+plus a day under five days, and neither raised a false alert. A feed with
+under a week of history has not shown a weekend yet, so the longest gap
+among feeds of its kind that have a week stands in.
+
 Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
 outlet's recurring briefing ("Up First", "Morning news brief", "The week in
 politics") is a single RSS item covering three to five unrelated stories, and

@@ -208,6 +208,18 @@ distinction between a quiet news cycle and new topics being dropped on the way i
 
 `GET /api/admin/action-metrics` returns the window with the three groups totalled.
 
+**A feed that goes quiet is the same silence one level up.** Every feed's
+publication times are kept for 60 days, and one that shows nothing new for a
+day past its longest gap in that window (never under the 48-hour article
+window) raises an ops alert, open until it publishes again
+(`ops_alerts.check_source_freshness`). The bar is measured, not guessed: on
+Roll Call's 130-day record its weekends run 64-72 hours and a holiday weekend
+82-88, so the gap plus a day waits out Labor Day and still notices a dead feed
+within five days, where twice the gap took more than a week. Until a feed's
+own history spans a week it has not shown a weekend, so the longest gap among
+feeds that have stands in — Roll Call, first checked on a Sunday, alerted on
+its first quiet weekend under the old rule.
+
 **Calibrated thresholds.** `cluster_title` (`action_thresholds.py`) is refitted
 daily from labelled pairs these rows carry (`thr_*` counters), labelled by
 signature overlap, plus one probe per run below the floor. `near_identical` and
