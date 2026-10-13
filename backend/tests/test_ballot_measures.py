@@ -596,7 +596,8 @@ async def test_alaskas_real_certificate_names_the_intermediate_that_signed_it():
 
     tls = Path(__file__).parent / "fixtures" / "tls"
     leaf = x509.load_der_x509_certificate((tls / "ak_leaf.der").read_bytes())
-    assert "alaska.gov" in leaf.subject.rfc4514_string()
+    common_name = leaf.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
+    assert [a.value for a in common_name] == ["elections.alaska.gov"]
     assert ca_issuers(leaf) == ["http://secure.globalsign.com/cacert/gsgccr46ovtlsca2025.crt"]
     assert load_issuer(leaf, (tls / "ak_issuer.der").read_bytes()) is not None
 
