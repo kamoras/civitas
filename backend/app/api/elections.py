@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json, retry_soon_json
 from app.database import get_db
+from app.district_places import places_on_lines_of
 from app.office_terms import term_years
 from app.state_ballot_scope import on_november_ballot
 from app.election_calendar import (
@@ -751,10 +752,11 @@ def _race_full(
     candidates = sorted(_confirmed_or_all(race.candidates, race.state, complete), key=lambda c: (c.cash_on_hand or 0.0), reverse=True)
     pvi, pvi_level = _pvi_for_race(race, state_pvi, district_pvi)
     stale_incumbent_ids = _stale_incumbent_ids(race.candidates)
-    counties = None
+    counties = places = None
     if race.office == "H":
         key = f"{race.state}-{race.district if race.district is not None else 0}"
         counties = _district_counties().get(key)
+        places = (places_on_lines_of(congress_for_election(race.cycle_year)) or {}).get(key)
     return {
         "id": race.id,
         "cycleYear": race.cycle_year,
@@ -765,6 +767,7 @@ def _race_full(
         "pvi": pvi,
         "pviLevel": pvi_level,
         "counties": counties,
+        "places": places,
         "candidateSource": _candidate_source(race.candidates, complete),
         "candidates": [
             _ballot_candidate(c, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids)

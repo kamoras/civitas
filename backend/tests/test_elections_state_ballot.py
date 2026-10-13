@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 from app.api import elections
 from app.api.politicians import get_politician
+from app.district_places import places_on_lines_of
 from app.models import (
     BallotMeasure,
     Candidate,
@@ -410,6 +411,24 @@ def test_house_race_with_no_crosswalk_entry_gets_null_counties(db_session):
 
     data = _body(elections.state_ballot("GA", db_session))
     assert data["houseRaces"][0]["counties"] is None
+
+
+def test_house_race_lists_the_places_in_its_district_on_the_election_lines(db_session):
+    """A reader types their city or town, not only their county: each House
+    race carries the places in its district on the lines it is elected on
+    (congressional_district_places.json, key "120" for 2026). A Senate
+    race and a district outside the file get null, never a guess."""
+    _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+    _race(db_session, "2026-HOUSE-GA-99", "GA", office="H", district=99)
+    _race(db_session, "2026-SEN-GA", "GA")
+    db_session.commit()
+
+    data = _body(elections.state_ballot("GA", db_session))
+    by_district = {r["district"]: r for r in data["houseRaces"]}
+    assert by_district[6]["places"] == places_on_lines_of(120)["GA-6"]
+    assert by_district[6]["places"]
+    assert by_district[99]["places"] is None
+    assert data["senateRaces"][0]["places"] is None
 
 
 class TestIncumbentRecordLink:
