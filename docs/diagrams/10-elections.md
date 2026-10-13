@@ -80,6 +80,14 @@ regular or special (`state_candidates._race_id_for`). Keyed to the regular id
 alone, Florida's and Ohio's 2026 specials matched nothing and showed every FEC
 filer. A state with both kinds keeps records on the regular race.
 
+The crawl reads each site's robots.txt first, by RFC 9309: redirects
+followed, a 4xx is no rules, a 5xx or no answer is read-nothing for an hour —
+except a 4xx that is a bot wall's challenge, which is a wall
+(`state_source_crawler.WALLED`) and never crawled past. The ops alert names a
+new wall or an unreachable file with its class; the walls already
+investigated sit in `state_candidate_sources.json`'s `_robots_walls`, with
+their evidence, and aren't repeated.
+
 ## Where "confirmed" comes from
 
 Every state has exactly one entry in `state_candidate_sources.json`. What
