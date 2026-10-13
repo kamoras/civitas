@@ -5,6 +5,7 @@ import type { FundingFacts, ScoreBreakdownDimension } from "@/types/scoreBreakdo
 import { useIndustries } from "@/hooks/useConfig";
 import { formatCurrency } from "@/lib/formatting";
 import { fecCommitteeSearchUrl } from "@/lib/sources";
+import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 import ComponentBars from "./ComponentBars";
 import ScoreColumn, { Block } from "./ScoreColumn";
 import { percent } from "./format";
@@ -79,12 +80,19 @@ export default function FundingColumn({
   score,
   weight,
   onMore,
+  donorVoteLinks = 0,
+  onDonorVotes,
 }: {
   funding: Senator["funding"];
   dimension: ScoreBreakdownDimension | undefined;
   score: number;
   weight?: number;
   onMore: () => void;
+  /** Stored donor-vote overlaps; with `onDonorVotes`, a link to them here,
+   *  beside the money, rather than only in the tiles at the foot of the
+   *  page (about seven screens down on a phone). */
+  donorVoteLinks?: number;
+  onDonorVotes?: () => void;
 }) {
   const industryInfo = useIndustries();
   const facts = dimension?.facts as FundingFacts | undefined;
@@ -177,6 +185,18 @@ export default function FundingColumn({
             ))}
           </ul>
         </Block>
+      )}
+
+      {onDonorVotes && donorVoteLinks > 0 && (
+        <button
+          type="button"
+          onClick={onDonorVotes}
+          {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+          className="min-h-[44px] self-start text-left text-sm text-ink underline underline-offset-2 hover:text-phos"
+        >
+          See how this money lines up with votes ({donorVoteLinks} link
+          {donorVoteLinks !== 1 ? "s" : ""}) &rarr;
+        </button>
       )}
     </ScoreColumn>
   );
