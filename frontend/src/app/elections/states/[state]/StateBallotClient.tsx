@@ -1324,7 +1324,7 @@ function ContestOverview({
             onClick={() => onOpen("house", null)}
             className="mt-2 min-h-[44px] font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
           >
-            DON&apos;T KNOW YOUR DISTRICT? MAP OR COUNTY →
+            DON&apos;T KNOW YOUR DISTRICT? MAP, TOWN OR COUNTY →
           </button>
         </div>,
         false
