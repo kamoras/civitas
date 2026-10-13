@@ -1,8 +1,8 @@
 {
   "_source": "Each state's (and D.C.'s) own election authority: the voter lookup it publishes on its own domain, or a vendor portal it links as its official tool. Never a third-party aggregator. National fallback: USAGov's state election office directory (https://www.usa.gov/election-office).",
-  "_method": "Per state, the page where a voter sees their sample ballot or polling place: the state's personal lookup when an automated check can reach it, else the authority's own polling-place page that links it. Each was opened through the pipeline's HTTP client with BROWSER_HEADERS (what refresh_link_verification sends) from the development workstation and from production, and `_checked` records what was found. A state whose lookup sits behind a bot wall keeps its official URL, marked UNVERIFIABLE, and is never worked around (AGENTS.md section 7): the link check cannot confirm it, so its page shows the national directory until the wall stops refusing the check.",
-  "_as_of": "2026-10-08",
-  "_note": "A dead link on 'here is how to see your real ballot', during election week, from a link Civitas vouched for, is the worst failure this feature has. So per-state URLs are gated: an entry is rendered only once `verified_at` is set by the liveness check (app/pipeline/fetch/ballot_lookup.py), which this file never sets. The check reads its candidate URLs from this file every run, so an edit here reaches the site on the next election run. Unverified or missing entries fall back to the national directory, which is stable and maintained by USAGov.",
+  "_method": "Per state, the page where a voter sees their sample ballot or polling place: the state's personal lookup when an automated check can reach it, else the authority's own polling-place page that links it. Each was opened through the pipeline's HTTP client with BROWSER_HEADERS (what refresh_link_verification sends) from the development workstation and from production, and `_checked` records what was found. A state whose lookup sits behind a bot wall keeps its official URL, marked UNVERIFIABLE, and is never worked around (AGENTS.md section 7): the link check cannot confirm it, so (since 2026-10-13) its page shows that URL as the state's own lookup, says the site blocks automated checks so Civitas can't confirm it is up, and gives the national directory as the backup. A URL that answers 404, or redirects to its site's homepage, still falls back to the national directory alone.",
+  "_as_of": "2026-10-13",
+  "_note": "A dead link on 'here is how to see your real ballot', during election week, from a link Civitas vouched for, is the worst failure this feature has. So per-state URLs are gated: an entry is rendered only once the liveness check (app/pipeline/fetch/ballot_lookup.py) sets `verified_at` (the page answered) or `blocked_at` (a bot wall refused the check; shown as unconfirmed, with the national directory beside it). This file never sets either. The check reads its candidate URLs from this file every run, so an edit here reaches the site on the next election run. Unverified or missing entries fall back to the national directory, which is stable and maintained by USAGov.",
   "national_fallback": {
     "url": "https://www.usa.gov/election-office",
     "label": "Find your state or local election office",
@@ -28,7 +28,7 @@
       "label": "Arizona Voter Information Portal",
       "source_name": "Arizona Secretary of State",
       "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the link check cannot confirm it, so the page shows the national directory"
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the link check cannot confirm it, so the page shows it as unconfirmed, with the national directory as the backup"
     },
     "AR": {
       "url": "https://www.voterview.ar-nova.org/voterview",
@@ -84,7 +84,7 @@
       "label": "Georgia My Voter Page",
       "source_name": "Georgia Secretary of State",
       "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation, 2026-10-13; production's link check has not verified it either (the live page showed the national directory on 2026-10-13). Earlier checks (2026-10-08) had resolved it. Official URL kept"
     },
     "HI": {
       "url": "https://elections.hawaii.gov/voter-service-centers-and-places-of-deposit/",
@@ -119,7 +119,7 @@
       "label": "Iowa: find my polling place",
       "source_name": "Iowa Secretary of State",
       "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08 (one of several requests to the same host was answered). Official URL, linked from the Secretary of State's voter page; the page shows the national directory while the check cannot confirm it"
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08 (one of several requests to the same host was answered). Official URL, linked from the Secretary of State's voter page; the page shows it as unconfirmed, with the national directory as the backup"
     },
     "KS": {
       "url": "https://myvoteinfo.voteks.org/voterview",
@@ -161,14 +161,14 @@
       "label": "Where do I vote? (Massachusetts)",
       "source_name": "Secretary of the Commonwealth of Massachusetts",
       "verified_at": null,
-      "_checked": "UNVERIFIABLE: Imperva challenge page (200 with challenge script) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows the national directory while the check cannot confirm it"
+      "_checked": "UNVERIFIABLE: Imperva challenge page (200 with challenge script) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
     },
     "MI": {
       "url": "https://mvic.sos.state.mi.us/",
       "label": "Michigan Voter Information Center",
       "source_name": "Michigan Secretary of State",
       "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows the national directory while the check cannot confirm it"
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
     },
     "MN": {
       "url": "https://myballotmn.sos.mn.gov/",
@@ -210,14 +210,14 @@
       "label": "Nevada voter search",
       "source_name": "Nevada Secretary of State",
       "verified_at": null,
-      "_checked": "UNVERIFIABLE: Imperva challenge page (200 with challenge script) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows the national directory while the check cannot confirm it"
+      "_checked": "UNVERIFIABLE: Imperva challenge page (200 with challenge script) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
     },
     "NH": {
       "url": "https://app.sos.nh.gov/viphome",
       "label": "New Hampshire voter information lookup",
       "source_name": "New Hampshire Secretary of State",
       "verified_at": null,
-      "_checked": "UNVERIFIABLE: Akamai Access Denied (403) to the pipeline's client from the workstation and from production, 2026-10-08, on sos.nh.gov too (a plain curl from production was answered 'Voter Information Lookup'). Official URL kept; the page shows the national directory while the check cannot confirm it"
+      "_checked": "UNVERIFIABLE: Akamai Access Denied (403) to the pipeline's client from the workstation and from production, 2026-10-08, on sos.nh.gov too (a plain curl from production was answered 'Voter Information Lookup'). Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
     },
     "NJ": {
       "url": "https://www.nj.gov/state/elections/vote-polling-location.shtml",
@@ -238,7 +238,7 @@
       "label": "New York voter lookup",
       "source_name": "New York State Board of Elections",
       "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08, on elections.ny.gov too. Official URL kept; the page shows the national directory while the check cannot confirm it"
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08, on elections.ny.gov too. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
     },
     "NC": {
       "url": "https://vt.ncsbe.gov/RegLkup/",
@@ -259,7 +259,7 @@
       "label": "Ohio voter lookup",
       "source_name": "Ohio Secretary of State",
       "verified_at": null,
-      "_checked": "UNVERIFIABLE: challenge page (403) to the pipeline's client from the workstation and from production, 2026-10-08, on ohiosos.gov and voteohio.gov too. Official URL kept; the page shows the national directory while the check cannot confirm it"
+      "_checked": "UNVERIFIABLE: challenge page (403) to the pipeline's client from the workstation and from production, 2026-10-08, on ohiosos.gov and voteohio.gov too. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
     },
     "OK": {
       "url": "https://okvoterportal.okelections.gov/",
@@ -287,7 +287,7 @@
       "label": "Rhode Island Voter Information Center",
       "source_name": "Rhode Island Secretary of State",
       "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows the national directory while the check cannot confirm it"
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
     },
     "SC": {
       "url": "https://vrems.scvotes.sc.gov/Voter/Login?PageMode=Sampleballot",

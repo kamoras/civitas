@@ -167,8 +167,9 @@ export default function DataChapter() {
               a visitor&apos;s.
             </Fact>
             <Fact label="State election offices · USAGov">
-              Each state&apos;s own voter lookup, linked only after a nightly check that it still
-              opens; otherwise USAGov&apos;s directory of election offices.
+              Each state&apos;s own voter lookup, linked after a nightly check that it still opens,
+              or, where the state&apos;s site turns the check away, linked as unconfirmed beside
+              USAGov&apos;s directory of election offices; otherwise USAGov&apos;s directory alone.
             </Fact>
             <Fact label="News & trends">
               RSS feeds from six newsrooms, Google Trends and Bluesky, for the Action Center.

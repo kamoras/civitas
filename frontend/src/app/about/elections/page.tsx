@@ -114,8 +114,12 @@ export default async function ElectionsChapter() {
           That link goes to the state&apos;s own voter lookup, where you can see your sample ballot
           or polling place on the state&apos;s site (or its polling-place page, where the lookup
           itself refuses automated checks). Each night Civitas checks that the link still opens that
-          page; when it doesn&apos;t, or when a state&apos;s site turns away the check, the page
-          links USAGov&apos;s directory of election offices instead.
+          page; when it doesn&apos;t (the page is gone, or moved to the site&apos;s homepage), the
+          page links USAGov&apos;s directory of election offices instead. Some states&apos; sites
+          turn away every automated check, though they open for a person. Civitas never gets past
+          that block, so it can&apos;t confirm those links are up: their pages still link the
+          state&apos;s own lookup, say it couldn&apos;t be checked, and give USAGov&apos;s directory
+          as the backup.
         </P>
       </Section>
 

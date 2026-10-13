@@ -226,6 +226,46 @@ describe("the ballot page", () => {
     render(<StateBallotClient ballot={ballot({ omits: ["County and municipal offices"] })} />);
     expect(screen.getAllByText("County and municipal offices").length).toBeGreaterThan(0);
   });
+
+  it("links a walled state's own lookup, says it can't be checked, and gives the backup", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          state: "AZ",
+          stateName: "Arizona",
+          officialLookup: {
+            url: "https://my.arizona.vote/PortalList.aspx",
+            label: "Arizona Voter Information Portal",
+            sourceName: "Arizona Secretary of State",
+            isStateSpecific: true,
+            verifiedAt: null,
+            unconfirmed: true,
+            fallback: {
+              url: "https://www.usa.gov/election-office",
+              label: "Find your state or local election office",
+              sourceName: "USAGov",
+            },
+          },
+        })}
+      />
+    );
+    const own = screen.getByRole("link", {
+      name: "Arizona Voter Information Portal (opens in new tab)",
+    });
+    expect(own).toHaveAttribute("href", "https://my.arizona.vote/PortalList.aspx");
+    expect(own).toHaveTextContent("ARIZONA'S OFFICIAL VOTER LOOKUP");
+    expect(screen.getByText(/This site blocks automated checks/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "Find your state or local election office (opens in new tab)",
+      })
+    ).toHaveAttribute("href", "https://www.usa.gov/election-office");
+  });
+
+  it("gives a verified lookup no caveat", () => {
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(screen.queryByText(/This site blocks automated checks/)).not.toBeInTheDocument();
+  });
 });
 
 describe("the contest drawer", () => {
