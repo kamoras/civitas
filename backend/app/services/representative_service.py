@@ -31,7 +31,13 @@ from app.schemas import (
     StockTradeSchema,
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
 )
-from app.services._scorecard_common import pac_share_pct, party_line_counts, score_breakdown, vote_search
+from app.services._scorecard_common import (
+    pac_share_pct,
+    party_line_counts,
+    score_breakdown,
+    vote_period_start,
+    vote_search,
+)
 from app.services.constituent_survey import constituent_approval
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
@@ -68,6 +74,28 @@ def _build_areas(raw_str: str | None) -> list[dict]:
         {"area": a.get("area", ""), "confidence": a.get("confidence", 0.0), "party": a.get("party", "bipartisan")}
         for a in raw if isinstance(a, dict) and a.get("area")
     ]
+
+
+def readable_vote_bills(db: Session | None, ids: list[str], key_votes: list) -> list[str]:
+    """A lobbying match's related bills as a reader can use them. A recent
+    House roll call is stored under a synthetic id ("HouseRC-2026-314",
+    normalize_votes.house_roll_call_id), which the donor-vote panel printed
+    as is: replaced by the roll call's own bill ("H.R. 5823", which links to
+    the bill's page), else the vote's title. Other ids pass through."""
+    synthetic = [b for b in ids if b.startswith("HouseRC-")]
+    if not synthetic:
+        return ids
+    vote_by_id = {v.bill_id: v for v in key_votes if v.bill_id in synthetic}
+    summaries = roll_call_summaries(db, [v.roll_call for v in vote_by_id.values()]) if db else {}
+    out: list[str] = []
+    for b in ids:
+        vote = vote_by_id.get(b)
+        if b.startswith("HouseRC-"):
+            rc = summaries.get(vote.roll_call) if vote else None
+            b = (rc and rc.get("billLabel")) or (vote.bill_name if vote else None)
+        if b and b not in out:
+            out.append(b)
+    return out
 
 
 def build_rep_response(rep: Representative, _db: Session = None) -> RepresentativeSchema:
@@ -155,7 +183,9 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
                 "industry": lm.industry,
                 "lobbyingSpend": lm.lobbying_spend,
                 "donationToSenator": lm.donation_to_representative,  # key shared with senator schema
-                "billsInfluenced": json.loads(lm.bills_influenced) if lm.bills_influenced else [],
+                "billsInfluenced": readable_vote_bills(
+                    _db, json.loads(lm.bills_influenced) if lm.bills_influenced else [], key_votes,
+                ),
                 "senatorVoteAligned": lm.representative_vote_aligned,  # key shared with senator schema
                 "description": lm.description,
                 "lobbiedBills": json.loads(lm.lobbied_bills) if lm.lobbied_bills else [],
@@ -638,6 +668,7 @@ def get_rep_votes(
     per_page: int = 15,
     vote_filter: str = "all",
     q: str | None = None,
+    period: str = "all",
 ) -> dict | None:
     """Return paginated, filterable votes for a representative."""
     rep = db.query(Representative).filter(Representative.id == rep_id).first()
@@ -650,6 +681,10 @@ def get_rep_votes(
     # A reader's search narrows the list and its counts alike.
     if q and q.strip():
         base_q = base_q.filter(vote_search(RepKeyVote, q))
+    # So does a date range; dates are stored YYYY-MM-DD, so they compare as strings.
+    since = vote_period_start(period)
+    if since is not None:
+        base_q = base_q.filter(RepKeyVote.date >= since)
 
     count_all = base_q.count()
     count_yea = base_q.filter(RepKeyVote.vote == "Yea").count()

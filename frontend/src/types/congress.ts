@@ -183,6 +183,11 @@ export interface VoteMember {
   position: string;
   bucket: "yea" | "nay" | "present" | "notVoting";
   page: string | null;
+  /** The member's own name, where the site has a page for them (a House
+   * roll call prints only the Clerk's surname form); null otherwise. */
+  name?: string | null;
+  /** House only: the member's district (0 at-large); null in the Senate. */
+  district?: number | null;
 }
 
 export interface VoteDetail extends RollCallSummary {

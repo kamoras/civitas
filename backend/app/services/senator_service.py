@@ -17,7 +17,13 @@ from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
     party_ideology_bounds,
 )
-from app.services._scorecard_common import pac_share_pct, party_line_counts, score_breakdown, vote_search
+from app.services._scorecard_common import (
+    pac_share_pct,
+    party_line_counts,
+    score_breakdown,
+    vote_period_start,
+    vote_search,
+)
 from app.services.constituent_survey import constituent_approval
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
@@ -499,6 +505,7 @@ def get_senator_votes(
     per_page: int = 15,
     vote_filter: str = "all",
     q: str | None = None,
+    period: str = "all",
 ) -> PaginatedVotesSchema | None:
     """Return paginated, filterable votes for a senator."""
     senator = db.query(Senator).filter(Senator.id == senator_id).first()
@@ -511,6 +518,10 @@ def get_senator_votes(
     # A reader's search narrows the list and its counts alike.
     if q and q.strip():
         base_q = base_q.filter(vote_search(KeyVote, q))
+    # So does a date range; dates are stored YYYY-MM-DD, so they compare as strings.
+    since = vote_period_start(period)
+    if since is not None:
+        base_q = base_q.filter(KeyVote.date >= since)
 
     count_all = base_q.count()
     count_yea = base_q.filter(KeyVote.vote == "Yea").count()

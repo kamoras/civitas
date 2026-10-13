@@ -190,6 +190,7 @@ describe("VotingRecord", () => {
       perPage: 15,
       filter: "all",
       q: "hr 7",
+      period: "all",
     });
     expect(fetchSenatorVotes).toHaveBeenCalledTimes(2);
 
@@ -202,6 +203,44 @@ describe("VotingRecord", () => {
     );
     await userEvent.type(screen.getByLabelText("SEARCH THESE VOTES"), "zzz");
     expect(await screen.findByText(/No vote on record matches this search/)).toBeInTheDocument();
+  });
+
+  it("narrows to a date range the server works out, with its own empty message", async () => {
+    fetchSenatorVotes.mockResolvedValueOnce(votes("all", "First bill"));
+    await openList();
+
+    fetchSenatorVotes.mockResolvedValueOnce(
+      votes("all", "Last week's bill", {
+        total: 3,
+        totalPages: 1,
+        counts: { all: 3, yea: 3, nay: 0, againstParty: 0 },
+      })
+    );
+    await userEvent.click(screen.getByRole("button", { name: "LAST 30 DAYS" }));
+    expect(await screen.findByText("Last week's bill")).toBeInTheDocument();
+    expect(screen.getByText("3 votes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "LAST 30 DAYS" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(fetchSenatorVotes).toHaveBeenLastCalledWith("S1", {
+      category: "all",
+      page: 1,
+      perPage: 15,
+      filter: "all",
+      q: "",
+      period: "month",
+    });
+
+    fetchSenatorVotes.mockResolvedValueOnce(
+      votes("all", "unused", {
+        votes: [],
+        total: 0,
+        counts: { all: 0, yea: 0, nay: 0, againstParty: 0 },
+      })
+    );
+    await userEvent.click(screen.getByRole("button", { name: "THIS CONGRESS" }));
+    expect(await screen.findByText("No recorded vote in this Congress yet.")).toBeInTheDocument();
   });
 
   it("links a vote stored before its roll call was recorded to the site's bill page", async () => {

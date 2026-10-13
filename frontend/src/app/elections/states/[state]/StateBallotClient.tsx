@@ -9,7 +9,11 @@ import CoverageFeed from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard, { measureAnchor } from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
-import GeneralRunoffNotice, { otherPrimaryLabel } from "@/components/elections/GeneralRunoffNotice";
+import GeneralRunoffNotice, {
+  otherPrimaryLabel,
+  RankedChoiceNotice,
+  TopPrimaryNotice,
+} from "@/components/elections/GeneralRunoffNotice";
 import DistrictFinder from "@/components/elections/DistrictFinder";
 import DistrictMap from "@/components/elections/DistrictMap";
 import TownContestCard from "@/components/elections/TownContestCard";
@@ -51,6 +55,7 @@ import {
   termPhrase,
   tierCandidates,
 } from "@/lib/elections";
+import { calendarDate, longDate } from "@/lib/congress";
 import { safeHref } from "@/lib/formatting";
 import { absoluteUrl, stateFeed } from "@/lib/site";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
@@ -108,11 +113,11 @@ function NomineeName({ nominee }: { nominee: StatewideNominee }) {
  * townships, so rendering them all would bury the row — but a reader in
  * the 290th still has to find their seat by typing its name.
  */
-function StateLegSeatRow({ seat }: { seat: StateLegDistrict }) {
+function StateLegSeatRow({ seat, filter }: { seat: StateLegDistrict; filter: string }) {
   // Suffixes kept: a district lists its counties after its places, and
   // "Forsyth County" must not render as "Forsyth" beside Georgia's
-  // actual Forsyth city.
-  const townsLabel = districtAreaLabel(seat.towns, 3, false);
+  // actual Forsyth city. The places the filter matched lead.
+  const townsLabel = districtAreaLabel(seat.towns, 3, false, filter);
   return (
     <div className="grid grid-cols-[42px_1fr] items-baseline gap-3 border border-white/[0.09] bg-surface px-3 py-2">
       <span className="border border-white/15 py-0.5 text-center font-mono text-xs text-ink-hi">
@@ -177,7 +182,7 @@ function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
       )}
       <div className="space-y-1">
         {shown.map((d) => (
-          <StateLegSeatRow key={d.district} seat={d} />
+          <StateLegSeatRow key={d.district} seat={d} filter={filter} />
         ))}
         {shown.length === 0 && (
           <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
@@ -221,7 +226,7 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
     return (
       <div>
         <p className="text-sm text-ink">
-          No judicial contests are on {state}&apos;s {ballot.electionDate} ballot.
+          No judicial contests are on {state}&apos;s {calendarDate(ballot.electionDate)} ballot.
         </p>
         <p className="mt-2 text-[10px] text-ink-min">
           Judges here are elected at the primary: a candidate who takes a majority wins the seat
@@ -380,9 +385,9 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
               {seatWord ? `${seatWord} ${s.seat}` : s.seat}
             </span>
             <span className="min-w-0">
-              {districtAreaLabel(s.areas ?? [], 3, false) && (
+              {districtAreaLabel(s.areas ?? [], 3, false, filter) && (
                 <span className="block truncate text-[11px] text-ink-min">
-                  {districtAreaLabel(s.areas ?? [], 3, false)}
+                  {districtAreaLabel(s.areas ?? [], 3, false, filter)}
                 </span>
               )}
               <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
@@ -424,7 +429,8 @@ function StatewideExecutiveDetail({
     <div>
       {statewideRaces.length === 0 ? (
         <p className="text-sm text-ink">
-          No statewide executive offices are on {state}&apos;s {ballot.electionDate} ballot.
+          No statewide executive offices are on {state}&apos;s {calendarDate(ballot.electionDate)}{" "}
+          ballot.
         </p>
       ) : (
         <div className="space-y-1.5">
@@ -519,6 +525,14 @@ const OPERATOR_NONE_TEXT = (state: string) =>
 /** The shareable measures box's short form of OPERATOR_NONE_TEXT. */
 const OPERATOR_NONE_SHORT =
   "None remain as far as Civitas can tell: our determination, not a list from the state.";
+
+/** Scroll a measure's card into view and move focus to its heading, so a
+ * keyboard or screen-reader user lands where a sighted reader does. */
+function jumpToMeasure(id: string) {
+  const card = document.getElementById(measureAnchor(id));
+  card?.scrollIntoView?.({ block: "start" });
+  card?.querySelector<HTMLElement>("h3")?.focus();
+}
 
 function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHref: string }) {
   const { measures, measureCoverage, state } = ballot;
@@ -621,6 +635,29 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
             </p>
           </div>
         )}
+        {/* California's fourteen measures run to eleven screens of
+            verbatim text; a reader looking for one was scrolling through
+            the other thirteen to reach it. */}
+        {measures.length > 3 && (
+          <nav aria-label="Jump to a measure" className="border border-white/[0.09] p-3">
+            <p className="mb-2 font-mono text-xs tracking-[0.1em] text-ink-lo">JUMP TO A MEASURE</p>
+            <ul className="flex flex-wrap gap-1.5">
+              {measures.map((m) => (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => jumpToMeasure(m.id)}
+                    aria-label={[m.number, m.title].filter(Boolean).join(": ")}
+                    title={m.title}
+                    className="min-h-[44px] min-w-[44px] max-w-[16rem] truncate border border-white/25 px-2 font-mono text-sm text-ink-hi hover:border-phos hover:text-phos"
+                  >
+                    {m.number || m.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
         {measures.map((m) => (
           <BallotMeasureCard key={m.id} measure={m} />
         ))}
@@ -658,7 +695,8 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
     return (
       <div className="border border-white/15 p-4">
         <p className="text-sm text-ink">
-          No statewide ballot measures are on {state}&apos;s {ballot.electionDate} ballot.
+          No statewide ballot measures are on {state}&apos;s {calendarDate(ballot.electionDate)}{" "}
+          ballot.
         </p>
         <p className="text-[10px] text-ink-min mt-2">
           Per {measureCoverage.sourceName || "our source"}
@@ -813,9 +851,9 @@ function TownDetail({
                 <p className="text-xs text-signal-amber">
                   These local races are from {selected}&apos;s{" "}
                   {ballot.electionName || "most recently published ballot"}
-                  {ballot.electionDate ? ` (${ballot.electionDate})` : ""}, <strong>not</strong> the{" "}
-                  {pageElectionDate} general election. {selected} has not yet published a ballot for
-                  that election.
+                  {ballot.electionDate ? ` (${calendarDate(ballot.electionDate)})` : ""},{" "}
+                  <strong>not</strong> the {calendarDate(pageElectionDate)} general election.{" "}
+                  {selected} has not yet published a ballot for that election.
                 </p>
               </div>
             )}
@@ -894,11 +932,14 @@ function HouseDistrictOption({
   onPick,
   newLines,
   resultsMode,
+  filter,
 }: {
   race: RaceWithCandidates;
   onPick: () => void;
   newLines: boolean;
   resultsMode: boolean;
+  /** What the reader typed: the counties it matched lead the label. */
+  filter: string;
 }) {
   const { leaders } = tierCandidates(race.candidates.filter(isActiveCandidate));
   const redrawn = isRedrawnSeat(race, newLines);
@@ -908,7 +949,7 @@ function HouseDistrictOption({
       : " (I)";
   const dem = leaders.find((c) => majorPartyOf(c) === "DEM");
   const rep = leaders.find((c) => majorPartyOf(c) === "REP");
-  const countiesLabel = districtAreaLabel(race.counties);
+  const countiesLabel = districtAreaLabel(race.counties, 3, true, filter);
 
   return (
     <button
@@ -1158,8 +1199,11 @@ function HouseDetail({
             className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
           />
           <p className="mt-1.5 text-[10px] text-ink-min">
-            Filtered here in your browser: nothing is sent anywhere, and Civitas never asks for your
-            address.
+            {/* Named, because /politicians finds today's member on the
+                sitting Congress's lines, a different map in a state that
+                redrew. */}
+            {ballot.cycleYear} election districts. Filtered here in your browser: nothing is sent
+            anywhere, and Civitas never asks for your address.
           </p>
           {/* Typing silently rewrites the list below, which a sighted
               reader sees and a screen-reader user otherwise would not. */}
@@ -1177,14 +1221,18 @@ function HouseDetail({
           onPick={() => onPick(r.id)}
           newLines={newLines}
           resultsMode={resultsMode}
+          filter={filter}
         />
       ))}
       {shown.length === 0 && (
         <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
           No district matches “{filter}”.{" "}
+          {/* Cities and towns are not on this list (a city can span several
+              districts), and a reader who typed one should be told so
+              rather than left to guess why their home matched nothing. */}
           {newLines
-            ? "Try a county name or a district number, or pick a county above."
-            : "Try a county name, a candidate’s surname, or a district number, or pick a county above."}
+            ? "This list goes by county, not city or town: try your county’s name or a district number, or pick a county above."
+            : "This list goes by county, not city or town: try your county’s name, a candidate’s surname, or a district number, or pick a county above."}
         </p>
       )}
     </div>
@@ -1269,7 +1317,17 @@ function ContestOverview({
       }
       return box(
         <div className="px-4 py-3">
-          <p className="mb-2 text-[13px] text-ink-lo">Pick a district to research its race:</p>
+          {/* First, not after the numbers: most voters don't know their
+              district number, and after a 38-button grid this was the
+              56th Tab stop on a big state's page. */}
+          <button
+            type="button"
+            onClick={() => onOpen("house", null)}
+            className="mb-2 min-h-[44px] font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+          >
+            DON&apos;T KNOW YOUR DISTRICT? MAP OR COUNTY →
+          </button>
+          <p className="mb-2 text-[13px] text-ink-lo">Or pick its number to research the race:</p>
           <div className="grid grid-cols-7 gap-1.5">
             {ballot.houseRaces.map((r) => (
               <button
@@ -1283,13 +1341,6 @@ function ContestOverview({
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => onOpen("house", null)}
-            className="mt-2 min-h-[44px] font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
-          >
-            DON&apos;T KNOW YOUR DISTRICT? MAP OR COUNTY →
-          </button>
         </div>,
         false
       );
@@ -1689,7 +1740,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const federalRaces = [...ballot.senateRaces, ...ballot.houseRaces];
   const federalCandidates = federalRaces.flatMap((r) => r.candidates.filter(isActiveCandidate));
   const thirdParty = federalCandidates.filter((c) => majorPartyOf(c) === null).length;
-  const withRecords = federalCandidates.filter((c) => c.incumbentRecord).length;
+  const withRecords = federalCandidates.filter((c) => c.incumbentRecord || c.memberRecord).length;
   const contestCount = countBallotContests(contests, ballot);
 
   function detailFor(contest: BallotContest) {
@@ -1748,7 +1799,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // the page itself: a precinct's ballot has more on it (ballot.omits).
   const shareSubject = {
     title: `${stateName} statewide ballot`,
-    subtitle: `${ballot.cycleYear} general election · ${ballot.electionDate}`,
+    subtitle: `${ballot.cycleYear} general election · ${calendarDate(ballot.electionDate)}`,
     url: absoluteUrl(stateBallotHref(ballot.state)),
   };
 
@@ -1769,7 +1820,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               <div className="min-w-0">
                 <p className="font-mono text-xs tracking-[0.14em] text-phos">
                   {resultsFraming ? "RESULTS" : "BALLOT RESEARCH"} · {stateName.toUpperCase()} ·{" "}
-                  <span className="whitespace-nowrap">{ballot.electionDate.toUpperCase()}</span>
+                  <span className="whitespace-nowrap">
+                    {longDate(ballot.electionDate).toUpperCase()}
+                  </span>
                 </p>
                 <h1 className="mt-1 font-display text-2xl font-extrabold text-ink-hi sm:text-[28px]">
                   {resultsFraming ? (
@@ -1796,11 +1849,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 </p>
                 {ballot.primaryDate && (
                   <p className="mt-0.5 font-mono text-xs text-ink-min">
-                    PRIMARY: {ballot.primaryDate}
+                    PRIMARY: {calendarDate(ballot.primaryDate).toUpperCase()}
                     {(ballot.otherPrimaries ?? []).map((o) => (
                       <span key={`${String(o.offices)}-${o.date}`}>
                         {" · "}
-                        {otherPrimaryLabel(o)}: {o.date}
+                        {otherPrimaryLabel(o)}: {calendarDate(o.date).toUpperCase()}
                       </span>
                     ))}
                   </p>
@@ -1833,6 +1886,16 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                     : "FIND YOUR ELECTION OFFICE ↗"}
                 </a>
                 <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
+                {/* Before election day nothing on the page says what it
+                    will show once polls close, or what "leads" will mean. */}
+                {!resultsMode && (
+                  <Link
+                    href="/about/elections#election-night"
+                    className="text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+                  >
+                    What this page shows on election night
+                  </Link>
+                )}
               </div>
             </header>
 
@@ -1862,6 +1925,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               primary, a reader who only sees a footnote has been misled. */}
             <BallotBasisNotice basis={ballot.ballotBasis} />
             <GeneralRunoffNotice runoffs={ballot.generalRunoffs} />
+            <TopPrimaryNotice rules={ballot.topPrimary} stateName={stateName} />
+            <RankedChoiceNotice rankedChoice={ballot.rankedChoice} stateName={stateName} />
 
             {federalRaces.length === 0 && (
               <p className="mb-4 text-base text-ink-min">
