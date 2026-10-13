@@ -5,9 +5,9 @@ photo URL the API hands out is a same-origin path to the frontend's photo
 route (`frontend/src/app/photo/[kind]/[id]/route.ts`), which takes a kind
 and an id — never a URL — and fetches the picture server-side:
 
-- `bioguide`: a member's official photo: the one on the member's
-  Congress.gov record (its `depiction`) when that record has a credited
-  one, else bioguide.congress.gov's portrait for the id
+- `bioguide`: a member's official photo: the Congress.gov record's credited
+  headshot (its `depiction`) or bioguide.congress.gov's portrait, whichever
+  the pipeline measured to be the head-and-shoulders shot
   (`bioguide_photo_source`, looked up through the endpoint below like the
   stored kinds);
 - `justice`: a justice's Oyez thumbnail, and `issue`: an Action Center
@@ -31,7 +31,7 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session
 
-from app.models import ApiCache
+from app.models import ApiCache, MemberPhoto
 from app.pipeline.fetch.congress import member_detail_cache_key
 
 PHOTO_SOURCE_HOSTS: dict[str, frozenset[str]] = {
@@ -75,7 +75,7 @@ _DEPICTION_URL = re.compile(r"https://www\.congress\.gov/img/member/[A-Za-z0-9_]
 _TAG = re.compile(r"<[^>]*>")
 
 
-def _depiction(record: dict) -> str | None:
+def credited_depiction(record: dict) -> str | None:
     """The record's official photo URL, if it is one we can credit: on
     Congress.gov's member-image path, with the attribution Congress.gov
     gives it (most read "Image courtesy of the Member"; the rest name the
@@ -94,29 +94,37 @@ def _depiction(record: dict) -> str | None:
     return url
 
 
+def bioguide_portrait_url(bioguide_id: str) -> str:
+    # bioguide.congress.gov/bioguide/photo/<L>/<id>.jpg 301s to this.
+    return f"https://bioguide.congress.gov/photo/{bioguide_id}.jpg"
+
+
 def bioguide_photo_source(db: Session, bioguide_id: str) -> str | None:
     """Where member `bioguide_id`'s photo is fetched from.
 
-    The Congress.gov record's headshot first: bioguide's file for some
-    members is a full-length painted portrait (an official committee
-    chair's), mostly background once cropped to an avatar, while the
-    record's depiction is a head-and-shoulders photo. The record is the one
-    the pipeline stored (api_cache, written by fetch/congress.
-    fetch_member_detail), read at any age: an older record still names an
-    official photo. A member with no credited depiction there, or no record
-    at all (a bill sponsor from before the pipeline's time), gets bioguide's
+    The choice the pipeline measured, when it has made one (MemberPhoto,
+    pipeline/fetch/member_photos.py: the face's size in each candidate
+    decides). Before that, or for a member it doesn't cover (a bill sponsor
+    who has left), the Congress.gov record's credited headshot first:
+    bioguide's file for some members is a full-length painted portrait, mostly
+    background once cropped to an avatar. The record is the one the pipeline
+    stored (api_cache, written by fetch/congress.fetch_member_detail), read
+    at any age: an older record still names an official photo. A member with
+    no credited depiction there, or no record at all, gets bioguide's
     portrait."""
     if not _BIOGUIDE_ID.fullmatch(bioguide_id):
         return None
+    chosen = db.get(MemberPhoto, bioguide_id)
+    if chosen is not None and photo_source_allowed("bioguide", chosen.source_url):
+        return chosen.source_url
     row = db.get(ApiCache, ("congress", member_detail_cache_key(bioguide_id)))
     try:
         record = json.loads(row.data_json) if row else None
     except ValueError:
         record = None
-    if isinstance(record, dict) and (url := _depiction(record)):
+    if isinstance(record, dict) and (url := credited_depiction(record)):
         return url
-    # bioguide.congress.gov/bioguide/photo/<L>/<id>.jpg 301s to this.
-    return f"https://bioguide.congress.gov/photo/{bioguide_id}.jpg"
+    return bioguide_portrait_url(bioguide_id)
 
 
 def bioguide_photo(bioguide_id: str | None) -> str | None:
