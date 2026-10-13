@@ -80,7 +80,13 @@ describe("WhatYouCanDo", () => {
       "href",
       "/politicians/H1"
     );
-    expect(screen.queryByRole("link", { name: "Directory →" })).toBeNull();
+    // A named member's office answers its own constituents, so every other
+    // reader still gets a contact they can complete: their own members.
+    expect(screen.getByText("Or contact your own senators and representative")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Directory →" })).toHaveAttribute(
+      "href",
+      "/politicians"
+    );
   });
 
   it("says why each member is listed once, in the reason's own words", () => {

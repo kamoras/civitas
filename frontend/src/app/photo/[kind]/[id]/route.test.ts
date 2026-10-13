@@ -58,7 +58,10 @@ describe("parsePhoto", () => {
 // nginx caches this path by status (200 for a day, 404 for ten minutes,
 // nothing else), so what each outcome maps to is the contract.
 describe("GET /photo/[kind]/[id]", () => {
-  it("serves a portrait, cacheable for a day, asking bioguide for raster types only", async () => {
+  it("serves a portrait the backend names, cacheable for a day, raster types only", async () => {
+    const backend = backendAnswers(200, {
+      url: "https://www.congress.gov/img/member/b001309_200.jpg",
+    });
     fetchRemoteImage.mockResolvedValue({
       status: "ok",
       bytes: Buffer.from([1, 2, 3]),
@@ -69,10 +72,32 @@ describe("GET /photo/[kind]/[id]", () => {
     expect(res.headers.get("content-type")).toBe("image/jpeg");
     expect(res.headers.get("cache-control")).toBe("public, max-age=86400");
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+    expect(String(backend.mock.calls[0][0])).toMatch(/\/api\/photo-sources\/bioguide\/B001309$/);
     const [url, opts] = fetchRemoteImage.mock.calls[0];
-    expect(url).toBe("https://bioguide.congress.gov/photo/B001309.jpg");
+    expect(url).toBe("https://www.congress.gov/img/member/b001309_200.jpg");
     expect(opts.types).toEqual(["image/jpeg", "image/png", "image/webp"]);
-    expect(opts.hosts).toEqual(["bioguide.congress.gov"]);
+    expect(opts.hosts).toEqual(["www.congress.gov", "bioguide.congress.gov"]);
+  });
+
+  it("serves bioguide's portrait when that is the source the backend names", async () => {
+    backendAnswers(200, { url: "https://bioguide.congress.gov/photo/B001309.jpg" });
+    fetchRemoteImage.mockResolvedValue({
+      status: "ok",
+      bytes: Buffer.from([1]),
+      contentType: "image/jpeg",
+    });
+    const res = await get("bioguide", "B001309");
+    expect(res.status).toBe(200);
+    expect(fetchRemoteImage.mock.calls[0][0]).toBe(
+      "https://bioguide.congress.gov/photo/B001309.jpg"
+    );
+  });
+
+  it("refuses a member photo off Congress.gov's hosts", async () => {
+    backendAnswers(200, { url: "https://api.oyez.org/files/a.png" });
+    const res = await get("bioguide", "B001309");
+    expect(res.status).toBe(404);
+    expect(fetchRemoteImage).not.toHaveBeenCalled();
   });
 
   it("serves a stored photo from an allowed host the backend names", async () => {
@@ -106,6 +131,7 @@ describe("GET /photo/[kind]/[id]", () => {
   });
 
   it("answers a photo the source doesn't have with a cacheable 404", async () => {
+    backendAnswers(200, { url: "https://bioguide.congress.gov/photo/B001309.jpg" });
     fetchRemoteImage.mockResolvedValue({ status: "missing" });
     const res = await get("bioguide", "B001309");
     expect(res.status).toBe(404);
@@ -129,6 +155,7 @@ describe("GET /photo/[kind]/[id]", () => {
   // Cached as a 404, one slow request blanked the photo for every visitor
   // for ten minutes.
   it("answers a transient failure with an uncached 502, not a 404", async () => {
+    backendAnswers(200, { url: "https://www.congress.gov/img/member/b001309_200.jpg" });
     fetchRemoteImage.mockResolvedValue({ status: "failed" });
     const res = await get("bioguide", "B001309");
     expect(res.status).toBe(502);
@@ -142,8 +169,10 @@ describe("GET /photo/[kind]/[id]", () => {
   });
 
   it("never fetches for an invalid id", async () => {
+    const backend = backendAnswers(200, { url: "https://bioguide.congress.gov/photo/x.jpg" });
     const res = await get("bioguide", "not-an-id");
     expect(res.status).toBe(404);
+    expect(backend).not.toHaveBeenCalled();
     expect(fetchRemoteImage).not.toHaveBeenCalled();
   });
 });

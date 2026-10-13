@@ -40,7 +40,7 @@
     "knip": "^6.38.0",
     "postcss": "^8.5.28",
     "prettier": "^3.9.9",
-    "sharp": ">=0.35.0",
+    "sharp": ">=0.35.5",
     "tailwindcss": "^4.3.2",
     "typescript": "~6.0.3",
     "vite": "^8.3.4",
@@ -51,6 +51,6 @@
     "postcss": "^8.5.28",
     "@babel/core": ">=7.29.6",
     "brace-expansion": ">=5.0.12",
-    "sharp": ">=0.35.0"
+    "sharp": ">=0.35.5"
   }
 }

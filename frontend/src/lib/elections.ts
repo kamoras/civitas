@@ -71,7 +71,14 @@ export function raceBadgeLabel(race: { office: string; district: number | null }
  *
  * "(part)" is left as-is since it means that county is split across
  * districts. Null in, null out — a district missing from the crosswalk
- * stays unlabeled, never a guessed list. */
+ * stays unlabeled, never a guessed list.
+ *
+ * With a `query` (what the reader typed in the filter), the places that
+ * matched it lead the label, whole and with their suffix: otherwise a
+ * row can match on a place hidden behind "& 10 more", and a reader who
+ * typed "Houston" (the city) sees one district come back with no sign it
+ * matched Houston County, a different place. "Houston County, Anderson,
+ * Cherokee & 9 more" says which Houston it found. */
 /* parseUtc moved to lib/formatting.ts — it is a generic ISO-8601 concern,
    and the records band and homepage index need it too. Re-exported here so
    existing election call sites keep their import path. */
@@ -80,12 +87,21 @@ export { parseUtc } from "./formatting";
 export function districtAreaLabel(
   areas: string[] | null,
   max = 3,
-  dropCountySuffix = true
+  dropCountySuffix = true,
+  query = ""
 ): string | null {
   if (!areas || areas.length === 0) return null;
-  const short = dropCountySuffix ? areas.map((a) => a.replace(/ County\b/, "")) : areas.slice();
-  if (short.length <= max) return short.join(", ");
-  return `${short.slice(0, max).join(", ")} & ${short.length - max} more`;
+  const q = searchFold(query);
+  const hit = (a: string) => q !== "" && searchFold(a).includes(q);
+  const matched = areas.filter(hit);
+  const rest = areas.filter((a) => !hit(a));
+  const short = [
+    ...matched,
+    ...(dropCountySuffix ? rest.map((a) => a.replace(/ County\b/, "")) : rest),
+  ];
+  const shown = Math.max(max, matched.length);
+  if (short.length <= shown) return short.join(", ");
+  return `${short.slice(0, shown).join(", ")} & ${short.length - shown} more`;
 }
 
 /** Does this district row match what the reader typed in the district
@@ -224,6 +240,13 @@ export function isActiveCandidate(c: CandidateSummary): boolean {
   return (
     c.confirmed || c.candidateStatus === "C" || c.hasRaisedFunds || c.incumbentChallenge === "I"
   );
+}
+
+/** "House member, GA-6" / "Senator": what a candidate's memberRecord
+ * says they are now, beside a record that isn't this seat's. */
+export function memberRecordLabel(r: { chamber: "house" | "senate"; seat: string | null }): string {
+  if (r.chamber === "senate") return "Senator";
+  return r.seat ? `House member, ${r.seat}` : "House member";
 }
 
 /** FEC's incumbency codes, in words. */
