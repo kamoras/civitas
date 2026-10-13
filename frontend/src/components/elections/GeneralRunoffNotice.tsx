@@ -71,7 +71,7 @@ export function TopPrimaryNotice({
             key={`${String(r.offices)}-${r.advance}`}
             className="font-mono text-xs leading-relaxed text-ink-lo"
           >
-            {`${scope}${stateName} held a top-${n} primary: every candidate, of every party, ran on one primary ballot, and the ${n} with the most votes went on to November whatever their party. So one party can have more than one candidate in a November contest.`}
+            {`${scope}${stateName} held a top-${n} primary. Every candidate, of every party, ran on one primary ballot. The ${n} with the most votes went on to November, whatever their party. So a November contest can have more than one candidate from the same party.`}
           </p>
         );
       })}
