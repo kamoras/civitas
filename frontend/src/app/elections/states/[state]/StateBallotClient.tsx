@@ -1600,6 +1600,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // A rejected URL falls back to the national directory, so it isn't the
   // state's own site whatever the flag says.
   const lookupIsStateSpecific = officialLookup.isStateSpecific && !!safeHref(officialLookup.url);
+  // The state's own lookup behind a bot wall the link check can't get
+  // past: shown, but said to be unconfirmed, with the national directory
+  // as the backup (ballot_lookup.lookup_for_state).
+  const lookupUnconfirmed = lookupIsStateSpecific && !!officialLookup.unconfirmed;
+  const fallbackHref =
+    safeHref(officialLookup.fallback?.url ?? "") || "https://www.usa.gov/election-office";
   const stateName = ballot.stateName ?? ballot.state;
 
   const [towns, setTowns] = useState<TownEntry[]>([]);
@@ -1899,10 +1905,27 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                     rejected sends this link to USAGov. "Voter lookup", not
                     "your full ballot": some states' link is their polling-
                     place page, which shows where to vote, not the ballot. */}
-                  {lookupIsStateSpecific
-                    ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
-                    : "FIND YOUR ELECTION OFFICE ↗"}
+                  {lookupUnconfirmed
+                    ? `${stateName.toUpperCase()}'S OFFICIAL VOTER LOOKUP ↗`
+                    : lookupIsStateSpecific
+                      ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
+                      : "FIND YOUR ELECTION OFFICE ↗"}
                 </a>
+                {lookupUnconfirmed && (
+                  <p className="max-w-xs text-xs text-ink-lo">
+                    This site blocks automated checks, so we can&apos;t confirm it&apos;s up. If it
+                    doesn&apos;t open, use the{" "}
+                    <a
+                      href={fallbackHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`${officialLookup.fallback?.label ?? "National directory of election offices"} (opens in new tab)`}
+                      className="text-signal-cyan hover:text-phos"
+                    >
+                      national directory ↗
+                    </a>
+                  </p>
+                )}
                 <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
                 {/* Before election day nothing on the page says what it
                     will show once polls close, or what "leads" will mean. */}

@@ -9,10 +9,12 @@ import { fetchRemoteImage, onAllowedHost, type RemoteImageResult } from "./remot
  *
  * A kind and an id, never a URL: each kind's source is fixed, so nothing a
  * client sends can make the server fetch from a host of its choosing.
- *  - bioguide: a member's official portrait, at a URL built from the id;
+ * Each kind's source URL is looked up by id from the backend:
+ *  - bioguide: a member's official photo, the headshot on the member's
+ *    Congress.gov record or else bioguide's portrait (backend
+ *    `bioguide_photo_source`);
  *  - justice, issue: a URL the pipeline stored (an Oyez thumbnail, an
- *    Action Center issue's rights-cleared news photo), looked up by id
- *    from the backend.
+ *    Action Center issue's rights-cleared news photo).
  */
 const PHOTO_IDS = {
   bioguide: /^[A-Z]\d{6}$/,
@@ -35,7 +37,7 @@ export interface PhotoRef {
  * host.
  */
 export const PHOTO_HOSTS: Record<PhotoKind, readonly string[]> = {
-  bioguide: ["bioguide.congress.gov"],
+  bioguide: ["www.congress.gov", "bioguide.congress.gov"],
   justice: ["api.oyez.org"],
   issue: ["rollcall.com"],
 };
@@ -62,8 +64,6 @@ export function parsePhotoPath(path: string): PhotoRef | null {
 /** Where a photo comes from: a URL, `null` for "no such photo", or
  *  `"failed"` when the backend couldn't be asked. */
 async function photoSource({ kind, id }: PhotoRef): Promise<string | null | "failed"> {
-  // bioguide.congress.gov/bioguide/photo/<L>/<id>.jpg 301s to this.
-  if (kind === "bioguide") return `https://bioguide.congress.gov/photo/${id}.jpg`;
   try {
     const res = await fetch(`${BACKEND}/api/photo-sources/${kind}/${id}`, {
       cache: "no-store",

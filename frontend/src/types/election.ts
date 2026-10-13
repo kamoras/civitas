@@ -397,6 +397,12 @@ export interface OfficialLookup {
    * each, rather than promising a state lookup it doesn't have. */
   isStateSpecific: boolean;
   verifiedAt: string | null;
+  /** The state's own URL, which its site's bot wall stops the link check
+   * from confirming: shown as the state's lookup, with a note and
+   * `fallback` (the national directory) beside it. Absent from an older
+   * API, read as false. */
+  unconfirmed?: boolean;
+  fallback?: { url: string; label: string; sourceName: string } | null;
 }
 
 /** Every federal race on one state's ballot this cycle, plus its
