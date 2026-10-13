@@ -97,7 +97,7 @@ function DeadlineRow({ d }: { d: StateNextDeadline }) {
     <li className="text-sm leading-snug">
       <Link
         href={`${stateBallotHref(d.state)}#voter-deadlines`}
-        className="text-ink-hi hover:underline"
+        className="text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos"
       >
         {STATE_NAMES[d.state] ?? d.state}
       </Link>
