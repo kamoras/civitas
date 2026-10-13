@@ -776,11 +776,25 @@ SOURCE_FRESHNESS_HISTORY = timedelta(days=60)
 # state outlets' median gap, measured 2026-10-10) and keeps each row to a few
 # tens of kilobytes.
 _SOURCE_FRESHNESS_KEEP = 500
-# A source is stale once its silence passes twice the longest gap it has
+# A source is stale once its silence runs a day past the longest gap it has
 # shown between items in the history window — its own measured rhythm,
 # weekends and recesses included — and never before the caller's `floor`,
 # the point past which the silence costs something.
-SOURCE_FRESHNESS_MULTIPLE = 2
+#
+# A day, not a multiple: measured 2026-10-13 on 130 days of Roll Call's own
+# publication record (its WordPress API), its ordinary weekend is 64-72 hours
+# and a holiday weekend 82-88 (July 4, Labor Day). Twice the longest gap set a
+# 142-177 hour bar — a dead feed unnoticed for over a week — where the longest
+# gap plus a day sets 95-112 hours; neither raised a false alert on that
+# record, nor on VTDigger's, Civil Beat's or The Hill's.
+SOURCE_FRESHNESS_SLACK = timedelta(hours=24)
+# How much history a source's own longest gap needs before it is trusted:
+# a week always holds a weekend. Until then the bar comes from the other
+# sources of the same kind that have that much history (their longest gap,
+# plus the slack) — a feed first checked on a Thursday has never shown a
+# weekend, and its weekday rhythm alone alerted on Roll Call's first quiet
+# weekend (2026-10-11, a 48-hour bar against a 72-hour weekend).
+SOURCE_FRESHNESS_MIN_SPAN = timedelta(days=7)
 
 
 def _as_utc_naive(t: datetime) -> datetime:
@@ -790,6 +804,10 @@ def _as_utc_naive(t: datetime) -> datetime:
 def longest_gap(times: list[datetime]) -> timedelta:
     """The longest stretch between consecutive times (sorted input)."""
     return max((b - a for a, b in zip(times, times[1:])), default=timedelta(0))
+
+
+def _matured(history: list[datetime]) -> bool:
+    return bool(history) and history[-1] - history[0] >= SOURCE_FRESHNESS_MIN_SPAN
 
 
 def check_source_freshness(
@@ -804,6 +822,11 @@ def check_source_freshness(
     dated item is measured from when it was first checked. One alert per
     stale stretch (``condition`` stays open until the source shows something
     new). Never raises.
+
+    The bar is the source's longest gap in the history window plus
+    SOURCE_FRESHNESS_SLACK, once that history spans
+    SOURCE_FRESHNESS_MIN_SPAN; before then, the longest gap among the
+    sources of the same ``kind`` that have that much history stands in.
     """
     now = utcnow()
     alerts: list[tuple[str, str, str, str]] = []
@@ -811,20 +834,40 @@ def check_source_freshness(
     db = None
     try:
         db = SessionLocal()
-        rows = {
-            r.cache_key: r for r in db.query(ApiCache).filter(
-                ApiCache.tier == SOURCE_FRESHNESS_TIER, ApiCache.cache_key.in_(list(observed)),
-            )
-        }
+        # Every row of the tier: a source's peers are the other sources of
+        # its kind, whichever call checks them (the national and state feeds
+        # are fetched separately).
+        rows = {r.cache_key: r for r in db.query(ApiCache).filter(ApiCache.tier == SOURCE_FRESHNESS_TIER)}
+        states = {key: json.loads(row.data_json) for key, row in rows.items()}
+
+        def window(times) -> list[datetime]:
+            return sorted(t for t in times if t >= now - SOURCE_FRESHNESS_HISTORY)[-_SOURCE_FRESHNESS_KEEP:]
+
+        peer_gaps = [
+            longest_gap(h) for key, state in states.items()
+            if key not in observed and state.get("kind") == kind
+            and _matured(h := window(datetime.fromisoformat(t) for t in state.get("seen", [])))
+        ]
+        histories = {}
+        for key, (_label, times) in observed.items():
+            seen = {datetime.fromisoformat(t) for t in states.get(key, {}).get("seen", [])}
+            histories[key] = window(seen | {_as_utc_naive(t) for t in times or []})
+        peer_gaps += [longest_gap(h) for h in histories.values() if _matured(h)]
+        peers = max(peer_gaps, default=None)
+
         for key, (label, times) in observed.items():
             row = rows.get(key)
-            state = json.loads(row.data_json) if row else {}
+            state = states.get(key, {})
             first_checked = datetime.fromisoformat(state.get("first_checked") or now.isoformat())
-            seen = {datetime.fromisoformat(t) for t in state.get("seen", [])}
-            seen |= {_as_utc_naive(t) for t in times or []}
-            history = sorted(t for t in seen if t >= now - SOURCE_FRESHNESS_HISTORY)[-_SOURCE_FRESHNESS_KEEP:]
+            history = histories[key]
             since = history[-1] if history else first_checked
-            limit = max(floor, SOURCE_FRESHNESS_MULTIPLE * longest_gap(history))
+            gap = longest_gap(history)
+            measured_by = f"its longest gap in the last {SOURCE_FRESHNESS_HISTORY.days} days"
+            if not _matured(history) and peers is not None and peers > gap:
+                gap = peers
+                measured_by = (f"it has under {SOURCE_FRESHNESS_MIN_SPAN.days} days of history, so the "
+                               f"longest gap among other {kind}s that have that much")
+            limit = max(floor, gap + SOURCE_FRESHNESS_SLACK)
             alerted = bool(state.get("alerted"))
             condition = f"source-stale:{key}"
             if now - since > limit:
@@ -838,9 +881,9 @@ def check_source_freshness(
                               "The latest fetch succeeded: the source is answering with old items.")
                     body = (
                         f"The {kind} '{label}' ({key}) has had nothing new for {hours:.0f} hours: "
-                        f"{newest}. Its longest gap in the last {SOURCE_FRESHNESS_HISTORY.days} days "
-                        f"is {longest_gap(history).total_seconds() / 3600:.1f} hours, so the bar is "
-                        f"{limit.total_seconds() / 3600:.0f} hours. {latest}"
+                        f"{newest}. The bar is {measured_by} ({gap.total_seconds() / 3600:.1f} hours) "
+                        f"plus {SOURCE_FRESHNESS_SLACK.total_seconds() / 3600:.0f}, never under "
+                        f"{floor.total_seconds() / 3600:.0f}: {limit.total_seconds() / 3600:.0f} hours. {latest}"
                     )
                     alerts.append((f"Stale {kind}: {label}", body, f"{condition}:{since.isoformat()}", condition))
                     alerted = True
@@ -848,11 +891,15 @@ def check_source_freshness(
                 resolved.append(condition)
                 alerted = False
                 # The stale stretch is not the source's rhythm: kept, it would
-                # double the bar for the next two months.
+                # set the bar for the next two months. Only when the source
+                # came back — a bar that rose past the silence (more history,
+                # or peers) leaves nothing to forget.
                 stale_since = datetime.fromisoformat(state.get("since") or since.isoformat())
-                history = [t for t in history if t > stale_since]
+                if history and history[-1] > stale_since:
+                    history = [t for t in history if t > stale_since]
             data = json.dumps({
                 "label": label,
+                "kind": kind,
                 "first_checked": first_checked.isoformat(),
                 "since": since.isoformat(),
                 "alerted": alerted,

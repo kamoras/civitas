@@ -11,6 +11,11 @@ import type { BallotMeasure } from "@/types/election";
  * platform's grounding checks verify that tokens came from the source,
  * not that the claim points the same direction (AGENTS.md principle 7).
  */
+/** The id of a measure's card, for the drawer's jump list. */
+export function measureAnchor(id: string): string {
+  return `measure-${id}`;
+}
+
 export default function BallotMeasureCard({ measure }: { measure: BallotMeasure }) {
   const removed = measure.status === "removed" || measure.status === "withdrawn";
   // Read from the state's own office, not user-controlled, but still external data
@@ -37,12 +42,13 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
 
   return (
     <article
+      id={measureAnchor(measure.id)}
       className={`border p-4 ${
         removed ? "border-signal-red/40 bg-signal-red/10" : "border-white/[0.09] bg-surface"
       }`}
     >
       <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
-        <h3 className="font-display font-semibold text-sm text-ink-hi">
+        <h3 tabIndex={-1} className="font-display font-semibold text-sm text-ink-hi">
           {measure.number || measure.title}
         </h3>
         <span

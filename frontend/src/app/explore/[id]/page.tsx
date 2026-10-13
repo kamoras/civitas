@@ -54,6 +54,13 @@ function scorecardHref(doc: ExploreDocumentDetail): string | null {
   return `/politicians/${doc.politicianId}`;
 }
 
+/** A comment link, always over https: rows stored before ingest upgraded
+ * the Federal Register's http:// regulations.gov links still carry them,
+ * and the same page is served over https. */
+function commentHref(url: string | null | undefined): string {
+  return safeHref(url?.replace(/^http:\/\//i, "https://")) || "#";
+}
+
 function isCommentOpen(doc: ExploreDocumentDetail): boolean {
   return !!doc.commentUrl && isCommentPeriodOpen(doc.commentsCloseOn);
 }
@@ -149,14 +156,15 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
               · Opens on regulations.gov
             </p>
             <a
-              href={safeHref(doc.commentUrl) || "#"}
+              href={commentHref(doc.commentUrl)}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Open the comment form at regulations.gov (opens in new tab)"
               className="text-xs font-mono px-5 py-2 bg-phos/20 text-phos border border-phos/50
                          hover:bg-phos/30 hover:border-phos/70
                          transition-colors"
             >
-              OPEN COMMENT FORM →
+              OPEN COMMENT FORM ↗
             </a>
           </div>
           <p className="text-xs text-ink-min leading-relaxed">
@@ -411,7 +419,7 @@ function CommentsSection({
               <p className="text-ink-min text-base">{commentsError}</p>
               {commentsError === "API key not configured" && (
                 <a
-                  href={safeHref(commentUrl) || "#"}
+                  href={commentHref(commentUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-block mt-3 text-xs font-mono text-signal-cyan hover:text-phos transition-colors"
@@ -493,7 +501,7 @@ function CommentsSection({
           {commentsLoaded && (
             <div className="mt-4 pt-3 border-t border-white/[0.07] text-center">
               <a
-                href={safeHref(commentUrl) || "#"}
+                href={commentHref(commentUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-mono text-ink-min hover:text-phos transition-colors"
@@ -638,8 +646,10 @@ export default function ExploreDetailPage() {
           </Link>
 
           {/* Public Comment CTA — prominent, above everything */}
+          {/* id="comment": every "Comment →" link (search results, the
+              Action Center, the homepage deadlines) points here. */}
           {commentOpen && (
-            <div className="border border-phos/40 p-5 mb-6 bg-phos/5">
+            <div id="comment" className="scroll-mt-24 border border-phos/40 p-5 mb-6 bg-phos/5">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
@@ -660,15 +670,20 @@ export default function ExploreDetailPage() {
                     Comments close {formatDate(doc.commentsCloseOn)}
                   </p>
                 </div>
+                {/* The Federal Register still hands out some comment links
+                    as http://; regulations.gov serves the same page over
+                    https, so the reader's comment never starts on plain
+                    http. A new tab, said as the site says it elsewhere. */}
                 <a
-                  href={safeHref(doc.commentUrl) || "#"}
+                  href={commentHref(doc.commentUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label="Submit your comment at regulations.gov (opens in new tab)"
                   className="text-sm font-mono px-6 py-3 bg-phos/20 text-phos border border-phos/50
                              hover:bg-phos/30 hover:border-phos/70
                              transition-colors shrink-0"
                 >
-                  SUBMIT YOUR COMMENT →
+                  SUBMIT YOUR COMMENT ↗
                 </a>
               </div>
               <HelpMeCommentPanel doc={doc} remaining={remaining} />
