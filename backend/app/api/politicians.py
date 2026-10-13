@@ -33,6 +33,7 @@ from app.api.elections import member_on_ballot
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.config import settings
 from app.database import get_db
+from app.district_places import places_on_lines_of
 from app.member_ids import resolve_member_id
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
@@ -468,20 +469,27 @@ def counties_on_lines_of(congress: int) -> dict[str, list[str]] | None:
 def house_districts_by_county(
     state: str = Query(..., min_length=2, max_length=2),
 ) -> JSONResponse:
-    """Which counties each of a state's House districts covers, on the
-    lines of the Congress in office — the districts its sitting members
-    represent, not the coming election's (the state ballot page has
-    those). A reader finds their member by a county they know; nothing
-    about them is asked or sent (AGENTS.md section 8)."""
+    """Which counties, and which cities, towns and communities, each of a
+    state's House districts covers, on the lines of the Congress in office
+    — the districts its sitting members represent, not the coming
+    election's (the state ballot page has those). A reader finds their
+    member by a place they know; nothing about them is asked or sent
+    (AGENTS.md section 8). `places` is null for a district when no place
+    list holds that Congress's lines; the counties still answer."""
     st = state.upper()
     if st not in STATE_NAMES:
         raise HTTPException(status_code=404, detail="Unknown state")
     congress = settings.CURRENT_CONGRESS
     lines = counties_on_lines_of(congress)
+    places = places_on_lines_of(congress) or {}
     prefix = f"{st}-"
     districts = (
         sorted(
-            ({"district": int(k[len(prefix):]), "counties": v} for k, v in lines.items() if k.startswith(prefix)),
+            (
+                {"district": int(k[len(prefix):]), "counties": v, "places": places.get(k)}
+                for k, v in lines.items()
+                if k.startswith(prefix)
+            ),
             key=lambda d: d["district"],
         )
         if lines is not None

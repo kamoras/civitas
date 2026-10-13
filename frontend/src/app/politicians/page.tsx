@@ -1,7 +1,12 @@
 "use client";
 
 import { displayScore } from "@/lib/formatting";
-import { districtName, matchesDistrictQuery, stateBallotHref } from "@/lib/elections";
+import {
+  districtName,
+  matchesDistrictQuery,
+  placeDistrictSummary,
+  stateBallotHref,
+} from "@/lib/elections";
 import { Suspense, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -11,7 +16,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import PageFallback from "@/components/layout/PageFallback";
-import { countyFinderStatus, countyNames } from "@/lib/countyFinder";
+import { countyFinderStatus, countyNames, finderSuggestions } from "@/lib/countyFinder";
 import { fetchHouseDistrictsByCounty, fetchPoliticianDirectory } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { getScoreBgColor } from "@/lib/representation";
@@ -152,9 +157,10 @@ function writeParams(params: Record<string, string>) {
   window.history.replaceState(null, "", url.pathname + url.search + url.hash);
 }
 
-/** Find your House member by a county you know. Civitas never asks where
- *  a visitor lives (AGENTS.md section 8): this filters the delegation over
- *  the counties each district covers, a list the page already has.
+/** Find your House member by a city, town or county you know. Civitas
+ *  never asks where a visitor lives (AGENTS.md section 8): this filters the
+ *  delegation over the counties and places each district covers, a list
+ *  the page already has.
  *
  *  These are the lines of the Congress in office — the districts the
  *  members now serving were elected in. The state ballot page uses the
@@ -175,11 +181,16 @@ function CountyFinder({
 }) {
   const id = useId();
   const names = countyNames(lines);
-  const status = countyFinderStatus(names, query, matches.length);
+  const status = countyFinderStatus(
+    names,
+    query,
+    matches.length,
+    placeDistrictSummary(lines.districts, query)
+  );
   return (
     <div className="mb-4 border border-white/[0.07] p-4">
       <label htmlFor={id} className="block text-sm font-bold text-ink-hi">
-        Find your House member by county
+        Find your House member by city, town or county
       </label>
       <p className="mt-1 text-xs text-ink-lo">
         Districts as of the current Congress: the ones today&apos;s members were elected in. Nothing
@@ -191,12 +202,12 @@ function CountyFinder({
         list={`${id}-counties`}
         value={query}
         onChange={(e) => onQuery(e.target.value)}
-        placeholder="County name"
+        placeholder="City, town or county"
         autoComplete="off"
         className="mt-2 w-full max-w-xs border border-white/15 bg-surface-base px-3 py-2 font-mono text-sm text-ink-hi placeholder:text-ink-min outline-none focus:border-phos/40"
       />
       <datalist id={`${id}-counties`}>
-        {names.map((n) => (
+        {finderSuggestions(lines).map((n) => (
           <option key={n} value={n} />
         ))}
       </datalist>
@@ -283,7 +294,10 @@ function PoliticiansPageContent() {
     () =>
       linesReady && county.trim()
         ? houseLines!.districts.filter((d) =>
-            matchesDistrictQuery({ district: null, areas: d.counties, candidates: [] }, county)
+            matchesDistrictQuery(
+              { district: null, areas: [...d.counties, ...(d.places ?? [])], candidates: [] },
+              county
+            )
           )
         : [],
     [linesReady, houseLines, county]
