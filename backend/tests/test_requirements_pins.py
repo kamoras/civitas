@@ -45,6 +45,7 @@ MACHINES = ("aarch64", "x86_64")
 DIRECT = {
     "alembic", "apscheduler", "atproto", "certifi", "cryptography", "cssselect", "defusedxml",
     "diff-cover", "fastapi", "httptools", "httpx", "lxml", "mcp", "numpy",
+    "opencv-python-headless",
     "packaging", "pdfplumber", "pillow", "playwright", "pydantic",
     "pydantic-settings", "pytesseract", "pytest", "pytest-asyncio",
     "pytest-cov", "pyyaml", "requests", "scikit-learn", "scipy",

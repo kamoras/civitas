@@ -7,6 +7,8 @@ import {
   majorPartyOf,
   matchesDistrictQuery,
   parseUtc,
+  placeDistrictSummary,
+  placeName,
   raceBadgeLabel,
   tierCandidates,
   incumbencyLabel,
@@ -548,5 +550,54 @@ describe("incumbencyLabel", () => {
     expect(isRedrawnSeat({ office: "S" }, true)).toBe(false);
     expect(isRedrawnSeat({ office: "H" }, false)).toBe(false);
     expect(isRedrawnSeat({ office: "H" }, undefined)).toBe(false);
+  });
+});
+
+describe("placeName", () => {
+  it("drops the Census legal type, never a City in the name itself", () => {
+    expect(placeName("Rivertown city")).toBe("Rivertown");
+    expect(placeName("Northside borough")).toBe("Northside");
+    expect(placeName("Harbor city and borough")).toBe("Harbor");
+    expect(placeName("Midvale-Lake metropolitan government (balance)")).toBe("Midvale-Lake");
+    expect(placeName("Lake Pine City city")).toBe("Lake Pine City");
+    expect(placeName("Ore City")).toBe("Ore City");
+    expect(placeName("Silver Glen")).toBe("Silver Glen");
+  });
+});
+
+describe("placeDistrictSummary", () => {
+  const races = [
+    { district: 3, places: ["Rivertown city", "Oakdale"] },
+    { district: 11, places: ["Rivertown city", "Kingsford town"] },
+    { district: 7, places: ["Rivertown city", "Kingsford city"] },
+    { district: 0, places: null },
+  ];
+
+  it("names every district a split place is in, in order, and says it is split", () => {
+    expect(placeDistrictSummary(races, "rivertown")).toEqual([
+      "Rivertown is in districts 3, 7 and 11: it is split between them, so the part you live in decides which is yours.",
+    ]);
+  });
+
+  it("a whole place is in one district", () => {
+    expect(placeDistrictSummary(races, "Oakdale")).toEqual(["Oakdale is in district 3."]);
+  });
+
+  it("matches the whole name only, so a fragment leaves the list to answer", () => {
+    expect(placeDistrictSummary(races, "river")).toEqual([]);
+    expect(placeDistrictSummary(races, "")).toEqual([]);
+  });
+
+  it("keeps the legal type where two places share a name", () => {
+    expect(placeDistrictSummary(races, "kingsford")).toEqual([
+      "Kingsford town is in district 11.",
+      "Kingsford city is in district 7.",
+    ]);
+  });
+
+  it("reads an at-large seat as at-large", () => {
+    expect(placeDistrictSummary([{ district: 0, places: ["Capitol city"] }], "capitol")).toEqual([
+      "Capitol is in the at-large district.",
+    ]);
   });
 });

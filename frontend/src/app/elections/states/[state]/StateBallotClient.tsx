@@ -49,8 +49,10 @@ import {
   isRedrawnSeat,
   majorPartyOf,
   matchesDistrictQuery,
+  placeDistrictSummary,
   pviColor,
   redrawnMemberWords,
+  searchFold,
   stateBallotHref,
   termPhrase,
   tierCandidates,
@@ -938,7 +940,8 @@ function HouseDistrictOption({
   onPick: () => void;
   newLines: boolean;
   resultsMode: boolean;
-  /** What the reader typed: the counties it matched lead the label. */
+  /** What the reader typed: the places and counties it matched lead the
+   * label, so a row found by a city says which city. */
   filter: string;
 }) {
   const { leaders } = tierCandidates(race.candidates.filter(isActiveCandidate));
@@ -949,7 +952,18 @@ function HouseDistrictOption({
       : " (I)";
   const dem = leaders.find((c) => majorPartyOf(c) === "DEM");
   const rep = leaders.find((c) => majorPartyOf(c) === "REP");
-  const countiesLabel = districtAreaLabel(race.counties, 3, true, filter);
+  // Only the places the filter matched join the label (three at most):
+  // a district holds up to a thousand, and "& 1200 more" says nothing.
+  const q = searchFold(filter);
+  const matchedPlaces = q
+    ? (race.places ?? []).filter((p) => searchFold(p).includes(q)).slice(0, 3)
+    : [];
+  const countiesLabel = districtAreaLabel(
+    race.counties || matchedPlaces.length ? [...(race.counties ?? []), ...matchedPlaces] : null,
+    3,
+    true,
+    filter
+  );
 
   return (
     <button
@@ -1101,7 +1115,10 @@ function HouseDetail({
     );
   }
 
-  const shown = houseRaces.filter((r) => matchesDistrictQuery({ ...r, areas: r.counties }, filter));
+  const shown = houseRaces.filter((r) =>
+    matchesDistrictQuery({ ...r, areas: [...(r.counties ?? []), ...(r.places ?? [])] }, filter)
+  );
+  const placeSummary = placeDistrictSummary(houseRaces, filter);
   return (
     <div>
       {newLines ? (
@@ -1135,7 +1152,7 @@ function HouseDetail({
             </>
           )}
           , and lookups by representative can answer for the old map, not these lines. Point at the
-          map, pick your county, or filter by a county or district number
+          map, pick your county, or filter by a city, town, county or district number
           {lookupIsStateSpecific ? (
             <>
               , or check{" "}
@@ -1155,7 +1172,8 @@ function HouseDetail({
       ) : (
         <p className="mb-3 text-[13px] text-ink-lo">
           {resultsMode ? HOUSE_ONE_EACH_RESULTS : HOUSE_ONE_EACH} Point at the map, pick your
-          county, or filter by a county, a candidate&apos;s name or a district number, or{" "}
+          county, or filter by a city, town, county, a candidate&apos;s name or a district number,
+          or{" "}
           <a
             href="https://www.house.gov/representatives/find-your-representative"
             target="_blank"
@@ -1188,13 +1206,13 @@ function HouseDetail({
             onChange={(e) => setFilter(e.target.value)}
             placeholder={
               newLines
-                ? "Filter by county or district number"
-                : "Filter by county, candidate, or district number"
+                ? "Filter by city, town, county or district number"
+                : "Filter by city, town, county, candidate or district number"
             }
             aria-label={
               newLines
-                ? "Filter districts by county or district number"
-                : "Filter districts by county, candidate, or district number"
+                ? "Filter districts by city, town, county or district number"
+                : "Filter districts by city, town, county, candidate or district number"
             }
             className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
           />
@@ -1209,9 +1227,23 @@ function HouseDetail({
               reader sees and a screen-reader user otherwise would not. */}
           <p role="status" aria-live="polite" className="sr-only">
             {filter.trim()
-              ? `${shown.length} of ${houseRaces.length} districts match ${filter}`
+              ? `${shown.length} of ${houseRaces.length} districts match ${filter}. ${placeSummary.join(" ")}`
               : ""}
           </p>
+        </div>
+      )}
+      {/* A city split between districts is the case a county search got
+          wrong: say which districts, and that the row alone can't settle
+          it. aria-hidden: the status line above reads the same words. */}
+      {placeSummary.length > 0 && (
+        <div
+          data-place-summary
+          aria-hidden="true"
+          className="mb-2 border border-white/15 bg-surface px-3 py-2 text-[13px] text-ink"
+        >
+          {placeSummary.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
         </div>
       )}
       {shown.map((r) => (
@@ -1227,12 +1259,9 @@ function HouseDetail({
       {shown.length === 0 && (
         <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
           No district matches “{filter}”.{" "}
-          {/* Cities and towns are not on this list (a city can span several
-              districts), and a reader who typed one should be told so
-              rather than left to guess why their home matched nothing. */}
           {newLines
-            ? "This list goes by county, not city or town: try your county’s name or a district number, or pick a county above."
-            : "This list goes by county, not city or town: try your county’s name, a candidate’s surname, or a district number, or pick a county above."}
+            ? "Try the name of your city, town or county, or a district number, or pick a county above."
+            : "Try the name of your city, town or county, a candidate’s surname, or a district number, or pick a county above."}
         </p>
       )}
     </div>
@@ -1325,7 +1354,7 @@ function ContestOverview({
             onClick={() => onOpen("house", null)}
             className="mb-2 min-h-[44px] font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
           >
-            DON&apos;T KNOW YOUR DISTRICT? MAP OR COUNTY →
+            DON&apos;T KNOW YOUR DISTRICT? MAP, TOWN OR COUNTY →
           </button>
           <p className="mb-2 text-[13px] text-ink-lo">Or pick its number to research the race:</p>
           <div className="grid grid-cols-7 gap-1.5">
@@ -1578,6 +1607,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // A rejected URL falls back to the national directory, so it isn't the
   // state's own site whatever the flag says.
   const lookupIsStateSpecific = officialLookup.isStateSpecific && !!safeHref(officialLookup.url);
+  // The state's own lookup behind a bot wall the link check can't get
+  // past: shown, but said to be unconfirmed, with the national directory
+  // as the backup (ballot_lookup.lookup_for_state).
+  const lookupUnconfirmed = lookupIsStateSpecific && !!officialLookup.unconfirmed;
+  const fallbackHref =
+    safeHref(officialLookup.fallback?.url ?? "") || "https://www.usa.gov/election-office";
   const stateName = ballot.stateName ?? ballot.state;
 
   const [towns, setTowns] = useState<TownEntry[]>([]);
@@ -1881,10 +1916,27 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                     rejected sends this link to USAGov. "Voter lookup", not
                     "your full ballot": some states' link is their polling-
                     place page, which shows where to vote, not the ballot. */}
-                  {lookupIsStateSpecific
-                    ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
-                    : "FIND YOUR ELECTION OFFICE ↗"}
+                  {lookupUnconfirmed
+                    ? `${stateName.toUpperCase()}'S OFFICIAL VOTER LOOKUP ↗`
+                    : lookupIsStateSpecific
+                      ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
+                      : "FIND YOUR ELECTION OFFICE ↗"}
                 </a>
+                {lookupUnconfirmed && (
+                  <p className="max-w-xs text-xs text-ink-lo">
+                    This site blocks automated checks, so we can&apos;t confirm it&apos;s up. If it
+                    doesn&apos;t open, use the{" "}
+                    <a
+                      href={fallbackHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`${officialLookup.fallback?.label ?? "National directory of election offices"} (opens in new tab)`}
+                      className="text-signal-cyan hover:text-phos"
+                    >
+                      national directory ↗
+                    </a>
+                  </p>
+                )}
                 <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
                 {/* Before election day nothing on the page says what it
                     will show once polls close, or what "leads" will mean. */}

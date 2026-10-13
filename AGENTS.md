@@ -762,7 +762,12 @@ Corollaries that follow from the same rule, all enforced in code:
   state's own would; a state page that was read and refused never falls
   back to one, since that would publish past the refusal; and the card
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
-  past the wall itself is not an option: it is the state saying no. That
+  past the wall itself is not an option: it is the state saying no.
+  A wall is not a dead link, though. A state's voter lookup the nightly
+  link check is refused on (`ballot_lookup._check` → `blocked_at`) is still
+  linked, worded as unconfirmed ("This site blocks automated checks, so we
+  can't confirm it's up") with USAGov's directory beside it; only a link
+  that answers 404, or lands on its site's homepage, falls back alone. That
   is enforced in the HTTP layer for every source: the client forgets the
   cookies a challenge response sets (`http_client.is_bot_challenge`), and
   `fetch_with_retry` never retries a challenge. Until 2026-10 a retry sent
@@ -813,12 +818,15 @@ What this rules in and out:
   explicit, unremembered navigation choices (the town selector, the state
   picker); linking out to the official lookup for a reader who wants a
   precinct-exact answer. Where a district needs to be findable, give it
-  place names a person already knows and let them filter: counties for a
-  U.S. House seat (`county_district_crosswalk.json`, the coming
-  election's lines, for the ballot pages; `county_district_crosswalk_sitting.json`,
-  the lines the sitting members were elected on, for "who represents me"
-  on `/politicians` — in a redrawn state the same number is a different
-  district, so each surface names its map and never borrows the other's), towns, communities
+  place names a person already knows and let them filter: counties, and
+  the cities, towns and communities in it, for a U.S. House seat
+  (`county_district_crosswalk.json` and the "120" map of
+  `congressional_district_places.json`, the coming election's lines, for
+  the ballot pages; `county_district_crosswalk_sitting.json` and the "119"
+  map, the lines the sitting members were elected on, for "who represents
+  me" on `/politicians` — in a redrawn state the same number is a
+  different district, so each surface names its map and never borrows the
+  other's; places by `scripts/build_district_place_crosswalk.py`), towns, communities
   (incorporated places and Census Designated Places) and counties for a
   state legislative one (`state_leg_district_crosswalk.json`, a block-level
   join documented in `scripts/fetch_state_leg_crosswalk.py`). Building
@@ -942,8 +950,38 @@ outright under a full directory page. Every photo is now served from this
 site at `/photo/<kind>/<id>` (2026-10): the API hands out those paths
 (`app/photos.py`; JSON-LD makes them absolute), and the frontend route
 (`app/photo/[kind]/[id]/route.ts`, `lib/photos.ts`) fetches the picture
-server-side — a bioguide portrait by its id, a stored source (Oyez, the
-outlet) looked up by kind and id through `GET /api/photo-sources/…`. It
+server-side, from a source the backend names by kind and id through
+`GET /api/photo-sources/…`: a justice's or issue's stored URL (Oyez, the
+outlet), and for a member (`bioguide`) one of two official photos: the
+headshot on the member's Congress.gov record (`depiction`, read from the
+record the pipeline stored in `api_cache`) or bioguide.congress.gov's
+portrait (`bioguide_photo_source`). Neither source is reliably the
+head-and-shoulders shot (2026-10): bioguide's file is, for some members, a
+full-length painted committee-chair portrait, mostly background as an
+avatar, and for a few others it is the member's own depiction that is a
+full-figure or wide shot. So the choice is measured, nightly in the
+stock-trades run (`pipeline/fetch/member_photos.py`, stored in
+`member_photos`): OpenCV's YuNet face detector measures each candidate's
+face height over its shorter side, and bioguide wins only when the
+depiction's face is below a head-and-shoulders share and bioguide's is
+clearly larger. Both numbers are fitted, not typed:
+`scripts/calibrate_member_photos.py` writes them to
+`app/data/member_photo_calibration.json` from a hand-labelled comparison of
+every current member's two photos (labels kept there with each image's
+hash; rerun when labelled photos change). OpenCV runs only in a child
+process started for the night's batch (`pipeline/fetch/face_detection.py`,
+which nothing in `app/` imports; `tests/test_member_photos.py` checks no app
+process loads `cv2`), so a native fault can't reach page serving or the
+pipeline. The model is YuNet from the OpenCV Zoo (MIT), vendored in
+`app/data/`; source and hash are in the calibration file. The endpoint reads
+the stored choice, and a member without one (a departed
+bill sponsor, or before the first run) gets the depiction-first rule. A
+depiction is used only on Congress.gov's `/img/member/` path and only with
+the attribution Congress.gov gives it; one without falls back to bioguide,
+so the credit on `/about/data#privacy` stays true. Many
+headshots are taller than 4:5 (up to 2:3), so member avatars crop at
+`object-[center_25%]` (the OG card at `objectPosition: "center 25%"`),
+which keeps the head in a square where a centred crop clips it. It
 takes an id, never a URL, so it is not an open proxy; add a kind there for
 a new picture, never a URL parameter. An issue's photo URL still comes from
 an RSS item, so each kind is fetched only from its own hosts
@@ -1521,7 +1559,7 @@ the pending list).
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
-| Official-ballot link table + liveness gating | `backend/app/pipeline/fetch/ballot_lookup.py` |
+| Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
@@ -1547,7 +1585,7 @@ the pending list).
 | Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
 | Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/` |
-| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
+| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; detector process `face_detection.py`; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |

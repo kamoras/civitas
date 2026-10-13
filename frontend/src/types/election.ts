@@ -174,6 +174,12 @@ export interface RaceWithCandidates {
    * out. Null (not []) if this district isn't in the bundled crosswalk —
    * never a guess. */
   counties: string[] | null;
+  /** House races only: the cities, towns and communities in this district
+   * on the lines it is elected on, largest first, from the Census
+   * Bureau's block files (congressional_district_places.json). A place
+   * listed by several districts is split between them. Null for a Senate
+   * race or a district the file doesn't cover — never a guess. */
+  places?: string[] | null;
   candidates: BallotCandidate[];
 }
 
@@ -391,6 +397,12 @@ export interface OfficialLookup {
    * each, rather than promising a state lookup it doesn't have. */
   isStateSpecific: boolean;
   verifiedAt: string | null;
+  /** The state's own URL, which its site's bot wall stops the link check
+   * from confirming: shown as the state's lookup, with a note and
+   * `fallback` (the national directory) beside it. Absent from an older
+   * API, read as false. */
+  unconfirmed?: boolean;
+  fallback?: { url: string; label: string; sourceName: string } | null;
 }
 
 /** Every federal race on one state's ballot this cycle, plus its

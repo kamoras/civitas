@@ -226,6 +226,46 @@ describe("the ballot page", () => {
     render(<StateBallotClient ballot={ballot({ omits: ["County and municipal offices"] })} />);
     expect(screen.getAllByText("County and municipal offices").length).toBeGreaterThan(0);
   });
+
+  it("links a walled state's own lookup, says it can't be checked, and gives the backup", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          state: "AZ",
+          stateName: "Arizona",
+          officialLookup: {
+            url: "https://my.arizona.vote/PortalList.aspx",
+            label: "Arizona Voter Information Portal",
+            sourceName: "Arizona Secretary of State",
+            isStateSpecific: true,
+            verifiedAt: null,
+            unconfirmed: true,
+            fallback: {
+              url: "https://www.usa.gov/election-office",
+              label: "Find your state or local election office",
+              sourceName: "USAGov",
+            },
+          },
+        })}
+      />
+    );
+    const own = screen.getByRole("link", {
+      name: "Arizona Voter Information Portal (opens in new tab)",
+    });
+    expect(own).toHaveAttribute("href", "https://my.arizona.vote/PortalList.aspx");
+    expect(own).toHaveTextContent("ARIZONA'S OFFICIAL VOTER LOOKUP");
+    expect(screen.getByText(/This site blocks automated checks/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "Find your state or local election office (opens in new tab)",
+      })
+    ).toHaveAttribute("href", "https://www.usa.gov/election-office");
+  });
+
+  it("gives a verified lookup no caveat", () => {
+    render(<StateBallotClient ballot={ballot()} />);
+    expect(screen.queryByText(/This site blocks automated checks/)).not.toBeInTheDocument();
+  });
 });
 
 describe("the contest drawer", () => {
@@ -490,7 +530,7 @@ describe("U.S. Representative", () => {
     const drawer = await openContest(/U\.S\. Representative/);
     expect(drawer.getByRole("link", { name: /house\.gov/ })).toBeInTheDocument();
     expect(
-      drawer.getByLabelText("Filter districts by county, candidate, or district number")
+      drawer.getByLabelText("Filter districts by city, town, county, candidate or district number")
     ).toBeInTheDocument();
   });
 
@@ -529,16 +569,58 @@ describe("U.S. Representative", () => {
     expect(
       drawer.getByRole("link", { name: "Texas voter portal (opens in new tab)" })
     ).toHaveAttribute("href", "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do");
-    const input = drawer.getByLabelText("Filter districts by county or district number");
+    const input = drawer.getByLabelText(
+      "Filter districts by city, town, county or district number"
+    );
     await userEvent.type(input, "zzz");
     expect(
-      drawer.getByText(
-        /goes by county, not city or town: try your county’s name or a district number/
-      )
+      drawer.getByText(/Try the name of your city, town or county, or a district number/)
     ).toBeInTheDocument();
     expect(drawer.queryByText(/surname/)).not.toBeInTheDocument();
     // Never an address field.
     expect(drawer.queryByLabelText(/address|zip/i)).not.toBeInTheDocument();
+  });
+
+  it("finds a district by a city or town in it, and says when a city is split", async () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          houseRaces: [1, 2, 3, 4].map((d) =>
+            houseRace({
+              id: `d${d}`,
+              district: d,
+              counties: [`County ${d}`],
+              // Rivertown spans districts 2 and 4; Oakdale is whole in 3.
+              places: [
+                ...(d === 2 || d === 4 ? ["Rivertown city"] : []),
+                ...(d === 3 ? ["Oakdale"] : []),
+                `Hamlet ${d}`,
+              ],
+            })
+          ),
+        })}
+      />
+    );
+    const drawer = await openContest(/U\.S\. Representative/);
+    const input = drawer.getByRole("searchbox");
+    await userEvent.type(input, "rivertown");
+    expect(document.querySelector("[data-place-summary]")).toHaveTextContent(
+      /^Rivertown is in districts 2 and 4: it is split/
+    );
+    expect(drawer.getByRole("status")).toHaveTextContent(
+      /2 of 4 districts match rivertown\. Rivertown is in districts 2 and 4/
+    );
+    // The row says it matched the city, ahead of its counties.
+    expect(drawer.getAllByText(/^Rivertown city, County/)).toHaveLength(2);
+    await userEvent.clear(input);
+    await userEvent.type(input, "Oakdale");
+    expect(document.querySelector("[data-place-summary]")).toHaveTextContent(
+      "Oakdale is in district 3."
+    );
+    // A place nobody lists names no district.
+    await userEvent.clear(input);
+    await userEvent.type(input, "Elsewhere");
+    expect(document.querySelector("[data-place-summary]")).toBeNull();
   });
 
   it("words new lines around the sitting member on the next cycle's ballot, before Jan 3", async () => {
