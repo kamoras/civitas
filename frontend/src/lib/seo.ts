@@ -101,7 +101,12 @@ const CHAMBER_NAMES: Record<string, string> = { senate: "Senate", house: "House"
 
 /** "S.4967, the Foo Act: sponsor, status, and votes" — the bill number is
  * what people paste into a search box, so it leads. */
-export function describeBill(bill: BillDetail): { title: string; description: string } {
+export function describeBill(
+  bill: BillDetail,
+  // The Record's spelling ("H.R. 7008", the backend's billLabel), which is
+  // what people type; the site's id ("HR.7008") when none is known.
+  label: string = bill.billId
+): { title: string; description: string } {
   const sponsor = `${bill.sponsorName} (${bill.sponsorParty}-${bill.sponsorState})`;
   const status = bill.isLaw
     ? "Became law."
@@ -109,9 +114,9 @@ export function describeBill(bill: BillDetail): { title: string; description: st
       ? `Latest action: ${bill.latestAction}`
       : "";
   return {
-    title: `${bill.billId}: ${bill.title}`,
+    title: `${label}: ${bill.title}`,
     description:
-      `${bill.billId} (${ordinal(bill.congress)} Congress, ${CHAMBER_NAMES[bill.chamber] ?? bill.chamber}), sponsored by ${sponsor}. ${status}`.trim(),
+      `${label} (${ordinal(bill.congress)} Congress, ${CHAMBER_NAMES[bill.chamber] ?? bill.chamber}), sponsored by ${sponsor}. ${status}`.trim(),
   };
 }
 

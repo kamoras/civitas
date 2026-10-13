@@ -265,18 +265,23 @@ def _apply_diversity(ranked: list[dict], cap: int) -> list[dict]:
 
 def browse_documents(
     db,
-    politician_id: str,
+    politician_id: str | None,
     *,
     limit: int = 20,
     doc_type: str | None = None,
     chamber: str | None = None,
     commentable: bool = False,
 ) -> dict:
-    """One member's documents, newest first, with no query: what a profile's
-    "view all documents" link opens. Same response shape as hybrid_search,
-    with no retrieval channel involved (so no distance, no matched terms)."""
+    """Documents with no query. One member's, newest first: what a profile's
+    "view all documents" link opens. With no member, only `commentable`
+    (every open comment period), closing soonest first: a reader looking
+    for a rule to comment on needs the next deadline before the newest
+    notice. Same response shape as hybrid_search, with no retrieval channel
+    involved (so no distance, no matched terms)."""
     today = comment_period_today()
-    query = db.query(ExploreDocument.id).filter(ExploreDocument.politician_id == politician_id)
+    query = db.query(ExploreDocument.id)
+    if politician_id is not None:
+        query = query.filter(ExploreDocument.politician_id == politician_id)
     if doc_type:
         query = query.filter(ExploreDocument.doc_type == doc_type)
     if chamber or commentable:
@@ -286,7 +291,11 @@ def browse_documents(
             ExploreDocument.comment_url.isnot(None), ExploreDocument.comment_url != "",
             ExploreDocument.comments_close_on >= today,
         )
-    ids = [row.id for row in query.order_by(ExploreDocument.date.desc(), ExploreDocument.id.desc()).limit(limit)]
+    order = (
+        (ExploreDocument.date.desc(), ExploreDocument.id.desc()) if politician_id is not None
+        else (ExploreDocument.comments_close_on.asc(), ExploreDocument.date.desc(), ExploreDocument.id.desc())
+    )
+    ids = [row.id for row in query.order_by(*order).limit(limit)]
     hydrated = _hydrate(db, ids)
     results = []
     for doc_id in ids:
