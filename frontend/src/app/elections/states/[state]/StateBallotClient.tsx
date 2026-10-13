@@ -7,7 +7,7 @@ import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import CoverageFeed from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
-import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
+import BallotMeasureCard, { measureAnchor } from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
 import GeneralRunoffNotice, { otherPrimaryLabel } from "@/components/elections/GeneralRunoffNotice";
 import DistrictFinder from "@/components/elections/DistrictFinder";
@@ -1214,7 +1214,7 @@ function ContestOverview({
 }: {
   contest: BallotContest;
   ballot: StateBallot;
-  onOpen: (key: string, houseRaceId?: string | null) => void;
+  onOpen: (key: string, houseRaceId?: string | null, measureId?: string | null) => void;
   /** From election day on — how incumbency is worded (incumbencyLabel). */
   resultsMode: boolean;
 }) {
@@ -1442,19 +1442,26 @@ function ContestOverview({
                   {OPERATOR_NONE_SHORT}
                 </p>
               )}
+            {/* Each row opens the drawer at its own measure: California's
+                fourteen run to ten screens of verbatim text, and the ninth
+                was a click and seven screens of scrolling away. */}
             <ul>
               {ballot.measures.map((m) => (
-                <li
-                  key={m.id}
-                  className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-hi"
-                >
-                  <span className="mr-2 font-mono text-xs text-ink-lo">{m.number}</span>
-                  {m.title}
-                  {(m.status === "removed" || m.status === "withdrawn") && (
-                    <span className="ml-2 font-mono text-[10px] uppercase text-signal-red">
-                      {m.status}
-                    </span>
-                  )}
+                <li key={m.id} className="border-b border-white/[0.09]">
+                  <button
+                    type="button"
+                    data-open-measure={m.id}
+                    onClick={() => onOpen(contest.key, null, m.id)}
+                    className="min-h-[44px] w-full px-4 py-2 text-left text-[13px] text-ink-hi hover:text-phos"
+                  >
+                    <span className="mr-2 font-mono text-xs text-ink-lo">{m.number}</span>
+                    {m.title}
+                    {(m.status === "removed" || m.status === "withdrawn") && (
+                      <span className="ml-2 font-mono text-[10px] uppercase text-signal-red">
+                        {m.status}
+                      </span>
+                    )}
+                  </button>
                 </li>
               ))}
             </ul>
@@ -1620,7 +1627,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // Collapsing the two meant a contest opened by a link could never be
   // closed (setting null over null changes nothing).
   const [chosen, setChosen] = useState<
-    { key: string; houseRaceId: string | null } | null | undefined
+    { key: string; houseRaceId: string | null; measureId?: string | null } | null | undefined
   >(undefined);
   // A #race-{id} link (old /elections/{raceId} redirects, Bluesky posts,
   // the live-updates feed, the Action Center's follow-the-count links) or a
@@ -1658,10 +1665,14 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const open = chosen !== undefined ? chosen : fromHash;
 
   const openContest = useCallback(
-    (key: string, houseRaceId: string | null = null) => {
-      setChosen({ key, houseRaceId });
+    (key: string, houseRaceId: string | null = null, measureId: string | null = null) => {
+      setChosen({ key, houseRaceId, measureId });
       const contest = contests.find((c) => c.key === key);
-      const hash = contest ? contestHash(contest, houseRaceId) : `#ballot-${key}`;
+      const hash = measureId
+        ? `#${measureAnchor(measureId)}`
+        : contest
+          ? contestHash(contest, houseRaceId)
+          : `#ballot-${key}`;
       window.history.replaceState(null, "", hash);
     },
     [contests]
@@ -1933,6 +1944,39 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                                 ›
                               </span>
                             </button>
+                            {/* The phone's ballot has no measures box, so the
+                                measures row carries one button per measure:
+                                a reader after the ninth taps it, not the row
+                                and then nine measures of scrolling. */}
+                            {c.kind === "measures" && ballot.measures.length > 1 && (
+                              <div
+                                role="group"
+                                aria-label="Open a measure"
+                                className="flex flex-wrap gap-1.5 border-b border-white/[0.14] px-4 py-2 pl-12"
+                              >
+                                {/* Said on screen too: a row of bare numbers
+                                    doesn't say what tapping one does. The
+                                    group's label speaks for it. */}
+                                <span
+                                  aria-hidden="true"
+                                  className="w-full font-mono text-[11px] text-ink-lo"
+                                >
+                                  Open a measure:
+                                </span>
+                                {ballot.measures.map((m) => (
+                                  <button
+                                    key={m.id}
+                                    type="button"
+                                    data-open-measure={m.id}
+                                    onClick={() => openContest(c.key, null, m.id)}
+                                    aria-label={[m.number, m.title].filter(Boolean).join(": ")}
+                                    className="min-h-[44px] min-w-[44px] max-w-[12rem] truncate border border-white/25 px-2 font-mono text-sm text-ink-hi hover:border-phos hover:text-phos"
+                                  >
+                                    {m.number || m.title}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -1967,6 +2011,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           <ContestDrawer
             contest={openContestEntry}
             shareAnchor={contestHash(openContestEntry, open?.houseRaceId ?? null).slice(1)}
+            focusId={open?.measureId ? measureAnchor(open.measureId) : null}
             index={openIndex}
             total={contests.length}
             prev={openIndex > 0 ? contests[openIndex - 1] : null}

@@ -338,38 +338,90 @@ export default async function ElectionsChapter() {
       </Section>
 
       <Section id="election-night" title="Election night: the count">
-        <P>
-          From election day, <span className="font-mono text-ink-hi">/elections</span> and each
-          state page put results first. The national map is shaded by who is leading each race
-          instead of by how the state usually leans: fainter while fewer than half its reporting
-          areas (usually precincts) are in, solid once the state lists its count as official. Where
-          a state has more than one race on the map (its House seats, or both Senate seats), it
-          takes the colour of the party leading the most of them, grey when two lead equally many,
-          and stays fainter until every one has half in; it turns solid only when every count is
-          official. A state still voting, one with no votes yet and one whose feed couldn&apos;t be
-          read are each marked with a pattern as well as a colour, and each state&apos;s name, read
-          aloud, says where its count stands. Each state page says when its count was last read, and
-          shows its Senate race or races, every House district and a district map shaded the same
-          way, above the ballot research, and a live-updates feed tells each change as it happens:
-          first returns, a new leader, every reporting area in, a count the state lists as official,
-          a seat changing party. A district or Senate race Civitas shows no count for while it shows
-          one for the state&apos;s other races (a contest the feed doesn&apos;t list or that
-          couldn&apos;t be matched, two Senate contests that couldn&apos;t be told apart, a count
-          set aside as impossible, an uncontested seat) is listed and marked as exactly that, not as
-          &ldquo;no votes yet&rdquo;; so is a whole chamber on the national map, hatched and named
-          &ldquo;no count shown here&rdquo;, and, in a state electing both its senators with a count
-          shown for only one, the other race on that state&apos;s map label and row. While a
-          state&apos;s polls are still open, its page stays a ballot-research page and the national
-          map marks its polls &ldquo;not yet closed&rdquo;: nothing is said about a count until its
-          last polls close. From election day the elections pages show no partisan lean, on a map or
-          beside a district, even where there is no count to show: next to a live count, a lean
-          reads as a prediction of it.
-        </P>
-        <Sub title="Where the numbers come from">
+        {/* The summary is the part most readers need; it stays at a grade-8
+            reading level. Every rule is spelled out in the parts below it. */}
+        <Sub title="In short" id="election-night-summary">
+          <List>
+            <Item>
+              Once a state&apos;s polls close, its page shows the vote count from the state&apos;s
+              own election office.
+            </Item>
+            <Item>
+              The count is checked every five minutes while it is moving. Some states don&apos;t
+              publish a count we can read. Their pages say so and link to the office that does.
+            </Item>
+            <Item>
+              The person ahead &ldquo;leads&rdquo;. Until the state says its count is official, the
+              lead is &ldquo;not final&rdquo;.
+            </Item>
+            <Item>
+              Civitas never says who won. A recount, a runoff or a court can still change the
+              result.
+            </Item>
+            <Item>
+              If a number can&apos;t be trusted, the page shows no number and tells you why.
+            </Item>
+            <Item>
+              Results stay up for two weeks after the count stops changing, and never past January
+              3.
+            </Item>
+          </List>
+        </Sub>
+        <Sub title="What the pages show" id="election-night-pages">
+          <List>
+            <Item label="Results first">
+              From election day, <span className="font-mono text-ink-hi">/elections</span> and each
+              state page put results first.
+            </Item>
+            <Item label="The national map">
+              Each state is shaded by who is leading, not by how it usually votes. The colour is
+              fainter while fewer than half of its reporting areas (usually precincts) are in. It
+              turns solid once the state lists its count as official.
+            </Item>
+            <Item label="A state with several races">
+              Where a state has more than one race on the map (its House seats, or both Senate
+              seats), it takes the colour of the party leading the most of them. It is grey when two
+              parties lead equally many. It stays fainter until every race has half its areas in,
+              and turns solid only when every count is official.
+            </Item>
+            <Item label="Patterns as well as colours">
+              A state still voting, a state with no votes yet, and a state whose feed couldn&apos;t
+              be read each get a pattern as well as a colour. Each state&apos;s name, read aloud,
+              says where its count stands.
+            </Item>
+            <Item label="Each state page">
+              It says when its count was last read. Above the ballot research it shows the Senate
+              race or races, every House district, and a district map shaded the same way. A
+              live-updates feed tells each change as it happens: first returns, a new leader, every
+              reporting area in, a count the state lists as official, a seat changing party.
+            </Item>
+            <Item label="A race with no count">
+              Sometimes Civitas shows a count for some of a state&apos;s races but not one of them.
+              The feed may not list that contest, or it couldn&apos;t be matched. Two Senate
+              contests may not be told apart. A count may have been set aside as impossible, or the
+              seat may be uncontested. That race is listed and marked as exactly that, never as
+              &ldquo;no votes yet&rdquo;. The same goes for a whole chamber on the national map,
+              which is hatched and named &ldquo;no count shown here&rdquo;. In a state electing both
+              senators with a count shown for only one, the other race is marked that way on the
+              state&apos;s map label and row.
+            </Item>
+            <Item label="Polls still open">
+              While a state&apos;s polls are open, its page stays a ballot-research page, and the
+              national map marks its polls &ldquo;not yet closed&rdquo;. Nothing is said about a
+              count until its last polls close.
+            </Item>
+            <Item label="No partisan lean">
+              From election day the elections pages show no partisan lean, on a map or beside a
+              district, even where there is no count to show. Next to a live count, a lean reads as
+              a prediction of it.
+            </Item>
+          </List>
+        </Sub>
+        <Sub title="Where the numbers come from" id="election-night-sources">
           <P>
-            Every five minutes while counts are moving (hourly once none has moved for a day), from
-            the state&apos;s own election-night results site: the same systems Civitas already reads
-            for confirmed candidates.{" "}
+            The count comes from the state&apos;s own election-night results site: the same systems
+            Civitas already reads for confirmed candidates. It is read every five minutes while
+            counts are moving, and hourly once none has moved for a day.{" "}
             {live && live.length > 0 ? (
               <>
                 {capitalize(countWord(live.length))}{" "}
@@ -384,7 +436,7 @@ export default async function ElectionsChapter() {
               </>
             )}{" "}
             Every other state&apos;s page says it has no live count here and links to the office
-            that publishes one; it is never drawn as a state where nothing has happened.
+            that publishes one. It is never drawn as a state where nothing has happened.
             {rankedChoice && rankedChoice.length > 0 && (
               <>
                 {" "}
@@ -403,75 +455,108 @@ export default async function ElectionsChapter() {
             )}
           </P>
         </Sub>
-        <Sub title="What we won’t show">
-          <P>
-            A wrong number on election night is worse than none. Nothing from a state is read until
-            its last polls close. A feed marked as test or practice data, one answering for the
-            wrong election, or one older than what we already show is refused, and the page keeps
-            the last count it trusted, and says so, with the time, if a state&apos;s feed
-            couldn&apos;t be read at all rather than implying counting hasn&apos;t started. If the
-            page itself can&apos;t refresh, it says that too, with when the counts still on screen
-            were read; no state is marked live and every count on the map is striped, so an old
-            count never passes for a live one &mdash; and that is all it says then: it doesn&apos;t
-            blame a state&apos;s feed for its own failure to ask. If Civitas itself stops reading a
-            state&apos;s feed &mdash; no check in well over a pass, 15 minutes while counts move or
-            70 once they are read hourly, or no record of one at all since the state&apos;s polls
-            closed &mdash; the state is marked <strong>stale</strong>: its row says when its feed
-            was last checked and when the count shown was read, and the map keeps the last
-            leader&apos;s colour under amber stripes. That is judged by the server&apos;s clock,
-            from the time on the page&apos;s latest answer, not by your device&apos;s, which may be
-            off; while the page can&apos;t refresh, that clock stops where it stood, and it never
-            runs backwards. A count that goes down (a county pulling a bad upload) is shown but
-            announces nothing: a change of party already announced stays announced &mdash; on the
-            map, in the live updates and in the Action Center alike &mdash; until the next count
-            says otherwise. If that lower count shows the holder&apos;s party ahead again, the
-            results pages say both: that the change was announced, and that the latest count shows
-            the holder&apos;s party ahead.
-          </P>
-          <P>
-            We never call a race. A candidate &ldquo;leads&rdquo; &mdash; &ldquo;not final&rdquo;
-            while the state hasn&apos;t listed its count as official, and still &ldquo;leads&rdquo;
-            once it has, never &ldquo;wins&rdquo;: an official count&apos;s leader can still face a
-            runoff (Georgia requires a majority), a recount or a court. A seat is only described as
-            changing party once half its reporting areas are in; where a state reports by county or
-            town, it takes every county or town in and six hours since the first votes, or the
-            state&apos;s official count. Some states count a county as in with its first batch of
-            ballots; others only once its count is complete, which can take weeks, and there the map
-            shows who leads meanwhile without calling it a change of party. How much is in is said
-            the state&apos;s way too: &ldquo;fully reported&rdquo; where it counts areas whose count
-            is complete, &ldquo;results from&rdquo; where an area counts once it has reported
-            anything. Once said, it stands until the lead itself goes back to the seat&apos;s party
-            or ties: a count that dips below that bar with the same candidate ahead is not a
-            reversal. A House seat in a state whose congressional map was redrawn for this election
-            has no previous holder to compare against (the district with the same number is a
-            different district), so it is never described as changing party. Nor is a seat whose
-            previous holder was still unknown when the new Congress took office at noon on January
-            3: from then the member list is changing over to the winners, so it no longer says who
-            held the seat going in.
-          </P>
+        <Sub title="When we show no number" id="election-night-refused">
+          <P>A wrong number on election night is worse than none.</P>
+          <List>
+            <Item label="Before polls close">
+              Nothing from a state is read until its last polls close.
+            </Item>
+            <Item label="Feeds we refuse">
+              A feed marked as test or practice data, one for the wrong election, or one older than
+              what we already show is refused. The page keeps the last count it trusted. If a
+              state&apos;s feed couldn&apos;t be read at all, the page says so, with the time,
+              rather than implying counting hasn&apos;t started.
+            </Item>
+            <Item label="When this page can't refresh">
+              The page says so, with when the counts still on screen were read. No state is marked
+              live, and every count on the map is striped, so an old count never passes for a live
+              one. That is all it says then: it doesn&apos;t blame a state&apos;s feed for its own
+              failure to ask.
+            </Item>
+            <Item label="When Civitas stops reading a state">
+              If a state&apos;s feed hasn&apos;t been checked in well over a pass (15 minutes while
+              counts move, 70 once they are read hourly), or there is no record of a check at all
+              since its polls closed, the state is marked <strong>stale</strong>. Its row says when
+              its feed was last checked and when the count shown was read. The map keeps the last
+              leader&apos;s colour under amber stripes.
+            </Item>
+            <Item label="Whose clock">
+              All of this is judged by the server&apos;s clock, from the time on the page&apos;s
+              latest answer, not by your device&apos;s, which may be off. While the page can&apos;t
+              refresh, that clock stops where it stood. It never runs backwards.
+            </Item>
+            <Item label="A count that goes down">
+              A county may pull a bad upload. The lower count is shown but announces nothing. A
+              change of party already announced stays announced (on the map, in the live updates and
+              in the Action Center alike) until the next count says otherwise. If the lower count
+              shows the holder&apos;s party ahead again, the results pages say both: that the change
+              was announced, and that the latest count shows the holder&apos;s party ahead.
+            </Item>
+          </List>
         </Sub>
-        <Sub title="Developing stories and posts">
+        <Sub title="We never call a race" id="election-night-leads">
+          <List>
+            <Item label="Leads, not wins">
+              A candidate &ldquo;leads&rdquo;. The lead is &ldquo;not final&rdquo; while the state
+              hasn&apos;t listed its count as official. It still &ldquo;leads&rdquo; once it has,
+              and never &ldquo;wins&rdquo;: an official count&apos;s leader can still face a runoff
+              (Georgia requires a majority), a recount or a court.
+            </Item>
+            <Item label="A seat changing party">
+              A seat is only described as changing party once half its reporting areas are in. Where
+              a state reports by county or town, it takes every county or town in and six hours
+              since the first votes, or the state&apos;s official count.
+            </Item>
+            <Item label="What &ldquo;in&rdquo; means">
+              Some states count a county as in with its first batch of ballots. Others count it only
+              once its count is complete, which can take weeks. There the map shows who leads in the
+              meantime without calling it a change of party. How much is in is said the state&apos;s
+              way too: &ldquo;fully reported&rdquo; where it counts areas whose count is complete,
+              &ldquo;results from&rdquo; where an area counts once it has reported anything.
+            </Item>
+            <Item label="Once said, it stands">
+              A change of party stays until the lead itself goes back to the seat&apos;s party or
+              ties. A count that dips below that bar with the same candidate ahead is not a
+              reversal.
+            </Item>
+            <Item label="Seats with no previous holder">
+              A House seat in a state whose congressional map was redrawn for this election has no
+              previous holder to compare against: the district with the same number is a different
+              district. So it is never described as changing party. Nor is a seat whose previous
+              holder was still unknown when the new Congress took office at noon on January 3. From
+              then the member list is changing over to the winners, so it no longer says who held
+              the seat going in.
+            </Item>
+          </List>
+        </Sub>
+        <Sub title="Developing stories and posts" id="election-night-posts">
           <P>
             A seat changing party opens a <em>developing</em> story in the{" "}
             <A href={ACTION_CENTER_HREF}>Action Center</A>, marked as not yet confirmed by the
-            press. Until a news story naming that race (the state&apos;s seat, and one of its
-            candidates by full name (&ldquo;Wayne Johnson&rdquo;, never just &ldquo;Johnson&rdquo;))
-            confirms it, it follows the count, and if the lead reverts it comes off the Action
-            Center and is rewritten to say the count no longer shows a change of party; once
-            confirmed, it is the news story. Civitas&apos;s Bluesky account posts fewer moments than
-            the feed shows: a seat changing party, a count the state lists as official (a Senate
-            race, or a seat changing party), and the big moves in a Senate race: a new leader with
-            most of the count in, every reporting area in. A few an hour at most; one that
-            can&apos;t go out within two hours, or that a newer post about the same race overtakes,
-            is dropped rather than posted late, and a posted change of party that reverts gets a
-            correction. Every sentence in the feed, the story and the posts is a fixed template
-            around the state&apos;s own figures; no AI writes any of it.
+            press. It follows the count until a news story naming that race confirms it: the
+            state&apos;s seat, and one of its candidates by full name, never the surname alone. If
+            the lead reverts first, the story comes off the Action Center and is rewritten to say
+            the count no longer shows a change of party. Once confirmed, it is the news story.
+          </P>
+          <P>
+            Civitas&apos;s Bluesky account posts fewer moments than the feed shows: a seat changing
+            party, a count the state lists as official (a Senate race, or a seat changing party),
+            and the big moves in a Senate race (a new leader with most of the count in, every
+            reporting area in). It posts a few an hour at most. A post that can&apos;t go out within
+            two hours, or that a newer post about the same race overtakes, is dropped rather than
+            posted late. A posted change of party that reverts gets a correction.
+          </P>
+          <P>
+            Every sentence in the feed, the story and the posts is a fixed template around the
+            state&apos;s own figures. No AI writes any of it.
           </P>
         </Sub>
-        <P>
-          The results stay up for two weeks after the last count changes, never past January 3, when
-          the new Congress is sworn in. Then the pages turn to the next election.
-        </P>
+        <Sub title="How long results stay up" id="election-night-ends">
+          <P>
+            The results stay up for two weeks after the last count changes, never past January 3,
+            when the new Congress is sworn in. Then the pages turn to the next election.
+          </P>
+        </Sub>
       </Section>
 
       <Section id="measures" title="Ballot measures: quoted, never rewritten">
@@ -481,6 +566,11 @@ export default async function ElectionsChapter() {
           to the source. Where a state publishes no yes/no description, none is shown. We never
           infer one: the intuitive reading (&ldquo;yes enacts it&rdquo;) is backwards on a veto
           referendum, where approving <em>keeps</em> the law being challenged.
+        </P>
+        <P>
+          On the ballot page, each measure in the measures box (on a phone, each measure&apos;s
+          button under the measures line) opens the full text at that measure, so finding the ninth
+          of fourteen takes one click rather than scrolling past the other eight.
         </P>
         <Sub title="Who wrote the words you’re reading">
           <P>

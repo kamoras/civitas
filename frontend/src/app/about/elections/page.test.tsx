@@ -48,6 +48,36 @@ describe("the elections methodology chapter", () => {
     expect(screen.getAllByRole("heading").length).toBeGreaterThan(0);
   });
 
+  it("opens election night with a short summary under plain headings, every rule kept", async () => {
+    backend(["GA"]);
+    render(await ElectionsChapter());
+    const summary = document.getElementById("election-night-summary")!;
+    expect(within(summary).getByRole("heading", { name: "In short" })).toBeInTheDocument();
+    expect(summary).toHaveTextContent(/“not final”/);
+    expect(summary).toHaveTextContent(/never says who won/);
+    // Each part a reader may be sent to has its own heading and anchor.
+    for (const [id, name] of [
+      ["election-night-pages", "What the pages show"],
+      ["election-night-sources", "Where the numbers come from"],
+      ["election-night-refused", "When we show no number"],
+      ["election-night-leads", "We never call a race"],
+      ["election-night-posts", "Developing stories and posts"],
+      ["election-night-ends", "How long results stay up"],
+    ]) {
+      expect(
+        within(document.getElementById(id)!).getByRole("heading", { name })
+      ).toBeInTheDocument();
+    }
+    const section = document.getElementById("election-night")!;
+    // A sample of the rules the restructure had to keep.
+    expect(section).toHaveTextContent(/fewer than half of its reporting areas/);
+    expect(section).toHaveTextContent(/15 minutes while counts move, 70 once they are read hourly/);
+    expect(section).toHaveTextContent(/six hours since the first votes/);
+    expect(section).toHaveTextContent(/noon on January 3/);
+    expect(section).toHaveTextContent(/never the surname alone/);
+    expect(section).toHaveTextContent(/within two hours/);
+  });
+
   it("lists the states read live from the backend's own list, not a hand-typed one", async () => {
     backend(["WV", "GA", "NM"]);
     render(await ElectionsChapter());
@@ -72,7 +102,7 @@ describe("the elections methodology chapter", () => {
     backend(["GA"]);
     render(await ElectionsChapter());
     expect(document.getElementById("election-night")).toHaveTextContent(
-      /Every five minutes while counts are moving \(hourly once none has moved for a day\)/
+      /read every five minutes while counts are moving, and hourly once none has moved for a day/
     );
   });
 
