@@ -168,10 +168,11 @@ export default function NewsChapter() {
           for or against a position: contact the members of Congress the coverage names (through
           their own contact form), contact the committee that handles the subject, follow the bills
           involved, comment on a rule about the story by its deadline, and read the related federal
-          documents. When the coverage names no member, it also points to the directory, where you
-          pick your own state; the site never asks where you live. A seat changing party on election
-          night is the exception: its issue is the count, so what you can do is follow that count on
-          its state&apos;s page.
+          documents. Every issue also points to the directory, where you pick your own state, and
+          the site never asks where you live: a member&apos;s office answers its own constituents,
+          so a member from another state is often not one you can reach. A seat changing party on
+          election night is the exception: its issue is the count, so what you can do is follow that
+          count on its state&apos;s page.
         </P>
         <More label="How the committee is chosen">
           <P>
@@ -224,7 +225,9 @@ export default function NewsChapter() {
             any a recent issue links, then proposed and final rules by how many people have read
             them (the Federal Register&apos;s own count), then notices, which are mostly paperwork
             renewals and waiver requests. By deadline alone, six of the first ten were such notices
-            on 11 October 2026. Every day still on the record can be paged through, one at a time.
+            on 11 October 2026. &ldquo;Every open comment period&rdquo; lists them all in Explore,
+            closing soonest first. Every day still on the record can be paged through, one at a
+            time.
           </Item>
           <Item label="Ongoing">
             When a story keeps coming back, on five separate days within two weeks and from at least

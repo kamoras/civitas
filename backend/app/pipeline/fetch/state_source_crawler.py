@@ -47,6 +47,7 @@ from urllib.parse import urljoin, urlparse, urlsplit
 
 import httpx
 
+from app.http_client import is_bot_challenge
 from app.pipeline.fetch import robots
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_with_retry
 from app.pipeline.fetch.state_candidates_common import normalize_party, parse_office, runoff_threshold
@@ -84,6 +85,8 @@ CLARITY_BASE = "https://results.enr.clarityelections.com"
 # PAGES beneath them rather than any stored deep link, so a redesign under
 # the same domain costs nothing. A state that moved domains entirely
 # announces itself by every probe failing, which the run report surfaces.
+# Massachusetts's is www.sec.state.ma.us: the bare sec.state.ma.us accepts
+# no connection at all (measured 2026-10-13 from two networks).
 ELECTION_DOMAINS = {
     "AL": ["sos.alabama.gov", "alabamavotes.gov"], "AK": ["elections.alaska.gov"],
     "AZ": ["azsos.gov", "arizona.vote"], "AR": ["sos.arkansas.gov"],
@@ -94,7 +97,7 @@ ELECTION_DOMAINS = {
     "ID": ["sos.idaho.gov", "voteidaho.gov"], "IL": ["elections.il.gov"],
     "IN": ["in.gov", "indianavoters.in.gov"], "IA": ["sos.iowa.gov"],
     "KS": ["sos.ks.gov"], "KY": ["sos.ky.gov", "elect.ky.gov"], "LA": ["sos.la.gov"],
-    "ME": ["maine.gov"], "MD": ["elections.maryland.gov"], "MA": ["sec.state.ma.us"],
+    "ME": ["maine.gov"], "MD": ["elections.maryland.gov"], "MA": ["www.sec.state.ma.us"],
     "MI": ["michigan.gov"], "MN": ["sos.mn.gov"], "MS": ["sos.ms.gov"],
     "MO": ["sos.mo.gov"], "MT": ["sosmt.gov"], "NE": ["sos.nebraska.gov"],
     "NV": ["nvsos.gov"], "NH": ["sos.nh.gov"], "NJ": ["nj.gov"],
@@ -144,9 +147,22 @@ _robots_locks: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, a
 _robots_last_read: dict[str, tuple[robots.Robots, float]] = {}
 ROBOTS_LAST_READ_MAX_AGE_S = 30 * 24 * 3600
 # Origins where a real request was refused only because robots.txt could
-# not be read — reported by the sweep (take_unreadable_refusals), since a
-# state quietly finding nothing looks the same as a state with nothing.
-_unreadable_refusals: set[str] = set()
+# not be read, and why ("bot wall", "HTTP 503", "no answer") — reported by
+# the sweep (take_robots_refusals), since a state quietly finding nothing
+# looks the same as a state with nothing.
+_robots_refusals: dict[str, str] = {}
+# Why each origin's current blanket refusal applies, beside its _robots entry.
+_robots_failure: dict[str, str] = {}
+# A robots.txt request answered with a bot wall's challenge. RFC 9309 would
+# read a 4xx as "no rules", but a challenge is the site saying no to robots
+# outright: nothing is read past it (AGENTS.md §7), and it is reported as a
+# wall, not as a file that couldn't be read. A distinct object, so a refusal
+# can say which it was.
+WALLED = robots.Robots(blanket=False)
+BOT_WALL = "bot wall"
+# §2.3.1.2: follow at least five redirects for robots.txt itself; the shared
+# fetch follows them (httpx stops at 20), and the rules read at the end
+# govern the origin that was asked.
 # How many redirects a request follows, each hop asking robots.txt first.
 MAX_REDIRECTS = 5
 
@@ -158,10 +174,11 @@ async def _allowed(client: httpx.AsyncClient, url: str, probe: bool = False) -> 
     robots.txt exists to govern, and a crawler that ignores it earns a
     block that takes the whole feature down with it. Read as RFC 9309 says
     (fetch/robots.py) and kept ROBOTS_CACHE_S: a 4xx means the site has no
-    rules for us; a 5xx, a 429 or no answer at all means we may read
-    nothing there until it can be asked again, ROBOTS_UNREACHABLE_RETRY_S
-    later (logged here, so a refusal it causes isn't mistaken for the
-    site's own).
+    rules for us — unless it is a bot wall's challenge, which means nothing
+    is read there (WALLED); a 5xx, a 429 or no answer at all means we may
+    read nothing there until it can be asked again,
+    ROBOTS_UNREACHABLE_RETRY_S later (logged here, so a refusal it causes
+    isn't mistaken for the site's own).
     """
     parts = urlsplit(url)
     origin = f"{(parts.scheme or 'https').lower()}://{parts.netloc.lower()}"
@@ -171,18 +188,19 @@ async def _allowed(client: httpx.AsyncClient, url: str, probe: bool = False) -> 
     # urlsplit keeps ";params" in the path, which urlparse would cut off.
     path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
     allowed = cached.allows(ROBOTS_AGENT, path)
-    if not allowed and cached is robots.DISALLOW_ALL and not probe:
+    if not allowed and cached.blanket is False and not probe:
         # The portal probe's guesses are mostly hosts that don't exist;
         # everything else refused this way is a source the sweep missed.
-        _unreadable_refusals.add(origin)
+        _robots_refusals[origin] = _robots_failure.get(origin, "no answer")
     return allowed
 
 
-def take_unreadable_refusals() -> list[str]:
-    """Origins where a request was refused because robots.txt couldn't be
-    read, since the last call — for the sweep's report."""
-    refused = sorted(_unreadable_refusals)
-    _unreadable_refusals.clear()
+def take_robots_refusals() -> dict[str, str]:
+    """{origin: why} for every request refused because robots.txt was
+    walled or couldn't be read, since the last call — for the sweep's
+    report."""
+    refused = dict(sorted(_robots_refusals.items()))
+    _robots_refusals.clear()
     return refused
 
 
@@ -211,38 +229,55 @@ async def _get_governed(
     return None
 
 
+# Every 4xx but 429 means "no rules" (§2.3.1.3); a 5xx means "read nothing"
+# (§2.3.1.4) and is returned only so the report can name it.
+_ROBOTS_ANSWERS = tuple(s for s in range(400, 600) if s != 429)
+
+
 async def _robots_for(client: httpx.AsyncClient, origin: str) -> robots.Robots:
     """The origin's rules, read at most once per ROBOTS_CACHE_S (or
     ROBOTS_UNREACHABLE_RETRY_S after a failed read)."""
     cached = _robots.get(origin)
     now = time.monotonic()
     if cached is None or now >= cached[1]:
-        resp = await fetch_with_retry(
-            client, _probe_limiter, "GET", f"{origin}/robots.txt",
-            # Two tries: one refusal here keeps the whole origin out of the
-            # sweep, and every state's Clarity probe shares one origin.
-            timeout=8.0, retries=2, retry_on_4xx=False,
-            # A missing robots.txt is an answer, not a failure to log. A 429
-            # is handled before this, as a failed fetch: asked to slow down,
-            # we read nothing there rather than everything.
-            expected_statuses=tuple(s for s in range(400, 500) if s != 429),
-            log_label=f"{origin} robots.txt", headers=_HEADERS,
-        )
+        resp = None
+        for _ in range(2):  # A 5xx is asked once more, as a dropped connection is.
+            resp = await fetch_with_retry(
+                client, _probe_limiter, "GET", f"{origin}/robots.txt",
+                # Two tries: one refusal here keeps the whole origin out of the
+                # sweep, and every state's Clarity probe shares one origin.
+                timeout=8.0, retries=2, retry_on_4xx=False,
+                # A missing robots.txt is an answer, not a failure to log, and
+                # a 5xx is returned to be named in the report. A 429 is
+                # handled before this, as a failed fetch: asked to slow down,
+                # we read nothing there rather than everything.
+                expected_statuses=_ROBOTS_ANSWERS, bot_challenge_ok=True,
+                log_label=f"{origin} robots.txt", headers=_HEADERS,
+            )
+            if resp is None or resp.status_code < 500 or is_bot_challenge(resp):
+                break
         last = _robots_last_read.get(origin)
-        if resp is None and last is not None and now - last[1] <= ROBOTS_LAST_READ_MAX_AGE_S:
+        failure = None if resp is None or resp.status_code < 500 else f"HTTP {resp.status_code}"
+        if resp is not None and is_bot_challenge(resp):
+            # Never the copy read before: the site has said no since.
+            logger.info("%s/robots.txt answered a bot challenge — reading nothing there", origin)
+            cached = (WALLED, now + ROBOTS_UNREACHABLE_RETRY_S)
+            _robots_failure[origin] = BOT_WALL
+        elif (resp is None or failure) and last is not None and now - last[1] <= ROBOTS_LAST_READ_MAX_AGE_S:
             # The copy read before still stands (§2.3.1.4), asked again later.
             logger.info("%s/robots.txt unreachable — using the copy read before", origin)
             cached = (last[0], now + ROBOTS_UNREACHABLE_RETRY_S)
-        elif resp is None:
+        elif resp is None or failure:
             # Info here (fetch_with_retry has already logged the failure):
             # the portal probe asks hosts that mostly don't exist. A real
             # request this refuses is reported by the sweep instead
-            # (take_unreadable_refusals).
+            # (take_robots_refusals).
             logger.info(
-                "%s/robots.txt unreachable — reading nothing there for %d minutes (RFC 9309 §2.3.1.4)",
-                origin, ROBOTS_UNREACHABLE_RETRY_S // 60,
+                "%s/robots.txt unreachable (%s) — reading nothing there for %d minutes (RFC 9309 §2.3.1.4)",
+                origin, failure or "no answer", ROBOTS_UNREACHABLE_RETRY_S // 60,
             )
             cached = (robots.DISALLOW_ALL, now + ROBOTS_UNREACHABLE_RETRY_S)
+            _robots_failure[origin] = failure or "no answer"
         elif resp.status_code >= 400:
             cached = (robots.ALLOW_ALL, now + ROBOTS_CACHE_S)
         else:

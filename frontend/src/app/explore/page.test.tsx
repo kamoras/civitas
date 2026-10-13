@@ -88,4 +88,37 @@ describe("ExplorePage", () => {
       expect.objectContaining({ politicianId: undefined })
     );
   });
+
+  it("lists every open comment period from ?comment=open, with no query", async () => {
+    // The homepage's "Every open comment period" link used to open an empty
+    // search page: the comment filter did nothing without a search term.
+    api.searchExplore.mockResolvedValue({ query: "", results: [doc(1, "A rule")], count: 1 });
+    open("comment=open");
+
+    expect(await screen.findByText("A rule")).toBeInTheDocument();
+    expect(api.searchExplore).toHaveBeenCalledWith(
+      "",
+      expect.objectContaining({ commentableOnly: true })
+    );
+    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
+      /1 open comment period.*sorted by closing date/
+    );
+  });
+
+  it("lists open comment periods when the filter is switched on with an empty box", async () => {
+    api.searchExplore.mockResolvedValue({ query: "", results: [doc(1, "A rule")], count: 1 });
+    open("");
+    fireEvent.click(screen.getByRole("button", { name: /open for public comment/i }));
+
+    expect(await screen.findByText("A rule")).toBeInTheDocument();
+    expect(window.location.search).toBe("?comment=open");
+  });
+
+  it("offers a searched bill number's own page above the results", async () => {
+    api.searchExplore.mockResolvedValue({ query: "H.R. 7008", results: [], count: 0 });
+    open("q=H.R.%207008");
+
+    const link = await screen.findByRole("link", { name: /Open the page for H\.R\. 7008/ });
+    expect(link).toHaveAttribute("href", "/congress/bills/HR.7008");
+  });
 });

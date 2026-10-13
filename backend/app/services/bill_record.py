@@ -203,6 +203,10 @@ class MemberLinks:
 
     def __init__(self, db: Session):
         self.by_bioguide: dict[str, str] = {}
+        # A House roll call names a member as the Clerk prints them
+        # ("Joyce (PA)"), with no first name or district: a reader looking
+        # for their own representative needs both.
+        self.house_names: dict[str, tuple[str, int | None]] = {}
         self.senators_by_state: dict[str, list[tuple[str, str]]] = {}
         for s in db.query(Senator):
             if s.bioguide_id:
@@ -211,6 +215,7 @@ class MemberLinks:
         for r in db.query(Representative):
             if r.bioguide_id:
                 self.by_bioguide[r.bioguide_id] = r.id
+                self.house_names[r.bioguide_id] = (r.name, r.district)
         self.senate_lis = self._senate_lis_ids(db)
 
     def _senate_lis_ids(self, db: Session) -> dict[str, str]:
@@ -308,12 +313,20 @@ def roll_call_summaries(db: Session, refs: list[str | None]) -> dict[str, dict]:
 def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> dict:
     links = links or MemberLinks(db)
     positions = db.query(RollCallPosition).filter_by(roll_call_id=rc.id).all()
-    members = [{
-        "lastName": p.last_name, "firstName": p.first_name, "party": p.party, "state": p.state,
-        "position": p.position, "bucket": _bucket(p.position),
-        "page": (links.page(bioguide=p.member_id) if rc.chamber == "house"
-                 else links.page(last_name=p.last_name, state=p.state, lis_id=p.member_id)),
-    } for p in positions]
+    def member(p: RollCallPosition) -> dict:
+        house = rc.chamber == "house"
+        name, district = links.house_names.get(p.member_id or "", (None, None)) if house else (None, None)
+        return {
+            "lastName": p.last_name, "firstName": p.first_name, "party": p.party, "state": p.state,
+            "position": p.position, "bucket": _bucket(p.position),
+            "page": (links.page(bioguide=p.member_id) if house
+                     else links.page(last_name=p.last_name, state=p.state, lis_id=p.member_id)),
+            # The member's own name and district where the site knows them;
+            # null for a former member (the Clerk's name is all there is).
+            "name": name, "district": district,
+        }
+
+    members = [member(p) for p in positions]
     members.sort(key=lambda m: (m["lastName"], m["state"]))
     return {
         "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
