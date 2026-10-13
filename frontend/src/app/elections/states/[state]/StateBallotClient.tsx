@@ -45,8 +45,10 @@ import {
   isRedrawnSeat,
   majorPartyOf,
   matchesDistrictQuery,
+  placeDistrictSummary,
   pviColor,
   redrawnMemberWords,
+  searchFold,
   stateBallotHref,
   termPhrase,
   tierCandidates,
@@ -894,11 +896,15 @@ function HouseDistrictOption({
   onPick,
   newLines,
   resultsMode,
+  filter,
 }: {
   race: RaceWithCandidates;
   onPick: () => void;
   newLines: boolean;
   resultsMode: boolean;
+  /** What the reader typed: the places and counties it matched lead the
+   * label, so a row found by a city says which city. */
+  filter: string;
 }) {
   const { leaders } = tierCandidates(race.candidates.filter(isActiveCandidate));
   const redrawn = isRedrawnSeat(race, newLines);
@@ -908,7 +914,18 @@ function HouseDistrictOption({
       : " (I)";
   const dem = leaders.find((c) => majorPartyOf(c) === "DEM");
   const rep = leaders.find((c) => majorPartyOf(c) === "REP");
-  const countiesLabel = districtAreaLabel(race.counties);
+  // Only the places the filter matched join the label (three at most):
+  // a district holds up to a thousand, and "& 1200 more" says nothing.
+  const q = searchFold(filter);
+  const matchedPlaces = q
+    ? (race.places ?? []).filter((p) => searchFold(p).includes(q)).slice(0, 3)
+    : [];
+  const countiesLabel = districtAreaLabel(
+    race.counties || matchedPlaces.length ? [...(race.counties ?? []), ...matchedPlaces] : null,
+    3,
+    true,
+    filter
+  );
 
   return (
     <button
@@ -1060,7 +1077,10 @@ function HouseDetail({
     );
   }
 
-  const shown = houseRaces.filter((r) => matchesDistrictQuery({ ...r, areas: r.counties }, filter));
+  const shown = houseRaces.filter((r) =>
+    matchesDistrictQuery({ ...r, areas: [...(r.counties ?? []), ...(r.places ?? [])] }, filter)
+  );
+  const placeSummary = placeDistrictSummary(houseRaces, filter);
   return (
     <div>
       {newLines ? (
@@ -1094,7 +1114,7 @@ function HouseDetail({
             </>
           )}
           , and lookups by representative can answer for the old map, not these lines. Point at the
-          map, pick your county, or filter by a county or district number
+          map, pick your county, or filter by a city, town, county or district number
           {lookupIsStateSpecific ? (
             <>
               , or check{" "}
@@ -1114,7 +1134,8 @@ function HouseDetail({
       ) : (
         <p className="mb-3 text-[13px] text-ink-lo">
           {resultsMode ? HOUSE_ONE_EACH_RESULTS : HOUSE_ONE_EACH} Point at the map, pick your
-          county, or filter by a county, a candidate&apos;s name or a district number, or{" "}
+          county, or filter by a city, town, county, a candidate&apos;s name or a district number,
+          or{" "}
           <a
             href="https://www.house.gov/representatives/find-your-representative"
             target="_blank"
@@ -1147,13 +1168,13 @@ function HouseDetail({
             onChange={(e) => setFilter(e.target.value)}
             placeholder={
               newLines
-                ? "Filter by county or district number"
-                : "Filter by county, candidate, or district number"
+                ? "Filter by city, town, county or district number"
+                : "Filter by city, town, county, candidate or district number"
             }
             aria-label={
               newLines
-                ? "Filter districts by county or district number"
-                : "Filter districts by county, candidate, or district number"
+                ? "Filter districts by city, town, county or district number"
+                : "Filter districts by city, town, county, candidate or district number"
             }
             className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
           />
@@ -1165,9 +1186,23 @@ function HouseDetail({
               reader sees and a screen-reader user otherwise would not. */}
           <p role="status" aria-live="polite" className="sr-only">
             {filter.trim()
-              ? `${shown.length} of ${houseRaces.length} districts match ${filter}`
+              ? `${shown.length} of ${houseRaces.length} districts match ${filter}. ${placeSummary.join(" ")}`
               : ""}
           </p>
+        </div>
+      )}
+      {/* A city split between districts is the case a county search got
+          wrong: say which districts, and that the row alone can't settle
+          it. aria-hidden: the status line above reads the same words. */}
+      {placeSummary.length > 0 && (
+        <div
+          data-place-summary
+          aria-hidden="true"
+          className="mb-2 border border-white/15 bg-surface px-3 py-2 text-[13px] text-ink"
+        >
+          {placeSummary.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
         </div>
       )}
       {shown.map((r) => (
@@ -1177,14 +1212,15 @@ function HouseDetail({
           onPick={() => onPick(r.id)}
           newLines={newLines}
           resultsMode={resultsMode}
+          filter={filter}
         />
       ))}
       {shown.length === 0 && (
         <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
           No district matches “{filter}”.{" "}
           {newLines
-            ? "Try a county name or a district number, or pick a county above."
-            : "Try a county name, a candidate’s surname, or a district number, or pick a county above."}
+            ? "Try the name of your city, town or county, or a district number, or pick a county above."
+            : "Try the name of your city, town or county, a candidate’s surname, or a district number, or pick a county above."}
         </p>
       )}
     </div>

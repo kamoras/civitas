@@ -807,8 +807,11 @@ What this rules in and out:
   explicit, unremembered navigation choices (the town selector, the state
   picker); linking out to the official lookup for a reader who wants a
   precinct-exact answer. Where a district needs to be findable, give it
-  place names a person already knows and let them filter: counties for a
-  U.S. House seat (`county_district_crosswalk.json`), towns, communities
+  place names a person already knows and let them filter: counties, and
+  the cities, towns and communities in it, for a U.S. House seat
+  (`county_district_crosswalk.json`, `congressional_district_places.json`
+  by `scripts/build_district_place_crosswalk.py`, on both the election
+  lines and the sitting Congress's), towns, communities
   (incorporated places and Census Designated Places) and counties for a
   state legislative one (`state_leg_district_crosswalk.json`, a block-level
   join documented in `scripts/fetch_state_leg_crosswalk.py`). Building

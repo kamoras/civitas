@@ -809,6 +809,26 @@ through `searchFold` (`frontend/src/lib/elections.ts`), so accents,
 punctuation, a phone's curly apostrophe and "saint"/"st" don't matter
 ("dona ana", "st louis", "prince georges").
 
+**The filter also takes a city, town or community** (2026-10). A county
+search misses where most people start, with the name of their city:
+of the 100 most populous places in California,
+Texas, Florida, New York and Pennsylvania only 15 found their district(s)
+by name (4 more found the wrong one, a rural county sharing a big city's
+name). Each House race now carries the places in its district
+(`places`, from `backend/app/data/congressional_district_places.json`):
+incorporated places and Census Designated Places, plus the towns and
+townships of the strong-MCD states, with at least 50 of their 2020
+residents inside the district, largest first. It is built by
+`backend/scripts/build_district_place_crosswalk.py` with the same block
+join as the state legislative crosswalk (the Census congressional block
+equivalency files against the 2020 P.L. 94-171 block populations), for
+two maps: `"120"`, the lines each state votes on in 2026 (the ballot
+page), and `"119"`, the lines the sitting members were elected on. A row
+the filter found by a place shows that place first, and a place named in
+full gets a line saying which districts it is in, and that
+it is split between them when it is in more than one. All 100 of the
+sample places now find their district(s).
+
 Where a county answers nothing — a county split between districts, or a
 city holding several — a **map of the districts themselves** does. Every
 multi-district state page draws its districts, shaded by the same PVI
@@ -873,6 +893,7 @@ first day), never the new district's incumbent
 ```bash
 python backend/scripts/build_county_district_crosswalk.py
 python backend/scripts/build_district_topology.py
+python backend/scripts/build_district_place_crosswalk.py
 ```
 
 ### Race coverage: what counts as coverage

@@ -71,7 +71,14 @@ export function raceBadgeLabel(race: { office: string; district: number | null }
  *
  * "(part)" is left as-is since it means that county is split across
  * districts. Null in, null out — a district missing from the crosswalk
- * stays unlabeled, never a guessed list. */
+ * stays unlabeled, never a guessed list.
+ *
+ * With a `query` (what the reader typed in the filter), the places that
+ * matched it lead the label, whole and with their suffix: otherwise a
+ * row can match on a place hidden behind "& 10 more", and a reader who
+ * typed "Houston" (the city) sees one district come back with no sign it
+ * matched Houston County, a different place. "Houston County, Anderson,
+ * Cherokee & 9 more" says which Houston it found. */
 /* parseUtc moved to lib/formatting.ts — it is a generic ISO-8601 concern,
    and the records band and homepage index need it too. Re-exported here so
    existing election call sites keep their import path. */
@@ -80,20 +87,29 @@ export { parseUtc } from "./formatting";
 export function districtAreaLabel(
   areas: string[] | null,
   max = 3,
-  dropCountySuffix = true
+  dropCountySuffix = true,
+  query = ""
 ): string | null {
   if (!areas || areas.length === 0) return null;
-  const short = dropCountySuffix ? areas.map((a) => a.replace(/ County\b/, "")) : areas.slice();
-  if (short.length <= max) return short.join(", ");
-  return `${short.slice(0, max).join(", ")} & ${short.length - max} more`;
+  const q = searchFold(query);
+  const hit = (a: string) => q !== "" && searchFold(a).includes(q);
+  const matched = areas.filter(hit);
+  const rest = areas.filter((a) => !hit(a));
+  const short = [
+    ...matched,
+    ...(dropCountySuffix ? rest.map((a) => a.replace(/ County\b/, "")) : rest),
+  ];
+  const shown = Math.max(max, matched.length);
+  if (short.length <= shown) return short.join(", ");
+  return `${short.slice(0, shown).join(", ")} & ${short.length - shown} more`;
 }
 
 /** Does this district row match what the reader typed in the district
  * filter?
  *
  * Deliberately matches on the three things a reader plausibly knows
- * about themselves without being asked for an address: the county they
- * live in, a candidate's name (their representative's, when that member
+ * about themselves without being asked for an address: the city, town or
+ * county they live in, a candidate's name (their representative's, when that member
  * is running again — a retiring member is on no row, and in a state that
  * redrew for this cycle the member's name finds the candidate's NEW
  * district, not necessarily the reader's), and the district number if
@@ -102,7 +118,8 @@ export function districtAreaLabel(
  * recall unprompted — see the House section's own copy.
  *
  * `areas` is whatever place names that district is described by — the
- * counties on a U.S. House row, the towns on a state legislative one.
+ * counties and then the places (cities, towns, CDPs) on a U.S. House row,
+ * the towns on a state legislative one.
  * Matching runs against that list IN FULL, not the truncated
  * districtAreaLabel display string: a reader typing "washington"
  * must still match a district whose label elided it behind "& 2 more".
@@ -153,6 +170,54 @@ export function searchFold(text: string): string {
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\bsaint\b/g, "st")
     .trim();
+}
+
+/** A Census place name as people say it: the legal type the Gazetteer
+ * appends ("Tulsa city", "Brooklyn borough", "Juneau city and
+ * borough", "… metropolitan government (balance)") dropped. The type is
+ * always lower case and the name never starts a word with one, so
+ * "Carson City" and "Lake Havasu City city" keep their own "City". */
+export function placeName(place: string): string {
+  return place.replace(/(?: (?:[a-z][a-z-]*|\(balance\)))+$/, "");
+}
+
+/** "11, 17 and 31". */
+function andList(items: string[]): string {
+  return items.length < 2
+    ? items.join("")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** What the House district filter says when the reader typed a city, town
+ * or community by name: "Rivertown is in districts 3, 7 and 11." A
+ * place listed under several districts is split between them, and the
+ * reader is told so rather than left to take the first row as theirs.
+ * Matches the whole name only (accents, case and the legal type aside),
+ * so "san" names nothing and the list alone answers. Two places with the
+ * same name ("Kingston city", "Kingston town") keep their legal type. */
+export function placeDistrictSummary(
+  races: { district: number | null; places?: string[] | null }[],
+  query: string
+): string[] {
+  const q = searchFold(query);
+  if (!q) return [];
+  const found = new Map<string, number[]>();
+  for (const r of races) {
+    for (const p of r.places ?? []) {
+      if (searchFold(placeName(p)) !== q && searchFold(p) !== q) continue;
+      found.set(p, [...(found.get(p) ?? []), r.district ?? 0]);
+    }
+  }
+  const shortNames = [...found.keys()].map(placeName);
+  return [...found.entries()].slice(0, 3).map(([p, ds], i) => {
+    const name = shortNames.filter((n) => n === shortNames[i]).length > 1 ? p : shortNames[i];
+    const nums = ds.sort((a, b) => a - b).map((d) => (d === 0 ? "at-large" : String(d)));
+    if (ds.length === 1)
+      return ds[0] === 0
+        ? `${name} is in the at-large district.`
+        : `${name} is in district ${nums[0]}.`;
+    return `${name} is in districts ${andList(nums)}: it is split between them, so the part you live in decides which is yours.`;
+  });
 }
 
 /** What a candidate's money column says: the FEC's contributions for this
