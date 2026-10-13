@@ -52,7 +52,8 @@ from app.http_client import make_async_client  # noqa: E402
 from app.models import ApiCache, Representative, Senator  # noqa: E402
 from app.photos import bioguide_portrait_url, credited_depiction  # noqa: E402
 from app.pipeline.fetch.congress import member_detail_cache_key  # noqa: E402
-from app.pipeline.fetch.member_photos import CALIBRATION_PATH, PAUSE_S, _image, face_share  # noqa: E402
+from app.pipeline.fetch.face_detection import face_share  # noqa: E402
+from app.pipeline.fetch.member_photos import CALIBRATION_PATH, PAUSE_S, _image  # noqa: E402
 
 MARGINS = [round(1.0 + i / 20, 2) for i in range(2, 31)]       # 1.10 .. 2.50
 CEILINGS = [round(0.2 + i / 200, 3) for i in range(0, 61)]     # 0.200 .. 0.500

@@ -20,22 +20,24 @@ app/data/member_photo_calibration.json (scripts/calibrate_member_photos.py),
 fitted to a hand-labelled comparison of every current member's two photos.
 
 The choice is stored per member (models.MemberPhoto) for the photo-sources
-endpoint to read. Nothing here runs on a page request: OpenCV loads only in
-the pipeline process. A fetch that fails (anything but a 404) leaves the
+endpoint to read. Nothing here runs on a page request, and OpenCV is never
+loaded by this module or anything that imports it: the detector runs in a
+child process for the night's batch (face_detection.py), so a native fault
+there ends that process, not the pipeline or page serving. A fetch that fails (anything but a 404) leaves the
 member's stored choice as it was, since an outage is not a missing photo.
 """
 
 import asyncio
 import json
 import logging
+import sys
+import tempfile
 import time
 from datetime import timedelta
 from functools import cache
 from pathlib import Path
 
-import cv2
 import httpx
-import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -47,9 +49,8 @@ from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-DATA = Path(__file__).resolve().parents[2] / "data"
-CALIBRATION_PATH = DATA / "member_photo_calibration.json"
-MODEL_PATH = DATA / "face_detection_yunet_2023mar.onnx"
+BACKEND = Path(__file__).resolve().parents[3]
+CALIBRATION_PATH = BACKEND / "app" / "data" / "member_photo_calibration.json"
 
 # A choice is measured again after this long even if the record's depiction
 # is unchanged: bioguide replaces a portrait without changing its URL.
@@ -60,12 +61,10 @@ RECHECK_AFTER = timedelta(days=30)
 PAUSE_S = 0.25
 # Photos are a few hundred KB; bioguide's largest current file is 1.2 MB.
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
-# The detector reads a downscaled copy: a face share doesn't depend on
-# resolution, and decoding a 5000 px original is what costs memory.
-DETECT_MAX_SIDE = 640
-# YuNet's own confidence cut. Every current member's photos (1,060 images)
-# held exactly one face at this setting, paintings included.
-DETECT_SCORE = 0.7
+# The detector measured all ~1,060 current photos in under 4 s on a desktop,
+# and a 1000 px portrait in 0.06 s on the Pi (2026-10-13); past this
+# something is wrong.
+MEASURE_TIMEOUT_S = 300
 
 
 @cache
@@ -73,27 +72,28 @@ def calibration() -> dict:
     return json.loads(CALIBRATION_PATH.read_text())
 
 
-@cache
-def _detector():
-    return cv2.FaceDetectorYN.create(str(MODEL_PATH), "", (320, 320), score_threshold=DETECT_SCORE)
+class _MeasureFailed(Exception):
+    """The detector process failed: nothing stored, try another night."""
 
 
-def face_share(image: bytes) -> float | None:
-    """The largest face's height over the image's shorter side, or None
-    for something that isn't a decodable image. 0.0 when no face is found."""
-    img = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
-    if img is None:
-        return None
-    h, w = img.shape[:2]
-    scale = min(1.0, DETECT_MAX_SIDE / max(h, w))
-    if scale < 1.0:
-        img = cv2.resize(img, (max(1, round(w * scale)), max(1, round(h * scale))), interpolation=cv2.INTER_AREA)
-    sh, sw = img.shape[:2]
-    detector = _detector()
-    detector.setInputSize((sw, sh))
-    _, faces = detector.detect(img)
-    tallest = max((float(f[3]) for f in faces), default=0.0) if faces is not None else 0.0
-    return tallest / min(sh, sw)
+async def measure(paths: list[str]) -> dict[str, float | None]:
+    """{path: face share} for image files, from the detector process
+    (face_detection.py; its face_share says what a share is)."""
+    if not paths:
+        return {}
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "app.pipeline.fetch.face_detection",
+        cwd=BACKEND, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(json.dumps(paths).encode()), MEASURE_TIMEOUT_S)
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise _MeasureFailed(f"face detection took over {MEASURE_TIMEOUT_S}s") from None
+    if proc.returncode != 0:
+        raise _MeasureFailed(f"face detection exited {proc.returncode}: {err.decode(errors='replace')[-500:]}")
+    return json.loads(out)
 
 
 def prefers_bioguide(bioguide_share: float | None, depiction_share: float | None) -> bool:
@@ -158,39 +158,50 @@ def _members_to_check(db: Session) -> list[tuple[str, str]]:
 
 
 async def refresh_member_photos(db: Session, client: httpx.AsyncClient, budget: timedelta) -> int:
-    """Measure and store the photo choice for members that need one, until
-    `budget` runs out (the rest wait for the next night). Returns how many
+    """Measure and store the photo choice for members that need one. Fetching
+    stops when `budget` runs out (the rest wait for the next night); the
+    fetched pairs are then measured in one detector run. Returns how many
     choices were stored."""
     deadline = time.monotonic() + budget.total_seconds()
-    stored = failed = 0
-    for bioguide_id, depiction in _members_to_check(db):
-        if time.monotonic() > deadline:
-            logger.info("Member photos: budget spent, the rest wait for the next run")
-            break
+    failed = 0
+    with tempfile.TemporaryDirectory(prefix="member-photos-") as tmp:
+        fetched: list[tuple[str, str, str | None, str | None]] = []
+        for bioguide_id, depiction in _members_to_check(db):
+            if time.monotonic() > deadline:
+                logger.info("Member photos: budget spent, the rest wait for the next run")
+                break
+            try:
+                depiction_bytes = await _image(client, depiction)
+                portrait_bytes = await _image(client, bioguide_portrait_url(bioguide_id))
+            except _FetchFailed as exc:
+                failed += 1
+                logger.info("Member photos: %s not measured (%s)", bioguide_id, exc)
+                continue
+            finally:
+                await asyncio.sleep(PAUSE_S)
+            paths = []
+            for kind, body in (("depiction", depiction_bytes), ("bioguide", portrait_bytes)):
+                path = None
+                if body is not None:
+                    path = str(Path(tmp) / f"{bioguide_id}_{kind}")
+                    Path(path).write_bytes(body)
+                paths.append(path)
+            fetched.append((bioguide_id, depiction, *paths))
+        shares = await measure([p for f in fetched for p in f[2:] if p])
+    for bioguide_id, depiction, depiction_path, portrait_path in fetched:
         portrait = bioguide_portrait_url(bioguide_id)
-        try:
-            depiction_bytes = await _image(client, depiction)
-            portrait_bytes = await _image(client, portrait)
-        except _FetchFailed as exc:
-            failed += 1
-            logger.info("Member photos: %s not measured (%s)", bioguide_id, exc)
-            continue
-        finally:
-            await asyncio.sleep(PAUSE_S)
-        if depiction_bytes is None:
-            # The record names a photo Congress.gov doesn't have; bioguide's
-            # is served (the route 404s the depiction otherwise).
-            depiction_share, portrait_share, source = None, None, portrait
+        depiction_share = shares.get(depiction_path) if depiction_path else None
+        portrait_share = shares.get(portrait_path) if portrait_path else None
+        if depiction_path is None:
+            # The record names a photo Congress.gov doesn't have: bioguide's.
+            source = portrait
         else:
-            depiction_share = await asyncio.to_thread(face_share, depiction_bytes)
-            portrait_share = await asyncio.to_thread(face_share, portrait_bytes) if portrait_bytes else None
             source = portrait if prefers_bioguide(portrait_share, depiction_share) else depiction
         db.merge(MemberPhoto(
             bioguide_id=bioguide_id, source_url=source, depiction_url=depiction,
             bioguide_face_share=portrait_share, depiction_face_share=depiction_share, checked_at=utcnow(),
         ))
-        db.commit()
-        stored += 1
+    db.commit()
     if failed:
         logger.warning("Member photos: %d members not measured this run (fetch failed)", failed)
-    return stored
+    return len(fetched)

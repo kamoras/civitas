@@ -5,6 +5,9 @@ each candidate and read by the photo-sources endpoint."""
 import ast
 import hashlib
 import json
+import os
+import subprocess
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -16,11 +19,12 @@ import pytest
 from app.api.photos import get_photo_source
 from app.models import ApiCache, MemberPhoto, Senator
 from app.pipeline.fetch import member_photos
+from app.pipeline.fetch.face_detection import MODEL_PATH
 from app.pipeline.fetch.member_photos import (
+    BACKEND,
     CALIBRATION_PATH,
-    MODEL_PATH,
     calibration,
-    face_share,
+    measure,
     prefers_bioguide,
     refresh_member_photos,
 )
@@ -55,8 +59,11 @@ def _jpeg(tag: bytes) -> httpx.Response:
 
 @pytest.fixture()
 def measured(monkeypatch):
-    """face_share stubbed: each fake image's bytes name its face share."""
-    monkeypatch.setattr(member_photos, "face_share", lambda body: float(body[2:].decode()))
+    """The detector stubbed: each fake image's bytes name its face share."""
+    async def fake_measure(paths):
+        return {p: float(Path(p).read_bytes()[2:].decode()) for p in paths}
+
+    monkeypatch.setattr(member_photos, "measure", fake_measure)
     monkeypatch.setattr(member_photos, "PAUSE_S", 0)
 
 
@@ -76,12 +83,6 @@ def test_calibration_is_the_fitted_file():
 
 def test_the_detector_model_is_the_one_the_calibration_measured_with():
     assert hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest() == json.loads(CALIBRATION_PATH.read_text())["detector"]["sha256"]
-
-
-def test_face_share_reads_an_image_and_refuses_anything_else():
-    blank = cv2.imencode(".jpg", np.full((250, 200, 3), 128, np.uint8))[1].tobytes()
-    assert face_share(blank) == 0.0
-    assert face_share(b"<html>challenge</html>") is None
 
 
 @pytest.mark.parametrize("bio,dep,expected", [
@@ -184,14 +185,55 @@ def test_a_stored_choice_off_the_photo_hosts_is_never_handed_out(db_session):
     assert get_photo_source("bioguide", "X000001", db=db_session) == {"url": DEPICTION}
 
 
-def test_the_api_never_loads_opencv():
-    """The read path serves the stored choice; the detector is pipeline-only."""
-    app = Path(member_photos.__file__).resolve().parents[2]
-    for path in (app / "photos.py", app / "api" / "photos.py"):
+async def test_the_detector_process_measures_files(tmp_path):
+    """The real child process, end to end: a blank image has no face, and
+    a file that isn't an image measures as None."""
+    blank, junk = tmp_path / "blank.jpg", tmp_path / "junk.jpg"
+    blank.write_bytes(cv2.imencode(".jpg", np.full((250, 200, 3), 128, np.uint8))[1].tobytes())
+    junk.write_bytes(b"<html>challenge</html>")
+    assert await measure([str(blank), str(junk)]) == {str(blank): 0.0, str(junk): None}
+
+
+async def test_a_failed_detector_run_stores_nothing(db_session, freeze_utcnow, monkeypatch):
+    freeze_utcnow(NOW)
+    _member(db_session)
+    monkeypatch.setattr(member_photos, "PAUSE_S", 0)
+
+    async def crash(paths):
+        raise member_photos._MeasureFailed("exited -4")
+
+    monkeypatch.setattr(member_photos, "measure", crash)
+    async with _client({DEPICTION: _jpeg(b"0.25"), PORTRAIT: _jpeg(b"0.75")}) as client:
+        with pytest.raises(member_photos._MeasureFailed):
+            await refresh_member_photos(db_session, client, timedelta(minutes=1))
+    assert db_session.get(MemberPhoto, "X000001") is None
+
+
+@pytest.mark.parametrize("role", ["api", "all", "worker"])
+def test_no_app_process_loads_opencv(role):
+    """OpenCV runs only in the detector's own process: importing the app,
+    whatever its role, and the stock run that starts the detector, must not
+    load it (a native fault would otherwise reach page serving)."""
+    code = (
+        "import sys\n"
+        "import app.main\n"
+        "import app.pipeline.stock_pipeline\n"
+        "import app.pipeline.fetch.member_photos\n"
+        "assert 'cv2' not in sys.modules, 'cv2 loaded'\n"
+    )
+    env = {**os.environ, "PYTHONPATH": str(BACKEND), "PROCESS_ROLE": role}
+    subprocess.run([sys.executable, "-c", code], check=True, cwd=BACKEND, env=env)
+
+
+def test_nothing_in_the_app_imports_the_detector_module():
+    app = BACKEND / "app"
+    for path in app.rglob("*.py"):
+        if path.name == "face_detection.py":
+            continue
         imported = {
             (node.module or "") if isinstance(node, ast.ImportFrom) else alias.name
             for node in ast.walk(ast.parse(path.read_text()))
             if isinstance(node, (ast.Import, ast.ImportFrom))
             for alias in node.names
         }
-        assert not {m for m in imported if m == "cv2" or m.endswith("member_photos")}, path
+        assert not {m for m in imported if m == "cv2" or m.endswith("face_detection")}, path

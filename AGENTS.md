@@ -950,8 +950,13 @@ clearly larger. Both numbers are fitted, not typed:
 `scripts/calibrate_member_photos.py` writes them to
 `app/data/member_photo_calibration.json` from a hand-labelled comparison of
 every current member's two photos (labels kept there with each image's
-hash; rerun when labelled photos change). OpenCV loads only in the pipeline;
-the endpoint reads the stored choice, and a member without one (a departed
+hash; rerun when labelled photos change). OpenCV runs only in a child
+process started for the night's batch (`pipeline/fetch/face_detection.py`,
+which nothing in `app/` imports; `tests/test_member_photos.py` checks no app
+process loads `cv2`), so a native fault can't reach page serving or the
+pipeline. The model is YuNet from the OpenCV Zoo (MIT), vendored in
+`app/data/`; source and hash are in the calibration file. The endpoint reads
+the stored choice, and a member without one (a departed
 bill sponsor, or before the first run) gets the depiction-first rule. A
 depiction is used only on Congress.gov's `/img/member/` path and only with
 the attribution Congress.gov gives it; one without falls back to bioguide,
@@ -1551,7 +1556,7 @@ the pending list).
 | Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
 | Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/` |
-| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
+| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; detector process `face_detection.py`; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
