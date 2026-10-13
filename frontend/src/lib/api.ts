@@ -317,6 +317,10 @@ export async function fetchRepLeaderboard(
 // Shared by the fetchRepVotes/fetchSenatorVotes and fetchRepStockTrades/
 // fetchSenatorStockTrades pairs below — same query-building and fetch
 // shape, differing only in the "representatives"/"senators" URL segment.
+/** The votes list's date ranges; the server works out each one's start
+ *  ("month" is the last 30 days, "congress" the Congress in office). */
+export type VotePeriod = "all" | "congress" | "month";
+
 async function fetchPaginatedVotes(
   chamber: Chamber,
   entityId: string,
@@ -327,6 +331,7 @@ async function fetchPaginatedVotes(
     filter?: string;
     /** Bill number, title or question to search for (server-side). */
     q?: string;
+    period?: VotePeriod;
   }
 ): Promise<PaginatedVotes> {
   const params = new URLSearchParams();
@@ -335,6 +340,7 @@ async function fetchPaginatedVotes(
   if (options?.perPage) params.set("per_page", String(options.perPage));
   if (options?.filter) params.set("filter", options.filter);
   if (options?.q) params.set("q", options.q);
+  if (options?.period && options.period !== "all") params.set("period", options.period);
   return requestJson(
     `${API_BASE}/${CHAMBER_PATH[chamber]}/${entityId}/votes?${params}`,
     "Failed to load votes"
@@ -349,6 +355,7 @@ export async function fetchRepVotes(
     perPage?: number;
     filter?: string;
     q?: string;
+    period?: VotePeriod;
   }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.House, repId, options);
@@ -362,6 +369,7 @@ export async function fetchSenatorVotes(
     perPage?: number;
     filter?: string;
     q?: string;
+    period?: VotePeriod;
   }
 ): Promise<PaginatedVotes> {
   return fetchPaginatedVotes(Chamber.Senate, senatorId, options);

@@ -31,7 +31,13 @@ from app.schemas import (
     StockTradeSchema,
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
 )
-from app.services._scorecard_common import pac_share_pct, party_line_counts, score_breakdown, vote_search
+from app.services._scorecard_common import (
+    pac_share_pct,
+    party_line_counts,
+    score_breakdown,
+    vote_period_start,
+    vote_search,
+)
 from app.services.constituent_survey import constituent_approval
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
@@ -638,6 +644,7 @@ def get_rep_votes(
     per_page: int = 15,
     vote_filter: str = "all",
     q: str | None = None,
+    period: str = "all",
 ) -> dict | None:
     """Return paginated, filterable votes for a representative."""
     rep = db.query(Representative).filter(Representative.id == rep_id).first()
@@ -650,6 +657,10 @@ def get_rep_votes(
     # A reader's search narrows the list and its counts alike.
     if q and q.strip():
         base_q = base_q.filter(vote_search(RepKeyVote, q))
+    # So does a date range; dates are stored YYYY-MM-DD, so they compare as strings.
+    since = vote_period_start(period)
+    if since is not None:
+        base_q = base_q.filter(RepKeyVote.date >= since)
 
     count_all = base_q.count()
     count_yea = base_q.filter(RepKeyVote.vote == "Yea").count()
