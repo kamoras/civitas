@@ -179,3 +179,121 @@ class TestEveryClientInTheAppIsBackstopped:
             "no wall-clock hang backstop. Use app.http_client.make_async_client "
             f"instead: {offenders}"
         )
+
+
+class TestIncompleteCertificateChains:
+    """Alaska's, Alabama's and Virginia's election sites (2026-10-13) sent
+    no intermediate, or the wrong one: every browser opens them by fetching
+    the issuer the certificate names (AIA), and so does the client now —
+    without loosening verification. The certificates are the real ones."""
+
+    TLS = pathlib.Path(__file__).parent / "fixtures" / "tls"
+
+    def _leaf(self):
+        from cryptography import x509
+
+        return x509.load_der_x509_certificate((self.TLS / "ak_leaf.der").read_bytes())
+
+    def test_an_added_intermediate_is_never_a_trust_anchor(self):
+        import ssl
+
+        from app.http_client import TLS_CONTEXT
+
+        assert not TLS_CONTEXT.verify_flags & ssl.VERIFY_X509_PARTIAL_CHAIN
+        assert TLS_CONTEXT.verify_mode == ssl.CERT_REQUIRED and TLS_CONTEXT.check_hostname
+
+    def test_the_issuer_url_is_read_from_the_certificate(self):
+        from app.http_client import ca_issuers
+
+        assert ca_issuers(self._leaf()) == ["http://secure.globalsign.com/cacert/gsgccr46ovtlsca2025.crt"]
+
+    def test_only_the_certificate_that_signed_it_is_taken(self):
+        from app.http_client import load_issuer
+
+        issuer = load_issuer(self._leaf(), (self.TLS / "ak_issuer.der").read_bytes())
+        assert issuer is not None and "GCC R46 OV TLS CA 2025" in issuer.subject.rfc4514_string()
+        # Another state's (real, valid) intermediate did not sign this one.
+        assert load_issuer(self._leaf(), (self.TLS / "al_issuer.der").read_bytes()) is None
+        assert load_issuer(self._leaf(), b"<html>not a certificate</html>") is None
+
+    def test_a_self_signed_certificate_from_the_network_is_never_added(self):
+        import datetime
+
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives.serialization import Encoding
+        from cryptography.x509.oid import NameOID
+
+        from app.http_client import load_issuer
+
+        key = ec.generate_private_key(ec.SECP256R1())
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Root")])
+        start = datetime.datetime(2026, 1, 1)
+        root = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+                .serial_number(1).not_valid_before(start).not_valid_after(start + datetime.timedelta(days=1))
+                .sign(key, hashes.SHA256()))
+        assert load_issuer(root, root.public_bytes(Encoding.DER)) is None
+
+    @staticmethod
+    def _missing_issuer_error():
+        import ssl
+
+        cause = ssl.SSLCertVerificationError(1, "certificate verify failed: unable to get local issuer certificate")
+        cause.verify_code = 20
+        try:
+            raise httpx.ConnectError("[SSL: CERTIFICATE_VERIFY_FAILED]") from cause
+        except httpx.ConnectError as exc:
+            return exc
+
+    @pytest.mark.asyncio
+    async def test_the_request_is_sent_again_once_the_chain_is_completed(self, monkeypatch):
+        attempts = []
+
+        def handler(request):
+            attempts.append(request.url.host)
+            if len(attempts) == 1:
+                raise self._missing_issuer_error()
+            return httpx.Response(200, text="ok")
+
+        completed = []
+
+        async def complete(self_, host, port):
+            completed.append((host, port))
+            return True
+
+        monkeypatch.setattr(BackstoppedAsyncClient, "_complete_chain", complete)
+        async with make_async_client(transport=httpx.MockTransport(handler)) as client:
+            client._completes_chains = True  # a mock transport stands in for the TLS one
+            resp = await client.get("https://elections.alaska.gov/robots.txt")
+        assert resp.text == "ok"
+        assert completed == [("elections.alaska.gov", 443)]
+        assert attempts == ["elections.alaska.gov"] * 2
+
+    @pytest.mark.asyncio
+    async def test_any_other_connect_error_is_left_alone(self, monkeypatch):
+        def handler(request):
+            raise httpx.ConnectError("connection refused")
+
+        async def complete(self_, host, port):
+            raise AssertionError("not a certificate problem")
+
+        monkeypatch.setattr(BackstoppedAsyncClient, "_complete_chain", complete)
+        async with make_async_client(transport=httpx.MockTransport(handler)) as client:
+            client._completes_chains = True
+            with pytest.raises(httpx.ConnectError):
+                await client.get("https://x.gov/")
+
+    @pytest.mark.asyncio
+    async def test_a_chain_that_cannot_be_completed_keeps_its_error(self, monkeypatch):
+        def handler(request):
+            raise self._missing_issuer_error()
+
+        async def complete(self_, host, port):
+            return False
+
+        monkeypatch.setattr(BackstoppedAsyncClient, "_complete_chain", complete)
+        async with make_async_client(transport=httpx.MockTransport(handler)) as client:
+            client._completes_chains = True
+            with pytest.raises(httpx.ConnectError):
+                await client.get("https://x.gov/")
