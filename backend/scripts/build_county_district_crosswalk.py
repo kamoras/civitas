@@ -40,11 +40,22 @@ or not — the rule the bundled file has always used; regenerating the
 Delegate seats (district 98: DC and the territories) and unassigned
 water blocks ("ZZ") are left out.
 
+TWO FILES, TWO QUESTIONS. The election file above answers "which
+district do I vote in this cycle". It does not answer "who represents me
+today": in a redrawn state the district of the same number is a different
+district from the one its sitting member won. `--sitting` writes the
+second file, county_district_crosswalk_sitting.json: every state on the
+119th Congress lines (the corrected CD119 file), the map the members now
+serving were elected on in 2024. /politicians reads it. Each file states
+the Congress whose lines it holds (`congress`); the API serves the one
+whose Congress is in office (settings.CURRENT_CONGRESS), so from Jan 3,
+2027 the election file (the 120th's lines) answers with no rebuild.
+Rebuild the sitting file when the election file moves to the next cycle.
+
 Run from the repo root (network required, ~80MB of downloads):
 
     python backend/scripts/build_county_district_crosswalk.py [--cache DIR]
-    python backend/scripts/build_county_district_crosswalk.py --all-cd119 --out /tmp/x.json
-        # the 119th-Congress file, for checking against an older build
+    python backend/scripts/build_county_district_crosswalk.py --sitting [--cache DIR]
 """
 
 from __future__ import annotations
@@ -67,6 +78,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "backend"))
 from app.contact import BOT_USER_AGENT  # noqa: E402
 OUT_PATH = REPO / "backend" / "app" / "data" / "county_district_crosswalk.json"
+SITTING_OUT_PATH = REPO / "backend" / "app" / "data" / "county_district_crosswalk_sitting.json"
 
 _RDO = "https://www2.census.gov/programs-surveys/decennial/rdo/mapping-files"
 CD119_URL = f"{_RDO}/2025/119-congressional-district-befs/cd119.zip"
@@ -81,6 +93,14 @@ USER_AGENT = BOT_USER_AGENT
 CD119 = "CD119"
 CD120 = "CD120"
 CYCLE = "2026"
+# The Congress whose members the 119th-Congress block file's lines elected.
+SITTING_CONGRESS = 119
+
+
+def congress_seated_by(cycle: str) -> int:
+    """The Congress a November election seats: the 1st was elected in
+    1788, one every two years since (2026 seats the 120th)."""
+    return (int(cycle) - 1788) // 2 + 1
 
 MAPS_PATH = REPO / "backend" / "app" / "data" / "redrawn_congressional_maps.json"
 
@@ -217,7 +237,10 @@ def source_note(
         f"files ({CD119_URL}). 120th Congress: NationalCD120.txt ({CD120_URL}). "
     )
     if all_cd119:
-        plan = "Every state uses its 119th Congress map. "
+        plan = (
+            "Every state on its 119th Congress map: the lines the members now serving were "
+            "elected on in 2024 (who represents a county today, not the coming election). "
+        )
     else:
         lines = [
             f"{st} {plan} ({reason})"
@@ -309,6 +332,8 @@ def build(cache: Path, all_cd119: bool) -> tuple[dict, list[str], dict[str, str]
     districts = build_districts(county_districts(assignment), names, fips_to_state)
     doc = {
         "_source": source_note(cycle_maps, dt.date.today(), all_cd119),
+        # Whose lines these are; the API matches it to the Congress in office.
+        "congress": SITTING_CONGRESS if all_cd119 else congress_seated_by(CYCLE),
         "districts": districts,
     }
     return doc, problems, assignment
@@ -319,24 +344,27 @@ def main() -> int:
     ap.add_argument(
         "--cache", type=Path, help="keep downloads here (default: a temp dir)"
     )
-    ap.add_argument("--out", type=Path, default=OUT_PATH)
+    ap.add_argument("--out", type=Path)
     ap.add_argument(
-        "--all-cd119", action="store_true", help="every state on its 119th Congress map"
+        "--sitting",
+        action="store_true",
+        help="every state on its 119th Congress map: the lines sitting members were elected on",
     )
     args = ap.parse_args()
+    out = args.out or (SITTING_OUT_PATH if args.sitting else OUT_PATH)
 
     with tempfile.TemporaryDirectory() as tmp:
         cache = args.cache or Path(tmp)
         cache.mkdir(parents=True, exist_ok=True)
-        doc, problems, _ = build(cache, args.all_cd119)
+        doc, problems, _ = build(cache, args.sitting)
 
     if problems:
         print("REFUSING TO WRITE:")
         for p in problems:
             print(f"  {p}")
         return 1
-    args.out.write_text(json.dumps(doc, indent=2))
-    print(f"wrote {len(doc['districts'])} districts to {args.out}")
+    out.write_text(json.dumps(doc, indent=2))
+    print(f"wrote {len(doc['districts'])} districts to {out}")
     return 0
 
 

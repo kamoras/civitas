@@ -143,7 +143,9 @@ class TestStockTradesOverlapGuard:
 
     def test_proceeds_when_stock_pipeline_running_flag_is_stale_beyond_2_hours(self):
         state = {"is_running": False, "started_at": None}
-        mock_refresh = _run_hourly_refresh(state, stock_running=True, stock_age=timedelta(hours=3))
+        # Past the 2h trade budget plus the time-boxed steps (ops_alerts.
+        # stock_trades_overrun_budget, about 3h06m).
+        mock_refresh = _run_hourly_refresh(state, stock_running=True, stock_age=timedelta(hours=4))
         mock_refresh.assert_called_once()
 
 

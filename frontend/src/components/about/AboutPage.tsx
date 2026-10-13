@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -22,6 +22,10 @@ import { REFERENCES, type RefId } from "./references";
  *   without being the first thing every reader has to wade through.
  * - Headings are sentences a reader would ask ("Which votes count"), not
  *   system names.
+ * - A chapter with CONTENTS_MIN_SECTIONS or more `Section`s gets an "On
+ *   this page" list of them after its Summary, built from the Sections
+ *   themselves so it can't drift from the headings. /about/scores ran to
+ *   about 26 phone screens with no way to jump to a part.
  *
  * Server components throughout, like the page they replace: `<details>`
  * gives expand/collapse, keyboard support and find-in-page for free.
@@ -41,6 +45,7 @@ export function AboutPage({
   children: ReactNode;
 }) {
   const { prev, next } = adjacentChapters(href);
+  const body = withContents(children);
   return (
     <>
       <Navbar />
@@ -52,7 +57,7 @@ export function AboutPage({
             {lede}
           </PageMasthead>
           <ChapterNav current={href} />
-          <div className="mt-10 space-y-12">{children}</div>
+          <div className="mt-10 space-y-12">{body}</div>
           {(prev || next || href !== ABOUT_OVERVIEW_HREF) && (
             <nav
               aria-label="Chapter"
@@ -70,6 +75,52 @@ export function AboutPage({
       </main>
       <Footer />
     </>
+  );
+}
+
+/** Fewer sections than this and the page is short enough to scan. */
+const CONTENTS_MIN_SECTIONS = 4;
+
+/** The chapter's children with an "On this page" list of its top-level
+ *  Sections placed after its Summary (first, when it has none). */
+function withContents(children: ReactNode): ReactNode {
+  const kids = Children.toArray(children);
+  const sections = kids
+    .filter((c): c is ReactElement<{ id: string; title: string }> => {
+      return isValidElement(c) && c.type === Section;
+    })
+    .map((c) => ({ id: c.props.id, title: c.props.title }));
+  if (sections.length < CONTENTS_MIN_SECTIONS) return kids;
+  const at = kids.findIndex((c) => isValidElement(c) && c.type === Summary) + 1;
+  return [
+    ...kids.slice(0, at),
+    <Contents key="on-this-page" sections={sections} />,
+    ...kids.slice(at),
+  ];
+}
+
+function Contents({ sections }: { sections: { id: string; title: string }[] }) {
+  return (
+    <nav aria-labelledby="on-this-page" className="border-l-3 border-l-signal-cyan/60 pl-5">
+      <h2
+        id="on-this-page"
+        className="font-mono text-xs uppercase tracking-[0.16em] text-signal-cyan"
+      >
+        On this page
+      </h2>
+      <ol className="mt-3 grid gap-x-6 gap-y-1 text-base sm:grid-cols-2">
+        {sections.map((s) => (
+          <li key={s.id}>
+            <a
+              href={`#${s.id}`}
+              className="inline-block py-1 text-ink underline decoration-white/20 underline-offset-2 hover:text-phos"
+            >
+              {s.title}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 

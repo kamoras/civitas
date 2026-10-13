@@ -282,10 +282,10 @@ function OpenComments() {
       <h2 id="open-comments-heading" className={SECTION_HEADING}>
         <span>Open for public comment</span>
         <Link
-          href="/explore"
+          href="/explore?comment=open"
           className="normal-case tracking-[0.08em] text-ink-lo hover:text-ink-hi"
         >
-          Search in Explore →
+          Every open comment period →
         </Link>
       </h2>
       <ul>

@@ -29,6 +29,14 @@ export function longDate(iso: string): string {
   return `${WEEKDAYS[weekday]}, ${MONTHS[m - 1]} ${d}, ${y}`;
 }
 
+/** "September 24, 2026": a date inside a sentence. Anything not ISO is
+ * returned as given. */
+export function calendarDate(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso;
+  const { y, m, d } = parts(iso);
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
 /** "Thu, Sep 24" */
 export function shortDate(iso: string): string {
   // A vote stored before dates were ISO ("October 14, 2025, 05:34 PM") is

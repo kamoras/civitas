@@ -9,7 +9,11 @@ ballot in two places, verified live 2026-09-28:
 
   - "Ballot Measures for 2026 General Election / Initiative Nos.
     440-442", linking the "Informational Pamphlet" (and a Spanish
-    edition, not read).
+    edition, not read). Redesigned as an FAQ by 2026-10-11: "Which
+    initiatives will be on the 2026 General election ballot?" followed
+    by each initiative's name and number ("Fairness for Girls (442)") —
+    both shapes are read, the numbers taken from the range or from the
+    parentheses.
   - "Constitutional Amendment passed by the Nebraska Legislature for the
     2026 General Election", linking "LR19CA" (the Legislature's bill page)
     and a scanned image of the Executive Board's ballot statement for it.
@@ -73,6 +77,9 @@ PETITION_FRAMING_AUTHORITY = "Nebraska Attorney General (statement of effect, Ne
 _rate_limiter = RateLimiter(rps=1.0)
 
 _RANGE_RE = re.compile(r"Initiative Nos?\.\s*([\d,\s–-]+)")
+# The FAQ shape names each initiative with its number: "Fairness for Girls (442)".
+_LISTED_NUMBER_RE = re.compile(r"\((\d+)\)")
+_INITIATIVES_RE = re.compile(r"\binitiatives?\b", re.IGNORECASE)
 _LR_TEXT_RE = re.compile(r"^LR\d+CA$")
 _PAGE_HEAD_RE = re.compile(r"^Ballot Title and Text for Initiative Measure (\d+)$")
 _PROPOSED_BY_RE = re.compile(r"^Proposed by (.+)$")
@@ -114,29 +121,31 @@ def read_elections_page(page_html: str, year: int) -> dict | None:
     words this reader doesn't know, refuses the whole page. Publishing
     the kind that did match alone would read as the whole ballot."""
     tree = lxml_html.fromstring(page_html)
-    marker = f"{year} General Election"
+    # Case-blind: the FAQ writes "2026 General election", and a heading
+    # this skips is one the unrecognised-paragraph refusal never sees.
+    marker = f"{year} General Election".lower()
     initiatives: set[str] = set()
     amendments: list[str] = []
     for p in tree.xpath("//p"):
         text = _norm(p.text_content())
-        if marker not in text:
+        if marker not in text.lower():
             continue
         if text.startswith("General Election: "):
             continue  # the election's own date line
-        if text.startswith(f"Ballot Measures for {marker}"):
-            m = _RANGE_RE.search(text)
-            numbers = _expand_numbers(m.group(1)) if m else set()
-            if not numbers:
-                logger.warning("NE %d: initiative heading without a readable number range: %r", year, text[:120])
-                return None
-            initiatives |= numbers
-            continue
-        if "Legislature" in text and f"for the {marker}" in text:
+        if "Legislature" in text and f"for the {marker}" in text.lower():
             links = [a for a in p.xpath(".//a[@href]") if _LR_TEXT_RE.match(_norm(a.text_content()))]
             if not links:
                 logger.warning("NE %d: legislature amendment heading without an LR link: %r", year, text[:120])
                 return None
             amendments.extend(urljoin(ELECTIONS_URL, a.get("href")) for a in links)
+            continue
+        if text.startswith("Ballot Measures for ") or _INITIATIVES_RE.search(text):
+            m = _RANGE_RE.search(text)
+            numbers = _expand_numbers(m.group(1)) if m else set(_LISTED_NUMBER_RE.findall(text))
+            if not numbers:
+                logger.warning("NE %d: initiative heading without readable numbers: %r", year, text[:120])
+                return None
+            initiatives |= numbers
             continue
         if _MEASURE_WORDS_RE.search(text):
             logger.warning("NE %d: unrecognised ballot-measure paragraph: %r", year, text[:120])

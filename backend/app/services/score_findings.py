@@ -77,7 +77,10 @@ def alignment_finding(facts: dict | None, chamber: str) -> str | None:
             return f"Has not broken with the party on any of {tally}."
         return f"Broke with the party on {breaks:,} of {tally}."
     if breaks == 0:
-        return f"Never broke with the party on a party-line vote, though {members} in {seats} break on {_pct(expected)}."
+        # One decimal, as the line beneath it prints the same norm
+        # (AlignmentColumn's percentOneDecimal): "break on 2%" over "do
+        # that on 2.5%" read as two different figures.
+        return f"Never broke with the party on a party-line vote, though {members} in {seats} break on {expected:.1%}."
     ratio = rate / expected
     if ratio >= _ABOUT_THE_SAME:
         return f"Breaks with the party {_times(ratio)} as often as {members} in {seats}."

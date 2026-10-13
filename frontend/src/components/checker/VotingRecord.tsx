@@ -8,7 +8,7 @@ import {
   VotingRecord as VotingRecordType,
 } from "@/types/senator";
 import { billPageHref } from "@/lib/congress";
-import { fetchSenatorVotes, fetchRepVotes } from "@/lib/api";
+import { fetchSenatorVotes, fetchRepVotes, type VotePeriod } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
 import Link from "next/link";
@@ -19,6 +19,12 @@ import { useLatestRequest } from "@/hooks/useLatestRequest";
 const VOTES_PER_PAGE = 15;
 // The search box asks the server once typing pauses this long.
 const SEARCH_DEBOUNCE_MS = 300;
+
+const PERIODS: { key: VotePeriod; label: string; empty: string }[] = [
+  { key: "month", label: "LAST 30 DAYS", empty: "No recorded vote in the last 30 days." },
+  { key: "congress", label: "THIS CONGRESS", empty: "No recorded vote in this Congress yet." },
+  { key: "all", label: "ANY DATE", empty: "" },
+];
 
 interface VotingRecordProps {
   senatorId: string;
@@ -120,6 +126,7 @@ function PaginatedVoteList({
   voteCount,
   chamber = "senate",
   q,
+  period = "all",
 }: {
   senatorId: string;
   category: "recent" | "key" | "all";
@@ -127,7 +134,10 @@ function PaginatedVoteList({
   chamber?: "senate" | "house";
   /** A search over bill number, title and question, run by the server. */
   q?: string;
+  /** A date range, worked out by the server. */
+  period?: VotePeriod;
 }) {
+  const narrowed = !!q || period !== "all";
   // `filter` is the one last asked for, `shownFilter` the one the votes on
   // screen were fetched with.
   const {
@@ -143,10 +153,10 @@ function PaginatedVoteList({
     (p: number, f: VoteFilterType) => {
       const fetcher = chamber === "house" ? fetchRepVotes : fetchSenatorVotes;
       request(f, () =>
-        fetcher(senatorId, { category, page: p, perPage: VOTES_PER_PAGE, filter: f, q })
+        fetcher(senatorId, { category, page: p, perPage: VOTES_PER_PAGE, filter: f, q, period })
       );
     },
-    [request, senatorId, category, chamber, q]
+    [request, senatorId, category, chamber, q, period]
   );
 
   useEffect(() => {
@@ -185,11 +195,12 @@ function PaginatedVoteList({
 
   const counts: VoteCounts = data.counts;
 
-  if (q && counts.all === 0) {
+  if (narrowed && counts.all === 0) {
     return (
       <p className={`text-sm text-ink-lo ${loading ? "opacity-60" : ""}`} role="status">
-        No vote on record matches this search. Try a bill number (such as H.R. 1) or a word from its
-        title.
+        {q
+          ? "No vote on record matches this search. Try a bill number (such as H.R. 1) or a word from its title."
+          : PERIODS.find((x) => x.key === period)?.empty}
       </p>
     );
   }
@@ -198,13 +209,13 @@ function PaginatedVoteList({
     <div className={loading ? "opacity-60 transition-opacity" : ""}>
       {/* Not naming the query: while the next one loads, these counts are
           still the last one's. */}
-      {q && (
+      {narrowed && (
         <p className="mb-2 text-xs text-ink-lo" role="status">
-          {counts.all.toLocaleString()} {counts.all === 1 ? "vote matches" : "votes match"} this
-          search
+          {counts.all.toLocaleString()} {counts.all === 1 ? "vote" : "votes"}
+          {q ? (counts.all === 1 ? " matches this search" : " match this search") : ""}
         </p>
       )}
-      {(voteCount > VOTES_PER_PAGE || (q && counts.all > VOTES_PER_PAGE)) && (
+      {(voteCount > VOTES_PER_PAGE || (narrowed && counts.all > VOTES_PER_PAGE)) && (
         <div className="flex items-center gap-1.5 mb-3 flex-wrap">
           <VoteFilter
             label="ALL"
@@ -278,6 +289,8 @@ export default function VotingRecord({
   } = votingRecord;
 
   const searchId = useId();
+  const periodId = useId();
+  const [period, setPeriod] = useState<VotePeriod>("all");
   const [query, setQuery] = useState("");
   const [q, setQ] = useState("");
   useEffect(() => {
@@ -336,6 +349,30 @@ export default function VotingRecord({
       alwaysVisible={statBoxes}
     >
       <div className="space-y-6 mt-4">
+        {totalVotes > 0 && (
+          <div role="group" aria-labelledby={periodId} className="flex flex-col gap-1">
+            <span id={periodId} className="font-mono text-xs tracking-widest text-ink-lo">
+              WHEN
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {PERIODS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setPeriod(key)}
+                  aria-pressed={period === key}
+                  className={`min-h-[36px] border px-2.5 font-mono text-xs transition-all ${
+                    period === key
+                      ? "border-white/15 bg-white/[0.03] text-ink-hi"
+                      : "border-white/[0.07] text-ink-min hover:border-white/15"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {totalVotes > VOTES_PER_PAGE && (
           <div className="flex flex-col gap-1">
             <label htmlFor={searchId} className="font-mono text-xs tracking-widest text-ink-lo">
@@ -351,13 +388,14 @@ export default function VotingRecord({
             />
           </div>
         )}
-        {q ? (
+        {q || period !== "all" ? (
           <PaginatedVoteList
             senatorId={senatorId}
             category="all"
             voteCount={totalVotes}
             chamber={chamber}
             q={q}
+            period={period}
           />
         ) : (
           <>

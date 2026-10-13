@@ -43,8 +43,9 @@ MACHINES = ("aarch64", "x86_64")
 # dropping its last use means removing it here, and the test then names
 # every pin that went unused with it.
 DIRECT = {
-    "alembic", "apscheduler", "atproto", "cssselect", "defusedxml",
+    "alembic", "apscheduler", "atproto", "certifi", "cryptography", "cssselect", "defusedxml",
     "diff-cover", "fastapi", "httptools", "httpx", "lxml", "mcp", "numpy",
+    "opencv-python-headless",
     "packaging", "pdfplumber", "pillow", "playwright", "pydantic",
     "pydantic-settings", "pytesseract", "pytest", "pytest-asyncio",
     "pytest-cov", "pyyaml", "requests", "scikit-learn", "scipy",

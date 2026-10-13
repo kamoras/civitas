@@ -98,6 +98,12 @@ describe("describeBill", () => {
     expect(description).toContain("121st Congress");
     expect(description).toContain("Latest action: Referred to committee.");
   });
+
+  it("uses the Record's spelling of the number when one is given", () => {
+    const { title, description } = describeBill(bill, "S. 4967");
+    expect(title).toBe("S. 4967: The Example Act");
+    expect(description.startsWith("S. 4967 (121st Congress")).toBe(true);
+  });
 });
 
 describe("JSON-LD", () => {

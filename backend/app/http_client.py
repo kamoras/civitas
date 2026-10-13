@@ -54,13 +54,39 @@ Two scope notes, stated rather than glossed:
   `httpx.get` builds a fresh client per call, so there is no pool to hand
   back a dead connection — the failure mode above structurally can't occur.
   Its own `timeout=` is a real per-socket-operation timeout and does fire.
+
+## Completing a server's certificate chain (AIA)
+
+A server is meant to send its certificate and the intermediate that signed
+it. Some send the wrong intermediate or none: measured 2026-10-13, Alaska's,
+Alabama's and Virginia's election sites, which every browser opens because
+browsers fetch the missing intermediate from the address the certificate
+itself names (its Authority Information Access "CA Issuers" URL). OpenSSL
+doesn't, so for us those sites were simply unreachable — a ballot-measure
+ingest failed and the source crawl skipped them.
+
+So the client does what the browser does, once per host: on a verification
+failure that says the issuer is missing, it reads the server's certificate,
+fetches the issuer from that URL, checks the issuer's signature on it, adds it
+to the shared context (TLS_CONTEXT) and tries once more. Verification is not
+loosened: the context has partial chains turned off, so an added
+intermediate is never a trust anchor — the chain must still end at a root in
+certifi's bundle, and a self-signed certificate is never added. An issuer
+fetched over plain HTTP that a network attacker replaced would fail exactly
+there.
 """
 
 import asyncio
 import logging
+import ssl
 from typing import Any
 
+import certifi
 import httpx
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.serialization import Encoding
+from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
 
 logger = logging.getLogger(__name__)
 
@@ -143,15 +169,124 @@ def is_bot_challenge(response: httpx.Response) -> bool:
     return (refused or "x-iinfo" in headers) and any(m in head for m in _CHALLENGE_BODY_MARKERS)
 
 
+def _tls_context() -> ssl.SSLContext:
+    """httpx's own default trust (certifi), with partial chains off: a CA
+    certificate added for chain completion is chain material, never an
+    anchor (Python 3.13 turns partial chains on by default)."""
+    context = ssl.create_default_context(cafile=certifi.where())
+    context.verify_flags &= ~ssl.VERIFY_X509_PARTIAL_CHAIN
+    return context
+
+
+TLS_CONTEXT = _tls_context()
+# X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY and ..._VERIFY_LEAF_SIGNATURE:
+# the server's chain is missing the certificate that signed its own.
+_MISSING_ISSUER = (20, 21)
+# Hosts whose chain was completed, or is being: tried once per process each.
+_chains_completed: set[str] = set()
+# A chain is rarely more than two intermediates deep.
+_AIA_MAX_DEPTH = 3
+
+
+def _missing_issuer(exc: BaseException) -> bool:
+    """Whether a connect error is a certificate whose issuer we lack."""
+    seen = exc
+    while seen is not None:
+        if isinstance(seen, ssl.SSLCertVerificationError):
+            return seen.verify_code in _MISSING_ISSUER
+        seen = seen.__cause__ or seen.__context__
+    return False
+
+
+def ca_issuers(cert: x509.Certificate) -> list[str]:
+    """The http(s) URLs a certificate names for its issuer (AIA)."""
+    try:
+        access = cert.extensions.get_extension_for_oid(ExtensionOID.AUTHORITY_INFORMATION_ACCESS).value
+    except x509.ExtensionNotFound:
+        return []
+    return [
+        d.access_location.value for d in access
+        if d.access_method == AuthorityInformationAccessOID.CA_ISSUERS
+        and d.access_location.value.startswith(("http://", "https://"))
+    ]
+
+
+def load_issuer(cert: x509.Certificate, body: bytes) -> x509.Certificate | None:
+    """The certificate in `body` (DER or PEM), if it really signed `cert`
+    and isn't self-signed — a root is never taken from the network."""
+    try:
+        issuer = x509.load_der_x509_certificate(body)
+    except ValueError:
+        try:
+            issuer = x509.load_pem_x509_certificate(body)
+        except ValueError:
+            return None
+    try:
+        cert.verify_directly_issued_by(issuer)
+    except (ValueError, TypeError, InvalidSignature):
+        return None
+    return None if issuer.subject == issuer.issuer else issuer
+
+
 class BackstoppedAsyncClient(httpx.AsyncClient):
     """`httpx.AsyncClient` whose every request has a wall-clock ceiling.
 
     The bound is applied in `send()`, which is the single funnel every
     `get`/`post`/`request`/`stream` call goes through, so no call site can
-    accidentally opt out of it.
+    accidentally opt out of it — and where a server's incomplete certificate
+    chain is completed (module docstring).
     """
 
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("verify", TLS_CONTEXT)
+        self._completes_chains = kwargs["verify"] is TLS_CONTEXT
+        super().__init__(**kwargs)
+
     async def send(self, request: httpx.Request, **kwargs: Any) -> httpx.Response:
+        try:
+            return await self._send_once(request, **kwargs)
+        except httpx.ConnectError as exc:
+            if not (self._completes_chains and _missing_issuer(exc)):
+                raise
+            try:
+                failed = exc.request  # a redirect hop's own host, not the first one's
+            except RuntimeError:
+                failed = request
+            if not await self._complete_chain(failed.url.host, failed.url.port or 443):
+                raise
+            return await self._send_once(request, **kwargs)
+
+    async def _complete_chain(self, host: str, port: int) -> bool:
+        """Fetch and add the issuers `host`'s certificate names. True when
+        at least one was added, so the request is worth sending again."""
+        if host in _chains_completed:
+            return False
+        _chains_completed.add(host)
+        added = []
+        try:
+            pem = await asyncio.to_thread(ssl.get_server_certificate, (host, port), timeout=10)
+            cert = x509.load_pem_x509_certificate(pem.encode())
+            for _ in range(_AIA_MAX_DEPTH):
+                issuer = None
+                for url in ca_issuers(cert):
+                    resp = await self.get(url, timeout=10, follow_redirects=True)
+                    issuer = load_issuer(cert, resp.content) if resp.status_code == 200 else None
+                    if issuer is not None:
+                        break
+                if issuer is None:
+                    break
+                TLS_CONTEXT.load_verify_locations(cadata=issuer.public_bytes(Encoding.DER))
+                added.append(issuer.subject.rfc4514_string())
+                cert = issuer
+        except Exception as exc:  # any failure here leaves the original error standing
+            logger.info("%s: could not complete its certificate chain (%s)", host, exc)
+        if not added:
+            _chains_completed.discard(host)  # asked again next time
+            return False
+        logger.info("%s sends an incomplete certificate chain — completed it with %s", host, "; ".join(added))
+        return True
+
+    async def _send_once(self, request: httpx.Request, **kwargs: Any) -> httpx.Response:
         url = request.url
         # Scheme/host/path only — deliberately never the query string, which
         # is where callers like congress.py carry their API key. Building the

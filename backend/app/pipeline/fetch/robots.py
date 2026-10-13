@@ -43,7 +43,9 @@ Python-level loop over the path.
 
 What an unreadable file means is the caller's to apply (§2.3.1): a 4xx
 means there are no rules, a 5xx or no answer means assume complete
-disallow.
+disallow. The crawler adds one case the RFC doesn't have: a 4xx that is a
+bot wall's challenge is a wall, and nothing is read there
+(state_source_crawler.WALLED).
 """
 
 import re

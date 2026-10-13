@@ -11,6 +11,7 @@ from app.api.response_helpers import (
 )
 from app.database import get_db
 from app.member_ids import resolve_member_id
+from app.services._scorecard_common import VOTE_PERIOD_PATTERN
 from app.services.holdings_service import HOLDING_CATEGORY_PATTERN, get_rep_holdings
 from app.services.representative_service import (
     get_rep_leaderboard,
@@ -68,9 +69,12 @@ def get_votes(
     per_page: int = Query(15, ge=1, le=100),
     filter: str = Query("all", pattern="^(all|yea|nay|against-party)$"),
     q: str | None = Query(None, max_length=100, description="Bill number, title or question to search for"),
+    period: str = Query(
+        "all", pattern=VOTE_PERIOD_PATTERN, description="month: the last 30 days; congress: this Congress; all"
+    ),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    result = get_rep_votes(db, resolve_member_id(db, rep_id), category, page, per_page, filter, q)
+    result = get_rep_votes(db, resolve_member_id(db, rep_id), category, page, per_page, filter, q, period)
     if result is None:
         raise HTTPException(status_code=404, detail="Representative not found")
     return _cached_json(result, max_age=CACHE_TTL_DETAIL_S)
