@@ -443,6 +443,55 @@ async def test_link_verification_shows_a_link_that_resolves(monkeypatch, tmp_pat
     assert shown["url"] == "https://ga.example/lookup"
 
 
+def _tls_failure(verify_code):
+    """The ConnectError httpx raises for a certificate it can't verify."""
+    import ssl
+
+    import httpx
+
+    cause = ssl.SSLCertVerificationError(1, "certificate verify failed")
+    cause.verify_code = verify_code
+
+    class _Client:
+        async def get(self, url, **kwargs):
+            raise httpx.ConnectError("certificate verify failed") from cause
+
+    return _Client()
+
+
+@pytest.mark.asyncio
+async def test_link_verification_completes_a_chain_missing_its_intermediate(monkeypatch, tmp_path):
+    """A server that omits its intermediate certificate works in every
+    browser (they fetch it from the certificate's AIA URL) and must not
+    read as a dead link; the chain is completed the same way and checked."""
+    import httpx
+
+    ballot_lookup, _ = _link_files(monkeypatch, tmp_path, {"AK": {"url": "https://ak.example/polls/"}})
+    completed = []
+
+    async def complete(client, url):
+        completed.append(url)
+        return httpx.Response(200, content=b"<title>Polls</title>", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(ballot_lookup, "_get_completing_chain", complete)
+    assert (await ballot_lookup.refresh_link_verification(_tls_failure(20)))["verified"] == 1
+    assert completed == ["https://ak.example/polls/"]
+    assert ballot_lookup.lookup_for_state("AK")["isStateSpecific"] is True
+
+
+@pytest.mark.asyncio
+async def test_link_verification_fails_any_other_certificate_fault(monkeypatch, tmp_path):
+    """An expired or wrong-host certificate fails in a browser too: not retried."""
+    ballot_lookup, _ = _link_files(monkeypatch, tmp_path, {"AK": {"url": "https://ak.example/polls/"}})
+
+    async def complete(client, url):
+        raise AssertionError("only a missing intermediate is completed")
+
+    monkeypatch.setattr(ballot_lookup, "_get_completing_chain", complete)
+    assert (await ballot_lookup.refresh_link_verification(_tls_failure(10)))["failed"] == 1
+    assert ballot_lookup.lookup_for_state("AK")["isStateSpecific"] is False
+
+
 @pytest.mark.asyncio
 async def test_link_verification_does_not_pass_a_bot_challenge(monkeypatch, tmp_path):
     """Imperva serves its challenge with a 200. A wall that refuses the

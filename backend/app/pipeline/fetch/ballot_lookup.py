@@ -26,12 +26,18 @@ app/data/ is COPY'd into the Docker image and is NOT writable at runtime,
 so the verifier writes /data/ and this module reads both.
 """
 
+import asyncio
 import json
 import logging
 import os
+import ssl
 from typing import Any
 
+import certifi
 import httpx
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
+from cryptography.x509.oid import AuthorityInformationAccessOID, ExtensionOID
 
 from app.atomic_write import write_text_atomic
 from app.file_cache import Stamp, read_json, read_json_preferring, reload_if_moved, new_reload_lock
@@ -128,6 +134,66 @@ def _is_the_page(requested: str, response: httpx.Response) -> bool:
     )
 
 
+def _missing_intermediate(exc: BaseException) -> bool:
+    """The TLS failure a browser recovers from by itself: the server sent
+    its certificate without the intermediate that signed it (OpenSSL's
+    "unable to get local issuer certificate"). Chrome, Safari and Edge
+    fetch that intermediate from the certificate's own AIA "CA Issuers"
+    URL, and Firefox ships it, so visitors reach the page; Python does
+    neither, and the check read a working lookup as dead (Alaska's, from
+    2026-10). Any other certificate fault (expired, wrong host,
+    self-signed) fails in a browser too and stays a failure here."""
+    while exc is not None:
+        if isinstance(exc, ssl.SSLCertVerificationError):
+            return exc.verify_code == _UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
+# X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY (OpenSSL x509_vfy.h).
+_UNABLE_TO_GET_ISSUER_CERT_LOCALLY = 20
+
+
+def _issuer_url(host: str) -> str | None:
+    """The leaf certificate's AIA "CA Issuers" URL: where its issuer says
+    the missing intermediate is published. Read without verification
+    (it is the certificate being verified), and only to find that URL."""
+    pem = ssl.get_server_certificate((host, 443), timeout=_LINK_CHECK_TIMEOUT_S)
+    cert = x509.load_pem_x509_certificate(pem.encode())
+    try:
+        aia = cert.extensions.get_extension_for_oid(ExtensionOID.AUTHORITY_INFORMATION_ACCESS).value
+    except x509.ExtensionNotFound:
+        return None
+    return next(
+        (d.access_location.value for d in aia if d.access_method == AuthorityInformationAccessOID.CA_ISSUERS),
+        None,
+    )
+
+
+async def _get_completing_chain(client: httpx.AsyncClient, url: str) -> httpx.Response | None:
+    """Re-request `url` with its server's missing intermediate added, as a
+    browser would: the intermediate is fetched from the leaf's AIA URL and
+    added beside the usual roots, so the chain is still verified to a
+    trusted root (an untrusted intermediate verifies nothing). None when
+    there is no AIA URL to complete it from."""
+    issuer_url = await asyncio.to_thread(_issuer_url, httpx.URL(url).host)
+    if not issuer_url:
+        return None
+    issuer = await client.get(issuer_url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True)
+    issuer.raise_for_status()
+    body = issuer.content
+    intermediate = (
+        x509.load_pem_x509_certificate(body) if body.lstrip().startswith(b"-----")
+        else x509.load_der_x509_certificate(body)
+    )
+    context = ssl.create_default_context(cafile=certifi.where())
+    context.load_verify_locations(cadata=intermediate.public_bytes(serialization.Encoding.PEM).decode())
+    async with httpx.AsyncClient(verify=context) as completing:
+        return await completing.get(
+            url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True, headers=BROWSER_HEADERS,
+        )
+
+
 async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]:
     """Re-check every candidate per-state URL and rewrite the volume copy.
 
@@ -164,11 +230,16 @@ async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]
             # BROWSER_HEADERS: honest identity, complete request — the shape
             # several state WAFs require before they answer anyone (see
             # http_utils). A wall that still refuses is left refusing.
-            response = await client.get(
-                url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True,
-                headers=BROWSER_HEADERS,
-            )
-            ok = _is_the_page(url, response)
+            try:
+                response = await client.get(
+                    url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True,
+                    headers=BROWSER_HEADERS,
+                )
+            except httpx.ConnectError as exc:
+                if not _missing_intermediate(exc):
+                    raise
+                response = await _get_completing_chain(client, url)
+            ok = response is not None and _is_the_page(url, response)
         except Exception:
             ok = False
         if ok:

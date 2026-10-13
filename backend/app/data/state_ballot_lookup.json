@@ -21,7 +21,7 @@
       "label": "Alaska polling place locations",
       "source_name": "Alaska Division of Elections",
       "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The personal portal (myvoterportal.alaska.gov) is behind a DataDome bot wall that refuses automated checks, so the Division's own polling-place page, which links it, is used instead"
+      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The personal portal (myvoterportal.alaska.gov) is behind a DataDome bot wall that refuses automated checks, so the Division's own polling-place page, which links it, is used instead. Its server omits the intermediate certificate, which browsers fetch from the certificate's AIA address; the check completes the chain the same way (2026-10-12)"
     },
     "AZ": {
       "url": "https://my.arizona.vote/PortalList.aspx",
@@ -84,7 +84,7 @@
       "label": "Georgia My Voter Page",
       "source_name": "Georgia Secretary of State",
       "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation, 2026-10-12, and production stopped showing it the same week; it resolved through the same client on 2026-10-08. Official URL kept (it opens normally in a browser); the page shows the national directory while the check cannot confirm it"
     },
     "HI": {
       "url": "https://elections.hawaii.gov/voter-service-centers-and-places-of-deposit/",
