@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import type { CommentDeadline, ThisWeek } from "@/types/thisWeek";
+import type { CommentDeadline, StateNextDeadline, ThisWeek } from "@/types/thisWeek";
+import { countdownText } from "@/components/elections/VoterCalendar";
 import { dayHref, shortDate, weekHref } from "@/lib/congress";
 import { stateBallotHref } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
@@ -87,6 +88,57 @@ function StatePicker({ states, compact }: { states: string[]; compact: boolean }
   );
 }
 
+/** How many states' next deadlines show before "every state". */
+const DEADLINES_SHOWN = 5;
+
+function DeadlineRow({ d }: { d: StateNextDeadline }) {
+  const left = countdownText(d);
+  return (
+    <li className="text-sm leading-snug">
+      <Link
+        href={`${stateBallotHref(d.state)}#voter-deadlines`}
+        className="text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos"
+      >
+        {STATE_NAMES[d.state] ?? d.state}
+      </Link>
+      <span className="text-ink-lo">: {d.sentence}</span>
+      {left && <span className="ml-1 font-mono text-xs text-phos">{left}</span>}
+    </li>
+  );
+}
+
+/** Each state's next voter deadline, soonest first: the five nearest, and
+ *  every state behind a disclosure. Links, not a question (AGENTS.md §8). */
+function StateDeadlines({ rows }: { rows: StateNextDeadline[] }) {
+  const soon = rows.slice(0, DEADLINES_SHOWN);
+  const rest = rows.slice(DEADLINES_SHOWN);
+  return (
+    <div className="flex flex-col gap-2 pt-2">
+      <h3 className={LABEL}>Next voter deadlines</h3>
+      <ul className="flex flex-col gap-1.5">
+        {soon.map((d) => (
+          <DeadlineRow key={d.state} d={d} />
+        ))}
+      </ul>
+      {rest.length > 0 && (
+        <details className="group">
+          <summary className="cursor-pointer list-none font-mono text-xs text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+            Every state&apos;s next deadline
+            <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
+              &#9662;
+            </span>
+          </summary>
+          <ul className="flex flex-col gap-1.5 pt-2">
+            {rest.map((d) => (
+              <DeadlineRow key={d.state} d={d} />
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function deadlineWhy(d: CommentDeadline) {
   if (d.issueId) {
     return (
@@ -124,6 +176,9 @@ function FullStrip({ data }: { data: ThisWeek }) {
           </p>
           <p className="font-display text-base text-ink">{line.pick}:</p>
           <StatePicker states={election.states} compact={false} />
+          {election.deadlines && election.deadlines.length > 0 && (
+            <StateDeadlines rows={election.deadlines} />
+          )}
         </div>
 
         <div className="flex flex-col gap-3">

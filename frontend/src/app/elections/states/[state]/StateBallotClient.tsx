@@ -9,6 +9,7 @@ import CoverageFeed from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard, { measureAnchor } from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
+import VoterCalendar from "@/components/elections/VoterCalendar";
 import GeneralRunoffNotice, {
   otherPrimaryLabel,
   RankedChoiceNotice,
@@ -49,8 +50,10 @@ import {
   isRedrawnSeat,
   majorPartyOf,
   matchesDistrictQuery,
+  placeDistrictSummary,
   pviColor,
   redrawnMemberWords,
+  searchFold,
   stateBallotHref,
   termPhrase,
   tierCandidates,
@@ -938,7 +941,8 @@ function HouseDistrictOption({
   onPick: () => void;
   newLines: boolean;
   resultsMode: boolean;
-  /** What the reader typed: the counties it matched lead the label. */
+  /** What the reader typed: the places and counties it matched lead the
+   * label, so a row found by a city says which city. */
   filter: string;
 }) {
   const { leaders } = tierCandidates(race.candidates.filter(isActiveCandidate));
@@ -949,7 +953,18 @@ function HouseDistrictOption({
       : " (I)";
   const dem = leaders.find((c) => majorPartyOf(c) === "DEM");
   const rep = leaders.find((c) => majorPartyOf(c) === "REP");
-  const countiesLabel = districtAreaLabel(race.counties, 3, true, filter);
+  // Only the places the filter matched join the label (three at most):
+  // a district holds up to a thousand, and "& 1200 more" says nothing.
+  const q = searchFold(filter);
+  const matchedPlaces = q
+    ? (race.places ?? []).filter((p) => searchFold(p).includes(q)).slice(0, 3)
+    : [];
+  const countiesLabel = districtAreaLabel(
+    race.counties || matchedPlaces.length ? [...(race.counties ?? []), ...matchedPlaces] : null,
+    3,
+    true,
+    filter
+  );
 
   return (
     <button
@@ -1101,7 +1116,10 @@ function HouseDetail({
     );
   }
 
-  const shown = houseRaces.filter((r) => matchesDistrictQuery({ ...r, areas: r.counties }, filter));
+  const shown = houseRaces.filter((r) =>
+    matchesDistrictQuery({ ...r, areas: [...(r.counties ?? []), ...(r.places ?? [])] }, filter)
+  );
+  const placeSummary = placeDistrictSummary(houseRaces, filter);
   return (
     <div>
       {newLines ? (
@@ -1135,7 +1153,7 @@ function HouseDetail({
             </>
           )}
           , and lookups by representative can answer for the old map, not these lines. Point at the
-          map, pick your county, or filter by a county or district number
+          map, pick your county, or filter by a city, town, county or district number
           {lookupIsStateSpecific ? (
             <>
               , or check{" "}
@@ -1155,7 +1173,8 @@ function HouseDetail({
       ) : (
         <p className="mb-3 text-[13px] text-ink-lo">
           {resultsMode ? HOUSE_ONE_EACH_RESULTS : HOUSE_ONE_EACH} Point at the map, pick your
-          county, or filter by a county, a candidate&apos;s name or a district number, or{" "}
+          county, or filter by a city, town, county, a candidate&apos;s name or a district number,
+          or{" "}
           <a
             href="https://www.house.gov/representatives/find-your-representative"
             target="_blank"
@@ -1188,13 +1207,13 @@ function HouseDetail({
             onChange={(e) => setFilter(e.target.value)}
             placeholder={
               newLines
-                ? "Filter by county or district number"
-                : "Filter by county, candidate, or district number"
+                ? "Filter by city, town, county or district number"
+                : "Filter by city, town, county, candidate or district number"
             }
             aria-label={
               newLines
-                ? "Filter districts by county or district number"
-                : "Filter districts by county, candidate, or district number"
+                ? "Filter districts by city, town, county or district number"
+                : "Filter districts by city, town, county, candidate or district number"
             }
             className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
           />
@@ -1209,9 +1228,23 @@ function HouseDetail({
               reader sees and a screen-reader user otherwise would not. */}
           <p role="status" aria-live="polite" className="sr-only">
             {filter.trim()
-              ? `${shown.length} of ${houseRaces.length} districts match ${filter}`
+              ? `${shown.length} of ${houseRaces.length} districts match ${filter}. ${placeSummary.join(" ")}`
               : ""}
           </p>
+        </div>
+      )}
+      {/* A city split between districts is the case a county search got
+          wrong: say which districts, and that the row alone can't settle
+          it. aria-hidden: the status line above reads the same words. */}
+      {placeSummary.length > 0 && (
+        <div
+          data-place-summary
+          aria-hidden="true"
+          className="mb-2 border border-white/15 bg-surface px-3 py-2 text-[13px] text-ink"
+        >
+          {placeSummary.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
         </div>
       )}
       {shown.map((r) => (
@@ -1227,12 +1260,9 @@ function HouseDetail({
       {shown.length === 0 && (
         <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
           No district matches “{filter}”.{" "}
-          {/* Cities and towns are not on this list (a city can span several
-              districts), and a reader who typed one should be told so
-              rather than left to guess why their home matched nothing. */}
           {newLines
-            ? "This list goes by county, not city or town: try your county’s name or a district number, or pick a county above."
-            : "This list goes by county, not city or town: try your county’s name, a candidate’s surname, or a district number, or pick a county above."}
+            ? "Try the name of your city, town or county, or a district number, or pick a county above."
+            : "Try the name of your city, town or county, a candidate’s surname, or a district number, or pick a county above."}
         </p>
       )}
     </div>
@@ -1262,7 +1292,7 @@ function ContestOverview({
 }: {
   contest: BallotContest;
   ballot: StateBallot;
-  onOpen: (key: string, houseRaceId?: string | null) => void;
+  onOpen: (key: string, houseRaceId?: string | null, measureId?: string | null) => void;
   /** From election day on — how incumbency is worded (incumbencyLabel). */
   resultsMode: boolean;
 }) {
@@ -1325,7 +1355,7 @@ function ContestOverview({
             onClick={() => onOpen("house", null)}
             className="mb-2 min-h-[44px] font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
           >
-            DON&apos;T KNOW YOUR DISTRICT? MAP OR COUNTY →
+            DON&apos;T KNOW YOUR DISTRICT? MAP, TOWN OR COUNTY →
           </button>
           <p className="mb-2 text-[13px] text-ink-lo">Or pick its number to research the race:</p>
           <div className="grid grid-cols-7 gap-1.5">
@@ -1493,19 +1523,26 @@ function ContestOverview({
                   {OPERATOR_NONE_SHORT}
                 </p>
               )}
+            {/* Each row opens the drawer at its own measure: California's
+                fourteen run to ten screens of verbatim text, and the ninth
+                was a click and seven screens of scrolling away. */}
             <ul>
               {ballot.measures.map((m) => (
-                <li
-                  key={m.id}
-                  className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-hi"
-                >
-                  <span className="mr-2 font-mono text-xs text-ink-lo">{m.number}</span>
-                  {m.title}
-                  {(m.status === "removed" || m.status === "withdrawn") && (
-                    <span className="ml-2 font-mono text-[10px] uppercase text-signal-red">
-                      {m.status}
-                    </span>
-                  )}
+                <li key={m.id} className="border-b border-white/[0.09]">
+                  <button
+                    type="button"
+                    data-open-measure={m.id}
+                    onClick={() => onOpen(contest.key, null, m.id)}
+                    className="min-h-[44px] w-full px-4 py-2 text-left text-[13px] text-ink-hi hover:text-phos"
+                  >
+                    <span className="mr-2 font-mono text-xs text-ink-lo">{m.number}</span>
+                    {m.title}
+                    {(m.status === "removed" || m.status === "withdrawn") && (
+                      <span className="ml-2 font-mono text-[10px] uppercase text-signal-red">
+                        {m.status}
+                      </span>
+                    )}
+                  </button>
                 </li>
               ))}
             </ul>
@@ -1677,7 +1714,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // Collapsing the two meant a contest opened by a link could never be
   // closed (setting null over null changes nothing).
   const [chosen, setChosen] = useState<
-    { key: string; houseRaceId: string | null } | null | undefined
+    { key: string; houseRaceId: string | null; measureId?: string | null } | null | undefined
   >(undefined);
   // A #race-{id} link (old /elections/{raceId} redirects, Bluesky posts,
   // the live-updates feed, the Action Center's follow-the-count links) or a
@@ -1715,10 +1752,14 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const open = chosen !== undefined ? chosen : fromHash;
 
   const openContest = useCallback(
-    (key: string, houseRaceId: string | null = null) => {
-      setChosen({ key, houseRaceId });
+    (key: string, houseRaceId: string | null = null, measureId: string | null = null) => {
+      setChosen({ key, houseRaceId, measureId });
       const contest = contests.find((c) => c.key === key);
-      const hash = contest ? contestHash(contest, houseRaceId) : `#ballot-${key}`;
+      const hash = measureId
+        ? `#${measureAnchor(measureId)}`
+        : contest
+          ? contestHash(contest, houseRaceId)
+          : `#ballot-${key}`;
       window.history.replaceState(null, "", hash);
     },
     [contests]
@@ -1911,6 +1952,18 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               </div>
             </header>
 
+            {/* Before the ballot: a reader who isn't registered by the
+              deadline can't vote on any of it. Gone in the results window,
+              when every deadline has passed. */}
+            {!resultsMode && ballot.voterCalendar && (
+              <VoterCalendar
+                calendar={ballot.voterCalendar}
+                stateName={stateName}
+                lookupHref={lookupHref}
+                lookupIsStateSpecific={lookupIsStateSpecific}
+              />
+            )}
+
             {resultsMode && (
               <>
                 <StateResults
@@ -2021,6 +2074,39 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                                 ›
                               </span>
                             </button>
+                            {/* The phone's ballot has no measures box, so the
+                                measures row carries one button per measure:
+                                a reader after the ninth taps it, not the row
+                                and then nine measures of scrolling. */}
+                            {c.kind === "measures" && ballot.measures.length > 1 && (
+                              <div
+                                role="group"
+                                aria-label="Open a measure"
+                                className="flex flex-wrap gap-1.5 border-b border-white/[0.14] px-4 py-2 pl-12"
+                              >
+                                {/* Said on screen too: a row of bare numbers
+                                    doesn't say what tapping one does. The
+                                    group's label speaks for it. */}
+                                <span
+                                  aria-hidden="true"
+                                  className="w-full font-mono text-[11px] text-ink-lo"
+                                >
+                                  Open a measure:
+                                </span>
+                                {ballot.measures.map((m) => (
+                                  <button
+                                    key={m.id}
+                                    type="button"
+                                    data-open-measure={m.id}
+                                    onClick={() => openContest(c.key, null, m.id)}
+                                    aria-label={[m.number, m.title].filter(Boolean).join(": ")}
+                                    className="min-h-[44px] min-w-[44px] max-w-[12rem] truncate border border-white/25 px-2 font-mono text-sm text-ink-hi hover:border-phos hover:text-phos"
+                                  >
+                                    {m.number || m.title}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -2055,6 +2141,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           <ContestDrawer
             contest={openContestEntry}
             shareAnchor={contestHash(openContestEntry, open?.houseRaceId ?? null).slice(1)}
+            focusId={open?.measureId ? measureAnchor(open.measureId) : null}
             index={openIndex}
             total={contests.length}
             prev={openIndex > 0 ? contests[openIndex - 1] : null}

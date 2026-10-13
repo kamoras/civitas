@@ -26,6 +26,7 @@ from app.pipeline.congress_activity import eastern_today
 from app.retractions import retraction_for_issue
 from app.services.congress_service import CHAMBERS, bill_label, next_meeting, week_bounds
 from app.time_utils import comment_period_today
+from app.voter_calendar import next_deadlines
 
 router = APIRouter()
 
@@ -212,6 +213,9 @@ def election(db: Session) -> dict:
         # Every jurisdiction with a ballot page (DC included: it votes on
         # measures), for the state picker.
         "states": sorted(ballot_state_codes()),
+        # Each state's next voter deadline (registration, early voting, mail
+        # ballots), soonest first, on that state's own clock.
+        "deadlines": next_deadlines(e.election_day),
     }
 
 

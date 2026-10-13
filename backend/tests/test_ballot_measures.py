@@ -443,6 +443,209 @@ async def test_link_verification_shows_a_link_that_resolves(monkeypatch, tmp_pat
     assert shown["url"] == "https://ga.example/lookup"
 
 
+class _TlsLab:
+    """A trusted test root, its intermediate, and local servers (HTTPS for
+    the page, plain HTTP for the AIA address) — so the link check runs
+    through the real shared client and a real TLS handshake, offline."""
+
+    def __init__(self):
+        import datetime
+
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        self.now = datetime.datetime.now(datetime.timezone.utc)
+        self.root_key = ec.generate_private_key(ec.SECP256R1())
+        self.root = self._cert("Test Root", self.root_key, "Test Root", self.root_key, ca=True)
+        self.inter_key = ec.generate_private_key(ec.SECP256R1())
+        self.inter = self._cert("Test Intermediate", self.inter_key, "Test Root", self.root_key, ca=True)
+        self.aia_port = None
+
+    def _cert(self, subject, key, issuer, issuer_key, *, ca=False, host=None, aia=None, days=(-1, 30)):
+        import datetime
+
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.x509.oid import AuthorityInformationAccessOID, NameOID
+
+        name = lambda cn: x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])  # noqa: E731
+        builder = (
+            x509.CertificateBuilder().subject_name(name(subject)).issuer_name(name(issuer))
+            .public_key(key.public_key()).serial_number(x509.random_serial_number())
+            .not_valid_before(self.now + datetime.timedelta(days=days[0]))
+            .not_valid_after(self.now + datetime.timedelta(days=days[1]))
+            .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
+            # Python 3.13's default verification is X.509-strict: key
+            # identifiers are required, as every real CA issues them.
+            .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+            .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()), critical=False)
+        )
+        if ca:
+            builder = builder.add_extension(x509.KeyUsage(
+                digital_signature=False, content_commitment=False, key_encipherment=False,
+                data_encipherment=False, key_agreement=False, key_cert_sign=True, crl_sign=True,
+                encipher_only=False, decipher_only=False,
+            ), critical=True)
+        if host:
+            builder = builder.add_extension(x509.SubjectAlternativeName([x509.DNSName(host)]), critical=False)
+        if aia:
+            builder = builder.add_extension(x509.AuthorityInformationAccess([x509.AccessDescription(
+                AuthorityInformationAccessOID.CA_ISSUERS, x509.UniformResourceIdentifier(aia),
+            )]), critical=False)
+        return builder.sign(issuer_key, hashes.SHA256())
+
+    def leaf(self, *, host="localhost", issuer="inter", aia=True, days=(-1, 30)):
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        key = ec.generate_private_key(ec.SECP256R1())
+        if issuer == "self":
+            return self._cert(host, key, host, key, host=host, days=days), key
+        issuer_cert, issuer_key = (self.inter, self.inter_key) if issuer == "inter" else issuer
+        url = f"http://127.0.0.1:{self.aia_port}/issuer.der" if aia else None
+        cert = self._cert(host, key, issuer_cert.subject.rfc4514_string().split("=", 1)[1], issuer_key,
+                          host=host, aia=url, days=days)
+        return cert, key
+
+    @staticmethod
+    def _server_context(tmp_path, cert, key, chain=()):
+        import ssl
+
+        from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
+
+        pem = tmp_path / f"server-{id(cert)}.pem"
+        pem.write_bytes(
+            key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())
+            + b"".join(c.public_bytes(Encoding.PEM) for c in (cert, *chain))
+        )
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(pem)
+        return context
+
+
+async def _http_server(body: bytes, context=None):
+    import asyncio
+
+    async def handle(reader, writer):
+        try:
+            await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n"
+                         + f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
+            await writer.drain()
+        except Exception:
+            pass
+        finally:
+            writer.close()
+
+    server = await asyncio.start_server(handle, "127.0.0.1", 0, ssl=context)
+    return server, server.sockets[0].getsockname()[1]
+
+
+@pytest.fixture
+def tls_lab(monkeypatch):
+    """The shared client's trust store with the test root added — a fresh
+    copy, so nothing completed here leaks into another test."""
+    from cryptography.hazmat.primitives.serialization import Encoding
+
+    from app import http_client
+
+    lab = _TlsLab()
+    context = http_client._tls_context()
+    context.load_verify_locations(cadata=lab.root.public_bytes(Encoding.DER))
+    monkeypatch.setattr(http_client, "TLS_CONTEXT", context)
+    monkeypatch.setattr(http_client, "_chains_completed", set())
+    return lab
+
+
+async def _check_link(monkeypatch, tmp_path, lab, make_leaf, chain=(), host="localhost"):
+    """Serve the leaf `make_leaf()` issues (with `chain`) on a local HTTPS page, run the link check
+    on it through the project's client, and return whether it verified."""
+    from cryptography.hazmat.primitives.serialization import Encoding
+
+    from app.http_client import make_async_client
+
+    aia, lab.aia_port = await _http_server(lab.inter.public_bytes(Encoding.DER))
+    try:
+        cert, key = make_leaf()  # it names the AIA port, known only now
+        page, port = await _http_server(b"<title>Polling places</title>", lab._server_context(tmp_path, cert, key, chain))
+        try:
+            url = f"https://{host}:{port}/polls/"
+            ballot_lookup, _ = _link_files(monkeypatch, tmp_path, {"AK": {"url": url}})
+            async with make_async_client() as client:
+                result = await ballot_lookup.refresh_link_verification(client)
+            return result["verified"] == 1
+        finally:
+            page.close()
+    finally:
+        aia.close()
+
+
+@pytest.mark.asyncio
+async def test_a_chain_missing_its_intermediate_verifies_through_the_shared_client(monkeypatch, tmp_path, tls_lab):
+    """Alaska's polling-place page sends its certificate without the
+    intermediate (2026-10): a browser fetches it from the certificate's AIA
+    address, and the project's client now does the same."""
+    assert await _check_link(monkeypatch, tmp_path, tls_lab, lambda: tls_lab.leaf())
+
+
+@pytest.mark.asyncio
+async def test_alaskas_real_certificate_names_the_intermediate_that_signed_it():
+    from pathlib import Path
+
+    from cryptography import x509
+
+    from app.http_client import ca_issuers, load_issuer
+
+    tls = Path(__file__).parent / "fixtures" / "tls"
+    leaf = x509.load_der_x509_certificate((tls / "ak_leaf.der").read_bytes())
+    common_name = leaf.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
+    assert [a.value for a in common_name] == ["elections.alaska.gov"]
+    assert ca_issuers(leaf) == ["http://secure.globalsign.com/cacert/gsgccr46ovtlsca2025.crt"]
+    assert load_issuer(leaf, (tls / "ak_issuer.der").read_bytes()) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_complete_chain_still_verifies(monkeypatch, tmp_path, tls_lab):
+    assert await _check_link(monkeypatch, tmp_path, tls_lab, lambda: tls_lab.leaf(aia=False), chain=(tls_lab.inter,))
+
+
+@pytest.mark.asyncio
+async def test_an_expired_certificate_fails(monkeypatch, tmp_path, tls_lab):
+    assert not await _check_link(
+        monkeypatch, tmp_path, tls_lab, lambda: tls_lab.leaf(days=(-30, -1)), chain=(tls_lab.inter,),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_self_signed_certificate_fails(monkeypatch, tmp_path, tls_lab):
+    assert not await _check_link(monkeypatch, tmp_path, tls_lab, lambda: tls_lab.leaf(issuer="self"))
+
+
+@pytest.mark.asyncio
+async def test_an_untrusted_issuer_fails_even_when_its_aia_serves_it(monkeypatch, tmp_path, tls_lab):
+    """The AIA address serves a CA no trusted root signed: completing the
+    chain with it must not make it trusted."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    rogue_key = ec.generate_private_key(ec.SECP256R1())
+    rogue = tls_lab._cert("Test Intermediate", rogue_key, "Rogue Root", rogue_key, ca=True)
+    tls_lab.inter, real_inter = rogue, tls_lab.inter  # what the AIA server hands out
+    try:
+        assert not await _check_link(monkeypatch, tmp_path, tls_lab, lambda: tls_lab.leaf(issuer=(rogue, rogue_key)))
+        # It was fetched and added, and still verified nothing: an added
+        # intermediate is chain material, never a trust anchor.
+        from app import http_client
+
+        assert "localhost" in http_client._chains_completed
+    finally:
+        tls_lab.inter = real_inter
+
+
+@pytest.mark.asyncio
+async def test_a_certificate_for_another_host_fails(monkeypatch, tmp_path, tls_lab):
+    assert not await _check_link(
+        monkeypatch, tmp_path, tls_lab, lambda: tls_lab.leaf(host="elsewhere.example"), chain=(tls_lab.inter,),
+    )
+
+
 @pytest.mark.asyncio
 async def test_link_verification_shows_a_walled_lookup_as_unconfirmed(monkeypatch, tmp_path):
     """Imperva serves its challenge with a 200, Akamai a bare 403. A wall

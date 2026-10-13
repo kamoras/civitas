@@ -7,6 +7,7 @@ from datetime import date, datetime
 import pytest
 from fastapi.testclient import TestClient
 
+from app import voter_calendar
 from app.api import this_week as tw
 from app.database import get_db
 from app.issue_ids import to_public_id
@@ -148,6 +149,14 @@ def test_the_endpoint(db_session, freeze_utcnow, monkeypatch):
     assert body["election"]["daysUntil"] == 23
     assert body["election"]["phase"] == "campaign"
     assert "DC" in body["election"]["states"] and len(body["election"]["states"]) == 51
+    # Each state's next voter deadline from the bundled calendar, soonest first.
+    deadlines = body["election"]["deadlines"]
+    # Every state with a deadline read from an official source; one read from
+    # none (`unread`) is left out rather than listed from anywhere else.
+    unread = {s for s, e in json.loads(voter_calendar._PATH.read_text())["states"].items() if e.get("unread")}
+    assert {d["state"] for d in deadlines} == set(body["election"]["states"]) - unread
+    assert [d["closesOn"] for d in deadlines] == sorted(d["closesOn"] for d in deadlines)
+    assert all(d["closesOn"] >= "2026-10-11" and d["sentence"] for d in deadlines)
     assert body["commentDeadlines"] == []
     assert body["congress"]["sentence"] == (
         "The Senate's next meeting is not on record yet. The House's next meeting is not on record yet."

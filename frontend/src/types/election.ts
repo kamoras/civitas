@@ -174,6 +174,12 @@ export interface RaceWithCandidates {
    * out. Null (not []) if this district isn't in the bundled crosswalk —
    * never a guess. */
   counties: string[] | null;
+  /** House races only: the cities, towns and communities in this district
+   * on the lines it is elected on, largest first, from the Census
+   * Bureau's block files (congressional_district_places.json). A place
+   * listed by several districts is split between them. Null for a Senate
+   * race or a district the file doesn't cover — never a guess. */
+  places?: string[] | null;
   candidates: BallotCandidate[];
 }
 
@@ -381,6 +387,57 @@ export interface StatewideCoverage {
   ballotList?: boolean;
 }
 
+/** One voter deadline or window, as the state states it. Every sentence
+ * is the backend's; the page only lays them out. */
+export interface VoterDeadline {
+  kind:
+    | "registration"
+    | "same_day_registration"
+    | "early_voting"
+    | "absentee_request"
+    | "ballot_return";
+  method: "online" | "mail" | "in_person" | "any" | null;
+  basis: "postmarked" | "received" | "submitted" | null;
+  label: string;
+  /** The rule in the state's terms ("15 days before Election Day"). */
+  rule: string;
+  date: string;
+  endDate: string | null;
+  time: string | null;
+  endTime: string | null;
+  daysBefore: number | null;
+  countedDate: string | null;
+  adjustment: string | null;
+  status: "upcoming" | "open" | "closed";
+  daysLeft: number | null;
+  /** "today", "tomorrow", "6 days"; null once closed. */
+  countdown: string | null;
+  sentence: string;
+  closesOn: string;
+  source: { publisher: string | null; url: string; type: "official" | "statute" };
+  verification: {
+    /** The generator refuses any item it could not verify, so there is no
+     * third state. */
+    status: "verified" | "statute";
+    checkedOn?: string;
+    detail?: string;
+  };
+}
+
+export interface VoterCalendar {
+  timeZone: string;
+  localToday: string;
+  note: string | null;
+  next: VoterDeadline | null;
+  /** What registration has closed and what is still open, once any has. */
+  registrationSummary: string | null;
+  items: VoterDeadline[];
+  /** Set (a sentence saying so) when no deadline could be read from any
+   * official source: items is then empty, and the page points to the
+   * state's lookup and county board instead. Absent from an older API. */
+  unread?: string | null;
+}
+
 /** Where to go for the parts of the ballot this page cannot show. */
 export interface OfficialLookup {
   url: string;
@@ -496,6 +553,11 @@ export interface StateBallot {
    * November judicial contests. */
   judicialCoverage: JudicialCoverage;
   officialLookup: OfficialLookup;
+  /** Registration, early voting and mail-ballot deadlines, each with where
+   * it stands on the state's own clock (backend app/voter_calendar.py).
+   * Null when there is no calendar for this election; absent from an
+   * older API. */
+  voterCalendar?: VoterCalendar | null;
   /** What this page deliberately does not cover, enumerated by the
    * backend so the limitation renders as content rather than a footnote. */
   omits: string[];

@@ -77,7 +77,7 @@ describe("PoliticiansPage state picker", () => {
       name: /Find your election district on the Ohio ballot page/,
     });
     expect(link).toHaveAttribute("href", "/elections/states/OH#ballot-house");
-    expect(screen.getByText(/Find your House member by county/)).toBeTruthy();
+    expect(screen.getByText(/Find your House member by city, town or county/)).toBeTruthy();
     expect(screen.queryByText(/20\d\d/)).toBeNull();
   });
 
@@ -88,7 +88,7 @@ describe("PoliticiansPage state picker", () => {
       "WY"
     );
     await screen.findByText("1 POLITICIAN");
-    expect(screen.queryByText(/Find your House member by county/)).toBeNull();
+    expect(screen.queryByText(/Find your House member by city, town or county/)).toBeNull();
     expect(screen.queryByRole("link", { name: /Find your election district/ })).toBeNull();
   });
 });

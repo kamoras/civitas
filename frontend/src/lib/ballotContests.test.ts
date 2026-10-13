@@ -215,6 +215,29 @@ describe("contestHash", () => {
   });
 });
 
+describe("a #measure- link", () => {
+  const withMeasures = () =>
+    ballot({
+      measureCoverage: { status: "covered" },
+      measures: [{ id: "OH-1" }, { id: "OH-2" }],
+    } as unknown as Partial<StateBallot>);
+
+  it("opens the measures at the named measure", () => {
+    const b = withMeasures();
+    const contests = buildBallotContests(b, false);
+    expect(contestForHash("#measure-OH-2", contests, b)).toEqual({
+      key: "measures",
+      houseRaceId: null,
+      measureId: "OH-2",
+    });
+  });
+
+  it("names no contest for a measure not on this ballot", () => {
+    const b = withMeasures();
+    expect(contestForHash("#measure-OH-9", buildBallotContests(b, false), b)).toBeNull();
+  });
+});
+
 describe("the House contest's subtitle", () => {
   const house = (resultsMode?: boolean) =>
     buildBallotContests(
