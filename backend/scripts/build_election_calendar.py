@@ -20,9 +20,14 @@ every cited page to confirm the quoted passage is still on it:
 
   - "verified": the quote is on the election authority's own page;
   - "statute": the quote is in the statute's official text;
-  - "unverified": the page could not be read (a bot wall, which is never
-    worked around -- AGENTS.md section 7 -- or an outage) or no longer
-    carries the passage. The value is still shown, and says so.
+
+An item whose page could not be read (a bot wall, which is never worked
+around -- AGENTS.md section 7 -- or an outage) or no longer carries the
+passage is refused: the script exits without writing, naming it. A date a
+voter acts on is never published from memory. Fix the citation, or drop
+the item. A state none of whose deadlines can be read from any official
+source carries `unread` instead of items, and its page says so and sends
+the reader to the state's own lookup and county office.
 
 Run from the repo (network required), after editing the sources file:
     PYTHONPATH=backend python3 backend/scripts/build_election_calendar.py \
@@ -30,7 +35,7 @@ Run from the repo (network required), after editing the sources file:
 
 --text URL prints the normalised text a quote is matched against (for
 copying a quote out of a page exactly). --cache DIR keeps fetched pages
-between runs. Exits 1 on a malformed entry.
+between runs. Exits 1 on a malformed entry or an item it could not verify.
 """
 
 import argparse
@@ -123,8 +128,8 @@ def resolve(item: dict, election: dt.date, where: str) -> dict:
     src = item["source"]
     if src.get("type") not in ("official", "statute") or not src.get("url"):
         sys.exit(f"{where}: source needs type official|statute and url")
-    # No quote only where the cited page could not be read at all (a bot
-    # wall): the item is then unverified, and says so.
+    if not src.get("quote"):
+        sys.exit(f"{where}: source needs the quoted passage that states the rule")
     out = dict(item)
     stated = _date(item.get("date"), where)
     if item.get("daysBefore") is not None:
@@ -154,6 +159,8 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None) -> di
     for code, entry in sorted(sources["states"].items()):
         if not entry.get("timeZone"):
             sys.exit(f"{code}: missing timeZone")
+        if bool(entry.get("items")) == bool(entry.get("unread")):
+            sys.exit(f"{code}: give items, or `unread` (why no official source could be read), not both")
         items = []
         for i, raw in enumerate(entry.get("items") or []):
             item = resolve(raw, election, f"{code}[{i}]")
@@ -161,17 +168,18 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None) -> di
             if src["url"] not in pages:
                 pages[src["url"]] = fetch(src["url"], client, cache)
             text, how = pages[src["url"]]
-            found = text is not None and bool(src.get("quote")) and normalise(src["quote"]) in text
-            status = ("verified" if src["type"] == "official" else "statute") if found else "unverified"
+            if text is None or normalise(src["quote"]) not in text:
+                why = how if text is None else "quote not on the page"
+                sys.exit(f"{code}[{i}] {item['kind']}: not verified ({why}, {src['url']}); "
+                         "fix the citation or drop the item -- nothing was written")
             item["verification"] = {
-                "status": status,
+                "status": "verified" if src["type"] == "official" else "statute",
                 "checkedOn": today,
-                "detail": "quote found on the page" if found else (
-                    how if text is None else
-                    "page read, quote not found" if src.get("quote") else "page read, no quote recorded"),
             }
             items.append(item)
         states[code] = {"timeZone": entry["timeZone"], "items": items}
+        if entry.get("unread"):
+            states[code]["unread"] = True
         if entry.get("note"):
             states[code]["note"] = entry["note"]
     return {
@@ -181,7 +189,8 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None) -> di
             "backend/scripts/build_election_calendar.py from scripts/election_calendar_sources.json, "
             "which re-read every cited page and checked its quoted passage is on it "
             "(verification.status: verified = on the authority's page, statute = in the statute's "
-            "official text, unverified = the page could not be read or no longer says it)."
+            "official text). An item that could not be verified is never written; a state with "
+            "unread: true has no deadline read from any official source, and lists none."
         ),
         "_use": (
             "Read by app/voter_calendar.py. Dates are local to timeZone (a state spanning two "

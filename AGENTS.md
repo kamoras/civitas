@@ -742,7 +742,7 @@ Corollaries that follow from the same rule, all enforced in code:
   NULL — **never derived from the title**. The obvious derivation ("yes
   enacts it") inverts on a veto referendum, where approving retains the law
   under challenge.
-- Voter deadlines follow the same rule (`app/data/election_calendar.json`): each read from the state election authority's own page or its statute, quoted, and re-checked by `scripts/build_election_calendar.py` — never an aggregator, never a date typed without its rule. A "N days before" date is counted by the script and shown beside the rule; status is computed on the state's own clock; a passed deadline is rendered as passed, never dropped.
+- Voter deadlines follow the same rule (`app/data/election_calendar.json`): each read from the state election authority's own page or its statute, quoted, and re-checked by `scripts/build_election_calendar.py` — never an aggregator, never a date typed without its rule, and never an item the script could not verify (it refuses to write one; a state with no readable official source is `unread` and lists no dates). A "N days before" date is counted by the script and shown beside the rule; status is computed on the state's own clock; a passed deadline is rendered as passed, never dropped.
 - Absence must be able to say *which* absence it is. `MeasureCoverage` carries
   `confirmed_none` vs `not_yet_covered` / `ingest_failed`, because an empty
   measures section on a page about a state's ballot reads as "nothing to

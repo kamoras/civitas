@@ -1830,7 +1830,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               deadline can't vote on any of it. Gone in the results window,
               when every deadline has passed. */}
             {!resultsMode && ballot.voterCalendar && (
-              <VoterCalendar calendar={ballot.voterCalendar} stateName={stateName} />
+              <VoterCalendar
+                calendar={ballot.voterCalendar}
+                stateName={stateName}
+                lookupHref={lookupHref}
+                lookupIsStateSpecific={lookupIsStateSpecific}
+              />
             )}
 
             {resultsMode && (

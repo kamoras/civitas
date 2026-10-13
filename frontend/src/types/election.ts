@@ -395,7 +395,9 @@ export interface VoterDeadline {
   closesOn: string;
   source: { publisher: string | null; url: string; type: "official" | "statute" };
   verification: {
-    status: "verified" | "statute" | "unverified";
+    /** The generator refuses any item it could not verify, so there is no
+     * third state. */
+    status: "verified" | "statute";
     checkedOn?: string;
     detail?: string;
   };
@@ -409,6 +411,10 @@ export interface VoterCalendar {
   /** What registration has closed and what is still open, once any has. */
   registrationSummary: string | null;
   items: VoterDeadline[];
+  /** Set (a sentence saying so) when no deadline could be read from any
+   * official source: items is then empty, and the page points to the
+   * state's lookup and county board instead. Absent from an older API. */
+  unread?: string | null;
 }
 
 /** Where to go for the parts of the ballot this page cannot show. */

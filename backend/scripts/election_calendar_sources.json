@@ -1,5 +1,5 @@
 {
- "_about": "Input to build_election_calendar.py: each state's (and D.C.'s) voter deadlines for the general election, as its election authority or its statute states them. Each item cites the page that says so, with a passage quoted verbatim (as the script's --text normalises it) so the script can confirm the page still says it. Sources are the state's own pages or statute, never an aggregator; a page behind a bot wall is cited by URL and left unverified, never worked around (AGENTS.md section 7). Researched 2026-10-12/13. A state's `_research` (never served) says how its items were sourced. Edit an item, then rerun the script.",
+ "_about": "Input to build_election_calendar.py: each state's (and D.C.'s) voter deadlines for the general election, as its election authority or its statute states them. Each item cites the page that says so, with a passage quoted verbatim (as the script's --text normalises it) so the script can confirm the page still says it. Sources are the state's own pages or statute, never an aggregator; a page behind a bot wall is never worked around (AGENTS.md section 7): cite the statute, or leave the item out, since the script refuses an item it cannot verify. A state with no readable official source carries `unread` (why, never served) and no items. Researched 2026-10-12/13. A state's `_research` (never served) says how its items were sourced. Edit an item, then rerun the script.",
  "electionDate": "2026-11-03",
  "states": {
   "AK": {
@@ -3125,108 +3125,7 @@
   },
   "NY": {
    "timeZone": "America/New_York",
-   "note": "We could not read New York's official election pages automatically, so these dates are not confirmed. Check them with your county board of elections. New York has no same-day registration.",
-   "items": [
-    {
-     "kind": "registration",
-     "method": "in_person",
-     "basis": "received",
-     "rule": "Your registration must reach your county board of elections at least 10 days before Election Day.",
-     "daysBefore": 10,
-     "date": "2026-10-24",
-     "source": {
-      "type": "official",
-      "publisher": "New York State Board of Elections",
-      "url": "https://elections.ny.gov/voting-deadlines",
-      "quote": ""
-     }
-    },
-    {
-     "kind": "registration",
-     "method": "mail",
-     "basis": "postmarked",
-     "rule": "Mailed registration must be postmarked at least 10 days before Election Day and arrive at least 5 days before.",
-     "daysBefore": 10,
-     "date": "2026-10-24",
-     "endDate": "2026-10-29",
-     "source": {
-      "type": "official",
-      "publisher": "New York State Board of Elections",
-      "url": "https://elections.ny.gov/voting-deadlines",
-      "quote": ""
-     }
-    },
-    {
-     "kind": "early_voting",
-     "method": "in_person",
-     "rule": "Early voting runs from the 10th day through the 2nd day before Election Day. Sites and hours vary by county.",
-     "date": "2026-10-24",
-     "endDate": "2026-11-01",
-     "source": {
-      "type": "official",
-      "publisher": "New York State Board of Elections",
-      "url": "https://elections.ny.gov/voting-deadlines",
-      "quote": ""
-     }
-    },
-    {
-     "kind": "absentee_request",
-     "method": "any",
-     "basis": "received",
-     "rule": "Online, mail, fax or email requests for an absentee or early mail ballot must be received 10 days before Election Day.",
-     "daysBefore": 10,
-     "date": "2026-10-24",
-     "source": {
-      "type": "official",
-      "publisher": "New York State Board of Elections",
-      "url": "https://elections.ny.gov/voting-deadlines",
-      "quote": ""
-     }
-    },
-    {
-     "kind": "absentee_request",
-     "method": "in_person",
-     "basis": "received",
-     "rule": "Apply in person at your county board of elections until the day before Election Day.",
-     "daysBefore": 1,
-     "date": "2026-11-02",
-     "source": {
-      "type": "official",
-      "publisher": "New York State Board of Elections",
-      "url": "https://elections.ny.gov/voting-deadlines",
-      "quote": ""
-     }
-    },
-    {
-     "kind": "ballot_return",
-     "method": "mail",
-     "basis": "postmarked",
-     "rule": "Mailed ballots must be postmarked by Election Day and reach your county board within 7 days after.",
-     "date": "2026-11-03",
-     "endDate": "2026-11-10",
-     "source": {
-      "type": "official",
-      "publisher": "New York State Board of Elections",
-      "url": "https://elections.ny.gov/voting-deadlines",
-      "quote": ""
-     }
-    },
-    {
-     "kind": "ballot_return",
-     "method": "in_person",
-     "basis": "received",
-     "rule": "Hand-deliver your ballot to your county board, an early voting site, or a poll site by 9 p.m. on Election Day.",
-     "date": "2026-11-03",
-     "time": "21:00",
-     "source": {
-      "type": "official",
-      "publisher": "New York State Board of Elections",
-      "url": "https://elections.ny.gov/voting-deadlines",
-      "quote": ""
-     }
-    }
-   ],
-   "_research": "UNVERIFIED: the State Board of Elections site and both statute sites (nysenate.gov, legislation API) refuse automated reads, so nothing here could be quoted; values are recorded against the walled Board page and need checking. No same-day registration in New York."
+   "unread": "elections.ny.gov (State Board of Elections) answers a Cloudflare challenge (403); nysenate.gov and the legislature's legislation API refuse automated reads too, and the LRS statute site timed out (checked 2026-10-12/13). No deadline could be read from any official source, so none is published."
   },
   "OH": {
    "timeZone": "America/New_York",

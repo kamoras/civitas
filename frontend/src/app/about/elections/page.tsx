@@ -105,8 +105,10 @@ export default async function ElectionsChapter() {
           Every date comes from the state&apos;s own election office or its election law, never from
           a third-party site, and each one links to its source. When a rule says &ldquo;15 days
           before the election,&rdquo; we show the rule and the date it works out to. Each source is
-          checked again when the list is rebuilt. When a state&apos;s site blocks automated checks,
-          we use its law instead, or say the date couldn&apos;t be confirmed.
+          checked again when the list is rebuilt, and a date we can&apos;t check isn&apos;t shown.
+          When a state&apos;s site blocks automated checks, we use its law instead. If we can&apos;t
+          read a state&apos;s deadlines from either, its page lists none, says so, and links the
+          state&apos;s own voter lookup.
         </P>
         <P>
           Deadlines are counted on the state&apos;s own clock. A deadline that has passed stays on

@@ -1,10 +1,13 @@
 """Voter deadlines: where each stands is read on the state's own clock."""
 
+import importlib.util
 import json
+import pathlib
 from datetime import date, datetime
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 
 from app import voter_calendar
@@ -21,6 +24,9 @@ def _src(url="https://sos.example.gov/vote"):
 def calendar(monkeypatch, tmp_path):
     """Point the module at a calendar holding `states`."""
     def write(states, election="2026-11-03"):
+        for entry in states.values():
+            for item in entry.get("items") or []:
+                item.setdefault("verification", {"status": "verified", "checkedOn": "2026-10-13"})
         path = tmp_path / "cal.json"
         path.write_text(json.dumps({"electionDate": election, "states": states}))
         monkeypatch.setattr(voter_calendar, "_PATH", path)
@@ -150,6 +156,82 @@ def test_noon_and_an_online_deadline_read_plainly(calendar):
     ]
 
 
+def test_a_state_read_from_no_official_source_lists_no_dates_and_says_so(calendar):
+    calendar({"WA": WA, "NY": {"timeZone": "America/New_York", "items": [], "unread": True}})
+    cal = voter_calendar.calendar_for_state("NY", ELECTION, _utc(2026, 10, 20, 18))
+    assert cal["items"] == [] and cal["next"] is None and cal["registrationSummary"] is None
+    assert cal["unread"] == (
+        "We couldn't read New York's voter deadlines from its election board, so we don't list any."
+    )
+    assert voter_calendar.calendar_for_state("WA", ELECTION, _utc(2026, 10, 20, 18))["unread"] is None
+    # Nor in the homepage strip.
+    assert [r["state"] for r in voter_calendar.next_deadlines(ELECTION, _utc(2026, 10, 20, 18))] == ["WA"]
+
+
+# ── The generator ────────────────────────────────────────────────
+
+_SCRIPT = pathlib.Path(__file__).resolve().parent.parent / "scripts" / "build_election_calendar.py"
+
+
+@pytest.fixture
+def generator():
+    spec = importlib.util.spec_from_file_location("build_election_calendar", _SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class _Pages:
+    """A client whose GET answers each URL with (status, html)."""
+
+    def __init__(self, pages):
+        self.pages = pages
+
+    def get(self, url, **kwargs):
+        status, body = self.pages[url]
+        return httpx.Response(status, content=body.encode(), headers={"content-type": "text/html"},
+                              request=httpx.Request("GET", url))
+
+
+def _sources(states):
+    return {"electionDate": "2026-11-03", "states": states}
+
+
+def _reg(url, quote):
+    return {"kind": "registration", "method": "online", "rule": "8 days before.", "daysBefore": 8,
+            "source": {"type": "official", "publisher": "SOS", "url": url, "quote": quote}}
+
+
+def test_the_generator_writes_a_verified_item(generator):
+    page = "<p>Register online at least 8 days before the election.</p>"
+    out = generator.build(_sources({"WA": {"timeZone": "America/Los_Angeles", "items": [
+        _reg("https://sos.example.gov/a", "at least 8 days before the election")]}}),
+        _Pages({"https://sos.example.gov/a": (200, page)}), None)
+    item = out["states"]["WA"]["items"][0]
+    assert item["date"] == "2026-10-26" and item["verification"]["status"] == "verified"
+
+
+@pytest.mark.parametrize("pages, quote", [
+    ({"https://sos.example.gov/a": (200, "<p>Some other page.</p>")}, "at least 8 days before"),
+    ({"https://sos.example.gov/a": (403, "<h1>Access Denied</h1>")}, "at least 8 days before"),
+    ({"https://sos.example.gov/a": (200, "<p>at least 8 days before</p>")}, ""),
+])
+def test_the_generator_refuses_an_item_it_could_not_verify(generator, pages, quote):
+    """A quote missing from its page, a page that refuses the read, and an item with
+    no quote at all: nothing is written from memory."""
+    with pytest.raises(SystemExit):
+        generator.build(_sources({"NY": {"timeZone": "America/New_York", "items": [
+            _reg("https://sos.example.gov/a", quote)]}}), _Pages(pages), None)
+
+
+def test_the_generator_marks_a_state_with_no_readable_source(generator):
+    out = generator.build(_sources({"NY": {"timeZone": "America/New_York", "unread": "walled"}}),
+                          _Pages({}), None)
+    assert out["states"]["NY"] == {"timeZone": "America/New_York", "items": [], "unread": True}
+    with pytest.raises(SystemExit):
+        generator.build(_sources({"NY": {"timeZone": "America/New_York"}}), _Pages({}), None)
+
+
 # ── The bundled file ─────────────────────────────────────────────
 
 _AGGREGATORS = ("vote.org", "ncsl.org", "ballotpedia", "usa.gov", "justia", "findlaw", "casetext",
@@ -163,13 +245,17 @@ def test_the_bundled_calendar_covers_every_state_from_its_own_sources():
     assert set(data["states"]) == set(STATE_NAMES)
     for code, entry in data["states"].items():
         ZoneInfo(entry["timeZone"])
+        if entry.get("unread"):
+            assert entry["items"] == [], code
+            continue
         kinds = {i["kind"] for i in entry["items"]}
         assert "registration" in kinds or "same_day_registration" in kinds or code == "ND", code
         for item in entry["items"]:
             host = urlsplit(item["source"]["url"]).hostname or ""
             assert not any(a in host for a in _AGGREGATORS), (code, host)
             assert item["source"]["type"] in ("official", "statute")
-            assert item["verification"]["status"] in ("verified", "statute", "unverified")
+            # Never "unverified": the generator refuses to write one.
+            assert item["verification"]["status"] in ("verified", "statute")
             assert item["verification"]["checkedOn"]
             date.fromisoformat(item["date"])
             if item.get("daysBefore") is not None:

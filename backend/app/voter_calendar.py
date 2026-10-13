@@ -22,6 +22,7 @@ from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 from app.file_cache import read_json
+from app.state_names import STATE_NAMES
 from app.time_utils import utcnow
 
 
@@ -148,7 +149,7 @@ def _item(item: dict, now: datetime, today: date, zone: ZoneInfo) -> dict:
         "closesOn": closes_on.isoformat(),
         "_closes": closes,
         "source": {"publisher": src.get("publisher"), "url": src["url"], "type": src["type"]},
-        "verification": item.get("verification") or {"status": "unverified"},
+        "verification": item["verification"],
     }
 
 
@@ -200,6 +201,13 @@ def calendar_for_state(state: str, election_day: date, now: datetime | None = No
         "next": {k: v for k, v in nxt.items() if k != "_closes"} if nxt else None,
         "registrationSummary": _registration_summary(items),
         "items": [{k: v for k, v in i.items() if k != "_closes"} for i in items],
+        # A state none of whose deadlines could be read from an official
+        # source lists none, rather than dates from anywhere else, and says
+        # so; the page sends the reader to the state's own lookup.
+        "unread": (
+            f"We couldn't read {STATE_NAMES.get(state.upper(), state)}'s voter deadlines from its "
+            "election board, so we don't list any."
+        ) if entry.get("unread") else None,
     }
 
 

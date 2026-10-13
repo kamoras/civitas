@@ -18,10 +18,9 @@ function isRegistration(d: VoterDeadline): boolean {
 
 function checked(d: VoterDeadline): string {
   const on = d.verification.checkedOn ? `, checked ${shortDate(d.verification.checkedOn)}` : "";
-  const who = d.source.publisher ?? "the state";
-  if (d.verification.status === "verified") return `From ${who}${on}`;
+  // Only verified items reach the page: the generator refuses any other.
   if (d.verification.status === "statute") return `From state law${on}`;
-  return `From ${who}. We could not confirm this page automatically.`;
+  return `From ${d.source.publisher ?? "the state"}${on}`;
 }
 
 function Row({ d }: { d: VoterDeadline }) {
@@ -65,21 +64,59 @@ function Row({ d }: { d: VoterDeadline }) {
 export default function VoterCalendar({
   calendar,
   stateName,
+  lookupHref,
+  lookupIsStateSpecific,
 }: {
   calendar: Calendar;
   stateName: string;
+  /** Where to send a reader when no deadline could be read: the state's
+   *  own voter lookup, or the national directory of election offices. */
+  lookupHref: string;
+  lookupIsStateSpecific: boolean;
 }) {
   const { next } = calendar;
   const left = next ? countdownText(next) : null;
+  const heading = (
+    <h2 id="voter-deadlines-heading" className="font-mono text-xs tracking-[0.16em] text-ink-min">
+      VOTER DEADLINES · {stateName.toUpperCase()}
+    </h2>
+  );
+  if (calendar.unread) {
+    // No dates from anywhere but an official source: say so, and point to
+    // the people who have them.
+    const where = lookupIsStateSpecific
+      ? `${stateName}'s official voter lookup`
+      : "the national directory of election offices";
+    return (
+      <section
+        id="voter-deadlines"
+        aria-labelledby="voter-deadlines-heading"
+        className="mb-6 border border-white/15 bg-surface px-4 py-3"
+      >
+        {heading}
+        <p className="mt-1 text-base text-ink">
+          {calendar.unread} Check your deadlines with your county board of elections, or use{" "}
+          <a
+            href={lookupHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-signal-cyan hover:text-phos"
+            aria-label={`${where} (opens in new tab)`}
+          >
+            {where} ↗
+          </a>
+          .
+        </p>
+      </section>
+    );
+  }
   return (
     <section
       id="voter-deadlines"
       aria-labelledby="voter-deadlines-heading"
       className="mb-6 border border-white/15 bg-surface px-4 py-3"
     >
-      <h2 id="voter-deadlines-heading" className="font-mono text-xs tracking-[0.16em] text-ink-min">
-        VOTER DEADLINES · {stateName.toUpperCase()}
-      </h2>
+      {heading}
       {calendar.registrationSummary && (
         <p className="mt-1 font-display text-lg font-semibold text-ink-hi">
           {calendar.registrationSummary}

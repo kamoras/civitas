@@ -41,7 +41,6 @@ const closedMail = item({
   countdown: null,
   sentence: "Registration by mail closed Oct 5",
   closesOn: "2026-10-05",
-  verification: { status: "unverified", checkedOn: "2026-10-13", detail: "blocked" },
 });
 
 const ballotReturn = item({
@@ -71,11 +70,13 @@ const calendar: Calendar = {
   items: [closedMail, item({}), ballotReturn],
 };
 
+const LOOKUP = { lookupHref: "https://voter.example.gov/lookup", lookupIsStateSpecific: true };
+
 describe("VoterCalendar", () => {
   it("leads with registration, keeps a passed deadline and says it closed", async () => {
     render(
       <main>
-        <VoterCalendar calendar={calendar} stateName="Washington" />
+        <VoterCalendar calendar={calendar} stateName="Washington" {...LOOKUP} />
       </main>
     );
     expect(
@@ -87,7 +88,6 @@ describe("VoterCalendar", () => {
     const list = screen.getByText("Every deadline, with its source").closest("details")!;
     const rows = within(list).getAllByRole("listitem", { hidden: true });
     expect(rows[0]).toHaveTextContent("CLOSEDRegistration by mail closed Oct 5");
-    expect(rows[0]).toHaveTextContent("We could not confirm this page automatically.");
     expect(rows[1]).toHaveTextContent("6 days left");
     expect(rows[1]).toHaveTextContent("Register online up to 8 days before Election Day.");
     expect(
@@ -107,6 +107,7 @@ describe("VoterCalendar", () => {
       <VoterCalendar
         calendar={{ ...calendar, next: ballotReturn, registrationSummary: null }}
         stateName="Washington"
+        {...LOOKUP}
       />
     );
     expect(screen.getByText(/^Next deadline: Mail ballots must be postmarked/)).toHaveTextContent(
@@ -115,8 +116,43 @@ describe("VoterCalendar", () => {
   });
 
   it("says when every deadline has passed", () => {
-    render(<VoterCalendar calendar={{ ...calendar, next: null }} stateName="Washington" />);
+    render(
+      <VoterCalendar calendar={{ ...calendar, next: null }} stateName="Washington" {...LOOKUP} />
+    );
     expect(screen.getByText("Every deadline for this election has passed.")).toBeInTheDocument();
+  });
+
+  it("lists no dates for a state read from no official source, and points to its lookup", async () => {
+    render(
+      <main>
+        <VoterCalendar
+          calendar={{
+            ...calendar,
+            next: null,
+            registrationSummary: null,
+            note: null,
+            items: [],
+            unread:
+              "We couldn't read New York's voter deadlines from its election board, so we don't list any.",
+          }}
+          stateName="New York"
+          {...LOOKUP}
+        />
+      </main>
+    );
+    const section = screen.getByRole("region", { name: "VOTER DEADLINES · NEW YORK" });
+    expect(section).toHaveTextContent(
+      "We couldn't read New York's voter deadlines from its election board, so we don't list any. Check your deadlines with your county board of elections"
+    );
+    expect(
+      within(section).getByRole("link", {
+        name: "New York's official voter lookup (opens in new tab)",
+      })
+    ).toHaveAttribute("href", "https://voter.example.gov/lookup");
+    // No dates, no countdowns, no list.
+    expect(section.textContent).not.toMatch(/Oct|Nov|days left|Every deadline/);
+    const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
+    expect(r.violations.map((v) => v.id)).toEqual([]);
   });
 
   it("words a countdown for a deadline and for a window that hasn't opened", () => {
