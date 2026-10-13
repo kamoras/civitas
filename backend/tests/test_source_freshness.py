@@ -6,6 +6,7 @@ stretch, with the bar set by the source's own rhythm."""
 
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -18,6 +19,11 @@ from app.pipeline.fetch import news_feeds, trending
 
 NOW = datetime(2026, 10, 10, 22, 0)
 FLOOR = timedelta(hours=48)
+REAL = json.loads((Path(__file__).parent / "fixtures_source_freshness.json").read_text())
+
+
+def _times(key: str) -> list[datetime]:
+    return [datetime.fromisoformat(t) for t in REAL[key]]
 
 
 @pytest.fixture
@@ -62,8 +68,8 @@ def test_the_feeds_own_rhythm_raises_the_bar(check):
     history = [newest, newest - timedelta(hours=30), newest - timedelta(hours=31), newest - timedelta(hours=61)]
     send, _ = check({"f": ("Feed", history)})
     send.assert_not_called()
-    # Past twice its longest gap (60 hours), it is.
-    send, _ = check({"f": ("Feed", history)}, now=newest + timedelta(hours=61))
+    # A day past its longest gap (54 hours), it is.
+    send, _ = check({"f": ("Feed", history)}, now=newest + timedelta(hours=55))
     send.assert_called_once()
 
 
@@ -97,6 +103,61 @@ def test_recovery_resolves_and_forgets_the_stale_stretch(check, db_session):
     assert state["seen"] == [(NOW + timedelta(hours=1)).isoformat()]
     send, _ = check({"f": ("Feed", [])}, now=NOW + timedelta(hours=60))
     send.assert_called_once()
+
+
+def test_a_holiday_weekend_is_rhythm_but_four_quiet_days_are_not(check):
+    """Roll Call's real record: weekends of 64-72 hours, Labor Day's 82. A
+    day past the longest gap waits out the holiday and still catches a dead
+    feed within four days — twice it would have waited six."""
+    record = _times("rollcall_labor_day")
+    last_before = max(t for t in record if t < datetime(2026, 9, 5))  # Friday evening
+    seen = [t for t in record if t <= last_before]
+    check({"rc": ("Roll Call", seen)}, now=last_before + timedelta(minutes=5))
+    send, _ = check({"rc": ("Roll Call", seen)}, now=last_before + timedelta(hours=82))
+    send.assert_not_called()
+    send, _ = check({"rc": ("Roll Call", seen)}, now=last_before + timedelta(hours=96))
+    send.assert_called_once()
+    assert "longest gap in the last 60 days" in send.call_args.args[1]
+
+
+def test_a_young_history_borrows_the_bar_of_feeds_that_have_seen_a_weekend(check):
+    """Roll Call was first checked on a Sunday, its 10-item feed showing a
+    Thursday and Friday: its own longest gap was 11.6 hours, and the 48-hour
+    floor alerted on its quiet weekend. Until it has a week of history, the
+    longest gap among feeds that do (here the New Hampshire Bulletin's real
+    63-hour weekend) sets the bar."""
+    peer = {"https://nh/feed": ("New Hampshire Bulletin", _times("nh_bulletin_feed"))}
+    roll_call = {"https://rc/feed": ("Roll Call", _times("rollcall_feed"))}
+    newest = max(_times("rollcall_feed"))
+    check(peer, now=datetime(2026, 10, 11, 14, 45))
+    send, _ = check(roll_call, now=newest + timedelta(hours=72))
+    send.assert_not_called()
+    # Still a bar, not a pass: a feed that stays quiet past the peers'
+    # longest gap plus a day is stale.
+    send, _ = check(roll_call, now=newest + timedelta(hours=88))
+    send.assert_called_once()
+    assert "under 7 days of history" in send.call_args.args[1]
+
+
+def test_a_week_of_its_own_history_outranks_the_peers(check):
+    hourly_peer = {"slow": ("Weekly", [NOW - timedelta(days=d) for d in (0, 3, 10)])}
+    check(hourly_peer)
+    busy = {"busy": ("Busy", _hourly(NOW - timedelta(hours=50), 24 * 8))}
+    send, _ = check(busy)
+    send.assert_called_once()  # its own 1-hour rhythm: 50 hours is stale
+
+
+def test_a_bar_that_rises_past_the_silence_keeps_the_history(check, db_session):
+    """Resolved because peers raised the bar, not because the feed came
+    back: nothing to forget."""
+    feed = {"f": ("Feed", _hourly(NOW - timedelta(hours=50), 10))}
+    send, _ = check(feed)
+    send.assert_called_once()
+    check({"p": ("Peer", [NOW - timedelta(days=d) for d in (1, 4, 9)])})
+    _, resolve = check(feed, now=NOW + timedelta(minutes=5))
+    resolve.assert_called_once_with("source-stale:f")
+    state = json.loads(db_session.query(ApiCache).filter_by(cache_key="f").one().data_json)
+    assert len(state["seen"]) == 10
 
 
 def test_aware_times_are_compared_in_utc(check):

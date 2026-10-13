@@ -438,8 +438,11 @@ Every hour at :15
        │         AP's mirror went stale on 2026-09-09 and apnews.com walls
        │         off automated readers, so AP was dropped (2026-10).
        │         A feed or trending source that fails, or has nothing new
-       │         for longer than twice its longest gap in 60 days (and the
+       │         for a day longer than its longest gap in 60 days (and the
        │         48h window), raises an ops alert (check_source_freshness).
+       │         Under a week of history, the longest gap among feeds that
+       │         have a week stands in, so a feed first seen midweek isn't
+       │         stale on its first weekend.
        │         + Google Trends + Bluesky trending
        │         48-hour article window; direct URLs only (no redirect wrappers)
        │         Reddit was a third trending source until 2026-09: it now
