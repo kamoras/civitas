@@ -4,7 +4,10 @@ import userEvent from "@testing-library/user-event";
 import PoliticiansPage from "./page";
 import type { PoliticianCard } from "@/types/politicians";
 
-const api = vi.hoisted(() => ({ fetchPoliticianDirectory: vi.fn() }));
+const api = vi.hoisted(() => ({
+  fetchPoliticianDirectory: vi.fn(),
+  fetchHouseDistrictsByCounty: vi.fn(),
+}));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   ...api,
@@ -37,6 +40,18 @@ const directory = [
 function open(search: string) {
   params = new URLSearchParams(search);
   api.fetchPoliticianDirectory.mockResolvedValue(directory);
+  api.fetchHouseDistrictsByCounty.mockImplementation(async (state: string) => ({
+    state,
+    congress: 119,
+    available: true,
+    districts:
+      state === "WY"
+        ? [{ district: 0, counties: ["Albany"] }]
+        : [
+            { district: 1, counties: ["Hamilton"] },
+            { district: 2, counties: ["Adams"] },
+          ],
+  }));
   return render(<PoliticiansPage />);
 }
 
@@ -59,10 +74,11 @@ describe("PoliticiansPage state picker", () => {
   it("offers the county finder, without a stale cycle year, where there is a district to find", async () => {
     open("state=OH");
     const link = await screen.findByRole("link", {
-      name: /Find it by county on the Ohio ballot page/,
+      name: /Find your election district on the Ohio ballot page/,
     });
     expect(link).toHaveAttribute("href", "/elections/states/OH#ballot-house");
-    expect(screen.queryByText(/2026 district lines/)).toBeNull();
+    expect(screen.getByText(/Find your House member by county/)).toBeTruthy();
+    expect(screen.queryByText(/20\d\d/)).toBeNull();
   });
 
   it("leaves the county finder out for a one-seat state", async () => {
@@ -72,6 +88,7 @@ describe("PoliticiansPage state picker", () => {
       "WY"
     );
     await screen.findByText("1 POLITICIAN");
-    expect(screen.queryByRole("link", { name: /Find it by county/ })).toBeNull();
+    expect(screen.queryByText(/Find your House member by county/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Find your election district/ })).toBeNull();
   });
 });

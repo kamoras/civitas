@@ -1199,8 +1199,11 @@ function HouseDetail({
             className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
           />
           <p className="mt-1.5 text-[10px] text-ink-min">
-            Filtered here in your browser: nothing is sent anywhere, and Civitas never asks for your
-            address.
+            {/* Named, because /politicians finds today's member on the
+                sitting Congress's lines, a different map in a state that
+                redrew. */}
+            {ballot.cycleYear} election districts. Filtered here in your browser: nothing is sent
+            anywhere, and Civitas never asks for your address.
           </p>
           {/* Typing silently rewrites the list below, which a sighted
               reader sees and a screen-reader user otherwise would not. */}

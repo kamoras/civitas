@@ -1,8 +1,8 @@
 "use client";
 
 import { displayScore } from "@/lib/formatting";
-import { districtName, stateBallotHref } from "@/lib/elections";
-import { Suspense, useMemo, useRef, useState } from "react";
+import { districtName, matchesDistrictQuery, stateBallotHref } from "@/lib/elections";
+import { Suspense, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
@@ -10,12 +10,14 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
-import { fetchPoliticianDirectory } from "@/lib/api";
+import PageFallback from "@/components/layout/PageFallback";
+import { countyFinderStatus, countyNames } from "@/lib/countyFinder";
+import { fetchHouseDistrictsByCounty, fetchPoliticianDirectory } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { getScoreBgColor } from "@/lib/representation";
 import { formerOfficeBadge } from "@/lib/officeStatus";
 import { delegationOrder } from "@/lib/delegationOrder";
-import type { PoliticianCard } from "@/types/politicians";
+import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import Photo from "@/components/Photo";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
@@ -136,21 +138,101 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
 
 const EMPTY_DIRECTORY: PoliticianCard[] = [];
 
-/** Keeps ?state= in the address bar so a filtered delegation can be
- * bookmarked, shared and returned to with Back. The History API, not
+/** Keeps ?state= and ?county= in the address bar so a filtered delegation
+ * can be bookmarked, shared and returned to with Back. The History API, not
  * router.replace(): on this statically prerendered route a router.replace()
  * after a load with a query string silently does nothing (AGENTS.md,
  * "Client-side URL state"). */
-function writeStateParam(state: string) {
+function writeParams(params: Record<string, string>) {
   const url = new URL(window.location.href);
-  if (state) url.searchParams.set("state", state);
-  else url.searchParams.delete("state");
+  for (const [key, value] of Object.entries(params)) {
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+  }
   window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+}
+
+/** Find your House member by a county you know. Civitas never asks where
+ *  a visitor lives (AGENTS.md section 8): this filters the delegation over
+ *  the counties each district covers, a list the page already has.
+ *
+ *  These are the lines of the Congress in office — the districts the
+ *  members now serving were elected in. The state ballot page uses the
+ *  coming election's lines, which in a state that redrew are different
+ *  districts under the same numbers, so each surface names its map. */
+function CountyFinder({
+  stateCode,
+  lines,
+  query,
+  onQuery,
+  matches,
+}: {
+  stateCode: string;
+  lines: HouseDistrictsByCounty;
+  query: string;
+  onQuery: (q: string) => void;
+  matches: { district: number; counties: string[] }[];
+}) {
+  const id = useId();
+  const names = countyNames(lines);
+  const status = countyFinderStatus(names, query, matches.length);
+  return (
+    <div className="mb-4 border border-white/[0.07] p-4">
+      <label htmlFor={id} className="block text-sm font-bold text-ink-hi">
+        Find your House member by county
+      </label>
+      <p className="mt-1 text-xs text-ink-lo">
+        Districts as of the current Congress: the ones today&apos;s members were elected in. Nothing
+        you type leaves this page.
+      </p>
+      <input
+        id={id}
+        type="search"
+        list={`${id}-counties`}
+        value={query}
+        onChange={(e) => onQuery(e.target.value)}
+        placeholder="County name"
+        autoComplete="off"
+        className="mt-2 w-full max-w-xs border border-white/15 bg-surface-base px-3 py-2 font-mono text-sm text-ink-hi placeholder:text-ink-min outline-none focus:border-phos/40"
+      />
+      <datalist id={`${id}-counties`}>
+        {names.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
+      {status && (
+        <p className="mt-2 text-sm text-ink-lo" role="status">
+          {status}
+        </p>
+      )}
+      <p className="mt-2 text-xs text-ink-min">
+        {/* No cycle year: it would go stale when the ballot page moves on. */}
+        Voting in the coming election?{" "}
+        <Link
+          href={`${stateBallotHref(stateCode)}#ballot-house`}
+          className="underline underline-offset-2 hover:text-phos"
+        >
+          Find your election district on the {STATE_NAMES[stateCode] ?? stateCode} ballot page
+        </Link>
+        . Its lines can differ from the ones your current member was elected on.
+      </p>
+    </div>
+  );
 }
 
 export default function PoliticiansPage() {
   return (
-    <Suspense fallback={null}>
+    // The frame and a skeleton in the first paint: the content reads the
+    // query string, which the server does not have (PageFallback).
+    <Suspense
+      fallback={
+        <PageFallback
+          eyebrow="Directory · currently serving officials"
+          title="Politicians"
+          rows={6}
+        />
+      }
+    >
       <PoliticiansPageContent />
     </Suspense>
   );
@@ -160,12 +242,20 @@ function PoliticiansPageContent() {
   const searchParams = useSearchParams();
   const initialBranch = (searchParams.get("branch") as BranchFilter) || "all";
   const initialState = searchParams.get("state") || "";
+  // Latched at mount (AGENTS.md "Client-side URL state"): writing ?county=
+  // brings it straight back through useSearchParams.
+  const [county, setCountyValue] = useState<string>(() => searchParams.get("county") || "");
+  const setCounty = (next: string) => {
+    setCountyValue(next);
+    writeParams({ county: next.trim() });
+  };
   const [branch, setBranch] = useState<BranchFilter>(initialBranch);
   const [party, setParty] = useState<PartyFilter>("ALL");
   const [state, setStateValue] = useState<string>(initialState);
   const setState = (next: string) => {
     setStateValue(next);
-    writeStateParam(next);
+    setCountyValue("");
+    writeParams({ state: next, county: "" });
   };
   const [search, setSearch] = useState<string>("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -176,6 +266,28 @@ function PoliticiansPageContent() {
     fetchPoliticianDirectory({ branch: branch === "all" ? undefined : branch })
   );
   const all = directory.data ?? EMPTY_DIRECTORY;
+
+  const showCountyFinder =
+    !!state &&
+    state !== "DC" &&
+    branch !== "senate" &&
+    branch !== "president" &&
+    branch !== "scotus";
+  const houseLines = useAsyncData(
+    `house-districts:${state}`,
+    showCountyFinder ? () => fetchHouseDistrictsByCounty(state) : null
+  ).data;
+  // A one-seat state has no district to find.
+  const linesReady = showCountyFinder && !!houseLines?.available && houseLines.districts.length > 1;
+  const countyMatches = useMemo(
+    () =>
+      linesReady && county.trim()
+        ? houseLines!.districts.filter((d) =>
+            matchesDistrictQuery({ district: null, areas: d.counties, candidates: [] }, county)
+          )
+        : [],
+    [linesReady, houseLines, county]
+  );
   const loading = directory.loading;
   const error = directory.error ? "Failed to load politicians." : null;
 
@@ -183,12 +295,17 @@ function PoliticiansPageContent() {
     let list = all;
     if (party !== "ALL") list = list.filter((p) => p.party === party);
     if (state) list = delegationOrder(list.filter((p) => p.state === state));
+    // A county narrows the House members; senators represent all of it.
+    if (linesReady && county.trim()) {
+      const districts = new Set(countyMatches.map((d) => d.district));
+      list = list.filter((p) => p.branch !== "house" || districts.has(p.district ?? -1));
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q));
     }
     return list;
-  }, [all, party, state, search]);
+  }, [all, party, state, search, linesReady, county, countyMatches]);
 
   const showStateFilter = branch === "all" || branch === "senate" || branch === "house";
 
@@ -208,7 +325,6 @@ function PoliticiansPageContent() {
   ];
 
   const activeCount = filtered.filter((p) => p.activeIssueCount > 0).length;
-  const houseSeats = filtered.filter((p) => p.branch === "house").length;
 
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
@@ -311,6 +427,16 @@ function PoliticiansPageContent() {
             </div>
           </div>
 
+          {linesReady && (
+            <CountyFinder
+              stateCode={state}
+              lines={houseLines!}
+              query={county}
+              onQuery={setCounty}
+              matches={countyMatches}
+            />
+          )}
+
           {/* Results */}
           {loading ? (
             <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest animate-pulse">
@@ -327,27 +453,6 @@ function PoliticiansPageContent() {
               <p className="font-mono text-xs text-ink-min mb-3 tracking-widest">
                 {filtered.length} POLITICIAN{filtered.length !== 1 ? "S" : ""}
               </p>
-              {/* A House district is a number few people know. The state's
-                  ballot page finds it from the county a reader lives in, with
-                  nothing typed or sent (AGENTS.md section 8). Those are the
-                  lines of the election that page covers, which in a redrawn
-                  state are not the ones the sitting member was elected on,
-                  so the link says so (without a year that goes stale when
-                  the page moves to the next cycle). A one-seat state has no
-                  district to find. */}
-              {state && branch !== "senate" && houseSeats > 1 && (
-                <p className="mb-4 text-sm text-ink-lo">
-                  Don&apos;t know your House district?{" "}
-                  <Link
-                    href={`${stateBallotHref(state)}#ballot-house`}
-                    className="underline underline-offset-2 hover:text-phos"
-                  >
-                    Find it by county on the {STATE_NAMES[state] ?? state} ballot page
-                  </Link>
-                  . It maps the lines of the election it covers, which can differ from the ones your
-                  current member was elected on.
-                </p>
-              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {filtered.map((p) => (
                   <PoliticianCardUI key={p.id} p={p} />
