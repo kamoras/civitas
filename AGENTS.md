@@ -942,8 +942,38 @@ outright under a full directory page. Every photo is now served from this
 site at `/photo/<kind>/<id>` (2026-10): the API hands out those paths
 (`app/photos.py`; JSON-LD makes them absolute), and the frontend route
 (`app/photo/[kind]/[id]/route.ts`, `lib/photos.ts`) fetches the picture
-server-side — a bioguide portrait by its id, a stored source (Oyez, the
-outlet) looked up by kind and id through `GET /api/photo-sources/…`. It
+server-side, from a source the backend names by kind and id through
+`GET /api/photo-sources/…`: a justice's or issue's stored URL (Oyez, the
+outlet), and for a member (`bioguide`) one of two official photos: the
+headshot on the member's Congress.gov record (`depiction`, read from the
+record the pipeline stored in `api_cache`) or bioguide.congress.gov's
+portrait (`bioguide_photo_source`). Neither source is reliably the
+head-and-shoulders shot (2026-10): bioguide's file is, for some members, a
+full-length painted committee-chair portrait, mostly background as an
+avatar, and for a few others it is the member's own depiction that is a
+full-figure or wide shot. So the choice is measured, nightly in the
+stock-trades run (`pipeline/fetch/member_photos.py`, stored in
+`member_photos`): OpenCV's YuNet face detector measures each candidate's
+face height over its shorter side, and bioguide wins only when the
+depiction's face is below a head-and-shoulders share and bioguide's is
+clearly larger. Both numbers are fitted, not typed:
+`scripts/calibrate_member_photos.py` writes them to
+`app/data/member_photo_calibration.json` from a hand-labelled comparison of
+every current member's two photos (labels kept there with each image's
+hash; rerun when labelled photos change). OpenCV runs only in a child
+process started for the night's batch (`pipeline/fetch/face_detection.py`,
+which nothing in `app/` imports; `tests/test_member_photos.py` checks no app
+process loads `cv2`), so a native fault can't reach page serving or the
+pipeline. The model is YuNet from the OpenCV Zoo (MIT), vendored in
+`app/data/`; source and hash are in the calibration file. The endpoint reads
+the stored choice, and a member without one (a departed
+bill sponsor, or before the first run) gets the depiction-first rule. A
+depiction is used only on Congress.gov's `/img/member/` path and only with
+the attribution Congress.gov gives it; one without falls back to bioguide,
+so the credit on `/about/data#privacy` stays true. Many
+headshots are taller than 4:5 (up to 2:3), so member avatars crop at
+`object-[center_25%]` (the OG card at `objectPosition: "center 25%"`),
+which keeps the head in a square where a centred crop clips it. It
 takes an id, never a URL, so it is not an open proxy; add a kind there for
 a new picture, never a URL parameter. An issue's photo URL still comes from
 an RSS item, so each kind is fetched only from its own hosts
@@ -1547,7 +1577,7 @@ the pending list).
 | Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
 | Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/` |
-| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
+| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; detector process `face_detection.py`; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |

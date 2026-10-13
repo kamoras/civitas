@@ -46,7 +46,8 @@ from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
 from app.pipeline.fetch.ptr_common import TICKER_RE, TradeRow
 from app.pipeline.fetch.fd_common import SENATE_ASSET_TYPE_CATEGORY, house_category, strip_house_code
 from app.pipeline.fetch.sec_tickers import SecUnavailable, issuer_industries
-from app.holdings_schedule import HOLDINGS_STEPS, PTR_REREAD_BUDGET
+from app.holdings_schedule import HOLDINGS_STEPS, MEMBER_PHOTOS_BUDGET, PTR_REREAD_BUDGET
+from app.pipeline.fetch.member_photos import refresh_member_photos
 from app.pipeline.holdings_pipeline import run_holdings_phases
 from app.pipeline.filer_matching import FilerMatcher, current_representatives, current_senators
 from app.pipeline.filer_matching import match_representative as _match_representative
@@ -806,6 +807,18 @@ async def run_stock_trades_pipeline() -> dict:
             # holdings_pipeline.py, which reports its own failures.
             holdings_counts, holdings_errors = await run_holdings_phases(db, client, progress)
             error_parts.extend(holdings_errors)
+            # Which official photo each member's avatar shows (face size in
+            # each candidate). Here because this run follows the member
+            # pipelines and its file is outside the analysis fingerprint;
+            # not a trade phase, so it never decides the run's status.
+            try:
+                photos = await refresh_member_photos(db, client, MEMBER_PHOTOS_BUDGET)
+                if photos:
+                    logger.info("Member photos: %d choices measured", photos)
+            except Exception:
+                logger.exception("Member photo choice failed")
+                db.rollback()
+                error_parts.append("Member photos: failed — see server logs")
 
         elapsed = round(time.time() - start_time, 1)
         logger.info(

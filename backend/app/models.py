@@ -2603,3 +2603,22 @@ class RollCallPosition(Base):
     # "Yea" | "Nay" | "Present" | "Not Voting" (the House's "Aye"/"No"
     # are stored as recorded).
     position: Mapped[str] = mapped_column(String(12), nullable=False)
+
+
+class MemberPhoto(Base):
+    """Which official photo a member's `/photo/bioguide/<id>` serves, chosen
+    nightly by pipeline/fetch/member_photos.py from the size of the face in
+    each candidate. The photo-sources endpoint reads `source_url`
+    (app/photos.py); a member without a row gets the depiction-first rule."""
+    __tablename__ = "member_photos"
+
+    bioguide_id: Mapped[str] = mapped_column(String(7), primary_key=True)
+    source_url: Mapped[str] = mapped_column(String(300), nullable=False)
+    # The credited depiction the choice was made against: a different one
+    # on the member's record is measured again.
+    depiction_url: Mapped[str] = mapped_column(String(300), nullable=False)
+    # The face's height as a share of the avatar square (the image's shorter
+    # side); null when bioguide has no portrait.
+    bioguide_face_share: Mapped[float | None] = mapped_column(Float, nullable=True)
+    depiction_face_share: Mapped[float | None] = mapped_column(Float, nullable=True)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)

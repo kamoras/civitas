@@ -85,7 +85,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
             // scrolls into view (loading="lazy", decoding="async").
             lazy
             alt={p.name}
-            className="w-10 h-10 object-cover shrink-0 opacity-80 group-hover:opacity-100 transition-opacity"
+            className="w-10 h-10 object-cover object-[center_25%] shrink-0 opacity-80 group-hover:opacity-100 transition-opacity"
             fallback={<Initials name={p.name} />}
           />
         ) : (
