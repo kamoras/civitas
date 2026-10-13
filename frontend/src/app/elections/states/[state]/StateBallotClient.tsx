@@ -9,6 +9,7 @@ import CoverageFeed from "@/components/elections/CoverageFeed";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard, { measureAnchor } from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
+import VoterCalendar from "@/components/elections/VoterCalendar";
 import GeneralRunoffNotice, {
   otherPrimaryLabel,
   RankedChoiceNotice,
@@ -1950,6 +1951,18 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 )}
               </div>
             </header>
+
+            {/* Before the ballot: a reader who isn't registered by the
+              deadline can't vote on any of it. Gone in the results window,
+              when every deadline has passed. */}
+            {!resultsMode && ballot.voterCalendar && (
+              <VoterCalendar
+                calendar={ballot.voterCalendar}
+                stateName={stateName}
+                lookupHref={lookupHref}
+                lookupIsStateSpecific={lookupIsStateSpecific}
+              />
+            )}
 
             {resultsMode && (
               <>

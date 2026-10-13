@@ -222,6 +222,54 @@ describe("the ballot page", () => {
     expect(within(box).getByText("Shannon Bly")).toBeInTheDocument();
   });
 
+  it("opens with the state's voter deadlines, before the ballot", () => {
+    const deadline = {
+      kind: "registration" as const,
+      method: "online" as const,
+      basis: null,
+      label: "Online registration",
+      rule: "Up to 8 days before Election Day.",
+      date: "2026-10-26",
+      endDate: null,
+      time: null,
+      endTime: null,
+      daysBefore: 8,
+      countedDate: "2026-10-26",
+      adjustment: null,
+      status: "open" as const,
+      daysLeft: 6,
+      countdown: "6 days",
+      sentence: "Online registration closes Oct 26",
+      closesOn: "2026-10-26",
+      source: {
+        publisher: "Secretary of State",
+        url: "https://sos.example.gov",
+        type: "official" as const,
+      },
+      verification: { status: "verified" as const, checkedOn: "2026-10-13" },
+    };
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          voterCalendar: {
+            timeZone: "America/New_York",
+            localToday: "2026-10-20",
+            note: null,
+            next: deadline,
+            registrationSummary: "Online registration closes Oct 26 (6 days left).",
+            items: [deadline],
+          },
+        })}
+      />
+    );
+    const section = screen.getByRole("region", { name: /VOTER DEADLINES/ });
+    expect(section).toHaveTextContent("Online registration closes Oct 26 (6 days left).");
+    expect(
+      section.compareDocumentPosition(screen.getByTestId("ballot-columns")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
   it("keeps the list of what this page does not cover in view", () => {
     render(<StateBallotClient ballot={ballot({ omits: ["County and municipal offices"] })} />);
     expect(screen.getAllByText("County and municipal offices").length).toBeGreaterThan(0);

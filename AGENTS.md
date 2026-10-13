@@ -742,6 +742,7 @@ Corollaries that follow from the same rule, all enforced in code:
   NULL — **never derived from the title**. The obvious derivation ("yes
   enacts it") inverts on a veto referendum, where approving retains the law
   under challenge.
+- Voter deadlines follow the same rule (`app/data/election_calendar.json`): each read from the state election authority's own page or its statute, quoted, and re-checked by `scripts/build_election_calendar.py` — never an aggregator, never a date typed without its rule, and never an item the script could not verify (it refuses to write one; a state with no readable official source is `unread` and lists no dates). A "N days before" date is counted by the script and shown beside the rule; status is computed on the state's own clock; a passed deadline is rendered as passed, never dropped.
 - Absence must be able to say *which* absence it is. `MeasureCoverage` carries
   `confirmed_none` vs `not_yet_covered` / `ingest_failed`, because an empty
   measures section on a page about a state's ballot reads as "nothing to
@@ -1558,6 +1559,7 @@ the pending list).
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
+| Voter calendar (registration, early voting, mail-ballot deadlines; status on the state's own clock) | `backend/app/voter_calendar.py`, `backend/app/data/election_calendar.json` (built by `backend/scripts/build_election_calendar.py` from `scripts/election_calendar_sources.json`), `frontend/src/components/elections/VoterCalendar.tsx` |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
 | Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |

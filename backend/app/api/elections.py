@@ -19,6 +19,7 @@ from app.database import get_db
 from app.district_places import places_on_lines_of
 from app.office_terms import term_years
 from app.state_ballot_scope import on_november_ballot
+from app.voter_calendar import calendar_for_state
 from app.election_calendar import (
     federal_states,
     next_senate_election_year,
@@ -1470,6 +1471,11 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             "unreadReason": unread_reason(state),
         },
         "officialLookup": lookup_for_state(state),
+        # Registration, early voting and mail-ballot deadlines, each with
+        # where it stands on the state's own clock (app/voter_calendar.py,
+        # data/election_calendar.json); null when the file has no calendar
+        # for this election.
+        "voterCalendar": calendar_for_state(state, election.election_day),
         "statewideRaces": statewide_races,
         "statewideCoverage": statewide_coverage,
         "stateLegRaces": state_leg_races,
