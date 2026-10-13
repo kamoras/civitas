@@ -29,6 +29,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
+from app.api.elections import member_on_ballot
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.config import settings
 from app.database import get_db
@@ -517,4 +518,8 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
         "chamberRank": _chamber_rank(branch, entity, db),
         "activeIssues": _get_active_issues(politician_id, db),
         "governmentRecord": _get_gov_record(politician_id, db),
+        # The race this member is a candidate in on the site's election
+        # ballot (their own seat, or another office), so "is my member up,
+        # and against whom?" is one link from the profile.
+        "onBallot": member_on_ballot(db, entity.bioguide_id) if branch in ("senate", "house") else None,
     })

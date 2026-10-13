@@ -20,63 +20,16 @@ import { delegationOrder } from "@/lib/delegationOrder";
 import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import Photo from "@/components/Photo";
+import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
 
 type BranchFilter = "all" | "senate" | "house" | "president" | "scotus";
 type PartyFilter = "ALL" | "D" | "R" | "I";
 
-const US_STATES = [
-  "AL",
-  "AK",
-  "AZ",
-  "AR",
-  "CA",
-  "CO",
-  "CT",
-  "DE",
-  "FL",
-  "GA",
-  "HI",
-  "ID",
-  "IL",
-  "IN",
-  "IA",
-  "KS",
-  "KY",
-  "LA",
-  "ME",
-  "MD",
-  "MA",
-  "MI",
-  "MN",
-  "MS",
-  "MO",
-  "MT",
-  "NE",
-  "NV",
-  "NH",
-  "NJ",
-  "NM",
-  "NY",
-  "NC",
-  "ND",
-  "OH",
-  "OK",
-  "OR",
-  "PA",
-  "RI",
-  "SC",
-  "SD",
-  "TN",
-  "TX",
-  "UT",
-  "VT",
-  "VA",
-  "WA",
-  "WV",
-  "WI",
-  "WY",
-  "DC",
-];
+// By full name, as a reader looks for their state: a list of postal codes
+// asks them to recall which of MI, MN, MS and MO is theirs.
+const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
+  STATE_NAMES[a].localeCompare(STATE_NAMES[b])
+);
 
 function partyDot(party: string) {
   const cls = party === "D" ? "bg-dem-blue" : party === "R" ? "bg-signal-red" : "bg-ind-purple";
@@ -253,14 +206,15 @@ function CountyFinder({
         </p>
       )}
       <p className="mt-2 text-xs text-ink-min">
-        Voting this November?{" "}
+        {/* No cycle year: it would go stale when the ballot page moves on. */}
+        Voting in the coming election?{" "}
         <Link
           href={`${stateBallotHref(stateCode)}#ballot-house`}
           className="underline underline-offset-2 hover:text-phos"
         >
-          Find your 2026 election district on the {stateCode} ballot page
+          Find your election district on the {STATE_NAMES[stateCode] ?? stateCode} ballot page
         </Link>
-        .
+        . Its lines can differ from the ones your current member was elected on.
       </p>
     </div>
   );
@@ -323,7 +277,8 @@ function PoliticiansPageContent() {
     `house-districts:${state}`,
     showCountyFinder ? () => fetchHouseDistrictsByCounty(state) : null
   ).data;
-  const linesReady = showCountyFinder && !!houseLines?.available;
+  // A one-seat state has no district to find.
+  const linesReady = showCountyFinder && !!houseLines?.available && houseLines.districts.length > 1;
   const countyMatches = useMemo(
     () =>
       linesReady && county.trim()
@@ -449,9 +404,9 @@ function PoliticiansPageContent() {
                   className="font-mono text-xs bg-surface-base border border-white/[0.07] text-ink-lo px-2 py-1 outline-none"
                 >
                   <option value="">ALL STATES</option>
-                  {US_STATES.map((s) => (
+                  {STATES_BY_NAME.map((s) => (
                     <option key={s} value={s}>
-                      {s}
+                      {STATE_NAMES[s]}
                     </option>
                   ))}
                 </select>

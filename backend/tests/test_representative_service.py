@@ -11,7 +11,9 @@ guard against the same class of surprise for any other Literal-constrained
 field build_rep_response feeds.
 """
 
-from app.models import Representative, RepDonor
+import json
+
+from app.models import RepDonor, RepKeyVote, RepLobbyingMatch, Representative, RollCall
 from app.services.representative_service import build_rep_response
 
 
@@ -46,3 +48,29 @@ class TestBuildRepResponseDonorTypes:
         rep = _make_rep(db_session, "test-rep-2", donor_types)
         result = build_rep_response(rep, db_session)
         assert [d.type for d in result.funding.top_donors] == donor_types
+
+
+class TestDonorVoteBillsAreReadable:
+    def test_a_synthetic_roll_call_id_becomes_its_bill_or_title(self, db_session):
+        """The donor-vote panel printed "HouseRC-2026-314" chips. Each is the
+        roll call's own bill where the record has one, else the vote's title;
+        a Senate-style bill number passes through."""
+        rep = _make_rep(db_session, "test-rep-3", [])
+        db_session.add_all([
+            RollCall(chamber="house", congress=119, session=2, number=314, date="2026-09-16",
+                     question="On Passage", bill_id="HR.5823"),
+            RepKeyVote(representative_id=rep.id, bill_name="Example Savings Act", bill_id="HouseRC-2026-314",
+                       date="2026-09-16", vote="Yea", roll_call="house-119-2-314"),
+            RepKeyVote(representative_id=rep.id, bill_name="Example Rule Resolution", bill_id="HouseRC-2026-300",
+                       date="2026-09-01", vote="Nay", roll_call="house-119-2-300"),
+        ])
+        db_session.add(RepLobbyingMatch(
+            representative_id=rep.id, lobbyist_org="Org", industry="LABOR", lobbying_spend=0,
+            donation_to_representative=1000, description="",
+            bills_influenced=json.dumps(["HouseRC-2026-314", "HouseRC-2026-300", "S. 12", "HouseRC-2026-999"]),
+        ))
+        db_session.commit()
+        db_session.refresh(rep)
+        bills = build_rep_response(rep, db_session).lobbying_matches[0].bills_influenced
+        # 999 is no vote of this member's: nothing readable to show, so dropped.
+        assert bills == ["H.R. 5823", "Example Rule Resolution", "S. 12"]

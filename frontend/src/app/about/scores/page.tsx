@@ -38,10 +38,28 @@ export default function ScoresChapter() {
       }
     >
       <Summary>
+        {/* What each score measures, in plain words: each line reads at a
+            Flesch-Kincaid grade of 6.7 or below, score name included
+            (measured 2026-10-13). The detail is in each linked section. */}
         <Point>
-          The Representation Score blends three parts, about a third each: where a member&apos;s
-          campaign money comes from, whether they vote the way their seat elected them to, and
-          whether their legislation goes anywhere.
+          <A href="#overall">Representation Score</A>: the overall grade. It is the average of the
+          three parts below, about a third each.
+        </Point>
+        <Point>
+          <A href="#funding">Funding Independence</A>: where the money for the last election came
+          from. Many small gifts score higher than PACs, a few big donors or one industry.
+        </Point>
+        <Point>
+          <A href="#alignment">Constituent Alignment</A>: does the member vote the way voters back
+          home lean? Each one is set next to others in the same party from places like theirs.
+        </Point>
+        <Point>
+          <A href="#effectiveness">Legislative Effectiveness</A>: how far the member&apos;s bills
+          get. A bill counts for more as it gets out of a committee, through a vote and into law.
+        </Point>
+        <Point>
+          <A href="#leadership">Leadership and ideology</A>: shown for context. They are not part of
+          the score.
         </Point>
         <Point>
           Members are compared with their own chamber, and on voting, with their own party in seats
@@ -113,7 +131,8 @@ export default function ScoresChapter() {
             not a re-election campaign still under way. Separately, the last Congress&apos;s voting
             position can decide which side of their party a member&apos;s breaks fall on, and so
             whether they count (see below). The position itself is never scored. Score trend charts
-            mark the start of each Congress so a reset reads as what it is.
+            mark the start of each Congress so a reset reads as what it is. A profile&apos;s full
+            vote list can be narrowed to the last 30 days or to this Congress.
           </P>
         </Sub>
       </Section>
@@ -675,7 +694,8 @@ export default function ScoresChapter() {
           donor is its PAC. A PAC the FEC lists no separate sponsor for is searched under its own
           name, and finding nothing there is reported as unknown, not as no lobbying. Spending is
           what the filings report, one report per lobbying firm, client and quarter: an amendment
-          restates its quarter, so only the latest filed is counted.
+          restates its quarter, so only the latest filed is counted. On a profile, the Funding
+          Independence column links to them.
         </P>
         <P>
           Profiles show registered lobbying spend for every client the search matched, each with its

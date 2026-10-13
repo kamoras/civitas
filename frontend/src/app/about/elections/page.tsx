@@ -130,8 +130,12 @@ export default async function ElectionsChapter() {
           the lean of the new district on the ballot (Cook&apos;s 2026 figures for the new lines),
           not of the old seat with the same number. A district with no lean of its own on file is
           left unshaded rather than given its state&apos;s colour. A text filter over county names,
-          candidates&apos; names and district numbers works too. All of it runs on data already on
-          the page: nothing is typed into a lookup, sent or stored.
+          candidates&apos; names and district numbers works too. It goes by county, not by city or
+          town, and a district that matches what you typed lists the matching county first, by its
+          full name: some counties share a name with a city elsewhere in the state (typing a big
+          city&apos;s name can find a rural county of the same name), and the label shows which one
+          matched. On the map, Tab reaches one district and the arrow keys move between them. All of
+          it runs on data already on the page: nothing is typed into a lookup, sent or stored.
         </P>
         <P>
           In a state whose lines were redrawn after its members were elected (those going into the
@@ -267,7 +271,11 @@ export default async function ElectionsChapter() {
             <Item label="Incumbents">
               Nine sitting members running again were not marked as incumbents, because someone else
               in the race carried the FEC&apos;s open-seat code. A member the state&apos;s ballot
-              lists is now trusted as running.
+              lists is now trusted as running. A member of Congress running for the other chamber (a
+              House member running for the Senate) was listed with no link to their record; the race
+              now links it, named as what they are now (&ldquo;House member, GA-6&rdquo;), never as
+              the seat&apos;s incumbent. A member&apos;s own profile now links to the race they are
+              on the ballot in.
             </Item>
             <Item label="Parties">
               Where a state prints a party Civitas has no code for (California&apos;s Peace and
@@ -279,7 +287,11 @@ export default async function ElectionsChapter() {
               A legislative seat with a special election for the rest of its term beside its regular
               contest is shown as two contests. Louisiana&apos;s House contests on 3 November are an
               all-party primary with a 12 December runoff, and Georgia requires a majority in
-              November with a 1 December runoff; both pages now say so above the ballot.
+              November with a 1 December runoff; both pages now say so above the ballot. So do
+              California and Washington, whose top-two primaries can send two candidates of one
+              party to November, and Alaska, whose top-four primary sends four. Maine and Alaska
+              rank candidates in their federal contests, and their pages now say so before election
+              day, not only on election night.
             </Item>
             <Item label="Finding your district">
               The filter ignores accents and punctuation, so &ldquo;dona ana&rdquo;, &ldquo;st
@@ -346,6 +358,14 @@ export default async function ElectionsChapter() {
       </Section>
 
       <Section id="election-night" title="Election night: the count">
+        <P>
+          In short: once a state&apos;s polls close, its page shows the count from the state&apos;s
+          own election office and updates it every few minutes, where that office publishes a feed
+          Civitas can read; where it doesn&apos;t, the page says so and links to the office. The
+          candidate ahead is said to &ldquo;lead&rdquo;. Until the state says its count is official,
+          that lead is &ldquo;not final&rdquo;. Civitas never says who won, because a recount, a
+          runoff or a court can still change the result. The details follow.
+        </P>
         <P>
           From election day, <span className="font-mono text-ink-hi">/elections</span> and each
           state page put results first. The national map is shaded by who is leading each race
