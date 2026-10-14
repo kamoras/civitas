@@ -316,6 +316,23 @@ export interface LeaderboardEntry {
   ideologyLabel: string | null;
   /** PageRank cosponsorship centrality, log-rescaled to [0, 1]; null if too little data. */
   leadershipScore: number | null;
+  /** Weighted dimensions whose data-sufficiency grade is "low" (backend
+   *  score_display.thin_dimensions): the score there is mostly a pull to 50. */
+  thinData?: string[];
+}
+
+/** GET /api/leaderboard/spread: how a chamber's displayed overall scores
+ *  are spread. Every figure is the backend's. */
+export interface ScoreSpread {
+  chamber: "senate" | "house";
+  total: number;
+  /** Members showing each whole-number score, lowest score first. */
+  counts: { score: number; members: number }[];
+  p25: number | null;
+  median: number | null;
+  p75: number | null;
+  /** Serving members per party, for the party filter's counts. */
+  parties: { D: number; R: number; I: number };
 }
 
 /** One asset from a member's latest annual financial disclosure. Values are

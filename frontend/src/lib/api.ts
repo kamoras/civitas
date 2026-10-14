@@ -1,6 +1,7 @@
 import {
   Holdings,
   LeaderboardEntry,
+  ScoreSpread,
   PaginatedStockTrades,
   PaginatedVotes,
   Senator,
@@ -246,6 +247,10 @@ export async function fetchStates(): Promise<StateInfo[]> {
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   const url = `${API_BASE}/senators/leaderboard`;
   return asList(await cachedFetch(url, TTL.SHORT), url);
+}
+
+export async function fetchLeaderboardSpread(chamber: "senate" | "house"): Promise<ScoreSpread> {
+  return cachedFetch(`${API_BASE}/leaderboard/spread?chamber=${chamber}`, TTL.SHORT);
 }
 
 // --- House Representatives ---
