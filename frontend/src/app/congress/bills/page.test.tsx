@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import BillsPage from "./page";
 
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
@@ -38,5 +39,25 @@ describe("bills page", () => {
     ).toHaveTextContent("Saturday, October 3");
     // The headline count is the backend's, not a sum worked out here.
     expect(await screen.findByText(/Where 7 bills sit/)).toBeInTheDocument();
+  });
+
+  // Every toggle in a filter group says whether it is on (WCAG 4.1.2): the
+  // party filter was the one group on the page without it.
+  it("says which chamber and party filter is on", async () => {
+    render(<BillsPage />);
+    await userEvent.click(screen.getByRole("button", { name: "All Bills" }));
+    for (const [group, on] of [
+      ["Filter by chamber", "all"],
+      ["Filter by sponsor's party", "ALL"],
+    ]) {
+      for (const button of within(screen.getByRole("group", { name: group })).getAllByRole(
+        "button"
+      ))
+        expect(button).toHaveAttribute("aria-pressed", String(button.textContent === on));
+    }
+    const party = within(screen.getByRole("group", { name: "Filter by sponsor's party" }));
+    await userEvent.click(party.getByRole("button", { name: "D" }));
+    expect(party.getByRole("button", { name: "D" })).toHaveAttribute("aria-pressed", "true");
+    expect(party.getByRole("button", { name: "ALL" })).toHaveAttribute("aria-pressed", "false");
   });
 });
