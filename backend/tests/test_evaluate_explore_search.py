@@ -302,3 +302,17 @@ class TestMeasurementLoop:
 
         assert asked, "derive_field_weights never measured anything"
         assert all(c == ("keyword",) for c in asked), asked
+
+
+def test_own_identifier_probes_use_the_documents_own_names(harness):
+    # The target's own citation and document number, typed as the FR prints
+    # them; a document known by neither gets no probe.
+    probes = harness.build_own_identifier_probes([
+        {"id": 1, "title": "Rule", "doc_type": "Final Rule",
+         "external_id": "fr-reg-2026-15603",
+         "identifiers": '["frdoc:2026-15603", "fr:91-48248", "rin:2120-AA66"]'},
+        {"id": 2, "title": "Speech", "doc_type": "Senate Floor Speech",
+         "external_id": "crec-1", "identifiers": "[]"},
+    ])
+    assert sorted((p["style"], p["doc_id"], p["query"]) for p in probes) == [
+        ("frcite", 1, "91 FR 48248"), ("frdoc", 1, "2026-15603")]

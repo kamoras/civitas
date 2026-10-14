@@ -833,7 +833,7 @@ class PublicSearchResultSchema(_PublicModel):
     comments_close_on: str = Field(description="When the document's comment period closes or closed, YYYY-MM-DD; "
                                                "empty when it has none")
     cited_by_count: int = Field(description="How many indexed documents cite this one")
-    matched_by: list[Literal["semantic", "keyword"]] = Field(description="Which search found it: by meaning, by exact words, or both")
+    matched_by: list[Literal["semantic", "keyword", "identifier"]] = Field(description="Which search found it: by meaning, by exact words, and/or as the document a citation or document number in the query names (\"91 FR 48248\", \"2026-15603\"), which is listed first")
     distance: float | None = Field(description="Distance in meaning from the query; null when only the exact words matched")
     snippet: str = Field(description="Text around the matched words, plain")
     duplicate_count: int = Field(description="Near-identical copies folded into this result")

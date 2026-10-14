@@ -233,6 +233,19 @@ identifier formats `document_authority` already parses for the citation
 graph) sends those to the keyword channel alone; a query with any words
 beside the identifier still goes to both.
 
+**A document's own identifier names it.** Neither channel can match an FR
+citation ("91 FR 48248"): the Federal Register prints it in the page header,
+not the text, so no indexed field holds it, and the document number reaches the
+body only when the body is short enough to keep its "[FR Doc. ...]" line. A
+third, partial ranker matches the identifiers a query names against the ones
+each document is known by (`declared_identifiers`: the stored FR citation,
+document number and RINs, the external id, an executive order's number), and
+those documents lead, exempt from crowding control; a document that only cites
+the identifier is not a match. Known-item probes of 300 documents, before and
+after: FR citation R@1 0.011 → 0.854 (R@5 1.000; a citation is a page, and a
+third of cited documents share theirs), FR document number R@1 0.465 → 1.000,
+every other style unchanged.
+
 **Half the engine can be down and search still works — and says so.** The
 vector index records which model built it, and a mismatch at startup drops the
 vec tables and kicks off a background reindex that takes minutes on the Pi.
@@ -345,7 +358,9 @@ style:
 |---|---|---|
 | `title` | the document's own title words, in order | the easy case |
 | `paraphrase` | the body's eight most frequent content words, title words removed | despite the name, an exact-term bag of words — keyword's home ground |
-| `identifier` | serial numbers and citations in the document | where dense retrieval cannot compete |
+| `identifier` | serial numbers and citations in the document's text, often of another document | where dense retrieval cannot compete |
+| `frcite` | the document's own FR citation, "91 FR 48248" | a reference a researcher holds; a page, so up to four documents share one |
+| `frdoc` | the document's own FR document number, "2026-15603" | the same, unique |
 | `rare` | the document's least common terms corpus-wide | the long tail, where IDF earns its keep |
 | `passage` | one verbatim body sentence, from anywhere in the body | whether a specific passage, deep text included, is reachable |
 
