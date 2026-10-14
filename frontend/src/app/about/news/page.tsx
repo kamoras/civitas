@@ -242,8 +242,10 @@ export default function NewsChapter() {
             model is asked again on later days. Until October 2026 the model copied the example name
             in its instructions for most new topics, and each new monitor was merged into the
             existing one of that name, so the site showed one monitor for months. A day&apos;s story
-            joins a monitor when its headline is close enough to the monitor&apos;s own description.
-            A language-model check on borderline matches was removed after a replay showed it let 17
+            joins a monitor when its headline is close enough to the monitor&apos;s own description
+            and it names someone or something the monitor names that most stories don&apos;t: a name
+            in a third of all stories, like the president&apos;s, doesn&apos;t count on its own. A
+            language-model check on borderline matches was removed after a replay showed it let 17
             of 18 off-topic stories through. Two monitors are merged only when their titles are
             near-identical, since a merge can&apos;t be undone. A monitor goes quiet
             (&ldquo;watching&rdquo;) after a week without coverage and wakes when it returns; after

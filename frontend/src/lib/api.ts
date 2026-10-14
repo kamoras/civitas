@@ -15,6 +15,7 @@ import type { PaginatedBills } from "@/types/bill";
 import type { LiveResults, PviMap, TownBallot, TownEntry } from "@/types/election";
 import type { SignalOverlap } from "@/types/scoreBreakdown";
 import type { Agreement } from "@/types/compare";
+import type { MemberSupport } from "@/types/presidentialSupport";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -743,6 +744,20 @@ export async function fetchCurrentPresident(): Promise<President | null> {
   // by_alias=True) — see fetchPresidentLeaderboard's comment for why
   // re-camelizing is a data-keyed-map landmine.
   return (await res.json()) as President;
+}
+
+/** One member's votes with the president's stated positions; null for a
+ * member none of whose votes count yet (404). */
+export async function fetchMemberPresidentialSupport(
+  memberId: string
+): Promise<MemberSupport | null> {
+  const url = `${API_BASE}/presidential-support/member/${encodeURIComponent(memberId)}`;
+  try {
+    return await cachedFetch<MemberSupport>(url, TTL.SHORT);
+  } catch (e) {
+    if (e instanceof Error && e.message.endsWith(": 404")) return null;
+    throw e;
+  }
 }
 
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {

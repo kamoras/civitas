@@ -20,12 +20,15 @@ from app.models import (
     Justice,
     KeyVote,
     MemberIdAlias,
+    PolicyStatement,
+    PresidentialSupport,
     RepKeyVote,
     Representative,
     RollCall,
     RollCallPosition,
     ScoreSnapshot,
     Senator,
+    StatementRollCall,
 )
 from app.pipeline.lexical_index import ensure_lexical_index
 from app.schemas import (
@@ -33,6 +36,7 @@ from app.schemas import (
     PublicBillVotesSchema,
     PublicHistorySchema,
     PublicMemberVotesSchema,
+    PublicPresidentialSupportSchema,
     PublicRepresentativePageSchema,
     PublicRepresentativeProfileSchema,
     PublicSearchResponseSchema,
@@ -78,6 +82,21 @@ def client(db_session, fixed_ranking, monkeypatch):
         RepKeyVote(representative_id="R000001", bill_name="Placeholder Act", bill_id="HR.1", date="2026-01-20",
                    vote="Nay", voted_with_party=None),
     ])
+    statement = PolicyStatement(url="https://example.gov/sap.pdf", title="S. 2 – Placeholder Act", readable=True,
+                                issued="2026-03-01", chamber="senate", measures='["S.2"]', amendments="[]",
+                                position="support", position_sentence="The Administration supports passage of S. 2.")
+    roll = RollCall(chamber="senate", congress=119, session=2, number=9, date="2026-03-04",
+                    question="On Passage of the Bill S. 2", title="S. 2", bill_id="S.2", result="Bill Passed",
+                    source_url="https://www.senate.gov/legislative/LIS/roll_call_votes/vote1192/vote_119_2_00009.xml")
+    db_session.add_all([statement, roll])
+    db_session.flush()
+    db_session.add_all([
+        StatementRollCall(roll_call_id=roll.id, statement_id=statement.id),
+        PresidentialSupport(chamber="senate", member_id="S000001", congress=119, party="D", seat_alignment=0.2,
+                            with_president=0, votes=1, expected=0.2),
+        PresidentialSupport(chamber="senate", member_id="S000002", congress=119, party="R", seat_alignment=0.5,
+                            with_president=1, votes=1, expected=None),
+    ])
     db_session.commit()
     app = FastAPI()
     app.include_router(api_router)
@@ -104,6 +123,7 @@ def _body(client, path, **params):
     ("/representatives/R000001/votes", {}, PublicMemberVotesSchema),
     ("/bills/HR.1/votes", {}, PublicBillVotesSchema),
     ("/search", {"q": "wildfire"}, PublicSearchResponseSchema),
+    ("/presidential-support/senate", {}, PublicPresidentialSupportSchema),
 ])
 def test_every_response_matches_its_documented_schema(client, path, params, schema):
     body = _body(client, path, **params)
@@ -213,7 +233,7 @@ def test_every_endpoint_answers_with_the_rate_limit_headers(client, monkeypatch)
     monkeypatch.setattr(public, "_spec", None)
     for path in _body(client, "/openapi.json")["paths"]:
         resp = client.get(path.replace("{senator_id}", "S000001").replace("{rep_id}", "R000001")
-                          .replace("{bill_id}", "HR.1"),
+                          .replace("{bill_id}", "HR.1").replace("{chamber}", "senate"),
                           params={"q": "wildfire"} if path.endswith("/search") else None)
         assert resp.status_code == 200, path
         assert {"x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset"} <= set(resp.headers), path
@@ -222,7 +242,7 @@ def test_every_endpoint_answers_with_the_rate_limit_headers(client, monkeypatch)
 @pytest.mark.parametrize("path", ["/senators/nobody/history", "/representatives/nobody/history",
                                   "/senators/nobody", "/representatives/nobody",
                                   "/senators/nobody/votes", "/representatives/nobody/votes",
-                                  "/bills/NOT-A-BILL/votes"])
+                                  "/bills/NOT-A-BILL/votes", "/presidential-support/house"])
 def test_unknown_member_is_404_not_an_empty_record(client, path):
     assert client.get(f"/api/public/v1{path}").status_code == 404
 

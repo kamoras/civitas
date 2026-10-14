@@ -17,6 +17,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import pathlib
 import re
 import threading
@@ -2990,6 +2991,28 @@ _MONITOR_ISSUE_SIM = 0.71
 # replaced merged every pair of different topics: the site had one monitor,
 # "U.S.-Iran Conflict", holding the Canada, Korea and Ukraine stories.
 _MONITOR_MERGE_TITLE_SIM = 0.75
+# The second half of the issue gate: an issue joins a monitor only if it also
+# names something the monitor's own text or updates name, and that something
+# is not in most stories. Inverse document frequency over every stored
+# issue's entity signature; a shared entity must score above this. Measured
+# 2026-10-14 on the 312 stored updates (the two live monitors, each read
+# on- or off-topic): the cosine floor alone let 3 of the 4 updates after the
+# Russian-diesel monitor opened in (a Trump rally in Alaska, the Supreme
+# Court's DOGE records ruling, taxpayer-funded ads), each sharing only
+# "trump" with it, the one entity in more than 7% of issues (32%, IDF 1.15;
+# next "iran", 6.9%, IDF 2.67). Any floor from 1.2 to 2.6 dropped all 3 and
+# none of the 291 on-topic Iran updates; 2.0 sits mid-gap. Comparing against
+# the monitor's founding issues only, instead of everything it has gathered,
+# lost 22 on-topic Iran updates (the Strait of Hormuz stories came later);
+# a centroid-of-founding cosine floor lost 4.5% of on-topic Iran updates
+# before it dropped the diesel three (0.84: 1 of 3 kept, recall 0.955).
+_MONITOR_ENTITY_MIN_IDF = 2.0
+# Below this many stored issues an entity's document frequency can't tell a
+# common name from a rare one (every name is in "most" of three issues), so
+# the entity half of the gate waits and the cosine floor decides alone. A
+# monitor needs five days of issues to exist at all; production held 551 on
+# 2026-10-14.
+_MONITOR_ENTITY_MIN_CORPUS = 100
 # A new monitor needs today's issue to match earlier issues, title against
 # title on the classification model, at this floor. Measured 2026-10-09 by
 # replaying creation day by day over every stored issue (2026-06-26 to
@@ -3076,6 +3099,98 @@ def _slugify(text: str) -> str:
     slug = re.sub(r'[^a-z0-9\s-]', '', slug)
     slug = re.sub(r'[\s-]+', '-', slug)
     return slug[:200]
+
+
+def _entity_document_frequency(db: Session) -> tuple[Counter, int]:
+    """How many stored issues each entity (_issue_signature, title and
+    summary) appears in, and how many issues there are."""
+    counts: Counter = Counter()
+    n = 0
+    for title, summary in db.query(ActionIssue.title, ActionIssue.summary):
+        counts.update(_issue_signature(title or "", [summary or ""]))
+        n += 1
+    return counts, n
+
+
+def _monitor_reference(monitor: NationalMonitor, db: Session) -> set[str]:
+    """The entities a monitor's own title and description and every update
+    it holds name: what a new issue must share one of to join it."""
+    ref = _issue_signature(monitor.title or "", [monitor.description or ""])
+    for title, summary in db.query(MonitorUpdate.article_title, MonitorUpdate.summary).filter(
+        MonitorUpdate.monitor_id == monitor.id,
+    ):
+        ref |= _issue_signature(title or "", [summary or ""])
+    return ref
+
+
+def _same_entity(a: str, b: str) -> bool:
+    """Equal, or one a prefix of the other at four letters or more: "iran"
+    and "iranian", "russia" and "russian" (a demonym is the same place)."""
+    return a == b or (min(len(a), len(b)) >= 4 and (a.startswith(b) or b.startswith(a)))
+
+
+def _shares_distinctive_entity(
+    entities: set[str], reference: set[str], df: Counter, n_docs: int,
+) -> bool:
+    """Whether `entities` name something in `reference` that is in few
+    enough stored issues to tell stories apart (_MONITOR_ENTITY_MIN_IDF).
+    Numbers don't count: a figure shared across stories is a coincidence.
+    True for every issue while the corpus is too small to say
+    (_MONITOR_ENTITY_MIN_CORPUS)."""
+    if n_docs < _MONITOR_ENTITY_MIN_CORPUS:
+        return True
+    return any(
+        math.log(n_docs / (1 + df[e])) > _MONITOR_ENTITY_MIN_IDF
+        for e in entities
+        if not e[0].isdigit() and any(_same_entity(e, r) for r in reference)
+    )
+
+
+# Updates a monitor was opened with are written in one commit; anything
+# later than this after the first was matched by the issue gate.
+_MONITOR_FOUNDING_WINDOW = timedelta(minutes=1)
+
+
+def _prune_off_topic_updates(db: Session) -> int:
+    """Apply the entity half of the issue gate to the updates a monitor
+    already holds, oldest first, as if it had been there all along: an update
+    that shares no distinctive entity with the monitor's text and the updates
+    before it is removed, and the issue it came from stops naming the
+    monitor. The updates it was opened with stay. On 2026-10-14 this removed
+    the Russian-diesel monitor's three off-topic updates and none of the Iran
+    monitor's 303. Returns how many went."""
+    monitors = db.query(NationalMonitor).all()
+    if not monitors:
+        return 0
+    df, n_docs = _entity_document_frequency(db)
+    removed = 0
+    for monitor in monitors:
+        updates = (
+            db.query(MonitorUpdate).filter(MonitorUpdate.monitor_id == monitor.id)
+            .order_by(MonitorUpdate.created_at, MonitorUpdate.id).all()
+        )
+        if not updates:
+            continue
+        founded = updates[0].created_at + _MONITOR_FOUNDING_WINDOW
+        reference = _issue_signature(monitor.title or "", [monitor.description or ""])
+        for u in updates:
+            entities = _issue_signature(u.article_title or "", [u.summary or ""])
+            if u.created_at > founded and not _shares_distinctive_entity(entities, reference, df, n_docs):
+                logger.info("Monitor '%s': removed off-topic update '%s'", monitor.title, u.article_title[:60])
+                for issue in db.query(ActionIssue).filter(
+                    ActionIssue.title == u.article_title,
+                    ActionIssue.related_monitor_slugs.contains(monitor.slug),
+                ):
+                    slugs = [s for s in json.loads(issue.related_monitor_slugs or "[]") if s != monitor.slug]
+                    issue.related_monitor_slugs = json.dumps(slugs)
+                db.delete(u)
+                removed += 1
+                continue
+            reference |= entities
+    if removed:
+        db.flush()
+        action_metrics.increment("monitor_updates_pruned", removed)
+    return removed
 
 
 def _merge_monitors(keep: NationalMonitor, absorb: NationalMonitor,
@@ -3326,6 +3441,8 @@ def _update_national_monitors(today: str, db: Session) -> None:
     )
 
     _sweep_orphan_updates(db)
+    if _prune_off_topic_updates(db):
+        db.commit()
 
     if _rename_headline_monitors(db):
         db.commit()
@@ -3347,11 +3464,19 @@ def _update_national_monitors(today: str, db: Session) -> None:
             normalize_embeddings=True,
         )
         sims = today_embeddings @ monitor_embeddings.T
+        entity_df, entity_docs = _entity_document_frequency(db)
+        references = {m.id: _monitor_reference(m, db) for m in existing_monitors}
 
         for i, issue in enumerate(today_issues):
+            issue_entities = _issue_signature(issue.title, [issue.summary or ""])
             for j, monitor in enumerate(existing_monitors):
                 full_sim = float(sims[i][j])
                 if full_sim < _MONITOR_ISSUE_SIM:
+                    continue
+                if not _shares_distinctive_entity(
+                    issue_entities, references[monitor.id], entity_df, entity_docs,
+                ):
+                    action_metrics.increment("monitor_update_no_shared_entity")
                     continue
 
                 issue_monitor_slugs.setdefault(i, []).append(monitor.slug)

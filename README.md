@@ -253,6 +253,10 @@ Scores sitting and historical presidents from a mix of live and archival sources
 - **Historical**: C-SPAN Presidential Historians Survey (historical legacy), UCSB election-margin data, MeasuringWorth real-GDP series (1790–present), Maddison Project GDP per person for the US and 13 peer economies (1946–2022, extended by the World Bank's live series): postwar growth is scored relative to those peers, with their catching up with US incomes set aside
 - All three score dimensions (Public Mandate, Effectiveness, Historical Legacy) are computed from source data with no LLM involvement. Dimensions a president has no real data source for are left N/A rather than filled with a placeholder.
 
+### Phase 6b — VOTES WITH THE PRESIDENT
+
+Reads new OMB Statements of Administration Policy and rebuilds each member's votes with the president's stated positions and the expected rate for their seat. Informational, not scored; see [Votes with the President](#votes-with-the-president-nightly-informational).
+
 ### Phase 7 — FINALIZE
 
 Persists everything computed in phases 3–6:
@@ -609,7 +613,10 @@ Every hour at :15
        │         distinct days in 14, ≥3 unique sources); the LLM only
        │         names one, checked against its articles
        │         Add today's issues to monitors they match (title against
-       │         the monitor's title and description ≥ 0.71, no LLM)
+       │         the monitor's title and description ≥ 0.71, no LLM) and
+       │         that share a distinctive entity with it (IDF > 2.0 over
+       │         stored issues: "trump", in a third of them, never counts
+       │         alone); stored updates re-checked each refresh
        │         Re-merge duplicate monitors (similarity-model title ≥ 0.75)
        │         No update for 7 days: watching; for 30 days: closed
        ▼
@@ -684,6 +691,40 @@ What each chamber did each day, for the Congress reports. Every half hour (`cong
 **No Record, said plainly.** GPO publishes the Congressional Record for every day either chamber is in session. A past day with no Record (behind the back-fill cursor, which stops before any day it could not read, or found absent at least three days on) reads "No Congressional Record was published for this day" rather than "no record yet", and the week and month strips say "No Record". It states the fact and not "neither chamber met": GPO very rarely prints two small consecutive days as one issue.
 
 **A missing file is not a failed fetch.** A 404, or senate.gov's redirect of a missing file to its "not found" page, means the chamber has nothing for that day. Anything else writes nothing, so a day is never made final from part of its Digest, and the back-fill stops before a failed day to retry it.
+
+## Votes with the President (Nightly, informational)
+
+How often each member votes with the president's stated position, beside what members of the same party in seats that lean the same way do. Informational: not in `SCORE_WEIGHTS`, and no score reads it. It runs as the Supplementary pipeline's last step (`analyze/presidential_support.py`), and is shown on every member's profile and at `/congress/president/house` and `/senate`.
+
+```
+  OMB INDEX ──── whitehouse.gov's list of Statements of Administration Policy
+       │         (SAPs, OMB Circular A-19): only PDFs not yet read are fetched
+  READ ───────── each PDF's date, the chamber it is addressed to ("(House)",
+       │         "(Senate)"), the measures its title block cites, an amendment
+       │         number it names, its opening and closing paragraphs
+       │         (fetch/omb_statements.py)
+  POSITION ───── support / oppose / no position on passage, by embedding
+       │         similarity to written prototypes (analyze/sap_position.py);
+       │         the sentence it was read from is stored and shown
+  MATCH ──────── each stored roll call (Congress Record, above) to the statement
+       │         that applies to it
+  TALLY + FIT ── per member: votes on the president's side / counted votes;
+                 per chamber and party: the expected rate by seat lean
+```
+
+**The source.** The president's position comes only from a signed, citable statement tied to the measure. OMB lists every SAP of the administration on one page; the index and the PDFs are served without a bot wall (the site's WordPress JSON API answers 403 and is not used) and `robots.txt` allows both. On 2026-10-13 it listed 194 statements for the 119th Congress: 125 addressed to the House, 69 to the Senate. One covers nineteen resolutions without citing any by number and cannot be matched to a vote.
+
+**Which votes count.** A roll call counts when it is the chamber's final vote on a measure (passage, adoption, concurrence, a veto override), read from the chamber's own question wording, or a vote on an amendment a statement names by number; a statement addressed to that chamber covers the measure, issued on or before the vote; no later statement on the measure (in either chamber) has superseded it; and the statement supports or opposes passage. Procedural votes (cloture, motions to proceed, discharge, table, recommit) are left out because no statement addresses them. A Yea advances the measure, so the president's side is Yea under a supporting statement and Nay under an opposing one; present and not voting are not votes. On the 2026-10-13 record that is 122 House and 27 Senate roll calls. Many Senate statements were never followed by a final vote: the Senate disposed of most war-powers and disapproval resolutions on motions to discharge or proceed, which are not counted.
+
+**Reading the position.** The statement's opening paragraph states the position on passage and the closing paragraph the recommendation to the President; a provision-by-provision statement (an appropriations bill, the NDAA) opens by thanking the committee and takes no position, and its votes are not counted. The candidate sentence most similar to a support or oppose prototype decides, unless it is nearer the "other" prototypes, with no tuned threshold. Checked against a hand reading of all 193 readable statements: 185 agree (95.9%); the eight that don't are seven positions read as "no position" and one statement recommending signature "with amendments" read as support. No support was read as oppose or the reverse.
+
+**The expectation.** Per chamber and party, a fractional-response logit (Papke & Wooldridge 1996) of members' rates on their seat's party-signed lean (the Cook PVI measure Constituent Alignment uses), each member weighted by their counted votes and kinked at a swing seat when enough of the party hold seats leaning the other way, fitted on this Congress's members every night (AGENTS.md §3a) and written to `/data/presidential_support_reference.json`. A member's expected rate is their party's fit at their seat's lean. No shrinkage is applied to either rate.
+
+**Uncertainty.** Each rate carries its 95% Wilson score interval (Wilson 1927; Agresti & Coull 1998), which keeps a real width at 0% and 100%, where most members sit. A member is "more" or "less" often than expected only when that interval misses the expected rate; the expected rate's own uncertainty is not included. With 27 Senate votes the intervals are wide, and the page says how many votes each rate rests on.
+
+**Bounded.** Every OMB request has a 30-second timeout and two retries; a run spends at most 15 minutes reading new statements (the first run reads all of them, later runs one or two), leaves the rest for the next night, and the step as a whole is cut off at 25 minutes. Like every Supplementary phase it is best-effort: a failure is recorded and alerted, and the phases before it are not affected. The embedding model loads only when there is a new statement to read, and classification and the rebuild run off the event loop.
+
+**Served.** `GET /api/presidential-support/{chamber}` and `/member/{id}` (the site), `GET /api/public/v1/presidential-support/{chamber}` (the public API, with a contract test). Every number is computed by the backend; the wording is neutral by construction (voting with or against the president is neither good nor bad).
 
 ---
 
@@ -1512,6 +1553,9 @@ GET /api/public/v1/bills/{id}/votes              The roll calls on a bill, with 
 GET /api/public/v1/search                        Floor speeches, presidential actions,
                                                  Supreme Court opinions and federal rules
 GET /api/public/v1/states                        States and their member counts
+GET /api/public/v1/presidential-support/{chamber}  How often each member votes with the
+                                                 president's stated position, and the
+                                                 rate expected for their seat
 GET /api/public/v1/                              Index: every endpoint, weights, links
 ```
 
@@ -1589,6 +1633,7 @@ Key algorithmic decisions and their academic backing:
 | Learning store as experience replay | Past classifications bootstrap future accuracy | Lin 1992; Yarowsky 1995 |
 | Inverse HHI for funding diversity | Standard concentration metric from IO economics | Rhoades 1993 |
 | Linear shrinkage toward 50 on thin evidence (fixed rate `min(n/k, 1)`, not empirical Bayes; Constituent Alignment's position part instead uses a measured reliability weight relative to a full record, v6.27) | Keeps a few votes or cases from producing an extreme score | Stein-type shrinkage idea: Efron & Morris 1975 |
+| Votes with the president's stated position, beside the rate expected for the seat (informational) | A raw support rate mostly measures party and seat | Papke & Wooldridge 1996; Wilson 1927; Agresti & Coull 1998 |
 | Seat-relative break rate for Constituent Alignment (expected rate by party and Cook PVI, fitted from the chamber each run) | Raw party-break rates mislead without constituency context | Carson et al. 2010; Papke & Wooldridge 1996 |
 | Donation-vote correlation ≠ causation | Methodological caution in interpreting funding influence | Ansolabehere et al. 2003 |
 | Fuzzy name matching for self-funded detection | SequenceMatcher handles spelling variations, middle names | Ratcliff & Obershelp 1988 |
@@ -2018,6 +2063,7 @@ Key references:
 - Lewis, P. et al. (2020). Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks. *NeurIPS 2020*.
 - Miller, W. & Stokes, D. (1963). Constituency Influence in Congress. *APSR*, 57(1), 45-56.
 - Nokken, T. & Poole, K. (2004). Congressional Party Defection in American History. *Legislative Studies Quarterly*, 29(4), 545-568.
+- Agresti, A. & Coull, B. (1998). Approximate Is Better than "Exact" for Interval Estimation of Binomial Proportions. *The American Statistician*, 52(2), 119-126.
 - Papke, L. & Wooldridge, J. (1996). Econometric Methods for Fractional Response Variables. *Journal of Applied Econometrics*, 11(6), 619-632.
 - Poole, K. & Rosenthal, H. (1985). A Spatial Model for Legislative Roll Call Analysis. *AJPS*, 29(2), 357-384.
 - Reimers, N. & Gurevych, I. (2019). Sentence-BERT. *EMNLP 2019*, 3982-3992.
@@ -2025,6 +2071,7 @@ Key references:
 - Stratmann, T. (2005). Some Talk: Money in Politics. *Public Choice*, 124(1-2), 135-156.
 - Tauberer, J. (2012). *Open Government Data*. GovTrack.us ideology/leadership methodology.
 - Volden, C. & Wiseman, A. (2014). *Legislative Effectiveness in the United States Congress: The Lawmakers*. Cambridge UP.
+- Wilson, E. B. (1927). Probable Inference, the Law of Succession, and Statistical Inference. *Journal of the American Statistical Association*, 22(158), 209-212.
 
 ## License
 

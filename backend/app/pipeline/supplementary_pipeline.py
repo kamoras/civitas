@@ -9,14 +9,17 @@ Trades are already orchestrated, rather than living inside "the Senate
 pipeline" where they don't belong.
 """
 
+import asyncio
 import logging
 import time
 from datetime import timedelta
 
 from app.database import SessionLocal
+from app.http_client import make_async_client
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline import lease
+from app.pipeline.analyze.presidential_support import run_presidential_support
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.time_utils import utcnow
@@ -29,9 +32,14 @@ SUPPLEMENTARY_PIPELINE_STEPS = [
     ("committee_leadership", "committee_leadership", "Refresh committee/leadership data"),
     ("district_pvi",        "district_pvi", "Refresh district PVI"),
     ("president_scorecards", "presidents", "Score presidents"),
+    ("presidential_support", "presidential_support", "Measure votes with the president's stated positions"),
 ]
 
 _tracker = PipelineRunTracker()
+
+# The presidential-support step's ceiling: its statement reading stops at
+# READ_BUDGET_S (15 minutes) and the rebuild takes seconds.
+PRESIDENTIAL_SUPPORT_TIMEOUT_S = 25 * 60
 
 
 def is_supplementary_pipeline_running() -> bool:
@@ -243,6 +251,35 @@ async def run_supplementary_pipeline() -> dict:
             db.rollback()  # drop partial president updates before the next commit
             logger.exception("President pipeline failed — continuing")
             progress.fail("president_scorecards")
+
+        # ── VOTES WITH THE PRESIDENT'S STATED POSITIONS ──
+        # Informational (no score reads it): OMB's Statements of
+        # Administration Policy matched to the chambers' final votes
+        # (analyze/presidential_support.py). Nightly: the roll calls it
+        # reads are synced half-hourly, and only new statements are fetched.
+        run.current_phase = "presidential_support"
+        db.commit()
+        logger.info("--- Supplementary: PRESIDENTIAL SUPPORT ---")
+        progress.begin("presidential_support")
+        try:
+            # Time-boxed, so a slow source can't hold the run (and the chain
+            # behind it); the reading step keeps its own smaller budget.
+            async with make_async_client() as client:
+                support = await asyncio.wait_for(
+                    run_presidential_support(client, db), timeout=PRESIDENTIAL_SUPPORT_TIMEOUT_S,
+                )
+            detail = (
+                f"{support['statements']['read']} statements read ({support['statements']['status']}); "
+                f"{support['senate']['rollCalls']} Senate and {support['house']['rollCalls']} House roll calls counted"
+            )
+            if support["statements"]["status"] == "index unavailable":
+                progress.fail("presidential_support", detail=detail)
+            else:
+                progress.complete("presidential_support", detail=detail)
+        except Exception:
+            db.rollback()
+            logger.exception("Presidential support step failed — continuing")
+            progress.fail("presidential_support")
 
         run.current_phase = "finalize"
         run.status = PipelineStatus.COMPLETED

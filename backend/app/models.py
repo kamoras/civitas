@@ -2641,6 +2641,71 @@ class RollCallPosition(Base):
     position: Mapped[str] = mapped_column(String(12), nullable=False)
 
 
+class PolicyStatement(Base):
+    """A Statement of Administration Policy as OMB published it
+    (pipeline/fetch/omb_statements.py): the measures it covers, the chamber
+    it is addressed to, and the position read from it
+    (analyze/sap_position.py), with the verbatim sentence that position was
+    read from."""
+    __tablename__ = "policy_statements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(String(300), nullable=False, unique=True)
+    title: Mapped[str] = mapped_column(Text, default="")
+    # False for a file that did not read as a SAP (kept so it is not
+    # fetched again every night; read again when PARSER_VERSION moves).
+    readable: Mapped[bool] = mapped_column(Boolean, default=False)
+    issued: Mapped[str] = mapped_column(String(10), default="")  # YYYY-MM-DD
+    chamber: Mapped[str] = mapped_column(String(6), default="")  # "house" | "senate"
+    measures: Mapped[str] = mapped_column(Text, default="[]")  # JSON: ["HR.9340", ...]
+    amendments: Mapped[str] = mapped_column(Text, default="[]")  # JSON: ["6715", ...]
+    position: Mapped[str] = mapped_column(String(8), default="none")  # "support" | "oppose" | "none"
+    position_sentence: Mapped[str] = mapped_column(Text, default="")
+    parser_version: Mapped[int] = mapped_column(Integer, default=0)
+    classifier_version: Mapped[int] = mapped_column(Integer, default=0)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class StatementRollCall(Base):
+    """A roll call the president's stated position applies to: the chamber's
+    final vote on a measure (or on the amendment a statement names), on or
+    after the statement addressed to that chamber and before any later one
+    on the same measure (analyze/presidential_support.py)."""
+    __tablename__ = "statement_roll_calls"
+
+    roll_call_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("roll_calls.id", ondelete="CASCADE"), primary_key=True,
+    )
+    statement_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("policy_statements.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+
+
+class PresidentialSupport(Base):
+    """How often one member voted with the president's stated position this
+    Congress, and what members of the same party in seats of the same lean
+    do (analyze/presidential_support.py, rewritten each run). Informational:
+    not part of any score."""
+    __tablename__ = "presidential_support"
+    __table_args__ = (UniqueConstraint("chamber", "member_id", name="uq_presidential_support_member"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chamber: Mapped[str] = mapped_column(String(6), nullable=False)
+    # The member's Civitas id (senators.id / representatives.id).
+    member_id: Mapped[str] = mapped_column(String, nullable=False)
+    congress: Mapped[int] = mapped_column(Integer, nullable=False)
+    # The party the expectation is read for: D, R, or another letter (no
+    # expectation is fitted for a third party).
+    party: Mapped[str] = mapped_column(String(1), nullable=False)
+    seat_alignment: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The seat's Cook PVI, positive leaning Republican (score_calculator._seat_pvi).
+    seat_lean: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    with_president: Mapped[int] = mapped_column(Integer, nullable=False)
+    votes: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected: Mapped[float | None] = mapped_column(Float, nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class MemberPhoto(Base):
     """Which official photo a member's `/photo/bioguide/<id>` serves, chosen
     nightly by pipeline/fetch/member_photos.py from the size of the face in

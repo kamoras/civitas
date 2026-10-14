@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { pageMetadata } from "@/lib/site";
 import {
   AboutPage,
@@ -725,6 +726,31 @@ export default function ScoresChapter() {
           A filing records that an organization lobbied on a bill, not which way, so none of this
           says whether a vote went the donor&apos;s way, and none of it shows influence
           <Cite id="ansolabehere2003" />.
+        </P>
+      </Section>
+
+      <Section id="with-the-president" title="Votes with the president">
+        <P>
+          Not scored. Each member&apos;s profile, and the{" "}
+          <Link href="/congress/president/house">chamber pages</Link>, show how often the member
+          voted on the president&apos;s side of a bill, beside what members of the same party in
+          seats that lean the same way do. The president&apos;s side comes only from a Statement of
+          Administration Policy, the signed position the White House budget office (OMB) issues to a
+          chamber before a vote, linked with every vote it counts. Only a chamber&apos;s final vote
+          on a measure counts, or a vote on an amendment a statement names: no statement addresses a
+          procedural vote. A statement that takes no position on passage counts no vote.
+        </P>
+        <P>
+          Whether a statement supports or opposes the bill is read from its opening and closing
+          paragraphs by comparing each sentence with written descriptions of support, opposition and
+          neither <Cite id="yin2019" />; the sentence it was read from is shown. Checked against a
+          reading of every statement, it agreed on 185 of 193, and none of the eight others had
+          support and opposition swapped. The expected rate is fitted each night, per chamber and
+          party, on the members&apos; own rates against their seat&apos;s partisan lean{" "}
+          <Cite id="papke1996" />. Each rate carries a 95% range <Cite id="wilson1927" />
+          <Cite id="agresti1998" />, and a member reads as voting with the president more or less
+          often than expected only when that range misses the expected rate. Voting with or against
+          the president is neither good nor bad.
         </P>
       </Section>
 

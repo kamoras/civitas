@@ -1252,6 +1252,14 @@ After issues are committed, the Action Center pipeline also:
   crossed the day floor, and pages printed the slug back as the name. Until 2026-10-09 it copied the prompt's example title
   "U.S.-Iran Conflict" for most new topics, which then merged into the
   existing monitor of that name, so the site showed one monitor for months.
+  A day's issue joins a monitor at title-to-monitor cosine ≥ 0.71 *and* only
+  when it names an entity the monitor's text or updates name that is in few
+  enough stored issues to tell stories apart (IDF > 2.0,
+  `_MONITOR_ENTITY_MIN_IDF`; demonyms match by prefix); stored updates are
+  re-checked the same way each refresh (`_prune_off_topic_updates`). Measured
+  2026-10-14: the cosine floor alone let a Russian-diesel monitor take three
+  stories sharing only "trump" (a third of all issues); the entity half drops
+  all three and none of the Iran monitor's 291 on-topic updates.
   Existing monitors are deduplicated by title similarity. A monitor with no
   update for 7 days is marked "watching" (still listed; the next match makes
   it active again) and after 30 days "closed" (off the Ongoing tab, still in
@@ -1593,6 +1601,7 @@ the pending list).
 | What changed on the new House maps (old/new district overlap, lean before/after, enacting act) | `backend/app/redistricting.py`, `backend/app/api/redistricting.py`, `backend/scripts/build_redistricting_overlap.py` → `app/data/redistricting_overlap.json`, `frontend/src/components/redistricting/`, `frontend/src/app/elections/redistricting/` |
 | Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
+| Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |

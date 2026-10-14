@@ -15,6 +15,16 @@ interface Reference {
 const J = ({ children }: { children: ReactNode }) => <em>{children}</em>;
 
 export const REFERENCES = {
+  agresti1998: {
+    short: "Agresti & Coull 1998",
+    entry: (
+      <>
+        Agresti, A., &amp; Coull, B. A. (1998). Approximate Is Better than &ldquo;Exact&rdquo; for
+        Interval Estimation of Binomial Proportions. <J>The American Statistician</J>, 52(2),
+        119–126.
+      </>
+    ),
+  },
   ansolabehere2003: {
     short: "Ansolabehere et al. 2003",
     entry: (
@@ -353,6 +363,16 @@ export const REFERENCES = {
       </>
     ),
   },
+  papke1996: {
+    short: "Papke & Wooldridge 1996",
+    entry: (
+      <>
+        Papke, L. E., &amp; Wooldridge, J. M. (1996). Econometric Methods for Fractional Response
+        Variables with an Application to 401(k) Plan Participation Rates.{" "}
+        <J>Journal of Applied Econometrics</J>, 11(6), 619–632.
+      </>
+    ),
+  },
   patterson2021: {
     short: "Patterson et al. 2021",
     entry: (
@@ -471,6 +491,15 @@ export const REFERENCES = {
         Wang, W., Wei, F., Dong, L., Bao, H., Yang, N., &amp; Zhou, M. (2020). MiniLM: Deep
         Self-Attention Distillation for Task-Agnostic Compression of Pre-Trained Transformers.{" "}
         <J>Proceedings of NeurIPS 2020</J>. arXiv:2002.10957
+      </>
+    ),
+  },
+  wilson1927: {
+    short: "Wilson 1927",
+    entry: (
+      <>
+        Wilson, E. B. (1927). Probable Inference, the Law of Succession, and Statistical Inference.{" "}
+        <J>Journal of the American Statistical Association</J>, 22(158), 209–212.
       </>
     ),
   },
