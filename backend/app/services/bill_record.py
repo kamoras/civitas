@@ -372,22 +372,29 @@ def _stored_bill(db: Session, congress: int, bill_id: str) -> dict:
     return {}
 
 
+def bill_votes(db: Session, congress: int, bill_id: str) -> list[dict]:
+    """Every stored roll call on the bill, newest first, with its tally and
+    each party's split (the bill page's vote panel, and the public API's
+    /bills/{id}/votes)."""
+    votes = db.query(RollCall).filter(RollCall.bill_id == bill_id, RollCall.congress == congress) \
+        .order_by(RollCall.date.desc(), RollCall.number.desc()).all()
+    positions: dict[int, list[RollCallPosition]] = {}
+    for p in db.query(RollCallPosition).filter(RollCallPosition.roll_call_id.in_([rc.id for rc in votes])):
+        positions.setdefault(p.roll_call_id, []).append(p)
+    return [{
+        "chamber": rc.chamber, "session": rc.session, "number": rc.number, "date": rc.date,
+        "question": rc.question, "title": rc.title, "result": rc.result, "rejected": rc.rejected,
+        "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
+        "sourceUrl": rc.source_url, "parties": party_breakdown(positions.get(rc.id, [])),
+    } for rc in votes]
+
+
 def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
     links = MemberLinks(db)
     bill = raw.get("bill") or (_stored_bill(db, congress, bill_id) if "bill" in (raw.get("unavailable") or []) else {})
     summaries = sorted(raw.get("summaries") or [], key=lambda s: s.get("updateDate") or s.get("actionDate") or "")
     latest_summary = summaries[-1] if summaries else None
-    votes = db.query(RollCall).filter(RollCall.bill_id == bill_id, RollCall.congress == congress) \
-        .order_by(RollCall.date.desc(), RollCall.number.desc()).all()
-    vote_summaries = []
-    for rc in votes:
-        positions = db.query(RollCallPosition).filter_by(roll_call_id=rc.id).all()
-        vote_summaries.append({
-            "chamber": rc.chamber, "session": rc.session, "number": rc.number, "date": rc.date,
-            "question": rc.question, "title": rc.title, "result": rc.result, "rejected": rc.rejected,
-            "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
-            "parties": party_breakdown(positions),
-        })
+    vote_summaries = bill_votes(db, congress, bill_id)
     return {
         "billId": bill_id,
         "billLabel": bill_label(bill_id),

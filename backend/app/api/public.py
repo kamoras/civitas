@@ -45,6 +45,7 @@ from app.api.response_helpers import (
 )
 from app.api.visits import record_api_request
 from app.broadcast import SITE_URL
+from app.config import settings
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db, off_loop
 from app.member_ids import resolve_member_id
@@ -53,7 +54,9 @@ from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
 from app.score_display import displayed_rank
 from app.schemas import (
     PublicApiIndexSchema,
+    PublicBillVotesSchema,
     PublicHistorySchema,
+    PublicMemberVotesSchema,
     PublicRepresentativePageSchema,
     PublicRepresentativeProfileSchema,
     PublicSearchResponseSchema,
@@ -65,12 +68,19 @@ from app.services.explore_search import hybrid_search
 from app.state_names import STATE_NAMES
 from app.time_utils import comment_period_today
 from app.services.pagination import paginate_bounds
+from app.services.bill_record import bill_votes, parse_bill_id
 from app.services.representative_service import (
     get_rep_leaderboard,
     get_rep_states_with_counts,
+    get_rep_votes as rep_votes,
     get_representative_by_id,
 )
-from app.services.senator_service import get_leaderboard, get_senator_by_id, get_states_with_counts
+from app.services.senator_service import (
+    get_leaderboard,
+    get_senator_by_id,
+    get_senator_votes as senator_votes,
+    get_states_with_counts,
+)
 
 # Where api/router.py mounts this router.
 PREFIX = "/api/public/v1"
@@ -377,8 +387,9 @@ def openapi_spec_dict() -> dict:
             generate_unique_id_function=lambda route: route.name,
             # Group order and introductions for /developers and generated clients.
             openapi_tags=[
-                {"name": "Senators", "description": "The 100 serving senators: rankings, full records and score history."},
-                {"name": "Representatives", "description": "The serving House members: rankings, full records and score history."},
+                {"name": "Senators", "description": "The 100 serving senators: rankings, full records, score history and votes."},
+                {"name": "Representatives", "description": "The serving House members: rankings, full records, score history and votes."},
+                {"name": "Bills", "description": "The roll calls on a bill, with each party's split."},
                 {"name": "Search", "description": "The government documents behind the records, searched the way the site's Explore page does."},
                 {"name": "Reference", "description": "What the API offers, and the states it covers."},
             ],
@@ -535,6 +546,63 @@ def get_senator_history(
 
 
 # ---------------------------------------------------------------------------
+# Votes
+# ---------------------------------------------------------------------------
+
+def _roll_call(rc: dict | None, chamber: str | None = None, congress: int | None = None) -> dict | None:
+    """A stored roll call, in the public shape (what the bill page's vote
+    panel and a member's vote rows hold, without the site's own extras)."""
+    if not rc:
+        return None
+    return {
+        "chamber": rc.get("chamber") or chamber, "congress": rc.get("congress") or congress,
+        "session": rc["session"], "number": rc["number"], "date": rc["date"],
+        "question": rc.get("question") or "", "result": rc.get("result") or "",
+        "sourceUrl": rc.get("sourceUrl") or "",
+        "parties": [{"party": p["party"], "yea": p["yea"], "nay": p["nay"], "present": p["present"],
+                     "notVoting": p["notVoting"]} for p in rc.get("parties") or []],
+    }
+
+
+def _member_votes(found: dict | None, member_id: str, request: Request) -> JSONResponse:
+    if found is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
+    return _pub_json({
+        "id": member_id, "total": found["total"], "page": found["page"], "perPage": found["perPage"],
+        "totalPages": max(1, found["totalPages"]),
+        "entries": [{
+            "billId": v["billId"], "billName": v["billName"], "date": v["date"], "vote": v["vote"],
+            "votedWithParty": v.get("votedWithParty"), "partyLeaning": v.get("partyLeaning"),
+            "policyArea": v.get("policyArea") or "PROCEDURAL", "rollCall": _roll_call(v.get("rollCall")),
+        } for v in found["votes"]],
+    }, request, max_age=CACHE_TTL_DETAIL_S)
+
+
+def _as_dict(found) -> dict | None:
+    return found.model_dump(by_alias=True) if hasattr(found, "model_dump") else found
+
+
+
+@router.get("/senators/{senator_id}/votes", response_model=PublicMemberVotesSchema, responses=_NOT_FOUND,
+            tags=["Senators"], summary="A senator's votes")
+def get_senator_votes(
+    _rl: PublicReadLimit,
+    request: Request,
+    senator_id: str = Path(description="The senator's id." + _RENAMED_ID),
+    page: int = _PAGE,
+    per_page: int = _PER_PAGE,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Every vote on record for the member this Congress, newest first:
+    the measure, the vote, whether it sided with the party, and the roll
+    call it was cast in with each party's split. The votes a profile's
+    Constituent Alignment reads, as stored by the last scoring run."""
+    member_id = resolve_member_id(db, senator_id)
+    return _member_votes(_as_dict(senator_votes(db, member_id, "all", page, per_page)), member_id, request)
+
+
+
+# ---------------------------------------------------------------------------
 # Representatives
 # ---------------------------------------------------------------------------
 
@@ -587,6 +655,56 @@ def get_representative_history(
 ) -> JSONResponse:
     """One snapshot per scoring run, oldest first."""
     return _history(db, "representative", Representative, rep_id, request)
+
+
+@router.get("/representatives/{rep_id}/votes", response_model=PublicMemberVotesSchema, responses=_NOT_FOUND,
+            tags=["Representatives"], summary="A representative's votes")
+def get_representative_votes(
+    _rl: PublicReadLimit,
+    request: Request,
+    rep_id: str = Path(description="The representative's id." + _RENAMED_ID),
+    page: int = _PAGE,
+    per_page: int = _PER_PAGE,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Every vote on record for the member this Congress, newest first:
+    the measure, the vote, whether it sided with the party, and the roll
+    call it was cast in with each party's split. The votes a profile's
+    Constituent Alignment reads, as stored by the last scoring run."""
+    member_id = resolve_member_id(db, rep_id)
+    return _member_votes(_as_dict(rep_votes(db, member_id, "all", page, per_page)), member_id, request)
+
+
+
+# ---------------------------------------------------------------------------
+# Bills
+# ---------------------------------------------------------------------------
+
+@router.get("/bills/{bill_id}/votes", response_model=PublicBillVotesSchema,
+            responses={404: {"description": "Not a bill id"}}, tags=["Bills"], summary="The roll calls on a bill")
+def get_bill_votes(
+    _rl: PublicReadLimit,
+    request: Request,
+    bill_id: str = Path(description="The bill as Civitas names it: type and number, e.g. HR.1234, S.56, HJRES.7"),
+    congress: int | None = Query(None, ge=93, le=200, description="The Congress (default: the current one)"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Every roll call on the bill that Civitas holds, newest first, with
+    the tally and each party's split: the votes on the bill's page. Read
+    from Civitas's own record of the chambers' roll calls, so a bill never
+    brought to a recorded vote has none."""
+    bill_id = bill_id.upper()
+    if parse_bill_id(bill_id) is None:
+        raise HTTPException(status_code=404, detail="Not a bill id")
+    congress = congress or settings.CURRENT_CONGRESS
+    votes = bill_votes(db, congress, bill_id)
+    return _pub_json({
+        "billId": bill_id, "congress": congress,
+        "siteUrl": f"{SITE_URL}/congress/bills/{bill_id}" + (
+            "" if congress == settings.CURRENT_CONGRESS else f"?congress={congress}"),
+        "entries": [{**_roll_call(v, congress=congress), "yeas": v["yeas"], "nays": v["nays"],
+                     "present": v["present"], "notVoting": v["notVoting"]} for v in votes],
+    }, request, max_age=CACHE_TTL_DETAIL_S)
 
 
 # ---------------------------------------------------------------------------

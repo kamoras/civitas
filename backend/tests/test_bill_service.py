@@ -13,6 +13,7 @@ from app.config import settings
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.services.bill_service import (
     clear_bill_collection_cache, get_bill_detail, get_bills_in_flight, short_title_index, stage_base_rate,
+    stage_milestones,
 )
 from tests.conftest import TEST_CONGRESS
 
@@ -373,6 +374,35 @@ class TestStageBaseRate:
     def test_on_the_bill_detail(self, congress):
         detail = get_bill_detail(congress, "S.90")  # a reported bill
         assert detail.stage_base_rate.at_stage == 6
+
+
+class TestStageMilestones:
+    """The bill page's ladder: how many of this Congress's bills reached
+    each milestone, and how far this one has."""
+
+    @pytest.fixture
+    def congress(self, db_session):
+        senator = _make_senator(db_session)
+        stages = ["REFERRED"] * 80 + ["IN_COMMITTEE"] * 8 + ["REPORTED"] * 6 + ["PASSED_CHAMBER"] * 3 \
+            + ["TO_PRESIDENT", "VETOED", "ENACTED"]
+        for n, stage in enumerate(stages):
+            _make_sponsored_bill(db_session, senator.id, f"S.{n}", stage)
+        db_session.commit()
+        return db_session
+
+    def test_each_milestone_counts_every_bill_that_got_at_least_that_far(self, congress):
+        m = stage_milestones(congress, "PASSED_CHAMBER", CURRENT)
+        assert m["total"] == 100
+        assert [(x["label"], x["bills"], x["shareText"]) for x in m["milestones"]] == [
+            ("Introduced", 100, "100%"), ("Reported by a committee", 12, "12%"),
+            ("Passed one chamber", 6, "6%"), ("Passed both chambers", 3, "3%"), ("Became law", 1, "1%")]
+        assert m["reached"] == 2
+
+    def test_a_vetoed_bill_passed_both_chambers_and_another_congress_has_none(self, congress):
+        assert stage_milestones(congress, "VETOED", CURRENT)["reached"] == 3
+        assert stage_milestones(congress, "ENACTED", CURRENT)["reached"] == 4
+        assert stage_milestones(congress, "REFERRED", CURRENT)["reached"] == 0
+        assert stage_milestones(congress, "REPORTED", CURRENT - 1) is None
 
 
 class TestStaleSort:

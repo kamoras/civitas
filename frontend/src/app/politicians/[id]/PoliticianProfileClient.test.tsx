@@ -15,9 +15,10 @@ describe("OnBallotLine", () => {
         }}
       />
     );
-    expect(
-      screen.getByText(/ON THE 2026 BALLOT · U\.S\. HOUSE, DISTRICT 37, TEXAS/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/2026 BALLOT/)).toBeInTheDocument();
+    expect(screen.getByText(/U\.S\. HOUSE, DISTRICT 37, TEXAS/)).toBeInTheDocument();
+    // The short name a phone shows in its place.
+    expect(screen.getByText("TX-37")).toHaveClass("sm:hidden");
     expect(screen.getByRole("link", { name: /WHO'S RUNNING/ })).toHaveAttribute(
       "href",
       "/elections/states/TX#race-2026-HOUSE-TX-37"

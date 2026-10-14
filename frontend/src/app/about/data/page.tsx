@@ -181,6 +181,14 @@ export default function DataChapter() {
           avoid asking twice, except a state&apos;s answer that it has no measures, kept for only
           six hours, so a measure certified afterwards appears the next night.
         </P>
+        <P>
+          Every member scorecard and bill page ends in a methods, sources and citation section, one
+          link from the top of the page: for each score, the data grade behind it, every component
+          with the scorer&apos;s own sentence on how it was measured, the research it follows and
+          where its data comes from; the record itself as JSON from the{" "}
+          <A href="/developers">public API</A> (a member&apos;s votes, a bill&apos;s roll calls);
+          and an APA-style reference with the date it was scored.
+        </P>
       </Section>
 
       <Section id="ai" title="How AI is used, and where it isn’t">
