@@ -1784,6 +1784,11 @@ the pending list).
 - The "this week" strip (`components/shared/ThisWeekStrip.tsx`) is an async
   server component; a client page gets it as a `strip` prop from its server
   `page.tsx`, never by fetching it on the client.
+- Every page's `<main>` is `id="main-content"`: the skip link targets it, and
+  `globals.css` gives it `min-height: 100vh` so the footer never paints in the
+  first screen while a client-fetched page loads and then jumps away (CLS
+  0.58-0.80 on /action, /elections and Explore documents before 2026-10-14).
+  `layoutStability.test.ts` fails on a `<main>` without the id.
 - Large tab components are code-split with `next/dynamic` to reduce initial
   bundle size (e.g., Action Center tabs load on demand). Use in-memory
   `cachedFetch` from `src/lib/api.ts` for API calls that benefit from
