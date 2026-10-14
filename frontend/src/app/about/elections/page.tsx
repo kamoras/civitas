@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { pageMetadata } from "@/lib/site";
 import {
   AboutPage,
@@ -178,6 +179,26 @@ export default async function ElectionsChapter() {
           day on, a &ldquo;member before this election&rdquo;, since the results can stay up until
           the new Congress is sworn in), not the &ldquo;incumbent&rdquo;: no seat on the new map has
           a previous holder.
+        </P>
+        <P>
+          For each redrawn state, a{" "}
+          <Link
+            href="/elections/redistricting"
+            className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+          >
+            what-changed page
+          </Link>{" "}
+          answers whether your district is different and by how much: for each new district, the
+          share of its residents who were in each old one and how its lean moved, and for each old
+          district, where its residents went. Find yours by city, town or county. The counts are
+          2020 Census residents, joined block by block to the old and new district files, so
+          everyone is counted once; both leans are Cook&apos;s on the same presidential elections,
+          so a change in lean comes from the lines alone. The page leads with how many seats lean
+          each way before and after; how many districts lean differently from the old district most
+          of their residents came from is a separate count, shown with the method. Each page links
+          the act or court order behind the map, explains the method and offers the whole table as
+          CSV and JSON. It describes who is in which district; it says nothing about why a line was
+          drawn.
         </P>
         <P>
           To find who represents you today, use the Politicians directory instead: pick your state,

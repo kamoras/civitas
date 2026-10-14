@@ -907,7 +907,41 @@ first day), never the new district's incumbent
 python backend/scripts/build_county_district_crosswalk.py
 python backend/scripts/build_district_topology.py
 python backend/scripts/build_district_place_crosswalk.py
+python backend/scripts/build_redistricting_overlap.py
 ```
+
+**What changed on the new maps** (`/elections/redistricting`, one page per
+redrawn state). For each new district: the share of its residents that came
+from each old district, its lean on the old lines against the new, and for
+each old district, where its residents went; per state, the seats leaning
+each way before and after (the net change, which is what the page leads
+with), how far the average resident's district lean moved, and the
+enacting act or court order (the official link is the `source` of each entry
+in `redrawn_congressional_maps.json`). The counts are
+`backend/app/data/redistricting_overlap.json`
+(`build_redistricting_overlap.py`): the same block equivalency files joined to
+each 2020 Census block's population, so every resident is in exactly one
+(old, new) cell and a state's cells add up to its 2020 population. Sentences
+leave out overlaps under 50 residents (about one block, the place files'
+sliver rule); the matrix, the CSV (`GET
+/api/elections/redistricting/{state}/overlap.csv`) and the JSON keep them all.
+Lean is joined at read time from the pinned Cook PVI tables for the 119th and
+120th Congresses (`district_pvi_for_congress`), the same 2020 + 2024 window
+on both, so a change in lean is the lines, not new election results; a
+"predecessor" is the old district most of a new district's residents came
+from. Lean categories are the PVI's sign (R, D or EVEN; no competitive band
+is invented). The headline is the net change in seats per category
+(`netSeatChangeByLean`, after minus before, tested to match the strips); the
+count of new districts leaning differently from their predecessor
+(`districtsLeaningDifferentlyFromPredecessor`) is a different question, kept
+in the method section with why the two can differ (a district built from
+several old ones is compared with its largest source only, and an old
+district split with no successor with nothing). Every figure comes from
+`backend/app/redistricting.py`; the pages only word it. The state ballot
+page's House box links it for a redrawn state, a picked district says where
+its residents lived before, and a sitting member's profile says where the
+residents of the district they were elected in went, until the new Congress
+sits.
 
 **Who represents a county today is a different question.** The election
 crosswalk answers "which district do I vote in"; in a redrawn state it gives

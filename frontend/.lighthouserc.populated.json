@@ -17,6 +17,10 @@
         "http://localhost:3000/action",
         "http://localhost:3000/elections",
         "http://localhost:3000/elections/states/CT",
+        "http://localhost:3000/elections/states/UT",
+        "http://localhost:3000/elections/redistricting",
+        "http://localhost:3000/elections/redistricting/UT",
+        "http://localhost:3000/politicians/R-UT1",
         "http://localhost:3000/feeds",
         "http://localhost:3000/developers"
       ],
