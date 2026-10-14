@@ -22,7 +22,7 @@ filelock==4.0.9
 fsspec==2026.9.0
 greenlet==3.5.6
 h11==0.16.0
-hf-xet==1.6.0
+hf-xet==1.7.0
 httpcore==1.0.9
 httpcore2==2.13.1
 httptools==0.8.0
@@ -87,7 +87,7 @@ sse-starlette==3.5.0
 starlette==1.7.0
 sympy==1.14.0
 threadpoolctl==3.7.0
-tokenizers==0.23.2
+tokenizers==0.23.3
 truststore==0.10.4
 # torch is the CPU-only build, pinned by URL and sha256 (pip verifies the
 # hash). PyPI's Linux torch wheels, aarch64 included (the Pi), depend on the
@@ -103,7 +103,7 @@ torch @ https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp313-cp313-m
 torch @ https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl#sha256=160e1bc46aeded3111d2801f8ae10dc9a1b946843a7e126b4dbf5e19c5706e95 ; sys_platform == "linux" and platform_machine == "x86_64"
 torch==2.14.0 ; sys_platform != "linux"
 tqdm==4.70.1
-transformers==5.18.0
+transformers==5.19.0
 typer==0.27.3
 typing-inspection==0.4.4
 typing_extensions==4.16.0
