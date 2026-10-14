@@ -55,7 +55,7 @@ function PhaseSteps({ currentPhase }: { currentPhase: string | null | undefined 
             {i > 0 && <span className={`w-4 h-px ${done ? "bg-phos" : "bg-phos"}`} />}
             <span
               className={
-                active ? "text-signal-cyan animate-pulse" : done ? "text-ink-hi" : "text-ink-min"
+                active ? "text-signal-cyan pulse-subtle" : done ? "text-ink-hi" : "text-ink-min"
               }
             >
               {done ? "✓ " : active ? "▶ " : ""}
@@ -319,7 +319,7 @@ export function PipelineProgressBar({
                           step.status === "done"
                             ? "text-ink-hi"
                             : step.status === "active"
-                              ? "text-signal-cyan animate-pulse"
+                              ? "text-signal-cyan pulse-subtle"
                               : step.status === "skipped"
                                 ? "text-ink-min"
                                 : "text-ink-min"
@@ -440,7 +440,7 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] | nul
                   : r.status === "failed"
                     ? "text-signal-magenta"
                     : r.status === "running"
-                      ? "text-signal-cyan animate-pulse"
+                      ? "text-signal-cyan pulse-subtle"
                       : "text-ink-lo";
             return (
               <tr
@@ -524,7 +524,7 @@ export function PipelineStatusRow({
     <>
       <div className="flex justify-between items-center">
         <span className="text-ink-lo">{label}</span>
-        <span className={isRunning ? "text-signal-cyan animate-pulse" : "text-ink-lo"}>
+        <span className={isRunning ? "text-signal-cyan pulse-subtle" : "text-ink-lo"}>
           {isRunning ? (
             "RUNNING"
           ) : run ? (

@@ -285,8 +285,10 @@ p + p {
    portion of every cycle, live-audit confirmed via axe-core on the
    "CURRENT" officeholder badge (2.23:1 at the dim phase, text-matrix-
    green/60 which is otherwise a passing 5.49:1 at rest). Use this instead
-   of animate-pulse on persistent (non-loading-spinner) text so the dim
-   phase never drops below the color's own safe floor. */
+   of animate-pulse on any text, loading lines included: "Analyzing
+   document…" can stay on screen for minutes and measured 3.86:1 at the dim
+   phase. app/pulseContrast.test.ts keeps animate-pulse to text-free
+   decoration. */
 @keyframes pulse-subtle {
   50% {
     opacity: 0.92;
