@@ -1,4 +1,5 @@
 import {
+  NOT_FINAL,
   flipNotShownTag,
   flipNotShownText,
   flipShown,
@@ -18,7 +19,9 @@ import { safeHref } from "@/lib/formatting";
 import type { LiveRaceResult } from "@/types/election";
 
 /** Where the count stands, in the state's own words: leading, tied, or no
- * votes yet — with "official count" once the state lists it so. Never
+ * votes yet — with "official count" once the state lists it so, and "not
+ * final" in the same tag until then (NOT_FINAL), so the leader's tag never
+ * stands alone a screen above the card's sentence saying so. Never
  * "won", and never a bare "OFFICIAL" beside the leader's name, which reads
  * as a result: an official count's leader still only leads (a Georgia
  * general short of a majority goes to a runoff), and Civitas never calls a
@@ -39,25 +42,27 @@ export function statusTag(r: LiveRaceResult): { text: string; className: string 
     return {
       // Short, as a tag must be; the card's sentence and the maps' names
       // say it in full ("holder's party ahead in the latest count").
-      text: `FLIP ANNOUNCED · ${notShown}${r.official ? " · OFFICIAL COUNT" : ""}`,
+      text: `FLIP ANNOUNCED · ${notShown}${
+        r.official ? " · OFFICIAL COUNT" : r.votesCounted ? ` · ${NOT_FINAL}` : ""
+      }`,
       className: "border-signal-amber/40 text-ink-hi",
     };
   if (!r.votesCounted) return { text: "NO VOTES YET", className: "border-white/20 text-ink-min" };
   if (isTied(r))
     return {
-      text: r.official ? "TIED · OFFICIAL COUNT" : "TIED",
+      text: r.official ? "TIED · OFFICIAL COUNT" : `TIED · ${NOT_FINAL}`,
       className: "border-white/40 text-ink-hi",
     };
   if (flipShown(r))
     return {
-      text: r.official ? "FLIP · OFFICIAL COUNT" : "FLIP · LEADING",
+      text: r.official ? "FLIP · OFFICIAL COUNT" : `FLIP · LEADING · ${NOT_FINAL}`,
       className: "border-signal-amber/60 text-signal-amber",
     };
   if (r.official) return { text: "LEADS · OFFICIAL COUNT", className: "border-phos/60 text-phos" };
   const share = reportingShare(r);
   if (share != null && share < 0.5)
-    return { text: "EARLY", className: "border-white/20 text-ink-lo" };
-  return { text: "LEADING", className: "border-white/25 text-ink-lo" };
+    return { text: `EARLY · ${NOT_FINAL}`, className: "border-white/20 text-ink-lo" };
+  return { text: `LEADING · ${NOT_FINAL}`, className: "border-white/25 text-ink-lo" };
 }
 
 /** A race's full count: every candidate, a bar each, the reporting line and

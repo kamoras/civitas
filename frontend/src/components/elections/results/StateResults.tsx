@@ -13,6 +13,8 @@ import {
   countReadAt as readAtOf,
   feedFailed,
   formatEasternTime,
+  NOT_FINAL,
+  anyCountNotFinal,
   formatLed,
   pollsStillOpen,
   serverTimeOf,
@@ -384,7 +386,7 @@ export default function StateResults({
                 U.S. House
               </h2>
               <span className="font-mono text-xs tracking-[0.1em] text-ink-lo">
-                {formatLed(led)} LEADING
+                {formatLed(led)} LEADING{anyCountNotFinal(house) ? ` · ${NOT_FINAL}` : ""}
               </span>
             </div>
             {newLines && (

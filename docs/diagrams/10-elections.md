@@ -459,7 +459,8 @@ links to its election office, never as a state where nothing has happened.
   none of the three, and the next poll reverts all three together. Until
   then the page says what both are: the flip was announced, and the latest
   count shows the holder's party ahead (or a tie) — "FLIP ANNOUNCED ·
-  HOLDER'S PARTY LEADS" on the race, "change of party announced earlier,
+  HOLDER'S PARTY LEADS · NOT FINAL" on the race (every tag that leads or
+  ties without an official count ends "· NOT FINAL", `NOT_FINAL`), "change of party announced earlier,
   holder's party ahead in the latest count" in the maps' names, never
   "FLIP · LEADING" or "seat
   changing party" beside the holder's lead. A held poll with no votes in
