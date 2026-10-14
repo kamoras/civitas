@@ -1397,6 +1397,17 @@ The homepage, and in a one-line form the pages most readers arrive on (a member'
 
 Every sentence is a template around stored figures. When the backend can't answer, the strip is left out and the page renders as before.
 
+## On the record
+
+Below the masthead, the homepage lists what stood out in Congress's latest week of record votes, from `GET /api/notable` (`api/notable.py`), rendered on the server with the page. Each entry is a fixed sentence around the chamber's own roll call and ends in the commands that check it: the roll call, the member, and (for a senator) the member beside the state's other senator on `/compare`.
+
+- **Closest vote.** The simple-majority question with the smallest gap between yeas and nays ("Decided by 1 vote in the Senate, 49–50: Amendment Rejected."), newest on a tie. A 3/5 or 2/3 question is left out, since how close it came depends on its threshold, and so is a housekeeping question (`normalize_votes.is_housekeeping`).
+- **Lone break.** The one member of a party who voted the other way from every other member of it, with at least ten of the party voting ("The only Republican to vote Yea: …, against 50 Republicans voting Nay."). At most one per party, the newest, so neither party fills the list by rule; two on one vote are listed in party-letter order. The majority leader's vote with the prevailing side of a question the party lost is the reconsider switch Constituent Alignment also exempts, not a break (the leader's current title stands for the week).
+
+The week is the latest Monday-to-Sunday week either chamber recorded a vote in, labelled with its dates, so a recess shows the last week in session. Past 28 days without a record vote the list is empty and the section is left out: an empty week shows nothing, never filler. A score's week-on-week "biggest mover" was considered and left out: a change is only comparable on one scoring method, and on 2026-10-13 none of 534 members had a comparable seven-day change, because methods change more often than that.
+
+The masthead also carries a "For researchers" line — methods, sources, the API and the scoring changelog — so they are one click from the first screen rather than only in the footer.
+
 ## Score Data Transparency
 
 A senator's or representative's profile is the scorecard at a glance (`components/scorecard/MemberScorecard.tsx`): a header with who they are, how to reach them, the Representation Score, the rank the leaderboard gives it (served as `chamberRank` on `GET /api/politicians/{id}`) and its trend; then the three scored dimensions side by side, each led by one plain sentence of what its score found, then the evidence behind it (the components, the weights and their statistics sit under "How this is computed", closed by default); then their financial-disclosure holdings as a pie beside the list; then tiles for what is on record but not scored (stock trades, donor-vote links, positions by policy area). The Funding Independence column also links straight to the donor-vote links ("See how this money lines up with votes"), which on a phone otherwise sit about seven screens below it. Every full list — every vote, every donor, every bill — opens in a drawer over the page; each vote there is one line (what was voted on, linked to the bill's page, the question, the date, the member's vote, and whether it went against the party). On a phone the columns stack.
