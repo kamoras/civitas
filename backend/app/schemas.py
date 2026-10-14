@@ -847,6 +847,78 @@ class PublicSearchResponseSchema(_PublicModel):
     index_building: bool = Field(description="True while the search index is being built; results are empty until it is")
 
 
+class PublicPolicyStatementSchema(_PublicModel):
+    title: str = Field(description="The statement's title as OMB lists it")
+    url: str = Field(description="The signed statement (PDF) on whitehouse.gov")
+    issued: str = Field(description="Date issued, YYYY-MM-DD")
+    position: Literal["support", "oppose"] = Field(description="The position on the measure read from the statement")
+    sentence: str = Field(description="The statement's sentence the position was read from, verbatim")
+
+
+class PublicPresidentialSupportRollCallSchema(_PublicModel):
+    chamber: Literal["senate", "house"]
+    congress: int
+    session: int
+    roll_call: int = Field(description="Roll call number within the session")
+    date: str = Field(description="YYYY-MM-DD")
+    question: str = Field(description="The question as the chamber recorded it")
+    title: str
+    bill_id: str | None = Field(description='The measure, as the site writes it ("HR.9340")')
+    result: str = Field(description="The result as the chamber recorded it")
+    source_url: str = Field(description="The chamber's own roll-call record")
+    president_side: Literal["Yea", "Nay"] = Field(description="The vote on the president's side of this question")
+    statement: PublicPolicyStatementSchema
+
+
+class PublicPresidentialSupportMemberSchema(_PublicModel):
+    id: str
+    name: str
+    party: str = Field(description="The party the expectation is read for (an independent's caucus party)")
+    state: str
+    district: int | None = Field(description="House district, 0 at-large; null for senators")
+    with_president: int = Field(description="Counted votes cast on the president's side")
+    votes: int = Field(description="Counted votes cast (Yea or Nay; present and not voting excluded)")
+    rate: float = Field(description="withPresident / votes")
+    rate_low: float = Field(description="Lower end of the rate's 95% Wilson score interval")
+    rate_high: float = Field(description="Upper end of the rate's 95% Wilson score interval")
+    expected: float | None = Field(description="What members of the same party in seats of the same lean vote "
+                                               "with the president, by this Congress's fit; null when none was fitted")
+    difference: float | None = Field(description="rate - expected")
+    difference_low: float | None = Field(description="rateLow - expected")
+    difference_high: float | None = Field(description="rateHigh - expected")
+    compared_with_expected: Literal["more", "less", "within"] | None = Field(
+        description="Whether the rate's interval lies above the expected rate (more), below it (less), or includes it")
+    site_url: str = _SITE_URL
+
+
+class PublicPresidentialSupportFitSchema(_PublicModel):
+    a: float = Field(description="Intercept, log-odds")
+    b: float = Field(description="Slope on party-signed seat alignment (-1..1)")
+    b_opposed: float = Field(description="Extra slope for seats leaning to the other party (0 when not fitted)")
+    members: int = Field(description="Members in the fit")
+    votes: int = Field(description="Their counted votes (the fit's weights)")
+
+
+class PublicPresidentialSupportMethodSchema(_PublicModel):
+    source: str
+    source_url: str = Field(description="OMB's index of Statements of Administration Policy")
+    counted: str = Field(description="Which roll calls count")
+    position: str = Field(description="How each statement's position is read")
+    expected: str = Field(description="How the expected rate is measured")
+    interval: str = Field(description="The uncertainty shown")
+    neutral: str
+    fits: dict[str, PublicPresidentialSupportFitSchema] = Field(description="Per party (D, R), this run's fit")
+    computed_at: str | None = Field(description="When the fit was measured (UTC)")
+
+
+class PublicPresidentialSupportSchema(_PublicModel):
+    chamber: Literal["senate", "house"]
+    congress: int
+    members: list[PublicPresidentialSupportMemberSchema] = Field(description="Serving members with a counted vote, by name")
+    roll_calls: list[PublicPresidentialSupportRollCallSchema] = Field(description="Counted roll calls, newest first")
+    method: PublicPresidentialSupportMethodSchema
+
+
 # --- Pipeline / Health schemas ---
 
 

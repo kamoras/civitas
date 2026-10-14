@@ -17,6 +17,7 @@ from app.api.pipeline import router as pipeline_router
 from app.api.photos import router as photos_router
 from app.api.politicians import router as politicians_router
 from app.api.presidents import router as presidents_router
+from app.api.presidential_support import router as presidential_support_router
 from app.api.public import router as public_router
 from app.api.redistricting import router as redistricting_router
 from app.api.representatives import router as representatives_router
@@ -33,6 +34,7 @@ api_router.include_router(photos_router, tags=["photos"])
 api_router.include_router(senators_router, tags=["senators"])
 api_router.include_router(representatives_router, tags=["representatives"])
 api_router.include_router(presidents_router, tags=["presidents"])
+api_router.include_router(presidential_support_router, tags=["presidential-support"])
 api_router.include_router(justices_router, tags=["justices"])
 api_router.include_router(leaderboard_router, tags=["leaderboard"])
 api_router.include_router(explore_router, tags=["explore"])

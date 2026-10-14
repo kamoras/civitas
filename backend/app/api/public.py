@@ -57,6 +57,7 @@ from app.schemas import (
     PublicBillVotesSchema,
     PublicHistorySchema,
     PublicMemberVotesSchema,
+    PublicPresidentialSupportSchema,
     PublicRepresentativePageSchema,
     PublicRepresentativeProfileSchema,
     PublicSearchResponseSchema,
@@ -65,6 +66,7 @@ from app.schemas import (
     PublicStateSchema,
 )
 from app.services.explore_search import hybrid_search
+from app.services.presidential_support_service import chamber_view
 from app.state_names import STATE_NAMES
 from app.time_utils import comment_period_today
 from app.services.pagination import paginate_bounds
@@ -390,6 +392,7 @@ def openapi_spec_dict() -> dict:
                 {"name": "Senators", "description": "The 100 serving senators: rankings, full records, score history and votes."},
                 {"name": "Representatives", "description": "The serving House members: rankings, full records, score history and votes."},
                 {"name": "Bills", "description": "The roll calls on a bill, with each party's split."},
+                {"name": "Votes with the president", "description": "How often each member voted with the president's stated position (OMB Statements of Administration Policy), beside what members of the same party in similar seats do. Informational: not part of any score."},
                 {"name": "Search", "description": "The government documents behind the records, searched the way the site's Explore page does."},
                 {"name": "Reference", "description": "What the API offers, and the states it covers."},
             ],
@@ -712,6 +715,32 @@ def get_bill_votes(
 # ---------------------------------------------------------------------------
 
 _NO_POLITICIAN = "No member, president or justice with that id"
+
+
+# ---------------------------------------------------------------------------
+# Votes with the president
+# ---------------------------------------------------------------------------
+
+@router.get("/presidential-support/{chamber}", response_model=PublicPresidentialSupportSchema,
+            responses={404: {"description": "Not measured yet"}}, tags=["Votes with the president"],
+            summary="How often each member votes with the president's stated position")
+def get_presidential_support(
+    _rl: PublicReadLimit,
+    request: Request,
+    chamber: Literal["senate", "house"] = Path(description="senate or house"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Every serving member's votes on the president's side of the roll calls
+    a Statement of Administration Policy addresses, this Congress, with the
+    rate's 95% interval and the rate expected for the member's party and seat
+    lean; the counted roll calls, each with its statement; and the method.
+    Measured nightly. Neither side is better: this describes, it doesn't score."""
+    view = chamber_view(db, chamber)
+    if view is None:
+        raise HTTPException(status_code=404, detail="Not measured yet")
+    for member in view["members"]:
+        member["siteUrl"] = _member_url(member["id"])
+    return _pub_json(view, request, max_age=CACHE_TTL_DETAIL_S)
 
 
 def _politician_id(db: Session, given: str) -> str:
