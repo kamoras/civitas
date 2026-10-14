@@ -106,3 +106,33 @@ export default function PresidentialSupportSection({
     </section>
   );
 }
+
+/**
+ * The same finding in one line, for the top of the profile: the full section
+ * sits below the scorecard, about eight phone screens down, so a reader gets
+ * the answer here and one tap takes them to the evidence. Same request as the
+ * section (cachedFetch shares it).
+ */
+export function PresidentialSupportLine({ memberId }: { memberId: string }) {
+  const { data } = useAsyncData<MemberSupport | null>(`presidential-support:${memberId}`, () =>
+    fetchMemberPresidentialSupport(memberId)
+  );
+  if (!data) return null;
+  const verdict =
+    data.comparedWithExpected === "more"
+      ? "more often than expected for the seat"
+      : data.comparedWithExpected === "less"
+        ? "less often than expected for the seat"
+        : data.comparedWithExpected === "within"
+          ? "about as expected for the seat"
+          : null;
+  return (
+    <p className="mb-3 border border-white/15 bg-surface px-3 py-2 font-mono text-xs tracking-[0.08em] text-ink-lo">
+      WITH THE PRESIDENT&apos;S STATED POSITION · {data.withPresident} OF {data.votes} VOTES (
+      {Math.round((data.rate ?? 0) * 100)}%){verdict ? ` · ${verdict.toUpperCase()}` : ""} ·{" "}
+      <a href="#ps-heading" className="inline-block min-h-[24px] text-signal-cyan hover:text-phos">
+        THE VOTES →
+      </a>
+    </p>
+  );
+}

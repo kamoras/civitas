@@ -19,7 +19,9 @@ import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
 import Photo from "@/components/Photo";
 import RedrawnSeatNote from "@/components/redistricting/RedrawnSeatNote";
-import PresidentialSupportSection from "@/components/presidentialSupport/PresidentialSupportSection";
+import PresidentialSupportSection, {
+  PresidentialSupportLine,
+} from "@/components/presidentialSupport/PresidentialSupportSection";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   "Senate Floor Speech": "FLOOR SPEECH",
@@ -145,6 +147,7 @@ export default function PoliticianProfileClient({
                   (Elections, the state, the House box, the district), and
                   on a redrawn map under a different district number. */}
               {profile.onBallot && <OnBallotLine race={profile.onBallot} />}
+              {isMember && <PresidentialSupportLine memberId={profile.id} />}
               {isMember && (
                 // Keyed by member: moving between two profiles reuses this
                 // page, and every part of the scorecard that loads or keeps
