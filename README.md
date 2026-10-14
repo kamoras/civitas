@@ -1433,6 +1433,10 @@ The homepage, and in a one-line form the pages most readers arrive on (a member'
 
 Every sentence is a template around stored figures. When the backend can't answer, the strip is left out and the page renders as before.
 
+## Source ledger
+
+The homepage's "Built from the public record" panel lists each source with what it has supplied and how recent it is, from `GET /api/sources` (`api/sources.py`), counted from the stored records rather than typed: roll calls and sponsored bills in the sitting Congress, floor speeches, Federal Register documents, the Court's votes and opinions, and disclosed stock trades, each with its newest record's date. FEC filings carry no single date the site keeps, so that row gives the day the site last read the FEC and says "last read". A source with nothing stored shows 0 and "nothing on record yet" rather than dropping out; when the backend can't answer, the panel falls back to the plain list of source names.
+
 ## Compare
 
 `/compare` sets two members of Congress side by side: the Representation Score and its three parts, and the money. Two members of the same chamber also get how often they voted alike this Congress, from `GET /api/compare/agreement?chamber=&left=&right=` (`api/compare.py`): of the chamber's roll calls in the sitting Congress on which both cast a Yea or a Nay, how many they voted the same way on, as a sentence ("Voted the same way on 603 of the 723 roll calls this Congress where both cast a Yea or a Nay (83%).") and the backend's whole percent, then the five latest votes they split on, each with both votes and a link to its roll call. Housekeeping questions (quorum calls, motions to table, the previous question; `normalize_votes.is_housekeeping`) are left out, as Constituent Alignment leaves them out: they split on party lines by habit. A senator is matched to the roll calls the way a bill page links a Senate vote to a member (`bill_record.MemberLinks`, by last name, state and the vote's LIS id); a representative by bioguide id. Members of different chambers share no vote, so the section is left out for them.
