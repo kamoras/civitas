@@ -121,4 +121,19 @@ describe("ExplorePage", () => {
     const link = await screen.findByRole("link", { name: /Open the page for H\.R\. 7008/ });
     expect(link).toHaveAttribute("href", "/congress/bills/HR.7008");
   });
+
+  it("offers a failed search again, without sending readers to the admin panel", async () => {
+    api.searchExplore.mockRejectedValueOnce(new Error("Explore search failed: 502"));
+    api.searchExplore.mockResolvedValueOnce({
+      query: "roads",
+      results: [doc(1, "Remarks")],
+      count: 1,
+    });
+    open("q=roads");
+
+    fireEvent.click(await screen.findByRole("button", { name: "TRY AGAIN" }));
+
+    expect(await screen.findByText("Remarks")).toBeInTheDocument();
+    expect(screen.queryByText(/admin panel/)).not.toBeInTheDocument();
+  });
 });
