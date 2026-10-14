@@ -231,6 +231,12 @@ function CountyFinder({
   );
 }
 
+// The masthead's line, sent with the server's fallback too (PageFallback).
+const POLITICIANS_EYEBROW = "Directory · currently serving officials";
+const POLITICIANS_LEDE = (
+  <p>Everyone currently holding federal office, as recorded in the public register.</p>
+);
+
 export default function PoliticiansPage() {
   return (
     // The frame and a skeleton in the first paint: the content reads the
@@ -238,8 +244,11 @@ export default function PoliticiansPage() {
     <Suspense
       fallback={
         <PageFallback
-          eyebrow="Directory · currently serving officials"
+          eyebrow={POLITICIANS_EYEBROW}
           title="Politicians"
+          lede={POLITICIANS_LEDE}
+          width="max-w-7xl"
+          mastheadClassName="mb-8"
           rows={6}
         />
       }
@@ -345,12 +354,8 @@ function PoliticiansPageContent() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-7xl mx-auto">
-          <PageMasthead
-            className="mb-8"
-            eyebrow="Directory · currently serving officials"
-            title="Politicians"
-          >
-            <p>Everyone currently holding federal office, as recorded in the public register.</p>
+          <PageMasthead className="mb-8" eyebrow={POLITICIANS_EYEBROW} title="Politicians">
+            {POLITICIANS_LEDE}
           </PageMasthead>
 
           <TerminalTitlebar title="Directory" />

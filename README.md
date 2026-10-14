@@ -110,16 +110,27 @@ external API calls to cloud AI services.
 > fits. They render as pictures on GitHub. The diagrams here stay ASCII so the
 > README reads the same in a terminal.
 
-**Server rendering:** `/action`, `/leaderboard`, `/congress`, `/explore` and
-`/compare` keep their view state in the address bar, and `useSearchParams()` has
+**Server rendering:** `/action`, `/explore`, `/politicians` and the other
+search-param pages keep their view state in the address bar, and `useSearchParams()` has
 no value during SSR — so React suspends and the server renders the nearest
 `<Suspense>` fallback. Each of those pages supplies a real one
 (`components/layout/PageFallback.tsx`: navbar, masthead, content skeleton), so
 the frame arrives in the first paint. They previously wrapped the *entire* page
 in `<Suspense fallback={null}>`, which made the server send a ~12KB body with no
 chrome and nothing visible until ~653KB of JavaScript had parsed and hydrated.
-The data itself still arrives after hydration: these routes are prerendered and
-the content is per-request.
+The fallback carries the page's own masthead line at the page's own width
+(`lede`, `width`), so the largest text in the first screen is server-sent:
+/action, /explore and /politicians painted it at 1.9 s on a throttled phone
+before (2026-10-14), 0.8 s after. Pages whose first screen depends on data
+or on the query string render per request instead (`await connection()`, or
+reading `searchParams`), with the data the first view needs read on the
+server and handed to the client as its first state: `/elections` (the lean
+map and phase, `elections/layout.tsx`), `/leaderboard` (the branch the URL
+asks for and its field strip, `leaderboard/page.tsx`), `/congress/bills`
+(the pipeline overview, `congress/bills/layout.tsx`) and `/compare` (a
+linked pair's loading view keeps the masthead). Mobile LCP on those went
+from 1.7–2.1 s to 0.8–0.86 s and leaderboard CLS from 0.09 to 0. Anything
+the server could not read, the page still reads itself.
 
 **Hardware:** Raspberry Pi 5 (16 GB RAM), NVMe SSD. All models, databases, and services run on-device. No cloud GPU, no third-party AI APIs, no data leaves the device. The backend image sets `HF_HUB_DISABLE_TELEMETRY=1`, so the Hugging Face libraries that fetch the embedding models send no usage reports.
 

@@ -136,3 +136,32 @@ describe("useAsyncData retry", () => {
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("recovered"));
   });
 });
+
+function SeededProbe({
+  k,
+  fetcher,
+  initial,
+}: {
+  k: string;
+  fetcher: () => Promise<string>;
+  initial?: { key: string; data: string };
+}) {
+  const { data, loading } = useAsyncData(k, fetcher, initial);
+  return <span data-testid="seeded">{loading ? "loading" : (data ?? "idle")}</span>;
+}
+
+describe("useAsyncData with server-read data", () => {
+  it("shows it from the first render and does not ask again", () => {
+    const fetcher = vi.fn(() => Promise.resolve("fetched"));
+    render(<SeededProbe k="a" fetcher={fetcher} initial={{ key: "a", data: "from server" }} />);
+    expect(screen.getByTestId("seeded")).toHaveTextContent("from server");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("asks for any other key as usual", async () => {
+    const fetcher = vi.fn(() => Promise.resolve("fetched"));
+    render(<SeededProbe k="b" fetcher={fetcher} initial={{ key: "a", data: "from server" }} />);
+    expect(screen.getByTestId("seeded")).toHaveTextContent("loading");
+    await waitFor(() => expect(screen.getByTestId("seeded")).toHaveTextContent("fetched"));
+  });
+});

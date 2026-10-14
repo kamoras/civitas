@@ -489,6 +489,23 @@ function ComparisonTable({
   );
 }
 
+// The masthead's line, sent with the server's fallback too (PageFallback).
+const COMPARE_EYEBROW = "Compare · two legislators, side by side";
+const COMPARE_TITLE = "Compare legislators";
+const COMPARE_LEDE = (
+  <p>
+    Pick two legislators, or start from a quick comparison, to see their representation scores,
+    funding sources, and constituent alignment side by side. Presidents compare on the{" "}
+    <Link
+      href="/compare/presidents"
+      className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+    >
+      president comparison
+    </Link>
+    .
+  </p>
+);
+
 function ComparePageInner() {
   const searchParams = useSearchParams();
   const [leftSenator, setLeftSenator] = useState<Senator | null>(null);
@@ -605,6 +622,12 @@ function ComparePageInner() {
         <Navbar />
         <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
           <div className="max-w-5xl mx-auto">
+            {/* The masthead stays while a linked pair loads: the server's
+                fallback sends it, and dropping it here made it vanish and
+                come back. */}
+            <PageMasthead className="mb-8" eyebrow={COMPARE_EYEBROW} title={COMPARE_TITLE}>
+              {COMPARE_LEDE}
+            </PageMasthead>
             <div className="panel p-8 text-center">
               <div className="font-mono text-xs text-ink-min tracking-widest animate-pulse">
                 LOADING...
@@ -622,23 +645,8 @@ function ComparePageInner() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-5xl mx-auto">
-          <PageMasthead
-            className="mb-8"
-            eyebrow="Compare · two legislators, side by side"
-            title="Compare legislators"
-          >
-            <p>
-              Pick two legislators, or start from a quick comparison, to see their representation
-              scores, funding sources, and constituent alignment side by side. Presidents compare on
-              the{" "}
-              <Link
-                href="/compare/presidents"
-                className="underline decoration-white/30 underline-offset-4 hover:text-phos"
-              >
-                president comparison
-              </Link>
-              .
-            </p>
+          <PageMasthead className="mb-8" eyebrow={COMPARE_EYEBROW} title={COMPARE_TITLE}>
+            {COMPARE_LEDE}
           </PageMasthead>
 
           <ComparePresets chosen={chosen} onPair={handlePair} />
@@ -690,8 +698,10 @@ export default function ComparePage() {
     <Suspense
       fallback={
         <PageFallback
-          eyebrow={"Compare · two legislators, side by side"}
-          title={"Compare legislators"}
+          eyebrow={COMPARE_EYEBROW}
+          title={COMPARE_TITLE}
+          lede={COMPARE_LEDE}
+          mastheadClassName="mb-8"
           rows={3}
         />
       }

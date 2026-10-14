@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
-import type { LiveResults, RaceSummary } from "@/types/election";
+import { connection } from "next/server";
+import type { LiveResults, PviMap, RaceSummary } from "@/types/election";
 import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { describeElections } from "@/lib/seo";
 import { everyLiveStateVoting, showsResults } from "@/lib/results";
+import { ElectionsInitialProvider, type ElectionsInitial } from "./ElectionsInitial";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -28,16 +30,19 @@ async function fetchCycleYear(): Promise<number | null> {
 // nor the campaign's "partisan lean", which the page stops drawing on
 // election day. Revalidated every five minutes, so the description turns
 // within minutes of the phase or the first close; an unreachable backend
-// (as under `next build`) is the campaign wording, as the page's own
-// default is. `now` is this server's clock, which in production runs
-// beside the backend's.
-async function fetchMode(now: number): Promise<"campaign" | "election_day" | "results"> {
+// (as under `next build`) is null: the metadata uses the campaign wording,
+// as the page's own default is, and the page reads the phase itself.
+// `now` is this server's clock, which in production runs beside the
+// backend's.
+async function fetchPhase(now: number): Promise<ElectionsInitial["phase"]> {
   try {
     const res = await fetch(`${BACKEND}/api/elections/results`, { next: { revalidate: 300 } });
-    if (!res.ok) return "campaign";
+    if (!res.ok) return null;
     const body = (await res.json()) as Partial<LiveResults>;
-    if (!body?.phase || !showsResults(body.phase)) return "campaign";
-    return everyLiveStateVoting(
+    if (!body?.phase) return null;
+    const read = { phase: body.phase, cycleYear: body.cycleYear ?? null };
+    if (!showsResults(body.phase)) return { ...read, mode: "campaign" };
+    const voting = everyLiveStateVoting(
       {
         phase: body.phase,
         pollsClose: body.pollsClose,
@@ -46,25 +51,49 @@ async function fetchMode(now: number): Promise<"campaign" | "election_day" | "re
         liveStates: Array.isArray(body.liveStates) ? body.liveStates : [],
       },
       now
-    )
-      ? "election_day"
-      : "results";
+    );
+    return { ...read, mode: voting ? "election_day" : "results" };
   } catch {
-    return "campaign";
+    return null;
   }
 }
 
 // Canonical /elections. The state pages beneath set their own; the
 // /elections/[raceId] route only redirects. See lib/site.ts.
 export async function generateMetadata(): Promise<Metadata> {
-  const [cycleYear, mode] = await Promise.all([fetchCycleYear(), fetchMode(Date.now())]);
+  const [cycleYear, phase] = await Promise.all([fetchCycleYear(), fetchPhase(Date.now())]);
   return pageMetadata({
-    ...describeElections(cycleYear, mode),
+    ...describeElections(cycleYear, phase?.mode ?? "campaign"),
     path: "/elections",
     feed: TOPIC_FEEDS.elections,
   });
 }
 
-export default function ElectionsLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+// The lean map, as the page reads it (lib/api fetchPviMap): its maps as
+// objects. Null when the backend can't answer; the page then reads it itself.
+async function fetchPvi(): Promise<PviMap | null> {
+  try {
+    const res = await fetch(`${BACKEND}/api/elections/pvi`, { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    const raw = (await res.json()) as Partial<PviMap> | null;
+    if (!raw || typeof raw !== "object") return null;
+    return { ...raw, states: raw.states ?? {}, districts: raw.districts ?? {} } as PviMap;
+  } catch {
+    return null;
+  }
+}
+
+// Rendered per request, never at build time: `next build` has no backend,
+// so a prerendered page would always be the no-data frame.
+async function readInitial(): Promise<ElectionsInitial> {
+  await connection();
+  const renderedAt = Date.now();
+  const [pvi, phase] = await Promise.all([fetchPvi(), fetchPhase(renderedAt)]);
+  return { pvi, phase, renderedAt };
+}
+
+export default async function ElectionsLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ElectionsInitialProvider value={await readInitial()}>{children}</ElectionsInitialProvider>
+  );
 }

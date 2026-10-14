@@ -476,13 +476,22 @@ function DayPager({
   );
 }
 
+// The masthead's line, sent with the server's fallback too (PageFallback).
+const ACTION_EYEBROW = "Action Center · what is moving right now";
+const ACTION_TITLE = "Today on the record";
+const ACTION_LEDE =
+  "Issues surfaced from news and social coverage, the ongoing concerns they belong to, and the members of Congress who can act. Every item links back to its source.";
+
 export default function ActionPage() {
   return (
     <Suspense
       fallback={
         <PageFallback
-          eyebrow={"Action Center · what is moving right now"}
-          title={"Today on the record"}
+          eyebrow={ACTION_EYEBROW}
+          title={ACTION_TITLE}
+          lede={ACTION_LEDE}
+          width="max-w-4xl"
+          mastheadClassName=""
           rows={4}
         />
       }
@@ -624,16 +633,15 @@ function ActionPageInner() {
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-4xl mx-auto relative z-10">
           <PageMasthead
-            eyebrow="Action Center · what is moving right now"
-            title="Today on the record"
+            eyebrow={ACTION_EYEBROW}
+            title={ACTION_TITLE}
             aside={
               activeTab === "issues" ? (
                 <DayPager data={request.data} selectedDate={selectedDate} onSelect={selectDate} />
               ) : undefined
             }
           >
-            Issues surfaced from news and social coverage, the ongoing concerns they belong to, and
-            the members of Congress who can act. Every item links back to its source.
+            {ACTION_LEDE}
           </PageMasthead>
 
           {/* Tab bar.
