@@ -419,7 +419,10 @@ export default function ResultsOverview({
           </p>
           <p className="mt-1 text-sm text-ink-lo">
             Leader from a different party than the holder, with enough of the count in (
-            <Link href="/about/elections#election-night" className="text-phos hover:underline">
+            <Link
+              href="/about/elections#election-night"
+              className="text-phos underline underline-offset-4"
+            >
               what counts as enough
             </Link>
             )

@@ -189,7 +189,7 @@ export function RaceResultCard({
             href={sourceHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-phos hover:underline"
+            className="text-phos underline underline-offset-4"
           >
             {result.sourceName} ↗
           </a>

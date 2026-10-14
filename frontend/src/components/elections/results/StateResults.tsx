@@ -463,7 +463,12 @@ function OfficeLink({
   what: "the count" | "the final count" | "it";
 }) {
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="text-phos hover:underline">
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-phos underline underline-offset-4"
+    >
       {stateSpecific
         ? `${stateName}'s election office publishes ${what} ↗`
         : `Find ${stateName}'s election office, which publishes ${what} (USAGov directory) ↗`}
