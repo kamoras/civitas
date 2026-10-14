@@ -337,3 +337,15 @@ async def test_refresh_reads_new_statements_and_keeps_going_past_a_failed_fetch(
     monkeypatch.setattr(omb_statements, "fetch_index", outage)
     assert await ps.refresh_statements(None, db_session) == {"status": "index unavailable", "read": 0}
     assert db_session.query(PolicyStatement).count() == 2
+
+
+def test_a_statement_from_another_congress_never_applies(db_session):
+    """H.R. 10 of the 120th is not the 119th's: a 2025 statement must not
+    count a 2027 vote on the same number."""
+    db_session.add(PolicyStatement(url="https://example.gov/old.pdf", title="H.R. 10", readable=True,
+                                   issued="2025-03-01", chamber="house", measures='["HR.10"]', amendments="[]",
+                                   position="support", position_sentence="Supports."))
+    db_session.add(RollCall(chamber="house", congress=120, session=1, number=1, date="2027-02-01",
+                            question="On Passage", title="H.R. 10", bill_id="HR.10", result="Passed"))
+    db_session.commit()
+    assert ps.match_roll_calls(db_session, "house", 120) == 0

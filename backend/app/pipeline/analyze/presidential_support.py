@@ -60,6 +60,7 @@ from app.pipeline.analyze.score_calculator import (
     _signed_state_alignment,
 )
 from app.pipeline.fetch import omb_statements
+from app.pipeline.fetch.congress import congress_first_year
 from app.pipeline.fetch.floor_logs import NAY_POSITIONS, YEA_POSITIONS
 from app.services.bill_record import MemberLinks
 from app.time_utils import utcnow
@@ -184,10 +185,16 @@ def applicable_statement(roll_call: dict, statements: list[dict]) -> dict | None
 def match_roll_calls(db: Session, chamber: str, congress: int) -> int:
     """Rewrite the chamber's statement_roll_calls for the Congress. Returns
     how many roll calls a statement applies to (whatever its position)."""
+    # A bill number names a different bill in each Congress: only statements
+    # issued during this one (noon ET Jan 3 of its first year on, a date
+    # comparison is enough) can apply to its roll calls.
+    start, end = f"{congress_first_year(congress)}-01-03", f"{congress_first_year(congress + 1)}-01-03"
     statements = [
         {"id": s.id, "chamber": s.chamber, "issued": s.issued, "measures": json.loads(s.measures or "[]"),
          "amendments": json.loads(s.amendments or "[]")}
-        for s in db.query(PolicyStatement).filter(PolicyStatement.readable.is_(True))
+        for s in db.query(PolicyStatement).filter(
+            PolicyStatement.readable.is_(True), PolicyStatement.issued >= start, PolicyStatement.issued < end,
+        )
     ]
     measures = {m for s in statements for m in s["measures"]}
     rolls = db.query(RollCall).filter(
