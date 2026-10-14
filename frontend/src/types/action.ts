@@ -6,6 +6,8 @@ export interface RelatedExploreDoc {
   url: string | null;
   commentUrl?: string | null;
   commentsCloseOn?: string | null;
+  /** The issuing agency, for a Federal Register document. */
+  agencyName?: string | null;
 }
 
 export interface RelatedSenator {
@@ -19,6 +21,7 @@ export interface RelatedSenator {
   matchReason?: string | null;
   contactFormUrl?: string | null;
   websiteUrl?: string | null;
+  officePhone?: string | null;
 }
 
 export interface CommitteeLeader {
@@ -57,6 +60,51 @@ export interface RelatedBill {
   url: string;
   /** Path to our own bill page ("/congress/bills/HR.22") when we host this bill. */
   internalUrl?: string | null;
+  /** Where the bill stands, from the stored record (null when none is held). */
+  stageName?: string | null;
+  latestAction?: string | null;
+  latestActionDate?: string | null;
+}
+
+/** Who can act on an issue next: from a linked bill's stage or an open
+ *  comment period's agency (backend api/action.py), never guessed. */
+export interface Decider {
+  body: string;
+  basis: string;
+}
+
+/** A roll call linked to an issue (the vote it reports, or a vote on a bill
+ *  its coverage names). */
+export interface IssueVote {
+  chamber: "senate" | "house";
+  congress: number;
+  session: number;
+  number: number;
+  date: string;
+  question: string;
+  result: string;
+  billId?: string | null;
+  billLabel?: string | null;
+}
+
+export interface IssueMember {
+  id: string;
+  name: string;
+  party: string;
+  chamber: "senate" | "house";
+  district?: number | null;
+  officePhone: string;
+  contactFormUrl: string;
+  websiteUrl: string;
+  /** {"house-119-2-314": "Yea"}: how the member voted on each linked roll call. */
+  positions: Record<string, string>;
+}
+
+/** GET /api/action/issues/{id}/members?state= */
+export interface IssueMembers {
+  state: string;
+  votes: IssueVote[];
+  members: IssueMember[];
 }
 
 export interface ActionIssue {
@@ -96,6 +144,9 @@ export interface ActionIssue {
   relatedMonitorSlugs?: string[];
   /** The monitors tracking this issue that still exist, by stored title. */
   relatedMonitors?: { slug: string; title: string }[];
+  deciders?: Decider[];
+  /** How many roll calls are linked (each member's record on them is in IssueMembers). */
+  voteCount?: number;
   fullStory?: string | null;
   /** Only ever true from the issues-list fetch — the single-issue lookup
    *  has no peer issues to judge traction against. */

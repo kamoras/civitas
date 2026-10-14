@@ -238,8 +238,10 @@ class TestTrackVisitIssueViews:
 
     async def test_issue_view_accumulates_alongside_the_normalized_page_view(self, db_session):
         pid = to_public_id(1)
-        await _view(_make_request(), f"/issue/{pid}")
-        await _view(_make_request(), f"/issue/{pid}")
+        # Two readers: one reader's repeat views count once an hour
+        # (ISSUE_VIEW_PERIOD_S, test_issue_contact).
+        await _view(_make_request("203.0.113.5"), f"/issue/{pid}")
+        await _view(_make_request("198.51.100.7"), f"/issue/{pid}")
         _drain_queue_and_write(db_session)
 
         issue_rows = db_session.query(IssueView).all()

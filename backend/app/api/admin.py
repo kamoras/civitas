@@ -20,12 +20,16 @@ from app import background, database, net_stats, ops_alerts, pipeline_chain
 from app.api.elections import ballot_state_codes
 from app.api.pipeline import _is_pipeline_running
 from app.api.pipeline_runner import run_pipeline_in_thread
-from app.api.visits import CONFIRMED_VISITS_SINCE, DEVICE_CLASSES, LOAD_TIMING_BUCKETS_MS, LOAD_TIMING_METRICS
+from app.api.visits import (
+    ACTION_TAP_KINDS, CONFIRMED_VISITS_SINCE, DEVICE_CLASSES, LOAD_TIMING_BUCKETS_MS, LOAD_TIMING_METRICS,
+)
 from app.config import settings
 from app.database import get_db, get_visits_db, off_loop
+from app.issue_ids import from_public_id
 from app.http_client import make_async_client
 from app.models import (
     ActionIssue,
+    ActionTap,
     AnalysisCache,
     ApiCache,
     ApiRejectionCount,
@@ -447,6 +451,49 @@ def _histogram_percentile(buckets: list[tuple[int, int]], q: float) -> float | N
         seen += n
         lower = bound
     return float(LOAD_TIMING_BUCKETS_MS[-1])
+
+
+# Issues listed by taps in the action-taps window.
+_ACTION_TAP_TOP_ISSUES = 20
+
+
+@router.get("/action-taps", dependencies=[Depends(require_admin)])
+def admin_action_taps(
+    days: int = Query(30, ge=1, le=366),
+    db: Session = Depends(get_visits_db),
+    main_db: Session = Depends(get_db),
+) -> dict:
+    """Taps on the Action Center's action links (ActionTap): per day and
+    kind (zero-filled), totals per kind, and the issues tapped most, with
+    their titles. Counts only: nothing about who tapped is stored."""
+    dates = _window_dates(days)
+    rows = (
+        db.query(ActionTap.date, ActionTap.issue_public_id, ActionTap.kind, ActionTap.count)
+        .filter(ActionTap.date >= dates[0])
+        .all()
+    )
+    per_day = {d: dict.fromkeys(ACTION_TAP_KINDS, 0) for d in dates}
+    totals = dict.fromkeys(ACTION_TAP_KINDS, 0)
+    per_issue: dict[str, dict[str, int]] = {}
+    for date_, public_id, kind, count in rows:
+        if kind not in totals:
+            continue
+        if date_ in per_day:
+            per_day[date_][kind] += count
+        totals[kind] += count
+        per_issue.setdefault(public_id, dict.fromkeys(ACTION_TAP_KINDS, 0))[kind] += count
+    top = sorted(per_issue.items(), key=lambda kv: -sum(kv[1].values()))[:_ACTION_TAP_TOP_ISSUES]
+    ids = {from_public_id(pid): pid for pid, _ in top}
+    titles = {
+        ids[i]: t for i, t in main_db.query(ActionIssue.id, ActionIssue.title)
+        .filter(ActionIssue.id.in_([i for i in ids if i is not None]))
+    }
+    return {
+        "kinds": list(ACTION_TAP_KINDS),
+        "days": [{"date": d, **per_day[d]} for d in dates],
+        "totals": totals,
+        "issues": [{"publicId": pid, "title": titles.get(pid), **counts} for pid, counts in top],
+    }
 
 
 @router.get("/load-times", dependencies=[Depends(require_admin)])

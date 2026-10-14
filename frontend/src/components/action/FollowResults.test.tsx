@@ -60,7 +60,7 @@ describe("a count issue's actions and facts", () => {
 
   it("offers no directory row: no coverage named anyone, and the count is the action", () => {
     render(<WhatYouCanDo today="2026-11-04" issue={count} />);
-    expect(screen.queryByText(/Find your senators/)).toBeNull();
+    expect(screen.queryByText(/senators and representative/)).toBeNull();
   });
 
   it("says, on the card too, that the count is not final and when Civitas read it", () => {

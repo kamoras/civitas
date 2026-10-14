@@ -847,6 +847,81 @@ class PublicSearchResponseSchema(_PublicModel):
     index_building: bool = Field(description="True while the search index is being built; results are empty until it is")
 
 
+class PublicPolicyStatementSchema(_PublicModel):
+    title: str = Field(description="The statement's title as OMB lists it")
+    url: str = Field(description="The signed statement (PDF) on whitehouse.gov")
+    issued: str = Field(description="Date issued, YYYY-MM-DD")
+    position: Literal["support", "oppose"] = Field(description="The position on the measure read from the statement")
+    sentence: str = Field(description="The statement's sentence the position was read from, verbatim")
+
+
+class PublicPresidentialSupportRollCallSchema(_PublicModel):
+    chamber: Literal["senate", "house"]
+    congress: int
+    session: int
+    roll_call: int = Field(description="Roll call number within the session")
+    date: str = Field(description="YYYY-MM-DD")
+    question: str = Field(description="The question as the chamber recorded it")
+    title: str
+    bill_id: str | None = Field(description='The measure, as the site writes it ("HR.9340")')
+    result: str = Field(description="The result as the chamber recorded it")
+    source_url: str = Field(description="The chamber's own roll-call record")
+    president_side: Literal["Yea", "Nay"] = Field(description="The vote on the president's side of this question")
+    statement: PublicPolicyStatementSchema
+
+
+class PublicPresidentialSupportMemberSchema(_PublicModel):
+    id: str
+    name: str
+    party: str = Field(description="The party the expectation is read for (an independent's caucus party)")
+    state: str
+    district: int | None = Field(description="House district, 0 at-large; null for senators")
+    seat_lean: int | None = Field(description="The seat's Cook PVI, positive leaning Republican")
+    with_president: int = Field(description="Counted votes cast on the president's side")
+    votes: int = Field(description="Counted votes cast (Yea or Nay; present and not voting excluded)")
+    rate: float = Field(description="withPresident / votes")
+    rate_low: float = Field(description="Lower end of the rate's 95% Wilson score interval")
+    rate_high: float = Field(description="Upper end of the rate's 95% Wilson score interval")
+    expected: float | None = Field(description="What members of the same party in seats of the same lean vote "
+                                               "with the president, by this Congress's fit; null when none was fitted")
+    difference: float | None = Field(description="rate - expected")
+    difference_low: float | None = Field(description="rateLow - expected")
+    difference_high: float | None = Field(description="rateHigh - expected")
+    compared_with_expected: Literal["more", "less", "within"] | None = Field(
+        description="Whether the rate's interval lies above the expected rate (more), below it (less), or includes it")
+    site_url: str = _SITE_URL
+
+
+class PublicPresidentialSupportFitSchema(_PublicModel):
+    a: float = Field(description="Intercept, log-odds")
+    b: float = Field(description="Slope on party-signed seat alignment (-1..1)")
+    b_opposed: float = Field(description="Extra slope for seats leaning to the other party (0 when not fitted)")
+    members: int = Field(description="Members in the fit")
+    votes: int = Field(description="Their counted votes (the fit's weights)")
+
+
+class PublicPresidentialSupportMethodSchema(_PublicModel):
+    source: str
+    source_url: str = Field(description="OMB's index of Statements of Administration Policy")
+    counted: str = Field(description="Which roll calls count")
+    position: str = Field(description="How each statement's position is read")
+    expected: str = Field(description="How the expected rate is measured")
+    interval: str = Field(description="The uncertainty shown")
+    neutral: str
+    fits: dict[str, PublicPresidentialSupportFitSchema] = Field(description="Per party (D, R), this run's fit")
+    curves: dict[str, list[list[float]]] = Field(
+        description="Per party, [seat lean, expected rate] along the fit, seat lean from -30 to +30 (PVI, + leans Republican)")
+    computed_at: str | None = Field(description="When the fit was measured (UTC)")
+
+
+class PublicPresidentialSupportSchema(_PublicModel):
+    chamber: Literal["senate", "house"]
+    congress: int
+    members: list[PublicPresidentialSupportMemberSchema] = Field(description="Serving members with a counted vote, by name")
+    roll_calls: list[PublicPresidentialSupportRollCallSchema] = Field(description="Counted roll calls, newest first")
+    method: PublicPresidentialSupportMethodSchema
+
+
 # --- Pipeline / Health schemas ---
 
 
@@ -1045,6 +1120,9 @@ class RelatedExploreDoc(CamelModel):
     url: str | None = None
     comment_url: str | None = None
     comments_close_on: str | None = None
+    # The issuing agency, for a Federal Register document: who takes the
+    # comments and decides the rule.
+    agency_name: str | None = None
 
 
 class RelatedSenator(CamelModel):
@@ -1063,6 +1141,8 @@ class RelatedSenator(CamelModel):
     # senate.gov link — wrong for House members in the list.
     contact_form_url: str | None = None
     website_url: str | None = None
+    # The office's Washington phone, read when the issue is served.
+    office_phone: str | None = None
 
 
 class CommitteeLeaderSchema(CamelModel):
@@ -1105,6 +1185,55 @@ class RelatedBillSchema(CamelModel):
     # Path to our own bill detail page ("/congress/bills/HR.22") when we host this
     # bill; None means the congress.gov `url` is the only link available.
     internal_url: str | None = None
+    # Where the bill stands, from the stored record of a bill a sitting
+    # member sponsored (bill_stage.py); None when the site holds no record.
+    stage_name: str | None = None
+    latest_action: str | None = None
+    latest_action_date: str | None = None
+
+
+class DeciderSchema(CamelModel):
+    """Who can act on an issue next, derived from a linked bill's stage or
+    an open comment period's agency; never guessed from the story."""
+    body: str
+    basis: str
+
+
+class IssueVoteSchema(CamelModel):
+    """A roll call linked to an issue: the vote the issue reports, or a vote
+    on a bill the coverage names."""
+    chamber: str
+    congress: int
+    session: int
+    number: int
+    date: str
+    question: str
+    result: str
+    bill_id: str | None = None
+    bill_label: str | None = None
+
+
+class IssueMemberSchema(CamelModel):
+    """A state's sitting member, with the office's contact details and how
+    they voted on the issue's roll calls ({"house-119-2-314": "Yea"})."""
+    id: str
+    name: str
+    party: str
+    chamber: str
+    district: int | None = None
+    office_phone: str = ""
+    contact_form_url: str = ""
+    website_url: str = ""
+    positions: dict[str, str] = {}
+
+
+class IssueMembersSchema(CamelModel):
+    """GET /api/action/issues/{id}/members?state=: a state's members, for
+    contacting them about one issue. The state is the reader's explicit
+    pick, carried in the URL and kept nowhere (AGENTS.md section 8)."""
+    state: str
+    votes: list[IssueVoteSchema] = []
+    members: list[IssueMemberSchema] = []
 
 
 class RelatedMonitorSchema(CamelModel):
@@ -1164,6 +1293,10 @@ class ActionIssueSchema(CamelModel):
     # Only monitors that still exist: a merged or deleted monitor's slug
     # stays on the issues it tracked, and linked nowhere.
     related_monitors: list[RelatedMonitorSchema] = []
+    deciders: list[DeciderSchema] = []
+    # Roll calls linked to the issue (IssueVoteSchema), so a page knows to
+    # offer each member's record on them.
+    vote_count: int = 0
     full_story: str | None = None
     # Computed only by the list endpoint (app/trending.py needs the whole
     # day's view-count spread to judge any one issue) — always False from

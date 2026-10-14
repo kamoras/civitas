@@ -912,6 +912,22 @@ first header the endpoint ever read. A browser under automation
 be joined to a `SiteVisit` would turn a performance histogram into a per-visitor
 log.
 
+Taps on an issue's action links (`POST /api/track-action`, `ActionTap`) are
+counted the same way: one counter per (day, issue public id, kind), where the
+kind is one of a fixed set validation enforces (`ACTION_TAP_KINDS`: picking a
+state, calling, writing, copying the call script, a comment page, a committee,
+a bill). Not which state, member or number, and nothing about the caller
+reaches the row: the address only keys a per-client rule in the RAM throttle
+store (`throttle.client_key`), so a tap counts once per client, issue and kind
+a day and a client's taps are capped per hour; the issue must exist. An issue
+view (`IssueView`, which decides the Trending flag) likewise counts once per
+client per issue an hour (`ISSUE_VIEW_PERIOD_S`). The state picker on an issue (`ContactYourMembers.tsx`) is an
+explicit, unremembered choice from a list: the state goes in the URL that loads
+its members (`GET /api/action/issues/{id}/members?state=`) and nowhere else, and
+the House town filter runs in the browser over district lists the page already
+has. Keep both that way: a tap row that named a state would be a coarse
+location log per issue.
+
 The admin dashboard's headline traffic figures are the two that measure people:
 **confirmed visitors** (`SiteVisit` from `CONFIRMED_VISITS_SINCE`, the first
 whole day a visit counted only once the browser ran the page; null before it,
@@ -1103,7 +1119,14 @@ clusters related articles, incorporates trending topics from Google Trends and B
 and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
-source URLs (`_build_actions_from_data`), never written by the model. Results
+source URLs (`_build_actions_from_data`), never written by the model. Members
+are linked by full name from the articles' own headlines and descriptions as
+well as the issue's text (a bare surname only from the issue's text). When the
+issue is served, a linked bill's stored stage names who acts next
+(`bill_decider`) and an open comment period names its agency; the reader's own
+members, their phones and their votes on the issue's roll calls come from the
+state the reader picks on the page; the call script is a fixed template
+around the record (`callScript`). Results
 are stored in the `action_issues` table. It runs through the nightly chain
 too: until 2026-10 it stood down for the Senate, Supplementary, House and
 Stock trades links, and the Action Center went as stale as the chain was
@@ -1585,6 +1608,7 @@ the pending list).
 | What changed on the new House maps (old/new district overlap, lean before/after, enacting act) | `backend/app/redistricting.py`, `backend/app/api/redistricting.py`, `backend/scripts/build_redistricting_overlap.py` → `app/data/redistricting_overlap.json`, `frontend/src/components/redistricting/`, `frontend/src/app/elections/redistricting/` |
 | Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
+| Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
@@ -1610,6 +1634,7 @@ the pending list).
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
 | Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/` |
 | Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; detector process `face_detection.py`; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
+| Issue contact surface (state picker, phones, roll-call record, call script) + action-tap counter | `frontend/src/components/action/ContactYourMembers.tsx`, `backend/app/api/action.py` (`get_issue_members`, `issue_roll_calls`, `bill_decider`), `backend/app/api/visits.py` (`track_action`), `GET /api/admin/action-taps` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
@@ -1766,6 +1791,11 @@ the pending list).
 - The "this week" strip (`components/shared/ThisWeekStrip.tsx`) is an async
   server component; a client page gets it as a `strip` prop from its server
   `page.tsx`, never by fetching it on the client.
+- Every page's `<main>` is `id="main-content"`: the skip link targets it, and
+  `globals.css` gives it `min-height: 100vh` so the footer never paints in the
+  first screen while a client-fetched page loads and then jumps away (CLS
+  0.58-0.80 on /action, /elections and Explore documents before 2026-10-14).
+  `layoutStability.test.ts` fails on a `<main>` without the id.
 - Large tab components are code-split with `next/dynamic` to reduce initial
   bundle size (e.g., Action Center tabs load on demand). Use in-memory
   `cachedFetch` from `src/lib/api.ts` for API calls that benefit from

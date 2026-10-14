@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from datetime import date, timedelta
 
-from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
+from app.config_definitions import BILL_STAGES, RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
 from app.retractions import retraction_for_issue
 from app.api.admin import require_admin
 from app.database import get_db, get_visits_db
@@ -23,20 +23,24 @@ from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
 from app.photos import issue_photo
-from app.pipeline.fetch.congress import expected_current_congress
+from app.pipeline.fetch.congress import congress_gov_url_for_bill_id, expected_current_congress
 from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES
-from app.services.bill_record import parse_bill_id
+from app.pipeline.transform.normalize_votes import is_housekeeping
+from app.services.bill_record import MemberLinks, parse_bill_id
+from app.services.congress_service import bill_label
+from app.state_names import STATE_NAMES
 from app.time_utils import comment_period_today, utcnow
 from app.timeline_entries import without_repeat_leads
 from app.trending import compute_trending_issue_ids
 from app.models import (
     ActionIssue, ActionIssueStatus, ApiCache, ExploreDocument, IssueView, MonitorStatus,
-    NationalMonitor, RepSponsoredBill, SponsoredBill,
+    NationalMonitor, RepSponsoredBill, RollCall, RollCallPosition, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
 )
 from app.schemas import (
-    ActionIssueSchema, ActionItemSchema, CommitteeContactSchema, CommitteeLeaderSchema, RelatedBillSchema,
+    ActionIssueSchema, ActionItemSchema, CommitteeContactSchema, CommitteeLeaderSchema, DeciderSchema,
+    IssueMemberSchema, IssueMembersSchema, IssueVoteSchema, RelatedBillSchema,
     RelatedExploreDoc, RelatedSenator,
     NationalMonitorSchema, NationalMonitorDetailSchema, MonitorUpdateSchema,
     TimelineEntrySchema,
@@ -267,6 +271,7 @@ def _current_member_facts(db: Session, member_ids: set[str]) -> dict[str, dict]:
             facts[m.id] = {
                 "name": m.name, "state": m.state, "party": m.party,
                 "overall_score": compute_overall_score(m),
+                "office_phone": m.office_phone or None,
             }
     return facts
 
@@ -303,6 +308,89 @@ def _committee_leaders(db: Session, names: set[str]) -> dict[str, dict]:
     return out
 
 
+# Senate-side bill types; every other site prefix is the House's.
+_SENATE_PREFIXES = {"S", "SJRES", "SCONRES", "SRES"}
+# Joint resolutions and bills go to the President; concurrent resolutions
+# need both chambers but no signature; simple resolutions stay in one.
+_SIGNED_PREFIXES = {"HR", "S", "HJRES", "SJRES"}
+_ONE_CHAMBER_PREFIXES = {"HRES", "SRES"}
+
+
+def bill_decider(bill_id: str, stage: str) -> str | None:
+    """Who acts next on a bill at `stage` (config_definitions.BILL_STAGES),
+    from the bill's type and stage alone, or None once nobody does (enacted,
+    or a stage this doesn't know)."""
+    prefix = bill_id.split(".", 1)[0].upper()
+    origin, other = ("Senate", "House") if prefix in _SENATE_PREFIXES else ("House", "Senate")
+    if stage in ("INTRODUCED", "REFERRED", "IN_COMMITTEE"):
+        return f"A {origin} committee"
+    if stage in ("REPORTED", "ON_FLOOR"):
+        return f"The full {origin}"
+    if prefix in _ONE_CHAMBER_PREFIXES:
+        return None
+    if stage in ("PASSED_CHAMBER", "IN_OTHER_CHAMBER"):
+        return f"The {other}"
+    if prefix not in _SIGNED_PREFIXES:
+        return None
+    if stage == "PASSED_BOTH":
+        return "Congress, then the President"
+    if stage == "TO_PRESIDENT":
+        return "The President"
+    return None
+
+
+def _bill_records(db: Session, wanted: set[tuple[str, int]]) -> dict[tuple[str, int], tuple[str, str, str]]:
+    """{(bill id, congress): (stage, latest action, its date)} for bills the
+    site holds a sponsor's record of."""
+    if not wanted:
+        return {}
+    out: dict[tuple[str, int], tuple[str, str, str]] = {}
+    ids = {b for b, _ in wanted}
+    for model in (SponsoredBill, RepSponsoredBill):
+        for bid, congress, stage, action, when in db.query(
+            model.bill_id, model.congress, model.stage, model.latest_action, model.latest_action_date,
+        ).filter(model.bill_id.in_(ids)):
+            if (bid, congress) in wanted and (bid, congress) not in out:
+                out[(bid, congress)] = (stage or "", action or "", when or "")
+    return out
+
+
+# The newest roll calls on an issue's bills that it lists: a bill can
+# collect dozens of amendment votes.
+_ISSUE_VOTES_MAX = 10
+
+
+def issue_roll_calls(db: Session, issue: ActionIssue) -> list[RollCall]:
+    """The roll calls an issue is about: the vote a roll-call issue reports
+    (its primary source is the vote's own record), and the stored votes on a
+    bill its coverage names, in that bill's Congress. Housekeeping questions
+    (quorum, adjourning, tabling) are left out, as everywhere votes are
+    compared (normalize_votes.is_housekeeping)."""
+    clauses = []
+    if issue.primary_source_url:
+        clauses.append(RollCall.source_url == issue.primary_source_url)
+    for b in _parse_json_field(issue.related_bill_ids):
+        if isinstance(b, dict) and b.get("id") and isinstance(b.get("congress"), int):
+            clauses.append((RollCall.bill_id == b["id"].upper()) & (RollCall.congress == b["congress"]))
+    if not clauses:
+        return []
+    rows = (
+        db.query(RollCall).filter(or_(*clauses))
+        .order_by(RollCall.date.desc(), RollCall.number.desc())
+        .all()
+    )
+    return [rc for rc in rows if not is_housekeeping(rc.question, rc.chamber)][:_ISSUE_VOTES_MAX]
+
+
+def _month_day(iso_day: str) -> str:
+    day = date.fromisoformat(iso_day)
+    return f"{day.strftime('%B')} {day.day}"
+
+
+def _roll_call_ref(rc: RollCall) -> str:
+    return f"{rc.chamber}-{rc.congress}-{rc.session}-{rc.number}"
+
+
 def _build_issue_response(
     issue: ActionIssue, db: Session,
     explore_docs_map: dict[int, ExploreDocument] | None = None,
@@ -327,6 +415,7 @@ def _build_issue_response(
                 date=d.date, url=d.url,
                 comment_url=d.comment_url or None,
                 comments_close_on=d.comments_close_on or None,
+                agency_name=d.agency_name or None,
             ).model_dump(by_alias=True)
             for d in docs
         ]
@@ -380,8 +469,23 @@ def _build_issue_response(
     if internal_bills is None:
         internal_bills = _internal_bill_congresses(db, _issue_bill_ids(issue))
     current_congress = expected_current_congress()
-    related_bills: list[dict] = []
+    # Roll-call issues stored before 2026-10-14 recorded their bill with no
+    # link (early_signal._vote_bill_entries), and a bill is only shown with
+    # one: build it from the id, in the issue's own Congress.
+    bills = []
     for b in raw_bills:
+        if isinstance(b, dict) and b.get("id") and not b.get("url"):
+            congress = b.get("congress") or current_congress
+            if url := congress_gov_url_for_bill_id(b["id"], congress):
+                b = {**b, "url": url, "congress": congress}
+        bills.append(b)
+    records = _bill_records(db, {
+        (b["id"].upper(), b["congress"]) for b in bills
+        if isinstance(b, dict) and b.get("id") and isinstance(b.get("congress"), int)
+    })
+    related_bills: list[dict] = []
+    deciders: list[dict] = []
+    for b in bills:
         if isinstance(b, dict) and b.get("id") and b.get("url"):
             bill_id = b["id"].upper()
             # The site's bill page shows any bill of any Congress that has
@@ -399,6 +503,8 @@ def _build_issue_response(
                 link_congress = max(internal_congresses)
             else:
                 link_congress = None
+            stage, action, action_date = records.get((bill_id, b.get("congress")), ("", "", ""))
+            stage_name = BILL_STAGES.get(stage, {}).get("name")
             related_bills.append(
                 RelatedBillSchema(
                     name=b.get("name", b["id"]),
@@ -407,8 +513,13 @@ def _build_issue_response(
                     internal_url=(
                         f"/congress/bills/{bill_id}?congress={link_congress}" if link_congress else None
                     ),
+                    stage_name=stage_name,
+                    latest_action=action or None,
+                    latest_action_date=action_date or None,
                 ).model_dump(by_alias=True)
             )
+            if stage_name and (body := bill_decider(bill_id, stage)):
+                deciders.append({"body": body, "basis": f"{bill_label(bill_id) or bill_id} · {stage_name}"})
 
     monitor_slugs = _parse_json_field(
         getattr(issue, "related_monitor_slugs", "[]")
@@ -462,6 +573,15 @@ def _build_issue_response(
             {"slug": slug, "title": monitor_titles[slug]}
             for slug in monitor_slugs if slug in monitor_titles
         ],
+        deciders=deciders + [
+            DeciderSchema(
+                body=d["agencyName"],
+                basis=f"taking public comments until {_month_day(d['commentsCloseOn'])}",
+            ).model_dump(by_alias=True)
+            for d in related_docs
+            if d["agencyName"] and d["commentUrl"] and d["commentsCloseOn"] and d["commentsCloseOn"] >= today
+        ],
+        vote_count=len(issue_roll_calls(db, issue)),
         full_story=getattr(issue, "full_story", None),
         is_trending=is_trending,
         status=getattr(issue, "status", None) or "confirmed",
@@ -674,6 +794,98 @@ def _hidden_as_duplicate(issue: ActionIssue, pool_by_id: dict[int, ActionIssue])
     return kept is not None and kept.source_type != _ELECTION_RESULTS_SOURCE
 
 
+def _issue_for_path(issue_id: str, db: Session) -> ActionIssue | None:
+    """The issue a path segment names: its public id, or the legacy numeric
+    id every share link published before public ids points at
+    (`from_public_id` only accepts its own letter-prefixed format, so the
+    two can't collide)."""
+    resolved_id = from_public_id(issue_id)
+    if resolved_id is None and issue_id.isdigit():
+        # SQLite's INTEGER column caps at a signed 8-byte int; a longer
+        # digit string (a bot, a mistyped URL) isn't a ROWID that could
+        # ever exist, and binding it as a query parameter overflows and
+        # raises rather than just missing — a real id never gets close to
+        # this bound, so treat anything past it as "no such issue".
+        candidate = int(issue_id)
+        resolved_id = candidate if candidate <= 2**63 - 1 else None
+    if resolved_id is None:
+        return None
+    return db.query(ActionIssue).filter(ActionIssue.id == resolved_id).first()
+
+
+# A state's members and their votes move nightly at most.
+_ISSUE_MEMBERS_CACHE_TTL_S = 300
+
+
+@router.get("/issues/{issue_id}/members", response_model=IssueMembersSchema, response_model_by_alias=True)
+def get_issue_members(
+    issue_id: str,
+    response: Response,
+    state: str = Query(..., min_length=2, max_length=2, description="Two-letter state code the reader picked"),
+    db: Session = Depends(get_db),
+):
+    """A state's sitting senators and representatives, with each office's
+    phone and contact form, and how each voted on the roll calls this issue
+    is about (issue_roll_calls). The state is the reader's own pick from a
+    list, sent in the URL and recorded nowhere: Civitas never asks where a
+    visitor lives (AGENTS.md section 8). Read path only: ORM queries."""
+    response.headers["Cache-Control"] = f"public, max-age={_ISSUE_MEMBERS_CACHE_TTL_S}"
+    code = state.upper()
+    if code not in STATE_NAMES:
+        raise HTTPException(status_code=404, detail="No such state")
+    issue = _issue_for_path(issue_id, db)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Issue not found")
+
+    members = [
+        (m, "senate") for m in db.query(Senator).filter(Senator.state == code, Senator.is_current.is_(True))
+        .order_by(Senator.name)
+    ] + [
+        (m, "house") for m in db.query(Representative)
+        .filter(Representative.state == code, Representative.is_current.is_(True))
+        .order_by(Representative.district)
+    ]
+
+    rolls = issue_roll_calls(db, issue)
+    positions: dict[str, dict[str, str]] = {}
+    if rolls:
+        ref_of = {rc.id: _roll_call_ref(rc) for rc in rolls}
+        chamber_of = {rc.id: rc.chamber for rc in rolls}
+        links = MemberLinks(db) if any(rc.chamber == "senate" for rc in rolls) else None
+        by_bioguide = {m.bioguide_id: m.id for m, chamber in members if chamber == "house" and m.bioguide_id}
+        for p in db.query(RollCallPosition).filter(
+            RollCallPosition.roll_call_id.in_(list(ref_of)), RollCallPosition.state == code,
+        ):
+            if chamber_of[p.roll_call_id] == "house":
+                member_id = by_bioguide.get(p.member_id)
+            else:
+                page = links.page(last_name=p.last_name, state=p.state, lis_id=p.member_id)
+                member_id = page.rsplit("/", 1)[-1] if page else None
+            if member_id:
+                positions.setdefault(member_id, {})[ref_of[p.roll_call_id]] = p.position
+
+    return IssueMembersSchema(
+        state=code,
+        votes=[
+            IssueVoteSchema(
+                chamber=rc.chamber, congress=rc.congress, session=rc.session, number=rc.number,
+                date=rc.date, question=rc.question, result=rc.result,
+                bill_id=rc.bill_id, bill_label=bill_label(rc.bill_id),
+            )
+            for rc in rolls
+        ],
+        members=[
+            IssueMemberSchema(
+                id=m.id, name=m.name, party=m.party, chamber=chamber,
+                district=m.district if chamber == "house" else None,
+                office_phone=m.office_phone or "", contact_form_url=m.contact_form_url or "",
+                website_url=m.website_url or "", positions=positions.get(m.id, {}),
+            )
+            for m, chamber in members
+        ],
+    )
+
+
 @router.get("/issues/{issue_id}")
 async def get_action_issue(issue_id: str, response: Response, db: Session = Depends(get_db)):
     """Return a single action issue by its public id (used for OG metadata /
@@ -685,21 +897,8 @@ async def get_action_issue(issue_id: str, response: Response, db: Session = Depe
     letter-prefixed format, so the two paths can't collide.
     """
     response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
-    resolved_id = from_public_id(issue_id)
-    if resolved_id is None and issue_id.isdigit():
-        # SQLite's INTEGER column caps at a signed 8-byte int; a longer
-        # digit string (a bot, a mistyped URL) isn't a ROWID that could
-        # ever exist, and binding it as a query parameter overflows and
-        # raises rather than just missing — a real id never gets close to
-        # this bound, so treat anything past it as "no such issue".
-        candidate = int(issue_id)
-        resolved_id = candidate if candidate <= 2**63 - 1 else None
-    issue = (
-        db.query(ActionIssue).filter(ActionIssue.id == resolved_id).first()
-        if resolved_id is not None else None
-    )
+    issue = _issue_for_path(issue_id, db)
     if not issue:
-        from fastapi import HTTPException
         retracted = retraction_for_issue(issue_id)
         if retracted:
             # 410, with the reason: a link someone saw in a withdrawn post

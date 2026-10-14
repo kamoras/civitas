@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { useNow } from "@/hooks/useNow";
 import {
   fetchAdminActionMetrics,
+  fetchAdminActionTaps,
   fetchAdminActorConcentration,
   fetchAdminPipelineTrend,
   type ActionMetrics,
+  type ActionTaps,
   type ActorConcentration,
   type ActionMetricsRun,
   type ActionRefreshState,
@@ -161,6 +163,84 @@ const counterLabel = (k: string) => k.replace(/_/g, " ");
 
 /** Weekly principal-actor concentration of the published issues: is the
  *  feed drifting toward one person? */
+const TAP_LABELS: Record<string, string> = {
+  pick: "State picked",
+  call: "Call",
+  write: "Contact form",
+  copy: "Script copied",
+  comment: "Comment page",
+  committee: "Committee",
+  bill: "Bill",
+};
+
+/** Whether readers use an issue's action links: taps per day and kind, and
+ *  the issues tapped most. Counts only (backend ActionTap): nothing says who
+ *  tapped, from where, or which member or state. */
+export function ActionTapsPanel({ token }: { token: string }) {
+  const [data, setData] = useState<ActionTaps | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetchAdminActionTaps(token, 30)
+      .then((d) => !cancelled && setData(d))
+      .catch(() => !cancelled && setFailed(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const days = data?.days ?? [];
+  const kinds = data?.kinds ?? [];
+  const contacts = (r: { call: number; write: number }) => r.call + r.write;
+  return (
+    <Panel title="Action taps">
+      <p className="mb-4 text-xs font-mono text-ink-min">
+        Taps on an issue&apos;s action links over 30 days, counted per day, issue and kind and
+        nothing else: no address, hash or browser, and not which state, member or number. A state
+        pick followed by no call is a reader who looked and stopped.
+      </p>
+      {failed ? (
+        <p className="text-xs font-mono text-signal-amber">Couldn&apos;t load action taps.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <LineChart
+            title="STATE PICKS AND CONTACTS PER DAY"
+            subtitle="contacts = calls + contact forms"
+            xLabels={days.map((d) => d.date.slice(5))}
+            series={[
+              {
+                key: "pick",
+                label: "State picked",
+                color: SERIES[1],
+                values: days.map((d) => d.pick),
+              },
+              { key: "contact", label: "Contacts", color: SERIES[0], values: days.map(contacts) },
+            ]}
+            formatValue={(v) => v.toLocaleString()}
+            emptyMessage={data ? "No taps in this window." : "Loading…"}
+          />
+          <div className="space-y-6">
+            <RankBars
+              title="BY KIND · 30 DAYS"
+              entries={kinds.map((k) => ({ name: TAP_LABELS[k] ?? k, count: data!.totals[k] }))}
+              unit="taps"
+              labelWidth="w-32"
+            />
+            <RankBars
+              title="ISSUES BY CONTACTS · 30 DAYS"
+              entries={(data?.issues ?? [])
+                .map((i) => ({ name: i.title ?? i.publicId, count: contacts(i) }))
+                .filter((e) => e.count > 0)}
+              unit="contacts"
+              labelWidth="w-48"
+            />
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 export function ActorConcentrationPanel({ token }: { token: string }) {
   const [data, setData] = useState<ActorConcentration | null>(null);
   const [failed, setFailed] = useState(false);
@@ -475,6 +555,8 @@ export function ActionCenterDashboard({
           </div>
         </div>
       </Panel>
+
+      <ActionTapsPanel token={token} />
 
       <ActorConcentrationPanel token={token} />
     </div>

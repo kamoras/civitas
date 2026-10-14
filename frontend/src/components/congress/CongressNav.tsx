@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { TAB_CONTROL, BOXED_CONTROL } from "@/lib/controlStyles";
+import { presidentSupportHref } from "@/lib/presidentialSupport";
 
-/** Reports | Bills: each a page of its own, so each is linkable and
- * renders on the server. */
-export function CongressTabs({ active }: { active: "reports" | "bills" }) {
+/** Reports | Bills | With the president: each a page of its own, so each is
+ * linkable and renders on the server. */
+export function CongressTabs({ active }: { active: "reports" | "bills" | "president" }) {
   const tab = (label: string, href: string, on: boolean) => (
     <Link
       href={href}
@@ -18,13 +19,14 @@ export function CongressTabs({ active }: { active: "reports" | "bills" }) {
   return (
     <nav
       aria-label="Congress sections"
-      className="mb-8 flex items-end gap-8 border-b border-white/15"
+      className="mb-8 flex flex-wrap items-end gap-x-6 border-b border-white/15 sm:gap-x-8"
     >
       <span className="py-3 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
         Congress
       </span>
       {tab("Reports", "/congress", active === "reports")}
       {tab("Bills", "/congress/bills", active === "bills")}
+      {tab("With the president", presidentSupportHref("house"), active === "president")}
     </nav>
   );
 }
