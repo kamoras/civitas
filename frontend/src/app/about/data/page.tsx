@@ -408,7 +408,7 @@ export default function DataChapter() {
             A count per day of taps on an Action Center issue&apos;s action links (picking a state,
             a phone number, a contact form, copying the call script, a comment page, a committee, a
             bill), per issue and kind, with nothing about who tapped: not your state, not which
-            member or number.
+            member or number. Repeat taps of the same link from one reader count once a day.
           </Item>
           <Item label="API use">
             A count per day of requests to the <A href="/developers">public API and MCP server</A>,

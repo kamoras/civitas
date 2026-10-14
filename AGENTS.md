@@ -916,8 +916,12 @@ Taps on an issue's action links (`POST /api/track-action`, `ActionTap`) are
 counted the same way: one counter per (day, issue public id, kind), where the
 kind is one of a fixed set validation enforces (`ACTION_TAP_KINDS`: picking a
 state, calling, writing, copying the call script, a comment page, a committee,
-a bill). Not which state, member or number, and the endpoint reads nothing
-about the caller. The state picker on an issue (`ContactYourMembers.tsx`) is an
+a bill). Not which state, member or number, and nothing about the caller
+reaches the row: the address only keys a per-client rule in the RAM throttle
+store (`throttle.client_key`), so a tap counts once per client, issue and kind
+a day and a client's taps are capped per hour; the issue must exist. An issue
+view (`IssueView`, which decides the Trending flag) likewise counts once per
+client per issue an hour (`ISSUE_VIEW_PERIOD_S`). The state picker on an issue (`ContactYourMembers.tsx`) is an
 explicit, unremembered choice from a list: the state goes in the URL that loads
 its members (`GET /api/action/issues/{id}/members?state=`) and nowhere else, and
 the House town filter runs in the browser over district lists the page already

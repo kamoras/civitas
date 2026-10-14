@@ -3,7 +3,6 @@ with their phones and their votes on the issue's roll calls, the bill a
 roll-call issue is about, members named in the reporting, and the
 anonymous count of action taps."""
 
-import inspect
 from datetime import datetime
 import json
 
@@ -15,10 +14,10 @@ from app.api.action import _build_issue_response, bill_decider, get_issue_member
 from app.api.admin import admin_action_taps
 from app.api.visits import track_action
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ExploreDocument, Representative, RollCall, RollCallPosition, Senator, SponsoredBill
+from app.models import ActionIssue, ActionTap, ExploreDocument, IssueView, Representative, RollCall, RollCallPosition, Senator, SponsoredBill
 from app.pipeline.analyze.action_center import _find_related_senators
 from app.pipeline.analyze.early_signal import _vote_bill_entries
-from tests.visits_helpers import _drain_queue_and_write
+from tests.visits_helpers import _drain_queue_and_write, _make_request, _view
 
 VOTE_URL = "https://clerk.house.gov/evs/2026/roll314.xml"
 
@@ -151,22 +150,47 @@ def test_members_named_in_the_reporting_by_full_name_only(db_session):
     assert [(m["id"], m["match_reason"]) for m in found] == [("ann-ash", "named in the reporting")]
 
 
-async def test_a_tap_is_counted_with_nothing_about_who_tapped(db_session, freeze_utcnow):
+async def test_a_tap_is_counted_once_per_client_with_nothing_about_who_tapped(db_session, freeze_utcnow):
     freeze_utcnow(datetime(2026, 10, 14, 12))
     issue = ActionIssue(date="2026-10-14", rank=1, title="An issue", summary="s", is_current=True)
     db_session.add(issue)
     db_session.commit()
     public_id = to_public_id(issue.id)
+    one, other = _make_request("203.0.113.5"), _make_request("198.51.100.7")
 
-    await track_action(issue=public_id, kind="call")
-    await track_action(issue=public_id, kind="call")
-    await track_action(issue="not-an-issue", kind="call")
-    assert _drain_queue_and_write(db_session) == 2
+    await track_action(one, issue=public_id, kind="call", db=db_session)
+    await track_action(one, issue=public_id, kind="call", db=db_session)   # the same client again
+    await track_action(other, issue=public_id, kind="call", db=db_session)
+    await track_action(one, issue=public_id, kind="write", db=db_session)  # another kind
+    await track_action(one, issue="not-an-issue", kind="call", db=db_session)
+    await track_action(one, issue=to_public_id(issue.id + 999), kind="call", db=db_session)  # no such issue
+    assert _drain_queue_and_write(db_session) == 3
 
     out = admin_action_taps(days=1, db=db_session, main_db=db_session)
-    assert out["totals"]["call"] == 2
-    assert out["issues"] == [{"publicId": public_id, "title": "An issue",
-                              **{k: (2 if k == "call" else 0) for k in out["kinds"]}}]
-    # The endpoint takes no Request: it cannot read an address or a header.
-    assert set(inspect.signature(track_action).parameters) == {"issue", "kind"}
+    assert (out["totals"]["call"], out["totals"]["write"]) == (2, 1)
+    assert out["issues"][0]["publicId"] == public_id
+    # The row is (date, issue, kind, count): nothing about either client.
+    assert {c.name for c in ActionTap.__table__.columns} == {"date", "issue_public_id", "kind", "count"}
     assert visits.ACTION_TAP_KINDS == ("pick", "call", "write", "copy", "comment", "committee", "bill")
+
+
+async def test_one_client_cannot_spray_taps_across_issues(db_session, freeze_utcnow, monkeypatch):
+    freeze_utcnow(datetime(2026, 10, 14, 12))
+    monkeypatch.setattr(visits, "ACTION_TAP_LIMIT", 2)
+    issues = [ActionIssue(date="2026-10-14", rank=i, title=f"Issue {i}", summary="s", is_current=True)
+              for i in range(4)]
+    db_session.add_all(issues)
+    db_session.commit()
+    for issue in issues:
+        await track_action(_make_request("203.0.113.5"), issue=to_public_id(issue.id), kind="call", db=db_session)
+    assert _drain_queue_and_write(db_session) == 2
+
+
+async def test_an_issue_view_counts_once_per_client_an_hour(db_session):
+    """IssueView decides the Trending flag (10 views): one client reloading
+    an issue ten times flagged it."""
+    for _ in range(3):
+        await _view(_make_request("203.0.113.5"), "/issue/i0835994f")
+    await _view(_make_request("198.51.100.7"), "/issue/i0835994f")
+    _drain_queue_and_write(db_session)
+    assert db_session.query(IssueView.count).scalar() == 2

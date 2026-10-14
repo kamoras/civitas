@@ -25,18 +25,18 @@ import time
 from dataclasses import dataclass
 from typing import Literal, get_args
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError, TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session
 
 from app import ops_alerts
 from app.api import throttle
-from app.api.rate_limit import SELF_DECLARED_CRAWLER
-from app.database import VisitsSessionLocal
+from app.api.rate_limit import SELF_DECLARED_CRAWLER, client_ip
+from app.database import VisitsSessionLocal, get_db
 from app.issue_ids import from_public_id
 from app.models import (
-    ActionTap, ApiRejectionCount, ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt,
+    ActionIssue, ActionTap, ApiRejectionCount, ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt,
 )
 
 logger = logging.getLogger(__name__)
@@ -716,6 +716,11 @@ async def track_visit(request: Request, kind: VisitSignal = Query(...), path: st
     paths = await throttle.run(_confirmed_paths, ip, kind, path)
     if not paths:
         return
+    issues = {p: _extract_issue_public_id(p) for p in paths}
+    counted_issues = {
+        issue for issue in set(issues.values()) - {None}
+        if await throttle.run(_first_issue_view, ip, issue)
+    }
     date = _today()
     visitor_hash = _visitor_hash(ip, await _daily_salt(date))
     for page in paths:
@@ -726,12 +731,27 @@ async def track_visit(request: Request, kind: VisitSignal = Query(...), path: st
             os=_parse_os(user_agent),
             device_type=_parse_device(user_agent),
             normalized_path=_normalize_path(page),
-            issue_public_id=_extract_issue_public_id(page),
+            issue_public_id=issues[page] if issues[page] in counted_issues else None,
         )
         try:
             _visit_queue.put_nowait(event)
         except asyncio.QueueFull:
             logger.warning("Visit queue full (%d) — dropping visit event", _VISIT_QUEUE_MAXSIZE)
+
+
+# An issue's view counts once per client per this many seconds. IssueView
+# decides the Trending flag (app/trending.py: 10 views and twice the peers'
+# median), so one client reloading a page ten times flagged it until
+# 2026-10-14.
+ISSUE_VIEW_PERIOD_S = 3600
+
+
+def _first_issue_view(ip: str, issue_public_id: str) -> bool:
+    """Whether this view of the issue counts: the client's first in
+    ISSUE_VIEW_PERIOD_S (a claim in the throttle store, under an HMAC key
+    for the client and issue — never the IP, and never with the count)."""
+    key = throttle.client_key(ip, f"issue-view\x00{issue_public_id}")
+    return throttle.claim("issue-view", key, period=ISSUE_VIEW_PERIOD_S)
 
 
 @router.post("/track-timing", status_code=204)
@@ -777,24 +797,50 @@ async def track_timing(
         logger.warning("Visit queue full (%d) — dropping timing event", _VISIT_QUEUE_MAXSIZE)
 
 
+# A tap counts once per client, issue and kind a day, and a client's taps
+# at most ACTION_TAP_LIMIT an hour across every issue: the counter answers
+# "did readers act on this issue", which one client tapping or scripting a
+# link over and over would answer for everyone.
+ACTION_TAP_PERIOD_S = 24 * 3600
+ACTION_TAP_LIMIT = 30
+
+
+def _tap_counts(ip: str, issue_public_id: str, kind: str) -> bool:
+    """Whether this tap counts (the throttle store, in RAM, keyed by an HMAC
+    of the client under the day's salt; the IP is never stored, and nothing
+    about the client reaches the ActionTap row)."""
+    rate = throttle.hit("action-tap", throttle.client_key(ip, "action-tap"),
+                        limit=ACTION_TAP_LIMIT, period=3600)
+    if not rate.allowed:
+        return False
+    key = throttle.client_key(ip, f"action-tap\x00{issue_public_id}\x00{kind}")
+    return throttle.claim("action-tap-once", key, period=ACTION_TAP_PERIOD_S)
+
+
 @router.post("/track-action", status_code=204)
 async def track_action(
+    request: Request,
     issue: str = Query(..., max_length=16),
     kind: ActionTapKind = Query(...),
+    db: Session = Depends(get_db),
 ) -> None:
     """Counts one tap on an issue's action link (ActionTap), sent by the
     browser with sendBeacon as the link opens.
 
-    Same design as track-timing: it reads nothing about the caller — no IP,
-    no User-Agent — and the kind is refused by validation unless it is one of
-    ACTION_TAP_KINDS, so a client can at most add counts to (issue, kind)
-    cells. The issue must be a well-formed public id (issue_ids), as for
-    IssueView. Queued for the visit consumer, never written on the request
+    The row keeps nothing about the caller. The address is read only to key
+    the per-client rule above in the throttle store, as every write endpoint
+    does (rate_limit.client_ip); the kind is refused by validation unless it
+    is one of ACTION_TAP_KINDS, and the issue must exist (a primary-key
+    lookup). Queued for the visit consumer, never written on the request
     path. Must stay `async def` — see track_visit.
     """
-    if from_public_id(issue) is None:
+    issue_id = from_public_id(issue)
+    if issue_id is None or db.get(ActionIssue, issue_id) is None:
+        return
+    public_id = issue.lower()
+    if not await throttle.run(_tap_counts, client_ip(request), public_id, kind):
         return
     try:
-        _visit_queue.put_nowait(_TapEvent(date=_today(), issue_public_id=issue.lower(), kind=kind))
+        _visit_queue.put_nowait(_TapEvent(date=_today(), issue_public_id=public_id, kind=kind))
     except asyncio.QueueFull:
         logger.warning("Visit queue full (%d) — dropping action tap", _VISIT_QUEUE_MAXSIZE)

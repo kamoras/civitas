@@ -1273,8 +1273,9 @@ export type ActionTapKind = "pick" | "call" | "write" | "copy" | "comment" | "co
 
 /**
  * Count one tap on an issue's action link. The backend keeps one counter per
- * (day, issue, kind) and reads nothing about the caller (ActionTap in
- * backend/app/models.py): not which state, member or number. sendBeacon, so
+ * (day, issue, kind) with nothing about the caller in it (ActionTap in
+ * backend/app/models.py): not which state, member or number; a repeat tap
+ * from the same reader counts once a day. sendBeacon, so
  * it survives the tap opening the dialler or a new page.
  */
 export function sendActionTap(issuePublicId: string, kind: ActionTapKind) {
