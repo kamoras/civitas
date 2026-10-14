@@ -1840,7 +1840,10 @@ the pending list).
   200 page that says "not found". The converse holds too: an unreachable
   backend or a 5xx is an error page (`app/error.tsx`), never a 404 — fetch
   detail records through `fetchRecord` (`src/lib/ssrPayload.ts`), which
-  returns null only for a 404.
+  returns null only for a 404. A record route's 404 offers the next step
+  for that kind of record from its segment's `not-found.tsx`
+  (`components/notFound/RecordNotFound.tsx`: a member's closest names, the
+  bills list, the Action Center, Explore search), never only "back home".
 - `sitemap.xml` is rendered per request from `GET /api/sitemap` — never
   prerendered, since `next build` can't reach the backend. Add a new
   detail-page type there, or search engines have no way to find it.
