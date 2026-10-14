@@ -25,6 +25,7 @@ from app.models import (
     Senator,
 )
 from app.pipeline.fetch.congressional_record import congress_start
+from app.redistricting import redrawn_overlap_states
 from app.services.bill_service import _collect_bills
 from app.services.congress_service import session_days
 
@@ -126,6 +127,8 @@ def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
         {
             "politicians": politicians, "bills": bills, "issues": issues,
             "congressDays": congress_days,
+            # The states with a "what changed on the new map" page.
+            "redistricting": redrawn_overlap_states(),
             # Explore documents are listed separately, a page at a time
             # (/sitemap/explore): the corpus has no upper bound, and one
             # sitemap file holds at most 50,000 URLs.

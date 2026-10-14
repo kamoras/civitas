@@ -232,3 +232,31 @@ export function describeStateBallot(
     description: `What's on the ${year} ${name} ballot (${ballot.electionDate}): U.S. Senate and House candidates with FEC fundraising${measures}.`,
   };
 }
+
+/** The redistricting index: what people search when a map changes. */
+export function describeRedistrictingIndex(
+  cycle: string | null,
+  states: number
+): {
+  title: string;
+  description: string;
+} {
+  const year = cycle ?? "";
+  return {
+    title: `New ${year} congressional maps: what changed in each district`.replace("  ", " "),
+    description: `${states} states vote on new U.S. House maps in ${year}. For each district: where its residents lived before, how its partisan lean moved, and the act or court order behind the map. Census counts, downloadable.`,
+  };
+}
+
+/** One state's redistricting page: "Texas new congressional map 2026". */
+export function describeStateRedistricting(
+  stateName: string,
+  cycle: string,
+  seats: number,
+  movedPct: number
+): { title: string; description: string } {
+  return {
+    title: `${stateName} new congressional map ${cycle}: what changed in your district`,
+    description: `${stateName}'s ${seats} U.S. House districts on the ${cycle} map: where each district's residents lived before (${movedPct}% are in a district built mostly from another), how each lean moved, and the official source. Find yours by town or county.`,
+  };
+}

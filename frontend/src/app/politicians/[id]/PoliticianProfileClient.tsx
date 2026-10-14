@@ -18,6 +18,7 @@ import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
 import Photo from "@/components/Photo";
+import RedrawnSeatNote from "@/components/redistricting/RedrawnSeatNote";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   "Senate Floor Speech": "FLOOR SPEECH",
@@ -182,6 +183,14 @@ export default function PoliticianProfileClient({
                 />
               )}
 
+              {/* Below the scorecard: it loads after the page, and above it
+                  would push the member's name down as it arrives. */}
+              {branch === "house" &&
+                !hasLeftOffice &&
+                identity.state &&
+                identity.district != null && (
+                  <RedrawnSeatNote state={identity.state} district={identity.district} />
+                )}
               {(branch === "senate" || branch === "house") && identity.state && (
                 <div className="mt-3 text-center">
                   <Link
