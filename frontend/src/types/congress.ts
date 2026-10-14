@@ -219,6 +219,8 @@ export interface BillRecordVote {
   nays: number;
   present: number;
   notVoting: number;
+  /** The roll call at its official source (Senate.gov or the House Clerk). */
+  sourceUrl?: string;
   parties: PartySplit[];
 }
 

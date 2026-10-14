@@ -10,6 +10,8 @@ import { policyAreaLabel } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { CHAMBER_NAME, dayHref, longDate, shortDate } from "@/lib/congress";
 import { CongressTabs } from "./CongressNav";
+import BillSources from "./BillSources";
+import StageLadder from "./StageLadder";
 import VotePanel from "./VotePanel";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -98,6 +100,10 @@ export default function BillPageView({
   const reportedDays = new Set((record?.days ?? []).map((d) => d.date));
   const unavailable = record?.unavailable ?? [];
   const stage = detail ? billStageStyle(detail.stage) : null;
+  // What the bill does, in the CRS's words: the summary's first paragraph
+  // after its title line (the paragraph the page's description uses too).
+  const summary = record?.summary;
+  const lead = summary ? (summary.paragraphs[1] ?? summary.paragraphs[0]) : null;
   // What a shared image of any section says it is from.
   const shareSubject = {
     title: title ? `${label}: ${title}` : label,
@@ -141,12 +147,49 @@ export default function BillPageView({
                     {record?.congress ? ` · ${ordinal(record.congress)} Congress` : ""}
                     {record?.originChamber ? ` · ${record.originChamber}` : ""}
                   </p>
-                  {/* The header names the bill itself: no title strip. */}
-                  <ShareSectionButton label="Bill overview" withStrip={false} />
+                  <span className="flex items-center gap-3">
+                    <a
+                      href="#sources"
+                      className="inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline underline-offset-2 hover:text-phos"
+                    >
+                      Data &amp; citation
+                    </a>
+                    {/* The header names the bill itself: no title strip. */}
+                    <ShareSectionButton label="Bill overview" withStrip={false} />
+                  </span>
                 </div>
-                <h1 className="font-display text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
+                <h1 className="font-display text-2xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
                   {title}
                 </h1>
+                {record?.sponsors.length ? (
+                  <p className="flex flex-wrap items-baseline gap-x-2 text-sm lg:hidden">
+                    <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                      Sponsor
+                    </span>
+                    {record.sponsors.map((p) => (
+                      <Person key={p.bioguideId ?? p.name} p={p} />
+                    ))}
+                  </p>
+                ) : null}
+                {lead && summary && (
+                  <div className="flex flex-col gap-1.5">
+                    <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+                      What it does
+                    </p>
+                    <p className="max-w-3xl text-base leading-relaxed text-ink">{lead}</p>
+                    <p className="font-mono text-xs text-ink-min">
+                      Congressional Research Service, {shortDate(summary.actionDate)},{" "}
+                      {summary.actionDate.slice(0, 4)} ·{" "}
+                      <a
+                        href="#summary"
+                        className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+                      >
+                        full summary
+                      </a>
+                    </p>
+                  </div>
+                )}
+                {detail?.stageMilestones && <StageLadder data={detail.stageMilestones} />}
                 <div className="flex flex-wrap items-center gap-2">
                   {detail && stage && (
                     <span
@@ -195,7 +238,8 @@ export default function BillPageView({
                 className="flex flex-col gap-4 border border-white/15 bg-surface p-4 text-sm"
               >
                 {record?.sponsors.length ? (
-                  <div className="flex flex-col gap-1">
+                  // On a phone the sponsor is named under the title instead.
+                  <div className="hidden flex-col gap-1 lg:flex">
                     <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
                       Sponsor
                     </span>
@@ -294,6 +338,7 @@ export default function BillPageView({
                 ["votes", "Votes"],
                 ["history", "History"],
                 ["text", "Text"],
+                ["sources", "Data & citation"],
               ].map(([id, name]) => (
                 <a
                   key={id}
@@ -490,6 +535,18 @@ export default function BillPageView({
                   </section>
                 )}
               </aside>
+            </div>
+
+            <div className="mt-12">
+              <BillSources
+                billId={billId}
+                label={label}
+                title={title}
+                congress={record?.congress ?? detail?.congress ?? null}
+                canonicalPath={canonicalPath}
+                record={record}
+                detail={detail}
+              />
             </div>
           </div>
         </main>

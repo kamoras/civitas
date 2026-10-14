@@ -61,6 +61,7 @@ import {
 import { calendarDate, longDate } from "@/lib/congress";
 import { safeHref } from "@/lib/formatting";
 import { absoluteUrl, stateFeed } from "@/lib/site";
+import { newDistrictSentence, redistrictingHref } from "@/lib/redistricting";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { fetchTownBallot, fetchTownsForState } from "@/lib/api";
@@ -1094,6 +1095,17 @@ function HouseDetail({
                 Covers: {picked.counties.join(", ")}
               </p>
             )}
+            {picked.redistricting && (
+              <p className="mt-1 text-[13px] text-ink-lo">
+                {newDistrictSentence(picked.redistricting, !resultsMode)}{" "}
+                <Link
+                  href={redistrictingHref(ballot.state, `new-${picked.district ?? 0}`)}
+                  className="font-mono text-xs tracking-[0.1em] text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
+                >
+                  [ WHAT CHANGED → ]
+                </Link>
+              </p>
+            )}
           </div>
           {houseRaces.length > 1 && (
             <button
@@ -1185,6 +1197,16 @@ function HouseDetail({
             look it up at house.gov ↗
           </a>
           .
+        </p>
+      )}
+      {houseRaces.some((r) => r.redistricting) && (
+        <p className="mb-3 font-mono text-xs tracking-[0.1em]">
+          <Link href={redistrictingHref(ballot.state)} className="text-signal-cyan hover:text-phos">
+            [ WHAT CHANGED ON THE NEW MAP → ]
+          </Link>{" "}
+          <span className="font-sans tracking-normal text-ink-min">
+            where each district&apos;s residents lived before
+          </span>
         </p>
       )}
       <DistrictMap
@@ -1371,6 +1393,17 @@ function ContestOverview({
               </button>
             ))}
           </div>
+          {/* On new lines the first question is whether the reader's
+              district changed; the drawer answers per district, this
+              page answers for the whole map. */}
+          {ballot.houseRaces.some((r) => r.redistricting) && (
+            <Link
+              href={redistrictingHref(ballot.state)}
+              className="mt-3 inline-block min-h-[44px] py-2 font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+            >
+              NEW LINES THIS YEAR: WHAT CHANGED →
+            </Link>
+          )}
         </div>,
         false
       );

@@ -4,6 +4,7 @@ import { useId, useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
 import RaceFullDetail from "@/components/elections/RaceFullDetail";
 import CoverageFeed from "@/components/elections/CoverageFeed";
+import RaceContext from "@/components/elections/ballot/RaceContext";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
 import { candidateName, isActiveCandidate, memberRecordLabel } from "@/lib/elections";
 import { displayScore } from "@/lib/formatting";
@@ -133,6 +134,7 @@ export default function RaceResearch({
 
   return (
     <div>
+      <RaceContext race={race} newLines={newLines} resultsMode={resultsMode} />
       <div
         role="tablist"
         aria-label="Research this race"

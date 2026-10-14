@@ -10,8 +10,15 @@ import json
 
 import pytest
 
-from app.api.politicians import _chamber_rank, _president_overall, _senator_overall, list_politicians
-from app.models import Justice, President, Representative, Senator
+from app.api.politicians import (
+    _chamber_field,
+    _chamber_rank,
+    _president_overall,
+    _scored_on,
+    _senator_overall,
+    list_politicians,
+)
+from app.models import Justice, President, Representative, ScoreSnapshot, Senator
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.score_display import displayed_score
 
@@ -182,6 +189,40 @@ class TestChamberRank:
         assert rank("d") == {"rank": 4, "of": 4}
         # Not serving: the leaderboard doesn't rank them, so neither does the profile.
         assert rank("gone") is None
+
+    def test_the_field_the_rank_is_taken_over(self, db_session):
+        """The profile's strip: every serving member's displayed score with
+        their party, lowest first; the party's and the chamber's medians;
+        and the members ranked next above and below, as the leaderboard
+        orders them (ties by name)."""
+        for rid, score in (("a", 80), ("b", 70), ("c", 70), ("d", 60)):
+            self._rep(db_session, rid, score)
+        db_session.add(Representative(id="e", name="e", state="TN", district=2, party="D",
+                                      score_funding_independence=50, score_constituent_alignment=50,
+                                      score_legislative_effectiveness=50))
+        self._rep(db_session, "gone", 90, current=False)
+        db_session.commit()
+        field = _chamber_field("house", db_session.get(Representative, "b"), db_session)
+        assert [(s["score"], s["party"]) for s in field["scores"]] == [
+            (50, "D"), (60, "R"), (70, "R"), (70, "R"), (80, "R")]
+        assert (field["partyMedian"], field["chamberMedian"]) == (70, 70)
+        assert field["above"]["id"] == "a" and field["above"]["rank"] == 1
+        assert field["below"]["id"] == "c" and field["below"]["rank"] == 2  # tied, after by name
+        top = _chamber_field("house", db_session.get(Representative, "a"), db_session)
+        assert top["above"] is None and top["below"]["id"] == "b"
+        # One Democrat: too few for a party median.
+        assert _chamber_field("house", db_session.get(Representative, "e"), db_session)["partyMedian"] is None
+        assert _chamber_field("house", db_session.get(Representative, "gone"), db_session) is None
+
+    def test_scored_on_is_the_latest_run(self, db_session):
+        self._rep(db_session, "a", 80)
+        for date, version in (("2026-09-01", "v6.1"), ("2026-10-01", "v6.2")):
+            db_session.add(ScoreSnapshot(entity_type="representative", entity_id="a", date=date,
+                                         overall_score=80, algorithm_version=version))
+        db_session.commit()
+        assert _scored_on("house", "a", db_session) == {"date": "2026-10-01", "algorithmVersion": "v6.2"}
+        assert _scored_on("house", "nobody", db_session) is None
+        assert _scored_on("scotus", "a", db_session) is None
 
     def test_a_president_ranks_among_completed_terms_and_a_sitting_one_not_at_all(self, db_session):
         """As the president leaderboard ranks them (get_president_leaderboard)."""

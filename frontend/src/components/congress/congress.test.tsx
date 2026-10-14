@@ -534,6 +534,56 @@ describe("bill page", () => {
   });
 });
 
+describe("bill page layers", () => {
+  it("leads with what the bill does and how far it got, and keeps sources one step down", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={record}
+        detail={
+          {
+            billId: "S.4668",
+            title: record.title,
+            stage: "PASSED_CHAMBER",
+            congress: 119,
+            isLaw: false,
+            relatedIssues: [],
+            policyAreas: [],
+            stageMilestones: {
+              total: 100,
+              milestones: [
+                { label: "Introduced", bills: 100, share: 1, shareText: "100%" },
+                { label: "Reported by a committee", bills: 12, share: 0.12, shareText: "12%" },
+                { label: "Passed one chamber", bills: 6, share: 0.06, shareText: "6%" },
+                { label: "Passed both chambers", bills: 3, share: 0.03, shareText: "3%" },
+                { label: "Became law", bills: 1, share: 0.01, shareText: "1%" },
+              ],
+              reached: 2,
+            },
+          } as unknown as BillDetail
+        }
+        stageName="Passed Chamber"
+      />
+    );
+    const header = screen.getByRole("heading", { level: 1 }).parentElement!;
+    // The CRS's own sentence, under the title, attributed and dated.
+    expect(within(header).getByText(record.summary!.paragraphs[1])).toBeTruthy();
+    expect(within(header).getByText("This bill")).toBeTruthy();
+    // From the header and from the page's own menu.
+    const toSources = screen.getAllByRole("link", { name: "Data & citation" });
+    expect(toSources.map((a) => a.getAttribute("href"))).toEqual(["#sources", "#sources"]);
+    const sources = screen.getByRole("heading", {
+      name: "Sources, data and citation",
+    }).parentElement!;
+    expect(
+      within(sources).getByRole("link", { name: /Every roll call on S\. 4668/ })
+    ).toHaveAttribute("href", "/api/public/v1/bills/S.4668/votes?congress=119");
+    await screen.findByRole("link", { name: "Rob Delgado" });
+  });
+});
+
 describe("bill page: finding one's own members", () => {
   const person = (i: number) => ({
     name: `Rep. Member${i}, Pat [D-OH-${i}]`,

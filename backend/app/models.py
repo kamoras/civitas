@@ -1006,6 +1006,17 @@ class Candidate(Base):
     # checked that day had reported through 2026-06-30. NULL with the
     # figures when the FEC holds no report for this race's election.
     financials_through: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Where `contributions` came from, in the same FEC totals row's own
+    # categories, which add up to it: individuals the FEC does not itemize
+    # (who gave this campaign $200 or less in the election), other
+    # committees (PACs and other candidates' committees), party committees,
+    # and the candidate's own contribution. NULL with the figures above.
+    individual_unitemized_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    other_committee_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    party_committee_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    candidate_contribution: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Loans the candidate made to the campaign: receipts, not contributions.
+    candidate_loans: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_financials_sync: Mapped[datetime | None] = mapped_column(nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(default=utcnow)

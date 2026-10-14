@@ -21,6 +21,7 @@ import { getScoreColor, asciiScoreBar } from "@/lib/representation";
 import { displayScore, formatCurrency } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
+import VotingAgreement from "@/components/compare/VotingAgreement";
 
 type Chamber = "senate" | "house";
 
@@ -437,6 +438,14 @@ function ComparisonTable({
           );
         })}
       </div>
+
+      {leftChamber === rightChamber && (
+        <VotingAgreement
+          chamber={leftChamber}
+          left={{ id: left.id, name: left.name }}
+          right={{ id: right.id, name: right.name }}
+        />
+      )}
 
       {/* Funding stats */}
       <div className="border-t border-white/[0.07] bg-white/[0.03] divide-y divide-white/[0.07]">

@@ -15,11 +15,24 @@ from fastapi.testclient import TestClient
 from app.api import public
 from app.api.router import api_router
 from app.database import get_db
-from app.models import ExploreDocument, Justice, MemberIdAlias, Representative, ScoreSnapshot, Senator
+from app.models import (
+    ExploreDocument,
+    Justice,
+    KeyVote,
+    MemberIdAlias,
+    RepKeyVote,
+    Representative,
+    RollCall,
+    RollCallPosition,
+    ScoreSnapshot,
+    Senator,
+)
 from app.pipeline.lexical_index import ensure_lexical_index
 from app.schemas import (
     PublicApiIndexSchema,
+    PublicBillVotesSchema,
     PublicHistorySchema,
+    PublicMemberVotesSchema,
     PublicRepresentativePageSchema,
     PublicRepresentativeProfileSchema,
     PublicSearchResponseSchema,
@@ -56,6 +69,14 @@ def client(db_session, fixed_ranking, monkeypatch):
         ExploreDocument(doc_type="Final Rule", source="Federal Register", title="Wildfire smoke rule",
                         summary="Standards for wildfire smoke.", body="Wildfire smoke exposure.",
                         date="2026-01-01", chamber="Regulatory"),
+        RollCall(id=1, chamber="senate", congress=119, session=1, number=5, date="2026-02-01",
+                 question="On Passage of the Bill", result="Bill Passed", yeas=1, nays=0, bill_id="HR.1",
+                 source_url="https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00005.htm"),
+        RollCallPosition(roll_call_id=1, member_id="S001", last_name="Doe", party="D", state="GA", position="Yea"),
+        KeyVote(senator_id="S000001", bill_name="Placeholder Act", bill_id="HR.1", date="2026-02-01", vote="Yea",
+                voted_with_party=True, party_leaning="D", roll_call="senate-119-1-5"),
+        RepKeyVote(representative_id="R000001", bill_name="Placeholder Act", bill_id="HR.1", date="2026-01-20",
+                   vote="Nay", voted_with_party=None),
     ])
     db_session.commit()
     app = FastAPI()
@@ -79,6 +100,9 @@ def _body(client, path, **params):
     ("/representatives", {"state": "GA"}, PublicRepresentativePageSchema),
     ("/representatives/R000001", {}, PublicRepresentativeProfileSchema),
     ("/representatives/R000001/history", {}, PublicHistorySchema),
+    ("/senators/S000001/votes", {}, PublicMemberVotesSchema),
+    ("/representatives/R000001/votes", {}, PublicMemberVotesSchema),
+    ("/bills/HR.1/votes", {}, PublicBillVotesSchema),
     ("/search", {"q": "wildfire"}, PublicSearchResponseSchema),
 ])
 def test_every_response_matches_its_documented_schema(client, path, params, schema):
@@ -86,6 +110,16 @@ def test_every_response_matches_its_documented_schema(client, path, params, sche
     schema.model_validate(body)
     # Non-empty, or a list-of-anything schema would pass vacuously.
     assert body.get("entries") or body.get("snapshots") or body.get("results") or "entries" not in body
+
+
+def test_a_vote_carries_its_roll_call_and_each_party_split(client):
+    (vote,) = _body(client, "/senators/S000001/votes")["entries"]
+    assert vote["votedWithParty"] is True and vote["rollCall"]["number"] == 5
+    assert vote["rollCall"]["parties"] == [{"party": "D", "yea": 1, "nay": 0, "present": 0, "notVoting": 0}]
+    assert vote["rollCall"]["sourceUrl"].startswith("https://www.senate.gov/")
+    (rc,) = _body(client, "/bills/hr.1/votes")["entries"]
+    assert (rc["yeas"], rc["nays"], rc["chamber"]) == (1, 0, "senate")
+    assert _body(client, "/bills/HR.1/votes", congress=118)["entries"] == []
 
 
 @pytest.mark.parametrize("path,member,schema", [
@@ -178,14 +212,17 @@ def test_comment_url_only_while_the_period_is_open(client, db_session, monkeypat
 def test_every_endpoint_answers_with_the_rate_limit_headers(client, monkeypatch):
     monkeypatch.setattr(public, "_spec", None)
     for path in _body(client, "/openapi.json")["paths"]:
-        resp = client.get(path.replace("{senator_id}", "S000001").replace("{rep_id}", "R000001"),
+        resp = client.get(path.replace("{senator_id}", "S000001").replace("{rep_id}", "R000001")
+                          .replace("{bill_id}", "HR.1"),
                           params={"q": "wildfire"} if path.endswith("/search") else None)
         assert resp.status_code == 200, path
         assert {"x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset"} <= set(resp.headers), path
 
 
 @pytest.mark.parametrize("path", ["/senators/nobody/history", "/representatives/nobody/history",
-                                  "/senators/nobody", "/representatives/nobody"])
+                                  "/senators/nobody", "/representatives/nobody",
+                                  "/senators/nobody/votes", "/representatives/nobody/votes",
+                                  "/bills/NOT-A-BILL/votes"])
 def test_unknown_member_is_404_not_an_empty_record(client, path):
     assert client.get(f"/api/public/v1{path}").status_code == 404
 

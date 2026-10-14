@@ -177,9 +177,21 @@ export default function DataChapter() {
           </Facts>
         </Sub>
         <P>
+          The homepage lists, for each main source, how many records it has supplied and the date of
+          the newest one, counted from what is stored, so a stale source shows as stale.
+        </P>
+        <P>
           Every source&apos;s rate limits are respected, and responses are cached for 72 hours to
           avoid asking twice, except a state&apos;s answer that it has no measures, kept for only
           six hours, so a measure certified afterwards appears the next night.
+        </P>
+        <P>
+          Every member scorecard and bill page ends in a methods, sources and citation section, one
+          link from the top of the page: for each score, the data grade behind it, every component
+          with the scorer&apos;s own sentence on how it was measured, the research it follows and
+          where its data comes from; the record itself as JSON from the{" "}
+          <A href="/developers">public API</A> (a member&apos;s votes, a bill&apos;s roll calls);
+          and an APA-style reference with the date it was scored.
         </P>
       </Section>
 
