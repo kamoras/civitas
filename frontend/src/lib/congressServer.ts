@@ -1,4 +1,11 @@
-import type { BillRecord, DayReport, MonthReport, PeriodReport } from "@/types/congress";
+import type {
+  BillRecord,
+  CommitteeRecordPage,
+  CommitteeSummary,
+  DayReport,
+  MonthReport,
+  PeriodReport,
+} from "@/types/congress";
 import { headers } from "next/headers";
 import { usableRecord } from "@/lib/ssrPayload";
 
@@ -51,6 +58,40 @@ export function fetchWeek(date: string): Promise<PeriodReport | null> {
 
 export function fetchMonth(month: string): Promise<MonthReport | null> {
   return getJson<MonthReport>(`/api/congress/month/${month}`, "start", "totals");
+}
+
+/** The committees with a meeting on record. Throws when the backend can't
+ * answer (congress/error.tsx). */
+export async function fetchCommittees(): Promise<CommitteeSummary[]> {
+  const body = await getJson<{ committees: CommitteeSummary[] }>(
+    "/api/congress/committees",
+    "committees"
+  );
+  return body?.committees ?? [];
+}
+
+/** Committee meetings and reports for a search (keys as the backend's
+ * query parameters). Throws when the backend can't answer. */
+export function fetchCommitteeRecord(
+  params: Record<string, string | number | undefined>
+): Promise<CommitteeRecordPage | null> {
+  const query = new URLSearchParams();
+  for (const [k, v] of Object.entries(params))
+    if (v !== undefined && v !== "") query.set(k, String(v));
+  return getJson<CommitteeRecordPage>(`/api/congress/committee-record?${query}`, "entries");
+}
+
+/** A bill's committee meetings and reports, or null when they can't be read
+ * just now: the bill page still renders without them. */
+export async function fetchBillCommitteeRecord(
+  billId: string,
+  congress: number
+): Promise<CommitteeRecordPage | null> {
+  try {
+    return await fetchCommitteeRecord({ bill: billId, congress, per_page: 100 });
+  } catch {
+    return null;
+  }
 }
 
 /** A bill's Congress.gov record, or null. `failed` says why it is null: false

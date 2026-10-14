@@ -5,6 +5,7 @@ import ExplorePage from "./page";
 const api = vi.hoisted(() => ({
   searchExplore: vi.fn(),
   fetchExploreStats: vi.fn(),
+  fetchCommitteeRecordTotal: vi.fn(),
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -35,6 +36,9 @@ function open(search: string) {
   params = new URLSearchParams(search);
   window.history.replaceState(null, "", `/explore${search ? `?${search}` : ""}`);
   api.fetchExploreStats.mockResolvedValue({ totalDocuments: 0, openForComment: 0 });
+  if (!api.fetchCommitteeRecordTotal.getMockImplementation()) {
+    api.fetchCommitteeRecordTotal.mockResolvedValue(0);
+  }
   return render(<ExplorePage />);
 }
 
@@ -120,5 +124,19 @@ describe("ExplorePage", () => {
 
     const link = await screen.findByRole("link", { name: /Open the page for H\.R\. 7008/ });
     expect(link).toHaveAttribute("href", "/congress/bills/HR.7008");
+  });
+
+  it("offers the committee meetings and reports that match a search", async () => {
+    api.searchExplore.mockResolvedValue({
+      query: "veterans",
+      results: [doc(1, "Remarks")],
+      count: 1,
+    });
+    api.fetchCommitteeRecordTotal.mockResolvedValue(12);
+    open("q=veterans");
+    const link = await screen.findByRole("link", { name: /12 committee meetings and reports/ });
+    expect(link).toHaveAttribute("href", "/congress/committees?q=veterans");
+    expect(api.fetchCommitteeRecordTotal).toHaveBeenCalledWith("veterans");
+    api.fetchCommitteeRecordTotal.mockReset();
   });
 });

@@ -1997,6 +1997,15 @@ export async function fetchLiveResults(state?: string): Promise<LiveResults> {
   return { ...results, clock: { serverDate, receivedAt } };
 }
 
+/** How many committee meetings and reports in the Daily Digest match a
+ * search (GET /api/congress/committee-record): Explore offers them beside
+ * its results, since they aren't documents in its index. */
+export async function fetchCommitteeRecordTotal(q: string): Promise<number> {
+  const url = `${API_BASE}/congress/committee-record?q=${encodeURIComponent(q)}&per_page=1`;
+  const total = asRecord(await cachedFetch(url, TTL.SHORT)).total;
+  return typeof total === "number" ? total : 0;
+}
+
 export async function fetchPviMap(): Promise<PviMap> {
   // `states` and `districts` are maps, not lists, and callers index into them
   // directly — an absent one has to arrive as {} rather than undefined.
