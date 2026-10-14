@@ -2,6 +2,8 @@
  * /api/elections/* response shapes exactly — see backend/app/api/elections.py.
  */
 
+import type { RedistrictingNote } from "@/types/redistricting";
+
 export interface CandidateSummary {
   id: string;
   name: string;
@@ -180,6 +182,10 @@ export interface RaceWithCandidates {
    * listed by several districts is split between them. Null for a Senate
    * race or a district the file doesn't cover — never a guess. */
   places?: string[] | null;
+  /** House races on new lines: where the district's residents lived
+   * before and how its lean moved (GET /elections/redistricting/{state}
+   * has the rest). Null or absent elsewhere. */
+  redistricting?: RedistrictingNote | null;
   candidates: BallotCandidate[];
 }
 

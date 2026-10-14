@@ -15,6 +15,7 @@ from app.api.photos import router as photos_router
 from app.api.politicians import router as politicians_router
 from app.api.presidents import router as presidents_router
 from app.api.public import router as public_router
+from app.api.redistricting import router as redistricting_router
 from app.api.representatives import router as representatives_router
 from app.api.senators import router as senators_router
 from app.api.sitemap import router as sitemap_router
@@ -33,6 +34,7 @@ api_router.include_router(justices_router, tags=["justices"])
 api_router.include_router(explore_router, tags=["explore"])
 api_router.include_router(action_router, tags=["action"])
 api_router.include_router(elections_router, tags=["elections"])
+api_router.include_router(redistricting_router, tags=["elections"])
 api_router.include_router(bills_router, tags=["bills"])
 api_router.include_router(congress_router, tags=["congress"])
 api_router.include_router(this_week_router, tags=["this-week"])
