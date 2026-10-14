@@ -274,11 +274,15 @@ Three independent caching systems serve different purposes:
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │  ApiCache  (SQLite: api_cache)                                     │
-│  Key: (tier, endpoint+params_hash)   TTL: 72h (configurable)       │
+│  Key: (tier, endpoint+params_hash)   TTL: 72h (configurable)*      │
 │  Stores: raw API JSON, verbatim                                    │
 │  Cleared: never (source data is immutable; re-fetched after TTL)   │
 │  Purpose: replay pipeline without re-hitting external APIs         │
 └────────────────────────────────────────────────────────────────────┘
+* Per-entity fetches expire at a per-key point in the last third of
+  their TTL, so one run's entries don't all come due on one night; a
+  bill's own records are kept until the hourly bill refresh sees the
+  bill change (30-day backstop). See AGENTS.md, "Data Pipeline".
 
 ┌────────────────────────────────────────────────────────────────────┐
 │  AnalysisCache  (SQLite: analysis_cache)                           │

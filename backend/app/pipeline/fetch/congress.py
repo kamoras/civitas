@@ -3,7 +3,7 @@
 import logging
 import re
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from lxml import etree
@@ -15,6 +15,7 @@ from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.fetch.floor_logs import house_roll_call_url, senate_roll_call_url
 from app.pipeline.rate_limiter import RateLimiter
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -367,7 +368,7 @@ async def fetch_member_detail(
 ) -> dict | None:
     """Fetch detailed member info including terms and sponsored legislation."""
     cache_key = member_detail_cache_key(bioguide_id)
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = api_cache_get(db, "congress", cache_key, spread=True)
     if cached is not None:
         return cached
 
@@ -406,7 +407,7 @@ async def fetch_member_sponsored(
     bills, confirmed inactivity" for that run.
     """
     cache_key = f"member-sponsored-v2-{bioguide_id}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = api_cache_get(db, "congress", cache_key, spread=True)
     if cached is not None:
         return _recent_congresses_only(cached)
 
@@ -445,6 +446,68 @@ async def fetch_member_sponsored(
 _STALE_SPONSORED_MAX_HOURS = 24 * 365 * 2
 
 
+# ── A bill's own records: fresh until Congress.gov says the bill changed ──
+# The nightly reads every current-Congress sponsored bill's actions,
+# cosponsors and titles (about 10,000, 6,000 and 4,300 requests on
+# 2026-10-14), and a fixed TTL refetched each one every few nights whether
+# or not the bill had moved — 300 to 600 bills change on a typical day. The
+# hourly bill refresh (pipeline/bill_refresh.py) already reads Congress.gov's
+# list of bills updated since its last pass, and marks every listed bill's
+# records stale (mark_bill_records_stale). So a current-Congress bill's
+# record written since the refresh's unbroken coverage began stays fresh for
+# up to BILL_RECORD_BACKSTOP_HOURS, as long as the refresh has run within the
+# plain TTL; anything else falls back to the plain TTL. Congress.gov moves a
+# bill's updateDate for its actions, cosponsors, titles and summaries alike
+# (bill_refresh: "updateDate churns ... summaries posted, cosponsors added").
+BILL_REFRESH_MARKER_KEY = "bill-status-refresh-last-run"
+# The backstop for a change the update list never reports.
+BILL_RECORD_BACKSTOP_HOURS = 24 * 30
+# How old a marked-stale record reads: past every freshness window above,
+# well inside the stale fallback's (_STALE_RECORD_MAX_HOURS).
+BILL_RECORD_STALE_AGE = timedelta(days=365)
+# How old a cached record may be and still stand in for a failed request.
+_STALE_RECORD_MAX_HOURS = 24 * 365 * 2
+
+
+def bill_record_keys(congress: int, bill_type: str, bill_number) -> list[str]:
+    """The cache keys of one bill's records that change when the bill does."""
+    suffix = f"{congress}-{bill_type.lower()}-{bill_number}"
+    return [f"bill-{suffix}", *(f"bill-{part}-{suffix}" for part in ("actions", "cosponsors", "summaries", "titles"))]
+
+
+def bill_changes_covered_since(db: Session) -> datetime | None:
+    """Since when every bill update Congress.gov listed has been applied to
+    the cache (bill_refresh's `coveredSince`), or None when that isn't known
+    or the refresh hasn't run within the plain TTL — updates since its last
+    pass are unapplied, and the plain TTL is what bounds that wait."""
+    marker = api_cache_get(db, "congress", BILL_REFRESH_MARKER_KEY, max_age_hours=24 * 7)
+    try:
+        covered = datetime.fromisoformat(marker["coveredSince"])
+        last_run = datetime.fromisoformat(marker["lastRun"])
+    except (TypeError, KeyError, ValueError):
+        return None
+    if utcnow() - last_run > timedelta(hours=settings.PIPELINE_CACHE_TTL_HOURS):
+        return None
+    return covered
+
+
+def _bill_record_get(
+    db: Session, congress: int, key: str, max_age_hours: int | None = None,
+):
+    """A bill record from the cache: within its (spread) TTL, or, for a
+    current-Congress bill, within the backstop when the update list has
+    covered it since it was written."""
+    cached = api_cache_get(db, "congress", key, max_age_hours, spread=True)
+    if cached is not None or congress < settings.CURRENT_CONGRESS:
+        return cached
+    covered = bill_changes_covered_since(db)
+    if covered is None:
+        return None
+    return api_cache_get(
+        db, "congress", key, BILL_RECORD_BACKSTOP_HOURS, spread=True, written_since=covered,
+    )
+
+
 async def fetch_bill(
     client: httpx.AsyncClient,
     db: Session,
@@ -454,7 +517,7 @@ async def fetch_bill(
 ) -> dict | None:
     """Fetch bill details."""
     cache_key = f"bill-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = _bill_record_get(db, congress, cache_key)
     if cached is not None:
         return cached
 
@@ -484,7 +547,7 @@ async def fetch_bill_actions(
 ) -> list[dict]:
     """Fetch roll call votes for a specific bill."""
     cache_key = f"bill-actions-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = _bill_record_get(db, congress, cache_key)
     if cached is not None:
         return cached
 
@@ -493,6 +556,14 @@ async def fetch_bill_actions(
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/actions?limit=100",
     )
     if data is None:
+        # The last history read is a better answer than none: raising here
+        # discards the whole run's stage and sponsorship work (one bill's
+        # actions failing three times cost the House run of 2026-10-14 its
+        # 86-minute sponsorship step).
+        stale = api_cache_get(db, "congress", cache_key, max_age_hours=_STALE_RECORD_MAX_HOURS)
+        if stale is not None:
+            logger.warning("Actions of %s.%s (%d) failed — using the cached history", bill_type.upper(), bill_number, congress)
+            return stale
         raise CongressUnavailable(f"actions of {bill_type.upper()}.{bill_number} ({congress})")
     raw = data.get("actions", [])
     # Congress.gov v3 may return {"count": N, "item": [...]} instead of a list
@@ -517,7 +588,7 @@ async def fetch_bill_cosponsors(
 ) -> list[dict]:
     """Fetch cosponsors for a bill (includes bioguideId, party, state)."""
     cache_key = f"bill-cosponsors-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "congress", cache_key, max_age_hours=COSPONSORS_CACHE_HOURS)
+    cached = _bill_record_get(db, congress, cache_key, COSPONSORS_CACHE_HOURS)
     if cached is not None:
         return cached
 
@@ -542,7 +613,7 @@ async def fetch_bill_summaries(
 ) -> list[dict]:
     """Fetch bill summary text."""
     cache_key = f"bill-summaries-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = _bill_record_get(db, congress, cache_key)
     if cached is not None:
         return cached
 
@@ -672,7 +743,7 @@ async def fetch_bill_titles_or_none(
     fetch_bill_titles used to cache a failure as [] for the cache lifetime.
     """
     cache_key = f"bill-titles-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "congress", cache_key)
+    cached = _bill_record_get(db, congress, cache_key)
     if cached is not None:
         return cached
     # A 404 is stored as a marker: api_cache_set treats an empty payload as
