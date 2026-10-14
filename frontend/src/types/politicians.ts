@@ -78,6 +78,31 @@ export interface GovernmentRecord {
   recentDocs: GovernmentDoc[];
 }
 
+/** A member ranked next to the profile's, on the same leaderboard. */
+export interface ChamberNeighbour {
+  id: string;
+  name: string;
+  party: string;
+  state: string;
+  district: number | null;
+  /** Overall score as displayed. */
+  score: number;
+  rank: number;
+}
+
+/** Every serving member of the profile's chamber, for its strip. */
+export interface ChamberField {
+  /** The profile's party, which `partyMedian` is of. */
+  party: string;
+  /** Each member's overall score as displayed, with their party, lowest first. */
+  scores: { score: number; party: string }[];
+  /** Null for a party with too few members to state one. */
+  partyMedian: number | null;
+  chamberMedian: number;
+  above: ChamberNeighbour | null;
+  below: ChamberNeighbour | null;
+}
+
 export interface PoliticianProfile {
   id: string;
   branch: PoliticianBranch;
@@ -87,6 +112,11 @@ export interface PoliticianProfile {
   scorecard?: Record<string, unknown> | null;
   /** A serving member's place on their chamber's leaderboard. */
   chamberRank?: { rank: number; of: number } | null;
+  /** The chamber the rank is taken over (api/politicians.py _chamber_field);
+   *  null where there is no chamber rank. */
+  chamberField?: ChamberField | null;
+  /** The latest scoring run: its date and the scoring method's version. */
+  scoredOn?: { date: string; algorithmVersion: string | null } | null;
   activeIssues: PoliticianActiveIssue[];
   governmentRecord: GovernmentRecord;
   /** The race this member is a candidate in on the site's election ballot
