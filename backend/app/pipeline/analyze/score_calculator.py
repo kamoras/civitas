@@ -1831,10 +1831,12 @@ def seat_residual(break_rate: float, expected: float, n_votes: int) -> float:
 _MAX_LOGIT_COEFFICIENT = 50.0
 
 
-def _fractional_logit(X, y):
+def _fractional_logit(X, y, w=None):
     """Fractional-response logit (Papke & Wooldridge 1996): the Bernoulli
     quasi-likelihood of proportions under a logit link, maximized by Newton's
-    method with step-halving. The objective is convex, so halving each step
+    method with step-halving. `w` weights each row's quasi-likelihood (a
+    proportion's number of trials, so each vote counts once); None weighs
+    every row alike. The objective is convex, so halving each step
     until it improves always improves it — plain iteratively reweighted least
     squares does not: it overshot to coefficients in the billions on the
     118th Senate's Democrats (research note section 10). Coefficients, or
@@ -1843,14 +1845,15 @@ def _fractional_logit(X, y):
     (_MAX_LOGIT_COEFFICIENT, or no convergence within the iteration cap)."""
     import numpy as np
 
-    mean = float(y.mean())
+    w = np.ones(len(y)) if w is None else np.asarray(w, dtype=float)
+    mean = float(np.sum(w * y) / np.sum(w))
     if mean <= 0.0 or mean >= 1.0:
         return None
 
     def loss(beta):
         eta = X @ beta
         # -sum(y*eta - log(1 + e^eta)), with log(1 + e^eta) overflow-safe.
-        return float(np.sum(np.logaddexp(0.0, eta) - y * eta))
+        return float(np.sum(w * (np.logaddexp(0.0, eta) - y * eta)))
 
     beta = np.zeros(X.shape[1])
     beta[0] = math.log(mean / (1.0 - mean))
@@ -1858,8 +1861,8 @@ def _fractional_logit(X, y):
     converged = False
     for _ in range(200):
         mu = 0.5 * (1.0 + np.tanh(0.5 * (X @ beta)))  # expit, overflow-safe
-        grad = X.T @ (mu - y)
-        hess = X.T @ (X * np.clip(mu * (1.0 - mu), 1e-12, None)[:, None])
+        grad = X.T @ (w * (mu - y))
+        hess = X.T @ (X * (w * np.clip(mu * (1.0 - mu), 1e-12, None))[:, None])
         step = np.linalg.lstsq(hess, grad, rcond=None)[0]
         t = 1.0
         while t > 1e-10:

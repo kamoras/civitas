@@ -19,6 +19,7 @@ import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
 import Photo from "@/components/Photo";
 import RedrawnSeatNote from "@/components/redistricting/RedrawnSeatNote";
+import PresidentialSupportSection from "@/components/presidentialSupport/PresidentialSupportSection";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   "Senate Floor Speech": "FLOOR SPEECH",
@@ -78,10 +79,14 @@ export default function PoliticianProfileClient({
   profile,
   breakdown = null,
   strip,
+  supportLine,
 }: {
   profile: PoliticianProfile;
   /** The "this week" strip, rendered by the server page. */
   strip?: React.ReactNode;
+  /** Votes with the president's stated positions in one line, rendered by
+   *  the server page (members only). */
+  supportLine?: React.ReactNode;
   /** The score breakdown, fetched with the profile (senators,
    *  representatives and presidents). */
   breakdown?: RepresentationScoreBreakdown | null;
@@ -144,6 +149,7 @@ export default function PoliticianProfileClient({
                   (Elections, the state, the House box, the district), and
                   on a redrawn map under a different district number. */}
               {profile.onBallot && <OnBallotLine race={profile.onBallot} />}
+              {supportLine}
               {isMember && (
                 // Keyed by member: moving between two profiles reuses this
                 // page, and every part of the scorecard that loads or keeps
@@ -210,6 +216,8 @@ export default function PoliticianProfileClient({
               screen and put the member's score below the fold for a reader
               arriving from a search result. */}
           {strip}
+
+          {isMember && <PresidentialSupportSection memberId={profile.id} name={identity.name} />}
 
           {/* Active Issues */}
           {activeIssues.length > 0 && (

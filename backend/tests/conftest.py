@@ -358,6 +358,13 @@ def pin_population_references(monkeypatch, tmp_path) -> None:
 
     monkeypatch.setattr(SIGNAL_OVERLAP, "live_path", tmp_path / "signal_overlap_live.json")
     monkeypatch.setattr(SIGNAL_OVERLAP, "_cache", None)
+    # The presidential-support fit (/data/presidential_support_reference.json),
+    # written by the Supplementary pipeline's step; it has no bundled file.
+    from app.pipeline.analyze.presidential_support import PRESIDENTIAL_SUPPORT_REFERENCE
+
+    monkeypatch.setattr(PRESIDENTIAL_SUPPORT_REFERENCE, "live_path", tmp_path / "presidential_support_live.json")
+    monkeypatch.setattr(PRESIDENTIAL_SUPPORT_REFERENCE, "bundled_path", tmp_path / "presidential_support_bundled.json")
+    monkeypatch.setattr(PRESIDENTIAL_SUPPORT_REFERENCE, "_cache", None)
 
 
 @pytest.fixture()

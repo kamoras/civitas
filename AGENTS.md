@@ -1578,6 +1578,7 @@ the pending list).
 | What changed on the new House maps (old/new district overlap, lean before/after, enacting act) | `backend/app/redistricting.py`, `backend/app/api/redistricting.py`, `backend/scripts/build_redistricting_overlap.py` → `app/data/redistricting_overlap.json`, `frontend/src/components/redistricting/`, `frontend/src/app/elections/redistricting/` |
 | Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
+| Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
