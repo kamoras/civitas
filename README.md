@@ -1397,6 +1397,10 @@ The homepage, and in a one-line form the pages most readers arrive on (a member'
 
 Every sentence is a template around stored figures. When the backend can't answer, the strip is left out and the page renders as before.
 
+## Source ledger
+
+The homepage's "Built from the public record" panel lists each source with what it has supplied and how recent it is, from `GET /api/sources` (`api/sources.py`), counted from the stored records rather than typed: roll calls and sponsored bills in the sitting Congress, floor speeches, Federal Register documents, the Court's votes and opinions, and disclosed stock trades, each with its newest record's date. FEC filings carry no single date the site keeps, so that row gives the day the site last read the FEC and says "last read". A source with nothing stored shows 0 and "nothing on record yet" rather than dropping out; when the backend can't answer, the panel falls back to the plain list of source names.
+
 ## Score Data Transparency
 
 A senator's or representative's profile is the scorecard at a glance (`components/scorecard/MemberScorecard.tsx`): a header with who they are, how to reach them, the Representation Score, the rank the leaderboard gives it (served as `chamberRank` on `GET /api/politicians/{id}`) and its trend; then the three scored dimensions side by side, each led by one plain sentence of what its score found, then the evidence behind it (the components, the weights and their statistics sit under "How this is computed", closed by default); then their financial-disclosure holdings as a pie beside the list; then tiles for what is on record but not scored (stock trades, donor-vote links, positions by policy area). The Funding Independence column also links straight to the donor-vote links ("See how this money lines up with votes"), which on a phone otherwise sit about seven screens below it. Every full list — every vote, every donor, every bill — opens in a drawer over the page; each vote there is one line (what was voted on, linked to the bill's page, the question, the date, the member's vote, and whether it went against the party). On a phone the columns stack.
