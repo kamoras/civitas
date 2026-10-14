@@ -448,6 +448,17 @@ async def _refresh_financials(db: Session, client: httpx.AsyncClient, batch_size
             cand.cash_on_hand = row.get("last_cash_on_hand_end_period")
             cand.individual_itemized_contributions = row.get("individual_itemized_contributions")
             cand.financials_through = (row.get("coverage_end_date") or "")[:10] or None
+            # Not stored: the row's last_report_type_full. A candidate's
+            # totals sum every committee authorized for them, and that field
+            # names whichever committee filed last — on 2026-10-14, 103 of
+            # 471 "TERMINATION REPORT" rows were candidates with cash on hand
+            # whose secondary committee had closed (the principal's figures
+            # are in the totals; checked against the FEC's committee totals).
+            cand.individual_unitemized_contributions = row.get("individual_unitemized_contributions")
+            cand.other_committee_contributions = row.get("other_political_committee_contributions")
+            cand.party_committee_contributions = row.get("political_party_committee_contributions")
+            cand.candidate_contribution = row.get("candidate_contribution")
+            cand.candidate_loans = row.get("loans_made_by_candidate")
             cand.last_financials_sync = utcnow()
             refreshed += 1
             db.commit()

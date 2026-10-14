@@ -460,3 +460,9 @@ export function tierCandidates(candidates: BallotCandidate[]): RaceTiers {
   }
   return { leaders, tail };
 }
+
+/** A candidate's FEC page opened on one election's figures — the same
+ * totals the ballot page shows (backend race_context.fec_candidate_url). */
+export function fecCandidateUrl(candidateId: string, cycleYear: number): string {
+  return `https://www.fec.gov/data/candidate/${encodeURIComponent(candidateId)}/?cycle=${cycleYear}&election_full=true`;
+}

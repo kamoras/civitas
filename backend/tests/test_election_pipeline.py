@@ -507,6 +507,10 @@ _ELECTION_FULL_2026 = {
     "coverage_end_date": "2026-06-30T00:00:00", "contributions": 87603239.28,
     "disbursements": 55398788.04, "last_cash_on_hand_end_period": 42587451.0,
     "individual_itemized_contributions": 50000000.0,
+    "individual_unitemized_contributions": 20000000.0,
+    "other_political_committee_contributions": 15000000.0,
+    "political_party_committee_contributions": 2603239.28,
+    "candidate_contribution": 0.0, "loans_made_by_candidate": 250000.0,
 }
 _TWO_YEAR_2026 = {
     "candidate_election_year": 2026, "cycle": 2026, "election_full": False,
@@ -554,6 +558,9 @@ class TestRefreshFinancials:
         assert cand.cash_on_hand == 42587451.0
         assert cand.individual_itemized_contributions == 50000000.0
         assert cand.financials_through == "2026-06-30"
+        assert (cand.individual_unitemized_contributions, cand.other_committee_contributions,
+                cand.party_committee_contributions, cand.candidate_contribution,
+                cand.candidate_loans) == (20000000.0, 15000000.0, 2603239.28, 0.0, 250000.0)
         assert cand.last_financials_sync is not None
 
     def test_only_an_earlier_election_clears_what_was_stored(self, db_session):
@@ -563,11 +570,13 @@ class TestRefreshFinancials:
         cand = self._candidate(
             db_session, contributions=1604699.27, cash_on_hand=597195.09,
             disbursements=1.0, individual_itemized_contributions=1.0,
+            individual_unitemized_contributions=1.0, candidate_loans=1.0,
             last_financials_sync=utcnow() - timedelta(days=30),
         )
         self._run(db_session, [_PRIOR_ELECTION])
         assert (cand.contributions, cand.cash_on_hand, cand.disbursements,
-                cand.individual_itemized_contributions, cand.financials_through) == (None,) * 5
+                cand.individual_itemized_contributions, cand.financials_through,
+                cand.individual_unitemized_contributions, cand.candidate_loans) == (None,) * 7
         assert cand.last_financials_sync > utcnow() - timedelta(minutes=1)
 
 
