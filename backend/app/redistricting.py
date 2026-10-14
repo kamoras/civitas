@@ -189,11 +189,20 @@ def state_changes(state: str) -> dict | None:
             "oldWithoutSuccessor": sum(not r["hasSuccessor"] for r in old_rows),
             "residentsMoved": moved,
             "residentsMovedPct": share_pct(moved, total),
-            # Lean categories are the PVI's sign; a seat "changed lean" when
-            # its category differs from its predecessor's.
-            "leanBefore": {k: before_counts.get(k, 0) for k in ("R", "EVEN", "D")},
-            "leanAfter": {k: after_counts.get(k, 0) for k in ("R", "EVEN", "D")},
-            "seatsChangedLean": sum(
+            # Seats by lean category (the PVI's sign) on each map, and the
+            # net change: what "how many seats changed" means to a reader,
+            # and the figure the pages lead with.
+            "seatsByLeanBefore": {k: before_counts.get(k, 0) for k in ("R", "EVEN", "D")},
+            "seatsByLeanAfter": {k: after_counts.get(k, 0) for k in ("R", "EVEN", "D")},
+            "netSeatChangeByLean": {
+                k: after_counts.get(k, 0) - before_counts.get(k, 0) for k in ("R", "EVEN", "D")
+            },
+            # A different question, for the expert layer: new districts whose
+            # category differs from their main predecessor's. It need not
+            # equal the net change: a district built from several old ones
+            # is compared with its largest source only, and an old district
+            # split with no successor is compared with nothing.
+            "districtsLeaningDifferentlyFromPredecessor": sum(
                 1 for r in new_rows
                 if r["leanBefore"] and r["leanAfter"] and r["leanBefore"] != r["leanAfter"]
             ),

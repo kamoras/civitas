@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app import redistricting as rd
 from app.api.redistricting import router
+from app.main import app as main_app
 
 _BACKEND = pathlib.Path(__file__).resolve().parent.parent
 _SCRIPTS = _BACKEND / "scripts"
@@ -134,9 +135,10 @@ def test_state_summary(toy):
     assert s["unchangedSeats"] == 1
     # Old ZZ-3's 280 in the new ZZ-1, and old ZZ-1's 20 in the new ZZ-3.
     assert s["residentsMoved"] == 300
-    assert s["leanBefore"] == {"R": 1, "EVEN": 0, "D": 2}
-    assert s["leanAfter"] == {"R": 2, "EVEN": 0, "D": 1}
-    assert s["seatsChangedLean"] == 1  # new ZZ-3: from D-1 to R+2
+    assert s["seatsByLeanBefore"] == {"R": 1, "EVEN": 0, "D": 2}
+    assert s["seatsByLeanAfter"] == {"R": 2, "EVEN": 0, "D": 1}
+    assert s["netSeatChangeByLean"] == {"R": 1, "EVEN": 0, "D": -1}
+    assert s["districtsLeaningDifferentlyFromPredecessor"] == 1  # new ZZ-3: from D-1 to R+2
     assert s["meanResidentShift"] == round((700 * 6 + 280 * 10 + 660 * 3 + 20 * 1) / 2660, 1)
 
 
@@ -191,3 +193,23 @@ def test_old_seat_note_answers_every_profile():
     assert nc["seat"]["district"] == "NC-1" and nc["fromCongressSitting"] is True
     assert c.get("/api/elections/redistricting/MO/old/5").json()["seat"] is None
     assert c.get("/api/elections/redistricting/WY/old/0").json()["seat"] is None
+
+
+def test_headline_seat_change_is_after_minus_before_in_every_shipped_state():
+    """The pages lead with the net change; it must be exactly what the
+    before/after strips beside it show, category by category."""
+    for st in _BUNDLED["states"]:
+        s = rd.state_changes(st)["summary"]
+        for k in ("R", "EVEN", "D"):
+            assert s["netSeatChangeByLean"][k] == s["seatsByLeanAfter"][k] - s["seatsByLeanBefore"][k], (st, k)
+        assert sum(s["seatsByLeanAfter"].values()) == s["seats"], st
+
+
+def test_routes_resolve_on_the_real_app():
+    """No earlier /api/elections/{...} route shadows the redistricting ones."""
+    c = TestClient(main_app)
+    index = c.get("/api/elections/redistricting")
+    assert index.status_code == 200 and "heldMaps" in index.json()
+    assert c.get("/api/elections/redistricting/UT").json()["state"] == "UT"
+    assert c.get("/api/elections/redistricting/UT/old/1").json()["seat"]["district"] == "UT-1"
+    assert c.get("/api/elections/redistricting/UT/overlap.csv").headers["content-type"].startswith("text/csv")

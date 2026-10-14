@@ -22,6 +22,7 @@ import { redistrictingDownloads } from "@/lib/api";
 import {
   REDISTRICTING_HREF,
   districtOrdinal,
+  netWord,
   newDistrictSentence,
   oldDistrictSentence,
 } from "@/lib/redistricting";
@@ -52,6 +53,13 @@ const LEAN_WORD: Record<LeanCategory, string> = {
   D: "Democratic-leaning",
   EVEN: "even",
 };
+
+/** The headline seat figures: the same counts the strips draw. */
+const SEAT_TILES: [LeanCategory, string][] = [
+  ["R", "R-LEANING SEATS"],
+  ["D", "D-LEANING SEATS"],
+  ["EVEN", "EVEN SEATS"],
+];
 
 /** One block per seat, coloured by its lean: the state's whole delegation
  * before and after at a glance. The counts are in the text beside it, so
@@ -347,11 +355,24 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
           A new district&apos;s <span className="text-ink-hi">predecessor</span> is the old district
           most of its residents came from; its &quot;before&quot; lean is the predecessor&apos;s.
           The weighted figure averages the leans of every old district its residents came from, by
-          residents. A seat <span className="text-ink-hi">changed lean</span> when the sign of its
-          lean (R, D or EVEN) differs from its predecessor&apos;s. The average resident&apos;s shift
-          is how far each resident&apos;s district lean moved, either way, averaged over residents.
-          Both leans are Cook PVI on the same 2020 + 2024 presidential window, so the change is the
-          lines, not new elections.
+          residents. The average resident&apos;s shift is how far each resident&apos;s district lean
+          moved, either way, averaged over residents. Both leans are Cook PVI on the same 2020 +
+          2024 presidential window, so the change is the lines, not new elections.
+        </p>
+        <p>
+          <span className="text-ink-hi">Seats by lean</span> (the figures at the top) count each
+          map&apos;s districts by the sign of their lean: R, D or EVEN. A different count:{" "}
+          <span className="text-ink-hi">
+            {data.summary.districtsLeaningDifferentlyFromPredecessor} of {data.summary.seats} new
+            districts lean differently from their predecessor
+          </span>
+          . The two need not match: a new district built from several old ones is compared with its
+          largest source only, an old district split up with no successor (
+          {data.summary.oldWithoutSuccessor} here) is compared with nothing, and an EVEN seat is a
+          category of its own. Average district lean: {formatPvi(data.summary.meanPviBefore)}{" "}
+          before, {formatPvi(data.summary.meanPviAfter)} after; a redraw moves residents between
+          districts, not out of the state, so the average barely moves while single seats can move a
+          lot.
         </p>
         <p>
           Population is the 2020 Census, the count the maps were drawn to; it does not track moves
@@ -478,16 +499,21 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
           The delegation, by lean
         </h2>
         <div className="mt-3 space-y-3">
-          <SeatStrip label="BEFORE" counts={s.leanBefore} />
-          <SeatStrip label="AFTER" counts={s.leanAfter} />
+          <SeatStrip label="BEFORE" counts={s.seatsByLeanBefore} />
+          <SeatStrip label="AFTER" counts={s.seatsByLeanAfter} />
         </div>
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/[0.07] pt-3 sm:grid-cols-4">
-          <div>
-            <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">
-              SEATS THAT CHANGED LEAN
-            </dt>
-            <dd className="font-mono text-lg text-ink-hi">{s.seatsChangedLean}</dd>
-          </div>
+          {SEAT_TILES.filter(
+            ([k]) => k !== "EVEN" || s.seatsByLeanBefore.EVEN > 0 || s.seatsByLeanAfter.EVEN > 0
+          ).map(([k, label]) => (
+            <div key={k}>
+              <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">{label}</dt>
+              <dd className="font-mono text-lg text-ink-hi">
+                {s.seatsByLeanBefore[k]} → {s.seatsByLeanAfter[k]}
+                <span className="text-xs text-ink-min"> {netWord(s.netSeatChangeByLean[k])}</span>
+              </dd>
+            </div>
+          ))}
           <div>
             <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">
               AVG. RESIDENT&apos;S SHIFT
@@ -498,14 +524,6 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
             </dd>
           </div>
           <div>
-            <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">
-              AVG. DISTRICT LEAN
-            </dt>
-            <dd className="font-mono text-lg text-ink-hi">
-              {formatPvi(s.meanPviBefore)} → {formatPvi(s.meanPviAfter)}
-            </dd>
-          </div>
-          <div>
             <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">UNCHANGED</dt>
             <dd className="font-mono text-lg text-ink-hi">
               {s.unchangedSeats}
@@ -513,10 +531,6 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
             </dd>
           </div>
         </dl>
-        <p className="mt-2 text-[11px] text-ink-min">
-          A redraw moves residents between districts, not out of the state, so the average barely
-          moves while single seats can move a lot.
-        </p>
       </section>
 
       <section aria-labelledby="districts" className="mt-8">

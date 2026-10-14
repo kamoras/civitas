@@ -42,9 +42,10 @@ const data: StateRedistricting = {
     oldWithoutSuccessor: 0,
     residentsMoved: 400,
     residentsMovedPct: 20,
-    leanBefore: { R: 1, EVEN: 0, D: 1 },
-    leanAfter: { R: 2, EVEN: 0, D: 0 },
-    seatsChangedLean: 1,
+    seatsByLeanBefore: { R: 1, EVEN: 0, D: 1 },
+    seatsByLeanAfter: { R: 2, EVEN: 0, D: 0 },
+    netSeatChangeByLean: { R: 1, EVEN: 0, D: -1 },
+    districtsLeaningDifferentlyFromPredecessor: 1,
     meanPviBefore: 1,
     meanPviAfter: 4,
     meanResidentShift: 3.2,
@@ -134,6 +135,18 @@ describe("RedistrictingStateView", () => {
     await userEvent.type(screen.getByRole("searchbox"), "Lakeside");
     expect(screen.queryByText(/were in the old 1st/)).not.toBeInTheDocument();
     expect(screen.getByText(/were in the old 2nd/)).toBeInTheDocument();
+  });
+
+  it("leads with the net seat change the strips show, and keeps the predecessor count in the method", () => {
+    render(<RedistrictingStateView data={data} />);
+    const r = screen.getByText("R-LEANING SEATS").closest("div")!;
+    expect(r).toHaveTextContent("1 → 2 (+1)");
+    expect(screen.getByText("D-LEANING SEATS").closest("div")).toHaveTextContent("1 → 0 (−1)");
+    expect(screen.queryByText("EVEN SEATS")).not.toBeInTheDocument();
+    expect(screen.queryByText(/CHANGED LEAN/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/1 of 2 new districts lean differently from their predecessor/)
+    ).toBeInTheDocument();
   });
 
   it("lists where each old district went", async () => {

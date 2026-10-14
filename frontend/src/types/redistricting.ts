@@ -65,9 +65,14 @@ export interface RedistrictingSummary {
   oldWithoutSuccessor: number;
   residentsMoved: number;
   residentsMovedPct: number;
-  leanBefore: Record<LeanCategory, number>;
-  leanAfter: Record<LeanCategory, number>;
-  seatsChangedLean: number;
+  /** Districts by lean category on each map, and the net change
+   * (after − before): the headline "how many seats changed". */
+  seatsByLeanBefore: Record<LeanCategory, number>;
+  seatsByLeanAfter: Record<LeanCategory, number>;
+  netSeatChangeByLean: Record<LeanCategory, number>;
+  /** Expert layer: new districts whose category differs from their main
+   * predecessor's. Not the net change; see the method section. */
+  districtsLeaningDifferentlyFromPredecessor: number;
   meanPviBefore: number | null;
   meanPviAfter: number | null;
   meanResidentShift: number | null;

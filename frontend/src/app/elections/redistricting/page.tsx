@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import type { RedistrictingIndex } from "@/types/redistricting";
 import { pageMetadata } from "@/lib/site";
 import { describeRedistrictingIndex } from "@/lib/seo";
-import { REDISTRICTING_HREF, redistrictingHref } from "@/lib/redistricting";
+import { REDISTRICTING_HREF, netWord, redistrictingHref } from "@/lib/redistricting";
 import { safeHref } from "@/lib/formatting";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -57,13 +57,16 @@ export default async function RedistrictingIndexPage() {
                   </Link>
                   <span className="font-mono text-[11px] tracking-[0.1em] text-ink-min">
                     {s.summary.seats} SEATS · {s.summary.residentsMovedPct}% IN A MOSTLY NEW
-                    DISTRICT · {s.summary.seatsChangedLean} CHANGED LEAN
+                    DISTRICT · R-LEANING {s.summary.seatsByLeanBefore.R} →{" "}
+                    {s.summary.seatsByLeanAfter.R} {netWord(s.summary.netSeatChangeByLean.R)} ·
+                    D-LEANING {s.summary.seatsByLeanBefore.D} → {s.summary.seatsByLeanAfter.D}{" "}
+                    {netWord(s.summary.netSeatChangeByLean.D)}
                   </span>
                 </div>
                 {s.map?.title && <p className="mt-0.5 text-xs text-ink-lo">{s.map.title}</p>}
                 <div className="mt-2 space-y-2">
-                  <SeatStrip label="BEFORE" counts={s.summary.leanBefore} />
-                  <SeatStrip label="AFTER" counts={s.summary.leanAfter} />
+                  <SeatStrip label="BEFORE" counts={s.summary.seatsByLeanBefore} />
+                  <SeatStrip label="AFTER" counts={s.summary.seatsByLeanAfter} />
                 </div>
                 <Link
                   href={redistrictingHref(s.state)}

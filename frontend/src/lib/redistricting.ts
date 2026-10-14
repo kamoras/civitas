@@ -88,3 +88,9 @@ export function oldDistrictSentence(
   const successor = o.hasSuccessor ? "" : " No new district draws most of its residents from it.";
   return `Of ${name}'s residents, ${andList(parts)}${rest}.${successor}`;
 }
+
+/** "(+4)", "(−3)", "(SAME)": a backend-computed net change, worded.
+ * Here, not in the client view, so the server-rendered index can call it. */
+export function netWord(n: number): string {
+  return n === 0 ? "(SAME)" : n > 0 ? `(+${n})` : `(−${Math.abs(n)})`;
+}

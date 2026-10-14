@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { newDistrictSentence, oldDistrictSentence, redistrictingHref } from "./redistricting";
+import {
+  netWord,
+  newDistrictSentence,
+  oldDistrictSentence,
+  redistrictingHref,
+} from "./redistricting";
 
 const base = { predecessorNumber: 5, pviBefore: 3, pviAfter: 9, unchanged: false };
 
@@ -70,4 +75,8 @@ describe("oldDistrictSentence", () => {
 
 it("links a state page and a district anchor", () => {
   expect(redistrictingHref("tx", "new-5")).toBe("/elections/redistricting/TX#new-5");
+});
+
+it("words a net seat change", () => {
+  expect([netWord(4), netWord(-3), netWord(0)]).toEqual(["(+4)", "(−3)", "(SAME)"]);
 });
