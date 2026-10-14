@@ -1104,7 +1104,14 @@ and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
 source URLs (`_build_actions_from_data`), never written by the model. Results
-are stored in the `action_issues` table.
+are stored in the `action_issues` table. It runs through the nightly chain
+too: until 2026-10 it stood down for the Senate, Supplementary, House and
+Stock trades links, and the Action Center went as stale as the chain was
+long (13 hours on 2026-10-14). A refresh takes minutes, mostly waiting on
+feeds and the LLM, and measured beside the chain it fits in memory (the
+reasons are in `scheduler._hourly_action_refresh`); only an overlapping
+refresh of its own holds it back. The hourly bill refresh still stands down
+for the Senate and House runs, which rewrite the rows it updates.
 
 Each issue's actions are fixed templates around stored data:
 
