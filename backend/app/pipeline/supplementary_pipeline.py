@@ -9,6 +9,7 @@ Trades are already orchestrated, rather than living inside "the Senate
 pipeline" where they don't belong.
 """
 
+import asyncio
 import logging
 import time
 from datetime import timedelta
@@ -35,6 +36,10 @@ SUPPLEMENTARY_PIPELINE_STEPS = [
 ]
 
 _tracker = PipelineRunTracker()
+
+# The presidential-support step's ceiling: its statement reading stops at
+# READ_BUDGET_S (15 minutes) and the rebuild takes seconds.
+PRESIDENTIAL_SUPPORT_TIMEOUT_S = 25 * 60
 
 
 def is_supplementary_pipeline_running() -> bool:
@@ -257,13 +262,17 @@ async def run_supplementary_pipeline() -> dict:
         logger.info("--- Supplementary: PRESIDENTIAL SUPPORT ---")
         progress.begin("presidential_support")
         try:
+            # Time-boxed, so a slow source can't hold the run (and the chain
+            # behind it); the reading step keeps its own smaller budget.
             async with make_async_client() as client:
-                support = await run_presidential_support(client, db)
+                support = await asyncio.wait_for(
+                    run_presidential_support(client, db), timeout=PRESIDENTIAL_SUPPORT_TIMEOUT_S,
+                )
             detail = (
                 f"{support['statements']['read']} statements read ({support['statements']['status']}); "
                 f"{support['senate']['rollCalls']} Senate and {support['house']['rollCalls']} House roll calls counted"
             )
-            if support["statements"]["status"] != "ok":
+            if support["statements"]["status"] == "index unavailable":
                 progress.fail("presidential_support", detail=detail)
             else:
                 progress.complete("presidential_support", detail=detail)

@@ -711,6 +711,8 @@ How often each member votes with the president's stated position, beside what me
 
 **Uncertainty.** Each rate carries its 95% Wilson score interval (Wilson 1927; Agresti & Coull 1998), which keeps a real width at 0% and 100%, where most members sit. A member is "more" or "less" often than expected only when that interval misses the expected rate; the expected rate's own uncertainty is not included. With 27 Senate votes the intervals are wide, and the page says how many votes each rate rests on.
 
+**Bounded.** Every OMB request has a 30-second timeout and two retries; a run spends at most 15 minutes reading new statements (the first run reads all of them, later runs one or two), leaves the rest for the next night, and the step as a whole is cut off at 25 minutes. Like every Supplementary phase it is best-effort: a failure is recorded and alerted, and the phases before it are not affected. The embedding model loads only when there is a new statement to read, and classification and the rebuild run off the event loop.
+
 **Served.** `GET /api/presidential-support/{chamber}` and `/member/{id}` (the site), `GET /api/public/v1/presidential-support/{chamber}` (the public API, with a contract test). Every number is computed by the backend; the wording is neutral by construction (voting with or against the president is neither good nor bad).
 
 ---

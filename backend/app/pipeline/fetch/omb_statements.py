@@ -55,6 +55,13 @@ INDEX_URL = (
 PARSER_VERSION = 1
 
 _rate_limiter = RateLimiter(1.0)
+# Every request is bounded: whitehouse.gov answers the index in under a
+# second and a SAP PDF (25-125 KB) in about one (2026-10-13), so these leave
+# wide room, and two retries rather than the default three keep one dead
+# file to a couple of minutes at worst.
+INDEX_TIMEOUT_S = 30.0
+PDF_TIMEOUT_S = 30.0
+RETRIES = 2
 
 # GPO citation forms of a bill or resolution, as SAP title blocks print them.
 # Longest first, so "S. J. Res. 1" is not read as "S. 1".
@@ -99,7 +106,9 @@ def parse_index(page_html: str, base_url: str = INDEX_URL) -> list[dict]:
 async def fetch_index(client: httpx.AsyncClient) -> list[dict] | None:
     """The index's entries, or None when it could not be read (an outage is
     not an empty list)."""
-    page = await fetch_text_with_retry(client, _rate_limiter, INDEX_URL, "OMB SAP index")
+    page = await fetch_text_with_retry(
+        client, _rate_limiter, INDEX_URL, "OMB SAP index", timeout=INDEX_TIMEOUT_S, retries=RETRIES,
+    )
     if page is None:
         return None
     entries = parse_index(page)
@@ -110,7 +119,9 @@ async def fetch_index(client: httpx.AsyncClient) -> list[dict] | None:
 
 
 async def fetch_statement_pdf(client: httpx.AsyncClient, url: str) -> bytes | None:
-    return await fetch_bytes_with_retry(client, _rate_limiter, url, "OMB SAP")
+    return await fetch_bytes_with_retry(
+        client, _rate_limiter, url, "OMB SAP", timeout=PDF_TIMEOUT_S, retries=RETRIES,
+    )
 
 
 def pdf_lines(raw: bytes) -> list[tuple[int, float, float, float, str]]:

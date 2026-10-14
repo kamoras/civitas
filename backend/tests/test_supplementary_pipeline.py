@@ -44,8 +44,11 @@ def _reset_tracker():
     supplementary_pipeline._tracker.clear()
 
 
+_SUPPORT_DEFAULT = {"statements": {"status": "ok", "read": 0}, "senate": {"rollCalls": 0}, "house": {"rollCalls": 0}}
+
+
 def _run(db_session, explore_result=None, justice_result=None, president_result=None,
-         committee_leadership_result=None, district_pvi_result=None):
+         committee_leadership_result=None, district_pvi_result=None, presidential_support_result=None):
     with patch("app.pipeline.supplementary_pipeline.SessionLocal", return_value=db_session), \
          patch("app.pipeline.explore_pipeline.run_explore_pipeline", new_callable=AsyncMock) as mock_explore, \
          patch("app.pipeline.justice_pipeline.run_justice_pipeline", new_callable=AsyncMock) as mock_justice, \
@@ -53,7 +56,11 @@ def _run(db_session, explore_result=None, justice_result=None, president_result=
          patch("app.pipeline.fetch.committee_leadership.refresh_committee_leadership_data",
                new_callable=AsyncMock) as mock_committee_leadership, \
          patch("app.pipeline.fetch.district_pvi.refresh_district_pvi",
-               new_callable=AsyncMock) as mock_district_pvi:
+               new_callable=AsyncMock) as mock_district_pvi, \
+         patch("app.pipeline.supplementary_pipeline.run_presidential_support",
+               new_callable=AsyncMock) as mock_presidential_support:
+        # No phase reaches the network or loads a model here: the fast suite
+        # runs offline with no model (AGENTS.md).
         # An exception or a callable becomes the mock's side effect;
         # anything else its return value (None -> that phase's default).
         for mock, result, default in (
@@ -62,6 +69,7 @@ def _run(db_session, explore_result=None, justice_result=None, president_result=
             (mock_president, president_result, {"updated": 0}),
             (mock_committee_leadership, committee_leadership_result, True),
             (mock_district_pvi, district_pvi_result, True),
+            (mock_presidential_support, presidential_support_result, _SUPPORT_DEFAULT),
         ):
             if isinstance(result, Exception) or callable(result):
                 mock.side_effect = result
@@ -351,3 +359,38 @@ def test_a_step_whose_lease_is_held_elsewhere_is_skipped(db_session):
     assert steps["explore_documents"] == "skipped" and steps["president_scorecards"] == "done"
     detail = {step["key"]: step.get("detail") for step in json.loads(run.progress_detail)}
     assert detail["explore_documents"] == "skipped: it is running elsewhere"
+
+
+class TestPresidentialSupportStep:
+    """The last step is best-effort like every other phase: a failure, a
+    timeout or an unreadable OMB index never fails the run or blocks the
+    steps before it."""
+
+    def _steps(self, db_session):
+        import json
+        run = db_session.query(SupplementaryPipelineRun).one()
+        return {s["key"]: (s["status"], s.get("detail")) for s in json.loads(run.progress_detail)}
+
+    def test_a_failing_step_is_carried_past(self, db_session):
+        result = _run(db_session, presidential_support_result=RuntimeError("boom"))
+        assert result["status"] == "completed"
+        steps = self._steps(db_session)
+        assert steps["presidential_support"][0] == "failed"
+        assert steps["president_scorecards"][0] == "done" and steps["explore_documents"][0] == "done"
+
+    def test_a_step_past_its_ceiling_is_cut_off(self, db_session, monkeypatch):
+        import asyncio
+
+        async def slow(*_a, **_k):
+            await asyncio.sleep(5)
+
+        monkeypatch.setattr(supplementary_pipeline, "PRESIDENTIAL_SUPPORT_TIMEOUT_S", 0.05)
+        result = _run(db_session, presidential_support_result=slow)
+        assert result["status"] == "completed"
+        assert self._steps(db_session)["presidential_support"][0] == "failed"
+
+    def test_an_unreadable_index_fails_the_step_and_keeps_the_rates(self, db_session):
+        _run(db_session, presidential_support_result={
+            **_SUPPORT_DEFAULT, "statements": {"status": "index unavailable", "read": 0}})
+        status, detail = self._steps(db_session)["presidential_support"]
+        assert status == "failed" and "index unavailable" in detail

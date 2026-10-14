@@ -5,6 +5,7 @@ expected rate and its interval (analyze/presidential_support.py)."""
 import json
 import math
 import pathlib
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -349,3 +350,23 @@ def test_a_statement_from_another_congress_never_applies(db_session):
                             question="On Passage", title="H.R. 10", bill_id="HR.10", result="Passed"))
     db_session.commit()
     assert ps.match_roll_calls(db_session, "house", 120) == 0
+
+
+async def test_reading_stops_at_its_budget(db_session, monkeypatch):
+    """A first run reads ~200 statements; past the budget the rest wait for
+    the next run instead of holding the pipeline."""
+    raw = (FIXTURES / "SAP-HR1968.pdf").read_bytes()
+
+    async def index(_client):
+        return [{"url": f"https://example.gov/{i}.pdf", "title": "H.R. 1968"} for i in range(3)]
+
+    async def pdf(_client, url):
+        return raw
+
+    ticks = iter([0.0, 0.0, 10.0])
+    monkeypatch.setattr(omb_statements, "fetch_index", index)
+    monkeypatch.setattr(omb_statements, "fetch_statement_pdf", pdf)
+    monkeypatch.setattr(sap_position, "classify", lambda opening, closing: ("support", "sentence"))
+    monkeypatch.setattr(ps, "READ_BUDGET_S", 5)
+    monkeypatch.setattr(ps, "time", SimpleNamespace(monotonic=lambda: next(ticks, 10.0)))
+    assert await ps.refresh_statements(None, db_session) == {"status": "budget spent", "read": 1}

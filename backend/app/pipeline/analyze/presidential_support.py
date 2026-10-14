@@ -36,10 +36,12 @@ the other way. The members being described are the population (AGENTS.md
 at their seat's lean. No shrinkage is applied to either rate.
 """
 
+import asyncio
 import json
 import logging
 import math
 import re
+import time
 from collections import defaultdict
 
 import httpx
@@ -47,6 +49,7 @@ import numpy as np
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import SessionLocal
 from app.models import (
     PolicyStatement, PresidentialSupport, Representative, RollCall, RollCallPosition, Senator, StatementRollCall,
 )
@@ -98,6 +101,12 @@ _AMENDMENT_QUESTIONS = ("On the Amendment", "On Agreeing to the Amendment")
 _AMENDMENT_NUMBER_RE = re.compile(r"Amdt\.\s*(\d+)|Amendment No\.\s*(\d+)")
 # 95% normal quantile for the Wilson score interval.
 _Z95 = 1.959964
+# How long one run spends reading new statements. A run usually finds none or
+# one (OMB publishes a few a week); the first run reads all ~200 at one
+# request a second, about five minutes with the model's classification. What
+# is left past the budget is read by the next night's run, and the rates are
+# rebuilt from what is stored either way.
+READ_BUDGET_S = 15 * 60
 
 
 # ── Statements ────────────────────────────────────────────────────
@@ -111,12 +120,16 @@ async def refresh_statements(client: httpx.AsyncClient, db: Session) -> dict:
         return {"status": "index unavailable", "read": 0}
     stored = {s.url: s for s in db.query(PolicyStatement)}
     read = 0
+    started = time.monotonic()
     for entry in entries:
         row = stored.get(entry["url"])
         if row is not None and row.parser_version == omb_statements.PARSER_VERSION and (
             not row.readable or row.classifier_version == sap_position.CLASSIFIER_VERSION
         ):
             continue
+        if time.monotonic() - started > READ_BUDGET_S:
+            logger.info("OMB statements: read budget spent after %d; the rest next run", read)
+            return {"status": "budget spent", "read": read}
         raw = await omb_statements.fetch_statement_pdf(client, entry["url"])
         if raw is None:
             continue  # a failed fetch is retried next run, never stored as unreadable
@@ -131,7 +144,10 @@ async def refresh_statements(client: httpx.AsyncClient, db: Session) -> dict:
         if parsed is None:
             logger.warning("OMB statement %s did not read as a SAP", entry["url"])
         else:
-            position, sentence = sap_position.classify(parsed["opening"], parsed["closing"])
+            # The model loads here, on the first statement there is to read,
+            # and never on a run that finds nothing new. Off the event loop:
+            # encoding is CPU work, and the loop answers the health check.
+            position, sentence = await asyncio.to_thread(sap_position.classify, parsed["opening"], parsed["closing"])
             row.issued, row.chamber = parsed["issued"], parsed["chamber"]
             row.measures, row.amendments = json.dumps(parsed["measures"]), json.dumps(parsed["amendments"])
             row.position, row.position_sentence = position, sentence
@@ -366,11 +382,19 @@ def compute_chamber(db: Session, chamber: str, congress: int) -> dict:
     return {**reference, "members": len(rows)}
 
 
+def _compute_both(congress: int) -> dict:
+    """Both chambers, on a session of this thread's own."""
+    db = SessionLocal()
+    try:
+        return {chamber: compute_chamber(db, chamber, congress) for chamber in ("senate", "house")}
+    finally:
+        db.close()
+
+
 async def run_presidential_support(client: httpx.AsyncClient, db: Session) -> dict:
-    """The pipeline step: read new statements, then rebuild both chambers."""
+    """The pipeline step: read new statements, then rebuild both chambers
+    from what is stored (also when OMB could not be read). The rebuild
+    reads every counted roll call's positions, so it runs off the event
+    loop."""
     statements = await refresh_statements(client, db)
-    congress = settings.CURRENT_CONGRESS
-    out = {"statements": statements}
-    for chamber in ("senate", "house"):
-        out[chamber] = compute_chamber(db, chamber, congress)
-    return out
+    return {"statements": statements, **(await asyncio.to_thread(_compute_both, settings.CURRENT_CONGRESS))}
