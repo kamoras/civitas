@@ -30,6 +30,28 @@ def congress_gov_bill_url(congress: int, url_type: str, number: str | int) -> st
 
     return f"https://www.congress.gov/bill/{ordinal(congress)}-congress/{url_type}/{number}"
 
+
+# Site bill-id prefix ("HR" in "HR.22") -> congress.gov's URL segment for
+# the bill type.
+BILL_URL_TYPES = {
+    "HR": "house-bill",
+    "S": "senate-bill",
+    "HJRES": "house-joint-resolution",
+    "SJRES": "senate-joint-resolution",
+    "HCONRES": "house-concurrent-resolution",
+    "SCONRES": "senate-concurrent-resolution",
+    "HRES": "house-resolution",
+    "SRES": "senate-resolution",
+}
+
+
+def congress_gov_url_for_bill_id(bill_id: str, congress: int) -> str | None:
+    """congress.gov's page for a site bill id ("S.2403") in `congress`, or
+    None for an id of no bill type congress.gov files."""
+    prefix, _, number = bill_id.upper().partition(".")
+    url_type = BILL_URL_TYPES.get(prefix)
+    return congress_gov_bill_url(congress, url_type, number) if url_type and number.isdigit() else None
+
 _rate_limiter = RateLimiter(settings.CONGRESS_RPS)
 
 # Roll-call-number probe search, shared by the Senate and House "recent

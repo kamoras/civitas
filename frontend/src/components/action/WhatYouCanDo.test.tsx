@@ -1,7 +1,64 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { IssueTags, WhatYouCanDo } from "./IssueEnrichment";
-import type { ActionIssue } from "@/types/action";
+import { callScript } from "./ContactYourMembers";
+import type { ActionIssue, IssueMembers } from "@/types/action";
+import * as api from "@/lib/api";
+
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  fetchIssueMembers: vi.fn(),
+  fetchHouseDistrictsByCounty: vi.fn(),
+  sendActionTap: vi.fn(),
+}));
+
+const VT: IssueMembers = {
+  state: "VT",
+  votes: [
+    {
+      chamber: "house",
+      congress: 119,
+      session: 2,
+      number: 314,
+      date: "2026-09-30",
+      question: "On Passage",
+      result: "Passed",
+      billId: "S.2403",
+      billLabel: "S. 2403",
+    },
+  ],
+  members: [
+    {
+      id: "ann-ash",
+      name: "Ann Ash",
+      party: "D",
+      chamber: "senate",
+      officePhone: "(202) 224-0001",
+      contactFormUrl: "https://ash.senate.gov/contact",
+      websiteUrl: "",
+      positions: {},
+    },
+    {
+      id: "bo-birch",
+      name: "Bo Birch",
+      party: "I",
+      chamber: "house",
+      district: 0,
+      officePhone: "(202) 225-0002",
+      contactFormUrl: "",
+      websiteUrl: "",
+      positions: { "house-119-2-314": "Yea" },
+    },
+  ],
+};
+
+beforeEach(() => {
+  vi.mocked(api.fetchIssueMembers).mockReset().mockResolvedValue(VT);
+  vi.mocked(api.fetchHouseDistrictsByCounty)
+    .mockReset()
+    .mockResolvedValue({ state: "VT", congress: 119, available: true, districts: [] });
+  vi.mocked(api.sendActionTap).mockReset();
+});
 
 function issue(overrides: Partial<ActionIssue> = {}): ActionIssue {
   return {
@@ -31,11 +88,39 @@ function issue(overrides: Partial<ActionIssue> = {}): ActionIssue {
 const rows = () => screen.getAllByRole("listitem");
 
 describe("WhatYouCanDo", () => {
-  it("sends a reader to the directory when the coverage names no member", () => {
-    // Never "your state": nothing asks or remembers where the reader lives.
-    render(<WhatYouCanDo issue={issue()} today="2026-09-29" />);
-    const link = screen.getByRole("link", { name: "Directory →" });
-    expect(link).toHaveAttribute("href", "/politicians");
+  it("gives a state's offices' phones on the issue itself, from a state picked from a list", async () => {
+    // Nothing asks or remembers where the reader lives: a list, kept nowhere.
+    render(<WhatYouCanDo issue={issue({ voteCount: 1 })} today="2026-09-29" />);
+    expect(screen.queryByRole("link", { name: "Directory →" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Your state"), { target: { value: "VT" } });
+    expect(api.fetchIssueMembers).toHaveBeenCalledWith("abc123", "VT");
+    const call = await screen.findByRole("link", {
+      name: "Call Sen. Ann Ash's office, (202) 224-0001",
+    });
+    expect(call).toHaveAttribute("href", "tel:2022240001");
+    // The record on the issue's roll call, linked to the vote on the bill page.
+    expect(screen.getByText("Yea")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "S. 2403 · On Passage" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("#vote-house-2-314")
+    );
+    fireEvent.click(call);
+    // Counted per issue and kind only: no state, member or number goes with it.
+    expect(api.sendActionTap).toHaveBeenNthCalledWith(1, "abc123", "pick");
+    expect(api.sendActionTap).toHaveBeenNthCalledWith(2, "abc123", "call");
+  });
+
+  it("states who decides next, from the record", () => {
+    render(
+      <WhatYouCanDo
+        issue={issue({ deciders: [{ body: "The House", basis: "S. 2403 · In Other Chamber" }] })}
+        today="2026-09-29"
+      />
+    );
+    const [row] = rows();
+    expect(within(row).getByText("Decides")).toBeInTheDocument();
+    expect(within(row).getByText("The House")).toBeInTheDocument();
+    expect(within(row).getByText("S. 2403 · In Other Chamber")).toBeInTheDocument();
   });
 
   it("contacts each named member through their own form, by chamber", () => {
@@ -83,10 +168,7 @@ describe("WhatYouCanDo", () => {
     // A named member's office answers its own constituents, so every other
     // reader still gets a contact they can complete: their own members.
     expect(screen.getByText("Or contact your own senators and representative")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Directory →" })).toHaveAttribute(
-      "href",
-      "/politicians"
-    );
+    expect(screen.getByLabelText("Your state")).toBeInTheDocument();
   });
 
   it("says why each member is listed once, in the reason's own words", () => {
@@ -311,5 +393,48 @@ describe("IssueTags", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /Government Funding/ }));
     expect(onMonitor).toHaveBeenCalledWith("government-funding");
+  });
+});
+
+describe("callScript", () => {
+  const sen = { name: "Ann Ash", chamber: "senate" };
+  const withBill = issue({
+    relatedBills: [{ name: "S. 2403", id: "S.2403", url: "https://www.congress.gov/x" }],
+  });
+
+  it("is a fixed template around the record, with support and oppose worded alike", () => {
+    expect(callScript(withBill, sen, "Vermont", "support")).toBe(
+      "Hello. My name is [your name], and I live in [your town], Vermont.\n" +
+        "I am calling about S. 2403.\n" +
+        "I support it, and I ask Sen. Ann Ash to vote yes.\n" +
+        "Thank you."
+    );
+    expect(callScript(withBill, sen, "Vermont", "oppose")).toContain(
+      "I oppose it, and I ask Sen. Ann Ash to vote no."
+    );
+    expect(callScript(withBill, sen, "Vermont", "ask")).toContain(
+      "I would like to know where Sen. Ann Ash stands on it."
+    );
+  });
+
+  it("quotes the report and its outlet when no bill is named, and never uses a pronoun for the member", () => {
+    const text = callScript(
+      issue({ summary: "Senators wrote a letter.", summarySource: "NPR" }),
+      sen,
+      "Vermont",
+      "ask"
+    );
+    expect(text).toContain('I am calling about this report from NPR: "Senators wrote a letter".');
+    expect(text).not.toMatch(/\b(he|she|his|her|him|they|their|them)\b/i);
+  });
+
+  it("offers support and oppose only when there is a bill to vote on", async () => {
+    render(<WhatYouCanDo issue={issue()} today="2026-09-29" />);
+    fireEvent.change(screen.getByLabelText("Your state"), { target: { value: "VT" } });
+    fireEvent.click(await screen.findByRole("button", { name: "What to say to Sen. Ann Ash" }));
+    expect(screen.queryByRole("button", { name: "Support" })).toBeNull();
+    expect(
+      screen.getByText(/I would like to know where Sen. Ann Ash stands on it/)
+    ).toBeInTheDocument();
   });
 });
