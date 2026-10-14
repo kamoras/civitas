@@ -72,6 +72,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
                 src={bill.sponsorThumbnailUrl}
                 lazy
                 alt=""
+                sizes="16px"
                 className="h-4 w-4 border border-white/[0.07] object-cover object-[center_25%]"
               />
             )}
