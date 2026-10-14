@@ -8,7 +8,7 @@ import {
 } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
-import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
+import type { ActionIssue, ActionIssuesResponse, IssueMembers } from "@/types/action";
 import type { RedistrictedSeat } from "@/types/redistricting";
 import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
@@ -1283,6 +1283,23 @@ export function sendLoadTiming(t: {
   navigator.sendBeacon(`${API_BASE}/track-timing?${params}`);
 }
 
+/** What a tap on an issue's action link counts as (backend ActionTap). */
+export type ActionTapKind = "pick" | "call" | "write" | "copy" | "comment" | "committee" | "bill";
+
+/**
+ * Count one tap on an issue's action link. The backend keeps one counter per
+ * (day, issue, kind) with nothing about the caller in it (ActionTap in
+ * backend/app/models.py): not which state, member or number; a repeat tap
+ * from the same reader counts once a day. sendBeacon, so
+ * it survives the tap opening the dialler or a new page.
+ */
+export function sendActionTap(issuePublicId: string, kind: ActionTapKind) {
+  if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") return;
+  navigator.sendBeacon(
+    `${API_BASE}/track-action?${new URLSearchParams({ issue: issuePublicId, kind })}`
+  );
+}
+
 /** A page opened inside the app, sent by the browser (NavigationBeacon
  *  says why it is counted there): nginx sets the X-Real-IP the visitor hash
  *  uses. */
@@ -1711,6 +1728,21 @@ export async function fetchAdminActionMetrics(
   );
 }
 
+/** Taps on issues' action links (GET /api/admin/action-taps): counts per
+ *  day, kind and issue, with nothing about who tapped (backend ActionTap). */
+export interface ActionTaps {
+  kinds: ActionTapKind[];
+  days: ({ date: string } & Record<ActionTapKind, number>)[];
+  totals: Record<ActionTapKind, number>;
+  issues: ({ publicId: string; title: string | null } & Record<ActionTapKind, number>)[];
+}
+
+export async function fetchAdminActionTaps(token: string, days: number = 30): Promise<ActionTaps> {
+  return requestJson(`${API_BASE}/admin/action-taps?days=${days}`, "Action taps failed", {
+    init: { headers: adminHeaders(token) },
+  });
+}
+
 /** One ISO week of Action Center news issues by principal actor
  *  (GET /api/admin/actor-concentration). */
 export interface ActorConcentrationWeek {
@@ -1839,6 +1871,19 @@ export async function fetchConfig(): Promise<AppConfig> {
     // Fall through to defaults
   }
   return DEFAULT_CONFIG;
+}
+
+/** A state's members, with their offices' phones and contact forms and how
+ *  they voted on the issue's roll calls. The state is the reader's pick from
+ *  a list, sent in the URL and kept nowhere (AGENTS.md section 8). */
+export async function fetchIssueMembers(
+  issuePublicId: string,
+  state: string
+): Promise<IssueMembers> {
+  return cachedFetch(
+    `${API_BASE}/action/issues/${encodeURIComponent(issuePublicId)}/members?state=${encodeURIComponent(state)}`,
+    TTL.SHORT
+  );
 }
 
 export async function fetchActionIssues(date?: string): Promise<ActionIssuesResponse> {

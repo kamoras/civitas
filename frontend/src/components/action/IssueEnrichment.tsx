@@ -38,7 +38,10 @@ import { formatEasternTime } from "@/lib/results";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { monitorHref } from "@/lib/routes";
 import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
+import type { ActionTapKind } from "@/lib/api";
 import Photo from "@/components/Photo";
+import ContactYourMembers from "@/components/action/ContactYourMembers";
+import TrackedLink from "@/components/action/TrackedLink";
 
 /** Hairline section header: the one used by RecordIndex and /elections. */
 export const SECTION_HEADING =
@@ -169,6 +172,10 @@ export function NewFactTag() {
   return <span className="ml-2 font-mono text-xs text-phos-mid">new</span>;
 }
 
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 /**
  * Policy areas and the national monitors tracking this issue, on one line.
  * Each monitor opens in place on the Action Center's monitors tab.
@@ -260,9 +267,12 @@ interface ActionRow {
   verb: string;
   what: React.ReactNode;
   detail?: React.ReactNode;
-  href: string;
-  internal: boolean;
-  label: string;
+  /** No link: a row that states something (who decides) rather than offers it. */
+  href?: string;
+  internal?: boolean;
+  label?: string;
+  /** Counted as this kind of tap when followed (backend ActionTap). */
+  tap?: ActionTapKind;
 }
 
 /**
@@ -274,15 +284,22 @@ interface ActionRow {
  * is generated from a related bill), so a track action whose URL is already a
  * related bill's is not listed twice.
  *
- * With no member named in the coverage there is no one specific to contact, so
- * the row points at the directory, where a reader picks their own state. The
- * reader is never asked, and nothing remembers, where they live (AGENTS.md §8).
+ * First, who decides next, where the record says (a linked bill's stage, an
+ * open comment period's agency). Then the reader's own members, on the page:
+ * a state picked from a list gives each office's phone and contact form, how
+ * each voted on the issue's roll calls, and a call script (ContactYourMembers).
+ * The reader is never asked, and nothing remembers, where they live
+ * (AGENTS.md §8).
  *
  * `today` is passed in rather than read from the clock so a server-rendered page
  * and its hydration agree on whether a comment period is still open.
  */
 function actionRows(issue: ActionIssue, today: string): ActionRow[] {
   const rows: ActionRow[] = [];
+
+  (issue.deciders ?? []).forEach((d, i) => {
+    rows.push({ key: `decides-${i}`, verb: "Decides", what: d.body, detail: capitalize(d.basis) });
+  });
 
   // A seat-flip issue's first row: the count itself, on its state's page.
   followResultsActions(issue).forEach((action, i) => {
@@ -301,6 +318,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
   for (const m of members) {
     const url = safeHref(m.contactFormUrl || m.websiteUrl || null);
     const title = m.chamber === "house" ? "Rep." : "Sen.";
+    const reason = m.matchReason ? capitalize(m.matchReason) : "Named in the coverage";
     rows.push({
       key: `member-${m.id}`,
       verb: "Contact",
@@ -322,12 +340,27 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       // The reason is the whole sentence ("named in coverage", "referenced
       // in coverage"); prefixing it repeated the first and contradicted the
       // second.
-      detail: m.matchReason
-        ? m.matchReason.charAt(0).toUpperCase() + m.matchReason.slice(1)
-        : "Named in the coverage",
+      detail: m.officePhone ? (
+        <>
+          {reason} ·{" "}
+          <TrackedLink
+            issuePublicId={issue.publicId}
+            kind="call"
+            href={`tel:${m.officePhone.replace(/[^0-9+]/g, "")}`}
+            internal={false}
+            className="underline decoration-ink-min/60 underline-offset-4"
+            ariaLabel={`Call ${title} ${m.name}'s office, ${m.officePhone}`}
+          >
+            {m.officePhone}
+          </TrackedLink>
+        </>
+      ) : (
+        reason
+      ),
       href: url ?? `/politicians/${m.id}`,
       internal: !url,
       label: url ? "Contact ↗" : "Scorecard →",
+      tap: url ? "write" : undefined,
     });
   }
   // The reader's own members, always — except on a count issue (a seat
@@ -339,23 +372,9 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
   // else had nothing on the page they could complete.
   if (followResultsActions(issue).length === 0) {
     rows.push({
-      key: "directory",
+      key: "your-members",
       verb: "Contact",
-      what:
-        members.length === 0
-          ? "Find your senators and representative"
-          : "Or contact your own senators and representative",
-      // What the reader gets by following the link, not why there is no
-      // named member: over a third of issues land here, and "No member was
-      // named in the coverage" read as an apology in the one place the
-      // page offers something to do.
-      detail:
-        members.length === 0
-          ? "Pick your state: each member's page has their phone number and contact form"
-          : "Offices answer their own constituents. Pick your state for your members' phone numbers and contact forms",
-      href: "/politicians",
-      internal: true,
-      label: "Directory →",
+      what: <ContactYourMembers issue={issue} afterNamed={members.length > 0} />,
     });
   }
 
@@ -398,6 +417,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       href,
       internal: false,
       label: "Committee ↗",
+      tap: "committee",
     });
   }
 
@@ -413,9 +433,19 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
           <span className="font-mono text-xs text-ink-lo">{bill.id}</span> · {bill.name}
         </>
       ),
+      detail: bill.stageName
+        ? [
+            bill.stageName,
+            bill.latestAction &&
+              `Latest action${bill.latestActionDate ? ` ${formatUtcDate(bill.latestActionDate, { month: "short", day: "numeric" })}` : ""}: ${bill.latestAction}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : undefined,
       href,
       internal,
       label: internal ? "Bill page →" : "Congress.gov ↗",
+      tap: "bill",
     });
   }
   trackableActions(issue)
@@ -429,6 +459,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
         href,
         internal,
         label: internal ? "Bill page →" : "Congress.gov ↗",
+        tap: "bill",
       });
     });
 
@@ -447,6 +478,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       verb: "Comment",
       what: doc?.title ?? action.text,
       detail: [
+        doc?.agencyName,
         doc?.docType.replace(/_/g, " "),
         action.text,
         describeDaysLeftOn(action.closesOn, today),
@@ -456,6 +488,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       href: `/explore/${action.docId}#comment`,
       internal: true,
       label: "Comment →",
+      tap: "comment",
     });
   }
 
@@ -467,12 +500,18 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       key: `doc-${doc.id}`,
       verb: commentOpen ? "Comment" : "Read",
       what: doc.title,
-      detail: commentOpen
-        ? `${kind} · comments close ${formatUtcDate(doc.commentsCloseOn!, { month: "short", day: "numeric" })} · ${describeDaysLeftOn(doc.commentsCloseOn!, today)}`
-        : `${kind} · ${doc.date}`,
+      detail: [
+        doc.agencyName,
+        commentOpen
+          ? `${kind} · comments close ${formatUtcDate(doc.commentsCloseOn!, { month: "short", day: "numeric" })} · ${describeDaysLeftOn(doc.commentsCloseOn!, today)}`
+          : `${kind} · ${doc.date}`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
       href: commentOpen ? `/explore/${doc.id}#comment` : `/explore/${doc.id}`,
       internal: true,
       label: commentOpen ? "Comment →" : "Document →",
+      tap: commentOpen ? "comment" : undefined,
     });
   }
 
@@ -506,13 +545,25 @@ export function WhatYouCanDo({
               <span className="col-span-2 font-mono text-xs uppercase tracking-[0.12em] text-ink-min sm:col-span-1">
                 {row.verb}
               </span>
-              <span className="min-w-0 font-display text-[15px] leading-snug text-ink-hi">
+              <div
+                className={`min-w-0 font-display text-[15px] leading-snug text-ink-hi ${row.href ? "" : "col-span-2 sm:col-span-2"}`}
+              >
                 {row.what}
                 {row.detail && (
                   <span className="mt-0.5 block text-[13px] text-ink-lo">{row.detail}</span>
                 )}
-              </span>
-              {row.internal ? (
+              </div>
+              {!row.href ? null : row.tap ? (
+                <TrackedLink
+                  issuePublicId={issue.publicId}
+                  kind={row.tap}
+                  href={row.href}
+                  internal={!!row.internal}
+                  className={cls}
+                >
+                  {row.label}
+                </TrackedLink>
+              ) : row.internal ? (
                 <Link href={row.href} className={cls}>
                   {row.label}
                 </Link>

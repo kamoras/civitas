@@ -35,7 +35,11 @@ from app.http_client import make_async_client
 from app.models import ActionIssue, ActionIssueStatus, RepSponsoredBill, SponsoredBill
 from app.pipeline.analyze import action_metrics
 from app.pipeline.analyze.bill_analyzer import classify_policy_area, recent_roll_call_key
-from app.pipeline.fetch.congress import fetch_recent_house_roll_calls, fetch_recent_roll_calls
+from app.pipeline.fetch.congress import (
+    congress_gov_url_for_bill_id,
+    fetch_recent_house_roll_calls,
+    fetch_recent_roll_calls,
+)
 from app.pipeline.fetch.daily_digest import first_bill_id
 from app.pipeline.fetch.federal_register import fetch_recent_significant_rules
 from app.pipeline.fetch.floor_logs import bill_id_from_number, house_roll_call_url, senate_roll_call_url
@@ -97,6 +101,21 @@ def _vote_url(vote: dict) -> str:
     if vote.get("chamber") == "House":
         return house_roll_call_url(vote.get("year"), vote.get("rollNumber"))
     return senate_roll_call_url(vote.get("congress"), vote.get("session"), vote.get("rollNumber"))
+
+
+def _vote_bill_entries(vote: dict, bill_id: str | None) -> list[dict]:
+    """The issue's related bill: the one the roll call was on, with the
+    congress.gov link and Congress the issue API needs to show it. Until
+    2026-10-14 these carried only a name and id, and the API, which shows a
+    bill only with a link, dropped them: a "House vote on S 2403" issue
+    listed no bill."""
+    if not bill_id:
+        return []
+    congress = vote.get("congress") or settings.CURRENT_CONGRESS
+    url = congress_gov_url_for_bill_id(bill_id, congress)
+    if not url:
+        return []
+    return [{"name": bill_label(bill_id) or bill_id, "id": bill_id, "url": url, "congress": congress}]
 
 
 def _vote_margin_ratio(vote: dict) -> float:
@@ -303,7 +322,7 @@ def check_roll_call_signals(db: Session, today: str | None = None) -> int:
             primary_source_url=vote_url,
             confirmation_deadline=utcnow() + timedelta(hours=CONFIRMATION_WINDOW_HOURS),
             primary_article_date=vote_date_iso(vote.get("voteDate")) or today,
-            related_bill_ids=json.dumps([{"name": bill_label(bill_id) or bill_id, "id": bill_id}] if bill_id else []),
+            related_bill_ids=json.dumps(_vote_bill_entries(vote, bill_id)),
         )
         db.add(row)
         created += 1

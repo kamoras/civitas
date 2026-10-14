@@ -193,7 +193,12 @@ class TestCheckRollCallSignals:
         assert row.title == "Senate vote on S. 4668: Bill Passed, 77-22"
         assert row.date == "2026-09-29" and row.primary_article_date == "2026-09-28"
         assert "narrow" not in f"{row.title} {row.summary} {row.facts}"
-        assert json.loads(row.related_bill_ids) == [{"name": "S. 4668", "id": "S.4668"}]
+        # With its link and Congress: the issue API shows a bill only with a
+        # link, and dropped these until 2026-10-14.
+        assert json.loads(row.related_bill_ids) == [{
+            "name": "S. 4668", "id": "S.4668", "congress": 119,
+            "url": "https://www.congress.gov/bill/119th-congress/senate-bill/4668",
+        }]
         assert json.loads(row.facts)[0] == "Tally: 77 yea, 22 nay, 0 not voting."
 
 

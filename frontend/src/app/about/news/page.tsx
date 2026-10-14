@@ -168,11 +168,16 @@ export default function NewsChapter() {
           for or against a position: contact the members of Congress the coverage names (through
           their own contact form), contact the committee that handles the subject, follow the bills
           involved, comment on a rule about the story by its deadline, and read the related federal
-          documents. Every issue also points to the directory, where you pick your own state, and
-          the site never asks where you live: a member&apos;s office answers its own constituents,
-          so a member from another state is often not one you can reach. A seat changing party on
-          election night is the exception: its issue is the count, so what you can do is follow that
-          count on its state&apos;s page.
+          documents. Where the record says who decides next (the stage a linked bill has reached, or
+          the agency taking comments on a rule), the issue says so. Every issue also lets you pick
+          your state from a list and shows your senators and representative right there, with each
+          office&apos;s phone number and contact form, how each voted on any roll call the issue is
+          about, and a call script made of the record and your choice to ask, support or oppose (the
+          last two only for a bill). The site never asks where you live, and the state you pick
+          isn&apos;t saved: a member&apos;s office answers its own constituents, so a member from
+          another state is often not one you can reach. A seat changing party on election night is
+          the exception: its issue is the count, so what you can do is follow that count on its
+          state&apos;s page.
         </P>
         <More label="How the committee is chosen">
           <P>
