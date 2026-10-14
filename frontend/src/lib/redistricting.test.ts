@@ -11,9 +11,16 @@ describe("newDistrictSentence", () => {
   });
   it("says the largest group when no old district holds a majority", () => {
     expect(
-      newDistrictSentence({ ...base, predecessorSharePct: 41, pviBefore: -2, pviAfter: -2 })
+      newDistrictSentence({ ...base, predecessorSharePct: 41, pviBefore: -23, pviAfter: 10 })
     ).toBe(
-      "The largest group of this district's residents (41%) were in the old 5th; its lean is D+2, the same as before."
+      "The largest group of this district's residents (41%) were in the old 5th, which leaned D+23; this district leans R+10."
+    );
+  });
+  it("says the same lean when a majority predecessor's lean is unchanged", () => {
+    expect(
+      newDistrictSentence({ ...base, predecessorSharePct: 60, pviBefore: -2, pviAfter: -2 })
+    ).toBe(
+      "Most of this district's residents (60%) were in the old 5th; its lean is D+2, the same as before."
     );
   });
   it("names an unchanged district as unchanged", () => {

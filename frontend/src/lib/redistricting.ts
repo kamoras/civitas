@@ -25,7 +25,7 @@ type NoteLike = Pick<
 
 /** "Most of this district's residents (78%) were in the old 5th; its lean
  * moved from R+3 to R+9." The lean "before" is the old district most
- * residents came from. */
+ * residents came from; with no majority, it is named as that district's. */
 export function newDistrictSentence(note: NoteLike, withLean = true): string {
   // Without the lean (a results page: beside a count, a lean reads as a
   // prediction of it), the sentence is only where residents lived.
@@ -40,10 +40,15 @@ export function newDistrictSentence(note: NoteLike, withLean = true): string {
           : ` Its lean is ${formatPvi(d.pviAfter)}.`;
     return `Unchanged: the same residents as ${old}.${lean}`;
   }
-  const who =
-    d.predecessorSharePct > 50
-      ? `Most of this district's residents (${d.predecessorSharePct}%)`
-      : `The largest group of this district's residents (${d.predecessorSharePct}%)`;
+  if (d.predecessorSharePct <= 50) {
+    // No old district holds a majority, so "its lean moved" would claim
+    // one predecessor for a district assembled from several: give the
+    // largest one's lean as that district's, and this one's as its own.
+    const before = d.pviBefore != null ? `, which leaned ${formatPvi(d.pviBefore)}` : "";
+    const after = d.pviAfter != null ? `; this district leans ${formatPvi(d.pviAfter)}` : "";
+    return `The largest group of this district's residents (${d.predecessorSharePct}%) were in ${old}${before}${after}.`;
+  }
+  const who = `Most of this district's residents (${d.predecessorSharePct}%)`;
   let lean = "";
   if (d.pviBefore != null && d.pviAfter != null) {
     lean =
