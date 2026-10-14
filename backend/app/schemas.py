@@ -1182,6 +1182,14 @@ class RelatedBillSchema(CamelModel):
     internal_url: str | None = None
 
 
+class RelatedMonitorSchema(CamelModel):
+    """A national monitor tracking an issue, by its stored title. Pages used
+    to print the slug back out as a name ("Democratic senator talks trumps
+    russian diesel deal"), losing the apostrophe and the capitals."""
+    slug: str
+    title: str
+
+
 class ActionIssueSchema(CamelModel):
     id: int
     public_id: str
@@ -1226,7 +1234,11 @@ class ActionIssueSchema(CamelModel):
     related_bills: list[RelatedBillSchema] = []
     related_explore_docs: list[RelatedExploreDoc] = []
     related_senators: list[RelatedSenator] = []
+    # Kept for pages built before related_monitors (expand, then contract).
     related_monitor_slugs: list[str] = []
+    # Only monitors that still exist: a merged or deleted monitor's slug
+    # stays on the issues it tracked, and linked nowhere.
+    related_monitors: list[RelatedMonitorSchema] = []
     full_story: str | None = None
     # Computed only by the list endpoint (app/trending.py needs the whole
     # day's view-count spread to judge any one issue) — always False from

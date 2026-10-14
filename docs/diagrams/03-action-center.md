@@ -160,9 +160,13 @@ monitors to August 31, 4 of them real, with 11 off-topic back-filled updates;
 prompt carried "U.S.-Iran Conflict" as an example, the production model copied
 it for 18 of 23 replayed topics, the real Iran one included, and the duplicate check then merged each new
 monitor into the existing one of that name. Its significance verdict said yes
-to all 23. Now there is no example and no verdict, a title word the articles
-never use falls back to the issue's own headline, and the category is the
-issues' own policy area. A monitor with no update for 7 days is watching, and
+to all 23. Now there is no example and no verdict, a name that fails its checks (a
+title word the articles never use, an ungrounded description) falls back to
+the headline nearest the opening issues' centroid, a monitor still named
+after one of its own headlines is named again on later runs (slug kept), and
+the category is the issues' own policy area. Until 2026-10-14 the fallback
+was whichever issue crossed the day floor: a bipartisan letter's monitor
+opened as one interview's headline, and pages printed its slug as the name. A monitor with no update for 7 days is watching, and
 closed after 30; long-running stories went up to 28 days between issues on the
 same history.
 

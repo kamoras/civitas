@@ -413,6 +413,11 @@ def _build_issue_response(
     monitor_slugs = _parse_json_field(
         getattr(issue, "related_monitor_slugs", "[]")
     )
+    monitor_titles = dict(
+        db.query(NationalMonitor.slug, NationalMonitor.title)
+        .filter(NationalMonitor.slug.in_(monitor_slugs))
+        .all()
+    ) if monitor_slugs else {}
 
     current_facts = _parse_json_field(issue.facts)
     previous_facts = _parse_json_field(getattr(issue, "previous_facts", "[]"))
@@ -453,6 +458,10 @@ def _build_issue_response(
         related_explore_docs=related_docs,
         related_senators=related_senators,
         related_monitor_slugs=monitor_slugs,
+        related_monitors=[
+            {"slug": slug, "title": monitor_titles[slug]}
+            for slug in monitor_slugs if slug in monitor_titles
+        ],
         full_story=getattr(issue, "full_story", None),
         is_trending=is_trending,
         status=getattr(issue, "status", None) or "confirmed",

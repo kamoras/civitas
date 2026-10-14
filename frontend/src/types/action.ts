@@ -94,6 +94,8 @@ export interface ActionIssue {
   relatedExploreDocs: RelatedExploreDoc[];
   relatedSenators: RelatedSenator[];
   relatedMonitorSlugs?: string[];
+  /** The monitors tracking this issue that still exist, by stored title. */
+  relatedMonitors?: { slug: string; title: string }[];
   fullStory?: string | null;
   /** Only ever true from the issues-list fetch — the single-issue lookup
    *  has no peer issues to judge traction against. */
