@@ -912,6 +912,18 @@ first header the endpoint ever read. A browser under automation
 be joined to a `SiteVisit` would turn a performance histogram into a per-visitor
 log.
 
+Taps on an issue's action links (`POST /api/track-action`, `ActionTap`) are
+counted the same way: one counter per (day, issue public id, kind), where the
+kind is one of a fixed set validation enforces (`ACTION_TAP_KINDS`: picking a
+state, calling, writing, copying the call script, a comment page, a committee,
+a bill). Not which state, member or number, and the endpoint reads nothing
+about the caller. The state picker on an issue (`ContactYourMembers.tsx`) is an
+explicit, unremembered choice from a list: the state goes in the URL that loads
+its members (`GET /api/action/issues/{id}/members?state=`) and nowhere else, and
+the House town filter runs in the browser over district lists the page already
+has. Keep both that way: a tap row that named a state would be a coarse
+location log per issue.
+
 The admin dashboard's headline traffic figures are the two that measure people:
 **confirmed visitors** (`SiteVisit` from `CONFIRMED_VISITS_SINCE`, the first
 whole day a visit counted only once the browser ran the page; null before it,
@@ -1103,7 +1115,14 @@ clusters related articles, incorporates trending topics from Google Trends and B
 and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
-source URLs (`_build_actions_from_data`), never written by the model. Results
+source URLs (`_build_actions_from_data`), never written by the model. Members
+are linked by full name from the articles' own headlines and descriptions as
+well as the issue's text (a bare surname only from the issue's text). When the
+issue is served, a linked bill's stored stage names who acts next
+(`bill_decider`) and an open comment period names its agency; the reader's own
+members, their phones and their votes on the issue's roll calls come from the
+state the reader picks on the page; the call script is a fixed template
+around the record (`callScript`). Results
 are stored in the `action_issues` table.
 
 Each issue's actions are fixed templates around stored data:
@@ -1595,6 +1614,7 @@ the pending list).
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
 | Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/` |
 | Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; detector process `face_detection.py`; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
+| Issue contact surface (state picker, phones, roll-call record, call script) + action-tap counter | `frontend/src/components/action/ContactYourMembers.tsx`, `backend/app/api/action.py` (`get_issue_members`, `issue_roll_calls`, `bill_decider`), `backend/app/api/visits.py` (`track_action`), `GET /api/admin/action-taps` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |

@@ -592,9 +592,17 @@ Every hour at :15
        │         with no q), the target of the homepage's and the Today
        │         tab's "Every open comment period" links
        │         Every issue but a count issue also offers the reader's
-       │         own members (the directory): a named member's office
-       │         answers its own constituents, so a member from another
-       │         state was a contact most readers could not complete
+       │         own members on the page: a state picked from a list
+       │         loads each office's phone (tel:) and contact form, how
+       │         each voted on the issue's roll calls, and a fixed call
+       │         script (GET /api/action/issues/{id}/members?state=; the
+       │         state is kept nowhere). Before 2026-10-14 this was a
+       │         link to the directory: 5 taps over 2 page loads to a
+       │         phone number, now 2 on the page
+       │         Who decides next: a linked bill's stored stage
+       │         (bill_decider) or an open comment period's agency
+       │         Members named by full name in the articles themselves
+       │         are linked too ("named in the reporting")
        ▼
   8. MONITORS ── Detect cross-day recurring topics (title similarity ≥ 0.85)
        │         Create NationalMonitor records (matching issues on 5

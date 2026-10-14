@@ -2310,6 +2310,29 @@ class ApiRequestCount(VisitsBase):
     count: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class ActionTap(VisitsBase):
+    """Taps on an issue's action links, as daily counters — never per tap.
+
+    One counter per (date, issue public id, kind): "one more tap on a member's
+    phone number under issue i5646e8ab today". The browser sends the issue and
+    one of a fixed set of kinds (api/visits.py's ACTION_TAP_KINDS: picking a
+    state, calling, writing, copying the call script, commenting on a rule,
+    contacting a committee, following a bill) and nothing else: not which
+    state, which member or which number, and the endpoint reads nothing about
+    the caller — no IP, no hash, no User-Agent — so a row cannot be joined to
+    a SiteVisit or say who did anything (AGENTS.md section 8). The issue is
+    kept only as a well-formed public id (issue_ids.from_public_id), the rule
+    IssueView already follows. It counts whether the Action Center's links
+    are used, which nothing measured before 2026-10-14.
+    """
+    __tablename__ = "action_taps"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD, UTC
+    issue_public_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(12), primary_key=True)  # an ACTION_TAP_KINDS member
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class StatewideNominee(Base):
     """A confirmed nominee for a STATEWIDE EXECUTIVE office (Governor,
     Lieutenant Governor, Attorney General, Secretary of State, Treasurer).

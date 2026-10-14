@@ -23,7 +23,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, get_args
 
 from fastapi import APIRouter, Query, Request
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -35,7 +35,9 @@ from app.api import throttle
 from app.api.rate_limit import SELF_DECLARED_CRAWLER
 from app.database import VisitsSessionLocal
 from app.issue_ids import from_public_id
-from app.models import ApiRejectionCount, ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt
+from app.models import (
+    ActionTap, ApiRejectionCount, ApiRequestCount, IssueView, PageLoadTiming, PageView, SiteVisit, VisitSalt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +126,21 @@ class _TimingEvent:
     device: str = ""
 
 
+# What an ActionTap counts: picking a state to see its members, calling an
+# office, opening its contact form, copying the call script, opening a rule's
+# comment page, contacting a committee, following a bill.
+ActionTapKind = Literal["pick", "call", "write", "copy", "comment", "committee", "bill"]
+ACTION_TAP_KINDS: tuple[str, ...] = get_args(ActionTapKind)
+
+
+@dataclass(frozen=True)
+class _TapEvent:
+    """One tap on an issue's action link — see ActionTap."""
+    date: str
+    issue_public_id: str
+    kind: str
+
+
 @dataclass(frozen=True)
 class _ApiEvent:
     """One public API request — see ApiRequestCount."""
@@ -161,7 +178,7 @@ def _bucket_for(ms: float) -> int | None:
     return None
 
 
-def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent | _ApiEvent"], db: Session) -> None:
+def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent | _ApiEvent | _TapEvent"], db: Session) -> None:
     """Write a batch of queued visit events in one transaction.
 
     Called by run_visit_consumer (via asyncio.to_thread, with a fresh
@@ -183,6 +200,16 @@ def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent | _ApiEvent"], db
                             set_={"count": PageLoadTiming.count + 1},
                         )
                     )
+                continue
+            if isinstance(event, _TapEvent):
+                db.execute(
+                    sqlite_insert(ActionTap).values(
+                        date=event.date, issue_public_id=event.issue_public_id, kind=event.kind, count=1,
+                    ).on_conflict_do_update(
+                        index_elements=["date", "issue_public_id", "kind"],
+                        set_={"count": ActionTap.count + 1},
+                    )
+                )
                 continue
             if isinstance(event, _ApiEvent):
                 db.execute(
@@ -240,7 +267,7 @@ def _write_visit_batch(batch: list["_VisitEvent | _TimingEvent | _ApiEvent"], db
         db.rollback()
 
 
-def _write_visit_batch_with_own_session(batch: list["_VisitEvent | _TimingEvent | _ApiEvent"]) -> None:
+def _write_visit_batch_with_own_session(batch: list["_VisitEvent | _TimingEvent | _ApiEvent | _TapEvent"]) -> None:
     """Entry point for asyncio.to_thread — owns the session lifecycle
     since, unlike _write_visit_batch, there's no request-scoped session
     to inject here."""
@@ -748,3 +775,26 @@ async def track_timing(
         _visit_queue.put_nowait(event)
     except asyncio.QueueFull:
         logger.warning("Visit queue full (%d) — dropping timing event", _VISIT_QUEUE_MAXSIZE)
+
+
+@router.post("/track-action", status_code=204)
+async def track_action(
+    issue: str = Query(..., max_length=16),
+    kind: ActionTapKind = Query(...),
+) -> None:
+    """Counts one tap on an issue's action link (ActionTap), sent by the
+    browser with sendBeacon as the link opens.
+
+    Same design as track-timing: it reads nothing about the caller — no IP,
+    no User-Agent — and the kind is refused by validation unless it is one of
+    ACTION_TAP_KINDS, so a client can at most add counts to (issue, kind)
+    cells. The issue must be a well-formed public id (issue_ids), as for
+    IssueView. Queued for the visit consumer, never written on the request
+    path. Must stay `async def` — see track_visit.
+    """
+    if from_public_id(issue) is None:
+        return
+    try:
+        _visit_queue.put_nowait(_TapEvent(date=_today(), issue_public_id=issue.lower(), kind=kind))
+    except asyncio.QueueFull:
+        logger.warning("Visit queue full (%d) — dropping action tap", _VISIT_QUEUE_MAXSIZE)

@@ -1045,6 +1045,9 @@ class RelatedExploreDoc(CamelModel):
     url: str | None = None
     comment_url: str | None = None
     comments_close_on: str | None = None
+    # The issuing agency, for a Federal Register document: who takes the
+    # comments and decides the rule.
+    agency_name: str | None = None
 
 
 class RelatedSenator(CamelModel):
@@ -1063,6 +1066,8 @@ class RelatedSenator(CamelModel):
     # senate.gov link — wrong for House members in the list.
     contact_form_url: str | None = None
     website_url: str | None = None
+    # The office's Washington phone, read when the issue is served.
+    office_phone: str | None = None
 
 
 class CommitteeLeaderSchema(CamelModel):
@@ -1105,6 +1110,55 @@ class RelatedBillSchema(CamelModel):
     # Path to our own bill detail page ("/congress/bills/HR.22") when we host this
     # bill; None means the congress.gov `url` is the only link available.
     internal_url: str | None = None
+    # Where the bill stands, from the stored record of a bill a sitting
+    # member sponsored (bill_stage.py); None when the site holds no record.
+    stage_name: str | None = None
+    latest_action: str | None = None
+    latest_action_date: str | None = None
+
+
+class DeciderSchema(CamelModel):
+    """Who can act on an issue next, derived from a linked bill's stage or
+    an open comment period's agency; never guessed from the story."""
+    body: str
+    basis: str
+
+
+class IssueVoteSchema(CamelModel):
+    """A roll call linked to an issue: the vote the issue reports, or a vote
+    on a bill the coverage names."""
+    chamber: str
+    congress: int
+    session: int
+    number: int
+    date: str
+    question: str
+    result: str
+    bill_id: str | None = None
+    bill_label: str | None = None
+
+
+class IssueMemberSchema(CamelModel):
+    """A state's sitting member, with the office's contact details and how
+    they voted on the issue's roll calls ({"house-119-2-314": "Yea"})."""
+    id: str
+    name: str
+    party: str
+    chamber: str
+    district: int | None = None
+    office_phone: str = ""
+    contact_form_url: str = ""
+    website_url: str = ""
+    positions: dict[str, str] = {}
+
+
+class IssueMembersSchema(CamelModel):
+    """GET /api/action/issues/{id}/members?state=: a state's members, for
+    contacting them about one issue. The state is the reader's explicit
+    pick, carried in the URL and kept nowhere (AGENTS.md section 8)."""
+    state: str
+    votes: list[IssueVoteSchema] = []
+    members: list[IssueMemberSchema] = []
 
 
 class RelatedMonitorSchema(CamelModel):
@@ -1164,6 +1218,10 @@ class ActionIssueSchema(CamelModel):
     # Only monitors that still exist: a merged or deleted monitor's slug
     # stays on the issues it tracked, and linked nowhere.
     related_monitors: list[RelatedMonitorSchema] = []
+    deciders: list[DeciderSchema] = []
+    # Roll calls linked to the issue (IssueVoteSchema), so a page knows to
+    # offer each member's record on them.
+    vote_count: int = 0
     full_story: str | None = None
     # Computed only by the list endpoint (app/trending.py needs the whole
     # day's view-count spread to judge any one issue) — always False from

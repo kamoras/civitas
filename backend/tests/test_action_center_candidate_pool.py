@@ -94,7 +94,7 @@ def refresh(monkeypatch):
     monkeypatch.setattr(ac, "_classify_issue_policy_areas", lambda t, s: [])
     monkeypatch.setattr(ac, "_resolve_bills", lambda texts, titles=None, bill_titles=None: [{"id": "hr1-119", "title": "A bill"}])
     monkeypatch.setattr(ac, "_find_related_explore_docs", lambda *a: [])
-    monkeypatch.setattr(ac, "_find_related_senators", lambda *a: [])
+    monkeypatch.setattr(ac, "_find_related_senators", lambda *a, **k: [])
     monkeypatch.setattr(ac, "_find_related_officials", lambda *a: [])
     monkeypatch.setattr(ac, "_build_actions_from_data", lambda *a, **k: [])
     monkeypatch.setattr(ac, "route_committees", lambda *a: [])

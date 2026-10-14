@@ -80,6 +80,7 @@ from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline import lease
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.congress import congress_gov_url_for_bill_id
 from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES, fetch_fr_metadata
 from app.http_client import make_async_client
 from app.pipeline.fetch.news_feeds import (
@@ -2077,9 +2078,18 @@ def _find_related_senators(
     summary: str,
     facts: list[str],
     db: Session,
+    article_texts: list[str] = (),
 ) -> list[dict]:
     """Members of Congress the issue names: by full name, or by a surname
     only one current member has, used as no one else's name.
+
+    `article_texts` (each on-topic article's headline and description) are
+    searched for full names only ("named in the reporting"). The issue's own
+    text is a headline and one or two quoted lines, which name a member far
+    less often than the articles they come from; bills were already resolved
+    from the articles (_resolve_bills) while members were looked for only in
+    the issue's text. A bare surname is not looked for there: a longer text
+    holds more namesakes.
 
     A surname two or more members share names none of them. On 2026-10-08,
     69 of the 120 links made from a bare surname were such surnames: one
@@ -2138,9 +2148,14 @@ def _find_related_senators(
     # whichever single member wasn't already explained by a more specific
     # match.
     full_name_matched_last_names: set[str] = set()
+    reporting = " ".join(article_texts)
+    reporting_lower = reporting.lower()
     for s, chamber in all_members:
         if s.name and _mentions_full_name(issue_text, s.name, issue_text_lower):
             matched[s.id] = _make_entry(s, chamber, match_reason="named in coverage")
+            full_name_matched_last_names.add(s.name.split()[-1].lower())
+        elif s.name and reporting and _mentions_full_name(reporting, s.name, reporting_lower):
+            matched[s.id] = _make_entry(s, chamber, match_reason="named in the reporting")
             full_name_matched_last_names.add(s.name.split()[-1].lower())
 
     surname_holders = Counter(s.name.split()[-1].lower() for s, _ in all_members if s.name)
@@ -2572,12 +2587,6 @@ def _refresh_open_comment_views(db: Session) -> int:
 CONGRESS_API_BASE = "https://api.congress.gov/v3"
 
 
-def _congress_gov_bill_url(congress: int, url_type: str, number: str | int) -> str:
-    from app.pipeline.fetch.congress import congress_gov_bill_url
-
-    return congress_gov_bill_url(congress, url_type, number)
-
-
 def _resolve_bills(
     article_texts: list[str],
     titles: dict[str, set[str]] | None = None,
@@ -2617,28 +2626,14 @@ def _resolve_bills(
         logger.info("Bills named: %s", ", ".join(ids))
     resolved: list[dict] = []
     for bill_id in ids:
-        prefix, _, number = bill_id.partition(".")
-        url_type = _BILL_URL_TYPES.get(prefix)
-        if url_type:
+        if url := congress_gov_url_for_bill_id(bill_id, settings.CURRENT_CONGRESS):
             resolved.append({
-                "name": bill_id, "id": bill_id,
-                "url": _congress_gov_bill_url(settings.CURRENT_CONGRESS, url_type, number),
+                "name": bill_id, "id": bill_id, "url": url,
                 "congress": settings.CURRENT_CONGRESS,
             })
     return resolved[:5]
 
 
-# Site bill-id prefix -> Congress.gov's URL segment for the bill type.
-_BILL_URL_TYPES = {
-    "HR": "house-bill",
-    "S": "senate-bill",
-    "HJRES": "house-joint-resolution",
-    "SJRES": "senate-joint-resolution",
-    "HCONRES": "house-concurrent-resolution",
-    "SCONRES": "senate-concurrent-resolution",
-    "HRES": "house-resolution",
-    "SRES": "senate-resolution",
-}
 
 
 _PERIOD_REVIEW_SYSTEM = (
@@ -5207,7 +5202,10 @@ def _run_refresh(db: Session) -> int:
         related_explore_ids = [d["id"] for d in related_docs]
 
         # 9. Find senators/reps mentioned in this issue (backward compat field)
-        related_senators = _find_related_senators(title, summary, facts, db)
+        related_senators = _find_related_senators(
+            title, summary, facts, db,
+            article_texts=[f"{a.title}. {a.summary}" for a in filtered_cluster],
+        )
 
         # 9b. Find ALL officials (senators + reps + president + justices) for profile cross-links
         related_officials = _find_related_officials(title, summary, facts, db)

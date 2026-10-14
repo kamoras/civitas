@@ -24,6 +24,7 @@ SERVED_BY_API = {
     "/api/feedback",
     "/api/track-visit",
     "/api/track-timing",
+    "/api/track-action",
     # The public API's MCP server: its POSTs are read-only tool calls.
     "/api/public/v1/mcp",
 }
