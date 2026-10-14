@@ -109,11 +109,12 @@ class TestChamberLabels:
 class TestVoteUrl:
     def test_senate_vote_url(self):
         url = es._vote_url(_vote(congress=119, session=1, roll_number=42))
-        assert url == es._senate_vote_url(119, 1, 42)
+        assert url == "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00042.xml"
 
     def test_house_vote_url(self):
         url = es._vote_url(_house_vote(year=2026, roll_number=42))
-        assert url == "https://clerk.house.gov/evs/2026/roll42.xml"
+        # The Clerk names a roll below 100 zero-padded; "roll42.xml" is its HTML site.
+        assert url == "https://clerk.house.gov/evs/2026/roll042.xml"
 
 
 @pytest.mark.parametrize("yeas, nays, expected", [
@@ -164,7 +165,7 @@ class TestCheckRollCallSignals:
         assert created == 1
         row = db_session.query(ActionIssue).one()
         assert row.source_type == "house_roll_call_vote"
-        assert row.primary_source_url == "https://clerk.house.gov/evs/2026/roll42.xml"
+        assert row.primary_source_url == "https://clerk.house.gov/evs/2026/roll042.xml"
 
     def test_senate_and_house_votes_sharing_a_roll_number_both_created(self, db_session):
         """recent_roll_call_key is congress-session-rollNumber only — House

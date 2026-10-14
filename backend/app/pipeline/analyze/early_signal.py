@@ -38,7 +38,7 @@ from app.pipeline.analyze.bill_analyzer import classify_policy_area, recent_roll
 from app.pipeline.fetch.congress import fetch_recent_house_roll_calls, fetch_recent_roll_calls
 from app.pipeline.fetch.daily_digest import first_bill_id
 from app.pipeline.fetch.federal_register import fetch_recent_significant_rules
-from app.pipeline.fetch.floor_logs import bill_id_from_number
+from app.pipeline.fetch.floor_logs import bill_id_from_number, house_roll_call_url, senate_roll_call_url
 from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.services.bill_service import names_phrase, short_title
 from app.services.congress_service import bill_label
@@ -93,22 +93,10 @@ def _chamber_labels(vote: dict) -> tuple[str, str]:
     return "Senate", "senators"
 
 
-def _senate_vote_url(congress: int, session: int, roll_number: int) -> str:
-    padded = str(roll_number).zfill(5)
-    return (
-        f"https://www.senate.gov/legislative/LIS/roll_call_votes/"
-        f"vote{congress}{session}/vote_{congress}_{session}_{padded}.xml"
-    )
-
-
-def _house_vote_url(year: int, roll_number: int) -> str:
-    return f"https://clerk.house.gov/evs/{year}/roll{roll_number}.xml"
-
-
 def _vote_url(vote: dict) -> str:
     if vote.get("chamber") == "House":
-        return _house_vote_url(vote.get("year"), vote.get("rollNumber"))
-    return _senate_vote_url(vote.get("congress"), vote.get("session"), vote.get("rollNumber"))
+        return house_roll_call_url(vote.get("year"), vote.get("rollNumber"))
+    return senate_roll_call_url(vote.get("congress"), vote.get("session"), vote.get("rollNumber"))
 
 
 def _vote_margin_ratio(vote: dict) -> float:

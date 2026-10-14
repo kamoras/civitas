@@ -23,6 +23,7 @@ from app.api.redistricting import router as redistricting_router
 from app.api.representatives import router as representatives_router
 from app.api.senators import router as senators_router
 from app.api.sitemap import router as sitemap_router
+from app.api.sources import router as sources_router
 from app.api.this_week import router as this_week_router
 from app.api.visits import router as visits_router
 
@@ -45,6 +46,7 @@ api_router.include_router(bills_router, tags=["bills"])
 api_router.include_router(congress_router, tags=["congress"])
 api_router.include_router(compare_router, tags=["compare"])
 api_router.include_router(this_week_router, tags=["this-week"])
+api_router.include_router(sources_router, tags=["sources"])
 api_router.include_router(notable_router, tags=["notable"])
 api_router.include_router(feedback_router, tags=["feedback"])
 api_router.include_router(pipeline_router, tags=["pipeline"])

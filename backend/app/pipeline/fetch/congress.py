@@ -13,6 +13,7 @@ from app.config import settings
 from app.pipeline.analyze.bill_stage import became_law_action
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
+from app.pipeline.fetch.floor_logs import house_roll_call_url, senate_roll_call_url
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -751,12 +752,7 @@ async def fetch_roll_call_vote(
         return cached
 
     await _rate_limiter.acquire()
-    padded_roll = str(roll_call_number).zfill(5)
-    url = (
-        f"https://www.senate.gov/legislative/LIS/roll_call_votes/"
-        f"vote{congress}{session_number}/"
-        f"vote_{congress}_{session_number}_{padded_roll}.xml"
-    )
+    url = senate_roll_call_url(congress, session_number, roll_call_number)
 
     try:
         logger.debug("Senate.gov vote: %s", url)
@@ -937,12 +933,7 @@ async def fetch_recent_roll_calls(
     )
 
     def _senate_roll_url(roll: int) -> str:
-        padded = str(roll).zfill(5)
-        return (
-            f"https://www.senate.gov/legislative/LIS/roll_call_votes/"
-            f"vote{congress}{session_number}/"
-            f"vote_{congress}_{session_number}_{padded}.xml"
-        )
+        return senate_roll_call_url(congress, session_number, roll)
 
     highest_valid = await _find_highest_roll_call(
         client, _senate_roll_url, [500, 300, 200, 150, 100, 75, 50, 25, 10],
@@ -997,8 +988,7 @@ async def fetch_house_roll_call_vote(
         return cached
 
     await _rate_limiter.acquire()
-    padded_roll = str(roll_call_number)
-    url = f"https://clerk.house.gov/evs/{year}/roll{padded_roll}.xml"
+    url = house_roll_call_url(year, roll_call_number)
 
     try:
         logger.debug("House Clerk vote: %s", url)
@@ -1137,7 +1127,7 @@ async def fetch_recent_house_roll_calls(
     logger.info("Discovering recent House roll calls (year=%d)...", year)
 
     def _house_roll_url(roll: int) -> str:
-        return f"https://clerk.house.gov/evs/{year}/roll{roll}.xml"
+        return house_roll_call_url(year, roll)
 
     highest_valid = await _find_highest_roll_call(
         client, _house_roll_url, [700, 500, 400, 300, 200, 100, 50, 25, 10],
