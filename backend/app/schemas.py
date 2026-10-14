@@ -876,6 +876,7 @@ class PublicPresidentialSupportMemberSchema(_PublicModel):
     party: str = Field(description="The party the expectation is read for (an independent's caucus party)")
     state: str
     district: int | None = Field(description="House district, 0 at-large; null for senators")
+    seat_lean: int | None = Field(description="The seat's Cook PVI, positive leaning Republican")
     with_president: int = Field(description="Counted votes cast on the president's side")
     votes: int = Field(description="Counted votes cast (Yea or Nay; present and not voting excluded)")
     rate: float = Field(description="withPresident / votes")
@@ -908,6 +909,8 @@ class PublicPresidentialSupportMethodSchema(_PublicModel):
     interval: str = Field(description="The uncertainty shown")
     neutral: str
     fits: dict[str, PublicPresidentialSupportFitSchema] = Field(description="Per party (D, R), this run's fit")
+    curves: dict[str, list[list[float]]] = Field(
+        description="Per party, [seat lean, expected rate] along the fit, seat lean from -30 to +30 (PVI, + leans Republican)")
     computed_at: str | None = Field(description="When the fit was measured (UTC)")
 
 

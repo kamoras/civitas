@@ -144,3 +144,13 @@ the list's is kept (`bill_refresh.keep_newer_latest_actions`).
 **Bill ids** are the site's (`S.3257`, `HCONRES.89`) whichever spelling the
 source used: the Record's "H. Con. Res. 89", the House roll call's
 "H CON RES 89", the Senate log's "H.Con.Res. 89".
+
+**Votes with the president.** The stored roll calls are also what the
+Supplementary pipeline's last step matches to OMB's Statements of
+Administration Policy (`analyze/presidential_support.py`): each chamber's
+final vote on a measure, after a statement addressed to that chamber and
+before any later one on the measure, counts when the statement supports or
+opposes passage. `/congress/president/house` and `/senate` show each
+member's rate beside the rate expected for their party and seat lean, with
+every counted vote and its statement. Informational, not scored; see the
+README's "Votes with the President".

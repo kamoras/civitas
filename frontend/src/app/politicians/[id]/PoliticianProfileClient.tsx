@@ -19,6 +19,7 @@ import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
 import Photo from "@/components/Photo";
 import RedrawnSeatNote from "@/components/redistricting/RedrawnSeatNote";
+import PresidentialSupportSection from "@/components/presidentialSupport/PresidentialSupportSection";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   "Senate Floor Speech": "FLOOR SPEECH",
@@ -210,6 +211,8 @@ export default function PoliticianProfileClient({
               screen and put the member's score below the fold for a reader
               arriving from a search result. */}
           {strip}
+
+          {isMember && <PresidentialSupportSection memberId={profile.id} name={identity.name} />}
 
           {/* Active Issues */}
           {activeIssues.length > 0 && (

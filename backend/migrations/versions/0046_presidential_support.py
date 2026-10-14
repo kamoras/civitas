@@ -6,16 +6,16 @@ roll calls they apply to, and each member's rate of voting with them
 New tables, so the previous image runs unchanged against the migrated
 schema (it never reads them).
 
-Revision ID: 0045
-Revises: 0044
+Revision ID: 0046
+Revises: 0045
 Create Date: 2026-10-14
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0045'
-down_revision = '0044'
+revision = '0046'
+down_revision = '0045'
 branch_labels = None
 depends_on = None
 
@@ -56,6 +56,7 @@ def upgrade() -> None:
         sa.Column('congress', sa.Integer(), nullable=False),
         sa.Column('party', sa.String(length=1), nullable=False),
         sa.Column('seat_alignment', sa.Float(), nullable=True),
+        sa.Column('seat_lean', sa.Integer(), nullable=True),
         sa.Column('with_president', sa.Integer(), nullable=False),
         sa.Column('votes', sa.Integer(), nullable=False),
         sa.Column('expected', sa.Float(), nullable=True),

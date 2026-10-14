@@ -2673,6 +2673,8 @@ class PresidentialSupport(Base):
     # expectation is fitted for a third party).
     party: Mapped[str] = mapped_column(String(1), nullable=False)
     seat_alignment: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The seat's Cook PVI, positive leaning Republican (score_calculator._seat_pvi).
+    seat_lean: Mapped[int | None] = mapped_column(Integer, nullable=True)
     with_president: Mapped[int] = mapped_column(Integer, nullable=False)
     votes: Mapped[int] = mapped_column(Integer, nullable=False)
     expected: Mapped[float | None] = mapped_column(Float, nullable=True)

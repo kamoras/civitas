@@ -56,6 +56,7 @@ from app.pipeline.analyze.score_calculator import (
     _MIN_CONSTITUENT_REFERENCE_PARTY,
     _MIN_OPPOSED_SEATS_FOR_KINK,
     _fractional_logit,
+    _seat_pvi,
     _signed_state_alignment,
 )
 from app.pipeline.fetch import omb_statements
@@ -263,15 +264,30 @@ def expected_rate(fit: dict | None, alignment: float | None) -> float | None:
     return _inverse_logit(fit["a"] + fit["b"] * alignment + fit.get("b_opposed", 0.0) * min(alignment, 0.0))
 
 
+def expected_curve(party: str, fit: dict | None) -> list[list[float]]:
+    """[[seat lean (PVI, + leans Republican), expected rate]] along a party's
+    fit, for drawing it: the lean is party-signed and scaled the way
+    _signed_state_alignment does (±15 PVI = ±1, flat beyond). Drawn only
+    across the seat leans the party's fitted members hold (the fit's
+    "leans"), never extrapolated into seats the party doesn't sit in."""
+    if not fit or party not in ("D", "R"):
+        return []
+    low, high = fit.get("leans") or (-30, 30)
+    leans = range(max(-30, low), min(30, high) + 1)
+    sign = 1 if party == "R" else -1
+    return [[lean, round(expected_rate(fit, max(-1.0, min(sign * lean / 15.0, 1.0))), 4)] for lean in leans]
+
+
 def fit_expectation(rows: list[tuple[str, float, int, int]]) -> dict[str, dict]:
     """Per party (D, R), the fractional-logit fit of the share of votes cast
     with the president on party-signed seat alignment, each member weighted
     by their votes: {"a", "b", "b_opposed", "members", "votes"}. A party with
     too few members, or whose rates admit no finite fit (every member at 100%,
-    say), gets no fit. rows: (party, alignment, with, votes)."""
+    say), gets no fit. rows: (party, alignment, with, votes[, seat lean])."""
     fits = {}
     for party in ("D", "R"):
-        mine = [(al, w / n, n) for p, al, w, n in rows if p == party and n > 0]
+        mine = [(r[1], r[2] / r[3], r[3]) for r in rows if r[0] == party and r[3] > 0]
+        leans = [r[4] for r in rows if r[0] == party and r[3] > 0 and len(r) > 4 and r[4] is not None]
         if len(mine) < _MIN_CONSTITUENT_REFERENCE_PARTY:
             continue
         al = np.array([r[0] for r in mine])
@@ -286,6 +302,7 @@ def fit_expectation(rows: list[tuple[str, float, int, int]]) -> dict[str, dict]:
                     "a": round(float(coef[0]), 5), "b": round(float(coef[1]), 5),
                     "b_opposed": round(float(coef[2]), 5) if bend else 0.0,
                     "members": len(mine), "votes": int(n.sum()),
+                    **({"leans": [min(leans), max(leans)]} if leans else {}),
                 }
                 break
     return fits
@@ -317,17 +334,17 @@ def compute_chamber(db: Session, chamber: str, congress: int) -> dict:
         if m is None:
             continue
         party = (m.caucus_party or m.party or "?")[:1]
+        district = m.district if chamber == "house" else None
         alignment = _signed_state_alignment(
-            m.state, m.party, effective_party=m.caucus_party,
-            district=getattr(m, "district", None) if chamber == "house" else None,
+            m.state, m.party, effective_party=m.caucus_party, district=district,
         ) if party in ("D", "R") else None
-        rows.append((member_id, party, alignment, w, n))
-    fits = fit_expectation([(p, al, w, n) for _, p, al, w, n in rows if al is not None])
+        rows.append((member_id, party, alignment, _seat_pvi(m.state, district), w, n))
+    fits = fit_expectation([(p, al, w, n, lean) for _, p, al, lean, w, n in rows if al is not None])
     stored = {r.member_id: r for r in db.query(PresidentialSupport).filter_by(chamber=chamber)}
     now = utcnow()
-    for member_id, party, alignment, w, n in rows:
+    for member_id, party, alignment, lean, w, n in rows:
         row = stored.pop(member_id, None) or PresidentialSupport(chamber=chamber, member_id=member_id)
-        row.congress, row.party, row.seat_alignment = congress, party, alignment
+        row.congress, row.party, row.seat_alignment, row.seat_lean = congress, party, alignment, lean
         row.with_president, row.votes, row.computed_at = w, n, now
         row.expected = expected_rate(fits.get(party), alignment)
         db.add(row)

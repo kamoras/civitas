@@ -78,6 +78,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/elections/redistricting`, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE_URL}/congress`, changeFrequency: "hourly", priority: 0.8 },
     { url: `${SITE_URL}/congress/bills`, changeFrequency: "hourly", priority: 0.8 },
+    { url: `${SITE_URL}/congress/president/house`, changeFrequency: "daily", priority: 0.6 },
+    { url: `${SITE_URL}/congress/president/senate`, changeFrequency: "daily", priority: 0.6 },
     { url: `${SITE_URL}/leaderboard`, changeFrequency: "daily", priority: 0.8 },
     { url: `${SITE_URL}/compare`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${SITE_URL}/compare/presidents`, changeFrequency: "weekly", priority: 0.6 },

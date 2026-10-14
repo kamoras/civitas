@@ -8,6 +8,7 @@ from app.models import PolicyStatement, PresidentialSupport, Representative, Rol
 from app.pipeline.analyze.presidential_support import (
     PRESIDENTIAL_SUPPORT_REFERENCE,
     counted_votes,
+    expected_curve,
     wilson_interval,
     with_president,
 )
@@ -106,7 +107,8 @@ def _method(chamber: str) -> dict:
                 "members": fit["members"], "votes": fit["votes"]}
         for party, fit in (reference.get("expected") or {}).items()
     }
-    return {**METHOD, "fits": expected, "computedAt": reference.get("computed_at")}
+    curves = {party: expected_curve(party, fit) for party, fit in (reference.get("expected") or {}).items()}
+    return {**METHOD, "fits": expected, "curves": curves, "computedAt": reference.get("computed_at")}
 
 
 def chamber_view(db: Session, chamber: str) -> dict | None:
@@ -125,7 +127,8 @@ def chamber_view(db: Session, chamber: str) -> dict | None:
         "members": [
             {
                 "id": m.id, "name": m.name, "party": row.party, "state": m.state,
-                "district": getattr(m, "district", None) if chamber == "house" else None,
+                "district": m.district if chamber == "house" else None,
+                "seatLean": row.seat_lean,
                 **summary(row),
             }
             for row, m in rows
@@ -171,6 +174,7 @@ def member_view(db: Session, member_id: str) -> dict | None:
         "chamber": row.chamber,
         "congress": row.congress,
         "party": row.party,
+        "seatLean": row.seat_lean,
         **summary(row),
         "rollCalls": votes,
         "method": _method(row.chamber),
