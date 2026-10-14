@@ -169,12 +169,6 @@ export function NewFactTag() {
   return <span className="ml-2 font-mono text-xs text-phos-mid">new</span>;
 }
 
-function humanizeSlug(slug: string): string {
-  const words = slug.replace(/-/g, " ");
-  const clipped = words.length > 48 ? `${words.slice(0, 48)}…` : words;
-  return clipped.charAt(0).toUpperCase() + clipped.slice(1);
-}
-
 /**
  * Policy areas and the national monitors tracking this issue, on one line.
  * Each monitor opens in place on the Action Center's monitors tab.
@@ -194,8 +188,10 @@ export function IssueTags({
   onMonitor?: (slug: string) => void;
 }) {
   const areas = issue.policyAreas ?? [];
-  const slugs = issue.relatedMonitorSlugs ?? [];
-  if (areas.length === 0 && slugs.length === 0) return null;
+  // By stored title, never the slug printed back as a name: that lost the
+  // apostrophes and capitals ("talks trumps russian diesel deal").
+  const monitors = issue.relatedMonitors ?? [];
+  if (areas.length === 0 && monitors.length === 0) return null;
   return (
     <div
       className={`flex flex-wrap items-baseline gap-x-4 gap-y-1.5 font-mono text-xs tracking-[0.08em] text-ink-lo ${className}`}
@@ -203,16 +199,16 @@ export function IssueTags({
       {areas.map((area) => (
         <span key={area}>{policyAreaLabel(area)}</span>
       ))}
-      {slugs.map((slug) => (
+      {monitors.map(({ slug, title }) => (
         <span key={slug}>
           Tracked in{" "}
           {onMonitor ? (
             <button onClick={() => onMonitor(slug)} className={TEXT_LINK}>
-              {humanizeSlug(slug)} →
+              {title} →
             </button>
           ) : (
             <Link href={monitorHref(slug)} className={TEXT_LINK}>
-              {humanizeSlug(slug)} →
+              {title} →
             </Link>
           )}
         </span>
