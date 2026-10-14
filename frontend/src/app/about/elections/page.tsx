@@ -94,6 +94,41 @@ export default async function ElectionsChapter() {
         </P>
       </Section>
 
+      <Section id="race-context" title="What shapes a race (and why there is no forecast)">
+        <P>
+          Each federal contest&apos;s research opens with what shapes the race. Civitas publishes no
+          prediction, odds or rating for any race, and calls none; these figures describe a race,
+          they don&apos;t forecast it.
+        </P>
+        <P>
+          <strong>The seat.</strong> Its lean is the Cook-PVI-style figure: how much more Republican
+          or Democratic it voted than the nation in the last two presidential elections. Beside it,
+          one square for every seat of its kind, from the most Democratic-leaning to the most
+          Republican: every U.S. House district on the lines this election is fought on, or the 50
+          states for a Senate race. The count of seats leaning further each way is worked out on the
+          server from the same table the lean comes from. A district that only has its state&apos;s
+          figure is not placed among districts, and from election day the lean is not shown at all,
+          so that it can&apos;t be read as a call on the count.
+        </P>
+        <P>
+          <strong>The money.</strong> Each candidate&apos;s contributions are split into the
+          categories of the FEC&apos;s own totals, which add up to the total: people who gave the
+          campaign $200 or less (the FEC doesn&apos;t list them by name), people who gave more, PACs
+          and other committees, party committees, and the candidate. Loans a candidate makes to the
+          campaign are shown on their own, because they are not contributions. Each candidate&apos;s
+          figures carry the last day they cover and a link to that election&apos;s FEC page. Where a
+          filing&apos;s categories don&apos;t add up to its total, no split is shown. No category is
+          presented as better or worse than another.
+        </P>
+        <P>
+          <strong>The data.</strong> The <span className="font-mono text-ink-hi">[ CSV ]</span> link
+          on any race downloads every federal candidate in that state with each FEC figure, the
+          dates they are as of, the seat&apos;s lean and the FEC link. The{" "}
+          <span className="font-mono text-ink-hi">[ JSON ]</span> link is the race as the page reads
+          it.
+        </P>
+      </Section>
+
       <Section id="deadlines" title="Voter deadlines">
         <P>
           Each state page starts with that state&apos;s deadlines for this election: when you can

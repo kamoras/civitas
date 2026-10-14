@@ -953,7 +953,8 @@ describe("the state page in results mode", () => {
       expect(drawer.queryByText(/sitting member/i)).not.toBeInTheDocument();
       await userEvent.click(drawer.getByRole("button", { name: /Greg Lindqvist/ }));
       const research = within(screen.getByRole("dialog"));
-      expect(research.getByText("MEMBER BEFORE THIS ELECTION, OH-2")).toBeInTheDocument();
+      // On the candidate's row and in the race's context line above it.
+      expect(research.getAllByText("MEMBER BEFORE THIS ELECTION, OH-2")).toHaveLength(2);
       expect(research.queryByText(/SITTING MEMBER|INCUMBENT/)).not.toBeInTheDocument();
     });
 

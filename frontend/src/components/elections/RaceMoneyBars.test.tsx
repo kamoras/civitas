@@ -30,6 +30,7 @@ describe("RaceMoneyBars", () => {
   it("scales bars to the leader of this race, not an absolute figure", () => {
     const { container } = render(
       <RaceMoneyBars
+        cycleYear={2026}
         candidates={[
           cand({ id: "a", name: "Leader", contributions: 2_000_000 }),
           cand({ id: "b", name: "Trailer", party: "REP", contributions: 200_000 }),
@@ -42,6 +43,7 @@ describe("RaceMoneyBars", () => {
   it("orders by money raised regardless of input order", () => {
     render(
       <RaceMoneyBars
+        cycleYear={2026}
         candidates={[
           cand({ id: "a", name: "Small", contributions: 5_000 }),
           cand({ id: "b", name: "Big", party: "REP", contributions: 900_000 }),
@@ -57,6 +59,7 @@ describe("RaceMoneyBars", () => {
     // empty is the truthful picture, not a crash and not a full bar.
     const { container } = render(
       <RaceMoneyBars
+        cycleYear={2026}
         candidates={[
           cand({ id: "a", contributions: 0, hasRaisedFunds: false }),
           cand({ id: "b", contributions: 0, hasRaisedFunds: false }),
@@ -72,6 +75,7 @@ describe("RaceMoneyBars", () => {
     // never $0 — the label used to read hasRaisedFunds and format null as $0.
     render(
       <RaceMoneyBars
+        cycleYear={2026}
         candidates={[
           cand({ id: "a", contributions: 50_000 }),
           cand({ id: "b", contributions: null, cashOnHand: null, lastFinancialsSync: null }),
@@ -87,25 +91,39 @@ describe("RaceMoneyBars", () => {
 
   it("shows reported money even when the FEC's roster flag says none", () => {
     render(
-      <RaceMoneyBars candidates={[cand({ contributions: 871_029, hasRaisedFunds: false })]} />
+      <RaceMoneyBars
+        cycleYear={2026}
+        candidates={[cand({ contributions: 871_029, hasRaisedFunds: false })]}
+      />
     );
     expect(screen.getByText("$871K")).toBeInTheDocument();
   });
 
   it("marks the incumbent", () => {
-    render(<RaceMoneyBars candidates={[cand({ incumbentChallenge: "I" })]} />);
+    render(<RaceMoneyBars cycleYear={2026} candidates={[cand({ incumbentChallenge: "I" })]} />);
     expect(screen.getByText("INCUMBENT")).toBeInTheDocument();
   });
 
   it("calls an incumbent on a redrawn seat a sitting member, not the incumbent", () => {
-    render(<RaceMoneyBars candidates={[cand({ incumbentChallenge: "I" })]} redrawnSeat />);
+    render(
+      <RaceMoneyBars
+        cycleYear={2026}
+        candidates={[cand({ incumbentChallenge: "I" })]}
+        redrawnSeat
+      />
+    );
     expect(screen.getByText("SITTING MEMBER")).toBeInTheDocument();
     expect(screen.queryByText("INCUMBENT")).not.toBeInTheDocument();
   });
 
   it("calls them the member before this election from election day on", () => {
     render(
-      <RaceMoneyBars candidates={[cand({ incumbentChallenge: "I" })]} redrawnSeat resultsMode />
+      <RaceMoneyBars
+        cycleYear={2026}
+        candidates={[cand({ incumbentChallenge: "I" })]}
+        redrawnSeat
+        resultsMode
+      />
     );
     expect(screen.getByText("MEMBER BEFORE THIS ELECTION")).toBeInTheDocument();
     expect(screen.queryByText(/SITTING MEMBER|INCUMBENT/)).not.toBeInTheDocument();
@@ -114,19 +132,76 @@ describe("RaceMoneyBars", () => {
   it("links an incumbent's representation score, shown as the scorecard shows it", () => {
     // 42.5 is 43 on the scorecard; one decimal here read 42.5.
     render(
-      <RaceMoneyBars candidates={[cand({ incumbentRecord: { id: "member-a", score: 42.5 } })]} />
+      <RaceMoneyBars
+        cycleYear={2026}
+        candidates={[cand({ incumbentRecord: { id: "member-a", score: 42.5 } })]}
+      />
     );
-    const link = screen.getByRole("link");
+    const link = screen.getByRole("link", { name: /representation score/ });
     expect(link).toHaveAttribute("href", "/politicians/member-a");
     expect(screen.getByText("43")).toBeInTheDocument();
   });
 
   it("badges unconfirmed entries only when the race asks for it", () => {
     const { rerender } = render(
-      <RaceMoneyBars candidates={[cand({ confirmed: false })]} showUnconfirmed />
+      <RaceMoneyBars cycleYear={2026} candidates={[cand({ confirmed: false })]} showUnconfirmed />
     );
     expect(screen.getByText("UNCONFIRMED")).toBeInTheDocument();
-    rerender(<RaceMoneyBars candidates={[cand({ confirmed: false })]} />);
+    rerender(<RaceMoneyBars cycleYear={2026} candidates={[cand({ confirmed: false })]} />);
     expect(screen.queryByText("UNCONFIRMED")).not.toBeInTheDocument();
+  });
+
+  it("splits contributions into the FEC's categories, in blocks and in words", () => {
+    const fundingSources = {
+      addsUp: true,
+      parts: [
+        { key: "smallDonors" as const, amount: 35, percent: 35, blocks: 7 },
+        { key: "largerDonors" as const, amount: 50, percent: 50, blocks: 10 },
+        { key: "committees" as const, amount: 15, percent: 15, blocks: 3 },
+        { key: "party" as const, amount: 0, percent: 0, blocks: 0 },
+        { key: "candidate" as const, amount: 0, percent: 0, blocks: 0 },
+      ],
+    };
+    const { container } = render(
+      <RaceMoneyBars cycleYear={2026} candidates={[cand({ fundingSources })]} />
+    );
+    expect(screen.getByText(/Where contributions came from/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "35% from donors of $200 or less · 50% from donors of more than $200 · 15% from PACs and other committees"
+      )
+    ).toBeInTheDocument();
+    expect(container.querySelectorAll("[style*='background-color']").length).toBe(20 + 5);
+  });
+
+  it("gives no split when the filing's categories don't add up", () => {
+    const parts = (
+      ["smallDonors", "largerDonors", "committees", "party", "candidate"] as const
+    ).map((key) => ({ key, amount: 1, percent: null, blocks: null }));
+    render(
+      <RaceMoneyBars
+        cycleYear={2026}
+        candidates={[cand({ fundingSources: { addsUp: false, parts } })]}
+      />
+    );
+    expect(screen.getByText(/don't add up to its total/)).toBeInTheDocument();
+    expect(screen.queryByText(/Where contributions came from/)).not.toBeInTheDocument();
+  });
+
+  it("dates each candidate's figures and links that election's FEC page", () => {
+    render(
+      <RaceMoneyBars
+        cycleYear={2026}
+        candidates={[
+          cand({ id: "H6XX00001", financialsThrough: "2026-06-30", candidateLoans: 2_400_000 }),
+        ]}
+      />
+    );
+    const link = screen.getByRole("link", { name: /FEC figures through 2026-06-30/ });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://www.fec.gov/data/candidate/H6XX00001/?cycle=2026&election_full=true"
+    );
+    expect(screen.getByText(/lent own campaign \$2\.4M/)).toBeInTheDocument();
   });
 });

@@ -10,6 +10,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session, selectinload
 
@@ -83,6 +84,7 @@ from app.pipeline.fetch.state_candidates_common import (
 )
 from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.fetch.town_directory import address_for_town, towns_for_state
+from app.race_context import funding_sources, lean_context, races_csv
 from app.services.senator_service import STATE_NAMES
 from app.time_utils import utcnow
 
@@ -326,6 +328,11 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
         # are as of. Null with figures from before this field existed, and
         # with no figures when the FEC holds no report for this election.
         "financialsThrough": cand.financials_through,
+        # Where `contributions` came from, in the FEC's own categories, with
+        # each one's share; null until a sync reads them (race_context).
+        "fundingSources": funding_sources(cand),
+        # Loans the candidate made to the campaign: not contributions.
+        "candidateLoans": cand.candidate_loans,
     }
 
 
@@ -768,6 +775,8 @@ def _race_full(
         "isSpecial": race.is_special,
         "pvi": pvi,
         "pviLevel": pvi_level,
+        # Where this seat's lean sits among all seats of its kind.
+        "leanContext": lean_context(race.office, pvi, pvi_level, state_pvi, district_pvi),
         "counties": counties,
         "places": places,
         "candidateSource": _candidate_source(race.candidates, complete),
@@ -1286,6 +1295,40 @@ def _judicial_section(
                 "termYears": term_years("judicial", state, court),
             })
     return out, coverage
+
+
+@router.get("/states/{state}/races.csv")
+def state_races_csv(state: str, db: Session = Depends(get_db)):
+    """Every federal candidate the state's ballot page lists this cycle, one
+    row each, with every FEC figure the page shows, the dates they are as
+    of, and each seat's lean: the page's money and seat figures as data."""
+    state = state.upper()
+    if state not in ballot_state_codes():
+        raise HTTPException(status_code=404, detail="Unknown state")
+    cycle = active_election(db).cycle
+    races = (
+        db.query(Race)
+        .filter(Race.state == state, Race.cycle_year == cycle)
+        .options(selectinload(Race.candidates))
+        .order_by(Race.office.desc(), Race.district, Race.id)
+        .all()
+    )
+    state_pvi = get_state_pvi_map()
+    district_pvi, _ = _election_district_pvi(cycle)
+    marker = _ballot_marker(db, state, cycle)
+    rows = []
+    for race in races:
+        pvi, level = _pvi_for_race(race, state_pvi, district_pvi)
+        shown = _confirmed_or_all(race.candidates, state, _race_complete(marker, state, race.id))
+        rows += [(race, c, pvi, level) for c in sorted(shown, key=lambda c: c.contributions or 0.0, reverse=True)]
+    return Response(
+        content=races_csv(rows),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Cache-Control": f"public, max-age={CACHE_TTL_LIST_S}, stale-while-revalidate={CACHE_TTL_LIST_S}",
+            "Content-Disposition": f'attachment; filename="civitas-{cycle}-{state}-federal-races.csv"',
+        },
+    )
 
 
 @router.get("/states/{state}")
@@ -2035,6 +2078,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "isSpecial": race.is_special,
         "pvi": pvi,
         "pviLevel": pvi_level,
+        "leanContext": lean_context(race.office, pvi, pvi_level, state_pvi, district_pvi),
         "candidateSource": _candidate_source(race.candidates, complete),
         "candidates": [_candidate_summary(c, stale_incumbent_ids) for c in candidates],
         "coverage": [_coverage_item(item) for item in coverage],

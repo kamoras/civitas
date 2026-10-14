@@ -35,11 +35,6 @@ vi.mock("./RaceMoneyBars", () => ({
     </div>
   ),
 }));
-vi.mock("./RaceFinancials", () => ({
-  default: ({ candidates }: { candidates: { id: string }[] }) => (
-    <div data-testid="financials">{candidates.map((c) => c.id).join(",")}</div>
-  ),
-}));
 
 function candidate(overrides: Partial<RaceWithCandidates["candidates"][number]>) {
   return {
@@ -101,7 +96,7 @@ describe("RaceFullDetail", () => {
     render(<RaceFullDetail race={race()} />);
 
     expect(screen.getByText(/No candidates on record/)).toBeInTheDocument();
-    expect(screen.queryByTestId("financials")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Source: FEC filings/)).not.toBeInTheDocument();
     // The candidateSource note ("...every FEC filer") must not render
     // alongside "no candidates on record" — the two together would tell
     // a reader both that a ballot answer exists AND that there's nobody
@@ -109,7 +104,7 @@ describe("RaceFullDetail", () => {
     expect(screen.queryByText(/every FEC filer/)).not.toBeInTheDocument();
   });
 
-  it("tiers an unconfirmed race into leader cards plus a collapsed tail, but charts them all", () => {
+  it("tiers an unconfirmed race into leader cards plus a collapsed tail", () => {
     render(
       <RaceFullDetail
         race={race({
@@ -149,15 +144,10 @@ describe("RaceFullDetail", () => {
     expect(screen.queryByText("Long Shot")).not.toBeInTheDocument();
     expect(screen.getByText("1 more filed")).toBeInTheDocument();
     expect(screen.getByText("FEC-filed field")).toBeInTheDocument();
-    // ...but the financials chart still gets every active candidate. The bug
-    // this guards against: the chart was narrowed to `leaders` (2-3
-    // candidates), silently dropping a real below-threshold fundraiser (like
-    // Long Shot here) from the "who's actually raising money" comparison even
-    // though they're a genuine active filer.
-    expect(screen.getByTestId("financials")).toHaveTextContent("d,r,long-shot");
+    expect(screen.getByText(/Source: FEC filings/)).toBeInTheDocument();
   });
 
-  it("still shows leader cards and a financials chart when only minor-party candidates have filed", () => {
+  it("still shows leader rows when only minor-party candidates have filed", () => {
     // The bug this guards against: with no DEM, no REP, and no
     // incumbent, tierCandidates' promotion checks all require a major
     // leader to compare against, so `leaders` came back empty — the
@@ -188,7 +178,6 @@ describe("RaceFullDetail", () => {
     );
 
     expect(screen.getByText("Lib One")).toBeInTheDocument();
-    expect(screen.getByTestId("financials")).toBeInTheDocument();
   });
 
   it("expands the tail on click to reveal who's in it", async () => {
