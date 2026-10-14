@@ -52,7 +52,7 @@ flowchart TB
     ENRICH --> MON
 
     MON{"<b>8. MONITORS</b><br/>matching issues on ≥ 5 distinct days in 14,<br/>from ≥ 3 unique sources,<br/>title similarity ≥ 0.85?"}
-    MON -->|yes| MONREC["Create NationalMonitor<br/>LLM writes title + description only,<br/>checked against its articles<br/>re-merge duplicates at similarity-model title ≥ 0.75<br/>today's issues join a monitor at title ≥ 0.71, no LLM"]
+    MON -->|yes| MONREC["Create NationalMonitor<br/>LLM writes title + description only,<br/>checked against its articles<br/>re-merge duplicates at similarity-model title ≥ 0.75<br/>today's issues join a monitor at title ≥ 0.71 and a shared distinctive entity (IDF > 2.0), no LLM"]
     MON -->|no| LIFE
     MONREC --> LIFE
     LIFE["Lifecycle, every run<br/>7 days without an update: watching<br/>30 days: closed"]

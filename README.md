@@ -605,7 +605,10 @@ Every hour at :15
        │         distinct days in 14, ≥3 unique sources); the LLM only
        │         names one, checked against its articles
        │         Add today's issues to monitors they match (title against
-       │         the monitor's title and description ≥ 0.71, no LLM)
+       │         the monitor's title and description ≥ 0.71, no LLM) and
+       │         that share a distinctive entity with it (IDF > 2.0 over
+       │         stored issues: "trump", in a third of them, never counts
+       │         alone); stored updates re-checked each refresh
        │         Re-merge duplicate monitors (similarity-model title ≥ 0.75)
        │         No update for 7 days: watching; for 30 days: closed
        ▼
