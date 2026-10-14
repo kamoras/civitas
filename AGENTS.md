@@ -1220,8 +1220,13 @@ After issues are committed, the Action Center pipeline also:
   timeline updates in `monitor_updates`. A monitor opens when today's issue
   matches issues on four other days of the last 14 from three or more outlets
   (`_MONITOR_HISTORY_SIM`, measured by replaying every stored issue). The LLM
-  only names it, and a title word its articles never use falls back to the
-  issue's own title: until 2026-10-09 it copied the prompt's example title
+  only names it. A name that fails its checks (a title word its articles
+  never use, an ungrounded description) falls back to the headline nearest
+  the opening issues' centroid (`_representative_issue`), and a monitor
+  still named after one of its own headlines is named again on later runs
+  (`_rename_headline_monitors`; the slug stays). Pages show the stored
+  title, never the slug: until 2026-10-14 the fallback was whichever issue
+  crossed the day floor, and pages printed the slug back as the name. Until 2026-10-09 it copied the prompt's example title
   "U.S.-Iran Conflict" for most new topics, which then merged into the
   existing monitor of that name, so the site showed one monitor for months.
   Existing monitors are deduplicated by title similarity. A monitor with no
