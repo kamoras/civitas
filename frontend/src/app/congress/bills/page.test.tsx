@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import BillsPage from "./page";
 
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
@@ -38,5 +38,18 @@ describe("bills page", () => {
     ).toHaveTextContent("Saturday, October 3");
     // The headline count is the backend's, not a sum worked out here.
     expect(await screen.findByText(/Where 7 bills sit/)).toBeInTheDocument();
+  });
+
+  it("searches every bill once a reader types, not just the Active now list", async () => {
+    render(<BillsPage />);
+    await screen.findByText("S.12");
+    fireEvent.change(screen.getByRole("textbox", { name: /bill number/ }), {
+      target: { value: "S. 2398" },
+    });
+    expect(screen.getByRole("button", { name: "All Bills" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "D" })).toHaveAttribute("aria-pressed", "false");
   });
 });

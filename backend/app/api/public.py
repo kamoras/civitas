@@ -70,7 +70,7 @@ from app.services.presidential_support_service import chamber_view
 from app.state_names import STATE_NAMES
 from app.time_utils import comment_period_today
 from app.services.pagination import paginate_bounds
-from app.services.bill_record import bill_votes, parse_bill_id
+from app.services.bill_record import bill_votes, canonical_bill_id
 from app.services.representative_service import (
     get_rep_leaderboard,
     get_rep_states_with_counts,
@@ -688,7 +688,7 @@ def get_representative_votes(
 def get_bill_votes(
     _rl: PublicReadLimit,
     request: Request,
-    bill_id: str = Path(description="The bill as Civitas names it: type and number, e.g. HR.1234, S.56, HJRES.7"),
+    bill_id: str = Path(description="The bill: type and number, e.g. HR.1234, S.56, HJRES.7 (dots and spaces optional, so H.R. 1234 is the same bill)"),
     congress: int | None = Query(None, ge=93, le=200, description="The Congress (default: the current one)"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
@@ -696,8 +696,8 @@ def get_bill_votes(
     the tally and each party's split: the votes on the bill's page. Read
     from Civitas's own record of the chambers' roll calls, so a bill never
     brought to a recorded vote has none."""
-    bill_id = bill_id.upper()
-    if parse_bill_id(bill_id) is None:
+    bill_id = canonical_bill_id(bill_id)
+    if bill_id is None:
         raise HTTPException(status_code=404, detail="Not a bill id")
     congress = congress or settings.CURRENT_CONGRESS
     votes = bill_votes(db, congress, bill_id)
