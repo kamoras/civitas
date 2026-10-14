@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import ExplorePage from "./page";
 
@@ -38,9 +38,22 @@ function open(search: string) {
   return render(<ExplorePage />);
 }
 
+// jsdom has neither; `phone` decides what a (max-width) query answers.
+let phone = false;
+const scrollIntoView = vi.fn();
+beforeEach(() => {
+  phone = false;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({ matches: phone && query.includes("max-width") }),
+  });
+  Element.prototype.scrollIntoView = scrollIntoView;
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  Reflect.deleteProperty(window, "matchMedia");
 });
 
 describe("ExplorePage", () => {
@@ -135,5 +148,25 @@ describe("ExplorePage", () => {
 
     expect(await screen.findByText("Remarks")).toBeInTheDocument();
     expect(screen.queryByText(/admin panel/)).not.toBeInTheDocument();
+  });
+
+  it("brings the query box to the top on a phone when the reader searches", () => {
+    // The first result sat a whole screen down at 375 px.
+    api.searchExplore.mockResolvedValue({ query: "roads", results: [], count: 0 });
+    phone = true;
+    open("");
+    const box = screen.getByRole("searchbox", { name: /search government records/i });
+    fireEvent.change(box, { target: { value: "roads" } });
+    fireEvent.submit(box.closest("form")!);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
+  });
+
+  it("leaves the page where it is on a wider screen", () => {
+    api.searchExplore.mockResolvedValue({ query: "roads", results: [], count: 0 });
+    open("");
+    const box = screen.getByRole("searchbox", { name: /search government records/i });
+    fireEvent.change(box, { target: { value: "roads" } });
+    fireEvent.submit(box.closest("form")!);
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 });
