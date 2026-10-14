@@ -48,8 +48,8 @@ describe("OnTheRecordList", () => {
     expect(screen.getByText(data.entries[0].sentence)).toBeTruthy();
     const rollCalls = screen.getAllByRole("link", { name: "[ ROLL CALL ]" });
     expect(rollCalls.map((a) => a.getAttribute("href"))).toEqual([
-      "/congress/bills/SRES.852?congress=119#vote-senate-2-252",
-      "/congress/bills/SRES.852?congress=119#vote-senate-2-252",
+      "/congress/votes/senate/119/2/252",
+      "/congress/votes/senate/119/2/252",
     ]);
   });
 
@@ -63,14 +63,14 @@ describe("OnTheRecordList", () => {
     );
   });
 
-  it("falls back to the day's page for a vote on no bill", () => {
+  it("links a vote on no bill to its own page too", () => {
     const nomination = {
       ...data,
       entries: [{ ...data.entries[0], vote: { ...vote, billId: null } }],
     };
     render(<OnTheRecordList data={nomination} />);
     expect(screen.getByRole("link", { name: "[ ROLL CALL ]" }).getAttribute("href")).toBe(
-      "/congress/2026-09-29"
+      "/congress/votes/senate/119/2/252"
     );
   });
 });

@@ -98,11 +98,11 @@ describe("WhatYouCanDo", () => {
       name: "Call Sen. Ann Ash's office, (202) 224-0001",
     });
     expect(call).toHaveAttribute("href", "tel:2022240001");
-    // The record on the issue's roll call, linked to the vote on the bill page.
+    // The record on the issue's roll call, linked to the roll call's page.
     expect(screen.getByText("Yea")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "S. 2403 · On Passage" })).toHaveAttribute(
       "href",
-      expect.stringContaining("#vote-house-2-314")
+      expect.stringMatching(/^\/congress\/votes\/house\/\d+\/2\/314$/)
     );
     fireEvent.click(call);
     // Counted per issue and kind only: no state, member or number goes with it.
