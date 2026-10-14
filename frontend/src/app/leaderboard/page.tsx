@@ -18,7 +18,9 @@ import {
   fetchPresidentLeaderboard,
   fetchCurrentPresident,
   fetchJusticeLeaderboard,
+  fetchLeaderboardSpread,
 } from "@/lib/api";
+import ScoreSpreadStrip from "@/components/leaderboard/ScoreSpreadStrip";
 import { getScoreColor, getScoreBgColor } from "@/lib/representation";
 import MetricTooltip from "@/components/checker/MetricTooltip";
 import { useConfig } from "@/hooks/useConfig";
@@ -98,6 +100,34 @@ function rankColor(rank: number): string {
 
 // Shared by PresidentLeaderboard, JusticeLeaderboard and LeaderboardContent's
 // congressional table — same loading/error markup, only the label differs.
+/** "TIED ×4" under a rank several members share: the strip above the table
+ *  shows why. The count is the backend's (GET /api/leaderboard/spread). */
+function TieNote({ members }: { members: number }) {
+  if (members < 2) return null;
+  return (
+    // Its own line in the phone card's rank column, beside the rank in the
+    // desktop table (whose rows would otherwise all grow a line).
+    <span className="block whitespace-nowrap font-mono text-xs font-normal tracking-[0.08em] text-ink-min md:ml-2 md:inline">
+      TIED ×{members}
+    </span>
+  );
+}
+
+/** A score resting on a dimension with too little data behind it: shown so
+ *  the rank isn't read as a measurement (backend score_display.thin_dimensions). */
+function ThinDataTag({ dims }: { dims?: string[] }) {
+  if (!dims || dims.length === 0) return null;
+  const which = dims.map((d) => SCORE_TERMS[d as ScoreKey]?.label ?? asLabel(d)).join(", ");
+  return (
+    <span
+      title={`Little data behind: ${which}. That part of the score is mostly a pull toward 50.`}
+      className="ml-2 inline-block border border-signal-amber/40 px-1 font-mono text-xs tracking-[0.08em] text-signal-amber"
+    >
+      THIN DATA<span className="sr-only">: little data behind {which}</span>
+    </span>
+  );
+}
+
 function LeaderboardLoading({ label }: { label: string }) {
   return (
     <div className="panel p-8 text-center" role="status" aria-live="polite">
@@ -741,6 +771,28 @@ function LeaderboardContent() {
     what it already loaded rather than refetching.
   */
   const senate = useAsyncData("senate", () => fetchLeaderboard());
+
+  // The chamber's whole field, for the distribution strip and the tie
+  // counts beside each rank (backend: GET /api/leaderboard/spread).
+  const spreadData = useAsyncData(
+    `spread:${branch}`,
+    branch === "senate" || branch === "house" ? () => fetchLeaderboardSpread(branch) : null
+  );
+  const spread = spreadData.data?.chamber === branch ? spreadData.data : null;
+  // The displayed score of the row under the pointer or keyboard focus.
+  const [highlight, setHighlight] = useState<number | null>(null);
+  // How many members show this score. Only meaningful beside the default
+  // ranking of the whole chamber: a party filter re-ranks within the party.
+  const tiedWith = (score: number): number =>
+    partyFilter === "ALL" && sortKey === "score"
+      ? (spread?.counts.find((c) => c.score === displayScore(score))?.members ?? 1)
+      : 1;
+  const hoverProps = (score: number) => ({
+    onMouseEnter: () => setHighlight(displayScore(score)),
+    onMouseLeave: () => setHighlight(null),
+    onFocus: () => setHighlight(displayScore(score)),
+    onBlur: () => setHighlight(null),
+  });
   const entries = senate.data ?? EMPTY_SENATE;
   const senateError = senate.error;
   const loading = senate.loading;
@@ -852,17 +904,19 @@ function LeaderboardContent() {
     return competitionRanks(displayed, key);
   }, [branch, displayed, housePage, sortKey]);
 
-  const counts = useMemo(() => {
-    if (branch === "house") {
-      return { ALL: houseTotal, D: 0, R: 0, I: 0 };
-    }
-    return {
-      ALL: entries.length,
-      D: entries.filter((e) => e.party === "D").length,
-      R: entries.filter((e) => e.party === "R").length,
-      I: entries.filter((e) => e.party === "I").length,
-    };
-  }, [branch, entries, houseTotal]);
+  // The backend's per-party counts for the chamber, from the spread: the
+  // House list is paginated, so it can't be counted here (it read DEM (0)).
+  const parties = spread?.parties;
+  const counts = {
+    ALL: parties
+      ? parties.D + parties.R + parties.I
+      : branch === "house"
+        ? houseTotal
+        : entries.length,
+    D: parties?.D ?? 0,
+    R: parties?.R ?? 0,
+    I: parties?.I ?? 0,
+  };
 
   return (
     <div className="min-h-screen bg-surface text-ink-hi font-mono overflow-x-hidden">
@@ -889,6 +943,18 @@ function LeaderboardContent() {
             {branch === "scotus"
               ? "by seniority: not ranked or scored."
               : "ranked by constituent representation score."}
+            {(branch === "senate" || branch === "house") && (
+              <>
+                {" "}
+                <Link
+                  href="/about/scores#overall"
+                  className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+                >
+                  How the score is computed
+                </Link>
+                .
+              </>
+            )}
           </p>
         </PageMasthead>
 
@@ -959,7 +1025,7 @@ function LeaderboardContent() {
 
                 {/* Sort */}
                 <div
-                  className="flex items-center gap-2 text-sm text-ink-lo"
+                  className="flex flex-wrap items-center gap-2 text-sm text-ink-lo"
                   role="group"
                   aria-label="Sort order"
                 >
@@ -991,6 +1057,14 @@ function LeaderboardContent() {
                 </div>
               </div>
 
+              {/* Not gated on the table's own load: the spread is a small answer
+                  and paints first. */}
+              {spread && !activeError && (
+                <div className="mb-4">
+                  <ScoreSpreadStrip spread={spread} highlight={highlight} />
+                </div>
+              )}
+
               {/* Loading / Error */}
               {activeLoading && (
                 <LeaderboardLoading
@@ -1019,7 +1093,7 @@ function LeaderboardContent() {
                       </caption>
                       <thead>
                         <tr className="border-b border-white/[0.07] text-ink-lo text-xs uppercase tracking-widest">
-                          <th scope="col" className="px-4 py-3 text-left w-14">
+                          <th scope="col" className="px-4 py-3 text-left w-32">
                             RANK
                           </th>
                           <th scope="col" className="px-4 py-3 text-left">
@@ -1067,18 +1141,21 @@ function LeaderboardContent() {
                                 isTopTen ? "border-l-2 border-l-signal-red/30" : ""
                               }`}
                               tabIndex={0}
-                              aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}, score ${score}`}
+                              aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}${tiedWith(score) > 1 ? `, shared by ${tiedWith(score)}` : ""}, score ${displayScore(score)}`}
                               {...rowNavProps(router, `/politicians/${entry.id}`)}
+                              {...hoverProps(score)}
                             >
                               <td className="px-4 py-3">
                                 <span className={`font-bold text-lg ${rankColor(rank)}`}>
                                   #{rank}
                                 </span>
+                                <TieNote members={tiedWith(score)} />
                               </td>
                               <td className="px-4 py-3">
                                 <span className="text-ink-hi group-hover:text-phos transition-colors">
                                   {entry.name}
                                 </span>
+                                <ThinDataTag dims={entry.thinData} />
                               </td>
                               <td className="px-3 py-3 text-center">
                                 <span
@@ -1143,13 +1220,18 @@ function LeaderboardContent() {
                           key={entry.id}
                           href={`/politicians/${entry.id}`}
                           className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
+                          {...hoverProps(score)}
                         >
-                          <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>
+                          <span
+                            className={`flex w-12 shrink-0 flex-col text-lg font-bold ${rankColor(rank)}`}
+                          >
                             #{rank}
+                            <TieNote members={tiedWith(score)} />
                           </span>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-ink-hi text-sm truncate">{entry.name}</span>
+                              <ThinDataTag dims={entry.thinData} />
                               <span
                                 className={`text-xs px-1 border shrink-0 ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
                               >
@@ -1197,7 +1279,7 @@ function LeaderboardContent() {
 
               {branch === "house" && houseTotalPages > 1 && !houseLoading && (
                 <nav
-                  className="flex items-center justify-center gap-2 mt-4"
+                  className="flex flex-wrap items-center justify-center gap-2 mt-4"
                   aria-label="Leaderboard pagination"
                 >
                   <button
@@ -1208,7 +1290,7 @@ function LeaderboardContent() {
                   >
                     ← PREV
                   </button>
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap justify-center gap-1">
                     {Array.from({ length: houseTotalPages }, (_, i) => i + 1).map((p) => (
                       <button
                         key={p}
@@ -1242,8 +1324,16 @@ function LeaderboardContent() {
                   </p>
                   <p className="font-sans text-xs text-ink-min">
                     Scores are shrunk toward a neutral value when data is thin: members with limited
-                    public data are not penalized or rewarded for it (the About page says how each
-                    score does this)
+                    public data are not penalized or rewarded for it.{" "}
+                    <span className="font-mono text-signal-amber">THIN DATA</span> marks a member
+                    with too little data behind a part of the score for it to be more than that pull
+                    toward 50.{" "}
+                    <Link
+                      href="/about/scores#overall"
+                      className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+                    >
+                      How each score does this
+                    </Link>
                   </p>
                 </div>
               )}

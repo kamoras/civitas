@@ -1397,6 +1397,16 @@ The homepage, and in a one-line form the pages most readers arrive on (a member'
 
 Every sentence is a template around stored figures. When the backend can't answer, the strip is left out and the page renders as before.
 
+## Reading the leaderboard
+
+The Senate and House leaderboards rank on the whole-number score the page shows, so members who show the same score share a rank. Most of a chamber sits in a narrow band (on 2026-10-13 the 433 House members held 47 distinct scores, half of them between 53 and 65), so a rank alone overstates how far apart two members are. Three things say so on the page, each from the backend:
+
+- **The field, by score.** A strip above the table with one mark per serving member, stacked on their score, and the middle half and median (`GET /api/leaderboard/spread?chamber=senate|house`, `score_display.score_spread`). The column of the row under the pointer or keyboard focus lights up with how many members show that score. The same answer carries each party's serving count for the party filter (the House list is paginated, so the page can't count it; it read DEM (0) and REP (0) before).
+- **Ties.** Beside a shared rank, "TIED ×4" with how many share it, read from the spread's counts; shown on the default ranking of the whole chamber only, since a party filter re-ranks within the party.
+- **Thin data.** `thinData` on each leaderboard row (and in the public API's rows): the weighted dimensions whose data-sufficiency grade (`score_calculator.calculate_confidence`) is "low", where the score is mostly the pull toward a reference rather than a measurement (`score_display.thin_dimensions`). Shown as a "THIN DATA" tag naming them.
+
+No rank interval is shown: a score has no standard error to draw one from, and a band of ±1 point would be a choice, not a measurement.
+
 ## Score Data Transparency
 
 A senator's or representative's profile is the scorecard at a glance (`components/scorecard/MemberScorecard.tsx`): a header with who they are, how to reach them, the Representation Score, the rank the leaderboard gives it (served as `chamberRank` on `GET /api/politicians/{id}`) and its trend; then the three scored dimensions side by side, each led by one plain sentence of what its score found, then the evidence behind it (the components, the weights and their statistics sit under "How this is computed", closed by default); then their financial-disclosure holdings as a pie beside the list; then tiles for what is on record but not scored (stock trades, donor-vote links, positions by policy area). The Funding Independence column also links straight to the donor-vote links ("See how this money lines up with votes"), which on a phone otherwise sit about seven screens below it. Every full list — every vote, every donor, every bill — opens in a drawer over the page; each vote there is one line (what was voted on, linked to the bill's page, the question, the date, the member's vote, and whether it went against the party). On a phone the columns stack.

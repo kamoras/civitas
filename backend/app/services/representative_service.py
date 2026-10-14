@@ -18,7 +18,7 @@ from app.models import (
     Representative,
 )
 from app.pipeline.analyze.score_calculator import NON_INDUSTRY_CODES, compute_overall_score
-from app.score_display import displayed_score
+from app.score_display import displayed_score, thin_dimensions
 from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
@@ -464,6 +464,7 @@ def get_rep_leaderboard(
                 else None
             ),
             "leadershipScore": r.leadership_score,
+            "thinData": thin_dimensions(json.loads(r.score_confidence or "{}")),
         }
         for r in page_reps
     ]

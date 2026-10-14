@@ -1593,6 +1593,7 @@ the pending list).
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
+| Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
 | Homepage (masthead, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `RecordIndex.tsx`, `Holdings.tsx` |
 
 ## Conventions
