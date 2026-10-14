@@ -10,6 +10,10 @@ analysis-code fingerprint (senate_pipeline._compute_analysis_code_hash).
 """
 
 import math
+import statistics
+from collections import Counter
+
+from app.config_definitions import SCORE_WEIGHTS
 
 
 def displayed_score(score: float) -> int:
@@ -23,3 +27,28 @@ def displayed_rank(score: float, field: list[float]) -> int:
     compared as displayed: members who show the same number share a rank."""
     mine = displayed_score(score)
     return 1 + sum(1 for v in field if displayed_score(v) > mine)
+
+
+def thin_dimensions(confidence: dict | None) -> list[str]:
+    """The weighted dimensions (SCORE_WEIGHTS) whose data-sufficiency grade
+    (score_calculator.calculate_confidence) is "low": too little source data
+    behind them for the number to be more than a pull toward neutral."""
+    return [k for k in SCORE_WEIGHTS if (confidence or {}).get(k) == "low"]
+
+
+def score_spread(scores: list[float]) -> dict:
+    """How a chamber's overall scores are spread, as displayed: how many
+    members show each whole number, and the quartiles. Members who show
+    the same number share a rank, so the counts say how much a rank
+    difference is worth; the quartiles say how tightly the field sits."""
+    shown = [displayed_score(s) for s in scores]
+    counts = Counter(shown)
+    quartiles = (statistics.quantiles(shown, n=4, method="inclusive") if len(shown) >= 2
+                 else [shown[0]] * 3 if shown else [None] * 3)
+    return {
+        "total": len(shown),
+        "counts": [{"score": v, "members": counts[v]} for v in sorted(counts)],
+        "p25": None if quartiles[0] is None else displayed_score(quartiles[0]),
+        "median": None if quartiles[1] is None else displayed_score(quartiles[1]),
+        "p75": None if quartiles[2] is None else displayed_score(quartiles[2]),
+    }

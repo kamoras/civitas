@@ -1,6 +1,7 @@
 import {
   Holdings,
   LeaderboardEntry,
+  ScoreSpread,
   PaginatedStockTrades,
   PaginatedVotes,
   Senator,
@@ -8,6 +9,7 @@ import {
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
+import type { RedistrictedSeat } from "@/types/redistricting";
 import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { LiveResults, PviMap, TownBallot, TownEntry } from "@/types/election";
@@ -256,6 +258,10 @@ export async function fetchCompareAgreement(
 ): Promise<Agreement> {
   const params = new URLSearchParams({ chamber, left, right });
   return cachedFetch(`${API_BASE}/compare/agreement?${params}`, TTL.SHORT);
+}
+
+export async function fetchLeaderboardSpread(chamber: "senate" | "house"): Promise<ScoreSpread> {
+  return cachedFetch(`${API_BASE}/leaderboard/spread?chamber=${chamber}`, TTL.SHORT);
 }
 
 // --- House Representatives ---
@@ -2143,4 +2149,20 @@ export async function submitFeedback(
   }
   const data = await res.json();
   return { ok: data.ok, issueUrl: data.issueUrl ?? data.issue_url ?? null };
+}
+
+/** Where an old House district's residents went on the new map (null
+ * `seat` when the state kept its lines) — the member profile's note. */
+export async function fetchRedistrictedSeat(
+  state: string,
+  district: number
+): Promise<RedistrictedSeat> {
+  const url = `${API_BASE}/elections/redistricting/${encodeURIComponent(state)}/old/${district}`;
+  return withShape<RedistrictedSeat>(await cachedFetch(url, TTL.SHORT), {}, url);
+}
+
+/** URLs a researcher downloads the overlap matrix from. */
+export function redistrictingDownloads(state: string): { csv: string; json: string } {
+  const base = `${API_BASE}/elections/redistricting/${encodeURIComponent(state)}`;
+  return { csv: `${base}/overlap.csv`, json: base };
 }

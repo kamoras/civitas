@@ -56,6 +56,7 @@ from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
 from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 from app.pipeline.fetch.district_pvi import congress_for_election, district_pvi_for_congress
+from app.redistricting import new_district_notes
 from app.pipeline.analyze.election_coverage import vacuous_corroboration_clause
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_source_for_town
 from app.pipeline.fetch.ballot_pdf_sources import town_names_for_state as ballot_pdf_town_names_for_state
@@ -1359,6 +1360,11 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         (r for r in full if r["office"] == "H"),
         key=lambda r: r["district"] if r["district"] is not None else -1,
     )
+    # On new lines: where each district's residents lived before and how
+    # its lean moved (app/redistricting.py), linked to the full page.
+    notes = new_district_notes(state, cycle)
+    for r in house_races:
+        r["redistricting"] = notes.get(r["district"] if r["district"] is not None else 0)
 
     # Only the election this page is about. Rows from an earlier cycle
     # (or a primary) stay in the table until pruned and must never render
