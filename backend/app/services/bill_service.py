@@ -392,6 +392,7 @@ def get_bill_detail(db: Session, bill_id: str, congress: int | None = None) -> B
         party_leaning=sp.party_leaning,
         related_issues=related,
         stage_base_rate=stage_base_rate(db, sp.stage or BillStage.INTRODUCED, sp.congress),
+        stage_milestones=stage_milestones(db, sp.stage or BillStage.INTRODUCED, sp.congress),
     )
 
 
@@ -551,6 +552,44 @@ def stage_base_rate(db: Session, stage: str, congress: int) -> dict | None:
     sentences.append("That describes bills at this stage, not where this one will go.")
     return {"total": total, "atStage": at, "reachedStage": reached, "becameLaw": law,
             "sentence": " ".join(sentences)}
+
+
+# The milestones a bill page's ladder draws: the furthest stage reached,
+# grouped where the steps between are automatic or brief (every bill is
+# referred on introduction; "on the floor" and "in the other chamber" are
+# waits between votes). Each is the BILL_STAGES order a bill must have reached.
+_MILESTONES = (
+    ("Introduced", BillStage.INTRODUCED),
+    ("Reported by a committee", BillStage.REPORTED),
+    ("Passed one chamber", BillStage.PASSED_CHAMBER),
+    ("Passed both chambers", BillStage.PASSED_BOTH),
+    ("Became law", BillStage.ENACTED),
+)
+
+
+def stage_milestones(db: Session, stage: str, congress: int) -> dict | None:
+    """How far this Congress's bills have got, and this one: for each
+    milestone, how many of the bills sitting members sponsored this
+    Congress have reached it (the same population and stage order as
+    stage_base_rate), and the furthest milestone this bill has reached
+    (`reached`, an index into `milestones`). A vetoed bill reached its
+    presentment and no further, so it counts as having passed both
+    chambers. None for another Congress's bill, whose stage the counts
+    don't describe."""
+    if congress != settings.CURRENT_CONGRESS:
+        return None
+    counts = Counter(_reach(r.bill.stage) for r in _collect_bills(db) if r.bill.congress == congress)
+    total = sum(counts.values())
+    if not total:
+        return None
+    here = _reach(stage)
+    milestones = []
+    for label, at in _MILESTONES:
+        need = BILL_STAGES[at]["order"]
+        n = sum(k for order, k in counts.items() if order >= need)
+        milestones.append({"label": label, "bills": n, "share": round(n / total, 4), "shareText": _pct(n, total)})
+    reached = max(i for i, (_, at) in enumerate(_MILESTONES) if here >= BILL_STAGES[at]["order"])
+    return {"total": total, "milestones": milestones, "reached": reached}
 
 
 # A bill title that reads as a short title: "... Act" (a year suffix, "of
