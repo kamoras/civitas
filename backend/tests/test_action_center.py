@@ -27,6 +27,9 @@ from app.database import Base
 from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
+    _entity_document_frequency,
+    _prune_off_topic_updates,
+    _shares_distinctive_entity,
     _rank_clusters,
     _deduplicate_top_clusters,
     _update_national_monitors,
@@ -3985,3 +3988,56 @@ def test_updates_of_a_deleted_monitor_are_swept(db_session):
     db_session.commit()
     assert _sweep_orphan_updates(db_session) == 1
     assert [u.source_url for u in db_session.query(MonitorUpdate)] == ["u1"]
+
+
+class TestMonitorEntityGate:
+    """The second half of the issue gate (_MONITOR_ENTITY_MIN_IDF): an issue
+    above the cosine floor joins a monitor only if it also names something
+    distinctive the monitor names. On 2026-10-14 the Russian-diesel monitor
+    took a Trump rally, a court ruling and an ad-spending story, each sharing
+    only "trump" with it, the name in a third of all issues."""
+
+    @staticmethod
+    def _corpus(db, n=120):
+        # A third of all issues name the ubiquitous figure; "Kestrel" is rare.
+        for k in range(n):
+            db.add(ActionIssue(date="2026-03-01", rank=k, title=f"Varga says filler {k}" if k % 3 == 0 else f"Filler story {k}",
+                               summary="s", is_current=False))
+
+    def test_a_ubiquitous_name_alone_does_not_join_a_rare_one_does(self, db_session):
+        self._corpus(db_session)
+        db_session.commit()
+        df, n = _entity_document_frequency(db_session)
+        reference = _issue_signature("Varga's Kestrel pipeline deal", ["Varga announced the Kestrel deal."])
+        assert not _shares_distinctive_entity(_issue_signature("Varga heads to a rally", []), reference, df, n)
+        assert _shares_distinctive_entity(_issue_signature("Senators fault Kestrel's terms", []), reference, df, n)
+        # A demonym is the same place.
+        assert _shares_distinctive_entity(_issue_signature("Kestrelian officials respond", []), reference, df, n)
+
+    def test_stored_off_topic_updates_are_pruned_and_founding_ones_kept(self, db_session):
+        self._corpus(db_session)
+        monitor = NationalMonitor(slug="kestrel-deal", title="Varga's Kestrel deal", description="d",
+                                  status=MonitorStatus.ACTIVE)
+        db_session.add(monitor)
+        db_session.flush()
+        opened = datetime(2026, 3, 10, 4, 20)
+        rows = [
+            ("Varga announces Kestrel deal", opened),
+            ("Varga heads to a rally", opened),                 # founding: kept as opened
+            ("Senators fault Kestrel terms", opened + timedelta(days=1)),
+            ("Varga heads to another rally", opened + timedelta(days=2)),  # later, "varga" only
+        ]
+        for k, (title, at) in enumerate(rows):
+            db_session.add(MonitorUpdate(monitor_id=monitor.id, date="2026-03-10", summary=title,
+                                         source_url=f"https://example.org/{k}", article_title=title, created_at=at))
+        issue = ActionIssue(date="2026-03-12", rank=1, title="Varga heads to another rally", summary="s",
+                            related_monitor_slugs=json.dumps(["kestrel-deal"]))
+        db_session.add(issue)
+        db_session.commit()
+
+        assert _prune_off_topic_updates(db_session) == 1
+
+        assert [u.article_title for u in db_session.query(MonitorUpdate).order_by(MonitorUpdate.id)] == [
+            "Varga announces Kestrel deal", "Varga heads to a rally", "Senators fault Kestrel terms",
+        ]
+        assert json.loads(issue.related_monitor_slugs) == []

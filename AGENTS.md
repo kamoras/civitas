@@ -1229,6 +1229,14 @@ After issues are committed, the Action Center pipeline also:
   crossed the day floor, and pages printed the slug back as the name. Until 2026-10-09 it copied the prompt's example title
   "U.S.-Iran Conflict" for most new topics, which then merged into the
   existing monitor of that name, so the site showed one monitor for months.
+  A day's issue joins a monitor at title-to-monitor cosine ≥ 0.71 *and* only
+  when it names an entity the monitor's text or updates name that is in few
+  enough stored issues to tell stories apart (IDF > 2.0,
+  `_MONITOR_ENTITY_MIN_IDF`; demonyms match by prefix); stored updates are
+  re-checked the same way each refresh (`_prune_off_topic_updates`). Measured
+  2026-10-14: the cosine floor alone let a Russian-diesel monitor take three
+  stories sharing only "trump" (a third of all issues); the entity half drops
+  all three and none of the Iran monitor's 291 on-topic updates.
   Existing monitors are deduplicated by title similarity. A monitor with no
   update for 7 days is marked "watching" (still listed; the next match makes
   it active again) and after 30 days "closed" (off the Ongoing tab, still in
