@@ -1141,7 +1141,7 @@ function LeaderboardContent() {
                                 isTopTen ? "border-l-2 border-l-signal-red/30" : ""
                               }`}
                               tabIndex={0}
-                              aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}${tiedWith(score) > 1 ? `, shared by ${tiedWith(score)}` : ""}, score ${displayScore(score)}`}
+                              aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}${tiedWith(score) > 1 ? `, shared by ${tiedWith(score)}` : ""}, score ${displayScore(score)}${entry.thinData?.length ? ", thin data" : ""}`}
                               {...rowNavProps(router, `/politicians/${entry.id}`)}
                               {...hoverProps(score)}
                             >
