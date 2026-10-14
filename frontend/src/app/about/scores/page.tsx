@@ -84,7 +84,10 @@ export default function ScoresChapter() {
         <P>
           Each part runs from 0 to 100, higher is better, and the Representation Score is their
           weighted average. Every senator and representative goes through identical formulas in the
-          same nightly run, so scores are comparable across both chambers.
+          same nightly run. The references a part is measured against (a typical PAC share, the
+          typical member&apos;s bill record, the break rate expected of a seat) are measured within
+          each chamber, so a score compares like for like with others in the same chamber, and only
+          roughly across the two.
         </P>
         <P>
           Each part answers to the same yardstick: does the member carry out the will of the
@@ -118,6 +121,17 @@ export default function ScoresChapter() {
             member&apos;s bills are their whole record, not a sample of it. And Funding
             Independence, where a part that can&apos;t be measured is left out and the others carry
             its weight; with no funding data at all the dimension is a neutral 50.
+          </P>
+        </Sub>
+        <Sub title="Reading the leaderboard">
+          <P>
+            The leaderboard ranks on the whole-number score the page shows, so members who show the
+            same score share a rank, marked &ldquo;tied&rdquo; with how many share it. Most of a
+            chamber sits within a few points, which the strip above the table draws, one mark per
+            member, so a gap of several places that is one point of score doesn&apos;t read as a
+            finding. A member whose score rests on a part with too little data behind it (a low
+            confidence grade on a weighted part) is marked &ldquo;thin data&rdquo;: that part is
+            mostly the pull toward a reference described above, not a measurement.
           </P>
         </Sub>
         <Sub title="Why the current Congress, not a career">

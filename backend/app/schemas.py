@@ -653,6 +653,12 @@ class LeaderboardEntrySchema(CamelModel):
     # disproportionate cosponsor weight. None when too little
     # cosponsorship data exists to compute it.
     leadership_score: float | None = Field(None, description=_LEADERSHIP)
+    # score_display.thin_dimensions: shown on the leaderboard so a rank built
+    # on a shrunk-to-neutral dimension isn't read as a measurement.
+    thin_data: list[str] = Field(
+        default_factory=list,
+        description="Weighted dimensions (keys of representationScore) whose confidence is \"low\": too little "
+                    "source data for the dimension to be more than a pull toward a neutral 50")
 
 
 # --- Public API v1 (api/public.py) ---

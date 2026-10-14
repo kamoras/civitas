@@ -1431,6 +1431,16 @@ The homepage, and in a one-line form the pages most readers arrive on (a member'
 
 Every sentence is a template around stored figures. When the backend can't answer, the strip is left out and the page renders as before.
 
+## Reading the leaderboard
+
+The Senate and House leaderboards rank on the whole-number score the page shows, so members who show the same score share a rank. Most of a chamber sits in a narrow band (on 2026-10-13 the 433 House members held 47 distinct scores, half of them between 53 and 65), so a rank alone overstates how far apart two members are. Three things say so on the page, each from the backend:
+
+- **The field, by score.** A strip above the table with one mark per serving member, stacked on their score, and the middle half and median (`GET /api/leaderboard/spread?chamber=senate|house`, `score_display.score_spread`). The column of the row under the pointer or keyboard focus lights up with how many members show that score. The same answer carries each party's serving count for the party filter (the House list is paginated, so the page can't count it; it read DEM (0) and REP (0) before).
+- **Ties.** Beside a shared rank, "TIED ×4" with how many share it, read from the spread's counts; shown on the default ranking of the whole chamber only, since a party filter re-ranks within the party.
+- **Thin data.** `thinData` on each leaderboard row (and in the public API's rows): the weighted dimensions whose data-sufficiency grade (`score_calculator.calculate_confidence`) is "low", where the score is mostly the pull toward a reference rather than a measurement (`score_display.thin_dimensions`). Shown as a "THIN DATA" tag naming them.
+
+No rank interval is shown: a score has no standard error to draw one from, and a band of ±1 point would be a choice, not a measurement.
+
 ## On the record
 
 Below the masthead, the homepage lists what stood out in Congress's latest week of record votes, from `GET /api/notable` (`api/notable.py`), rendered on the server with the page. Each entry is a fixed sentence around the chamber's own roll call and ends in the commands that check it: the roll call, the member, and (for a senator) the member beside the state's other senator on `/compare`.
