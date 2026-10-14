@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from fastapi import Response
 
-from app.api.action import _latest_current_issues, list_monitors
+from app.api.action import _build_issue_response, _latest_current_issues, list_monitors
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ActionIssueStatus, MonitorStatus, NationalMonitor
 
@@ -1141,3 +1141,18 @@ def test_ongoing_lists_monitors_closed_in_the_last_sixty_days(db_session, freeze
     assert [m["slug"] for m in body["monitors"]] == ["watching-one"]
     assert [(m["slug"], m["closedOn"]) for m in body["recentlyClosed"]] == [("closed-recently", "2026-09-01")]
     assert body["monitors"][0]["closedOn"] is None
+
+
+def test_an_issue_names_its_monitors_by_stored_title(db_session):
+    """Pages printed the slug back out as a name, losing apostrophes and
+    capitals; a slug whose monitor was merged away linked nowhere."""
+    db_session.add(NationalMonitor(slug="senator-talks-trumps-deal", title="Senator talks Trump's deal",
+                                   description="d", status=MonitorStatus.ACTIVE))
+    issue = ActionIssue(date="2026-10-14", rank=1, title="T", summary="S", is_current=True,
+                        related_monitor_slugs=json.dumps(["senator-talks-trumps-deal", "merged-away"]))
+    db_session.add(issue)
+    db_session.commit()
+
+    body = _build_issue_response(issue, db_session)
+
+    assert body["relatedMonitors"] == [{"slug": "senator-talks-trumps-deal", "title": "Senator talks Trump's deal"}]

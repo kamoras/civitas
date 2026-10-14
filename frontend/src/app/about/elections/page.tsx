@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { pageMetadata } from "@/lib/site";
 import {
   AboutPage,
@@ -93,6 +94,41 @@ export default async function ElectionsChapter() {
         </P>
       </Section>
 
+      <Section id="race-context" title="What shapes a race (and why there is no forecast)">
+        <P>
+          Each federal contest&apos;s research opens with what shapes the race. Civitas publishes no
+          prediction, odds or rating for any race, and calls none; these figures describe a race,
+          they don&apos;t forecast it.
+        </P>
+        <P>
+          <strong>The seat.</strong> Its lean is the Cook-PVI-style figure: how much more Republican
+          or Democratic it voted than the nation in the last two presidential elections. Beside it,
+          one square for every seat of its kind, from the most Democratic-leaning to the most
+          Republican: every U.S. House district on the lines this election is fought on, or the 50
+          states for a Senate race. The count of seats leaning further each way is worked out on the
+          server from the same table the lean comes from. A district that only has its state&apos;s
+          figure is not placed among districts, and from election day the lean is not shown at all,
+          so that it can&apos;t be read as a call on the count.
+        </P>
+        <P>
+          <strong>The money.</strong> Each candidate&apos;s contributions are split into the
+          categories of the FEC&apos;s own totals, which add up to the total: people who gave the
+          campaign $200 or less (the FEC doesn&apos;t list them by name), people who gave more, PACs
+          and other committees, party committees, and the candidate. Loans a candidate makes to the
+          campaign are shown on their own, because they are not contributions. Each candidate&apos;s
+          figures carry the last day they cover and a link to that election&apos;s FEC page. Where a
+          filing&apos;s categories don&apos;t add up to its total, no split is shown. No category is
+          presented as better or worse than another.
+        </P>
+        <P>
+          <strong>The data.</strong> The <span className="font-mono text-ink-hi">[ CSV ]</span> link
+          on any race downloads every federal candidate in that state with each FEC figure, the
+          dates they are as of, the seat&apos;s lean and the FEC link. The{" "}
+          <span className="font-mono text-ink-hi">[ JSON ]</span> link is the race as the page reads
+          it.
+        </P>
+      </Section>
+
       <Section id="deadlines" title="Voter deadlines">
         <P>
           Each state page starts with that state&apos;s deadlines for this election: when you can
@@ -178,6 +214,26 @@ export default async function ElectionsChapter() {
           day on, a &ldquo;member before this election&rdquo;, since the results can stay up until
           the new Congress is sworn in), not the &ldquo;incumbent&rdquo;: no seat on the new map has
           a previous holder.
+        </P>
+        <P>
+          For each redrawn state, a{" "}
+          <Link
+            href="/elections/redistricting"
+            className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+          >
+            what-changed page
+          </Link>{" "}
+          answers whether your district is different and by how much: for each new district, the
+          share of its residents who were in each old one and how its lean moved, and for each old
+          district, where its residents went. Find yours by city, town or county. The counts are
+          2020 Census residents, joined block by block to the old and new district files, so
+          everyone is counted once; both leans are Cook&apos;s on the same presidential elections,
+          so a change in lean comes from the lines alone. The page leads with how many seats lean
+          each way before and after; how many districts lean differently from the old district most
+          of their residents came from is a separate count, shown with the method. Each page links
+          the act or court order behind the map, explains the method and offers the whole table as
+          CSV and JSON. It describes who is in which district; it says nothing about why a line was
+          drawn.
         </P>
         <P>
           To find who represents you today, use the Politicians directory instead: pick your state,

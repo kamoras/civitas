@@ -153,6 +153,14 @@ def parse_senate_floor(xml: bytes) -> dict | None:
 
 # ── Roll calls ────────────────────────────────────────────────────
 
+# The one place each chamber's roll-call URL is built: every fetch of a roll
+# call goes through these. Both chambers zero-pad the number in the file name
+# (Senate to five digits, the House Clerk to three). The Clerk answers an
+# unpadded name ("roll1.xml") with 200 and its HTML site, not a 404, so a
+# hand-built unpadded URL silently read every roll below 100 as missing
+# (verified live 2026-10-14: roll001.xml is the vote, roll1.xml the site).
+
+
 def senate_roll_call_url(congress: int, session: int, number: int) -> str:
     return (f"https://www.senate.gov/legislative/LIS/roll_call_votes/"
             f"vote{congress}{session}/vote_{congress}_{session}_{number:05d}.xml")

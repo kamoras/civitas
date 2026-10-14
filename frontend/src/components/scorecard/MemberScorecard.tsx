@@ -2,7 +2,7 @@
 
 import { useCallback, useState, type ReactNode } from "react";
 import type { Senator } from "@/types/senator";
-import type { Committee } from "@/types/politicians";
+import type { ChamberField, Committee } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import { useConfig } from "@/hooks/useConfig";
 import { displayScore } from "@/lib/formatting";
@@ -22,8 +22,11 @@ import StockTrades from "@/components/checker/StockTrades";
 import VotingRecord from "@/components/checker/VotingRecord";
 import AlignmentColumn from "./AlignmentColumn";
 import AlsoOnRecord, { type RecordView } from "./AlsoOnRecord";
+import AtAGlance from "./AtAGlance";
+import ChamberStrip from "./ChamberStrip";
 import EffectivenessColumn from "./EffectivenessColumn";
 import FundingColumn from "./FundingColumn";
+import MethodsLedger from "./MethodsLedger";
 import ScorecardDrawer from "./ScorecardDrawer";
 import ScorecardHeader from "./ScorecardHeader";
 import TopDonorsTable from "./TopDonorsTable";
@@ -64,6 +67,8 @@ export default function MemberScorecard({
   rank,
   titleAs = "h1",
   former = false,
+  field = null,
+  scoredOn = null,
 }: {
   member: Senator;
   chamber: "senate" | "house";
@@ -77,6 +82,10 @@ export default function MemberScorecard({
   titleAs?: "h1" | "h2";
   /** No longer serving: the header leaves out how to reach them. */
   former?: boolean;
+  /** The chamber the rank is taken over, for the header's strip. */
+  field?: ChamberField | null;
+  /** The latest scoring run, for the methods section and its citation. */
+  scoredOn?: { date: string; algorithmVersion: string | null } | null;
 }) {
   const config = useConfig();
   const weights = config?.scoreWeights;
@@ -145,6 +154,20 @@ export default function MemberScorecard({
             rank={rank}
             titleAs={titleAs}
             former={former}
+            standing={
+              field &&
+              rank && (
+                <ChamberStrip
+                  field={field}
+                  memberId={member.id}
+                  name={member.name}
+                  score={overall}
+                  rank={rank}
+                  chamber={chamber}
+                />
+              )
+            }
+            glance={<AtAGlance breakdown={breakdown} scores={scores} />}
           />
 
           <div className="grid items-stretch gap-5 lg:grid-cols-3">
@@ -182,6 +205,14 @@ export default function MemberScorecard({
           <Holdings memberId={member.id} filer={chamber} variant="panel" />
 
           <AlsoOnRecord member={member} chamber={chamber} onOpen={setView} />
+
+          <MethodsLedger
+            member={member}
+            chamber={chamber}
+            breakdown={breakdown}
+            weights={weights}
+            scoredOn={scoredOn}
+          />
         </div>
       </ShareSubjectProvider>
 

@@ -32,6 +32,9 @@ from app.pipeline.analyze.action_center import (
     _update_national_monitors,
     _cleanup_monitor_lifecycle,
     _generate_monitor_metadata,
+    _monitor_article_lines,
+    _rename_headline_monitors,
+    _representative_issue,
     _full_story_should_invalidate,
     _find_related_explore_docs,
     _find_related_senators,
@@ -509,52 +512,97 @@ class TestNationalMonitorCreation:
 
     @patch("app.pipeline.analyze.action_center.call_llm")
     def test_generate_monitor_metadata_success(self, mock_call_llm):
-        """The model writes the title and description; the category is the
-        issues' own commonest policy area, not the model's."""
-        issue = _make_issue("2026-03-13", "Strikes on Iran continue", ["AP News"])
-        issue.policy_areas = json.dumps(["DEFENSE"])
-        past = [_make_issue("2026-03-12", "Iran talks stall", ["Reuters"])]
-        past[0].policy_areas = json.dumps(["DEFENSE", "FOREIGN_POLICY"])
-
+        """The model writes the title and description, checked against the
+        articles it was given."""
+        articles = _monitor_article_lines([
+            ("Strikes on Iran continue", "AP News", "Strikes on Iran continue."),
+            ("Iran talks stall", "Reuters", "Talks stall."),
+        ])
         mock_call_llm.return_value = json.dumps({
             "title": "Iran Strikes and Talks",
             "description": "Strikes on Iran continue while talks stall.",
             "category": "TRADE",
         })
 
-        result = _generate_monitor_metadata(issue, past, MagicMock())
+        result = _generate_monitor_metadata(articles, MagicMock())
 
-        assert result["title"] == "Iran Strikes and Talks"
-        assert result["category"] == "defense"
-        assert result["description"].startswith("Strikes")
+        assert result == {
+            "title": "Iran Strikes and Talks",
+            "description": "Strikes on Iran continue while talks stall.",
+        }
 
     @patch("app.pipeline.analyze.action_center.call_llm")
-    def test_monitor_title_naming_what_the_articles_dont_falls_back(self, mock_call_llm):
+    def test_monitor_title_naming_what_the_articles_dont_is_refused(self, mock_call_llm):
         """The model copied the example title from its prompt ("U.S.-Iran
         Conflict") for 18 of 23 unrelated topics; each was then merged into
         the existing monitor of that name. A title word the articles never
-        use sends the monitor to the issue's own title instead."""
-        issue = _make_issue("2026-03-13", "Beef import plan draws criticism", ["AP News"])
+        use is refused."""
+        articles = _monitor_article_lines([
+            ("Beef import plan draws criticism", "AP News", "Beef import plan draws criticism."),
+        ])
         mock_call_llm.return_value = json.dumps({
             "title": "U.S.-Iran Conflict",
             "description": "Beef import plan draws criticism.",
         })
 
-        result = _generate_monitor_metadata(issue, [], MagicMock())
-
-        assert result["title"] == "Beef import plan draws criticism"
-        assert result["description"] == "Summary for Beef import plan draws criticism"
+        assert _generate_monitor_metadata(articles, MagicMock()) is None
 
     @patch("app.pipeline.analyze.action_center.call_llm", return_value=None)
-    def test_unanswered_model_call_keeps_the_monitor(self, _llm):
-        """Whether a monitor opens is decided before the model is asked; no
-        answer means the issue's own (already checked) text, not no monitor."""
-        issue = _make_issue("2026-03-13", "Tariff talks stall", ["AP News"])
+    def test_unanswered_model_call_names_nothing(self, _llm):
+        articles = _monitor_article_lines([("Tariff talks stall", "AP News", "")])
+        assert _generate_monitor_metadata(articles, MagicMock()) is None
 
-        result = _generate_monitor_metadata(issue, [], MagicMock())
+    def test_fallback_name_is_the_most_representative_headline(self):
+        """Until 2026-10-14 an unnamed monitor took the headline of whichever
+        issue crossed the day floor, here a one-off interview, and kept it."""
+        issues = [
+            _make_issue("2026-10-13", "Senator talks diesel deal", ["NPR"]),
+            _make_issue("2026-10-12", "Senators call on Trump to rescind diesel deal", ["PBS"]),
+            _make_issue("2026-10-11", "Senators urge reversal of diesel deal", ["NPR"]),
+        ]
+        embeddings = np.array([[1.0, 0.0], [0.6, 0.8], [0.5, 0.86]], dtype=np.float32)
+        embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True)
 
-        assert result["title"] == "Tariff talks stall"
-        assert result["category"] == "general"
+        assert _representative_issue(issues, embeddings) is issues[1]
+
+    def test_headline_named_monitor_is_renamed_from_its_updates(self, db_session, monkeypatch):
+        """A monitor still named after one of its own headlines is named again
+        by the model on a later run; its slug stays (links point at it). A
+        monitor with a real name is never asked about."""
+        import app.pipeline.analyze.action_center as ac
+
+        headline = "Senator talks Trump's diesel deal"
+        named = NationalMonitor(slug="senator-talks-trumps-diesel-deal", title=headline,
+                                description=headline, status=MonitorStatus.ACTIVE)
+        real = NationalMonitor(slug="iran", title="Iran talks", description="Talks.",
+                               status=MonitorStatus.ACTIVE)
+        db_session.add_all([named, real])
+        db_session.flush()
+        db_session.add_all([
+            MonitorUpdate(monitor_id=named.id, date="2026-10-13", summary=headline,
+                          source_url="https://example.org/1", source_name="NPR", article_title=headline),
+            MonitorUpdate(monitor_id=named.id, date="2026-10-12", summary="Senators ask Trump to drop the diesel deal.",
+                          source_url="https://example.org/2", source_name="PBS",
+                          article_title="Senators ask Trump to drop the diesel deal"),
+            MonitorUpdate(monitor_id=real.id, date="2026-10-12", summary="Talks.",
+                          source_url="https://example.org/3", source_name="AP", article_title="Iran talks resume"),
+        ])
+        db_session.commit()
+        prompts: list[str] = []
+
+        def llm(**kw):
+            prompts.append(kw["user_prompt"])
+            return json.dumps({"title": "Trump's Diesel Deal",
+                               "description": "Senators ask Trump to drop the diesel deal."})
+
+        monkeypatch.setattr(ac, "call_llm", llm)
+
+        assert _rename_headline_monitors(db_session) is True
+
+        assert named.title == "Trump's Diesel Deal"
+        assert named.slug == "senator-talks-trumps-diesel-deal"
+        assert real.title == "Iran talks"
+        assert len(prompts) == 1 and "drop the diesel deal" in prompts[0]
 
     @patch("app.pipeline.analyze.action_center.get_embedding_model")
     def test_new_topic_gets_its_own_monitor_once(self, mock_get_model, db_session, monkeypatch):

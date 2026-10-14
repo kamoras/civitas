@@ -2209,8 +2209,6 @@ def _find_related_officials(
     by _find_related_senators; president and justices use the same substring +
     embedding disambiguation pattern.
     """
-    import re
-
     combined: list[dict] = []
 
     # Senators + reps (existing logic, backward compat)
@@ -3079,7 +3077,6 @@ def _ungrounded_title_words(title: str, source: str) -> list[str]:
 
 
 def _slugify(text: str) -> str:
-    import re
     slug = text.lower().strip()
     slug = re.sub(r'[^a-z0-9\s-]', '', slug)
     slug = re.sub(r'[\s-]+', '-', slug)
@@ -3172,61 +3169,66 @@ def _merge_similar_monitors(monitors: list[NationalMonitor], db: Session) -> boo
     return bool(merged_ids)
 
 
-def _generate_monitor_metadata(
-    issue: ActionIssue,
-    past_issues: list[ActionIssue],
-    db: Session,
-) -> dict:
-    """A new monitor's title and description, written by the LLM from the
-    issues that opened it, and its category.
+def _monitor_article_lines(entries: list[tuple[str, str, str]]) -> list[str]:
+    """The articles a monitor's name is written from and checked against:
+    (title, source, summary) triples, first 15, one per title."""
+    seen: set[str] = set()
+    lines: list[str] = []
+    for title, source, summary in entries[:15]:
+        if title in seen:
+            continue
+        seen.add(title)
+        source_str = f" [{source}]" if source else ""
+        lines.append(f"{title}{source_str}\n  {(summary or '')[:200]}")
+    return lines
+
+
+def _issue_article_entry(issue: ActionIssue) -> tuple[str, str, str]:
+    sources = json.loads(issue.source_names or "[]")
+    return issue.title, sources[0] if sources else "", issue.summary or ""
+
+
+def _generate_monitor_metadata(articles: list[str], db: Session) -> dict | None:
+    """A monitor's title and description, written by the LLM from
+    `articles` (_monitor_article_lines) and checked against them, or None
+    when the model gave nothing usable.
 
     The model only writes; it decides nothing. Whether a monitor opens is
     settled before this is called (the day, source and similarity floors),
-    and the category is the commonest policy area of those issues, which
-    the embedding classifier already gave each one
+    and the category is the commonest policy area of its issues, which the
+    embedding classifier already gave each one
     (_classify_issue_policy_areas). The model's own verdict and category
     were removed 2026-10-09: see _MONITOR_METADATA_PROMPT.
+
+    None is not "no monitor": the caller names a new monitor after its
+    most representative headline (_representative_issue) and a later run
+    asks again (_rename_headline_monitors).
     """
-    all_issues = [issue] + past_issues
-    # Gather unique articles to provide enough context for the LLM
-    seen_titles: set[str] = set()
-    articles: list[str] = []
-    for i in all_issues[:15]:
-        if i.title not in seen_titles:
-            seen_titles.add(i.title)
-            sources = json.loads(i.source_names or "[]")
-            source_str = f" [{sources[0]}]" if sources else ""
-            articles.append(f"{i.title}{source_str}\n  {(i.summary or '')[:200]}")
-
-    areas = Counter(
-        a for i in all_issues for a in json.loads(i.policy_areas or "[]")
-    ).most_common(1)
-    category = areas[0][0].lower() if areas else "general"
-
+    titles = sorted(a.split("\n", 1)[0] for a in articles)
     result = call_llm(
         prompt_version="monitor-metadata-v2",
         system_prompt="You are a civic data analyst. Respond in JSON.",
         user_prompt=_MONITOR_METADATA_PROMPT.format(articles="\n\n".join(articles)),
-        cache_key={"type": "monitor_metadata", "titles": sorted(seen_titles)[:5]},
+        cache_key={"type": "monitor_metadata", "titles": titles[:5]},
         db_session=db,
         max_tokens=1024,
     )
     if isinstance(result, str):
         result = extract_json(result)
     if not isinstance(result, dict):
-        result = {}
+        return None
 
-    title = str(result.get("title") or issue.title)[:500]
-    description = str(result.get("description") or issue.summary or "")[:1000]
+    title = str(result.get("title") or "")[:500]
+    description = str(result.get("description") or "")[:1000]
+    if not title or not description:
+        return None
 
     # A National Monitor's title and description are published prose and
     # were, until 2026-09-23, generated with no mechanical check at all —
     # the same gap that let "Iran War Ends Quickly to Lower Prices" onto
-    # the site from the issue path next door. The articles assembled
-    # above are this generation's source material, so they are what it
-    # gets checked against; falling back to the originating issue's own
-    # already-checked title and summary keeps the monitor rather than
-    # dropping it. A model that answered nothing gets the same fallback.
+    # the site from the issue path next door. The articles are this
+    # generation's source material, so they are what it gets checked
+    # against.
     source_material = "\n\n".join(articles)
     reasons = grounding_violations(f"{title} {description}", source_material)
     reasons += hedge_and_editorializing_violations(f"{title} {description}")
@@ -3239,18 +3241,50 @@ def _generate_monitor_metadata(
         for missing in [_ungrounded_title_words(title, source_material)] if missing
     ]
     if reasons:
-        logger.warning(
-            "Monitor metadata failed grounding (%s) — falling back to the issue's own text",
-            "; ".join(reasons),
-        )
+        logger.warning("Monitor name failed its checks (%s)", "; ".join(reasons))
         action_metrics.increment("monitor_metadata_ungrounded")
-        title, description = issue.title, issue.summary or ""
+        return None
+    return {"title": title, "description": description}
 
-    return {
-        "title": title[:500],
-        "description": description[:1000],
-        "category": category,
-    }
+
+def _representative_issue(issues: list[ActionIssue], embeddings: np.ndarray) -> ActionIssue:
+    """The issue whose title sits nearest the centroid of the issues that
+    opened a monitor: its fallback name. Until 2026-10-14 the fallback was
+    whichever issue happened to cross the day floor, so a monitor on a
+    bipartisan senators' letter about a diesel deal opened as "Democratic
+    senator talks Trump's Russian diesel deal" — one interview's headline —
+    and kept it for its life."""
+    centroid = embeddings.mean(axis=0)
+    return issues[int(np.argmax(embeddings @ centroid))]
+
+
+def _rename_headline_monitors(db: Session) -> bool:
+    """Ask the model again for a monitor still named after a headline (its
+    title is one of its own updates' article titles: the fallback's mark),
+    from its updates. The slug stays: it is the monitor's address, and
+    links to it are out there. Returns True when anything was renamed."""
+    renamed = False
+    for monitor in db.query(NationalMonitor).filter(NationalMonitor.status != MonitorStatus.CLOSED).all():
+        updates = (
+            db.query(MonitorUpdate)
+            .filter(MonitorUpdate.monitor_id == monitor.id)
+            .order_by(MonitorUpdate.date.desc(), MonitorUpdate.id.desc())
+            .all()
+        )
+        if monitor.title not in {u.article_title for u in updates}:
+            continue
+        articles = _monitor_article_lines(
+            [(u.article_title, u.source_name, u.summary) for u in updates]
+        )
+        name = _generate_monitor_metadata(articles, db)
+        if name is None:
+            continue
+        logger.info("Monitor renamed: '%s' -> '%s'", monitor.title, name["title"])
+        monitor.title = name["title"]
+        monitor.description = name["description"]
+        action_metrics.increment("monitor_renamed")
+        renamed = True
+    return renamed
 
 
 def _update_national_monitors(today: str, db: Session) -> None:
@@ -3297,6 +3331,9 @@ def _update_national_monitors(today: str, db: Session) -> None:
     )
 
     _sweep_orphan_updates(db)
+
+    if _rename_headline_monitors(db):
+        db.commit()
 
     # Step 1: Merge any existing monitors that are too similar to each other.
     _set_refresh_state(stage_detail="1/4 dedup")
@@ -3432,7 +3469,23 @@ def _update_national_monitors(today: str, db: Session) -> None:
                 if float(dup_sims.max()) >= _MONITOR_ISSUE_SIM:
                     continue
 
-            metadata = _generate_monitor_metadata(issue, matched_past, db)
+            opened_by = [issue] + matched_past
+            areas = Counter(
+                a for i in opened_by for a in json.loads(i.policy_areas or "[]")
+            ).most_common(1)
+            category = areas[0][0].lower() if areas else "general"
+            metadata = _generate_monitor_metadata(
+                _monitor_article_lines([_issue_article_entry(i) for i in opened_by]), db,
+            )
+            if metadata is None:
+                past_index = {id(p): j for j, p in enumerate(past_issues)}
+                representative = _representative_issue(
+                    opened_by,
+                    np.vstack([today_embeddings[i]] + [past_embeddings[past_index[id(p)]] for p in matched_past]),
+                )
+                metadata = {"title": representative.title[:500],
+                            "description": (representative.summary or "")[:1000]}
+            metadata["category"] = category
             slug = _slugify(metadata["title"])
 
             # Ensure unique slug. `int(time.time()) % 1000` (previous

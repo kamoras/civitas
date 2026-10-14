@@ -28,6 +28,8 @@ interface SitemapIndex {
   /** Days either chamber met. Optional only for a backend image older than
    * this field; the Explore documents are listed by /sitemap-index.xml. */
   congressDays?: string[];
+  /** States with a redistricting page (/elections/redistricting/{ST}). */
+  redistricting?: string[];
 }
 
 async function fetchIndex(): Promise<SitemapIndex | null> {
@@ -73,6 +75,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/action`, changeFrequency: "hourly", priority: 0.9 },
     { url: `${SITE_URL}/politicians`, changeFrequency: "daily", priority: 0.9 },
     { url: `${SITE_URL}/elections`, changeFrequency: "daily", priority: 0.9 },
+    { url: `${SITE_URL}/elections/redistricting`, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE_URL}/congress`, changeFrequency: "hourly", priority: 0.8 },
     { url: `${SITE_URL}/congress/bills`, changeFrequency: "hourly", priority: 0.8 },
     { url: `${SITE_URL}/leaderboard`, changeFrequency: "daily", priority: 0.8 },
@@ -108,6 +111,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...entries(index.bills, (id) => `/congress/bills/${id}`, "weekly", 0.5),
     ...entries(index.issues, (id) => `/issue/${id}`, "weekly", 0.5),
     ...congressReports(index.congressDays ?? []),
+    ...(index.redistricting ?? []).map((code) => ({
+      url: `${SITE_URL}/elections/redistricting/${code}`,
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
+    })),
   ];
 }
 

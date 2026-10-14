@@ -498,11 +498,26 @@ class StageBaseRateSchema(CamelModel):
     sentence: str
 
 
+class StageMilestoneSchema(CamelModel):
+    label: str
+    bills: int
+    share: float
+    share_text: str
+
+
+class StageMilestonesSchema(CamelModel):
+    """How far this Congress's bills have got, and this one (bill_service.stage_milestones)."""
+    total: int
+    milestones: list[StageMilestoneSchema]
+    reached: int
+
+
 class BillDetailSchema(BillInFlightSchema):
     policy_areas: list[PolicyAreaDetail] = []
     party_leaning: Literal["R", "D", "bipartisan"] | None = None
     related_issues: list[RelatedIssueSchema] = []
     stage_base_rate: StageBaseRateSchema | None = None
+    stage_milestones: StageMilestonesSchema | None = None
 
 
 class ConstituentApprovalPartySchema(CamelModel):
@@ -638,6 +653,12 @@ class LeaderboardEntrySchema(CamelModel):
     # disproportionate cosponsor weight. None when too little
     # cosponsorship data exists to compute it.
     leadership_score: float | None = Field(None, description=_LEADERSHIP)
+    # score_display.thin_dimensions: shown on the leaderboard so a rank built
+    # on a shrunk-to-neutral dimension isn't read as a measurement.
+    thin_data: list[str] = Field(
+        default_factory=list,
+        description="Weighted dimensions (keys of representationScore) whose confidence is \"low\": too little "
+                    "source data for the dimension to be more than a pull toward a neutral 50")
 
 
 # --- Public API v1 (api/public.py) ---
@@ -715,6 +736,67 @@ class PublicSenatorPageSchema(_PublicPage):
 
 class PublicRepresentativePageSchema(_PublicPage):
     entries: list[PublicRepresentativeRowSchema]
+
+
+class PublicPartySplitSchema(_PublicModel):
+    party: str = Field(description="D, R, I or another party code as the chamber recorded it")
+    yea: int
+    nay: int
+    present: int
+    not_voting: int
+
+
+class PublicRollCallSchema(_PublicModel):
+    chamber: Literal["senate", "house"]
+    congress: int
+    session: int
+    number: int = Field(description="The roll call's number in its chamber and session")
+    date: str = Field(description="YYYY-MM-DD")
+    question: str = Field(description="The question voted on, as the chamber recorded it")
+    result: str = Field(description="The result, as the chamber recorded it")
+    source_url: str = Field(description="The roll call at its official source (Senate.gov or the House Clerk); "
+                                        "empty when not recorded")
+    parties: list[PublicPartySplitSchema] = Field(description="How each party voted")
+
+
+class PublicMemberVoteSchema(_PublicModel):
+    bill_id: str = Field(description="The measure voted on (e.g. HR.1234, PN.12), as Civitas names it")
+    bill_name: str
+    date: str = Field(description="YYYY-MM-DD")
+    vote: Literal["Yea", "Nay", "Present", "Not Voting"]
+    voted_with_party: bool | None = Field(description="Whether the vote sided with the member's party's majority "
+                                                      "on a party-split roll call; null when the vote carries no "
+                                                      "party signal")
+    party_leaning: Literal["R", "D", "bipartisan"] | None = Field(
+        description="How the parties split on it: R or D when one party's majority was for it and the other's "
+                    "against, bipartisan otherwise; null when not measured")
+    policy_area: str = Field(description="One of the index's policy areas (Civitas's classification)")
+    roll_call: PublicRollCallSchema | None = Field(description="The roll call this vote was cast in; null for "
+                                                               "votes stored before roll calls were recorded")
+
+
+class PublicMemberVotesSchema(_PublicModel):
+    id: str = Field(description="The member's id")
+    total: int = Field(description="Votes on record across every page")
+    page: int = Field(description="This page; a page past the last is answered as the last")
+    per_page: int
+    total_pages: int = Field(description="At least 1, even when there are none")
+    entries: list[PublicMemberVoteSchema] = Field(description="Newest first")
+
+
+class PublicBillRollCallSchema(PublicRollCallSchema):
+    yeas: int
+    nays: int
+    present: int
+    not_voting: int
+
+
+class PublicBillVotesSchema(_PublicModel):
+    bill_id: str = Field(description="The bill, as Civitas names it (e.g. HR.1234)")
+    congress: int
+    site_url: str = _SITE_URL
+    entries: list[PublicBillRollCallSchema] = Field(description="Every roll call on the bill Civitas holds, "
+                                                                "newest first; empty when none is recorded")
 
 
 class PublicScoreSnapshotSchema(_PublicModel):
@@ -1025,6 +1107,14 @@ class RelatedBillSchema(CamelModel):
     internal_url: str | None = None
 
 
+class RelatedMonitorSchema(CamelModel):
+    """A national monitor tracking an issue, by its stored title. Pages used
+    to print the slug back out as a name ("Democratic senator talks trumps
+    russian diesel deal"), losing the apostrophe and the capitals."""
+    slug: str
+    title: str
+
+
 class ActionIssueSchema(CamelModel):
     id: int
     public_id: str
@@ -1069,7 +1159,11 @@ class ActionIssueSchema(CamelModel):
     related_bills: list[RelatedBillSchema] = []
     related_explore_docs: list[RelatedExploreDoc] = []
     related_senators: list[RelatedSenator] = []
+    # Kept for pages built before related_monitors (expand, then contract).
     related_monitor_slugs: list[str] = []
+    # Only monitors that still exist: a merged or deleted monitor's slug
+    # stays on the issues it tracked, and linked nowhere.
+    related_monitors: list[RelatedMonitorSchema] = []
     full_story: str | None = None
     # Computed only by the list endpoint (app/trending.py needs the whole
     # day's view-count spread to judge any one issue) — always False from

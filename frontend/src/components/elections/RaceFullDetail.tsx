@@ -3,7 +3,6 @@ import { candidateName, isActiveCandidate, isRedrawnSeat, tierCandidates } from 
 import { cashOnHandDisplay } from "@/lib/formatting";
 import CandidateCard, { getPartyMeta } from "./CandidateCard";
 import RaceMoneyBars from "./RaceMoneyBars";
-import RaceFinancials from "./RaceFinancials";
 import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
 
 /** What this race's candidate list actually IS. Four quite different
@@ -120,6 +119,7 @@ export default function RaceFullDetail({
               what was wrong with it. */}
           <RaceMoneyBars
             candidates={leaders}
+            cycleYear={race.cycleYear}
             showUnconfirmed={!tiered}
             redrawnSeat={redrawnSeat}
             resultsMode={resultsMode}
@@ -175,18 +175,10 @@ export default function RaceFullDetail({
       )}
 
       {active.length > 0 && (
-        <div className="mt-4">
-          {/* Every active candidate, not just leaders -- tiering narrows
-              which candidates get a full card, but the funding chart is a
-              comparison tool, not a visual-weight statement. A real
-              fundraiser at, say, 8% of the leader's cash (just under
-              tierCandidates' 10% promotion bar) still belongs in "who's
-              actually raising money here", not silently dropped from it. */}
-          <RaceFinancials candidates={active} />
-          <p className="mt-3 font-mono text-xs leading-relaxed text-ink-min">
-            Per FEC filings: totals lag by up to a quarter and amendments. Source: fec.gov.
-          </p>
-        </div>
+        <p className="mt-4 font-mono text-xs leading-relaxed text-ink-min">
+          Source: FEC filings, as filed. Each candidate&apos;s date is the last day those figures
+          cover; totals lag by up to a quarter and change with amendments.
+        </p>
       )}
     </div>
   );

@@ -269,11 +269,32 @@ describe("WhatYouCanDo", () => {
 
 describe("IssueTags", () => {
   it("links a monitor to its row on the monitors tab", () => {
-    render(<IssueTags issue={issue({ relatedMonitorSlugs: ["government-funding"] })} />);
-    expect(screen.getByRole("link", { name: /Government funding/ })).toHaveAttribute(
+    render(
+      <IssueTags
+        issue={issue({
+          relatedMonitors: [{ slug: "government-funding", title: "Government Funding" }],
+        })}
+      />
+    );
+    expect(screen.getByRole("link", { name: /Government Funding/ })).toHaveAttribute(
       "href",
       "/action?tab=monitors&monitor=government-funding"
     );
+  });
+
+  it("names a monitor by its stored title, apostrophes and capitals intact", () => {
+    render(
+      <IssueTags
+        issue={issue({
+          relatedMonitorSlugs: ["senator-talks-trumps-deal"],
+          relatedMonitors: [
+            { slug: "senator-talks-trumps-deal", title: "Senator talks Trump's deal" },
+          ],
+        })}
+      />
+    );
+    expect(screen.getByRole("link", { name: "Senator talks Trump's deal →" })).toBeInTheDocument();
+    expect(screen.queryByText(/trumps/)).toBeNull();
   });
 
   it("opens the monitor in place when the page supplies a handler", () => {
@@ -282,11 +303,13 @@ describe("IssueTags", () => {
     const onMonitor = vi.fn();
     render(
       <IssueTags
-        issue={issue({ relatedMonitorSlugs: ["government-funding"] })}
+        issue={issue({
+          relatedMonitors: [{ slug: "government-funding", title: "Government Funding" }],
+        })}
         onMonitor={onMonitor}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: /Government funding/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Government Funding/ }));
     expect(onMonitor).toHaveBeenCalledWith("government-funding");
   });
 });

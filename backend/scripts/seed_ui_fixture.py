@@ -138,6 +138,28 @@ def seed(db) -> None:
                          loyalty_votes_in=rng.randint(100, 400), loyalty_votes_out=rng.randint(100, 400),
                          loyalty_rate_in=0.55, loyalty_rate_out=0.5, loyalty_through_term=2025))
 
+    # A state voting on new House lines (redrawn_congressional_maps.json),
+    # so the ballot page's "what changed" link, the redistricting pages and
+    # the member note on a redrawn seat are audited too. Its own generator:
+    # the records above stay exactly as they were.
+    ut = random.Random(11)
+    db.add(M.Representative(
+        id="R-UT1", bioguide_id="R-UT1", name="Quinn Example", state="UT", district=1,
+        party="R", is_current=True, years_in_office=4, initials="QE",
+        ideology_score=round(ut.uniform(0, 1), 3),
+        score_funding_independence=ut.randint(25, 90), score_constituent_alignment=ut.randint(25, 90),
+        score_legislative_effectiveness=ut.randint(25, 90),
+        total_raised=2e6, total_contributions=2e6, total_from_pacs=4e5, small_donor_percentage=20,
+    ))
+    for d in range(1, 5):
+        race = f"2026-H-UT-{d:02d}"
+        db.add(M.Race(id=race, cycle_year=2026, office="H", state="UT", district=d))
+        for k, (party, name) in enumerate((("DEM", "Rowan"), ("REP", "Sage"))):
+            db.add(M.Candidate(
+                id=f"U{d}{k}", race_id=race, name=f"{name} Candidate {d}", party=party,
+                confirmed_general=True, has_raised_funds=True,
+                contributions=ut.randint(1, 20) * 1e5, cash_on_hand=ut.randint(1, 9) * 1e5,
+            ))
     db.commit()
 
 

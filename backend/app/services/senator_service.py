@@ -28,6 +28,7 @@ from app.services.constituent_survey import constituent_approval
 from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
+from app.score_display import thin_dimensions
 from app.schemas import (
     CampaignPromiseSchema,
     PaginatedVotesSchema,
@@ -492,6 +493,7 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
                 else None
             ),
             leadership_score=s.leadership_score,
+            thin_data=thin_dimensions(json.loads(s.score_confidence or "{}")),
         )
         for s in senators
     ]
