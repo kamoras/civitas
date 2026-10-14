@@ -12,7 +12,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { CopyStatus, useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { countyFinderStatus, countyNames, finderSuggestions } from "@/lib/countyFinder";
 import { districtName, matchesDistrictQuery, placeDistrictSummary } from "@/lib/elections";
-import { formatUtcDate } from "@/lib/formatting";
+import { formatUtcDate, safeHref } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { boxedControl } from "@/lib/controlStyles";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
@@ -204,9 +204,9 @@ function MemberRow({
               [ CALL {member.officePhone} ]
             </a>
           )}
-          {member.contactFormUrl && (
+          {safeHref(member.contactFormUrl) && (
             <a
-              href={member.contactFormUrl}
+              href={safeHref(member.contactFormUrl)}
               target="_blank"
               rel="noopener noreferrer"
               className={COMMAND}
@@ -328,10 +328,13 @@ export default function ContactYourMembers({
         id={selectId}
         value={state}
         onChange={(e) => {
-          setState(e.target.value);
+          // Only a known postal code becomes state: it goes into hrefs and
+          // the members request.
+          const picked = Object.hasOwn(STATE_NAMES, e.target.value) ? e.target.value : "";
+          setState(picked);
           setPlace("");
           setShowAllHouse(false);
-          if (e.target.value) sendActionTap(issue.publicId, "pick");
+          if (picked) sendActionTap(issue.publicId, "pick");
         }}
         className="mt-2 min-h-[36px] w-full max-w-xs border border-white/15 bg-surface-base px-2 font-mono text-sm text-ink-hi outline-none focus:border-ink-lo"
       >
@@ -347,7 +350,10 @@ export default function ContactYourMembers({
       {state && members.error && (
         <p className="mt-2 text-[13px] text-signal-amber" role="alert">
           Couldn&apos;t load {stateName}&apos;s members. Try again, or use the{" "}
-          <Link href={`/politicians?state=${state}`} className="underline underline-offset-2">
+          <Link
+            href={`/politicians?state=${encodeURIComponent(state)}`}
+            className="underline underline-offset-2"
+          >
             directory
           </Link>
           .
