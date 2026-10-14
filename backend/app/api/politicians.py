@@ -23,6 +23,7 @@ whole grace period. Presidents are never removed by any of that.
 import json
 import logging
 import pathlib
+import statistics
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -36,12 +37,12 @@ from app.database import get_db
 from app.district_places import places_on_lines_of
 from app.member_ids import resolve_member_id
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, Senator
+from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, ScoreSnapshot, Senator
 from app.ordinals import ordinal
 from app.photos import bioguide_photo, justice_photo
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
-from app.score_display import displayed_rank
+from app.score_display import displayed_rank, displayed_score
 from app.services.senator_service import STATE_NAMES
 
 logger = logging.getLogger(__name__)
@@ -374,12 +375,76 @@ def _chamber_rank(branch: str, entity, db: Session) -> dict | None:
         for p in db.query(President).filter(President.is_current == False).all():  # noqa: E712
             scores[p.id] = compute_president_overall_score(p)
     elif branch in ("senate", "house") and getattr(entity, "is_current", False):
-        model = Senator if branch == "senate" else Representative
-        for m in db.query(model).filter(model.is_current == True).all():  # noqa: E712
-            scores[m.id] = compute_overall_score(m)
+        scores = {m.id: compute_overall_score(m) for m in _serving(branch, db)}
     if entity.id not in scores:
         return None
     return {"rank": displayed_rank(scores[entity.id], list(scores.values())), "of": len(scores)}
+
+
+def _serving(branch: str, db: Session) -> list:
+    model = Senator if branch == "senate" else Representative
+    return db.query(model).filter(model.is_current == True).all()  # noqa: E712
+
+
+# A party median is stated for a party with at least this many serving
+# members in the chamber: the median of one or two independents is just
+# their own scores.
+_PARTY_MEDIAN_MIN = 3
+
+
+def _chamber_field(branch: str, entity, db: Session) -> dict | None:
+    """The chamber the profile is ranked in, for the profile's "where this
+    member sits" strip: every serving member's overall score as displayed,
+    with their party; the medians of the member's party and of the chamber;
+    and the members ranked next above and below (the leaderboard's order,
+    ties by name), whose pages the profile links. The same field the rank is
+    taken over (_chamber_rank), so the strip, the rank and the leaderboard
+    agree. None where the profile has no chamber rank."""
+    if branch not in ("senate", "house") or not getattr(entity, "is_current", False):
+        return None
+    rows = sorted(((compute_overall_score(m), m) for m in _serving(branch, db)),
+                  key=lambda pair: (-pair[0], pair[1].name or ""))
+    ids = [m.id for _, m in rows]
+    if entity.id not in ids:
+        return None
+    field = [score for score, _ in rows]
+
+    def neighbour(i: int) -> dict | None:
+        if not 0 <= i < len(rows):
+            return None
+        score, m = rows[i]
+        return {"id": m.id, "name": m.name, "party": m.party, "state": m.state,
+                "district": getattr(m, "district", None),
+                "score": displayed_score(score), "rank": displayed_rank(score, field)}
+
+    shown = [displayed_score(score) for score in field]
+    party = [displayed_score(score) for score, m in rows if m.party == entity.party]
+    i = ids.index(entity.id)
+    return {
+        "party": entity.party,
+        # Lowest first, as the strip draws them left to right.
+        "scores": [{"score": shown[j], "party": rows[j][1].party} for j in reversed(range(len(rows)))],
+        "partyMedian": statistics.median(party) if len(party) >= _PARTY_MEDIAN_MIN else None,
+        "chamberMedian": statistics.median(shown),
+        "above": neighbour(i - 1),
+        "below": neighbour(i + 1),
+    }
+
+
+def _scored_on(branch: str, entity_id: str, db: Session) -> dict | None:
+    """The member's latest scoring run: its date and the scoring method's
+    version (the score snapshot the run wrote), for the profile's methods
+    section and its citation. None before the first run."""
+    entity_type = {"senate": "senator", "house": "representative", "president": "president"}.get(branch)
+    if entity_type is None:
+        return None
+    snap = (
+        db.query(ScoreSnapshot.date, ScoreSnapshot.algorithm_version)
+        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == entity_id)
+        .order_by(desc(ScoreSnapshot.date))
+        .first()
+    )
+    return {"date": snap.date, "algorithmVersion": snap.algorithm_version} if snap else None
 
 
 def _get_active_issues(politician_id: str, db: Session) -> list[dict]:
@@ -524,6 +589,8 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
         "overallScore": overall,
         "scorecard": scorecard,
         "chamberRank": _chamber_rank(branch, entity, db),
+        "chamberField": _chamber_field(branch, entity, db),
+        "scoredOn": _scored_on(branch, politician_id, db),
         "activeIssues": _get_active_issues(politician_id, db),
         "governmentRecord": _get_gov_record(politician_id, db),
         # The race this member is a candidate in on the site's election

@@ -5,8 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { billPageHref } from "@/lib/congress";
 
+const RESEARCH_LINKS: readonly { href: string; label: string }[] = [
+  { href: "/about/scores", label: "METHODS" },
+  { href: "/about/data#sources", label: "SOURCES" },
+  { href: "/developers", label: "DATA & API" },
+  { href: "/changelog", label: "SCORING CHANGELOG" },
+];
+
 /**
- * The homepage masthead: overprint wordmark, the statement of what this is,
+ * The homepage masthead:overprint wordmark, the statement of what this is,
  * the governance stamp, and the record request slip.
  *
  * Replaces a full-viewport centred hero over a canvas animation. That is
@@ -80,6 +87,25 @@ export default function Masthead() {
             Scored nightly from federal and state filings. Every number traces back to the document
             it came from. Nothing here is an estimate.
           </p>
+
+          {/* The researcher's way in, in the first screen: the methods, the
+              source list, the API and the scoring changelog were reachable
+              before only from the footer, four screens down on a phone. */}
+          <nav
+            aria-label="For researchers"
+            className="mt-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-xs tracking-[0.1em]"
+          >
+            <span className="text-ink-min">FOR RESEARCHERS:</span>
+            {RESEARCH_LINKS.map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
         </div>
 
         <div className="md:col-span-4">

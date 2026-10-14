@@ -25,9 +25,10 @@ from app.models import RepSponsoredBill, RollCall, RollCallPosition, Representat
 from app.config import settings
 from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async, api_cache_set_many_async
-from app.pipeline.fetch.congress import CONGRESS_API_BASE, _rate_limiter, congress_gov_bill_url
+from app.pipeline.fetch.congress import CONGRESS_API_BASE, congress_gov_bill_url
 from app.pipeline.fetch import floor_logs
 from app.pipeline.fetch.http_utils import fetch_with_retry
+from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
 from app.services.congress_service import bill_days, bill_label
 
@@ -46,6 +47,9 @@ _PARTS = {
     "cosponsors": "/cosponsors?limit=250",
     "text": "/text",
 }
+# Where each part's answer sits in Congress.gov's response.
+_ANSWER_KEY = {"bill": "bill", "summaries": "summaries", "actions": "actions",
+               "cosponsors": "cosponsors", "text": "textVersions"}
 
 
 def parse_bill_id(bill_id: str) -> tuple[str, int] | None:
@@ -61,12 +65,24 @@ def parse_bill_id(bill_id: str) -> tuple[str, int] | None:
 
 NOT_FOUND = object()
 
+# A reader's lookups get their own spacing, not the pipeline's 1.2/s
+# (fetch/congress.py's limiter, which exists to keep a run of thousands of
+# requests inside the key's hour). A cold bill page is five requests: at
+# 1.2/s they could not finish in under 3.3 s however fast Congress.gov
+# answered, and the page waited 3.6-5.8 s for its first byte (measured on
+# production, 2026-10-14). How many a reader may make is bounded by the hour
+# instead (rate_limit.try_spend_upstream, 200 calls for every reader
+# together), well inside what the pipeline leaves of the key's 5,000; this
+# only keeps one page's four parallel parts from leaving in the same instant.
+_READER_RPS = 10.0
+_reader_limiter = RateLimiter(_READER_RPS, name="congress_reader")
+
 
 async def _congress_get(client: httpx.AsyncClient, url: str):
     """Congress.gov JSON, NOT_FOUND for a 404, or None when the fetch
     failed. The key goes only in the request URL, never the logged one."""
     full = str(httpx.URL(url).copy_merge_params({"api_key": settings.DATA_GOV_API_KEY, "format": "json"}))
-    resp = await fetch_with_retry(client, _rate_limiter, "GET", url, request_url=full,
+    resp = await fetch_with_retry(client, _reader_limiter, "GET", url, request_url=full,
                                   expected_statuses=(404,), log_label="Congress API")
     if resp is None:
         return None
@@ -95,19 +111,21 @@ async def fetch_bill_record(
     has no record of is cached too, so the same wrong id asked again costs
     nothing upstream.
 
-    `deadline_s` bounds the whole fetch. Congress.gov's rate limiter is
-    shared with the nightly pipeline, which keeps it busy for hours, and a
-    reader's page waits on this: a part still unfetched when time runs out
-    is named in `unavailable`, not cached, and fetched by a later visit."""
+    `deadline_s` bounds the whole fetch, since a reader's page waits on it:
+    a part still unfetched when time runs out (Congress.gov slow, or a
+    retry backing off) is named in `unavailable`, not cached, and fetched
+    by a later visit."""
     started = time.monotonic()
     type_path, number = parse_bill_id(bill_id)
     out: dict = {"unavailable": [], "not_found": False}
     keys = {part: f"bill-record-{part}-{congress}-{type_path}-{number}" for part in _PARTS}
-    # One thread hop for every part's cache read: off the event loop.
-    cached = await off_loop(
-        db, lambda session: {
-            part: api_cache_get(session, _CACHE_TIER, key, max_age_hours=_CACHE_HOURS) for part, key in keys.items()
-        },
+    # One thread hop for every part's cache read, and whether a sitting
+    # member's sponsored bill is this one: off the event loop.
+    cached, known = await off_loop(
+        db, lambda session: (
+            {part: api_cache_get(session, _CACHE_TIER, key, max_age_hours=_CACHE_HOURS) for part, key in keys.items()},
+            bool(_stored_bill(session, congress, bill_id)),
+        ),
     )
     if (cached["bill"] or {}).get("not_found"):
         out["not_found"] = True
@@ -119,57 +137,69 @@ async def fetch_bill_record(
 
     # The bill itself is charged first, the other parts once it exists: a
     # wrong id stops after that one request and must not be charged for the
-    # four it never makes. Each charge still comes before its requests.
-    refused = not await charge(1 if "bill" in missing else 0)
-    rest_charged = False
+    # four it never makes. Each charge still comes before its requests. The
+    # other parts then go out together: one round trip after the bill's, not
+    # four more in a row. A bill the site already holds can't be a wrong id,
+    # so all five go out at once.
     fetched: dict = {}  # written in one transaction, in the finally below
+
+    async def get(part: str):
+        """Congress.gov's answer for `part` (NOT_FOUND, or None when it
+        failed or the deadline passed first)."""
+        url = f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{_PARTS[part]}"
+        if deadline_s is None:
+            return await _congress_get(client, url)
+        remaining = deadline_s - (time.monotonic() - started)
+        try:
+            return await asyncio.wait_for(_congress_get(client, url), remaining) if remaining > 0 else None
+        except TimeoutError:
+            return None
+
+    def keep(part: str, data) -> None:
+        if data is None:
+            out[part] = None
+            out["unavailable"].append(part)
+            return
+        if data is NOT_FOUND:  # a bill with no summaries, say
+            data = {}
+        value = data.get(_ANSWER_KEY[part])
+        out[part] = value
+        fetched[keys[part]] = {"value": value}
+
+    async def fetch_part(part: str) -> None:
+        # Kept as it arrives, so a part that came back before a cancellation
+        # is still cached below.
+        keep(part, await get(part))
+
+    for part in _PARTS:
+        if cached[part] is not None:
+            out[part] = cached[part].get("value")
+    first = missing if known else [part for part in missing if part == "bill"]
+    rest = [part for part in missing if part not in first]
     try:
-        for part, suffix in _PARTS.items():
-            key = keys[part]
-            if cached[part] is not None:
-                out[part] = cached[part].get("value")
-                continue
-            if refused or (part != "bill" and "bill" in out["unavailable"]):
-                # The bill request itself failed (an outage, most likely):
-                # the rest would fail the same way — not fetched, not charged.
-                out[part] = None
-                out["unavailable"].append(part)
-                continue
-            if part != "bill" and not rest_charged:
-                rest_charged = True
-                if not await charge(sum(1 for p in missing if p != "bill")):
-                    refused = True
-                    out[part] = None
-                    out["unavailable"].append(part)
-                    continue
-            url = f"{CONGRESS_API_BASE}/bill/{congress}/{type_path}/{number}{suffix}"
-            if deadline_s is None:
-                data = await _congress_get(client, url)
-            else:
-                remaining = deadline_s - (time.monotonic() - started)
-                try:
-                    data = await asyncio.wait_for(_congress_get(client, url), remaining) if remaining > 0 else None
-                except TimeoutError:
-                    data = None
+        if first and not await charge(len(first)):
+            for part in first:
+                keep(part, None)
+        elif first == ["bill"]:
+            data = await get("bill")
             if data is NOT_FOUND:
-                if part == "bill":
-                    out["not_found"] = True
-                    await api_cache_set_async(db, _CACHE_TIER, key, {"not_found": True}, normal_ttl_hours=_CACHE_HOURS)
-                    return out
-                data = {}
-            if data is None:
-                out[part] = None
-                out["unavailable"].append(part)
-                continue
-            value = {
-                "bill": data.get("bill"),
-                "summaries": data.get("summaries"),
-                "actions": data.get("actions"),
-                "cosponsors": data.get("cosponsors"),
-                "text": data.get("textVersions"),
-            }[part]
-            out[part] = value
-            fetched[key] = {"value": value}
+                out["not_found"] = True
+                await api_cache_set_async(db, _CACHE_TIER, keys["bill"], {"not_found": True},
+                                          normal_ttl_hours=_CACHE_HOURS)
+                return out
+            keep("bill", data)
+        elif first:
+            await asyncio.gather(*(fetch_part(part) for part in first))
+        if rest and ("bill" in out["unavailable"] or not await charge(len(rest))):
+            # The bill request failed (an outage, most likely), so the rest
+            # would fail the same way; or the budget refused them. Not
+            # fetched, and not charged.
+            for part in rest:
+                keep(part, None)
+        elif rest:
+            await asyncio.gather(*(fetch_part(part) for part in rest))
+        # Named in the order the parts are listed, whichever answered first.
+        out["unavailable"].sort(key=list(_PARTS).index)
     finally:
         # Written even when the request is cancelled or fails partway: the
         # parts already fetched were charged to the shared budget, and the
@@ -372,22 +402,29 @@ def _stored_bill(db: Session, congress: int, bill_id: str) -> dict:
     return {}
 
 
+def bill_votes(db: Session, congress: int, bill_id: str) -> list[dict]:
+    """Every stored roll call on the bill, newest first, with its tally and
+    each party's split (the bill page's vote panel, and the public API's
+    /bills/{id}/votes)."""
+    votes = db.query(RollCall).filter(RollCall.bill_id == bill_id, RollCall.congress == congress) \
+        .order_by(RollCall.date.desc(), RollCall.number.desc()).all()
+    positions: dict[int, list[RollCallPosition]] = {}
+    for p in db.query(RollCallPosition).filter(RollCallPosition.roll_call_id.in_([rc.id for rc in votes])):
+        positions.setdefault(p.roll_call_id, []).append(p)
+    return [{
+        "chamber": rc.chamber, "session": rc.session, "number": rc.number, "date": rc.date,
+        "question": rc.question, "title": rc.title, "result": rc.result, "rejected": rc.rejected,
+        "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
+        "sourceUrl": rc.source_url, "parties": party_breakdown(positions.get(rc.id, [])),
+    } for rc in votes]
+
+
 def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
     links = MemberLinks(db)
     bill = raw.get("bill") or (_stored_bill(db, congress, bill_id) if "bill" in (raw.get("unavailable") or []) else {})
     summaries = sorted(raw.get("summaries") or [], key=lambda s: s.get("updateDate") or s.get("actionDate") or "")
     latest_summary = summaries[-1] if summaries else None
-    votes = db.query(RollCall).filter(RollCall.bill_id == bill_id, RollCall.congress == congress) \
-        .order_by(RollCall.date.desc(), RollCall.number.desc()).all()
-    vote_summaries = []
-    for rc in votes:
-        positions = db.query(RollCallPosition).filter_by(roll_call_id=rc.id).all()
-        vote_summaries.append({
-            "chamber": rc.chamber, "session": rc.session, "number": rc.number, "date": rc.date,
-            "question": rc.question, "title": rc.title, "result": rc.result, "rejected": rc.rejected,
-            "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
-            "parties": party_breakdown(positions),
-        })
+    vote_summaries = bill_votes(db, congress, bill_id)
     return {
         "billId": bill_id,
         "billLabel": bill_label(bill_id),

@@ -10,7 +10,7 @@ import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
 import JusticeScorecard from "@/components/scorecard/JusticeScorecard";
 import { formerOfficeNotice } from "@/lib/officeStatus";
 import { issueDateLabel } from "@/lib/formatting";
-import { stateBallotHref } from "@/lib/elections";
+import { houseSeatLabel, stateBallotHref } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
 import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
 import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
@@ -160,6 +160,8 @@ export default function PoliticianProfileClient({
                   leadershipTitle={identity.leadershipTitle}
                   committees={identity.committees}
                   rank={profile.chamberRank}
+                  field={profile.chamberField}
+                  scoredOn={profile.scoredOn}
                   titleAs="h1"
                   former={hasLeftOffice}
                 />
@@ -340,12 +342,24 @@ export function OnBallotLine({ race }: { race: NonNullable<PoliticianProfile["on
         : `U.S. House, District ${race.district}`;
   return (
     <p className="mb-3 border border-white/15 bg-surface px-3 py-2 font-mono text-xs tracking-[0.08em] text-ink-lo">
-      ON THE {race.cycleYear} BALLOT · {office.toUpperCase()}, {state.toUpperCase()} ·{" "}
+      {/* Short on a phone, where the long line took three lines of the
+          first screen: the seat's short name, and the link's first words. */}
+      <span className="hidden sm:inline">ON THE </span>
+      {race.cycleYear} BALLOT ·{" "}
+      <span className="sm:hidden">
+        {race.office === "S"
+          ? `U.S. SENATE, ${race.state}`
+          : houseSeatLabel(race.state, race.district ?? 0)}
+      </span>
+      <span className="hidden sm:inline">
+        {office.toUpperCase()}, {state.toUpperCase()}
+      </span>{" "}
+      ·{" "}
       <Link
         href={`${stateBallotHref(race.state)}#race-${race.raceId}`}
         className="inline-block min-h-[24px] text-signal-cyan hover:text-phos"
       >
-        WHO&apos;S RUNNING AND WHO FUNDS THEM →
+        WHO&apos;S RUNNING<span className="hidden sm:inline"> AND WHO FUNDS THEM</span> →
       </Link>
     </p>
   );

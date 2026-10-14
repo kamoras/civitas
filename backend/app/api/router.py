@@ -10,6 +10,7 @@ from app.api.feed import router as feed_router
 from app.api.feedback import router as feedback_router
 from app.api.health import router as health_router
 from app.api.justices import router as justices_router
+from app.api.notable import router as notable_router
 from app.api.pipeline import router as pipeline_router
 from app.api.photos import router as photos_router
 from app.api.politicians import router as politicians_router
@@ -38,6 +39,7 @@ api_router.include_router(redistricting_router, tags=["elections"])
 api_router.include_router(bills_router, tags=["bills"])
 api_router.include_router(congress_router, tags=["congress"])
 api_router.include_router(this_week_router, tags=["this-week"])
+api_router.include_router(notable_router, tags=["notable"])
 api_router.include_router(feedback_router, tags=["feedback"])
 api_router.include_router(pipeline_router, tags=["pipeline"])
 api_router.include_router(admin_router, tags=["admin"])

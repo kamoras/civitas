@@ -14,6 +14,13 @@
 # clients.
 FROM python:3.13.15-slim-trixie
 
+# No usage reports to Hugging Face. huggingface_hub, transformers and hf_xet
+# (which from 1.7.0 reports every model download, with the server's IP added
+# on receipt) are all on by default; this one variable turns them all off.
+# The project's premise is that nothing about the deployment leaves the box
+# beyond the requests it has to make.
+ENV HF_HUB_DISABLE_TELEMETRY=1
+
 WORKDIR /app
 
 RUN apt-get update && \

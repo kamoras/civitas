@@ -97,7 +97,9 @@ call with every member's position at `/api/congress/votes/…`. A bill's full
 record for its page, any bill of any Congress that has convened, at
 `/api/bills/{id}/record?congress=N` (`app/services/bill_record.py`), within
 a 10-second deadline: a part not fetched by then is `unavailable`, not
-cached.
+cached. The parts are asked together once the bill exists (all five at once
+for a bill the site holds), on a reader limiter separate from the
+pipeline's.
 
 **Pages.** `/congress` (latest day), `/congress/{date}`, `/congress/week/{date}`,
 `/congress/month/{YYYY-MM}` render these reports on the server
