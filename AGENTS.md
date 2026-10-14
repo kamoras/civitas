@@ -241,6 +241,8 @@ exemption list covers what cannot affect classification or scoring:
 `_NOT_ANALYSIS_PATHS` (the holdings and trade ingests, filer matching, the run-coordination
 modules, the election run's orchestration, the LDA bill-name matcher
 `analyze/lobbying_records.py`, the Explore summary prompt `analyze/prompts.py`,
+the votes-with-the-president rate (`analyze/presidential_support.py`,
+`analyze/sap_position.py`),
 the modules that word and publish posts, the Action Center's hourly run
 (`_ACTION_CENTER_PATHS`), which keeps no learned data) and
 `_DISPLAY_ONLY_NAMES` (display-only constants such as `HOLDING_CATEGORIES`),
