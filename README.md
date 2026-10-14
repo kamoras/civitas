@@ -1433,6 +1433,10 @@ The homepage, and in a one-line form the pages most readers arrive on (a member'
 
 Every sentence is a template around stored figures. When the backend can't answer, the strip is left out and the page renders as before.
 
+## Compare
+
+`/compare` sets two members of Congress side by side: the Representation Score and its three parts, and the money. Two members of the same chamber also get how often they voted alike this Congress, from `GET /api/compare/agreement?chamber=&left=&right=` (`api/compare.py`): of the chamber's roll calls in the sitting Congress on which both cast a Yea or a Nay, how many they voted the same way on, as a sentence ("Voted the same way on 603 of the 723 roll calls this Congress where both cast a Yea or a Nay (83%).") and the backend's whole percent, then the five latest votes they split on, each with both votes and a link to its roll call. Housekeeping questions (quorum calls, motions to table, the previous question; `normalize_votes.is_housekeeping`) are left out, as Constituent Alignment leaves them out: they split on party lines by habit. A senator is matched to the roll calls the way a bill page links a Senate vote to a member (`bill_record.MemberLinks`, by last name, state and the vote's LIS id); a representative by bioguide id. Members of different chambers share no vote, so the section is left out for them.
+
 ## Reading the leaderboard
 
 The Senate and House leaderboards rank on the whole-number score the page shows, so members who show the same score share a rank. Most of a chamber sits in a narrow band (on 2026-10-13 the 433 House members held 47 distinct scores, half of them between 53 and 65), so a rank alone overstates how far apart two members are. Three things say so on the page, each from the backend:

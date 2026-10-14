@@ -14,6 +14,7 @@ import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians
 import type { PaginatedBills } from "@/types/bill";
 import type { LiveResults, PviMap, TownBallot, TownEntry } from "@/types/election";
 import type { SignalOverlap } from "@/types/scoreBreakdown";
+import type { Agreement } from "@/types/compare";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -247,6 +248,16 @@ export async function fetchStates(): Promise<StateInfo[]> {
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   const url = `${API_BASE}/senators/leaderboard`;
   return asList(await cachedFetch(url, TTL.SHORT), url);
+}
+
+/** How often two members of one chamber voted the same way this Congress. */
+export async function fetchCompareAgreement(
+  chamber: "senate" | "house",
+  left: string,
+  right: string
+): Promise<Agreement> {
+  const params = new URLSearchParams({ chamber, left, right });
+  return cachedFetch(`${API_BASE}/compare/agreement?${params}`, TTL.SHORT);
 }
 
 export async function fetchLeaderboardSpread(chamber: "senate" | "house"): Promise<ScoreSpread> {

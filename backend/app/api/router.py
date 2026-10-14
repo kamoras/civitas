@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.action import router as action_router
 from app.api.admin import router as admin_router
 from app.api.bills import router as bills_router
+from app.api.compare import router as compare_router
 from app.api.congress import router as congress_router
 from app.api.elections import router as elections_router
 from app.api.explore import router as explore_router
@@ -40,6 +41,7 @@ api_router.include_router(elections_router, tags=["elections"])
 api_router.include_router(redistricting_router, tags=["elections"])
 api_router.include_router(bills_router, tags=["bills"])
 api_router.include_router(congress_router, tags=["congress"])
+api_router.include_router(compare_router, tags=["compare"])
 api_router.include_router(this_week_router, tags=["this-week"])
 api_router.include_router(notable_router, tags=["notable"])
 api_router.include_router(feedback_router, tags=["feedback"])
