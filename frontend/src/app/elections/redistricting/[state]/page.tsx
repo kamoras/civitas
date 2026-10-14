@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { StateRedistricting } from "@/types/redistricting";
 import { fetchRecord } from "@/lib/ssrPayload";
-import { absoluteUrl, pageMetadata } from "@/lib/site";
+import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import { describeStateRedistricting } from "@/lib/seo";
 import { REDISTRICTING_HREF, redistrictingHref } from "@/lib/redistricting";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
@@ -38,12 +38,10 @@ export async function generateMetadata({
   const data = await fetchState(code);
   const path = redistrictingHref(code);
   if (!data) {
-    return pageMetadata({
-      title: `${code} congressional map`,
-      description: `${code} did not redraw its U.S. House map for this election.`,
-      path,
-      noindex: true,
-    });
+    return notFoundMetadata(
+      "No redrawn map for this state",
+      `${code} did not redraw its U.S. House map for this election.`
+    );
   }
   return pageMetadata({
     ...describeStateRedistricting(

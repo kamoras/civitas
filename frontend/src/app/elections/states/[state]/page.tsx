@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { LiveResults, StateBallot } from "@/types/election";
 import { fetchRecord } from "@/lib/ssrPayload";
 import { stateBallotHref } from "@/lib/elections";
-import { absoluteUrl, pageMetadata, stateFeed } from "@/lib/site";
+import { absoluteUrl, notFoundMetadata, pageMetadata, stateFeed } from "@/lib/site";
 import { describeStateBallot } from "@/lib/seo";
 import { pollsClosed, showsResults } from "@/lib/results";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
@@ -81,12 +81,7 @@ export async function generateMetadata({
   const path = stateBallotHref(code);
 
   if (!ballot) {
-    return pageMetadata({
-      title: `${code} ballot`,
-      description: `Federal contests and statewide ballot measures for ${code}.`,
-      path,
-      noindex: true,
-    });
+    return notFoundMetadata("No ballot for this state", `No ballot on record for ${code}.`);
   }
 
   // From election day the page leads with the count, but its h1 becomes

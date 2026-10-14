@@ -1831,7 +1831,15 @@ the pending list).
   inherited by every page and declare the whole site a duplicate of the
   homepage). A section layout's canonical is inherited the same way, so a
   dynamic child (`/politicians/[id]`, `/explore/[id]`…) must set its own,
-  taken from the record, not the request's spelling.
+  taken from the record, not the request's spelling. Its 404 can't (a
+  route's `notFound()` discards its page's metadata; the head comes from
+  the layouts above), so a section whose index page is a client component
+  keeps that page's metadata in a layout inside an `(index)` route group
+  (`politicians/(index)`, `congress/bills/(index)`, `elections/(index)`,
+  `explore/(index)`), and each record route has a layout setting only its
+  404's title; a not-found head has no canonical (`notFoundMetadata`).
+  `app/sectionMetadata.test.ts` fails on a layout with a canonical above a
+  record route.
 - Titles lead with what people type into a search box (member name +
   party-state, bill number, full state name); the root template appends
   " | Civitas" (no em dashes in site prose, 2026-10). Search-facing wording lives in `src/lib/seo.ts`, not in

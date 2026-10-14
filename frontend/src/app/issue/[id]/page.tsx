@@ -22,7 +22,7 @@ import {
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
 import ShareButtons from "@/components/action/ShareButtons";
-import { TOPIC_FEEDS, absoluteUrl, pageMetadata } from "@/lib/site";
+import { TOPIC_FEEDS, absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import { articleJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
@@ -105,12 +105,7 @@ export async function generateMetadata({
     });
   }
   if (!issue) {
-    return pageMetadata({
-      title: "Issue not found",
-      description: "No record for this issue.",
-      path: `/issue/${encodeURIComponent(id)}`,
-      noindex: true,
-    });
+    return notFoundMetadata("Issue not found", "No record for this issue.");
   }
 
   // Canonical from the record: public ids resolve case-insensitively

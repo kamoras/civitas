@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { fetchRecord } from "@/lib/ssrPayload";
-import { pageMetadata } from "@/lib/site";
+import { notFoundMetadata, pageMetadata } from "@/lib/site";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -45,12 +45,7 @@ export async function generateMetadata({
   const path = `/explore/${encodeURIComponent(id)}`;
 
   if (!doc) {
-    return pageMetadata({
-      title: "Document not found",
-      description: "No record for this document.",
-      path,
-      noindex: true,
-    });
+    return notFoundMetadata("Document not found", "No record for this document.");
   }
 
   const who = doc.politicianName || doc.agencyName;
