@@ -222,6 +222,8 @@ function renderCard(cardBreakdown: RepresentationScoreBreakdown = breakdown) {
 }
 
 beforeEach(() => {
+  // jsdom has no layout: opening the methods section (#methods) scrolls to it.
+  Element.prototype.scrollIntoView = vi.fn();
   fetchRepVotes.mockReset();
   fetchRepVotes.mockResolvedValue({
     votes: [recommit],
@@ -730,7 +732,6 @@ describe("MemberScorecard", () => {
   });
 
   it("opens the methods when the page is opened at #methods", () => {
-    Element.prototype.scrollIntoView = vi.fn(); // jsdom has no layout
     window.history.replaceState(null, "", "#methods");
     try {
       renderCard();
