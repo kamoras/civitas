@@ -44,6 +44,17 @@ vi.mock("@/lib/api", () => ({
   fetchRepresentativesByState: vi.fn(async () => ({ entries: [] })),
   fetchSenator: vi.fn(async (id: string) => NORTH.find((m) => m.id === id)),
   fetchRepresentative: vi.fn(),
+  fetchCompareAgreement: vi.fn(async () => ({
+    chamber: "senate",
+    congress: 119,
+    bothVoted: 10,
+    agreed: 4,
+    split: 6,
+    agreementPct: 40,
+    sentence:
+      "Voted the same way on 4 of the 10 roll calls this Congress where both cast a Yea or a Nay (40%).",
+    recentSplits: [],
+  })),
 }));
 vi.mock("@/components/layout/Navbar", () => ({ default: () => <header /> }));
 vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
@@ -77,6 +88,8 @@ describe("compare presets", () => {
     expect(await screen.findAllByRole("button", { name: /Member Two/ })).not.toHaveLength(0);
     expect(pressed(/Member One/)).toHaveLength(1);
     expect(pressed(/Member Two/)).toHaveLength(1);
+    // Two senators side by side: how often they voted alike.
+    expect(await screen.findByText("40%")).toBeTruthy();
   });
 
   it("offers a chosen member against their state's other senator", async () => {

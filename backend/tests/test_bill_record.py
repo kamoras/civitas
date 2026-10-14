@@ -109,9 +109,8 @@ def test_a_failed_part_is_named_and_not_cached(senate, monkeypatch):
 
 
 def test_a_part_that_misses_the_deadline_is_unavailable_and_asked_again(senate, monkeypatch):
-    # The limiter is shared with the nightly pipeline: a part still waiting
-    # when the reader's deadline passes is served as unavailable, never as
-    # empty, and is not cached.
+    # A part still waiting when the reader's deadline passes is served as
+    # unavailable, never as empty, and is not cached.
     fast, calls = _answers()
 
     async def slow_cosponsors(client, url):
@@ -121,16 +120,16 @@ def test_a_part_that_misses_the_deadline_is_unavailable_and_asked_again(senate, 
 
     monkeypatch.setattr(br, "_congress_get", slow_cosponsors)
     raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", deadline_s=0.5))
-    # Cosponsors ran out the clock, and the part after it was never asked.
-    assert raw["unavailable"] == ["cosponsors", "text"]
-    assert raw["bill"] is not None
+    # Cosponsors ran out the clock; the parts asked beside it arrived.
+    assert raw["unavailable"] == ["cosponsors"]
+    assert raw["bill"] is not None and raw["text"] is not None
 
     monkeypatch.setattr(br, "_congress_get", fast)
     n = len(calls)
     raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", deadline_s=0.5))
     assert raw["unavailable"] == []
-    # Only those two are asked again; the rest was cached.
-    assert len(calls) == n + 2 and "/cosponsors" in calls[-2] and "/text" in calls[-1]
+    # Only that one is asked again; the rest was cached.
+    assert len(calls) == n + 1 and "/cosponsors" in calls[-1]
 
 
 def test_a_missing_bill_is_cached_so_asking_again_costs_nothing(senate, monkeypatch):
@@ -182,6 +181,46 @@ def test_a_spent_budget_serves_what_is_stored_and_a_later_visit_fetches_the_rest
     raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=spend))
     assert raw["unavailable"] == [] and raw["actions"] is not None
     assert len(calls) == 5 and budget["left"] == 6
+
+
+def test_the_parts_after_the_bill_go_out_together(senate, monkeypatch):
+    """A cold page used to wait on five requests in a row; after the bill,
+    the other four are asked at once, so the fetch takes two answers' time."""
+    fast, _ = _answers()
+    in_flight = {"now": 0, "most": 0}
+
+    async def answer_slowly(client, url):
+        in_flight["now"] += 1
+        in_flight["most"] = max(in_flight["most"], in_flight["now"])
+        await asyncio.sleep(0.05)
+        in_flight["now"] -= 1
+        return await fast(client, url)
+
+    monkeypatch.setattr(br, "_congress_get", answer_slowly)
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668"))
+    assert raw["unavailable"] == [] and in_flight["most"] == 4
+
+
+def test_a_bill_the_site_holds_is_fetched_in_one_round(senate, monkeypatch):
+    """A sitting member's sponsored bill can't be a wrong id: all five parts
+    are charged and asked together."""
+    senate.add(SponsoredBill(senator_id="nora-bellweather", bill_id="S.4668", congress=119, title="Placeholder Act"))
+    senate.commit()
+    fast, calls = _answers()
+    in_flight = {"now": 0, "most": 0}
+
+    async def answer_slowly(client, url):
+        in_flight["now"] += 1
+        in_flight["most"] = max(in_flight["most"], in_flight["now"])
+        await asyncio.sleep(0.05)
+        in_flight["now"] -= 1
+        return await fast(client, url)
+
+    monkeypatch.setattr(br, "_congress_get", answer_slowly)
+    charged = []
+    raw = asyncio.run(br.fetch_bill_record(None, senate, 119, "S.4668", spend=_charging(charged)))
+    assert raw["unavailable"] == [] and raw["bill"] == BILL
+    assert charged == [5] and in_flight["most"] == 5
 
 
 def test_congress_gov_url_ordinal(senate):
@@ -326,16 +365,19 @@ async def test_parts_fetched_before_a_cancellation_are_still_cached(db_session, 
     monkeypatch.setattr(bill_record, "api_cache_set_many_async", write_many)
     task = asyncio.create_task(bill_record.fetch_bill_record(None, db_session, 119, "S.4668"))
     for _ in range(300):
-        if len(calls) >= 2 or task.done():
+        if len(calls) >= 5 or task.done():
             break
         await asyncio.sleep(0.01)
-    assert len(calls) == 2
+    await asyncio.sleep(0.05)  # the three quick parts land
+    assert len(calls) == 5
     task.cancel()
     try:
         await task
     except asyncio.CancelledError:
         pass
-    assert written and len(written[0]) == 1  # the first part, fetched before the cancel
+    # Every part that arrived before the cancel; not the one still in flight.
+    assert written and sorted(written[0]) == sorted(
+        f"bill-record-{part}-119-s-4668" for part in ("bill", "actions", "cosponsors", "text"))
 
 
 def test_a_wrong_id_is_charged_only_for_the_one_request_it_makes(senate, monkeypatch):

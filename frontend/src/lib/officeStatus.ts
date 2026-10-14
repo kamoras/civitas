@@ -28,7 +28,8 @@ export interface OfficeStatusInput {
   termEnd?: string | null;
 }
 
-function ordinal(n: number): string {
+/** "1st", "22nd", "113th": the one implementation (also the redistricting pages). */
+export function ordinal(n: number): string {
   if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
   return `${n}${{ 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th"}`;
 }

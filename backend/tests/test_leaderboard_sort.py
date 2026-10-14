@@ -3,6 +3,12 @@ compute_overall_score (previously each had its own copy-pasted
 _FIELD_TO_WEIGHT_KEY dict + _weighted_score closure computing the identical
 SCORE_WEIGHTS-weighted sum)."""
 
+import json
+
+from fastapi.testclient import TestClient
+
+from app.database import get_db
+from app.main import app
 from app.models import Representative, Senator
 from app.services.representative_service import get_rep_leaderboard
 from app.services.senator_service import get_leaderboard
@@ -171,3 +177,39 @@ def test_rep_leaderboard_route_passes_sort_and_rejects_unknown_keys(db_session):
     body = client.get("/api/representatives/leaderboard", params={"sort": "pac_pct", "dir": "asc"}).json()
     assert [e["id"] for e in body["entries"]] == ["R0", "R1", "R2"]
     assert client.get("/api/representatives/leaderboard", params={"sort": "name"}).status_code == 422
+
+
+def test_thin_data_names_only_weighted_dimensions_graded_low(db_session):
+    s = _senator("S001", "Thin Record", funding_independence=50)
+    # Promise Persistence is unweighted: its "low" is no reason to flag a rank.
+    s.score_confidence = json.dumps({"fundingIndependence": "high", "legislativeEffectiveness": "low",
+                                     "constituentAlignment": "medium", "promisePersistence": "low"})
+    r = _rep("R001", "Thin Record", funding_independence=50)
+    r.score_confidence = json.dumps({"constituentAlignment": "low"})
+    db_session.add_all([s, r, _senator("S002", "No Grades", funding_independence=50)])
+    db_session.commit()
+    by_id = {e.id: e for e in get_leaderboard(db_session)}
+    assert by_id["S001"].thin_data == ["legislativeEffectiveness"]
+    assert by_id["S002"].thin_data == []
+    assert get_rep_leaderboard(db_session)["entries"][0]["thinData"] == ["constituentAlignment"]
+
+
+def test_the_spread_endpoint_counts_serving_members_as_displayed(db_session):
+    # Overall scores 50, 60 and 60 + a departed member who is not counted.
+    db_session.add_all([_senator("S1", "A", 50), _senator("S2", "B", 80.3), _senator("S3", "C", 80.3)])
+    gone = _senator("S4", "D", 90)
+    gone.is_current = False
+    db_session.add(gone)
+    db_session.commit()
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        r = TestClient(app).get("/api/leaderboard/spread?chamber=senate")
+        bad = TestClient(app).get("/api/leaderboard/spread?chamber=court")
+    finally:
+        app.dependency_overrides.clear()
+    assert r.status_code == 200 and bad.status_code == 422
+    body = r.json()
+    assert body["chamber"] == "senate" and body["total"] == 3
+    assert body["counts"] == [{"score": 50, "members": 1}, {"score": 60, "members": 2}]
+    assert (body["p25"], body["median"], body["p75"]) == (55, 60, 60)
+    assert body["parties"] == {"D": 3, "R": 0, "I": 0}

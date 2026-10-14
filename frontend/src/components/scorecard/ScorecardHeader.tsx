@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Senator } from "@/types/senator";
 import type { Committee } from "@/types/politicians";
@@ -34,6 +35,8 @@ export default function ScorecardHeader({
   rank,
   titleAs: Title,
   former = false,
+  standing,
+  glance,
 }: {
   member: Senator;
   chamber: "senate" | "house";
@@ -45,6 +48,10 @@ export default function ScorecardHeader({
   rank?: { rank: number; of: number } | null;
   titleAs: "h1" | "h2";
   former?: boolean;
+  /** Where the member sits in the chamber (ChamberStrip), under the score. */
+  standing?: ReactNode;
+  /** The scorecard in short (AtAGlance), for a phone's first screen. */
+  glance?: ReactNode;
 }) {
   const overall = displayScore(member.representationScore.overall);
   const office = chamber === "senate" ? "Senator" : "Representative";
@@ -63,7 +70,7 @@ export default function ScorecardHeader({
 
   const initials = (
     <div
-      className={`flex h-24 w-20 shrink-0 items-center justify-center border-2 text-2xl font-bold sm:h-28 sm:w-24 ${PARTY_BORDER[member.party]} ${PARTY_COLORS[member.party]}`}
+      className={`flex h-14 w-12 shrink-0 items-center justify-center border-2 text-lg font-bold sm:h-28 sm:w-24 sm:text-2xl ${PARTY_BORDER[member.party]} ${PARTY_COLORS[member.party]}`}
       aria-hidden="true"
     >
       {member.initials}
@@ -74,28 +81,34 @@ export default function ScorecardHeader({
     <header
       id="overview"
       {...{ [SHARE_SECTION_ATTR]: "overview" }}
-      className={`grid scroll-mt-[var(--header-clearance)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${PARTY_BORDER[member.party]}`}
+      className={`grid scroll-mt-[var(--header-clearance)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:grid-rows-[auto_1fr] ${PARTY_BORDER[member.party]}`}
     >
       {/* Three blocks in reading order for a phone — who, the score, then
           how to reach them; on a desktop the score takes the right column
-          beside both. Below sm the photo sits above the name: beside it, the
-          name had about 146px at 320px and long surnames split mid-word. */}
-      <div className="flex min-w-0 flex-col gap-5 sm:flex-row lg:col-start-1 lg:row-start-1">
+          beside both. Below sm the photo is small, so the score, the
+          scorecard in short and the strip make a phone's first screen; a long
+          surname that still doesn't fit hyphenates at a syllable rather than
+          splitting anywhere (it once had 146px at 320px beside a full-size
+          photo, and split mid-word). */}
+      <div className="flex min-w-0 flex-row gap-3 sm:gap-5 lg:col-start-1 lg:row-start-1">
         {thumbnailUrl ? (
           <Photo
             src={thumbnailUrl}
             alt={member.name}
-            className={`h-24 w-20 shrink-0 border-2 object-cover object-[center_25%] sm:h-28 sm:w-24 ${PARTY_BORDER[member.party]}`}
+            className={`h-14 w-12 shrink-0 border-2 object-cover object-[center_25%] sm:h-28 sm:w-24 ${PARTY_BORDER[member.party]}`}
             fallback={initials}
           />
         ) : (
           initials
         )}
         <div className="flex min-w-0 flex-col gap-2">
-          <Title className="break-words text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
+          <Title
+            lang="en"
+            className="break-words text-2xl font-extrabold leading-tight text-ink-hi [hyphens:auto] sm:text-4xl"
+          >
             {member.name}
           </Title>
-          <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+          <p className="font-mono text-xs uppercase tracking-[0.08em] text-ink-lo sm:tracking-[0.12em]">
             {office} · {place} · {PARTY_LABELS[member.party] ?? member.party} · {tenure}
           </p>
           {(leadershipTitle || member.sponsorshipDescription) && (
@@ -123,7 +136,7 @@ export default function ScorecardHeader({
         </p>
         <div className="flex items-baseline gap-4">
           <span
-            className={`font-display text-7xl font-extrabold leading-none ${getScoreColor(overall)}`}
+            className={`font-display text-6xl font-extrabold leading-none sm:text-7xl ${getScoreColor(overall)}`}
           >
             {overall}
           </span>
@@ -141,13 +154,15 @@ export default function ScorecardHeader({
             )}
           </div>
         </div>
+        {glance}
+        {standing}
         <ScoreTrendSection entityId={member.id} entityType={chamber} />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="font-mono text-xs text-ink-min">
             Reflects the {currentCongressLabel()} ·{" "}
-            <Link href="/about/scores" className="underline underline-offset-2 hover:text-phos">
-              how scores are computed
-            </Link>{" "}
+            <a href="#methods" className="underline underline-offset-2 hover:text-phos">
+              methods, data &amp; citation
+            </a>{" "}
             ·{" "}
             <Link href="/changelog" className="underline underline-offset-2 hover:text-phos">
               scoring changelog

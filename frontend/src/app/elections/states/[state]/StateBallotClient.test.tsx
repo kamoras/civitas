@@ -706,6 +706,33 @@ describe("U.S. Representative", () => {
     expect(drawer.queryByRole("link", { name: /house\.gov/ })).not.toBeInTheDocument();
   });
 
+  it("links what changed on the new map, and says it per district", async () => {
+    const note = {
+      predecessorNumber: 2,
+      predecessorSharePct: 78,
+      sourceCount: 2,
+      pviBefore: 3,
+      pviAfter: 9,
+      unchanged: false,
+    };
+    const b = fourDistricts({ newDistrictLines: true });
+    b.houseRaces = b.houseRaces.map((r) => ({ ...r, redistricting: note }));
+    render(<StateBallotClient ballot={b} />);
+    expect(
+      screen.getAllByRole("link", { name: /WHAT CHANGED/ }).map((a) => a.getAttribute("href"))
+    ).toContain("/elections/redistricting/OH");
+    const drawer = await openContest(/U\.S\. Representative/);
+    await userEvent.click(drawer.getAllByRole("button", { name: /County 1/ })[0]);
+    expect(
+      drawer.getByText(/Most of this district's residents \(78%\) were in the old 2nd/)
+    ).toBeInTheDocument();
+  });
+
+  it("links no redistricting page where the lines are unchanged", () => {
+    render(<StateBallotClient ballot={fourDistricts()} />);
+    expect(screen.queryByRole("link", { name: /WHAT CHANGED/ })).not.toBeInTheDocument();
+  });
+
   it("links no lookup at all on new lines when the state has none of its own", async () => {
     render(<StateBallotClient ballot={fourDistricts({ newDistrictLines: true })} />);
     const drawer = await openContest(/U\.S\. Representative/);

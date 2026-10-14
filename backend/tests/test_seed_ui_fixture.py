@@ -17,4 +17,7 @@ def test_seed_populates_every_audited_page(db_session):
     assert db_session.get(Senator, "S000") is not None           # /politicians/S000
     assert db_session.get(Representative, "R-CT1") is not None   # /politicians/R-CT1
     assert db_session.get(ExploreDocument, 1) is not None        # /explore/1
-    assert db_session.query(Candidate).count() == 17             # /elections/states/CT
+    assert db_session.query(Candidate).filter(Candidate.race_id.like("2026-%-CT%")).count() == 17  # /elections/states/CT
+    # A state on new lines: /elections/states/UT, /elections/redistricting/UT
+    assert db_session.query(Candidate).filter(Candidate.race_id.like("2026-H-UT-%")).count() == 8
+    assert db_session.get(Representative, "R-UT1") is not None   # /politicians/R-UT1 (redrawn seat)

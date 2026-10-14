@@ -2,6 +2,8 @@
  * /api/elections/* response shapes exactly — see backend/app/api/elections.py.
  */
 
+import type { RedistrictingNote } from "@/types/redistricting";
+
 export interface CandidateSummary {
   id: string;
   name: string;
@@ -53,6 +55,37 @@ export interface CandidateSummary {
    * this election, and on figures synced before the field existed.
    * Optional because a backend deployed before it omits it. */
   financialsThrough?: string | null;
+  /** Where `contributions` came from, in the FEC totals row's own
+   * categories (backend app/race_context.funding_sources). Null until a
+   * sync reads them. Optional: an older backend omits it. */
+  fundingSources?: FundingSources | null;
+  /** Loans the candidate made to the campaign — receipts, not
+   * contributions. Null until synced. Optional for an older backend. */
+  candidateLoans?: number | null;
+}
+
+export type FundingSourceKey =
+  "smallDonors" | "largerDonors" | "committees" | "party" | "candidate";
+
+export interface FundingSources {
+  /** False: the filing's categories don't add up to its total, so no
+   * share is given (each part's percent and blocks are null). */
+  addsUp: boolean;
+  /** Always all five, in this order. `percent` adds up to 100 and
+   * `blocks` to 20 across the parts (largest remainder), both computed by
+   * the backend. */
+  parts: { key: FundingSourceKey; amount: number; percent: number | null; blocks: number | null }[];
+}
+
+/** Where a seat's lean sits among every seat of its kind (backend
+ * app/race_context.lean_context): House districts on the lines this
+ * election is fought on, or the 50 states. Counts of the OTHER seats. */
+export interface LeanContext {
+  unit: "districts" | "states";
+  of: number;
+  moreDemocratic: number;
+  moreRepublican: number;
+  same: number;
 }
 
 export interface RaceSummary {
@@ -155,6 +188,9 @@ export interface RaceWithCandidates {
   pvi: number | null;
   /** See RaceSummary.pviLevel. */
   pviLevel: "district" | "state" | null;
+  /** Null when the race has no lean, or a House race shows its state's.
+   * Optional: an older backend omits it. */
+  leanContext?: LeanContext | null;
   /** WHICH answer this race's candidate list is, decided by the backend
    * (never re-derived here): "confirmed" = the state has named its whole
    * November ballot, minor parties included; "nominees" = the state
@@ -180,6 +216,10 @@ export interface RaceWithCandidates {
    * listed by several districts is split between them. Null for a Senate
    * race or a district the file doesn't cover — never a guess. */
   places?: string[] | null;
+  /** House races on new lines: where the district's residents lived
+   * before and how its lean moved (GET /elections/redistricting/{state}
+   * has the rest). Null or absent elsewhere. */
+  redistricting?: RedistrictingNote | null;
   candidates: BallotCandidate[];
 }
 

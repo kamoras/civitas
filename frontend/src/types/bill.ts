@@ -58,4 +58,16 @@ export interface BillDetail extends BillInFlight {
     becameLaw: number;
     sentence: string;
   } | null;
+  /** How far this Congress's bills have got, and this one
+   * (bill_service.stage_milestones); null for an earlier Congress's bill. */
+  stageMilestones?: StageMilestones | null;
+}
+
+export interface StageMilestones {
+  /** The bills sitting members sponsored this Congress. */
+  total: number;
+  /** In order; each counts the bills that got at least that far. */
+  milestones: { label: string; bills: number; share: number; shareText: string }[];
+  /** The furthest milestone this bill has reached: an index into `milestones`. */
+  reached: number;
 }

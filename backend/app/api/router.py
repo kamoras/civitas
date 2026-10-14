@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.action import router as action_router
 from app.api.admin import router as admin_router
 from app.api.bills import router as bills_router
+from app.api.compare import router as compare_router
 from app.api.congress import router as congress_router
 from app.api.elections import router as elections_router
 from app.api.explore import router as explore_router
@@ -10,11 +11,14 @@ from app.api.feed import router as feed_router
 from app.api.feedback import router as feedback_router
 from app.api.health import router as health_router
 from app.api.justices import router as justices_router
+from app.api.leaderboard import router as leaderboard_router
+from app.api.notable import router as notable_router
 from app.api.pipeline import router as pipeline_router
 from app.api.photos import router as photos_router
 from app.api.politicians import router as politicians_router
 from app.api.presidents import router as presidents_router
 from app.api.public import router as public_router
+from app.api.redistricting import router as redistricting_router
 from app.api.representatives import router as representatives_router
 from app.api.senators import router as senators_router
 from app.api.sitemap import router as sitemap_router
@@ -31,13 +35,17 @@ api_router.include_router(senators_router, tags=["senators"])
 api_router.include_router(representatives_router, tags=["representatives"])
 api_router.include_router(presidents_router, tags=["presidents"])
 api_router.include_router(justices_router, tags=["justices"])
+api_router.include_router(leaderboard_router, tags=["leaderboard"])
 api_router.include_router(explore_router, tags=["explore"])
 api_router.include_router(action_router, tags=["action"])
 api_router.include_router(elections_router, tags=["elections"])
+api_router.include_router(redistricting_router, tags=["elections"])
 api_router.include_router(bills_router, tags=["bills"])
 api_router.include_router(congress_router, tags=["congress"])
+api_router.include_router(compare_router, tags=["compare"])
 api_router.include_router(this_week_router, tags=["this-week"])
 api_router.include_router(sources_router, tags=["sources"])
+api_router.include_router(notable_router, tags=["notable"])
 api_router.include_router(feedback_router, tags=["feedback"])
 api_router.include_router(pipeline_router, tags=["pipeline"])
 api_router.include_router(admin_router, tags=["admin"])
