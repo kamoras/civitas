@@ -105,9 +105,13 @@ describe("describeRunState", () => {
     expect(s.tone).toBe("text-signal-red");
   });
 
-  it("names every failed link, with no single time", () => {
-    const s = describeRunState(status({ links: links({ Senate: "failed", House: "failed" }) }));
-    expect(s.label).toBe("SENATE + HOUSE RUNS FAILED");
+  it("names the first failed link and counts the rest, every name kept, no single time", () => {
+    const s = describeRunState(
+      status({ links: links({ Senate: "failed", House: "failed", "Stock trades": "failed" }) })
+    );
+    expect(s.label).toBe("SENATE + 2 MORE RUNS FAILED");
+    expect(s.short).toBe("SENATE +2 FAILED");
+    expect(s.everyName).toBe("Senate, House, Stock trades");
     expect(s.at).toBeNull();
   });
 
@@ -153,6 +157,7 @@ describe("RecordsBand rendering", () => {
     expect(link).toHaveTextContent("SENATE RUN FAILED");
     expect(link).toHaveTextContent("2026-08-18 03:26 UTC");
     expect(screen.getByText(/4 OF 5 FILED/)).toBeInTheDocument();
+    expect(screen.getByText("4/5 FILED")).toBeInTheDocument(); // the phone line
     // The filed stamp is the newest completion among the four that completed.
     expect(screen.getByText(/2026-08-18 07:26 UTC/)).toBeInTheDocument();
     expect(screen.queryByText(/COMPLETE/)).not.toBeInTheDocument();

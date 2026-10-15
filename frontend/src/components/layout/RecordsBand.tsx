@@ -38,18 +38,19 @@ export function formatRunTimestamp(iso: string): string | null {
   );
 }
 
-/**
- * "HH:MM UTC", for the band's narrow line: the failed run's day is almost
- * always last night's, and the full stamp shows from `sm` up.
- */
+/** "HH:MM" (UTC), for the phone line: the failed run's day is almost always
+ * last night's, and the full stamp shows from `sm` up. */
 function formatRunTime(iso: string): string | null {
-  return formatRunTimestamp(iso)?.slice(11) ?? null;
+  return formatRunTimestamp(iso)?.slice(11, 16) ?? null;
 }
 
 interface RunState {
   /** The status words, full (from `sm`) and short (phones). */
   label: string;
   short: string;
+  /** Every link named, when the label names one and counts the rest
+   *  ("SENATE + 2 MORE"); null when the label already names them all. */
+  everyName: string | null;
   /** Tailwind text colour for the status words. */
   tone: string;
   /** When the named run ended (or started, if it never ended); null for none. */
@@ -61,6 +62,7 @@ interface RunState {
 const plain = (label: string, tone: string): RunState => ({
   label,
   short: label,
+  everyName: null,
   tone,
   at: null,
   complete: false,
@@ -88,11 +90,15 @@ export function describeRunState(status: PipelineStatus | null): RunState {
   ] as const) {
     const hit = links.filter((l) => l.state === state);
     if (hit.length === 0) continue;
-    const names = hit.map((l) => l.label.toUpperCase()).join(" + ");
+    // Two or more name the first and count the rest: every name in a row
+    // ("SENATE + SUPPLEMENTARY + STOCK TRADES RUNS FAILED") wrapped the band
+    // at 640px and the phone line at 320, past the header's clearance.
+    const first = hit[0].label.toUpperCase();
     const one = hit.length === 1;
     return {
-      label: `${names} ${one ? "RUN" : "RUNS"} ${verb}`,
-      short: `${names} ${shortVerb}`,
+      label: one ? `${first} RUN ${verb}` : `${first} + ${hit.length - 1} MORE RUNS ${verb}`,
+      short: one ? `${first} ${shortVerb}` : `${first} +${hit.length - 1} ${shortVerb}`,
+      everyName: one ? null : hit.map((l) => l.label).join(", "),
       tone,
       // One time per line: with two links named, whose time it was is unclear.
       at: one && state !== "running" ? (hit[0].completedAt ?? hit[0].startedAt) : null,
@@ -185,7 +191,7 @@ export default function RecordsBand() {
   // "SENATE RUN FAILED" would read as the whole record being current.
   const filedAt = status?.filedAt ? formatRunTimestamp(status.filedAt) : null;
   const total = status?.links?.length ?? 0;
-  const count = state.complete ? "" : `${status?.linksCompleted ?? 0} OF ${total} `;
+  const done = status?.linksCompleted ?? 0;
   const at = state.at ? formatRunTimestamp(state.at) : null;
   const atShort = state.at ? formatRunTime(state.at) : null;
 
@@ -221,11 +227,15 @@ export default function RecordsBand() {
         <span className="font-mono text-xs tracking-[0.06em] text-ink-lo lg:tracking-[0.16em]">
           {loaded ? (
             <>
-              {/* The phone line has to fit 288px at 320 (the fixed header's
-                  96px clearance, `--header-clearance`, allows no wrap), so
-                  below `sm` it shortens: "SENATE FAILED 05:26 UTC · 4 OF 5
-                  FILED", with the dates, "RUN" and the filed time from `sm`
-                  up. Measured at 320, 375, 640 and 1280 for every state. */}
+              {/* One line at every width: the fixed header's 96px clearance
+                  (`--header-clearance`) allows no wrap. So the phone line
+                  (288px at 320) is the short form, "SUPPLEMENTARY FAILED
+                  06:47 · 4/5 FILED", with UTC from 370px; from `sm` the
+                  full words and dates; the filed time from `lg`. Two or more
+                  failed links name the first and count the rest, every name
+                  in the link's title and its accessible name. Measured for
+                  every link and state, one to five failed, at 320, 360, 375,
+                  640, 1024 and 1280. */}
               {state.complete ? (
                 <>
                   {filedAt && (
@@ -236,34 +246,38 @@ export default function RecordsBand() {
                   )}
                   <span className={state.tone}>{state.label}</span>
                 </>
-              ) : (
+              ) : total > 0 ? (
                 <>
-                  {total > 0 ? (
-                    <Link
-                      href="/about/data#nightly-runs"
-                      className={`${state.tone} underline decoration-dotted underline-offset-2 hover:decoration-solid`}
-                    >
-                      <span className="hidden sm:inline">{state.label}</span>
-                      <span className="sm:hidden">{state.short}</span>
-                      {at && (
-                        <>
-                          {" "}
-                          <span className="hidden sm:inline">{at}</span>
-                          <span className="sm:hidden">{atShort}</span>
-                        </>
-                      )}
-                    </Link>
-                  ) : (
-                    <span className={state.tone}>{state.label}</span>
-                  )}
-                  {total > 0 && (
-                    <>
-                      <Dot />
-                      {count}FILED
-                      {filedAt && <span className="hidden sm:inline"> {filedAt}</span>}
-                    </>
-                  )}
+                  <Link
+                    href="/about/data#nightly-runs"
+                    title={state.everyName ?? undefined}
+                    className={`${state.tone} underline decoration-dotted underline-offset-2 hover:decoration-solid`}
+                  >
+                    <span className="hidden sm:inline">{state.label}</span>
+                    <span className="sm:hidden">{state.short}</span>
+                    {state.everyName && <span className="sr-only"> ({state.everyName})</span>}
+                    {at && (
+                      <>
+                        {" "}
+                        <span className="hidden sm:inline">{at}</span>
+                        <span className="sm:hidden">
+                          {atShort}
+                          <span className="hidden min-[370px]:inline"> UTC</span>
+                        </span>
+                      </>
+                    )}
+                  </Link>
+                  <Dot />
+                  <span className="sm:hidden">
+                    {done}/{total} FILED
+                  </span>
+                  <span className="hidden sm:inline">
+                    {done} OF {total} FILED
+                    {filedAt && <span className="hidden lg:inline"> {filedAt}</span>}
+                  </span>
                 </>
+              ) : (
+                <span className={state.tone}>{state.label}</span>
               )}
             </>
           ) : (
