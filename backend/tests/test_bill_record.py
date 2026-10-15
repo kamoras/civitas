@@ -8,9 +8,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import bills as bills_api
+from app.api.explore import get_explore_document
 from app.database import get_db
 from app.main import app
-from app.models import Representative, RollCall, RollCallPosition, Senator, SponsoredBill
+from app.models import ExploreDocument, Representative, RollCall, RollCallPosition, Senator, SponsoredBill
+from app.pipeline.fetch.daily_digest import heading_bill_ids
 from app.services import bill_record as br
 
 # Congress.gov's answer for S. 4668 (119th), trimmed to what is shaped.
@@ -506,7 +508,6 @@ def test_party_counts_read_positions_as_the_tally_does():
 # ── Floor speeches and their bills, from the Record heading ──────────
 
 def _speech(db, title, date="2026-09-16", chamber="House", name="Doe", pid=None):
-    from app.models import ExploreDocument
     doc = ExploreDocument(doc_type=f"{chamber} Floor Speech", source="Congressional Record (GovInfo)",
                           title=title, body="text", date=date, chamber=chamber, politician_name=name,
                           politician_id=pid)
@@ -516,8 +517,6 @@ def _speech(db, title, date="2026-09-16", chamber="House", name="Doe", pid=None)
 
 
 def test_a_record_heading_names_its_bills_in_capitals_or_not():
-    from app.pipeline.fetch.daily_digest import heading_bill_ids
-
     assert heading_bill_ids("S.J. RES. 188") == ["SJRES.188"]
     assert heading_bill_ids("UNANIMOUS CONSENT REQUEST--S. RES. 784") == ["SRES.784"]
     assert heading_bill_ids("PROVIDING FOR CONSIDERATION OF H.R. 9576, AN ACT; AND H.R. 10326") == [
@@ -555,8 +554,6 @@ def test_the_bill_page_lists_its_floor_debate_grouped_by_heading(db_session):
 
 
 def test_an_explore_speech_links_its_bill(db_session):
-    from app.api.explore import get_explore_document
-
     speech = _speech(db_session, "Remarks on S.J. RES. 188")
     body = json.loads(asyncio.run(get_explore_document(speech.id, db_session)).body)
     assert body["bills"] == [{"billId": "SJRES.188", "label": "S.J. Res. 188", "congress": 119}]
