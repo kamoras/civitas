@@ -224,6 +224,9 @@ export default function JusticeScorecard({
       .filter(Boolean)
       .join(" · "),
     url: absoluteUrl(`/politicians/${encodeURIComponent(j.id)}`),
+    source: "Supreme Court Database; Martin-Quinn scores; Oyez",
+    // Read when the page loads; not a score, so no scale.
+    asOf: null,
   };
 
   return (
