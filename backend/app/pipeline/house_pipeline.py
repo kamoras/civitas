@@ -119,7 +119,7 @@ from app.pipeline.fetch.voteview import refresh_member_ideal_points
 from app.pipeline.analyze.commemorative import mark_commemorative
 from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores, carry_forward_sponsored_bills
 from app.pipeline.live_references import (
-    bills_read_this_run,
+    bills_source,
     live_constituent_reference_measured,
     live_funding_reference,
     live_les_reference,
@@ -802,7 +802,7 @@ async def run_house_pipeline() -> dict:
             # anyone is scored. See live_references.live_les_reference.
             les_reference = live_les_reference(
                 "house",
-                [(r.get("sponsoredBills") or [], r.get("party"), bills_read_this_run(r)) for r in reps],
+                [(r.get("sponsoredBills") or [], r.get("party"), bills_source(r)) for r in reps],
                 db,
             )
 
@@ -1011,12 +1011,14 @@ async def run_house_pipeline() -> dict:
             # measured from the whole population BEFORE anyone is scored
             # (the Senate pipeline already works this way). The PAC-share
             # median needs every rep's funding, which the pass above fetches.
+            # Each measured on the members prepared, out of the whole House:
+            # under the coverage floor the last full-coverage one is carried.
             funding_reference = live_funding_reference(
                 "house", [r.get("funding") or {} for r, _ in prepared_reps],
-                parties=[r.get("party", "") for r, _ in prepared_reps],
+                parties=[r.get("party", "") for r, _ in prepared_reps], roster=len(reps),
             )
             constituent_reference, constituent_reference_measured = live_constituent_reference_measured(
-                "house", [r for r, _ in prepared_reps],
+                "house", [r for r, _ in prepared_reps], roster=len(reps),
             )
 
             for rep, bio_id in prepared_reps:

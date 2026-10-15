@@ -36,7 +36,7 @@ from app.pipeline.analyze.score_calculator import (
 from app.pipeline.cache import api_cache_set
 from app.pipeline.fetch import congress, fec, govinfo, house_clerk
 from app.pipeline.fetch.congress import CongressUnavailable
-from app.pipeline.live_references import bills_read_this_run
+from app.pipeline.live_references import bills_source
 from app.pipeline.sponsorship_backfill import carry_forward_sponsored_bills
 from app.services.representative_service import get_representative_score_breakdown, upsert_representative
 from app.time_utils import utcnow
@@ -90,7 +90,7 @@ class TestCarryForward:
         assert new["sponsoredBillsUnavailable"] and new["sponsoredBills"] == []
         assert "sponsoredBillsCarriedFrom" not in fetched
         # Only bills this run read are measured into the reference.
-        assert [bills_read_this_run(m) for m in (fetched, failed, unreached, new)] == [True, False, False, False]
+        assert [bills_source(m) for m in (fetched, failed, unreached, new)] == ["read", "carried", "carried", "unavailable"]
 
     def test_a_carried_date_is_kept_across_nights(self, db_session):
         _seed_stored(db_session, "r-c", "C1", [_bill(1)], "carried:2026-10-10")

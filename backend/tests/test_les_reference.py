@@ -180,7 +180,7 @@ class TestLiveReferenceInThePipeline:
     def test_measures_persists_and_merges(self, db_session, pinned_les_reference, monkeypatch):
         monkeypatch.setattr("app.pipeline.senate_pipeline.settings.CURRENT_CONGRESS", 120)
         self._president(db_session, "D")
-        members = [(_bills(n, congress=120), "R" if n % 2 else "D", True) for n in range(10, 50)]
+        members = [(_bills(n, congress=120), "R" if n % 2 else "D", "read") for n in range(10, 50)]
         ref = live_les_reference("senate", members, db_session)
         assert ref["senate"]["congress"] == 120
         assert ref["senate"]["majority"] == "D"  # 20-20 tie -> VP's party
@@ -188,19 +188,21 @@ class TestLiveReferenceInThePipeline:
         assert load_les_reference()["senate"]["congress"] == 120
 
     def test_small_run_scores_against_the_last_persisted_reference(self, db_session):
-        assert live_les_reference("senate", [(_bills(10), "D", True)], db_session) is None
+        assert live_les_reference("senate", [(_bills(10), "D", "read")], db_session) is None
 
-    def test_members_whose_bills_went_unread_are_not_measured(self, db_session, pinned_les_reference):
+    def test_members_whose_bills_went_unread_are_not_measured(self, db_session, pinned_les_reference, monkeypatch):
         """2026-10-14's House run: one failed request stopped the
         sponsorship read after 137 of 433 members, and the other 296 were
         measured as members with no bills — a mean credit of 3.16 (433/137)
         on a scale defined as 1.0, with every bar raised accordingly. A
         member whose bills weren't read this run is left out of the stage
         totals and the member count alike; the majority still comes from
-        the whole roster."""
+        the whole roster. (The coverage floor is off here: this is the
+        exclusion itself; test_reference_coverage.py has the floor.)"""
+        monkeypatch.setattr("app.pipeline.live_references.reference_coverage_floor", lambda name, chamber: 0.0)
         self._president(db_session, "R")
-        read = [(_bills(1 + n % 7, bill_type="hr", law=n % 3 == 0), "R" if n % 2 else "D", True) for n in range(137)]
-        unread = [([], "R" if n % 3 else "D", False) for n in range(296)]
+        read = [(_bills(1 + n % 7, bill_type="hr", law=n % 3 == 0), "R" if n % 2 else "D", "read") for n in range(137)]
+        unread = [([], "R" if n % 3 else "D", "unavailable") for n in range(296)]
 
         poisoned = compute_les_reference(
             [(b, p) for b, p, _ in read + unread], 119, "R",
