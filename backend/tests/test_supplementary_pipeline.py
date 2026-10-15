@@ -376,6 +376,8 @@ class TestPresidentialSupportStep:
         assert result["status"] == "completed"
         steps = self._steps(db_session)
         assert steps["presidential_support"][0] == "failed"
+        run = db_session.query(SupplementaryPipelineRun).one()
+        assert run.error_detail.startswith("presidential_support: RuntimeError: boom")
         assert steps["president_scorecards"][0] == "done" and steps["explore_documents"][0] == "done"
 
     def test_a_step_past_its_ceiling_is_cut_off(self, db_session, monkeypatch):

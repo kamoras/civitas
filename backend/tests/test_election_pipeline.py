@@ -158,6 +158,10 @@ class TestElectionPipelineLock:
         run = db_session.query(ElectionPipelineRun).one()
         assert run.status == PipelineStatus.COMPLETED
         assert result["status"] == "completed"
+        # Each failed phase's exception is kept on the run row, not only
+        # in a log a deploy replaces.
+        assert "RuntimeError: confirmed-candidates phase mocked to fail" in run.error_detail
+        assert "Traceback (most recent call last)" in run.error_detail
 
 
 class TestCurrentElectionCycle:
