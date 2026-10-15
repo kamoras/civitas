@@ -402,6 +402,16 @@ function IssuesTab({
 }
 
 /** Previous/next day and the refresh time, in the masthead's aside slot. */
+/** "1:21 PM", or "Oct 14, 4:17 AM" for an earlier day; "" when unparseable. */
+function clockTime(iso: string | undefined): string {
+  const d = iso ? new Date(iso) : null;
+  if (!d || Number.isNaN(d.getTime())) return "";
+  const time: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  return d.toDateString() === new Date().toDateString()
+    ? d.toLocaleString(undefined, time)
+    : d.toLocaleString(undefined, { month: "short", day: "numeric", ...time });
+}
+
 function DayPager({
   data,
   selectedDate,
@@ -427,14 +437,11 @@ function DayPager({
 
   const short = (d: string) => formatUtcDate(d, { month: "short", day: "numeric" });
 
-  const generatedAt = data?.generatedAt;
-  let updated = "";
-  if (generatedAt && !selectedDate) {
-    const d = new Date(generatedAt);
-    if (!Number.isNaN(d.getTime())) {
-      updated = d.toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
-    }
-  }
+  // When the news was last read, and when a story last changed. They differ
+  // on an hour that found nothing new: a single "Updated" naming the last
+  // change read as a refresh that had stopped (2026-10-15).
+  const checked = selectedDate ? "" : clockTime(data?.checkedAt);
+  const changed = selectedDate ? "" : clockTime(data?.generatedAt);
 
   const link = "text-ink-lo hover:text-ink-hi disabled:cursor-not-allowed disabled:text-ink-min/50";
 
@@ -466,7 +473,13 @@ function DayPager({
           {next ? short(next) : "Later"} →
         </button>
       </div>
-      {updated && <span className="tracking-[0.04em] text-ink-min">Updated {updated}</span>}
+      {(checked || changed) && (
+        <span className="tracking-[0.04em] text-ink-min">
+          {checked && `Checked ${checked}`}
+          {checked && changed && changed !== checked && " · "}
+          {changed && changed !== checked && `stories updated ${changed}`}
+        </span>
+      )}
       {selectedDate && (
         <button onClick={() => onSelect(null)} className={`${link} tracking-[0.04em]`}>
           Back to the latest

@@ -889,7 +889,7 @@ class TestEmptyDayPager:
 
         for bad in ("not-a-day", "2026-1-2", "2026-02-30", "2026-09-26\n"):
             resp = await get_action_issues(Response(), date=bad, db=db_session, db_visits=db_session)
-            assert resp == {"date": bad, "issues": [], "availableDates": [], "generatedAt": None}, bad
+            assert resp == {"date": bad, "issues": [], "availableDates": [], "generatedAt": None, "checkedAt": None}, bad
 
 
 class TestRecentFeedAndSeatFlips:
@@ -1024,6 +1024,35 @@ class TestIssuesListPagerFields:
 
         assert live["generatedAt"] == "2026-09-29T13:15:00Z"
         assert past["generatedAt"] is None
+        assert past["checkedAt"] is None
+
+    async def test_checked_at_is_the_latest_run_that_read_the_news(self, db_session):
+        # 2026-10-15: hourly runs that found nothing to publish left the page
+        # reading "Updated 4:17 AM" all afternoon. The last check is shown
+        # as such; a run with the feeds down (no articles) is not a check.
+        import json
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issues
+        from app.models import ApiCache
+
+        def run(key, at, **counts):
+            return ApiCache(tier="action-metrics", cache_key=key,
+                            data_json=json.dumps({"counts": counts}), cached_at=at)
+
+        db_session.add(ActionIssue(date="2026-09-29", rank=1, title="Live", summary="s", is_current=True))
+        db_session.add_all([
+            run("a", datetime(2026, 9, 29, 4, 17), articles_fetched=90, issues_new_topic=1),
+            run("b", datetime(2026, 9, 29, 15, 17), articles_fetched=95, clusters_without_claims=6),
+            run("c", datetime(2026, 9, 29, 16, 17), refresh_aborted_no_articles=1),
+        ])
+        db_session.commit()
+
+        live = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+        assert live["checkedAt"] == "2026-09-29T15:17:00Z"
+        assert live["generatedAt"] == "2026-09-29T04:17:00Z"
 
     async def test_no_recent_run_wrote_issues_omits_generated_at(self, db_session):
         import json
