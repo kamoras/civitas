@@ -201,6 +201,17 @@ class TestCheckRollCallSignals:
         }]
         assert json.loads(row.facts)[0] == "Tally: 77 yea, 22 nay, 0 not voting."
 
+    @pytest.mark.parametrize("document, measure", [
+        pytest.param("H R 9497", "H.R. 9497", id="the_clerk_spelling_is_printed_as_the_record_prints_it"),
+        pytest.param("PN1129", "PN1129", id="a_nomination_is_left_as_recorded"),
+    ])
+    def test_the_measure_is_named_as_the_site_prints_it(self, document, measure):
+        vote = _house_vote()
+        vote.update(documentName=document, result="Passed")
+        title, summary, _ = es._compose_developing_issue(vote)
+        assert title == f"House vote on {measure}: Passed, 250-180"
+        assert f"for {measure}." in summary
+
 
 def _reported(db_session, title, summary="", bills=None):
     row = ActionIssue(
@@ -330,7 +341,8 @@ class TestRuleDraft:
 
     def test_states_the_record_and_nothing_else(self):
         title, summary, facts = es._compose_developing_rule_issue(_rule())
-        assert title == "Interior Department final rule: Process for Authorizing Seasonal Migratory Game Bird Hunting"
+        # The rule's own title leads; the agency opens the summary.
+        assert title == "Final rule: Process for Authorizing Seasonal Migratory Game Bird Hunting"
         assert summary == (
             'Interior Department published the final rule "Process for Authorizing Seasonal Migratory Game '
             'Bird Hunting" in the Federal Register on 2026-08-31. The Service is changing the administrative '
@@ -349,8 +361,24 @@ class TestRuleDraft:
         assert facts[-1] == f"Abstract: {' '.join(abstract.split())}"
 
     def test_missing_agencies_falls_back(self):
-        title, _, _ = es._compose_developing_rule_issue(_rule(agencies=[]))
-        assert title.startswith("A federal agency final rule:")
+        _, summary, _ = es._compose_developing_rule_issue(_rule(agencies=[]))
+        assert summary.startswith("A federal agency published the final rule")
+
+    def test_many_agencies_never_push_the_subject_back(self):
+        agencies = ["Treasury Department", "Internal Revenue Service", "Labor Department",
+                    "Employee Benefits Security Administration", "Health and Human Services Department"]
+        title, summary, facts = es._compose_developing_rule_issue(
+            _rule(agencies=agencies, title="Transparency in Coverage"))
+        assert title == "Final rule: Transparency in Coverage"
+        assert summary.startswith(", ".join(agencies) + " published the final rule")
+        assert facts[0] == f"Agency: {', '.join(agencies)}."
+
+    def test_an_untitled_rule_is_titled_from_its_abstract_then_its_number(self):
+        title, _, _ = es._compose_developing_rule_issue(
+            _rule(title="", abstract="This rule sets a fee. It takes effect in May."))
+        assert title == "Final rule: This rule sets a fee. It takes effect in May."
+        title, _, _ = es._compose_developing_rule_issue(_rule(title="", abstract=""))
+        assert title == "Final rule: Federal Register document 2026-17733"
 
 
 class TestExpireStaleDevelopingIssues:

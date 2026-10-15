@@ -163,7 +163,7 @@ class TestResponseShape:
     async def test_channel_counts_are_reported(self, indexed_db):
         _add(indexed_db, title="wildfire response rule")
         body = _body(await _search(indexed_db, "wildfire"))
-        assert body["channels"] == {"semantic": 0, "keyword": 1}
+        assert body["channels"] == {"semantic": 0, "keyword": 1, "identifier": 0}
 
     async def test_snippet_marks_matched_terms(self, indexed_db):
         _add(indexed_db, title="A Rule",

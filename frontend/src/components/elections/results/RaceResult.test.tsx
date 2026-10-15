@@ -42,16 +42,27 @@ const TIE = race({
 
 describe("statusTag", () => {
   it("tags an exact tie as tied, not leading", () => {
-    expect(statusTag(TIE).text).toBe("TIED");
-    expect(statusTag(race()).text).toBe("LEADING");
+    expect(statusTag(TIE).text).toBe("TIED · NOT FINAL");
+    expect(statusTag(race()).text).toBe("LEADING · NOT FINAL");
     expect(statusTag(race({ votesCounted: 0 })).text).toBe("NO VOTES YET");
     expect(statusTag({ ...TIE, official: true }).text).toBe("TIED · OFFICIAL COUNT");
+  });
+
+  // The card's "The count is not final." sits under every candidate, more
+  // than a screen below the tag on a phone: the tag says it itself.
+  it("says not final in every leading, early or tied tag until the count is official", () => {
+    const early = race({ reportingUnits: 10, totalUnits: 100 });
+    for (const r of [race(), race({ flip: true }), TIE, early]) {
+      expect(statusTag(r).text).toMatch(/ · NOT FINAL$/);
+      expect(statusTag({ ...r, official: true }).text).not.toMatch(/NOT FINAL/);
+    }
+    expect(statusTag(early).text).toBe("EARLY · NOT FINAL");
   });
 
   it("never puts a bare OFFICIAL beside an official count's leader, and keeps its flip", () => {
     expect(statusTag(race({ official: true })).text).toBe("LEADS · OFFICIAL COUNT");
     expect(statusTag(race({ official: true, flip: true })).text).toBe("FLIP · OFFICIAL COUNT");
-    expect(statusTag(race({ flip: true })).text).toBe("FLIP · LEADING");
+    expect(statusTag(race({ flip: true })).text).toBe("FLIP · LEADING · NOT FINAL");
     for (const r of [race({ official: true }), race({ official: true, flip: true }), TIE])
       expect(statusTag({ ...r, official: true }).text).not.toBe("OFFICIAL");
   });
@@ -59,7 +70,7 @@ describe("statusTag", () => {
   it("never passes a count the state's latest read skipped off as live", () => {
     expect(statusTag(race({ inLatestRead: false })).text).toBe("NOT IN LATEST READ");
     expect(statusTag(race({ inLatestRead: false, flip: true })).text).toBe("NOT IN LATEST READ");
-    expect(statusTag(race({ inLatestRead: true })).text).toBe("LEADING");
+    expect(statusTag(race({ inLatestRead: true })).text).toBe("LEADING · NOT FINAL");
     render(<RaceResultCard result={race({ inLatestRead: false })} />);
     expect(
       screen.getByText(/The state's latest read didn't include this race/)
@@ -138,8 +149,10 @@ describe("RaceResultCard", () => {
     });
     render(<RaceResultCard result={held} />);
     // Both things that are true: announced, and the holder ahead here.
-    expect(screen.getByText("FLIP ANNOUNCED · HOLDER'S PARTY LEADS")).toBeInTheDocument();
-    expect(screen.queryByText("FLIP · LEADING")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("FLIP ANNOUNCED · HOLDER'S PARTY LEADS · NOT FINAL")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^FLIP · LEADING/)).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/another party|changing party/);
     expect(document.body).toHaveTextContent(
       "The seat was held by a Democrat; a change of party was announced earlier (holder's party ahead in the latest count)."
@@ -152,7 +165,7 @@ describe("RaceResultCard", () => {
       { name: "Ray Jones", party: "REP", votes: 950, pct: 50, candidateId: null },
     ];
     expect(statusTag(race({ flip: true, leaderParty: null, candidates: tiedCands })).text).toBe(
-      "FLIP ANNOUNCED · TIED"
+      "FLIP ANNOUNCED · TIED · NOT FINAL"
     );
     const heldCands = [
       { name: "Dana Smith", party: "DEM", votes: 1000, pct: 52.6, candidateId: null },
@@ -163,7 +176,7 @@ describe("RaceResultCard", () => {
         .text
     ).toBe("FLIP ANNOUNCED · HOLDER'S PARTY LEADS · OFFICIAL COUNT");
     // A flip the count still bears out keeps its FLIP.
-    expect(statusTag(race({ flip: true })).text).toBe("FLIP · LEADING");
+    expect(statusTag(race({ flip: true })).text).toBe("FLIP · LEADING · NOT FINAL");
   });
 
   it("tags a held flip on a House row by its standing, never FLIP · LEADING", () => {
@@ -244,7 +257,7 @@ describe("a flip announced earlier that the latest count doesn't show", () => {
         { name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4, candidateId: null },
       ],
     });
-    expect(statusTag(noParty).text).toBe("FLIP ANNOUNCED · LEADER'S PARTY NOT GIVEN");
+    expect(statusTag(noParty).text).toBe("FLIP ANNOUNCED · LEADER'S PARTY NOT GIVEN · NOT FINAL");
     render(<RaceResultCard result={noParty} />);
     expect(document.body).toHaveTextContent(
       "a change of party was announced earlier (leader's party not given in the latest count)."
@@ -290,7 +303,7 @@ describe("a House row on a phone", () => {
     // Two columns below `sm` (label, the rest); four from `sm`.
     expect(li.className).toMatch(/(^|\s)grid-cols-\[3\.75rem_minmax\(0,1fr\)\](\s|$)/);
     expect(li.className).toContain("sm:grid-cols-[4.5rem_minmax(0,1fr)_12rem_8rem]");
-    const tag = screen.getByText("FLIP · LEADING");
+    const tag = screen.getByText("FLIP · LEADING · NOT FINAL");
     expect(tag.className).toContain("col-start-2");
     expect(tag.className).toContain("sm:col-start-auto");
     // The leader wraps at every width, never cut short: from `sm` the

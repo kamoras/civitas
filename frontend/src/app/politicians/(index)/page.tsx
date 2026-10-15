@@ -90,6 +90,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
             // scrolls into view (loading="lazy", decoding="async").
             lazy
             alt={p.name}
+            sizes="40px"
             className="w-10 h-10 object-cover object-[center_25%] shrink-0 opacity-80 group-hover:opacity-100 transition-opacity"
             fallback={<Initials name={p.name} />}
           />
@@ -453,7 +454,7 @@ function PoliticiansPageContent() {
 
           {/* Results */}
           {loading ? (
-            <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest animate-pulse">
+            <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest pulse-subtle">
               LOADING...
             </div>
           ) : error ? (

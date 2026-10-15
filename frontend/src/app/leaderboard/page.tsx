@@ -131,7 +131,7 @@ function ThinDataTag({ dims }: { dims?: string[] }) {
 function LeaderboardLoading({ label }: { label: string }) {
   return (
     <div className="panel p-8 text-center" role="status" aria-live="polite">
-      <p className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">{label}</p>
+      <p className="text-ink-lo font-mono text-xs tracking-widest pulse-subtle">{label}</p>
     </div>
   );
 }
@@ -323,7 +323,7 @@ function CurrentPresidentSpotlight({
   if (loading) {
     return (
       <div className="panel p-6 text-center mb-6" role="status" aria-live="polite">
-        <p className="text-ink-lo font-mono text-xs tracking-widest animate-pulse">
+        <p className="text-ink-lo font-mono text-xs tracking-widest pulse-subtle">
           LOADING CURRENT PRESIDENT...
         </p>
       </div>
@@ -334,7 +334,7 @@ function CurrentPresidentSpotlight({
   return (
     <div className="mb-10">
       <div className="mb-3 flex items-center gap-2">
-        <span className="text-signal-amber text-xs animate-pulse border border-signal-amber/40 px-2 py-0.5 font-mono">
+        <span className="text-signal-amber text-xs pulse-subtle border border-signal-amber/40 px-2 py-0.5 font-mono">
           CURRENTLY SERVING
         </span>
         <p className="text-ink-min text-xs">

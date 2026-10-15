@@ -336,14 +336,29 @@ function ExplorePageInner() {
     if (!trimmed && !openComments) setSubmitted(null);
   };
 
+  // On a phone the masthead, the box and the filters fill the first screen,
+  // so the first result of a search sat a whole screen down (measured at
+  // 1.00 viewport heights at 375 px). A search the reader starts brings the
+  // box to the top instead: the filters stay in view below it and the
+  // results start on the same screen. Only on a search they start, never on
+  // load, which would fight the browser restoring a reader's place on Back.
+  const formRef = useRef<HTMLFormElement>(null);
+  const bringResultsUp = () => {
+    if (!window.matchMedia("(max-width: 639px)").matches) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    formRef.current?.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     runSearch(query, chamber, commentableOnly, sortOrder);
+    bringResultsUp();
   };
 
   const handleSuggestion = (q: string) => {
     setQuery(q);
     runSearch(q, chamber, commentableOnly, sortOrder);
+    bringResultsUp();
   };
 
   const handleChamberChange = (ch: ChamberFilter) => {
@@ -406,7 +421,11 @@ function ExplorePageInner() {
           </PageMasthead>
 
           {/* Search form */}
-          <form onSubmit={handleSubmit} className="mb-6">
+          <form
+            ref={formRef}
+            onSubmit={handleSubmit}
+            className="mb-6 scroll-mt-[var(--header-clearance)]"
+          >
             <div className="panel">
               <TerminalTitlebar title="Query" />
               <div className="p-4">
@@ -558,14 +577,28 @@ function ExplorePageInner() {
             </div>
           )}
 
-          {/* Error */}
+          {/* Error: an index still being built says so; a search that
+              failed says that, and offers it again. */}
           {error && (
             <div className="text-center py-8" role="alert">
-              <p className="text-ink-lo text-base">{error}</p>
-              <p className="text-ink-lo text-xs mt-2">
-                The explore pipeline runs nightly. Try again later or trigger a pipeline run from
-                the admin panel.
-              </p>
+              {indexEmpty ? (
+                <p className="text-ink-lo text-base">{error}</p>
+              ) : (
+                <p className="text-ink-lo text-base">
+                  The search didn&apos;t answer, so nothing is shown for it yet.{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // The button goes while the search runs; focus waits in the box.
+                      inputRef.current?.focus({ preventScroll: true });
+                      request.retry();
+                    }}
+                    className="font-mono text-xs tracking-widest text-signal-cyan underline underline-offset-2 hover:text-phos transition-colors"
+                  >
+                    TRY AGAIN
+                  </button>
+                </p>
+              )}
             </div>
           )}
 
@@ -573,8 +606,8 @@ function ExplorePageInner() {
           {loading && (
             <div className="text-center py-12" role="status" aria-live="polite">
               <div className="inline-block border border-white/[0.07] px-6 py-3">
-                <span className="text-ink-lo text-sm font-mono animate-pulse">
-                  Searching government records...
+                <span className="text-ink-lo text-sm font-mono pulse-subtle">
+                  Searching government records…
                 </span>
               </div>
             </div>

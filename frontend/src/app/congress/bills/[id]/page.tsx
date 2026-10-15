@@ -3,10 +3,10 @@ import { notFound } from "next/navigation";
 import type { BillDetail } from "@/types/bill";
 import type { BillRecord } from "@/types/congress";
 import { fetchRecord } from "@/lib/ssrPayload";
-import { absoluteUrl, pageMetadata } from "@/lib/site";
+import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import { describeBill, legislationJsonLd } from "@/lib/seo";
 import { fetchBillCommitteeRecord, fetchBillRecord } from "@/lib/congressServer";
-import { billCanonicalPath, billHref, currentCongress, parseCongressParam } from "@/lib/congress";
+import { billCanonicalPath, currentCongress, parseCongressParam } from "@/lib/congress";
 import { ordinal } from "@/components/scorecard/format";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import BillPageView from "@/components/congress/BillPageView";
@@ -74,12 +74,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   const congress = parseCongressParam((await searchParams).congress);
   const { record, detail } = await load(id, congress);
   if (!record && !detail) {
-    return pageMetadata({
-      title: "Bill not found",
-      description: "No record for this bill.",
-      path: billHref(id, congress),
-      noindex: true,
-    });
+    return notFoundMetadata("Bill not found", "No record for this bill.");
   }
   const billId = record?.billId ?? detail!.billId;
   // Canonical from the record, not the request: "/congress/bills/s.1" and

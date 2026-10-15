@@ -39,6 +39,22 @@ describe("sitemap", () => {
     expect(urls.filter(([u]) => String(u).startsWith("/congress/week/"))).toHaveLength(1);
   });
 
+  it("lists every roll call's page, a nomination's included", async () => {
+    backend({
+      "/api/sitemap": {
+        ...INDEX,
+        rollCalls: [
+          { chamber: "senate", congress: 119, session: 2, number: 256, lastmod: "2026-09-30" },
+        ],
+      },
+    });
+    const urls = (await sitemap()).map((e) => [
+      e.url.replace(/^https:\/\/[^/]+/, ""),
+      e.lastModified,
+    ]);
+    expect(urls).toContainEqual(["/congress/votes/senate/119/2/256", "2026-09-30"]);
+  });
+
   it("still serves a backend image that predates congressDays", async () => {
     backend({ "/api/sitemap": INDEX });
     const urls = (await sitemap()).map((e) => e.url);

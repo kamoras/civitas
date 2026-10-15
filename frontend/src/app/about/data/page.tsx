@@ -67,8 +67,9 @@ export default function DataChapter() {
               spending, and declared candidates for every federal race.
             </Fact>
             <Fact label="Senate.gov & House Clerk">
-              Roll-call votes with every member&apos;s position, and each chamber&apos;s live floor
-              log.
+              Roll-call votes with every member&apos;s position, each shown on its own page
+              (nominations included) and linked to the chamber&apos;s record, and each
+              chamber&apos;s live floor log.
             </Fact>
             <Fact label="unitedstates/congress-legislators">
               Committee seats and party leadership titles, an open dataset refreshed weekly. It
@@ -184,9 +185,10 @@ export default function DataChapter() {
           the newest one, counted from what is stored, so a stale source shows as stale.
         </P>
         <P>
-          Every source&apos;s rate limits are respected, and responses are cached for 72 hours to
-          avoid asking twice, except a state&apos;s answer that it has no measures, kept for only
-          six hours, so a measure certified afterwards appears the next night.
+          Every source&apos;s rate limits are respected, and responses are cached for up to 72 hours
+          to avoid asking twice, except a state&apos;s answer that it has no measures, kept for only
+          six hours, so a measure certified afterwards appears the next night. A bill&apos;s own
+          records are kept until Congress.gov lists the bill as updated, which is checked hourly.
         </P>
         <P>
           Every member scorecard and bill page ends in a methods, sources and citation section, one
@@ -359,6 +361,8 @@ export default function DataChapter() {
           <Item label="Keywords">
             A keyword index
             <Cite id="robertson2009" />, the only way to find an executive order number or a docket.
+            A document&apos;s own Federal Register citation or document number finds that document
+            first.
           </Item>
           <Item label="Recency">A newer document is usually the more useful answer.</Item>
           <Item label="Authority">

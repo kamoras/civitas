@@ -77,7 +77,7 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
       {/* Status + elapsed */}
       <div className="flex items-center justify-between">
         <span className="text-ink-lo">STATUS</span>
-        <span className={ac.isRunning ? "text-signal-cyan animate-pulse font-bold" : "text-ink-lo"}>
+        <span className={ac.isRunning ? "text-signal-cyan pulse-subtle font-bold" : "text-ink-lo"}>
           {ac.isRunning ? `RUNNING · ${formatDuration(totalElapsed)}` : "IDLE"}
         </span>
       </div>

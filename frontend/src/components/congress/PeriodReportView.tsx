@@ -13,6 +13,7 @@ import {
   longDate,
   monthHref,
   monthLabel,
+  rollCallHref,
   shortDate,
   weekHref,
 } from "@/lib/congress";
@@ -287,9 +288,12 @@ export default function PeriodReportView({
                         key={`${v.chamber}-${v.number}`}
                         className="border-b border-white/[0.09] py-2 text-[15px] text-ink"
                       >
-                        <span className="font-mono text-ink-lo">
+                        <Link
+                          href={rollCallHref(v)}
+                          className="font-mono text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+                        >
                           {CHAMBER_NAME[v.chamber]} No. {v.number}
-                        </span>{" "}
+                        </Link>{" "}
                         {v.result}, {v.yeas}–{v.nays}
                         {v.billLabel && v.billId && (
                           <>

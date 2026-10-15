@@ -134,7 +134,7 @@ describe("DistrictMap", () => {
       />
     );
     // Its standing is in its accessible name, not in its colour alone.
-    const shape = await screen.findByRole("button", { name: "CT-2: tied, 90% in" });
+    const shape = await screen.findByRole("button", { name: "CT-2: tied, 90% in, not final" });
     expect(screen.getByRole("button", { name: "CT-3: no count shown here" })).toBeTruthy();
     expect(screen.getByText("no votes yet")).toBeInTheDocument();
     // Share is drawn as opacity over a near-black page: less in reads
@@ -186,7 +186,7 @@ describe("DistrictMap", () => {
       />
     );
     const shape = await screen.findByRole("button", {
-      name: "CT-2: leader's party not given, 90% in",
+      name: "CT-2: leader's party not given, 90% in, not final",
     });
     shape.focus();
     expect(await screen.findByText(/Indy Pen \(party not given\) 55\.0%/)).toBeInTheDocument();
@@ -283,7 +283,9 @@ describe("DistrictMap", () => {
     const other = await screen.findByRole("button", {
       name: "CT-3: no count shown here",
     });
-    expect(screen.getByRole("button", { name: "CT-2: independent leads, 90% in" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "CT-2: independent leads, 90% in, not final" })
+    ).toBeTruthy();
     expect(other.getAttribute("style") ?? "").toMatch(/fill: url\("?#tex-[^"]*-nocount/);
     expect(container.querySelector("pattern[id$='-nocount']")).not.toBeNull();
     expect(screen.getByText("no count shown here")).toBeInTheDocument();

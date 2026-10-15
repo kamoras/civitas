@@ -1,7 +1,8 @@
 import { pageMetadata } from "@/lib/site";
 
-// /politicians/[id] sets its own canonical; anything else added under this
-// segment must too, or it inherits this one (see lib/site.ts).
+// The index page only: this layout sits in the (index) route group, so a
+// record page beneath (and its 404) never inherits this title or canonical.
+// The page is a client component, so its metadata lives here; see lib/site.ts.
 export const metadata = pageMetadata({
   title: "Directory of U.S. Senators, Representatives, President & Justices",
   description:

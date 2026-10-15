@@ -5,6 +5,7 @@ import type {
   DayReport,
   MonthReport,
   PeriodReport,
+  VoteDetail,
 } from "@/types/congress";
 import { headers } from "next/headers";
 import { usableRecord } from "@/lib/ssrPayload";
@@ -92,6 +93,24 @@ export async function fetchBillCommitteeRecord(
   } catch {
     return null;
   }
+}
+
+/** One roll call with every member's position, or null when none is
+ * recorded (404) or the address can't name one (422: a session or number
+ * out of range). A vote never changes once taken; an hour keeps a member
+ * page's link (a name or district fixed overnight) current enough. */
+export function fetchRollCall(
+  chamber: string,
+  congress: string,
+  session: string,
+  number: string
+): Promise<VoteDetail | null> {
+  return getJsonWith<VoteDetail>(
+    `/api/congress/votes/${chamber}/${congress}/${session}/${number}`,
+    { next: { revalidate: 3600 } },
+    "chamber",
+    "members"
+  );
 }
 
 /** A bill's Congress.gov record, or null. `failed` says why it is null: false

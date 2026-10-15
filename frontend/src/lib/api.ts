@@ -793,8 +793,9 @@ export interface ExploreResult {
   // its max-age. Every live response carries them.
   //
   // Which retrieval channels returned this document: "semantic", "keyword",
-  // or both.
-  matchedBy?: ("semantic" | "keyword")[];
+  // and/or "identifier" (the query named this document by its own FR
+  // citation, document number, RIN or order number).
+  matchedBy?: ("semantic" | "keyword" | "identifier")[];
   // Inbound citations from other federal documents in the index — the raw
   // count behind the PageRank authority signal.
   citedByCount?: number;
@@ -858,7 +859,7 @@ export interface ExploreResponse {
   // How many documents each retrieval channel returned before fusion.
   // Useful for spotting a dead channel. Optional for the same
   // proxy-cache reason as the per-result fields above.
-  channels?: { semantic: number; keyword: number };
+  channels?: { semantic: number; keyword: number; identifier?: number };
   // Set when these results came from the keyword channel alone because the
   // vector index is missing or mid-rebuild. Deliberately not the same as
   // `channels.semantic === 0`: a filtered query can retrieve zero vectors
@@ -939,6 +940,12 @@ export interface ExploreDocumentDetail {
   agencyName: string;
   commentUrl: string;
   commentsCloseOn: string;
+  /** The document's own Federal Register citation ("91 FR 48248") and
+   * document number ("2026-15603"); empty for a document the FR did not
+   * publish (api/explore.py fr_reference). Optional only for a backend
+   * older than the fields. */
+  frCitation?: string;
+  frDocNumber?: string;
 }
 
 export interface ExploreDocumentSummary {
@@ -978,10 +985,6 @@ function splitOnce(text: string, marker: string): [string, string?] {
   const i = text.indexOf(marker);
   if (i === -1) return [text, undefined];
   return [text.slice(0, i), text.slice(i + marker.length)];
-}
-
-export async function fetchExploreDocument(id: number): Promise<ExploreDocumentDetail> {
-  return requestJson(`${API_BASE}/explore/${id}`, "Document not found");
 }
 
 // How long a summary request keeps retrying a refusal: long enough to wait
@@ -2183,6 +2186,25 @@ export async function fetchPoliticianDirectory(params?: {
   const query = qs.toString() ? `?${qs.toString()}` : "";
   const url = `${API_BASE}/politicians${query}`;
   return asList(await cachedFetch(url, TTL.SHORT), url);
+}
+
+export interface PoliticianSuggestion {
+  id: string;
+  name: string;
+  role: string;
+  party: string | null;
+  state: string | null;
+}
+
+/** The politicians whose page addresses are closest to one that matched
+ *  no one (a typo, a surname alone): what a member page's 404 offers. */
+export async function fetchPoliticianSuggestions(q: string): Promise<PoliticianSuggestion[]> {
+  const url = `${API_BASE}/politicians/suggest?q=${encodeURIComponent(q)}`;
+  const data = await requestJson<{ suggestions?: PoliticianSuggestion[] }>(
+    url,
+    "Politician suggestions"
+  );
+  return asList(data?.suggestions, url);
 }
 
 /** A state's House districts by county on the sitting Congress's lines —

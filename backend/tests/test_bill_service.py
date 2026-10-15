@@ -152,6 +152,24 @@ class TestFiltering:
         assert result.total == 1
         assert result.bills[0].chamber == "house"
 
+    def test_finds_a_bill_by_number_as_the_site_prints_it(self, db_session):
+        senator = _make_senator(db_session)
+        rep = _make_rep(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.2398", "INTRODUCED")
+        _make_rep_sponsored_bill(db_session, rep.id, "HR.997", "INTRODUCED")
+
+        _make_sponsored_bill(db_session, senator.id, "SRES.15", "INTRODUCED")
+        _make_rep_sponsored_bill(db_session, rep.id, "HR.9977", "INTRODUCED")
+
+        for q, want in (("S. 2398", ["S.2398"]), ("S.2398", ["S.2398"]), ("s 2398", ["S.2398"]),
+                        # A whole number is that bill, not every one it begins.
+                        ("H.R. 997", ["HR.997"]), ("HR 997", ["HR.997"]),
+                        # The number alone, as a prefix, of any type.
+                        ("997", ["HR.997", "HR.9977"]),
+                        ("S 1", [])):
+            result = get_bills_in_flight(db_session, q=q)
+            assert sorted(b.bill_id for b in result.bills) == want, q
+
     def test_filters_by_party(self, db_session):
         dem = _make_senator(db_session, id="s1", party="D")
         rep_member = _make_senator(db_session, id="s2", party="R")

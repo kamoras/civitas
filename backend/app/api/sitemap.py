@@ -123,10 +123,21 @@ def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
     # from the same days.
     congress_days = session_days(db)
 
+    # Every stored roll call has its own page (/congress/votes/...), a bill
+    # or not: half the Senate's are on nominations, which no bill page
+    # lists. A vote never changes once taken, so its date is its lastmod.
+    roll_calls = [
+        {"chamber": chamber, "congress": congress, "session": session, "number": number, "lastmod": _iso_date(day)}
+        for chamber, congress, session, number, day in db.query(
+            RollCall.chamber, RollCall.congress, RollCall.session, RollCall.number, RollCall.date,
+        ).order_by(RollCall.date, RollCall.chamber, RollCall.number)
+    ]
+
     return cached_json(
         {
             "politicians": politicians, "bills": bills, "issues": issues,
             "congressDays": congress_days,
+            "rollCalls": roll_calls,
             # The states with a "what changed on the new map" page.
             "redistricting": redrawn_overlap_states(),
             # Explore documents are listed separately, a page at a time

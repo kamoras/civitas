@@ -128,14 +128,20 @@ function BillsPageContent() {
             <div className="flex flex-wrap gap-3 items-center mt-5 pt-4 border-t border-white/[0.07]">
               <input
                 type="text"
-                placeholder="SEARCH TITLE..."
-                aria-label="Search bill titles"
+                placeholder="TITLE, SPONSOR OR NUMBER"
+                aria-label="Search bills by title, sponsor or bill number"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-48"
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  // "Active now" holds only the few bills an issue names, so a
+                  // search there found almost nothing: search every bill, as a
+                  // ?q= deep link already does.
+                  if (e.target.value.trim()) setMode("all");
+                }}
+                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-60"
               />
 
-              <div className="flex gap-1">
+              <div className="flex gap-1" role="group" aria-label="Filter by chamber">
                 {(["all", "senate", "house"] as ChamberFilter[]).map((c) => (
                   <button
                     key={c}
@@ -150,11 +156,12 @@ function BillsPageContent() {
                 ))}
               </div>
 
-              <div className="flex gap-1">
+              <div className="flex gap-1" role="group" aria-label="Filter by sponsor's party">
                 {(["ALL", "D", "R", "I"] as PartyFilter[]).map((p) => (
                   <button
                     key={p}
                     onClick={() => setParty(p)}
+                    aria-pressed={party === p}
                     className={`font-mono text-xs px-2 py-1 border transition-colors ${
                       party === p ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
@@ -242,7 +249,7 @@ function AllBillsGroups({
 
   if (stageTotals === "loading") {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest animate-pulse">
+      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest pulse-subtle">
         LOADING...
       </div>
     );
@@ -255,12 +262,18 @@ function AllBillsGroups({
     );
   }
 
+  // A search whose matches all sit at one stage (a bill number, nearly
+  // always) opens that stage, so the bill is on screen without another click.
+  const matchingStages =
+    q && stageTotals !== "error" ? ALL_STAGE_CODES.filter((code) => stageTotals[code] > 0) : [];
+
   return (
     <div className="flex flex-col gap-2">
       {ALL_STAGE_CODES.map((code) => (
         <BillStageGroup
           key={code}
           stageCode={code}
+          forceExpanded={matchingStages.length === 1 && matchingStages[0] === code}
           count={stageTotals === "error" ? undefined : (stageTotals[code] ?? 0)}
           chamber={chamber}
           party={party}
@@ -369,7 +382,7 @@ function HotBillsList({
 
   if (loading) {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest animate-pulse">
+      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest pulse-subtle">
         LOADING...
       </div>
     );
