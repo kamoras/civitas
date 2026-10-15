@@ -157,7 +157,13 @@ def is_acting_party(span: str) -> bool:
         return True
     if _names_no_one(span):
         return False
-    return _actor_vote(span) >= actor_calibration()["threshold"]
+    try:
+        return _actor_vote(span) >= actor_calibration()["threshold"]
+    except Exception:
+        # The vote only ever admits what the rule refused, so failing closed
+        # leaves the rule's verdict: the claim is refused, not the run.
+        logger.exception("Actor vote failed for %r — refused, as the rule alone would", span)
+        return False
 
 
 @functools.lru_cache(maxsize=4096)

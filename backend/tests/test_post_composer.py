@@ -465,20 +465,27 @@ class TestTheActingPartyVote:
         assert any(e["actor"] for e in examples) and not all(e["actor"] for e in examples)
 
     def test_a_named_party_never_consults_the_vote(self, monkeypatch):
-        def no_model(span):
-            raise AssertionError(f"vote consulted for {span!r}")
-        monkeypatch.setattr(post_composer, "_actor_vote", no_model)
+        consulted = []
+        monkeypatch.setattr(post_composer, "_actor_vote", lambda span: consulted.append(span) or 1.0)
         assert compose("Sen. Jane Roe", "slammed the agency's new fee rule",
                        "Sen. Jane Roe on Sunday slammed the agency's new fee rule.") is not None
+        assert consulted == []
 
     def test_a_pronoun_led_party_never_reaches_the_vote(self, monkeypatch):
         """"its spokesman" points at a party only through someone the span
         doesn't name; the embedding reads "spokesman" and would vote actor."""
-        def no_model(span):
-            raise AssertionError(f"vote consulted for {span!r}")
-        monkeypatch.setattr(post_composer, "_actor_vote", no_model)
+        consulted = []
+        monkeypatch.setattr(post_composer, "_actor_vote", lambda span: consulted.append(span) or 1.0)
         src = "The agency declined to comment, but its spokesman denied the report on Friday."
         assert compose("its spokesman", "denied the report on Friday", src) is None
+        assert consulted == []
+
+    def test_a_failed_vote_refuses_the_span_not_the_run(self, monkeypatch):
+        def broken(span):
+            raise RuntimeError("similarity model unavailable")
+        monkeypatch.setattr(post_composer, "_actor_vote", broken)
+        src = "A federal judge on Sunday blocked the agency's new fee rule."
+        assert compose("A federal judge", "blocked the agency's new fee rule", src) is None
 
     def test_the_vote_decides_what_the_rule_refuses(self, monkeypatch):
         src = "A federal judge on Sunday blocked the agency's new fee rule."

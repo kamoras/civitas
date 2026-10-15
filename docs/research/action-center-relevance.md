@@ -230,8 +230,8 @@ and in full in another). The curated preview is no longer caught. The
 title patterns are unchanged.
 
 A two-story briefing escapes that check by construction: its headline names
-both stories ("Government spent millions on Trump ads. And, federal agents
-raid Ilhan Omar's home") and its body has two items, under the three-item
+both stories ("Government spent millions on campaign ads. And, federal
+agents raid a lawmaker's home") and its body has two items, under the three-item
 floor. `_parallel_stories` (2026-10-15) catches the shape both halves share:
 the headline splits into items naming disjoint entities, the body's items are
 disjoint too, and each body item names exactly one headline item's entities,
