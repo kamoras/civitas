@@ -99,6 +99,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                       {" · "}
                       <Link href={billHref(vote.billId, vote.congress)} className={LINK}>
                         {vote.billLabel}
+                        {vote.billShortTitle ? `, ${vote.billShortTitle}` : ""}
                       </Link>
                     </>
                   )}
