@@ -54,8 +54,9 @@ async function fetchMode(now: number): Promise<"campaign" | "election_day" | "re
   }
 }
 
-// Canonical /elections. The state pages beneath set their own; the
-// /elections/[raceId] route only redirects. See lib/site.ts.
+// Canonical /elections, for the index page only: this layout sits in the
+// (index) route group, so the state, redistricting and race pages beneath
+// (and their 404s) never inherit it. See lib/site.ts.
 export async function generateMetadata(): Promise<Metadata> {
   const [cycleYear, mode] = await Promise.all([fetchCycleYear(), fetchMode(Date.now())]);
   return pageMetadata({

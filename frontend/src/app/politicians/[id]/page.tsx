@@ -3,7 +3,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import { fetchRecord } from "@/lib/ssrPayload";
-import { absoluteUrl, pageMetadata } from "@/lib/site";
+import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import { describeProfile, personJsonLd } from "@/lib/seo";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
@@ -60,12 +60,7 @@ export async function generateMetadata({
   const profile = await fetchProfile(id);
 
   if (!profile) {
-    return pageMetadata({
-      title: "Politician not found",
-      description: "No record for this id.",
-      path: `/politicians/${encodeURIComponent(id)}`,
-      noindex: true,
-    });
+    return notFoundMetadata("Politician not found", "No record for this id.");
   }
 
   // The canonical is the record's own id: a renamed member's old URL

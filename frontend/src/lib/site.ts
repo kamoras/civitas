@@ -8,9 +8,14 @@ import type { Metadata } from "next";
  * Canonical URLs are set per route, never in the root layout. `alternates`
  * is inherited by every nested segment that doesn't set its own, so a
  * canonical on the root would tell Google every page on the site is a
- * duplicate of the homepage. The same holds for a section layout
- * (`/politicians`, `/explore`...): any dynamic child under it must set its
- * own canonical, or it inherits the section's.
+ * duplicate of the homepage. The same holds for a section layout: a
+ * section whose index page is a client component (`/politicians`,
+ * `/congress/bills`, `/elections`, `/explore`) keeps that page's metadata in
+ * a layout inside an `(index)` route group, wrapping the index alone. A
+ * record page beneath can set its own, but its 404 can't (Next resolves a
+ * not-found page's metadata from the layouts above it only), so a section
+ * layout's title and canonical used to label every missing member, bill
+ * and state as the directory.
  */
 export const SITE_URL = "https://civitas-research.org";
 export const SITE_NAME = "Civitas";
@@ -149,6 +154,21 @@ export function pageMetadata({
     },
     ...(noindex ? { robots: { index: false, follow: true } } : {}),
   };
+}
+
+/**
+ * A missing record's head, for a record route's generateMetadata: its own
+ * title, noindex, and no canonical or og:url, since a 404 is not a page to
+ * point at (pageMetadata would declare one).
+ *
+ * A route's notFound() discards its page's generateMetadata (Next resolves
+ * a not-found page's head from the layouts above it), so each record route
+ * also has a layout that sets only the 404's title: on a found record the
+ * page's own title replaces it, and the layout sets no robots or canonical
+ * that a found page would inherit.
+ */
+export function notFoundMetadata(title: string, description: string): Metadata {
+  return { title, description, robots: { index: false, follow: true } };
 }
 
 /**

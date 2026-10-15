@@ -1,6 +1,6 @@
 import RecordNotFound from "@/components/notFound/RecordNotFound";
 
-/** A document address with no document behind it (`explore/[id]/layout`
+/** A document address with no document behind it (`explore/[id]/page`
  * calls notFound(), so this segment's boundary renders). */
 export default function ExploreNotFound() {
   return (
