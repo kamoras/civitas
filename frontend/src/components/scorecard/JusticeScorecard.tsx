@@ -242,6 +242,7 @@ export default function JusticeScorecard({
                 <Photo
                   src={j.thumbnailUrl}
                   alt=""
+                  sizes="96px"
                   className={`h-28 w-24 shrink-0 border-2 object-cover ${party.border}`}
                 />
               )}

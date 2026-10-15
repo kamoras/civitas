@@ -477,8 +477,7 @@ def stock_trades_overrun_budget() -> timedelta:
 
 
 def overrun_condition(label: str) -> str:
-    """The open-alert condition for a pipeline running past its budget,
-    shared with the action refresh's own overrun alerts (scheduler.py)."""
+    """The open-alert condition for a pipeline running past its budget."""
     return f"overrun-{label.lower().replace(' ', '-')}"
 
 
@@ -491,11 +490,12 @@ def check_pipeline_overrun() -> None:
     Supplementary or Stock run generated zero automatic alert, unlike
     the other two. Confirmed live: this contributed to stock-trades data
     going stale for 4+ days and supplementary data for 1+ day with
-    nothing telling an operator to look. Per-pipeline budgets mirror the
-    ones scheduler.py's _hourly_action_refresh already uses for the same
-    four checks (Supplementary gets Senate/House's 8h, not Stock's
-    tighter stock_trades_overrun_budget() — its weekly SCOTUS-refresh day includes an uncached
-    Oyez crawl that took 5h+ in run 69).
+    nothing telling an operator to look. Supplementary gets Senate/House's
+    budget, not Stock's tighter stock_trades_overrun_budget() — its weekly
+    SCOTUS-refresh day includes an uncached Oyez crawl that took 5h+ in
+    run 69. The only overrun alert: the hourly Action Center refresh,
+    which raised its own until it stopped standing down for the chain
+    (2026-10).
     """
     from app.pipeline.run_tracker import live_run
 
@@ -522,7 +522,7 @@ def check_pipeline_overrun() -> None:
         age = utcnow() - run.started_at if run is not None else None
         if age is None or age <= budget:
             # Finished, or still inside its budget: an overrun alert from
-            # this watchdog or the action refresh's (scheduler.py) is over.
+            # this watchdog is over.
             resolve_ops_alert(condition)
         else:
             hours = age.total_seconds() / 3600

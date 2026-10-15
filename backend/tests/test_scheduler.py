@@ -129,48 +129,26 @@ class TestActionRefreshOverlapGuard:
         mock_refresh.assert_not_called()
 
 
-class TestStockTradesOverlapGuard:
-    """Stock trades runs sequentially after House within the same nightly
-    thread, so by the time it starts, House's own running flag is already
-    cleared — the pre-existing Senate/House guards can't see it. Without
-    this guard the hourly refresh could run concurrently with stock trades,
-    the same SQLite-write-conflict risk the House guard exists to prevent."""
+class TestActionRefreshRunsBesideTheChain:
+    """The refresh no longer stands down for the nightly chain's links: it
+    did until 2026-10, and the Action Center went as stale as the chain was
+    long (13 hours on 2026-10-14). Measured, the two don't compete (see
+    _hourly_action_refresh); overruns are ops_alerts.check_pipeline_overrun's."""
 
-    def test_skips_when_stock_pipeline_is_running_and_recent(self):
+    @pytest.mark.parametrize("running", [
+        {"house_running": True},
+        {"stock_running": True, "stock_age": timedelta(minutes=30)},
+        {"supplementary_running": True, "supplementary_age": timedelta(hours=1)},
+    ])
+    def test_proceeds_while_a_chain_link_runs(self, running):
         state = {"is_running": False, "started_at": None}
-        mock_refresh = _run_hourly_refresh(state, stock_running=True, stock_age=timedelta(minutes=30))
-        mock_refresh.assert_not_called()
-
-    def test_proceeds_when_stock_pipeline_running_flag_is_stale_beyond_2_hours(self):
-        state = {"is_running": False, "started_at": None}
-        # Past the 2h trade budget plus the time-boxed steps (ops_alerts.
-        # stock_trades_overrun_budget, about 3h06m).
-        mock_refresh = _run_hourly_refresh(state, stock_running=True, stock_age=timedelta(hours=4))
+        mock_refresh = _run_hourly_refresh(state, **running)
         mock_refresh.assert_called_once()
 
-
-class TestSupplementaryOverlapGuard:
-    """Explore docs/SCOTUS/presidents now run as their own pipeline
-    (extracted from Senate's run_senate_pipeline — see
-    supplementary_pipeline.py) between Senate and House in the nightly
-    sequence, so the hourly refresh needs its own guard the same way
-    House and stock trades already have one."""
-
-    def test_skips_when_supplementary_pipeline_is_running_and_recent(self):
+    def test_proceeds_while_the_senate_pipeline_runs(self):
         state = {"is_running": False, "started_at": None}
-        mock_refresh = _run_hourly_refresh(
-            state, supplementary_running=True, supplementary_age=timedelta(hours=1),
-        )
-        mock_refresh.assert_not_called()
-
-    def test_proceeds_when_supplementary_pipeline_running_flag_is_stale_beyond_8_hours(self):
-        # 8h, not stock's 2h: a weekly SCOTUS refresh includes the uncached
-        # per-case Oyez crawl, which took 5h+ in run 69 — a legitimately
-        # slow run must not be misdiagnosed as hung.
-        state = {"is_running": False, "started_at": None}
-        mock_refresh = _run_hourly_refresh(
-            state, supplementary_running=True, supplementary_age=timedelta(hours=9),
-        )
+        with patch("app.pipeline.run_tracker.live_run", return_value=MagicMock(id=1, started_at=utcnow())):
+            mock_refresh = _run_hourly_refresh(state)
         mock_refresh.assert_called_once()
 
 
@@ -763,9 +741,8 @@ class TestElectionResultsReadiness:
 
 def test_the_congress_sync_sends_held_posts_even_when_its_own_posting_fails():
     """The window's opening reaches Bluesky from the half-hourly Congress
-    sync, which keeps running through the nightly pipeline (the hourly
-    Action Center run stands down for it), and a Congress post that fails
-    to compose doesn't take the held posts with it."""
+    sync as well as the hourly Action Center run, and a Congress post that
+    fails to compose doesn't take the held posts with it."""
     from app import scheduler
 
     with patch("app.background.threading.Thread", _SyncThread), \

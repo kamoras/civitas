@@ -2176,6 +2176,25 @@ export async function fetchPoliticianDirectory(params?: {
   return asList(await cachedFetch(url, TTL.SHORT), url);
 }
 
+export interface PoliticianSuggestion {
+  id: string;
+  name: string;
+  role: string;
+  party: string | null;
+  state: string | null;
+}
+
+/** The politicians whose page addresses are closest to one that matched
+ *  no one (a typo, a surname alone): what a member page's 404 offers. */
+export async function fetchPoliticianSuggestions(q: string): Promise<PoliticianSuggestion[]> {
+  const url = `${API_BASE}/politicians/suggest?q=${encodeURIComponent(q)}`;
+  const data = await requestJson<{ suggestions?: PoliticianSuggestion[] }>(
+    url,
+    "Politician suggestions"
+  );
+  return asList(data?.suggestions, url);
+}
+
 /** A state's House districts by county on the sitting Congress's lines —
  *  how /politicians finds a reader's member from a county they know. */
 export async function fetchHouseDistrictsByCounty(state: string): Promise<HouseDistrictsByCounty> {
