@@ -1898,8 +1898,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```bash
 docker compose run --rm --no-deps backend python -m pytest tests/ -v
 
-# Fast tests only (skips the tests that load the sentence-transformer model)
-docker compose run --rm --no-deps backend python -m pytest tests/ -v -m "not slow"
+# Fast tests only (skips the tests that load the sentence-transformer model),
+# on 4 pytest-xdist workers
+docker compose run --rm --no-deps backend python -m pytest tests/ -v -m "not slow" -n 4
 
 # Only the embedding-model tests
 docker compose run --rm --no-deps backend python -m pytest tests/ -v -m slow

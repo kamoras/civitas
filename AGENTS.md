@@ -1531,8 +1531,9 @@ cd backend && .venv/bin/python -m pytest tests/ -v
 # Via Docker
 docker compose run --rm --no-deps backend python -m pytest tests/ -v
 
-# Fast tests only (no embedding model; runs offline)
-docker compose run --rm --no-deps backend python -m pytest tests/ -v -m "not slow"
+# Fast tests only (no embedding model; runs offline). -n N runs N
+# pytest-xdist workers; CI uses -n auto
+docker compose run --rm --no-deps backend python -m pytest tests/ -v -m "not slow" -n 4
 ```
 
 Test configuration is in `backend/pytest.ini`. Async tests use
@@ -1541,6 +1542,18 @@ model `@pytest.mark.slow`** (~10s startup). The fast job runs `-m "not
 slow"` on every PR and must pass with no network access and no model; the
 Embedding Tests job runs `-m slow` on pushes to `main` and on any PR that
 touches `backend/requirements.txt` or `backend/app/pipeline/`.
+
+`conftest.py` holds the fast tests to that: in a test not marked slow,
+constructing a sentence-transformer raises at once and resolving any host
+but loopback fails at once, on CI as offline (`_fast_tests_offline`). Until
+2026-10 a fast test that reached the model downloaded it on CI and waited
+out the Hub client's retries offline (69 s a test), and one whose mocks
+missed a fetch read the live source on CI. The fetch modules' rate limiters
+and the retry functions' default backoff don't sleep in tests either
+(`_fetches_do_not_wait`); a test about the waiting builds its own
+`RateLimiter` or passes `backoff_s`. Every test must also pass under xdist,
+where each worker is its own process with its own share of the files: no
+test may rely on another having run first in the same process.
 
 ### Environment variables
 
