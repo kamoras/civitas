@@ -21,7 +21,8 @@
     "next": "^16.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-simple-maps": "^5.0.5"
+    "react-simple-maps": "^5.0.5",
+    "sharp": ">=0.35.5"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.2",
@@ -40,7 +41,6 @@
     "knip": "^6.38.0",
     "postcss": "^8.5.28",
     "prettier": "^3.9.9",
-    "sharp": ">=0.35.5",
     "tailwindcss": "^4.3.2",
     "typescript": "~6.0.3",
     "vite": "^8.3.4",
