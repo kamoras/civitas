@@ -520,7 +520,6 @@ _PUBLISHING_PATHS = {
 # make the next nightly run cold.
 _ACTION_CENTER_PATHS = {
     "pipeline/analyze/action_center.py",
-    "pipeline/analyze/action_thresholds.py",
     "pipeline/analyze/bluesky_engagement.py",
     "pipeline/analyze/claims.py",
     "pipeline/analyze/early_signal.py",

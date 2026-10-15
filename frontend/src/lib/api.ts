@@ -1000,6 +1000,10 @@ export interface ExploreDocumentDetail {
    * older than the fields. */
   frCitation?: string;
   frDocNumber?: string;
+  /** A floor speech's bills, named in the Record heading it was given
+   * under, each with the Congress of the day (api/explore.py). Optional only
+   * for a backend older than the field. */
+  bills?: { billId: string; label: string | null; congress: number }[];
 }
 
 export interface ExploreDocumentSummary {

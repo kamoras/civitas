@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LobbyingMatch } from "@/types/senator";
 import { formatCurrency, safeHref } from "@/lib/formatting";
 import { billPageHref } from "@/lib/congress";
+import { VoteRow } from "./VotingRecord";
 
 interface LobbyingMatchesProps {
   matches: LobbyingMatch[];
@@ -28,6 +29,9 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
           const lobbied = match.lobbiedBills ?? [];
           // The backend keeps billsInfluenced to bills no filing names.
           const topical = match.billsInfluenced;
+          // The member's own vote on each, with its roll call; a response
+          // served before they were recorded falls back to the bare ids.
+          const votes = match.relatedVotes ?? [];
           return (
             <div key={i} className="panel p-4 border-l-2 border-l-signal-cyan/40">
               {/* The industry is the finding and its total is the industry's;
@@ -114,7 +118,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                     </ul>
                   </div>
                 )}
-                {topical.length > 0 && (
+                {topical.length > 0 && votes.length === 0 && (
                   <div className="flex items-center gap-1 flex-wrap">
                     <span>TOPICALLY RELATED BILLS:</span>
                     {topical.map((b, j) => {
@@ -136,6 +140,29 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
               </div>
 
               <p className="text-base text-ink">{match.description}</p>
+
+              {votes.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-xs font-mono text-ink-lo">
+                    THIS MEMBER&apos;S VOTES ON THE RELATED BILLS:
+                  </div>
+                  <ul>
+                    {votes.map((v) => (
+                      <VoteRow
+                        key={`${v.billId ?? v.title}|${v.rollCall?.number ?? v.date}`}
+                        vote={{
+                          billName: v.label && !v.rollCall ? `${v.label}: ${v.title}` : v.title,
+                          billId: v.billId ?? "",
+                          date: v.date,
+                          vote: v.vote,
+                          votedWithParty: null,
+                          rollCall: v.rollCall,
+                        }}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           );
         })}

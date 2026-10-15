@@ -22,11 +22,12 @@ from collections.abc import Awaitable, Callable
 import httpx
 from sqlalchemy.orm import Session
 
-from app.models import RepSponsoredBill, RollCall, RollCallPosition, Representative, Senator, SponsoredBill
+from app.models import ExploreDocument, RepSponsoredBill, RollCall, RollCallPosition, Representative, Senator, SponsoredBill
 from app.config import settings
 from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async, api_cache_set_many_async
-from app.pipeline.fetch.congress import CONGRESS_API_BASE, congress_gov_bill_url
+from app.pipeline.fetch.congress import CONGRESS_API_BASE, congress_gov_bill_url, congress_of_date
+from app.pipeline.fetch.daily_digest import heading_bill_ids
 from app.pipeline.fetch import floor_logs
 from app.pipeline.fetch.bill_display_titles import cached_display_titles, titles_key
 from app.pipeline.fetch.http_utils import fetch_with_retry
@@ -490,6 +491,61 @@ def bill_votes(db: Session, congress: int, bill_id: str) -> list[dict]:
     } for rc in votes]
 
 
+# Explore's floor speeches (explore_pipeline._SPEECH_TYPES).
+SPEECH_DOC_TYPES = ("Senate Floor Speech", "House Floor Speech")
+# floor_speech.titled_speeches titles a turn "Remarks on <heading>": the
+# heading after it is the Record's own.
+_REMARKS_ON = re.compile(r"^Remarks on ")
+
+
+def speech_bills(title: str | None, date: str | None) -> list[dict]:
+    """The bills a floor speech's Record heading names ("S.J. RES. 188"),
+    each with the Congress of the day it was given: a bill number names a
+    different bill in each Congress. Stated identifiers only, never a guess
+    from the speech's words."""
+    congress = congress_of_date(date or "")
+    if congress is None:
+        return []
+    return [{"billId": b, "label": bill_label(b), "congress": congress} for b in heading_bill_ids(title or "")]
+
+
+def floor_debate(db: Session, congress: int, bill_id: str) -> list[dict]:
+    """The floor speeches whose Record heading names this bill, in the
+    bill's Congress, grouped by day, chamber and heading (a debate is one
+    heading with many speakers, each listed once at their first turn),
+    newest first. Read from the stored
+    headings when the page is served; the speech text is never searched."""
+    number = bill_id.split(".", 1)[-1]
+    rows = (
+        db.query(ExploreDocument.id, ExploreDocument.title, ExploreDocument.date, ExploreDocument.chamber,
+                 ExploreDocument.politician_name, ExploreDocument.politician_id)
+        .filter(ExploreDocument.doc_type.in_(SPEECH_DOC_TYPES), ExploreDocument.title.contains(number))
+        .order_by(ExploreDocument.date.desc(), ExploreDocument.id)
+        .all()
+    )
+    groups: dict[tuple, dict] = {}
+    for r in rows:
+        if congress_of_date(r.date or "") != congress or bill_id not in heading_bill_ids(r.title or ""):
+            continue
+        heading = _REMARKS_ON.sub("", r.title or "")
+        group = groups.setdefault((r.date, r.chamber, heading), {
+            "date": r.date, "chamber": (r.chamber or "").lower(), "heading": heading, "speakers": {},
+        })
+        # A debate is a back-and-forth: each member once, at their first
+        # turn, with how many turns they took (each turn is a speech).
+        key = r.politician_id or r.politician_name or r.id
+        speaker = group["speakers"].setdefault(key, {
+            "speaker": r.politician_name or "", "politicianId": r.politician_id, "speechId": r.id, "speeches": 0,
+        })
+        speaker["speeches"] += 1
+    return [{**g, "speakers": list(g["speakers"].values())} for g in groups.values()]
+
+
+def _floor(debate: list[dict]) -> dict:
+    count = sum(sp["speeches"] for d in debate for sp in d["speakers"])
+    return {"floorDebate": debate, "floorSpeechCount": count}
+
+
 def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
     links = MemberLinks(db)
     bill = raw.get("bill") or (_stored_bill(db, congress, bill_id) if "bill" in (raw.get("unavailable") or []) else {})
@@ -538,6 +594,7 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
             for t in raw.get("text") or []
         ],
         "votes": vote_summaries,
+        **_floor(floor_debate(db, congress, bill_id)),
         "days": bill_days(db, bill_id, congress),
         "congressGovUrl": congress_gov_bill_url(
             congress, _CONGRESS_GOV_TYPE.get(parse_bill_id(bill_id)[0], "bill"), parse_bill_id(bill_id)[1],

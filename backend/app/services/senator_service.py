@@ -20,6 +20,7 @@ from app.pipeline.analyze.sponsorship_analysis import (
 from app.services._scorecard_common import (
     pac_share_pct,
     party_line_counts,
+    related_votes,
     score_breakdown,
     vote_period_start,
     vote_search,
@@ -303,6 +304,9 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
                 lobbying_spend=lm.lobbying_spend,
                 donation_to_senator=lm.donation_to_senator,
                 bills_influenced=json.loads(lm.bills_influenced) if lm.bills_influenced else [],
+                related_votes=related_votes(
+                    db, json.loads(lm.bills_influenced) if lm.bills_influenced else [], key_votes,
+                ),
                 senator_vote_aligned=lm.senator_vote_aligned,
                 description=lm.description,
                 lobbied_bills=json.loads(lm.lobbied_bills) if lm.lobbied_bills else [],

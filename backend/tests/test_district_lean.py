@@ -11,8 +11,11 @@ import struct
 
 import numpy as np
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from app import district_lean
+from app.api.router import api_router
 
 _BACKEND = pathlib.Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("build_district_lean", _BACKEND / "scripts" / "build_district_lean.py")
@@ -182,3 +185,53 @@ def test_texas_is_the_independent_cross_check_and_california_is_labelled_not():
     assert all(v["independent"] for k, v in checks.items() if k.startswith("TX-"))
     assert checks["CA-119-2024"]["independent"] is False  # also CA's correction source
     assert checks["TX-119-2024"]["maxAbsDiffPts"] <= 0.1
+
+
+# --- the table as data: the public API's JSON and the CSV ---------------------
+
+
+def test_the_published_table_has_every_district_on_both_maps(monkeypatch):
+    """A researcher gets the whole table, both maps, with Cook's figure for
+    the same lines beside each, and what a citation needs (2026-10: the
+    methods section had no data link at all)."""
+    cook = {"119": {"AL-1": 27}, "120": {}}
+    monkeypatch.setattr(district_lean, "district_pvi_for_congress",
+                        lambda c: (cook.get(str(c), {}), {"congress": 119}))
+    table = district_lean.published()
+    assert [c["congress"] for c in table["congresses"]] == sorted(int(c) for c in DATA["congresses"])
+    for block in table["congresses"]:
+        lines = DATA["congresses"][str(block["congress"])]["districts"]
+        assert {d["district"]: d["computedLean"] for d in block["districts"]} == lines
+    al1 = {c["congress"]: next(d for d in c["districts"] if d["district"] == "AL-1") for c in table["congresses"]}
+    # Cook's 119th table stands beside the 119th lines only, never the 120th's.
+    assert al1[119]["cookPvi"] == 27 and al1[120]["cookPvi"] is None
+    assert table["sha256"] and len(table["sha256"]) == 64
+    assert all(i["license"] for i in table["inputs"])
+    assert len(table["corrections"]) == len(DATA["corrections"]) and all(c["officialUrl"] for c in table["corrections"])
+
+
+def test_the_csv_holds_the_same_rows_as_the_json(monkeypatch):
+    monkeypatch.setattr(district_lean, "district_pvi_for_congress", lambda c: ({"AK-0": 6}, {"congress": c}))
+    lines = district_lean.csv_text().splitlines()
+    assert lines[0] == ",".join(district_lean.CSV_COLUMNS)
+    rows = [line.split(",") for line in lines[1:]]
+    table = district_lean.published()
+    assert len(rows) == sum(len(c["districts"]) for c in table["congresses"])
+    first = table["congresses"][0]
+    ak = next(r for r in rows if r[0] == str(first["congress"]) and r[1] == "AK-0")
+    assert ak == [str(first["congress"]), "AK-0", "AK", "0", str(DATA["congresses"][str(first["congress"])]["districts"]["AK-0"]), "6"]
+
+
+def test_the_csv_is_served_as_a_download(client_api):
+    resp = client_api.get("/api/elections/district-lean.csv")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/csv")
+    assert "attachment" in resp.headers["content-disposition"]
+    assert resp.text.startswith("congress,district,state,number,computed_lean,cook_pvi\n")
+
+
+@pytest.fixture
+def client_api():
+    app = FastAPI()
+    app.include_router(api_router)
+    return TestClient(app)
