@@ -34,6 +34,7 @@ from app.schemas import (
 from app.services._scorecard_common import (
     pac_share_pct,
     party_line_counts,
+    related_votes,
     score_breakdown,
     vote_period_start,
     vote_search,
@@ -186,6 +187,9 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
                 "billsInfluenced": readable_vote_bills(
                     _db, json.loads(lm.bills_influenced) if lm.bills_influenced else [], key_votes,
                 ),
+                "relatedVotes": related_votes(
+                    _db, json.loads(lm.bills_influenced) if lm.bills_influenced else [], key_votes,
+                ) if _db else [],
                 "senatorVoteAligned": lm.representative_vote_aligned,  # key shared with senator schema
                 "description": lm.description,
                 "lobbiedBills": json.loads(lm.lobbied_bills) if lm.lobbied_bills else [],

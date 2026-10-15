@@ -357,11 +357,14 @@ export default function PresidentScorecard({
   breakdown,
   rank,
   titleAs: Title = "h1",
+  scoredOn = null,
 }: {
   president: President;
   breakdown: PresidentScoreBreakdown | null;
   rank?: { rank: number; of: number } | null;
   titleAs?: "h1" | "h2";
+  /** The latest scoring run: what a shared image's figures are as of. */
+  scoredOn?: { date: string } | null;
 }) {
   // Each score's actual share of this president's overall, from the
   // backend; the nominal weights only for a payload that predates it.
@@ -388,6 +391,11 @@ export default function PresidentScorecard({
             colorClass: getScoreColor(overall),
           },
     url: absoluteUrl(`/politicians/${encodeURIComponent(president.id)}`),
+    // The sources the header links (left out of the picture, so named here).
+    source:
+      "American Presidency Project approval polls; BLS jobs; BEA GDP; Federal Register; C-SPAN Presidential Historians Survey",
+    asOf: scoredOn?.date ?? null,
+    scaleMax: 100,
   };
 
   useEffect(() => {

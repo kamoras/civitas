@@ -48,6 +48,7 @@ from app.broadcast import SITE_URL
 from app.config import settings
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db, off_loop
+from app import district_lean
 from app.district_lean import lean_for as computed_lean_for
 from app.member_ids import resolve_member_id
 from app.models import Justice, President, Representative, ScoreSnapshot, Senator
@@ -65,6 +66,7 @@ from app.score_display import displayed_rank
 from app.schemas import (
     PublicApiIndexSchema,
     PublicBillVotesSchema,
+    PublicDistrictLeanSchema,
     PublicHistorySchema,
     PublicMemberVotesSchema,
     PublicPresidentialSupportSchema,
@@ -282,6 +284,26 @@ _RENAMED_ID = (" An id the member had before a rename still works: the record co
                " current id (`id`, `siteUrl`).")
 
 
+def _latest_snapshot(db: Session, entity_type: str, member_id: str) -> ScoreSnapshot | None:
+    """The member's newest score snapshot: the run that stored the scores
+    a profile and a breakdown publish."""
+    return (
+        db.query(ScoreSnapshot)
+        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
+        .order_by(ScoreSnapshot.date.desc())
+        .first()
+    )
+
+
+def _method(snapshot: ScoreSnapshot | None) -> dict:
+    """Which scoring version stored the scores, and when: what a citation
+    of a score needs (the same two fields as the breakdown's)."""
+    return {
+        "algorithmVersion": snapshot.algorithm_version if snapshot else None,
+        "scoredOn": snapshot.date if snapshot else None,
+    }
+
+
 def _history(db: Session, entity_type: str, model, member_id: str, request: Request) -> JSONResponse:
     member_id = resolve_member_id(db, member_id)
     if db.get(model, member_id) is None:
@@ -305,6 +327,7 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
                     "constituentAlignment": round(s.score_3, 1),
                     "fundingDiversity": round(s.score_4, 1),
                     "legislativeEffectiveness": round(s.score_5, 1),
+                    "algorithmVersion": s.algorithm_version,
                 }
                 for s in snapshots
             ],
@@ -354,12 +377,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
     house = entity_type == "representative"
     chamber = "house" if house else "senate"
     explained = (get_representative_score_breakdown if house else get_senator_score_breakdown)(db, member_id)
-    snapshot = (
-        db.query(ScoreSnapshot)
-        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
-        .order_by(ScoreSnapshot.date.desc())
-        .first()
-    )
+    snapshot = _latest_snapshot(db, entity_type, member_id)
     district = member.district if house else None
     with lines_of(member.district_lines_congress if house else None):
         cook_pvi = _seat_pvi(member.state, district)
@@ -386,8 +404,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
             "chamber": chamber,
             "party": member.party,
             "siteUrl": _member_url(member_id),
-            "algorithmVersion": snapshot.algorithm_version if snapshot else None,
-            "scoredOn": snapshot.date if snapshot else None,
+            **_method(snapshot),
             "recomputedWith": ALGORITHM_VERSION,
             "overall": compute_overall_score(member),
             "weights": SCORE_WEIGHTS,
@@ -514,6 +531,7 @@ def openapi_spec_dict() -> dict:
                 {"name": "Bills", "description": "The roll calls on a bill, with each party's split."},
                 {"name": "Votes with the president", "description": "How often each member voted with the president's stated position (OMB Statements of Administration Policy), beside what members of the same party in similar seats do. Informational: not part of any score."},
                 {"name": "Search", "description": "The government documents behind the records, searched the way the site's Explore page does."},
+                {"name": "Districts", "description": "Every House district's partisan lean as Civitas computes it from open precinct returns, on both maps, with Cook's beside it. Shown for comparison: no score uses it."},
                 {"name": "Reference", "description": "What the API offers, and the states it covers."},
             ],
             summary="Open, read-only access to Civitas's scores, member records and document search.",
@@ -594,6 +612,24 @@ def list_states(
     return _pub_json(result, request, max_age=CACHE_TTL_REFERENCE_S)
 
 
+@router.get("/district-lean", response_model=PublicDistrictLeanSchema, tags=["Districts"],
+            summary="Every House district's computed lean, on both maps")
+def get_district_lean(_rl: PublicReadLimit, request: Request) -> JSONResponse:
+    """Civitas's partisan lean for all 435 districts on the 119th Congress's
+    lines and on the 2026 lines, with Cook's published PVI beside each,
+    the method, every input and its license, each correction with its
+    certified source, and the agreement with Cook. The same districts as
+    CSV: `csvUrl`."""
+    table = district_lean.published()
+    if table is None:
+        raise HTTPException(status_code=503, detail="The district lean table is unavailable")
+    return _pub_json(
+        {**table, "csvUrl": f"{SITE_URL}{district_lean.CSV_PATH}",
+         "siteUrl": f"{SITE_URL}{district_lean.METHOD_HREF}"},
+        request, max_age=CACHE_TTL_REFERENCE_S,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Senators
 # ---------------------------------------------------------------------------
@@ -651,7 +687,11 @@ def get_senator(
     if senator is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     return _pub_json(
-        {**senator.model_dump(by_alias=True), "siteUrl": _member_url(senator.id)},
+        {
+            **senator.model_dump(by_alias=True),
+            "siteUrl": _member_url(senator.id),
+            **_method(_latest_snapshot(db, "senator", senator.id)),
+        },
         request, max_age=CACHE_TTL_DETAIL_S,
     )
 
@@ -775,7 +815,11 @@ def get_representative(
     if rep is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     return _pub_json(
-        {**rep.model_dump(by_alias=True), "siteUrl": _member_url(rep.id)},
+        {
+            **rep.model_dump(by_alias=True),
+            "siteUrl": _member_url(rep.id),
+            **_method(_latest_snapshot(db, "representative", rep.id)),
+        },
         request, max_age=CACHE_TTL_DETAIL_S,
     )
 

@@ -14,9 +14,11 @@ from app.api.rate_limit import (
     PublicReadLimit, UpstreamRouteLimit, WriteRateLimit, client_ip, limit_client, retry_after, spend_upstream,
 )
 from app.api.response_helpers import (
+    CACHE_TTL_DETAIL_S,
     EXPLORE_CHAMBERS,
     EXPLORE_DOC_TYPES,
     RETRY_SOON_CACHE_CONTROL,
+    cached_json,
     retry_soon_json,
 )
 from app.database import get_db, off_loop
@@ -24,7 +26,9 @@ from app.member_ids import resolve_member_id
 from app.models import ExploreDocument
 from app.pipeline.analyze.document_authority import declared_identifiers
 from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
+from app.services.explore_matches import explore_matches
 from app.services.explore_search import browse_documents, hybrid_search
+from app.services.bill_record import SPEECH_DOC_TYPES, speech_bills
 from app.time_utils import comment_period_today
 
 logger = logging.getLogger(__name__)
@@ -192,6 +196,19 @@ async def explore_stats(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/matches")
+def explore_matches_route(
+    _rl: PublicReadLimit,
+    q: str = Query(..., min_length=2, max_length=200, description="The search, as typed into Explore"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """The sitting members and the bills a search names, offered beside
+    Explore's document results as their own groups (services/
+    explore_matches.py): never fused into the document ranking. A plain
+    def: name and title matching over the cached lists, on the threadpool."""
+    return cached_json(explore_matches(db, q), max_age=CACHE_TTL_DETAIL_S)
+
+
 async def _load_document(db: Session, doc_id: int) -> ExploreDocument | None:
     """The document, read off the event loop on a session of its own
     (off_loop) and detached from it, its columns loaded."""
@@ -266,6 +283,8 @@ async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
             "agencyName": doc.agency_name or "",
             "commentUrl": doc.comment_url or "",
             "commentsCloseOn": doc.comments_close_on or "",
+            # A floor speech's bill, from the Record heading it was given under.
+            "bills": speech_bills(doc.title, doc.date) if doc.doc_type in SPEECH_DOC_TYPES else [],
             **fr_reference(doc),
         },
         headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=300"},

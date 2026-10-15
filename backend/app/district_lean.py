@@ -11,17 +11,28 @@ The file is bundled and only changes with a release (nothing rewrites it at
 runtime), so it is read once per process.
 """
 
+import csv
 import functools
+import hashlib
+import io
 import json
 import logging
 import pathlib
 
+from app.pipeline.fetch.district_pvi import district_pvi_for_congress
+
 logger = logging.getLogger(__name__)
 
 PATH = pathlib.Path(__file__).resolve().parent / "data" / "district_lean.json"
+# The script's curated input: each precinct-file error and its certified
+# source, with the source's URL where the built file keeps only its key.
+CORRECTIONS_PATH = PATH.with_name("district_lean_corrections.json")
 
 # Where the reader-facing pages link for the method.
 METHOD_HREF = "/about/data#computed-lean"
+# The table as CSV (api/elections.py); the JSON is the public API's.
+CSV_PATH = "/api/elections/district-lean.csv"
+CSV_COLUMNS = ("congress", "district", "state", "number", "computed_lean", "cook_pvi")
 
 
 @functools.cache
@@ -62,3 +73,106 @@ def meta() -> dict | None:
         "href": METHOD_HREF,
         "againstCook": (data.get("validation") or {}).get("againstCook"),
     }
+
+
+@functools.cache
+def file_sha256() -> str | None:
+    """The data file's SHA-256: names the exact version a citation used
+    (the file only changes with a release, and its history is in git)."""
+    try:
+        return hashlib.sha256(PATH.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _seat_order(key: str) -> tuple[str, int]:
+    state, _, number = key.partition("-")
+    return state, int(number) if number.isdigit() else 0
+
+
+def districts(congress: int) -> list[dict]:
+    """Every district on a Congress's lines, in state and number order,
+    with Cook's published PVI for the same lines beside it (null where
+    Cook's table on file is another Congress's lines)."""
+    cook, provenance = district_pvi_for_congress(congress)
+    if str((provenance or {}).get("congress")) != str(congress):
+        cook = {}
+    return [
+        {"district": key, "state": _seat_order(key)[0], "number": _seat_order(key)[1],
+         "computedLean": lean, "cookPvi": cook.get(key)}
+        for key, lean in sorted(computed_lean(congress).items(), key=lambda kv: _seat_order(kv[0]))
+    ]
+
+
+@functools.cache
+def _corrections_file() -> dict:
+    try:
+        data = json.loads(CORRECTIONS_PATH.read_text())
+    except (OSError, ValueError):
+        logger.error("district_lean_corrections.json unreadable: corrections published without their sources")
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _correction(c: dict, source: dict) -> dict:
+    """One correction with its certified source: the fix's own
+    `official_url` (a single county's canvass), else the shared source's
+    document (`url`) or, for one read off a results site, its page."""
+    url = c.get("official_url") or next(
+        (source[k] for k in ("url", "page", "races_url", "state_url") if source.get(k)), "")
+    return {
+        "state": c.get("state") or "", "county": c.get("county"), "countyName": c.get("county_name"),
+        "action": c.get("action") or "", "why": c.get("why") or "",
+        "officialSource": source.get("title") or "", "officialUrl": url,
+    }
+
+
+def published() -> dict | None:
+    """The whole table with everything a citation needs: provenance, each
+    input and its license, every correction with its official source, the
+    validation against Cook, and both Congresses' districts. None when the
+    file is unreadable."""
+    data = _file()
+    if not data:
+        return None
+    curated = _corrections_file()
+    sources = curated.get("sources") or data.get("correctionSources") or {}
+    validation = (data.get("validation") or {}).get("againstCook") or {}
+    congresses = sorted((data.get("congresses") or {}), key=int)
+    return {
+        "source": data.get("_source") or "",
+        "method": data.get("_method") or "",
+        "sign": data.get("_sign") or "",
+        "window": data.get("_window") or "",
+        "asOf": data.get("_as_of") or "",
+        "sha256": file_sha256(),
+        "regenerate": data.get("_regenerate") or "",
+        "inputs": [
+            {k: i.get(k) or "" for k in ("name", "url", "version", "license", "use")}
+            for i in data.get("inputs") or []
+        ],
+        "corrections": [
+            _correction(c, sources.get(c.get("official") or "") or {})
+            for c in curated.get("fixes") or data.get("corrections") or []
+        ],
+        "againstCook": [{"congress": int(c), **v} for c, v in sorted(validation.items(), key=lambda kv: int(kv[0]))],
+        "unavailable": [
+            {"congress": int(c), "district": d, "reason": why}
+            for c, table in sorted((data.get("unavailable") or {}).items(), key=lambda kv: int(kv[0]))
+            for d, why in sorted(table.items(), key=lambda kv: _seat_order(kv[0]))
+        ],
+        "congresses": [{"congress": int(c), "districts": districts(int(c))} for c in congresses],
+    }
+
+
+def csv_text() -> str:
+    """Every district on every Congress's lines, one row each: the table
+    as plain CSV (no comment lines; the provenance is in the JSON)."""
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(CSV_COLUMNS)
+    for congress in sorted((_file().get("congresses") or {}), key=int):
+        for d in districts(int(congress)):
+            writer.writerow([congress, d["district"], d["state"], d["number"], d["computedLean"],
+                             "" if d["cookPvi"] is None else d["cookPvi"]])
+    return out.getvalue()

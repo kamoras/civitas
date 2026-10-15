@@ -97,6 +97,7 @@ class TestStockTradesPipelineRunTracking:
         assert run.status == "completed"
         assert run.senate_trades_ingested == 7
         assert "House" in (run.error_message or "")
+        assert run.error_detail.startswith("house_ptr: RuntimeError: House PTR site down")
 
     def test_every_phase_failing_marks_run_failed(self, db_session):
         result = _run(
@@ -664,3 +665,14 @@ async def test_the_president_s_annual_report_rows_are_never_reread(db_session):
          patch.object(stock_pipeline, "senate_accept_terms", new_callable=AsyncMock, return_value="tok"):
         await stock_pipeline._reread_trades(db_session, None)
     assert [c.args[1]["doc_id"] for c in read.await_args_list] == ["p"]
+
+
+def test_a_failure_outside_every_phase_fails_the_run_with_its_cause(db_session):
+    """Before, an exception no phase caught left the row "running" until
+    the stale sweep, with nothing to say why."""
+    with patch("app.pipeline.stock_pipeline.run_holdings_phases", side_effect=RuntimeError("holdings wiring broke")), \
+         pytest.raises(RuntimeError):
+        _run(db_session, house_result=1, senate_result=1)
+    run = db_session.query(StockTradesPipelineRun).one()
+    assert run.status == "failed"
+    assert run.error_detail.startswith("RuntimeError: holdings wiring broke (")

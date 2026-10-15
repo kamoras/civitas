@@ -29,11 +29,17 @@ LLM hallucinations"). This extends a pattern the codebase already
 proved, to the fields that still generate prose.
 """
 
+import hashlib
+import json
 import logging
+import pathlib
 from dataclasses import dataclass
 from typing import Callable
 
+import numpy as np
+
 from app.pipeline.analyze.post_composer import compose, headline_source
+from app.pipeline import vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -185,16 +191,12 @@ def on_topic(claims: list[Claim], articles: list) -> list[Claim]:
     if not claims or len(texts) < 2:
         return claims
     try:
-        import numpy as np
-
-        from app.pipeline.vector_store import encode_normalized, get_similarity_model
-
-        model = get_similarity_model()
-        article_vecs = encode_normalized(model, texts)
+        model = vector_store.get_similarity_model()
+        article_vecs = vector_store.encode_normalized(model, texts)
         centroid = article_vecs.mean(axis=0)
         norm = np.linalg.norm(centroid) or 1.0
         centroid = centroid / norm
-        claim_vecs = encode_normalized(model, [c.text for c in claims])
+        claim_vecs = vector_store.encode_normalized(model, [c.text for c in claims])
         scores = claim_vecs @ centroid
         # Half the best claim's score. Relative, so it scales with
         # however tightly this particular cluster embeds, and it can
@@ -212,6 +214,65 @@ def on_topic(claims: list[Claim], articles: list) -> list[Claim]:
             len(claims) - len(kept), floor,
         )
     return kept
+
+
+# Two claims that report one fact are one fact. dedupe_claims catches a
+# claim whose words are a subset of another's; a restatement in other words
+# ("Federal agents raid her home" / "Federal agents search her D.C. home", a
+# headline and its own lede) passed it, and the two-claim gate counted it
+# twice: replayed on 2026-10-11..15, a two-story briefing's two lines about
+# its second story made a two-claim issue. distinct_claims drops a claim
+# whose similarity-model cosine with an earlier one reaches a threshold
+# fitted to hand-labelled pairs (app/data/claim_restatement_pairs.json, by
+# scripts/calibrate_claim_restatement.py into
+# claim_restatement_calibration.json): the lowest threshold whose precision
+# (pairs it calls restatements that are) has a lower 95% bound of at least
+# 0.85, since a false call drops a real second fact and with it, often, the
+# issue (the script says why that bar).
+_DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
+RESTATEMENT_PAIRS_PATH = _DATA_DIR / "claim_restatement_pairs.json"
+RESTATEMENT_CALIBRATION_PATH = _DATA_DIR / "claim_restatement_calibration.json"
+_restatement_calibration_cache: dict | None = None
+
+
+def restatement_pairs() -> list[dict]:
+    return json.loads(RESTATEMENT_PAIRS_PATH.read_text())["pairs"]
+
+
+def restatement_pairs_hash() -> str:
+    """Identifies the labelled set a calibration was fitted to."""
+    payload = json.dumps([[p["a"], p["b"], p["restatement"]] for p in restatement_pairs()])
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def restatement_calibration() -> dict:
+    global _restatement_calibration_cache
+    if _restatement_calibration_cache is None:
+        _restatement_calibration_cache = json.loads(RESTATEMENT_CALIBRATION_PATH.read_text())
+    return _restatement_calibration_cache
+
+
+def distinct_claims(claims: list[Claim]) -> list[Claim]:
+    """CLAIMS without those that restate an earlier one, in order, so the
+    first (best-sourced) wording of each fact is the one kept.
+
+    Like on_topic, a failure keeps every claim: this runs inside the hourly
+    refresh, and it only ever removes."""
+    if len(claims) < 2:
+        return claims
+    try:
+        vectors = vector_store.encode_normalized(vector_store.get_similarity_model(), [c.text for c in claims])
+        threshold = restatement_calibration()["threshold"]
+    except Exception:
+        logger.exception("Claim restatement check failed — keeping every claim")
+        return claims
+    kept: list[int] = []
+    for i in range(len(claims)):
+        if all(float(vectors[i] @ vectors[j]) < threshold for j in kept):
+            kept.append(i)
+    if len(kept) != len(claims):
+        logger.info("Dropped %d claim(s) restating an earlier one", len(claims) - len(kept))
+    return [claims[i] for i in kept]
 
 
 def build_facts(claims: list[Claim], limit: int = MAX_FACTS) -> tuple[list[str], list[str], list[str]]:

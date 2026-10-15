@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.error_utils import record_exception
 from app.http_client import make_async_client
 from app.models import (
     CampaignPromise,
@@ -519,7 +520,6 @@ _PUBLISHING_PATHS = {
 # make the next nightly run cold.
 _ACTION_CENTER_PATHS = {
     "pipeline/analyze/action_center.py",
-    "pipeline/analyze/action_thresholds.py",
     "pipeline/analyze/bluesky_engagement.py",
     "pipeline/analyze/claims.py",
     "pipeline/analyze/early_signal.py",
@@ -1106,6 +1106,7 @@ async def run_senate_pipeline(
         # database, or a run already going.
         return {"status": "skipped", "reason": refused}
 
+    progress: ProgressTracker | None = None
     try:
         reset_stats()
         reset_client()
@@ -2487,7 +2488,8 @@ async def run_senate_pipeline(
             db.rollback()
             pipeline_run.status = PipelineStatus.FAILED
             pipeline_run.completed_at = utcnow()
-            pipeline_run.error_message = "Senate pipeline failed — see server logs"
+            pipeline_run.error_message = "Senate pipeline failed — see the run's error detail"
+            record_exception(pipeline_run, e, (progress and progress.active_step()) or pipeline_run.current_phase)
             pipeline_run.elapsed_seconds = round(time.time() - start_time, 1)
             db.commit()
         except Exception:
