@@ -242,12 +242,26 @@ export interface LobbiedBill {
   filingCount: number;
 }
 
+export interface RelatedVote {
+  /** The site's spelling ("SJRES.196"); null when the record names no bill. */
+  billId: string | null;
+  label: string | null;
+  title: string;
+  vote: "Yea" | "Nay";
+  date: string;
+  rollCall: VoteRollCall | null;
+}
+
 export interface LobbyingMatch {
   lobbyistOrg: string;
   industry: string;
   lobbyingSpend: number;
   donationToSenator: number;
   billsInfluenced: string[];
+  /** The member's own vote on each related bill, one per roll call, with
+   *  the roll call it was cast in. Absent from responses served before it
+   *  existed. */
+  relatedVotes?: RelatedVote[];
   senatorVoteAligned: boolean | null;
   description: string;
   /** Absent from responses served before these fields existed. */
@@ -335,6 +349,9 @@ export interface ScoreSpread {
   p75: number | null;
   /** Serving members per party, for the party filter's counts. */
   parties: { D: number; R: number; I: number };
+  /** The chamber's latest scoring run, YYYY-MM-DD; optional for an older
+   *  backend. */
+  asOf?: string | null;
 }
 
 /** One asset from a member's latest annual financial disclosure. Values are

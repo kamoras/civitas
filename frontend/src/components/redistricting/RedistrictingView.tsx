@@ -19,6 +19,10 @@ import {
   stateBallotHref,
 } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
+import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import { absoluteUrl } from "@/lib/site";
 import { redistrictingDownloads } from "@/lib/api";
 import {
   REDISTRICTING_HREF,
@@ -26,6 +30,7 @@ import {
   netWord,
   newDistrictSentence,
   oldDistrictSentence,
+  redistrictingHref,
 } from "@/lib/redistricting";
 import { SERIES } from "@/components/admin/charts/palette";
 
@@ -517,44 +522,66 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
         </a>
       </p>
 
-      <section aria-labelledby="at-a-glance" className="mt-6 border border-white/[0.09] p-4">
-        <h2 id="at-a-glance" className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-          The delegation, by lean
-        </h2>
-        <div className="mt-3 space-y-3">
-          <SeatStrip label="BEFORE" counts={s.seatsByLeanBefore} />
-          <SeatStrip label="AFTER" counts={s.seatsByLeanAfter} />
-        </div>
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/[0.07] pt-3 sm:grid-cols-4">
-          {SEAT_TILES.filter(
-            ([k]) => k !== "EVEN" || s.seatsByLeanBefore.EVEN > 0 || s.seatsByLeanAfter.EVEN > 0
-          ).map(([k, label]) => (
-            <div key={k}>
-              <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">{label}</dt>
+      <ShareSubjectProvider
+        subject={{
+          title: `${data.stateName}'s new House map`,
+          subtitle: `${data.cycle} ballot · ${data.fromCongress}th Congress lines to ${data.toCongress}th`,
+          url: absoluteUrl(redistrictingHref(data.state)),
+          source:
+            "U.S. Census Bureau 2020 blocks and block equivalency files; Cook PVI (pinned Wikipedia revisions)",
+          // The new lines' Cook table, as of its pinned revision.
+          asOf: data.sources.pviAfter?.revision?.timestamp ?? null,
+        }}
+      >
+        <section
+          aria-labelledby="at-a-glance"
+          className="mt-6 border border-white/[0.09] bg-surface-base p-4"
+          {...{ [SHARE_SECTION_ATTR]: "at-a-glance" }}
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2
+              id="at-a-glance"
+              className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+            >
+              The delegation, by lean
+            </h2>
+            <ShareSectionButton label="The delegation, by lean" />
+          </div>
+          <div className="mt-3 space-y-3">
+            <SeatStrip label="BEFORE" counts={s.seatsByLeanBefore} />
+            <SeatStrip label="AFTER" counts={s.seatsByLeanAfter} />
+          </div>
+          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/[0.07] pt-3 sm:grid-cols-4">
+            {SEAT_TILES.filter(
+              ([k]) => k !== "EVEN" || s.seatsByLeanBefore.EVEN > 0 || s.seatsByLeanAfter.EVEN > 0
+            ).map(([k, label]) => (
+              <div key={k}>
+                <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">{label}</dt>
+                <dd className="font-mono text-lg text-ink-hi">
+                  {s.seatsByLeanBefore[k]} → {s.seatsByLeanAfter[k]}
+                  <span className="text-xs text-ink-min"> {netWord(s.netSeatChangeByLean[k])}</span>
+                </dd>
+              </div>
+            ))}
+            <div>
+              <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">
+                AVG. RESIDENT&apos;S SHIFT
+              </dt>
               <dd className="font-mono text-lg text-ink-hi">
-                {s.seatsByLeanBefore[k]} → {s.seatsByLeanAfter[k]}
-                <span className="text-xs text-ink-min"> {netWord(s.netSeatChangeByLean[k])}</span>
+                {s.meanResidentShift ?? "N/A"}
+                <span className="text-xs text-ink-min"> PTS</span>
               </dd>
             </div>
-          ))}
-          <div>
-            <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">
-              AVG. RESIDENT&apos;S SHIFT
-            </dt>
-            <dd className="font-mono text-lg text-ink-hi">
-              {s.meanResidentShift ?? "N/A"}
-              <span className="text-xs text-ink-min"> PTS</span>
-            </dd>
-          </div>
-          <div>
-            <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">UNCHANGED</dt>
-            <dd className="font-mono text-lg text-ink-hi">
-              {s.unchangedSeats}
-              <span className="text-xs text-ink-min"> OF {s.seats}</span>
-            </dd>
-          </div>
-        </dl>
-      </section>
+            <div>
+              <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">UNCHANGED</dt>
+              <dd className="font-mono text-lg text-ink-hi">
+                {s.unchangedSeats}
+                <span className="text-xs text-ink-min"> OF {s.seats}</span>
+              </dd>
+            </div>
+          </dl>
+        </section>
+      </ShareSubjectProvider>
 
       <section aria-labelledby="districts" className="mt-8">
         <h2 id="districts" className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">

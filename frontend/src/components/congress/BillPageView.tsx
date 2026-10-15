@@ -132,6 +132,10 @@ export default function BillPageView({
       .filter(Boolean)
       .join(" · "),
     url: absoluteUrl(canonicalPath),
+    source:
+      "Congress.gov; Congressional Research Service; Senate.gov and House Clerk roll calls; Congressional Record Daily Digest",
+    // Read when the page loads.
+    asOf: null,
   };
 
   return (
@@ -425,6 +429,62 @@ export default function BillPageView({
                     congress={record?.congress ?? detail?.congress ?? 0}
                   />
                 </section>
+
+                {record?.floorDebate && (
+                  <section className="flex flex-col gap-3">
+                    <SectionHead
+                      id="floor"
+                      title="Floor debate"
+                      count={`${record.floorSpeechCount ?? 0} speech${record.floorSpeechCount === 1 ? "" : "es"}`}
+                    />
+                    {record.floorDebate.length > 0 ? (
+                      <ol className="flex flex-col">
+                        {record.floorDebate.map((d) => (
+                          <li
+                            key={`${d.date}-${d.chamber}-${d.heading}`}
+                            className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-4 border-b border-white/[0.09] py-2.5"
+                          >
+                            <span className="font-mono text-xs tabular-nums text-ink-lo">
+                              {shortDate(d.date).slice(5)}, {d.date.slice(0, 4)}
+                              <span className="block">{CHAMBER_NAME[d.chamber]}</span>
+                            </span>
+                            <div className="min-w-0">
+                              <p className="break-words text-sm leading-relaxed text-ink">
+                                {d.heading}
+                              </p>
+                              <p className="mt-1 text-sm text-ink-lo">
+                                {d.speakers.map((s, i) => (
+                                  <Fragment key={s.speechId}>
+                                    {i > 0 && ", "}
+                                    <Link
+                                      href={`/explore/${s.speechId}`}
+                                      className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+                                    >
+                                      {s.speaker || "Unnamed speaker"}
+                                    </Link>
+                                    {s.speeches > 1 && (
+                                      <span className="text-ink-min"> ({s.speeches})</span>
+                                    )}
+                                  </Fragment>
+                                ))}
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p className="text-ink-lo">
+                        No floor speech on file names this bill in its Congressional Record heading.
+                      </p>
+                    )}
+                    <p className="text-xs text-ink-min">
+                      Speeches are matched by the bill number printed in the Congressional
+                      Record&apos;s heading, never by their words. Each name opens that
+                      member&apos;s first speech under the heading; a number is how many times they
+                      spoke.
+                    </p>
+                  </section>
+                )}
 
                 <section className="flex flex-col gap-3">
                   <SectionHead

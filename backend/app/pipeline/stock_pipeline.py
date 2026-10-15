@@ -30,6 +30,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
+from app.error_utils import record_exception
 from app.http_client import make_async_client
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.models import (
@@ -709,6 +710,8 @@ async def run_stock_trades_pipeline() -> dict:
     """
     db: Session = SessionLocal()
     _run_token = None  # no run of ours for the finally to stop until start() below
+    run: StockTradesPipelineRun | None = None
+    progress: ProgressTracker | None = None
     try:
         if _other_pipeline_running(db):
             logger.info("Stock trades pipeline skipped — a member pipeline is currently running")
@@ -746,7 +749,7 @@ async def run_stock_trades_pipeline() -> dict:
                 # the Senate phase's first query raises PendingRollbackError,
                 # so the "best-effort per chamber" design failed BOTH.
                 db.rollback()
-                error_parts.append("House: failed — see server logs")
+                error_parts.append("House: failed — see the run's error detail")
                 progress.fail("house_ptr")
                 failed_steps.add("house_ptr")
             progress.begin("senate_ptr")
@@ -756,7 +759,7 @@ async def run_stock_trades_pipeline() -> dict:
             except Exception:
                 logger.exception("Senate PTR ingestion failed")
                 db.rollback()
-                error_parts.append("Senate: failed — see server logs")
+                error_parts.append("Senate: failed — see the run's error detail")
                 progress.fail("senate_ptr")
                 failed_steps.add("senate_ptr")
             progress.begin("president_ptr")
@@ -766,7 +769,7 @@ async def run_stock_trades_pipeline() -> dict:
             except Exception:
                 logger.exception("Presidential PTR ingestion failed")
                 db.rollback()
-                error_parts.append("President: failed — see server logs")
+                error_parts.append("President: failed — see the run's error detail")
                 progress.fail("president_ptr")
                 failed_steps.add("president_ptr")
             # Stored filings an older parser read. Not a trade phase of its
@@ -776,10 +779,11 @@ async def run_stock_trades_pipeline() -> dict:
                 reread = await _reread_trades(db, client)
                 if reread:
                     logger.info("PTR re-read: %d stored filings read again", reread)
-            except Exception:
+            except Exception as e:
                 logger.exception("PTR re-read failed")
                 db.rollback()
-                error_parts.append("Re-read of stored filings: failed — see server logs")
+                record_exception(run, e, "reread")
+                error_parts.append("Re-read of stored filings: failed — see the run's error detail")
             # A trade two reports list counts once, at its first disclosure.
             # After the re-read, which rewrites a filing's rows in full.
             try:
@@ -787,20 +791,22 @@ async def run_stock_trades_pipeline() -> dict:
                     collapsed = collapse_refiled_trades(db, model, key)
                     if collapsed:
                         logger.info("%s: %d trades listed again in a later report removed", model.__tablename__, collapsed)
-            except Exception:
+            except Exception as e:
                 logger.exception("Collapsing re-filed trades failed")
                 db.rollback()
-                error_parts.append("Collapsing re-filed trades: failed — see server logs")
+                record_exception(run, e, "collapse_refiled")
+                error_parts.append("Collapsing re-filed trades: failed — see the run's error detail")
             # Every stored trade's industry, whatever parser read it: not a
             # trade phase either.
             try:
                 reclassified = await _reclassify_stored_trades(db, client)
                 if reclassified:
                     logger.info("Trade industries: %d stored trades reclassified", reclassified)
-            except Exception:
+            except Exception as e:
                 logger.exception("Trade industry reclassification failed")
                 db.rollback()
-                error_parts.append("Industry reclassification of stored trades: failed — see server logs")
+                record_exception(run, e, "reclassify_industries")
+                error_parts.append("Industry reclassification of stored trades: failed — see the run's error detail")
             # Annual-report holdings: same sources, same best-effort
             # isolation (a failure leaves the trade rows above committed and
             # the stored holdings untouched). The phases live in
@@ -815,10 +821,11 @@ async def run_stock_trades_pipeline() -> dict:
                 photos = await refresh_member_photos(db, client, MEMBER_PHOTOS_BUDGET)
                 if photos:
                     logger.info("Member photos: %d choices measured", photos)
-            except Exception:
+            except Exception as e:
                 logger.exception("Member photo choice failed")
                 db.rollback()
-                error_parts.append("Member photos: failed — see server logs")
+                record_exception(run, e, "member_photos")
+                error_parts.append("Member photos: failed — see the run's error detail")
 
         elapsed = round(time.time() - start_time, 1)
         logger.info(
@@ -854,6 +861,23 @@ async def run_stock_trades_pipeline() -> dict:
             "president_holdings": holdings_counts["president_holdings"],
             "elapsed_seconds": elapsed,
         }
+    except Exception as e:
+        # Outside every phase's own handler (the HTTP client, the final
+        # write): the run is over, and it says so with its cause rather
+        # than staying "running" until the stale sweep. Re-raised for the
+        # chain's crash alert.
+        logger.exception("Stock trades pipeline failed: %s", e)
+        if run is not None:
+            try:
+                db.rollback()
+                run.status = PipelineStatus.FAILED
+                run.completed_at = utcnow()
+                run.error_message = "stock trades pipeline failed — see the run's error detail"
+                record_exception(run, e, progress.active_step() if progress else None)
+                db.commit()
+            except Exception:
+                logger.exception("Failed to record stock trades pipeline failure")
+        raise
     finally:
         _tracker.stop(_run_token)
         db.close()

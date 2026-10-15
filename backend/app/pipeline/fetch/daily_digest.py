@@ -72,6 +72,24 @@ def bill_ids(text: str) -> list[str]:
     return found
 
 
+# The Record's headings print a measure in capitals ("S.J. RES. 188",
+# "PROVIDING FOR CONSIDERATION OF H.R. 9576"), where the Digest's prose
+# writes "S.J. Res. 188": the same grammar, read in either case.
+_MEASURE_ANY_CASE_RE = re.compile(_MEASURE_RE.pattern, re.IGNORECASE)
+
+
+def heading_bill_ids(text: str) -> list[str]:
+    """Every bill or resolution number a Record heading names, as site bill
+    ids, in order and without repeats (bill_ids, in any case)."""
+    found: list[str] = []
+    for m in _MEASURE_ANY_CASE_RE.finditer(text or ""):
+        prefix = next(p for pattern, p in _MEASURE_TYPES if re.fullmatch(pattern, m.group(1), re.IGNORECASE))
+        bill_id = f"{prefix}.{m.group(2)}"
+        if bill_id not in found:
+            found.append(bill_id)
+    return found
+
+
 def only_bill_id(text: str) -> str | None:
     """The site bill id when the text is one bill number and nothing else
     ("S. 465", "H. Con. Res. 89"), else None."""

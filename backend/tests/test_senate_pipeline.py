@@ -1,7 +1,13 @@
 """Tests for senate_pipeline helper functions."""
 
+import asyncio
+from unittest.mock import AsyncMock
+
+import pytest
+
 from app.config import settings
-from app.models import Senator
+from app.models import PipelineRun, PipelineStatus, Senator
+from app.pipeline import senate_pipeline
 from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores
 from app.pipeline.senate_pipeline import (
     PIPELINE_STEPS,
@@ -315,3 +321,27 @@ def test_vote_dates_are_stored_iso_so_the_record_sorts_by_the_calendar(db_sessio
     db_session.commit()
     page = get_senator_votes(db_session, "s-test", category="recent")
     assert [v.date for v in page.votes] == ["2025-11-03", "2025-10-14", "2025-09-30"]
+
+
+def test_a_failed_run_keeps_its_exception_on_the_run_row(db_session, monkeypatch):
+    """Run 183 (2026-10-15) stored only "see server logs", and four deploys
+    replaced the log before anyone looked. The step, the exception and a
+    bounded traceback stay on the row (admin only); the public
+    error_message stays a fixed string."""
+    monkeypatch.setattr(senate_pipeline, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(settings, "DATA_GOV_API_KEY", "test-key")
+    for name in ("invalidate_stale_analysis", "initialize_platform_embeddings"):
+        monkeypatch.setattr(senate_pipeline, name, lambda *a, **k: None)
+    monkeypatch.setattr(
+        senate_pipeline, "fetch_senators",
+        AsyncMock(side_effect=ConnectionError("member list ?api_key=SECRET unreachable")),
+    )
+
+    with pytest.raises(ConnectionError):
+        asyncio.run(senate_pipeline.run_senate_pipeline())
+
+    run = db_session.query(PipelineRun).one()
+    assert run.status == PipelineStatus.FAILED
+    assert run.error_detail.startswith("fetch_senators: ConnectionError: member list ?api_key=*** unreachable")
+    assert "Traceback (most recent call last)" in run.error_detail and "SECRET" not in run.error_detail
+    assert run.error_message == "Senate pipeline failed — see the run's error detail"

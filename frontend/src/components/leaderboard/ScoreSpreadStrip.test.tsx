@@ -30,6 +30,11 @@ describe("ScoreSpreadStrip", () => {
     );
   });
 
+  it("offers itself as a shared image", async () => {
+    render(<ScoreSpreadStrip spread={spread} highlight={null} />);
+    expect(await screen.findByRole("button", { name: /Share.*The field, by score/i })).toBeTruthy();
+  });
+
   it("names the highlighted row's score and the members sharing it", () => {
     render(<ScoreSpreadStrip spread={spread} highlight={60} />);
     expect(screen.getByText(/3 senators show 60 and share one rank/)).toBeTruthy();
