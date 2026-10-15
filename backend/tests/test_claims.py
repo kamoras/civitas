@@ -1,9 +1,11 @@
-"""Tests for the claim layer — selection logic, no model involved.
+"""Tests for the claim layer — selection logic; only the actor check loads a model (slow).
 
 Every test names the real published failure it makes unreachable.
 """
 
 from dataclasses import dataclass
+
+import pytest
 
 from app.pipeline.analyze.claims import (
     Claim, build_facts, build_lede, build_story, dedupe_claims, extract_body_claims,
@@ -129,6 +131,7 @@ class TestTheOldPromptsRulesAreNowStructural:
         assert self._claims(src, "The Pentagon", "cut a significant number of jobs") == []
         assert len(self._claims(src, "The Pentagon", "cut 1,200 jobs in the reorganisation")) == 1
 
+    @pytest.mark.slow
     def test_the_coverage_cannot_be_the_subject_of_a_sentence(self):
         """Prompt clause: "Do not write about 'the coverage' or 'the
         reporting' as the subject" — the vacuity that produced 60 of 160

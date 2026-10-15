@@ -46,8 +46,16 @@ actually good at. It no longer chooses the words, which is where it was
 failing.
 """
 
+import functools
+import hashlib
+import json
 import logging
+import pathlib
 import re
+
+import numpy as np
+
+from app.pipeline.vector_store import get_similarity_model
 
 logger = logging.getLogger(__name__)
 
@@ -57,15 +65,152 @@ logger = logging.getLogger(__name__)
 MIN_ACTOR_CHARS = 3
 MIN_PREDICATE_CHARS = 12
 
-# An actor must read as a named party — a person, body or organisation
-# the source names. Anything starting with a pronoun or bare determiner
-# is the model summarising rather than pointing at someone ("This
-# coverage", "The race", "It"), which is exactly the empty-post shape.
-_NON_ACTOR_OPENERS = frozenset({
+# Whether a span names a party that can act — a person, institution,
+# official body or group of officials — is decided in two tiers
+# (is_acting_party).
+#
+# 1. The rule below: one capitalised word, and no leading determiner or
+#    pronoun before a lowercase word. It admits named parties. On its own it
+#    also refused every party a story DESCRIBES rather than names — "a
+#    federal judge", "federal agents", "a bipartisan group of senators": 33
+#    of the 136 claims compose() rejected in a live sample (2026-10-11..15).
+# 2. What the rule refuses gets a similarity-weighted vote among its nearest
+#    hand-labelled spans (app/data/claim_actor_examples.json, labelled per
+#    its _rubric; kNN, Cover & Hart 1967) on the similarity model, with k
+#    and the threshold fitted by scripts/calibrate_claim_actor.py
+#    (claim_actor_calibration.json) under one hard constraint: leave one
+#    out, it admits no labelled non-actor the rule refused, so the two tiers
+#    are at least as precise as the rule was alone.
+#
+#    Measured leave one out on the labelled set (970 spans): precision 0.80
+#    against the rule's 0.77, recall 0.85 against 0.71; on the replayed
+#    production spans alone 0.89 against 0.88, and 0.96 against 0.86.
+#    Replayed through compose() on the 264 recorded claim calls, each span's
+#    vote leaving its own spelling out, 15 of the rule's 33 rejections
+#    compose and nothing the rule admitted is lost; every new claim names
+#    the party its source says acted, in the same clause.
+#
+# The vote does not replace the rule, because measured alone it cannot. The
+# best vote-only setting meeting the same constraint refuses 233 of the 401
+# labelled actors the rule admits — the feed's most frequent actor among
+# them — and on the same replay it composed 82 claims to the rule's 128
+# (13 gained, 59 lost). The calibration file's "vote_alone" holds that
+# measurement. Named parties are exactly where a short span's embedding says
+# least: a surname, an acronym or an organisation called "Common Cause" sits
+# nearer the things it does than the people who do them.
+_DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
+ACTOR_EXAMPLES_PATH = _DATA_DIR / "claim_actor_examples.json"
+ACTOR_CALIBRATION_PATH = _DATA_DIR / "claim_actor_calibration.json"
+_actor_examples_cache: list[dict] | None = None
+_actor_calibration_cache: dict | None = None
+_actor_reference_cache: dict[int, np.ndarray] = {}
+
+
+def actor_examples() -> list[dict]:
+    global _actor_examples_cache
+    if _actor_examples_cache is None:
+        _actor_examples_cache = json.loads(ACTOR_EXAMPLES_PATH.read_text())["examples"]
+    return _actor_examples_cache
+
+
+def actor_calibration() -> dict:
+    global _actor_calibration_cache
+    if _actor_calibration_cache is None:
+        _actor_calibration_cache = json.loads(ACTOR_CALIBRATION_PATH.read_text())
+    return _actor_calibration_cache
+
+
+def actor_examples_hash() -> str:
+    """Identifies the labelled set a calibration was fitted to."""
+    payload = json.dumps([[e["text"], e["actor"]] for e in actor_examples()])
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def embed_spans(spans: list[str]) -> np.ndarray:
+    return get_similarity_model().encode(spans, show_progress_bar=False, normalize_embeddings=True)
+
+
+def actor_votes(span_embeddings: np.ndarray, reference: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
+    """Similarity-weighted share of actors among each span's k nearest
+    labelled spans (unit vectors, so the dot product is the cosine).
+    Negative similarities weigh nothing."""
+    sims = span_embeddings @ reference.T
+    k = min(k, reference.shape[0])
+    nearest = np.argpartition(-sims, k - 1, axis=1)[:, :k]
+    weights = np.take_along_axis(sims, nearest, axis=1).clip(min=0.0)
+    return (weights * labels[nearest]).sum(axis=1) / np.maximum(weights.sum(axis=1), 1e-9)
+
+
+def _actor_reference() -> np.ndarray:
+    """The labelled spans' embeddings, once per similarity model."""
+    key = id(get_similarity_model())
+    if key not in _actor_reference_cache:
+        _actor_reference_cache[key] = embed_spans([e["text"] for e in actor_examples()])
+    return _actor_reference_cache[key]
+
+
+def is_acting_party(span: str) -> bool:
+    """True when SPAN names or describes a party that can act or speak:
+    the rule's verdict, or else — unless a pronoun leads it — the labelled
+    spans' vote."""
+    if _looks_like_an_actor(span):
+        return True
+    if _names_no_one(span):
+        return False
+    return _actor_vote(span) >= actor_calibration()["threshold"]
+
+
+@functools.lru_cache(maxsize=4096)
+def _actor_vote(span: str) -> float:
+    """Cached: a claim's spans are composed more than once a run (the call
+    that records the model's answer, then extraction)."""
+    labels = np.array([float(e["actor"]) for e in actor_examples()])
+    return float(actor_votes(embed_spans([span]), _actor_reference(), labels, actor_calibration()["k"])[0])
+
+
+# Tier 1 of is_acting_party. Anything starting with a pronoun or bare
+# determiner and going on in lowercase is the model summarising rather than
+# pointing at someone ("This coverage", "The race", "It") — the empty-post
+# shape — unless the vote finds a party there ("a federal judge").
+#
+# A pronoun-led span never goes to the vote. Grammatical function words, not
+# a classification (as _RELATIVE_PRONOUNS below): "its spokesman" or "their
+# lawyers" points at a party only through someone the span doesn't name, so
+# the rendered claim could not say whose. The embedding can't see that — it
+# reads "spokesman" and votes actor (0.89 left out, higher than any other
+# non-actor the rule refuses; claim_actor_examples.json labels them
+# non-actors per its rubric).
+_PRONOUN_OPENERS = frozenset({
     "this", "that", "these", "those", "it", "they", "he", "she", "we",
-    "there", "the", "a", "an", "his", "her", "their", "its", "coverage",
-    "race", "update", "piece", "article", "report", "story", "analysis",
+    "there", "his", "her", "their", "its",
 })
+_NON_ACTOR_OPENERS = _PRONOUN_OPENERS | {
+    "the", "a", "an", "coverage",
+    "race", "update", "piece", "article", "report", "story", "analysis",
+}
+
+
+def _names_no_one(span: str) -> bool:
+    words = (span or "").split()
+    return not words or words[0].lower() in _PRONOUN_OPENERS
+
+
+def _looks_like_an_actor(span: str) -> bool:
+    words = (span or "").split()
+    if not words:
+        return False
+    # A leading determiner is only a problem when what follows is a
+    # common noun — "The coverage", "The race". "The Senate", "The
+    # Pentagon" and "The White House" are named parties and among the
+    # most common actors in civic reporting; an earlier version of this
+    # rule rejected every one of them, which a test written for a
+    # different purpose surfaced.
+    if words[0].lower() in _NON_ACTOR_OPENERS:
+        rest = words[1:]
+        if not rest or not rest[0][:1].isupper():
+            return False
+    # At least one capitalised token: a named party, not a common noun.
+    return any(w[:1].isupper() for w in words)
 
 
 def _normalise(text: str) -> str:
@@ -230,6 +375,20 @@ def _locate_assertion(actor: str, predicate: str, source: str) -> tuple[str, re.
         before = haystack[:match.start()].split()
         if before and before[-1].strip(",;:'\"‘“(").lower() in _OBJECT_PREPOSITIONS:
             continue
+        # The actor inside a quotation is the speaker's assertion, not the
+        # outlet's: "'...our media vendor mistakenly placed $25,000 in
+        # advertising...,' a spokesperson said" composed as "Media vendor
+        # mistakenly placed $25,000..." — a party's own account of its
+        # mistake, published as fact with its speaker gone (replay of
+        # 2026-10-11..15). And an actor straight after a quotation closed on
+        # a comma is the quotation's attribution: its predicate is "said in
+        # a statement" and what was said is behind it ("'...,' House
+        # Democratic leaders said in a statement."). Marks are counted after
+        # _flatten, which makes every double mark a straight one; single
+        # marks are left out, since an apostrophe is one too.
+        opening = haystack[:match.start()]
+        if opening.count('"') % 2 or re.search(r"""[,!?]"\s*$""", opening):
+            continue
         return tail, hit
     return None
 
@@ -248,24 +407,6 @@ _OBJECT_PREPOSITIONS = frozenset({
     "about", "over", "under", "between", "toward", "towards", "into",
     "including", "than", "behind", "without", "upon",
 })
-
-
-def _looks_like_an_actor(span: str) -> bool:
-    words = (span or "").split()
-    if not words:
-        return False
-    # A leading determiner is only a problem when what follows is a
-    # common noun — "The coverage", "The race". "The Senate", "The
-    # Pentagon" and "The White House" are named parties and among the
-    # most common actors in civic reporting; an earlier version of this
-    # rule rejected every one of them, which a test written for a
-    # different purpose surfaced.
-    if words[0].lower() in _NON_ACTOR_OPENERS:
-        rest = words[1:]
-        if not rest or not rest[0][:1].isupper():
-            return False
-    # At least one capitalised token: a named party, not a common noun.
-    return any(w[:1].isupper() for w in words)
 
 
 # A predicate ending on one of these was cut mid-phrase: the model
@@ -414,15 +555,21 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
     on purpose: this runs unsupervised against a public account.
     """
     actor = (actor or "").strip().strip(",;:")
-    predicate = (predicate or "").strip().strip(",;:")
+    # A trailing period is the sentence's own end, copied with the span. Left
+    # on, the span read as stopping short of a clause end (the next thing in
+    # the source is the next sentence), so it was "completed" into that
+    # sentence: "...for violating sanctions laws. The Treasury's Financial
+    # Crimes Enforcement Network (FinCEN) fined Bank of America." (replay of
+    # 2026-10-11..15). Without it, the boundary check finds the period.
+    predicate = (predicate or "").strip().strip(",;:").rstrip(".")
 
     if len(actor) < MIN_ACTOR_CHARS or not predicate:
         return None
     actor = _source_spelling(actor, source)
     predicate = _source_spelling(predicate, source)
-    if not _looks_like_an_actor(actor):
-        return None
     if not _is_verbatim(actor, source) or not _is_verbatim(predicate, source):
+        return None
+    if not is_acting_party(actor):
         return None
     # Both spans real is not enough — the source has to assert one OF the
     # other. See _asserted_together for the two-true-fragments-one-false-

@@ -139,14 +139,21 @@ export default function NewsChapter() {
           A model is asked only to locate an assertion in one article: who did something, and what
           they did. The site then checks that both parts appear in the article word for word, that
           the article asserts one of the other rather than merely containing both, and that the span
-          runs to the end of its clause. Where the model stops short (&ldquo;Senator sues&rdquo;),
-          the site reads on in the article to the end of that clause, and drops the claim if it
-          can&apos;t tell where the clause ends, and a line with a bracket it opens or closes but
-          doesn&apos;t match is dropped too. Only then is the sentence shown, in the source&apos;s
-          own words, naming the outlet and linking the article it came from. The summary at the top
-          of an issue is one of these lines, and names its outlet the same way. The headline is the
-          top article&apos;s real headline, and an issue&apos;s full story is every checked
-          sentence, listed under the outlet that reported it.
+          runs to the end of its clause. The &ldquo;who&rdquo; has to be a party that can act: a
+          person, an institution, an official body or a group of officials. A named one passes on
+          its name; one the story only describes (&ldquo;a federal judge&rdquo;, &ldquo;federal
+          agents&rdquo;) is compared with nearly a thousand hand-labelled examples, and passes only
+          when its nearest examples are overwhelmingly parties, a bar set so that, tested on those
+          examples, it lets through nothing the name check would have kept out. A line from inside
+          someone&apos;s quotation is dropped: it is their account, not the outlet&apos;s. Where the
+          model stops short (&ldquo;Senator sues&rdquo;), the site reads on in the article to the
+          end of that clause, and drops the claim if it can&apos;t tell where the clause ends, and a
+          line with a bracket it opens or closes but doesn&apos;t match is dropped too. Only then is
+          the sentence shown, in the source&apos;s own words, naming the outlet and linking the
+          article it came from. The summary at the top of an issue is one of these lines, and names
+          its outlet the same way. The headline is the top article&apos;s real headline, and an
+          issue&apos;s full story is every checked sentence, listed under the outlet that reported
+          it.
         </P>
         <P>
           This replaced asking a model to write neutrally and checking whether it had. That approach
