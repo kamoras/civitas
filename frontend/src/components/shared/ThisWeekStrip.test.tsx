@@ -92,7 +92,7 @@ describe("ThisWeekStrip", () => {
     expect(screen.getByText(/HOUSE · 1 record vote this week/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /H\.R\. 1: A bill to do a thing/ })).toHaveAttribute(
       "href",
-      "/congress/bills/HR.1?congress=119#vote-house-2-500"
+      "/congress/votes/house/119/2/500"
     );
     expect(screen.getByRole("link", { name: /What Congress did this week/ })).toHaveAttribute(
       "href",
