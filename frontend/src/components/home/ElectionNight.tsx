@@ -83,7 +83,9 @@ export function ElectionNightList({ data }: { data: ResultsSummary }) {
         id="election-night"
         className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
       >
-        <span>The count · {data.states.length} states counting</span>
+        <span>
+          The count · {data.states.length} {data.states.length === 1 ? "state" : "states"} counting
+        </span>
         <Link
           href="/elections"
           className="normal-case tracking-[0.06em] underline decoration-white/30 underline-offset-4 hover:text-phos"

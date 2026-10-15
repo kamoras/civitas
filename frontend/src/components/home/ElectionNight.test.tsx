@@ -38,6 +38,7 @@ describe("ElectionNightList", () => {
     render(<ElectionNightList data={data} />);
     expect(screen.getByText(data.states[0].lines[0])).toBeTruthy();
     expect(screen.getByText("LEADING · NOT FINAL")).toBeTruthy();
+    expect(screen.getByText(/1 state counting/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "[ COLORADO RESULTS ]" }).getAttribute("href")).toBe(
       "/elections/states/CO"
     );
