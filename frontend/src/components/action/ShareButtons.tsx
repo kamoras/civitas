@@ -3,7 +3,7 @@
 import { useState, type KeyboardEvent } from "react";
 import type { ActionIssue } from "@/types/action";
 import { CopyStatus, useCopyFeedback } from "@/hooks/useCopyFeedback";
-import { absoluteUrl } from "@/lib/site";
+import { absoluteUrl, BSKY_HANDLE } from "@/lib/site";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -26,20 +26,19 @@ interface ShareButtonsProps {
   imageShare?: boolean;
 }
 
-function buildShareText(title: string, shareUrl: string): string {
-  const full = `${title}. The record and what you can do: ${shareUrl} via @civitasvote #CivicTransparency`;
-  if (full.length <= 240) return full;
-
-  // Try without hashtag first
-  const noHashtag = `${title}. The record and what you can do: ${shareUrl} via @civitasvote`;
-  if (noHashtag.length <= 240) return noHashtag;
-
-  // Try without handle either
-  const noHandle = `${title}. The record and what you can do: ${shareUrl}`;
-  if (noHandle.length <= 240) return noHandle;
-
+/**
+ * The post text for a share intent. `handle` credits Civitas's own account,
+ * and only Bluesky has one: the text used to say "via @civitasvote" on every
+ * network, a handle that is nobody's on Bluesky and not Civitas's anywhere.
+ */
+export function buildShareText(title: string, shareUrl: string, handle?: string): string {
+  const base = `${title}. The record and what you can do: ${shareUrl}`;
+  const via = handle ? ` via @${handle}` : "";
+  for (const text of [`${base}${via} #CivicTransparency`, `${base}${via}`, base]) {
+    if (text.length <= 240) return text;
+  }
   // Hard trim as last resort
-  return noHandle.slice(0, 237) + "...";
+  return base.slice(0, 237) + "...";
 }
 
 export default function ShareButtons({
@@ -49,8 +48,8 @@ export default function ShareButtons({
   imageShare = true,
 }: ShareButtonsProps) {
   const shareUrl = shareUrlOverride ?? absoluteUrl(`/issue/${issue.publicId}`);
-  const shareText = buildShareText(issue.title, shareUrl);
-  const encodedText = encodeURIComponent(shareText);
+  const encodedText = encodeURIComponent(buildShareText(issue.title, shareUrl));
+  const encodedBskyText = encodeURIComponent(buildShareText(issue.title, shareUrl, BSKY_HANDLE));
 
   const [mastodonInstance, setMastodonInstance] = useState("mastodon.social");
   const [showMastodonInput, setShowMastodonInput] = useState(false);
@@ -91,7 +90,7 @@ export default function ShareButtons({
       </a>
 
       <a
-        href={`https://bsky.app/intent/compose?text=${encodedText}`}
+        href={`https://bsky.app/intent/compose?text=${encodedBskyText}`}
         target="_blank"
         rel="noopener noreferrer"
         className={linkCls}

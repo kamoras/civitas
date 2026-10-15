@@ -128,9 +128,10 @@ def test_vote_margin_ratio(yeas, nays, expected):
 
 def _roll_call_signals(db_session, votes, area="DEFENSE", *args):
     """check_roll_call_signals over `votes`, every one classified `area`."""
+    # The fixtures' votes are dated 2026-08-30; a run the day after.
     with patch.object(es, "_fetch_recent_votes", return_value=votes), \
             patch.object(es, "classify_policy_area", return_value=(area, 0.9)):
-        return es.check_roll_call_signals(db_session, *args)
+        return es.check_roll_call_signals(db_session, *(args or ("2026-08-31",)))
 
 
 class TestCheckRollCallSignals:
@@ -230,7 +231,7 @@ class TestCoveredVotes:
     thinner issue about the same vote."""
 
     def _vote(self):
-        vote = _vote(roll_number=250, yeas=77, nays=22)
+        vote = _vote(roll_number=250, yeas=77, nays=22, vote_date="2026-09-28")
         vote.update(documentName="S. 4668", result="Bill Passed")
         return vote
 
@@ -307,6 +308,50 @@ class TestCoveredVotes:
         assert draft.duplicate_of_id is None
 
 
+class TestStaleVotes:
+    """2026-10-15: the House's rolls of 2026-09-16 went up as that day's
+    developing news ("news coverage of the vote has not appeared yet"); the
+    poll takes each chamber's latest votes whenever they were cast."""
+
+    @pytest.mark.parametrize("vote_date, today, drafted", [
+        pytest.param("2026-09-16", "2026-10-15", 0, id="a_month_old_vote"),
+        pytest.param("2026-10-12", "2026-10-15", 0, id="three_days_back"),
+        pytest.param("2026-10-13", "2026-10-15", 1, id="two_days_back_is_inside_the_window"),
+        pytest.param("October 15, 2026,  09:42 PM", "2026-10-15", 1, id="the_senate_s_date_form"),
+        pytest.param("", "2026-10-15", 0, id="no_date_is_not_assumed_new"),
+    ])
+    def test_a_vote_is_drafted_only_inside_the_confirmation_window(self, db_session, vote_date, today, drafted):
+        assert _roll_call_signals(db_session, [_house_vote(vote_date=vote_date)], "DEFENSE", today) == drafted
+
+    def _draft(self, db_session, vote_day, **kw):
+        row = ActionIssue(
+            date="2026-10-14", rank=999, title="House vote on S 2403: Passed, 401-14", summary="s",
+            is_current=True, status=kw.get("status", ActionIssueStatus.DEVELOPING),
+            source_type="house_roll_call_vote", primary_source_url=kw.get("url", "https://clerk.house.gov/evs/2026/roll314.xml"),
+            primary_article_date=vote_day,
+        )
+        db_session.add(row)
+        db_session.flush()
+        return row
+
+    def test_a_current_draft_of_a_stale_vote_is_retired(self, db_session):
+        stale, fresh = self._draft(db_session, "2026-09-16"), self._draft(db_session, "2026-10-14", url="u2")
+        confirmed = self._draft(db_session, "2026-09-16", url="u3", status=ActionIssueStatus.CONFIRMED)
+        assert es.retire_stale_vote_drafts(db_session, "2026-10-15") == 1
+        assert stale.is_current is False and stale.status == ActionIssueStatus.DEVELOPING
+        assert fresh.is_current is True and confirmed.is_current is True
+
+    def test_a_current_draft_is_reworded_from_its_record(self, db_session):
+        # "S 2403" was the Clerk's file spelling, stored before the template
+        # printed bills as the site does.
+        vote = _house_vote(roll_number=314, vote_date="2026-10-14")
+        vote.update(documentName="S 2403", result="Passed")
+        row = self._draft(db_session, "2026-10-14")
+        assert _roll_call_signals(db_session, [vote], "DEFENSE", "2026-10-15") == 0
+        assert row.title.startswith("House vote on S. 2403: Passed")
+        assert json.loads(row.related_bill_ids)[0]["id"] == "S.2403"
+
+
 class TestCheckFederalRegisterSignals:
     def test_qualifying_rule_creates_a_developing_issue(self, db_session):
         with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]):
@@ -332,6 +377,22 @@ class TestCheckFederalRegisterSignals:
             created_second_pass = es.check_federal_register_signals(db_session)
         assert created_second_pass == 0
         assert db_session.query(ActionIssue).count() == 1
+
+    def test_a_current_draft_is_retitled_by_todays_template(self, db_session):
+        # Drafts stored before the title led with the rule kept their
+        # agency-list title until they expired.
+        with patch.object(es, "_fetch_recent_rules", return_value=[_rule()]):
+            es.check_federal_register_signals(db_session)
+            row = db_session.query(ActionIssue).one()
+            row.title = "Interior Department final rule: Process for Authorizing ..."
+            promoted = ActionIssue(date="2026-08-31", rank=1, title="As published", summary="s",
+                                   is_current=True, status=ActionIssueStatus.CONFIRMED,
+                                   primary_source_url="https://example.com/other")
+            db_session.add(promoted)
+            db_session.flush()
+            es.check_federal_register_signals(db_session)
+        assert row.title == f"Final rule: {_rule()['title']}"
+        assert promoted.title == "As published"
 
 
 class TestRuleDraft:
