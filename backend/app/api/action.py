@@ -19,7 +19,6 @@ from app.database import get_db, get_visits_db
 from app.election_calendar import next_election_day, previous_election_day, seats_up_for_year
 from app.election_phase import election_today
 from app.pipeline.analyze.score_calculator import compute_overall_score, get_district_pvi_map
-from app.fact_diff import new_facts_since
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
 from app.photos import issue_photo
@@ -531,11 +530,10 @@ def _build_issue_response(
     ) if monitor_slugs else {}
 
     current_facts = _parse_json_field(issue.facts)
-    previous_facts = _parse_json_field(getattr(issue, "previous_facts", "[]"))
-    # Empty previous_facts means never-updated, not "everything changed" —
-    # marking a brand-new issue's own facts as "new" would be true but
-    # meaningless (of course they are, the issue just appeared).
-    new_facts = new_facts_since(current_facts, previous_facts) if previous_facts else []
+    # Worked out when the facts were written (app/fact_diff.py): diffing
+    # them here needed the embedding model on a public GET. NULL on a row
+    # the hourly refresh hasn't backfilled yet reads as nothing new.
+    new_facts = _parse_json_field(getattr(issue, "new_facts", None) or "[]")
 
     # Stamped on the issue with its facts (live_results/signals.py), never
     # read from the live count row: a held poll moves that row's time and

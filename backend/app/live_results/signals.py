@@ -31,6 +31,7 @@ from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
+from app.fact_diff import stored_exact_new_facts
 from app.models import ActionIssue, ActionIssueStatus, RaceResult
 from app.pipeline.analyze.early_signal import CONFIRMATION_WINDOW_HOURS
 from app.live_results.sync import challenger_leads, event_detail, is_flip, lead_is_back
@@ -276,6 +277,7 @@ def _fill(issue: ActionIssue, result: RaceResult, *, content: dict | None = None
     issue.title = content["title"]
     issue.summary = content["summary"]
     issue.facts = facts
+    issue.new_facts = stored_exact_new_facts(issue.facts, issue.previous_facts)
     issue.fact_sources = json.dumps(
         content.get("fact_sources") or [publisher(result.source_name)] * len(content["facts"])
     )
@@ -302,6 +304,7 @@ def _create(db: Session, result: RaceResult) -> ActionIssue:
     )
     _fill(issue, result)
     issue.previous_facts = "[]"
+    issue.new_facts = "[]"
     db.add(issue)
     db.flush()
     result.developing_issue_id = issue.id

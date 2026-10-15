@@ -1441,6 +1441,11 @@ class ActionIssue(Base):
     # reliable "what did this issue say last time a reader would have seen
     # it" signal. Read by app/fact_diff.py to mark newly-added facts.
     previous_facts: Mapped[str] = mapped_column(Text, default="[]")
+    # The facts that are new since previous_facts (app/fact_diff.py), as a
+    # JSON list, worked out when the facts were written so the API never
+    # loads the embedding model to diff them. NULL for a row written before
+    # this column, until the hourly refresh fills it (backfill_new_facts).
+    new_facts: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     # The row this one is a near-identical duplicate of, among the newest
     # rows the homepage feed reads (action_center.mark_recent_duplicates);
