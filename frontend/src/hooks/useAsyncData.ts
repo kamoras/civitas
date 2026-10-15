@@ -44,13 +44,20 @@ export interface AsyncData<T> {
  * `if (branch !== "house") return;` guards, and reports neither loading nor
  * data while disabled.
  */
-export function useAsyncData<T>(key: string, fetcher: (() => Promise<T>) | null): AsyncData<T> {
+export function useAsyncData<T>(
+  key: string,
+  fetcher: (() => Promise<T>) | null,
+  /** Data the server already read for a key (a server-rendered page's
+   *  first view): settled from the first render, so it is in the HTML and
+   *  not asked for again. Read on the first render only. */
+  initial?: { key: string; data: T }
+): AsyncData<T> {
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<{
     key: string;
     data: T | null;
     error: string | null;
-  } | null>(null);
+  } | null>(() => (initial ? { key: `${initial.key}#0`, data: initial.data, error: null } : null));
 
   // The attempt counter is folded into the key, so a retry is just a new
   // request identity and every rule below applies to it unchanged.

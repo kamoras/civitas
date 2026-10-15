@@ -173,13 +173,47 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
   );
 }
 
+/** The index's counts beside the title. Both lines always take their
+ * place, hidden until the counts arrive: on a phone they wrap under the
+ * title, and appearing after the masthead had painted they pushed the
+ * whole page down. */
+function IndexCounts({ stats }: { stats: ExploreStats | null }) {
+  const docs = stats?.totalDocuments ?? 0;
+  const open = stats?.openForComment ?? 0;
+  return (
+    <div className="text-right font-mono text-xs">
+      <p className={`text-ink-lo tabular-nums ${docs > 0 ? "" : "invisible"}`}>
+        {docs.toLocaleString("en-US")} documents indexed
+      </p>
+      <p className={`text-signal-cyan tabular-nums ${docs > 0 && open > 0 ? "" : "invisible"}`}>
+        {open} open for comment
+      </p>
+    </div>
+  );
+}
+
+// The masthead's line, sent with the server's fallback too (PageFallback).
+const EXPLORE_EYEBROW = "Explore · search across every branch";
+const EXPLORE_TITLE = "Explore the record";
+const EXPLORE_LEDE = (
+  <p>
+    Search any issue to see what all branches of government and federal agencies have done about it:
+    by topic, or by exact name, number, or &ldquo;quoted phrase&rdquo;. Many regulatory documents
+    are open for public comment: make your voice heard.
+  </p>
+);
+
 export default function ExplorePage() {
   return (
     <Suspense
       fallback={
         <PageFallback
-          eyebrow={"Explore · search across every branch"}
-          title={"Explore the record"}
+          eyebrow={EXPLORE_EYEBROW}
+          title={EXPLORE_TITLE}
+          lede={EXPLORE_LEDE}
+          aside={<IndexCounts stats={null} />}
+          width="max-w-4xl"
+          mastheadClassName="mb-8"
           rows={4}
         />
       }
@@ -396,28 +430,11 @@ function ExplorePageInner() {
           {/* Header */}
           <PageMasthead
             className="mb-8"
-            eyebrow="Explore · search across every branch"
-            title="Explore the record"
-            aside={
-              stats && stats.totalDocuments > 0 ? (
-                <div className="text-right font-mono text-xs">
-                  <p className="text-ink-lo tabular-nums">
-                    {stats.totalDocuments.toLocaleString()} documents indexed
-                  </p>
-                  {stats.openForComment > 0 && (
-                    <p className="text-signal-cyan tabular-nums">
-                      {stats.openForComment} open for comment
-                    </p>
-                  )}
-                </div>
-              ) : null
-            }
+            eyebrow={EXPLORE_EYEBROW}
+            title={EXPLORE_TITLE}
+            aside={<IndexCounts stats={stats} />}
           >
-            <p>
-              Search any issue to see what all branches of government and federal agencies have done
-              about it: by topic, or by exact name, number, or &ldquo;quoted phrase&rdquo;. Many
-              regulatory documents are open for public comment: make your voice heard.
-            </p>
+            {EXPLORE_LEDE}
           </PageMasthead>
 
           {/* Search form */}

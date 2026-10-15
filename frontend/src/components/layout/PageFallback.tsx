@@ -38,10 +38,29 @@ import PageMasthead from "@/components/layout/PageMasthead";
 export default function PageFallback({
   eyebrow,
   title,
+  lede,
+  aside,
+  width = "max-w-5xl",
+  mastheadClassName = "mb-6",
   rows = 4,
 }: {
   eyebrow: string;
   title: React.ReactNode;
+  /** The masthead's standing line, exactly as the page renders it. It is
+   *  usually the largest text in the first screen, so the paint the reader
+   *  waits for (LCP) is this server-sent line, not the same line ~1 s later
+   *  after hydration: /action's and /leaderboard's mastheads painted at
+   *  1.9 s on a throttled phone (2026-10-14) while the fallback above them
+   *  painted at 0.8 s. */
+  lede?: React.ReactNode;
+  /** The masthead's aside as the page renders it before its data arrives,
+   *  when it takes room (it wraps under the title on a phone). */
+  aside?: React.ReactNode;
+  /** The page's own content width and masthead spacing, so the line wraps
+   *  the same here as on the page and nothing moves when the page replaces
+   *  this. */
+  width?: string;
+  mastheadClassName?: string;
   /** Roughly how many content blocks this page shows, so the skeleton is
    *  about the height of what replaces it and the layout does not jump. */
   rows?: number;
@@ -50,8 +69,10 @@ export default function PageFallback({
     <div className="min-h-screen">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
-        <div className="max-w-5xl mx-auto">
-          <PageMasthead className="mb-6" eyebrow={eyebrow} title={title} />
+        <div className={`${width} mx-auto`}>
+          <PageMasthead className={mastheadClassName} eyebrow={eyebrow} title={title} aside={aside}>
+            {lede}
+          </PageMasthead>
           <div aria-busy="true" aria-live="polite" className="space-y-4">
             <span className="sr-only">Loading…</span>
             {Array.from({ length: rows }).map((_, i) => (

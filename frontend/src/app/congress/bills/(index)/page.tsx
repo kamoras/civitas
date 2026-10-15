@@ -14,6 +14,7 @@ import BillStageGroup from "@/components/bills/BillStageGroup";
 import BillRow from "@/components/bills/BillRow";
 import { fetchBillsInFlight } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { useBillsInitial } from "./BillsInitial";
 import type { BillInFlight, PaginatedBills } from "@/types/bill";
 import { formatUtcDate } from "@/lib/formatting";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
@@ -34,8 +35,12 @@ function BillsPageContent() {
   // mention, which most individual bills don't have.
   const initialQ = searchParams.get("q") || "";
 
-  const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
-  const [inMotion, setInMotion] = useState(0);
+  // The overview the server read, when it could (congress/bills/layout.tsx).
+  const initial = useBillsInitial();
+  const [stageCounts, setStageCounts] = useState<Record<string, number>>(
+    () => initial?.stageCounts ?? {}
+  );
+  const [inMotion, setInMotion] = useState(() => initial?.inMotion ?? 0);
 
   const [mode, setMode] = useState<ViewMode>(initialQ ? "all" : "hot");
   const [stage, setStage] = useState<string | null>(null);
@@ -57,7 +62,9 @@ function BillsPageContent() {
   // The stage-flow funnel is a global overview of the whole pipeline,
   // independent of the chamber/party/search filters below it — fetch it
   // once, decoupled from everything else on the page.
+  const haveOverview = initial !== null;
   useEffect(() => {
+    if (haveOverview) return;
     let cancelled = false;
     fetchBillsInFlight({ sort: "recent", page: 1, perPage: 1 })
       .then((res) => {
@@ -69,7 +76,7 @@ function BillsPageContent() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [haveOverview]);
 
   const chamberParam = chamber === "all" ? undefined : chamber;
   const partyParam = party === "ALL" ? undefined : party;
