@@ -1619,18 +1619,18 @@ def _cluster_articles(
     about a nor'easter and an epidemic abroad. Complete linkage fixed the
     chaining; what remains is where the cut sits and what is compared.
 
-    Headlines alone can't separate "same event" from "same theme". On 553
+    Headlines alone can't separate "same event" from "same theme". On 530
     hand-judged pairs of feed articles (2026-09-28 to 10-15,
     app/data/cluster_pair_judgments.json), no title-cosine cut merged more
-    than 6 of 115 same-event pairs without also merging a different-event
-    one, and the 0.57 a daily self-labelled fit had settled on merged 39
-    same-event pairs and 23 different-event ones: two polls of one race, one
+    than 6 of 114 same-event pairs without also merging a different-event
+    one, and the 0.57 a daily self-labelled fit had settled on merged 38
+    same-event pairs and 22 different-event ones: two polls of one race, one
     official's rallies in two states, a statement and the letter that
     followed it. That fit was labelled by shared names and numbers, which
     call two stories about one person the same story. Adding the first 200
     characters of the description lets the description's first sentence
     say who did what; at the cut where it merges no judged different-event
-    pair it merges 16 same-event ones. Requiring a shared distinctive
+    pair it merges 17 same-event ones. Requiring a shared distinctive
     entity as well changed nothing: every pair above the cut shares one.
     The cut is precision-first because a wrong merge publishes a chimera,
     while a missed merge costs breadth — the thinner cluster is dropped by

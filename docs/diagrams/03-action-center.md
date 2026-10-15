@@ -27,7 +27,7 @@ flowchart TB
     RELCHECK -->|no| DROP(["Discard — off topic"])
     RELCHECK -->|yes| CLUSTER
 
-    CLUSTER["<b>3. CLUSTER</b><br/>complete linkage on headline + description start<br/>every pair ≥ the judged cut (0.73)"]
+    CLUSTER["<b>3. CLUSTER</b><br/>complete linkage on headline + description start<br/>every pair ≥ the judged cut (0.71)"]
     CLUSTER --> RANK
 
     RANK["<b>4. RANK</b><br/>0.40 × civic actionability<br/>0.35 × source breadth<br/>0.25 × trending relevance"]
@@ -151,9 +151,9 @@ and facts about a nor'easter and an HIV epidemic in Fiji. What is compared is
 the headline plus the first 200 characters of the description, day-centred,
 and the cut is the lowest at which none of the hand-judged different-event
 pairs in `app/data/cluster_pair_judgments.json` merges
-(`scripts/calibrate_cluster_pairs.py`, 0.73 on 553 pairs, merging 16 of 115
+(`scripts/calibrate_cluster_pairs.py`, 0.71 on 530 pairs, merging 17 of 114
 same-event pairs; headlines alone merged 6 on the same rule, and the 0.57 a
-self-labelled daily fit had reached merged 23 different-event pairs). So
+self-labelled daily fit had reached merged 22 different-event pairs). So
 clustering errs toward splitting: a split story costs source
 breadth (its second cluster is dropped as a duplicate in the same run, or
 matched to the same issue in a later one), a wrong merge publishes a chimera.

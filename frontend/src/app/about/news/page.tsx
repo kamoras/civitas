@@ -120,8 +120,8 @@ export default function NewsChapter() {
             How alike two articles must be to group them was set against 553 pairs of real articles,
             each judged as one event or two. The bar is the lowest at which none of the pairs from
             different events would be grouped. It groups fewer pairs of the same event than a looser
-            bar would, and that is the trade we chose. Headlines alone could group only 6 of the 115
-            same-event pairs on that rule; with the description, 16. A new issue is treated as an
+            bar would, and that is the trade we chose. Headlines alone could group only 6 of the 114
+            same-event pairs on that rule; with the description, 17. A new issue is treated as an
             existing one only when they share a source article, say the same thing, or carry
             near-identical headlines: naming the same people turned out to be wrong three times in
             four, and merging two stories hides one. Multi-story briefings (&ldquo;Up First&rdquo;,
