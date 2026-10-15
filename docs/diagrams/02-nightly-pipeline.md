@@ -1,16 +1,27 @@
 # Nightly pipeline
 
 Runs at 03:00 UTC by default (`PIPELINE_CRON_SCHEDULE`) as a chain of five
-pipelines, each started only if the one before it finished
-(`scheduler._nightly_pipeline`): **Senate → Supplementary → House → Stock
-trades → Election.** A failure partway down means nothing after it runs, and
-leaves no run row behind to look wrong; `ops_alerts.check_pipeline_staleness`
-is what notices.
+pipelines, one after another (`scheduler._nightly_pipeline`): **Senate →
+Supplementary → House → Stock trades → Election.** None waits on the one
+before it succeeding (`app/pipeline_chain.py`): a link that is skipped, fails
+or crashes is alerted and the next runs anyway. A killed process still ends
+its chain; `ops_alerts.check_pipeline_staleness` is what notices.
 
 The opposite case — a step that fails inside a run that carries on and ends
 "completed" — alerts from `ProgressTracker.fail`. Supplementary's weekly justice
 step failed that way on Sundays, invisibly, until the scorecards were seen to
 be stale.
+
+Either way the exception is kept on the run row: `error_detail` holds, for
+each failed step and for the failure that ended the run, a summary line (the
+step, the exception's type and message, the frame it raised in) and the last
+4 KB of its traceback, credential parameters redacted
+(`error_utils.record_exception`). The admin Pipelines tab shows it under each
+run's error, and the failure alerts carry the summary line. It is admin-only:
+`error_message`, which the public `/api/pipeline/status` returns, stays a
+fixed sentence. Until 2026-10-15 the row held only that sentence, and a
+Senate run that failed in donor classification lost its cause when four
+deploys replaced the container's log the same day.
 
 Every alert (`ops_alerts.send_ops_alert`) is logged at ERROR, kept (the last
 fifty) for the admin Overview's **Ops alerts** panel, and pushed to ntfy when

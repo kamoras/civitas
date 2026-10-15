@@ -8,6 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
 from app.database import SessionLocal
+from app.error_utils import exception_summary
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
 from app.pipeline.supplementary_pipeline import (
@@ -202,15 +203,18 @@ def reporter(run_name: str):
             # Raised, or caught its own error and said so (House,
             # Supplementary and Election return "failed"; House "no_data"
             # for an empty roster).
+            # The cause's head line (where, type, message, the frame it
+            # raised in); the traceback is on the run row, which outlives
+            # the container's log.
             if outcome.status == CRASHED:
-                why = f"{type(outcome.error).__name__}: {outcome.error}"
+                why = exception_summary(outcome.error)
             else:
                 detail = (outcome.result or {}).get("error") or (outcome.result or {}).get("reason")
                 why = f"it ended {outcome.status} ({detail or 'see its run row'})"
             send_ops_alert(
                 f"{run_name} {link.label} run {'crashed' if outcome.status == CRASHED else 'failed'}",
-                f"{why}. {link.label} data will be a day stale unless triggered again. The rest of its "
-                "chain still runs.",
+                f"{why}. The traceback is on the run row (admin, Pipelines). {link.label} data will be "
+                "a day stale unless triggered again. The rest of its chain still runs.",
                 dedupe_key=f"crashed-{tag}",
                 condition=crashed,
             )
@@ -287,7 +291,7 @@ def _nightly_pipeline() -> None:
             logger.exception("Nightly pipeline chain stopped")
             send_ops_alert(
                 "Nightly pipeline chain stopped",
-                f"{type(e).__name__}: {e}. The pipelines after the one running then did not run tonight.",
+                f"{exception_summary(e)}. The pipelines after the one running then did not run tonight.",
                 dedupe_key=f"crashed-{utcnow():%Y-%m-%d}",
                 condition="nightly-crashed",
             )

@@ -15,6 +15,7 @@ import time
 from datetime import timedelta
 
 from app.database import SessionLocal
+from app.error_utils import record_exception
 from app.http_client import make_async_client
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
@@ -296,21 +297,22 @@ async def run_supplementary_pipeline() -> dict:
             "elapsed_seconds": run.elapsed_seconds,
         }
     except Exception as e:
-        # Full detail goes to the server log; the admin-facing summary is a
-        # static string with zero reference to the exception object — see
-        # database.py's reset_all_data for why.
+        # error_message stays a static string (the public pipeline status
+        # returns it); the exception goes to error_detail, admin only — see
+        # error_utils.py.
         logger.exception("Supplementary pipeline failed: %s", e)
-        summary = "supplementary pipeline failed — see server logs"
+        cause = "supplementary pipeline failed"
         try:
             db.rollback()  # clear a poisoned session so the FAILED write commits
             run.status = PipelineStatus.FAILED
             run.completed_at = utcnow()
             run.elapsed_seconds = round(time.time() - start_time, 1)
-            run.error_message = summary
+            run.error_message = "supplementary pipeline failed — see the run's error detail"
+            cause = record_exception(run, e, progress.active_step() or run.current_phase)
             db.commit()
         except Exception:
             logger.exception("Failed to record supplementary pipeline failure")
-        return {"status": PipelineStatus.FAILED, "error": summary}
+        return {"status": PipelineStatus.FAILED, "error": cause}
     finally:
         _tracker.stop(_run_token)
         db.close()
