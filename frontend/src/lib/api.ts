@@ -688,10 +688,26 @@ export interface SupplementaryRunInfo {
   progressSteps?: PipelineStepInfo[] | null;
 }
 
+/** One link of the nightly chain, as its latest run left it (`/api/pipeline/status`). */
+export interface PipelineLink {
+  pipeline: string;
+  label: string;
+  /** Decided by the API: a dead RUNNING row is "failed", not "running". */
+  state: "completed" | "partial" | "running" | "failed";
+  runId: number;
+  startedAt: string;
+  completedAt: string | null;
+}
+
 export interface PipelineStatus {
   lastRun: PipelineRunInfo | null;
   nextScheduled: string | null;
   isRunning: boolean;
+  /** Each chain link's latest run, in chain order; links that never ran are absent. */
+  links: PipelineLink[];
+  linksCompleted: number;
+  /** The newest completion among the links that completed. */
+  filedAt: string | null;
 }
 
 export async function fetchPipelineStatus(): Promise<PipelineStatus | null> {
