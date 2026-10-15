@@ -2,7 +2,14 @@ import type { PolicyAreaDetail } from "./senator";
 
 export interface BillInFlight {
   billId: string;
+  /** The sponsor's listing title (the official one for a bill introduced without a short title). */
   title: string;
+  /** The short or popular title from Congress.gov's titles list, verbatim, when the listing title isn't it. */
+  shortTitle?: string | null;
+  /** Its title type as Congress.gov names it ("Short Title(s) as Passed House"). */
+  shortTitleType?: string | null;
+  /** The official title from that same list, shown under the short title. */
+  officialTitle?: string | null;
   chamber: "senate" | "house";
   sponsorId: string;
   sponsorName: string;

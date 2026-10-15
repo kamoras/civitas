@@ -181,8 +181,9 @@ export default function NewsChapter() {
         </P>
         <P>
           Each issue ends with what you can do about it, built from the record and never advocacy
-          for or against a position: contact the members of Congress the coverage names (through
-          their own contact form), contact the committee that handles the subject, follow the bills
+          for or against a position: see how each member voted (a vote&apos;s own issue links its
+          roll-call page here), contact the members of Congress the coverage names (through their
+          own contact form), contact the committee that handles the subject, follow the bills
           involved, comment on a rule about the story by its deadline, and read the related federal
           documents. Where the record says who decides next (the stage a linked bill has reached, or
           the agency taking comments on a rule), the issue says so. Every issue also lets you pick
