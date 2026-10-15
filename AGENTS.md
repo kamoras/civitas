@@ -1224,7 +1224,12 @@ In addition to the main pipeline, the **Action Center pipeline** runs hourly to
 surface trending civic issues. It fetches RSS feeds from low-bias news sources,
 filters articles for U.S. policy relevance by a kNN vote against hand-labelled
 feed articles (`relevance_votes`; `docs/research/action-center-relevance.md`),
-clusters related articles, incorporates trending topics from Google Trends and Bluesky,
+clusters articles reporting the same event (complete linkage on headline plus
+description start, cut where no hand-judged different-event pair merges:
+`app/data/cluster_pair_judgments.json`, `scripts/calibrate_cluster_pairs.py`;
+a missed merge costs a story a source, a wrong one publishes a chimera, so
+the cut is precision-first and is never refitted from the pipeline's own
+label of shared names), incorporates trending topics from Google Trends and Bluesky,
 and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
