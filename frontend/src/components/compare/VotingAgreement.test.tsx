@@ -46,8 +46,8 @@ describe("VotingAgreement", () => {
     expect(await screen.findByText("75%")).toBeTruthy();
     expect(screen.getByText(agreement.sentence)).toBeTruthy();
     const link = screen.getByRole("link", { name: "A nominee" });
-    // A vote on no bill opens its day's report.
-    expect(link.getAttribute("href")).toBe("/congress/2026-09-30");
+    // A vote on no bill (a nomination) opens its own page.
+    expect(link.getAttribute("href")).toBe("/congress/votes/senate/119/2/41");
     expect(screen.getByText(/Pat Able:/).textContent).toContain("NAY");
   });
 });

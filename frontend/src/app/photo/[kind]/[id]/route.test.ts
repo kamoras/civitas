@@ -176,3 +176,64 @@ describe("GET /photo/[kind]/[id]", () => {
     expect(fetchRemoteImage).not.toHaveBeenCalled();
   });
 });
+
+const { GET: getWidth } = await import("./[width]/route");
+const sharp = (await import("sharp")).default;
+
+describe("GET /photo/[kind]/[id]/[width]", () => {
+  function getAt(kind: string, id: string, width: string) {
+    return getWidth({} as NextRequest, { params: Promise.resolve({ kind, id, width }) });
+  }
+
+  it("scales the photo down to the width asked, as WebP, cacheable for a day", async () => {
+    backendAnswers(200, { url: "https://rollcall.com/a.jpg" });
+    const source = await sharp({
+      create: { width: 1620, height: 1080, channels: 3, background: "#808080" },
+    })
+      .jpeg()
+      .toBuffer();
+    fetchRemoteImage.mockResolvedValue({ status: "ok", bytes: source, contentType: "image/jpeg" });
+    const res = await getAt("issue", "795", "400");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/webp");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=86400");
+    const meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+    expect([meta.width, meta.height]).toEqual([400, 267]);
+  });
+
+  it("never scales a photo up", async () => {
+    backendAnswers(200, { url: "https://www.congress.gov/img/member/b001309_200.jpg" });
+    const source = await sharp({
+      create: { width: 173, height: 216, channels: 3, background: "#808080" },
+    })
+      .jpeg()
+      .toBuffer();
+    fetchRemoteImage.mockResolvedValue({ status: "ok", bytes: source, contentType: "image/jpeg" });
+    const meta = await sharp(
+      Buffer.from(await (await getAt("bioguide", "B001309", "1200")).arrayBuffer())
+    ).metadata();
+    expect(meta.width).toBe(173);
+  });
+
+  // nginx keys the cache on the path: a width off the list must not mint
+  // an entry, or fetch anything.
+  it("answers any other width 404 without asking the backend", async () => {
+    const backend = backendAnswers(200, { url: "https://rollcall.com/a.jpg" });
+    for (const width of ["401", "0400", "400.0", "abc", "-1"]) {
+      expect((await getAt("issue", "795", width)).status).toBe(404);
+    }
+    expect(backend).not.toHaveBeenCalled();
+  });
+
+  it("treats bytes that don't decode as a failed fetch, never remembered", async () => {
+    backendAnswers(200, { url: "https://rollcall.com/a.jpg" });
+    fetchRemoteImage.mockResolvedValue({
+      status: "ok",
+      bytes: Buffer.from("not an image"),
+      contentType: "image/jpeg",
+    });
+    const res = await getAt("issue", "795", "400");
+    expect(res.status).toBe(502);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+});

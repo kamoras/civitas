@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { SupportRollCall } from "@/types/presidentialSupport";
-import { shortDate, billPageHref } from "@/lib/congress";
+import { shortDate, billPageHref, rollCallHref } from "@/lib/congress";
 
 /** The anchor a tally square links to. */
 export function voteAnchor(v: SupportRollCall): string {
@@ -30,7 +30,12 @@ export default function VoteList({ votes, member }: { votes: SupportRollCall[]; 
                   {v.billId}
                 </Link>
               ) : null}
-              <span className="normal-case tracking-normal">{v.question}</span>
+              <Link
+                href={rollCallHref({ ...v, number: v.rollCall })}
+                className="inline-flex min-h-6 items-center normal-case tracking-normal text-ink-lo underline decoration-white/20 underline-offset-2 hover:text-phos"
+              >
+                {v.question}
+              </Link>
               <span>· {v.result}</span>
             </div>
             <p className="mt-1 font-sans text-sm text-ink">{v.statement.title}</p>

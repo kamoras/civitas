@@ -185,7 +185,9 @@ describe("a flip announced earlier that the latest count doesn't show", () => {
     );
     expect(within(flipsCard()).getByText("0")).toBeInTheDocument();
     expect(
-      screen.getByText("Senate: Dana Smith (D) leads · flip announced, not in latest count")
+      screen.getByText(
+        "Senate: Dana Smith (D) leads · not final · flip announced, not in latest count"
+      )
     ).toBeInTheDocument();
     expect(screen.queryByText(/· flip$/)).not.toBeInTheDocument();
     const label = mapProps.current!.getStateLabel("GA");
@@ -214,7 +216,7 @@ describe("a held Senate flip that the counter lists as not counted", () => {
       />
     );
     expect(
-      screen.getByText("Senate: tied · flip announced, not in latest count")
+      screen.getByText("Senate: tied · not final · flip announced, not in latest count")
     ).toBeInTheDocument();
   });
 

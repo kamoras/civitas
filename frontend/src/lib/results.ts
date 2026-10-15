@@ -710,6 +710,19 @@ export function formatEasternTime(iso: string): string {
   })} ET`;
 }
 
+/** Beside every "leading" or "tied" that isn't an official count, in the
+ * same tag or line: the card's sentence ("The count is not final.") sits
+ * below the candidate list, more than a screen under the tag on a phone
+ * (1.16 viewport heights for a seven-candidate Senate race, measured on a
+ * simulated election night, 2026-10-14), so a reader saw LEADING alone. */
+export const NOT_FINAL = "NOT FINAL";
+
+/** Some race among these has votes in a count the state doesn't list as
+ * official: a tally of leads over them is not final either. */
+export function anyCountNotFinal(races: LiveRaceResult[]): boolean {
+  return races.some((r) => r.votesCounted > 0 && !r.official);
+}
+
 export interface StateResultSummary {
   senate: LiveRaceResult[];
   house: LiveRaceResult[];
