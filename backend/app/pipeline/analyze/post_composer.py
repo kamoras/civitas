@@ -55,7 +55,7 @@ import re
 
 import numpy as np
 
-from app.pipeline.vector_store import get_similarity_model
+from app.pipeline import vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ def actor_examples_hash() -> str:
 
 
 def embed_spans(spans: list[str]) -> np.ndarray:
-    return get_similarity_model().encode(spans, show_progress_bar=False, normalize_embeddings=True)
+    return vector_store.get_similarity_model().encode(spans, show_progress_bar=False, normalize_embeddings=True)
 
 
 def actor_votes(span_embeddings: np.ndarray, reference: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
@@ -143,7 +143,7 @@ def actor_votes(span_embeddings: np.ndarray, reference: np.ndarray, labels: np.n
 
 def _actor_reference() -> np.ndarray:
     """The labelled spans' embeddings, once per similarity model."""
-    key = id(get_similarity_model())
+    key = id(vector_store.get_similarity_model())
     if key not in _actor_reference_cache:
         _actor_reference_cache[key] = embed_spans([e["text"] for e in actor_examples()])
     return _actor_reference_cache[key]

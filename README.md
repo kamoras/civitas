@@ -392,7 +392,7 @@ Classification decisions — what industry a donor belongs to, which direction a
 | Tier | Technique | Speed | Used For |
 |------|-----------|-------|----------|
 | 1 | FEC metadata / learning store exact match | Instant | Donor types, previously classified bills and donors |
-| 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection |
+| 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, whether two Action Center claims restate one fact (`claims.distinct_claims`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors, bill classification from reference corpus, whether a claim's actor span the capitalised-word rule refuses is a party that can act (`post_composer.is_acting_party`). A donor's industry is taken from the neighbours only when all seven agree (2026-10-09: on 177 record-labelled PAC sponsors the prototype tier abstains on, a plurality vote was right 29% of the time at every similarity floor; unanimous neighbours 8 of 8); otherwise the donor stays unclassified |
 | 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Natural-language text only: Action Center claim location, monitor decisions, timeline summaries, race-post spans, Explore summaries — never a classification feeding a score |
@@ -476,11 +476,15 @@ Every hour at :15
        │         A source that FAILS is reported as failed, never merged in
        │         as a source that simply had nothing to say.
        ▼
-  2. FILTER ──── Drop multi-story digests, then a kNN vote: each article's 41
-       │         nearest of 827 hand-labelled feed articles, weighted by
-       │         similarity; keep it if >= 80% of the weight is relevant
-       │         (app/data/policy_relevance_*.json). Measured on articles 1-6
-       │         weeks past the reference set: precision 0.89-0.97, recall
+  2. FILTER ──── Drop multi-story digests (a briefing's title, a body
+       │         listing unrelated stories, or a headline and body telling
+       │         the same unrelated stories one item each — "<A>. And, <B>":
+       │         5 of 1,473 stored articles, all briefings), then a kNN
+       │         vote: each article's 41 nearest of 827 hand-labelled feed
+       │         articles, weighted by similarity; keep it if >= 80% of the
+       │         weight is relevant (app/data/policy_relevance_*.json).
+       │         Measured on articles 1-6 weeks past the reference set:
+       │         precision 0.89-0.97, recall
        │         0.76-0.87, where the 24 policy prototypes it replaced kept
        │         0.61-0.67 relevant and found 0.73-0.77
        │         (docs/research/action-center-relevance.md)
@@ -552,6 +556,18 @@ Every hour at :15
        │         headlines: 2026-10-01, 78 of 300 clusters in three days
        │         were dropped as too few facts, 7 of 10 sampled failures
        │         were cut-short predicates.
+       │         The actor must name or describe a party that can act: a
+       │         capitalised name passes, anything else gets a kNN vote over
+       │         970 labelled spans ("a federal judge", "federal agents"; see
+       │         Classification Strategy). An actor inside a quotation, or
+       │         one that only attributes a quotation ("…," X said in a
+       │         statement), is refused: the first is the speaker's account
+       │         published as fact. Two claims that restate one fact count
+       │         once (claims.distinct_claims: similarity-model cosine >=
+       │         0.75, fitted to 204 hand-labelled claim pairs,
+       │         app/data/claim_restatement_*.json, precision 0.96 [0.88,
+       │         1.0]), so a headline and its own lede can't pass the
+       │         two-claim gate as two facts.
        │         Title = the top article's real headline. Summary = the
        │         single best claim. Facts = the supporting claims, each
        │         carrying the outlet it came from, shown on the issue as

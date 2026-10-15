@@ -229,6 +229,26 @@ story, and an interview that names its subject by acronym in one sentence
 and in full in another). The curated preview is no longer caught. The
 title patterns are unchanged.
 
+A two-story briefing escapes that check by construction: its headline names
+both stories ("Government spent millions on Trump ads. And, federal agents
+raid Ilhan Omar's home") and its body has two items, under the three-item
+floor. `_parallel_stories` (2026-10-15) catches the shape both halves share:
+the headline splits into items naming disjoint entities, the body's items are
+disjoint too, and each body item names exactly one headline item's entities,
+every headline item named. Measured on 1,473 stored articles with a headline
+and a body (race coverage plus the Action Center's claim sources,
+2026-10-11..15):
+
+| headlines with 2+ disjoint items | 28 |
+|---|---|
+| dropped by `_parallel_stories` | 5, all two-story briefings (three NPR "X. And, Y" items, two "Live updates: A; B") |
+| left: multi-story live blogs | 11 (the body names both stories in one item, or adds an item naming neither) |
+| left: single stories | 12 (photo columns "Capitol Lens \| …", two-sentence headlines about one story, a debate between two candidates) |
+
+Disjoint headline items alone would have dropped all 12 single stories with
+the 16 briefings, so the body half is what makes it precise. Its known miss
+is the live blog, left to the coherence and on-topic checks downstream.
+
 ## Limits
 
 One labeller, so no agreement figure; the ambiguous 12% is where a second

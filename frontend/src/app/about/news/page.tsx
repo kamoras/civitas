@@ -124,7 +124,8 @@ export default function NewsChapter() {
             near-identical headlines: naming the same people turned out to be wrong three times in
             four, and merging two stories hides one. Multi-story briefings (&ldquo;Up First&rdquo;,
             &ldquo;Morning news brief&rdquo;) are dropped at the door, because once several stories
-            share one article they can&apos;t be separated later.
+            share one article they can&apos;t be separated later. So is a two-story item whose
+            headline and summary both tell the same two unrelated stories, one sentence each.
           </P>
           <P>
             Reddit was a trending source until September 2026, when it began requiring a login this
@@ -151,9 +152,11 @@ export default function NewsChapter() {
           line with a bracket it opens or closes but doesn&apos;t match is dropped too. Only then is
           the sentence shown, in the source&apos;s own words, naming the outlet and linking the
           article it came from. The summary at the top of an issue is one of these lines, and names
-          its outlet the same way. The headline is the top article&apos;s real headline, and an
-          issue&apos;s full story is every checked sentence, listed under the outlet that reported
-          it.
+          its outlet the same way. An issue needs two of these lines, and two that say the same
+          thing in different words (a headline and its own first sentence) count as one: they are
+          compared with 204 pairs of lines judged by hand. The headline is the top article&apos;s
+          real headline, and an issue&apos;s full story is every checked sentence, listed under the
+          outlet that reported it.
         </P>
         <P>
           This replaced asking a model to write neutrally and checking whether it had. That approach

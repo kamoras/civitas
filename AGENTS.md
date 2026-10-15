@@ -216,7 +216,7 @@ the residual.
 | Tier | Technique | Used For |
 |------|-----------|----------|
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
-| 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
+| 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
 | 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing); whether a claim's actor span is a party that can act, for spans the capitalised-actor rule refuses (against hand-labelled spans, `claim_actor_examples.json`) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
@@ -1320,7 +1320,7 @@ among feeds of its kind that have a week stands in.
 Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
 outlet's recurring briefing ("Up First", "Morning news brief", "The week in
 politics") is a single RSS item covering three to five unrelated stories, and
-every stage downstream treats it as one story. Three mechanical signals:
+every stage downstream treats it as one story. Four mechanical signals:
 
 - **The outlet's newsletter section.** An item whose URL sits under a
   `newsletter`/`newsletters` path segment is the outlet's own newsletter, a
@@ -1342,6 +1342,14 @@ every stage downstream treats it as one story. Three mechanical signals:
   sentence break, and photo credits and a broadcast sign-off ("… reports.")
   are not items: before 2026-10 those made 16 single stories in 627 feed
   articles read as lists.
+- **A headline and body that tell the same unrelated stories**
+  (`_parallel_stories`) — the two-story briefing the body check can't see
+  ("<A>. And, <B>" over two teaser items): the headline's items name
+  disjoint entities, so do the body's, and each body item names exactly one
+  headline item's entities, every headline item named. The body half is
+  what makes it precise: on 1,473 stored articles, disjoint headline items
+  alone matched 12 single stories along with 16 briefings; with it, 5
+  briefings and no single story (`docs/research/action-center-relevance.md`).
 
 This has to happen here because once several stories share one article the
 boundary between them is not recoverable later — cluster coherence filtering
