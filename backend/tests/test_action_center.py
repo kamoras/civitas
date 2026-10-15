@@ -1,6 +1,8 @@
 """Tests for Action Center deduplication and national monitor creation logic."""
 
+import importlib.util
 import json
+import pathlib
 import sqlite3
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
@@ -24,6 +26,7 @@ from app.models import (
 )
 from app.pipeline.analyze.grounding import validate_facts as _validate_facts
 from app.database import Base
+from app.pipeline.analyze import action_center as ac
 from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
@@ -119,8 +122,6 @@ class TestClusterArticles:
     never a chain of pairwise resemblances (issue 759, 2026-09-27)."""
 
     def _cluster(self, monkeypatch, vectors):
-        from app.pipeline.analyze import action_center as ac
-
         arts = [NewsArticle(title=f"t{i}", summary="", url=f"u{i}", source_name="s", published=None)
                 for i in range(len(vectors))]
         monkeypatch.setattr(ac, "_embed_texts", lambda texts: np.array(vectors, dtype=float))
@@ -144,8 +145,6 @@ class TestClusterArticles:
         assert self._cluster(monkeypatch, [[1, 0]]) == [["t0"]]
 
     def test_embeds_the_headline_and_the_start_of_the_description(self, monkeypatch):
-        from app.pipeline.analyze import action_center as ac
-
         seen = []
         monkeypatch.setattr(ac, "_embed_texts", lambda texts: seen.extend(texts) or np.eye(len(texts)))
         arts = [NewsArticle(title="Council passes budget", summary="x" * 300, url="u0", source_name="s"),
@@ -165,8 +164,6 @@ class TestClusterArticles:
 
     @pytest.mark.parametrize("cosine, together", [(0.80, True), (0.72, False)])
     def test_the_cut_is_the_calibrated_threshold(self, monkeypatch, cosine, together):
-        from app.pipeline.analyze import action_center as ac
-
         monkeypatch.setattr(ac, "cluster_calibration", lambda: {"threshold": 0.76, "description_chars": 200})
         clusters = self._cluster(monkeypatch, self._pair_at(cosine))
         assert (["t0", "t1"] in clusters) is together
@@ -176,7 +173,6 @@ class TestClusterArticles:
         first = self._cluster(monkeypatch, vectors)
         assert self._cluster(monkeypatch, vectors) == first
         order = [4, 2, 0, 5, 3, 1]
-        from app.pipeline.analyze import action_center as ac
 
         arts = [NewsArticle(title=f"t{i}", summary="", url=f"u{i}", source_name="s") for i in order]
         monkeypatch.setattr(ac, "_embed_texts", lambda texts: np.array([vectors[i] for i in order], dtype=float))
@@ -222,8 +218,6 @@ class TestClusterArticlesModel:
     judged different-event pairs, in invented text)."""
 
     def _groups(self, case):
-        from app.pipeline.analyze import action_center as ac
-
         clusters = ac._cluster_articles([(a, None) for a in _FEED + case])
         return sorted(sorted(case.index(a) for a in c if a in case) for c in clusters if any(a in case for a in c))
 
@@ -277,8 +271,6 @@ class TestClusterArticlesModel:
         assert self._groups(case) == [[0], [1]]
 
     def test_clustering_is_deterministic(self):
-        from app.pipeline.analyze import action_center as ac
-
         items = [(a, None) for a in _FEED]
         runs = [sorted(sorted(a.title for a in c) for c in ac._cluster_articles(items)) for _ in range(2)]
         assert runs[0] == runs[1]
@@ -286,11 +278,6 @@ class TestClusterArticlesModel:
     def test_no_judged_different_event_pair_reaches_the_cut(self):
         """Re-measures the calibration's constraint on the judged pairs with
         the scoring the script uses."""
-        import importlib.util
-        import pathlib
-
-        from app.pipeline.analyze import action_center as ac
-
         path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "calibrate_cluster_pairs.py"
         spec = importlib.util.spec_from_file_location("calibrate_cluster_pairs", path)
         script = importlib.util.module_from_spec(spec)
@@ -316,8 +303,6 @@ class TestClusterCalibration:
     by scripts/calibrate_cluster_pairs.py."""
 
     def test_cluster_calibration_matches_judgments(self):
-        from app.pipeline.analyze import action_center as ac
-
         calibration = ac.cluster_calibration()
         assert calibration["judgments_hash"] == ac.cluster_judgments_hash()
         assert calibration["text"] == f"title+description[{calibration['description_chars']}]"
@@ -329,10 +314,6 @@ class TestClusterCalibration:
         assert all(c["same_merged"] <= chosen["same_merged"] for c in calibration["candidates"].values())
 
     def test_judged_pairs_are_well_formed(self):
-        from datetime import datetime, timedelta
-
-        from app.pipeline.analyze import action_center as ac
-
         data = json.loads(ac._CLUSTER_JUDGMENTS_PATH.read_text())
         assert data["_source"] and data["_rubric"]
         when = {a["id"]: datetime.fromisoformat(a["published"].replace("Z", "+00:00")) for a in data["articles"]}
@@ -785,8 +766,6 @@ class TestNationalMonitorCreation:
         """A monitor still named after one of its own headlines is named again
         by the model on a later run; its slug stays (links point at it). A
         monitor with a real name is never asked about."""
-        import app.pipeline.analyze.action_center as ac
-
         headline = "Senator talks Trump's diesel deal"
         named = NationalMonitor(slug="senator-talks-trumps-diesel-deal", title=headline,
                                 description=headline, status=MonitorStatus.ACTIVE)
@@ -826,8 +805,6 @@ class TestNationalMonitorCreation:
         monitor opens one monitor of its own, even when the model names it
         after the existing one, and a second issue on it the same run does
         not open another."""
-        import app.pipeline.analyze.action_center as ac
-
         topic = [1.0, 0.0, 0.0]
         vectors = {
             "Ongoing standoff Long-running coverage.": [0.0, 1.0, 0.0],
@@ -1854,8 +1831,6 @@ class TestRecordGenerationSample:
         """The row is the prompt the model got, with the article in it —
         not the template with a literal {source} (every row from 2026-09-24
         to 2026-10-10) — and whether its spans verified."""
-        from app.pipeline.analyze import action_center as ac
-
         source = "Senate passes the budget. The Senate passed the budget 51-49 on Tuesday."
         spans = {"actor": "The Senate", "predicate": "passed the budget 51-49 on Tuesday"}
         with patch.object(ac, "call_llm", return_value=spans):
@@ -1874,7 +1849,6 @@ class TestRecordGenerationSample:
         import ast
         import inspect
 
-        from app.pipeline.analyze import action_center as ac
 
         tree = ast.parse(inspect.getsource(ac))
         calls = [
@@ -2886,7 +2860,6 @@ class TestDigestFiltering:
 
     def test_digests_are_dropped_before_embedding_and_counted(self):
         from app.pipeline.analyze import action_metrics
-        from app.pipeline.analyze import action_center as ac
 
         digest = _make_article("Up First briefing: three stories to start your day")
         story = _make_article("House approves Pentagon funding framework")
@@ -2934,8 +2907,6 @@ class TestSimilarityModelGates:
         """The gate is a vote among the nearest labelled examples, not a
         similarity bar: an article lands with whichever examples it sits
         closest to."""
-        from app.pipeline.analyze import action_center as ac
-
         civic = _make_article("House approves Pentagon funding framework in narrow vote")
         sports = _make_article("Spain defeats Argentina 1-0 in World Cup final")
         # Two relevant examples along x, two not-relevant along y.
@@ -2969,8 +2940,6 @@ class TestSimilarityModelGates:
         """scripts/calibrate_policy_relevance.py fits k and the threshold to
         one labelled set; editing the set without rerunning it would gate
         on a fit to different data."""
-        from app.pipeline.analyze import action_center as ac
-
         calibration = ac.relevance_calibration()
         examples = ac.relevance_examples()
         assert calibration["examples_hash"] == ac.relevance_examples_hash()
@@ -3103,7 +3072,6 @@ class TestPeriodicBlueskyPosts:
     def test_runs_on_the_no_articles_abort_path(self, db_session):
         from unittest.mock import patch
 
-        import app.pipeline.analyze.action_center as ac
 
         with patch.object(ac, "check_roll_call_signals"), \
                 patch.object(ac, "check_federal_register_signals"), \
@@ -3119,7 +3087,6 @@ class TestPeriodicBlueskyPosts:
     def test_runs_on_the_no_relevant_articles_abort_path(self, db_session):
         from unittest.mock import patch
 
-        import app.pipeline.analyze.action_center as ac
 
         with patch.object(ac, "check_roll_call_signals"), \
                 patch.object(ac, "check_federal_register_signals"), \
@@ -3155,8 +3122,6 @@ class TestRefreshActionIssuesClearsIsRunningOnError:
     5+ hours, blocking deploys of CI-green commits already on main."""
 
     def test_is_running_cleared_when_run_refresh_raises(self, db_session):
-        import app.pipeline.analyze.action_center as ac
-
         saved_state = ac.get_action_refresh_state()
         try:
             with patch.object(ac, "_run_refresh", side_effect=RuntimeError("boom")):
