@@ -96,9 +96,9 @@ export default function AccessibilityPage() {
                 </Item>
                 <Item label="Screen readers">
                   Pages use landmarks (header, navigation, main) and headings in order. Tabs,
-                  dialogs, score bars and live loading and error messages carry their ARIA roles.
-                  Data tables have column headers and a caption. Links that open a new tab say so.
-                  Decorative marks are hidden.
+                  dialogs, score bars and live loading and error messages carry their ARIA roles,
+                  and every filter button says whether it is on. Data tables have column headers and
+                  a caption. Links that open a new tab say so. Decorative marks are hidden.
                 </Item>
                 <Item label="Explanations">
                   Every score has a <span className="font-mono text-sm text-ink-hi">[?]</span>{" "}

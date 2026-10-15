@@ -6,8 +6,9 @@
 import type { ActionIssue } from "@/types/action";
 import type { BillDetail } from "@/types/bill";
 import type { PoliticianProfile } from "@/types/politicians";
+import type { VoteDetail } from "@/types/congress";
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
-import { billCanonicalPath } from "./congress";
+import { billCanonicalPath, calendarDate } from "./congress";
 
 const PARTY_ADJECTIVES: Record<string, string> = {
   D: "Democratic",
@@ -117,6 +118,21 @@ export function describeBill(
     title: `${label}: ${bill.title}`,
     description:
       `${label} (${ordinal(bill.congress)} Congress, ${CHAMBER_NAMES[bill.chamber] ?? bill.chamber}), sponsored by ${sponsor}. ${status}`.trim(),
+  };
+}
+
+/** "<nominee>, of <state>, to be <office>: Senate roll call 256" —
+ * what the vote was about leads (a nominee's name, a bill's number), since
+ * that is what people search for; the question and result follow. */
+export function describeRollCall(v: VoteDetail): { title: string; description: string } {
+  const chamber = CHAMBER_NAMES[v.chamber] ?? v.chamber;
+  const subject = v.billLabel && v.title ? `${v.billLabel}: ${v.title}` : v.title || v.question;
+  const members = v.chamber === "senate" ? "senator" : "representative";
+  return {
+    title: `${subject}: ${chamber} roll call ${v.number}`,
+    description:
+      `${v.question}: ${v.result || "recorded"}, ${v.yeas}–${v.nays}, ${calendarDate(v.date)}. ` +
+      `How every ${members} voted, by party, from the ${chamber}'s own record.`,
   };
 }
 

@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.pipeline.fetch.fec import fetch_committee_meta
+from app.pipeline.fetch.fec import FecUnavailable, fetch_committee_meta
 
 
 @pytest.mark.asyncio
@@ -39,7 +39,9 @@ async def test_none_when_committee_not_found(db_session):
 async def test_a_failed_fetch_is_not_cached(db_session):
     mocked = AsyncMock(side_effect=[None, {"results": [{"committee_type": "Y", "designation": "U"}]}])
     with patch("app.pipeline.fetch.fec._fetch_with_retry", new=mocked):
-        assert await fetch_committee_meta(client=None, db=db_session, committee_id="C00027466") is None
+        # A failure says so (not None, which is "no such committee").
+        with pytest.raises(FecUnavailable):
+            await fetch_committee_meta(client=None, db=db_session, committee_id="C00027466")
         again = await fetch_committee_meta(client=None, db=db_session, committee_id="C00027466")
     assert again["type"] == "Y"
 
