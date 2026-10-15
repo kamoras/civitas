@@ -402,9 +402,58 @@ class TestMeasuredReference:
         members += self._members("R", a=-2.9)
         assert compute_constituent_reference(members) is None
 
-    def test_no_bend_without_enough_opposed_seats(self):
+    def test_no_bend_without_opposed_seats(self):
         ref = compute_constituent_reference(self._members("D", opposed=False) + self._members("R"))
         assert ref["expected"]["D"]["b_opposed"] == 0.0
+        assert ref["expected"]["D"]["kink"] == {"opposed": 0, "kept": False, "loo_gain": None, "loo_se": None}
+
+    @staticmethod
+    def _chamber(party, n, opposed, kink, seed, a=-2.4, b=-1.2, votes=300):
+        """A synthetic party: `opposed` of `n` members in seats leaning to the
+        other party, break rates drawn as binomial counts over `votes` from a
+        logit with opposed-seat slope change `kink` (0 for none). Seeded, so
+        the population is the same every run."""
+        import numpy as np
+
+        rng = np.random.default_rng(seed)
+        al = np.concatenate([-rng.uniform(0.02, 0.8, opposed), rng.uniform(0.02, 1.0, n - opposed)])
+        p = 1 / (1 + np.exp(-(a + b * al + kink * np.minimum(al, 0.0))))
+        return [(party, float(x), float(k) / votes, votes) for x, k in zip(al, rng.binomial(votes, p))]
+
+    def test_keeps_a_kink_the_held_out_fit_supports(self):
+        # 108th-House-like: 29 opposed seats whose members break far more
+        # than the aligned-seat slope predicts (the research note's measured
+        # 25.5% in strongly opposed seats).
+        ref = compute_constituent_reference(
+            self._chamber("D", 220, 29, -3.0, seed=1) + self._chamber("R", 220, 0, 0.0, seed=2))
+        d = ref["expected"]["D"]
+        assert d["kink"]["kept"] and d["kink"]["opposed"] == 29
+        assert d["kink"]["loo_gain"] > d["kink"]["loo_se"]
+        assert d["b_opposed"] == pytest.approx(-3.0, abs=1.0)
+
+    def test_drops_a_kink_the_held_out_fit_does_not_support(self):
+        # 119th-House-like: seven opposed seats, no real change of slope at
+        # the swing seat. Seven points are enough to fit a kink, not to
+        # predict with one.
+        ref = compute_constituent_reference(
+            self._chamber("D", 212, 7, 0.0, seed=3) + self._chamber("R", 219, 3, 0.0, seed=4))
+        for party in ("D", "R"):
+            fit = ref["expected"][party]
+            assert not fit["kink"]["kept"] and fit["b_opposed"] == 0.0
+            assert fit["kink"]["loo_gain"] <= fit["kink"]["loo_se"]
+
+    def test_the_kink_decision_is_deterministic(self):
+        members = self._chamber("D", 120, 12, -1.5, seed=5) + self._chamber("R", 120, 4, 0.0, seed=6)
+        assert compute_constituent_reference(members) == compute_constituent_reference(list(members))
+
+    def test_presidential_support_chooses_its_kink_the_same_way(self):
+        from app.pipeline.analyze.presidential_support import fit_expectation
+
+        rows = [(p, al, round(rate * votes), votes)
+                for p, al, rate, votes in self._chamber("D", 212, 7, 0.0, seed=3) + self._chamber("R", 219, 3, 0.0, seed=4)]
+        fits = fit_expectation(rows)
+        assert fits["D"]["kink"]["opposed"] == 7 and not fits["D"]["kink"]["kept"]
+        assert fits["D"]["b_opposed"] == 0.0
 
     def test_both_parties_or_neither(self):
         assert compute_constituent_reference(self._members("D") + self._members("R", n=10)) is None

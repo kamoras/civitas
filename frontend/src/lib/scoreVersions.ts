@@ -32,6 +32,17 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.35",
+    date: "2026-10-15",
+    title: "A seat's expected break rate bends at swing seats only on evidence",
+    tldr: "Constituent Alignment compares a member's party-line breaks with how often members of the same party in similar seats break. That expectation was allowed to change slope for seats leaning to the other party whenever five members held one. Seven were enough to draw the bend but not to predict with it, so it now bends only when the bend predicts members better from the other members' votes.",
+    changes: [
+      "The bend is kept only when, leaving each member out in turn, it predicts the left-out member's break rate better than a single line, by more than one standard error (the one-standard-error rule). In the 119th Congress it is kept nowhere: House Democrats had a bend fitted on seven members that doubled their opposed-seat slope (95% bootstrap interval included no bend), and Senate Democrats one fitted on seven that ran the other way.",
+      "Constituent Alignment: 190 of 433 representatives move (mean 0.98 points, at most 18, 5.9 on the overall score) and 37 of 100 senators (mean 0.93, at most 9, 3.0 overall); only Democrats, whose mean rises 0.78 (House) and 0.36 (Senate). The most a one-point change in a House seat's lean moves a score falls from 39 points to 20.",
+      "The presidential-support expectation, which used the same five-seat rule, now uses the same test; House Democrats' bend is dropped there too. It is shown, not scored. docs/methodology/member-score/v6.35.md has the measurements.",
+    ],
+  },
+  {
     version: "Justice v3",
     date: "2026-10-09",
     title: "Supreme Court justices are no longer scored",

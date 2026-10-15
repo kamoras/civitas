@@ -492,7 +492,9 @@ The correct pattern, established by `_district_pvi()` /
    `funding_reference.json`, `scripts/audit_pac_ratio.py`), and so does
    Constituent Alignment's per-party expected break rate by seat lean
    (`compute_constituent_reference`, `constituent_reference.json`,
-   `scripts/calibrate_constituent_reference.py`); all go through
+   `scripts/calibrate_constituent_reference.py`; its swing-seat bend is
+   kept only when it predicts the party's members better out of sample,
+   `select_opposed_kink`, not by a count of opposed seats); all go through
    `pipeline/analyze/population_reference.py`. A value frozen on one date
    can't track a quantity that accumulates over a congress.
 

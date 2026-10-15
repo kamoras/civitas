@@ -315,11 +315,13 @@ export default function ScoresChapter() {
             </Step>
             <Step n={3} title="Work out what the seat expects">
               From the chamber itself, on every run: how often members of the same party break in
-              seats with the same partisan lean (Cook PVI). Each party gets its own line, allowed to
-              bend at swing seats, so a Republican in a seat Biden won is compared with how
-              Republicans in seats like that actually vote. A House seat&apos;s lean is the district
-              the member was elected on (their Congress&apos;s lines, not the map the next election
-              uses), and a score&apos;s worked math is redone on the same lines as the score.
+              seats with the same partisan lean (Cook PVI). Each party gets its own line, so a
+              Republican in a seat Biden won is compared with how Republicans in seats like that
+              actually vote. The line bends at swing seats only when the bend predicts each
+              member&apos;s rate better from the other members&apos; votes, and is straight
+              otherwise. A House seat&apos;s lean is the district the member was elected on (their
+              Congress&apos;s lines, not the map the next election uses), and a score&apos;s worked
+              math is redone on the same lines as the score.
             </Step>
             <Step n={4} title="Measure the gap">
               In standard deviations, not percentage points. Four extra points on a seat whose

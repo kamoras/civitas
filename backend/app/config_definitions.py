@@ -250,12 +250,14 @@ SATURATION_QUANTILE = 0.9
 # CONSTITUENT_FULL_CONFIDENCE_VOTES party-labeled votes, its expectation a
 # fractional-logit fit, its scale per party the SATURATION_QUANTILE of the
 # Pearson residual per vote (written exactly, so any change to either constant
-# changes the stamp). CONSTITUENT_REFERENCE accepts only stored entries
+# changes the stamp), its kink term kept only on held-out evidence (v6.35,
+# "kink=loo-1se": score_calculator.select_opposed_kink). CONSTITUENT_REFERENCE accepts only stored entries
 # carrying it, so one measured under another rule — v6.15's least-squares
 # expectation and percentage-point scale, v6.13's content-weighted rate,
 # another threshold or quantile — is not scored against.
 CONSTITUENT_REFERENCE_STATISTIC = (
     f"congress-centerward-per-measure-break-rate/logit/party-residual/n>={CONSTITUENT_FULL_CONFIDENCE_VOTES}/q={SATURATION_QUANTILE!r}"
+    "/kink=loo-1se"
 )
 
 
