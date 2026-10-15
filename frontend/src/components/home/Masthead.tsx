@@ -111,7 +111,9 @@ export default function Masthead() {
               YOUR STATE:
               <select
                 value={state}
-                onChange={(e) => setState(e.target.value)}
+                // The code from our own list, never the field's text, into
+                // an href.
+                onChange={(e) => setState(STATES_BY_NAME.find((c) => c === e.target.value) ?? "")}
                 className="min-h-[28px] border border-white/20 bg-surface-base px-1 font-mono text-xs tracking-normal text-ink"
               >
                 <option value="">Pick one</option>
