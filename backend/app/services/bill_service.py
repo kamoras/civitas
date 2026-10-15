@@ -23,6 +23,7 @@ from app.config_definitions import BILL_STAGES, BillStage
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.photos import bioguide_photo
+from app.pipeline.fetch.bill_display_titles import cached_display_titles, titles_key
 from app.pipeline.congress_activity import eastern_today
 from app.services.bill_record import bill_number_matches, canonical_bill_id, typed_bill_number
 from app.services.word_search import build_index, search
@@ -152,17 +153,23 @@ def _build_rows(db: Session) -> list[_Row]:
             .filter(Representative.is_current == True),  # noqa: E712
         ),
     ]
-    for chamber, query in chamber_queries:
+    fetched = [(chamber, query.all()) for chamber, query in chamber_queries]
+    short = cached_display_titles(db, [(r[7], r[0], r[1]) for _, found in fetched for r in found])
+    for chamber, found in fetched:
         for (
             bill_id, title, introduced_date, latest_action, latest_action_date,
             stage, policy_area, congress, bill_type, is_law,
             member_id, member_name, member_party, member_state, bioguide_id,
-        ) in query.all():
+        ) in found:
             mention_count = mention_counts.get(bill_id, 0)
+            named = short.get(titles_key(congress, bill_id))
             rows.append(_Row(
                 bill=BillInFlightSchema(
                     bill_id=bill_id,
                     title=title,
+                    short_title=named.title if named else None,
+                    short_title_type=named.title_type if named else None,
+                    official_title=named.official if named else None,
                     chamber=chamber,
                     sponsor_id=member_id,
                     sponsor_name=member_name,
@@ -373,9 +380,16 @@ def get_bill_detail(db: Session, bill_id: str, congress: int | None = None) -> B
     _, chamber, (sp, member) = max(candidates, key=lambda c: (c[0], c[1] == "senate"))
     related = _issues_mentioning(db, bill_id)
 
+    named = cached_display_titles(db, [(sp.congress, sp.bill_id, sp.title)]).get(
+        titles_key(sp.congress, sp.bill_id),
+    )
+
     return BillDetailSchema(
         bill_id=sp.bill_id,
         title=sp.title,
+        short_title=named.title if named else None,
+        short_title_type=named.title_type if named else None,
+        official_title=named.official if named else None,
         chamber=chamber,
         sponsor_id=member.id,
         sponsor_name=member.name,
@@ -420,8 +434,8 @@ def _row_key(bill_id: str, congress: int | None) -> str:
 
 
 def _word_matches(q: str) -> set[str]:
-    """The _row_key of every cached bill whose title or sponsor holds each
-    of the query's words (word_search: stemmed, as word starts, in any
+    """The _row_key of every cached bill whose title, short title or
+    sponsor holds each of the query's words (word_search: stemmed, as word starts, in any
     order) — "flag burning" finds "Flag Burners Act"."""
     global _word_index
     cached = _collect_cache
@@ -433,8 +447,9 @@ def _word_matches(q: str) -> set[str]:
             if _word_index is not None:
                 _word_index[1].close()
             _word_index = (built, build_index(
-                ((_row_key(r.bill.bill_id, r.bill.congress), r.bill.title, r.bill.sponsor_name) for r in rows),
-                n_texts=2,
+                ((_row_key(r.bill.bill_id, r.bill.congress), r.bill.title, r.bill.short_title or "",
+                  r.bill.sponsor_name) for r in rows),
+                n_texts=3,
             ))
         return search(_word_index[1], q)
 

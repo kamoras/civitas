@@ -28,6 +28,7 @@ from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async, api_cache_set_many_async
 from app.pipeline.fetch.congress import CONGRESS_API_BASE, congress_gov_bill_url
 from app.pipeline.fetch import floor_logs
+from app.pipeline.fetch.bill_display_titles import cached_display_titles, titles_key
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
@@ -381,14 +382,31 @@ def roll_call_summaries(db: Session, refs: list[str | None]) -> dict[str, dict]:
     positions: dict[int, list[RollCallPosition]] = {}
     for p in db.query(RollCallPosition).filter(RollCallPosition.roll_call_id.in_([rc.id for rc in rows])):
         positions.setdefault(p.roll_call_id, []).append(p)
+    short = roll_call_short_titles(db, rows)
     return {
         wanted[(rc.chamber, rc.congress, rc.session, rc.number)]: {
             "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
             "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
             "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
+            "billShortTitle": short.get(rc.id),
             "parties": party_breakdown(positions.get(rc.id, [])),
         }
         for rc in rows
+    }
+
+
+def roll_call_short_titles(db: Session, rows: list[RollCall]) -> dict[int, str]:
+    """{roll call id: its bill's short or popular title} for the roll calls
+    on a bill whose cached Congress.gov titles list names one their own
+    title isn't (fetch/bill_display_titles): a vote list then says "One Big
+    Beautiful Bill Act" where the Senate's record says "A bill to provide
+    for reconciliation pursuant to title II of H. Con. Res. 14." The
+    chamber's own title stays on the roll call's page and in `title`."""
+    on_bills = [rc for rc in rows if rc.bill_id]
+    found = cached_display_titles(db, [(rc.congress, rc.bill_id, rc.title or "") for rc in on_bills])
+    return {
+        rc.id: found[titles_key(rc.congress, rc.bill_id)].title
+        for rc in on_bills if titles_key(rc.congress, rc.bill_id) in found
     }
 
 
@@ -416,6 +434,7 @@ def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> 
         "rejected": rc.rejected, "majorityRequirement": rc.majority_requirement,
         "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
         "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
+        "billShortTitle": roll_call_short_titles(db, [rc]).get(rc.id),
         "parties": party_breakdown(positions), "members": members,
     }
 
@@ -477,11 +496,21 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
     summaries = sorted(raw.get("summaries") or [], key=lambda s: s.get("updateDate") or s.get("actionDate") or "")
     latest_summary = summaries[-1] if summaries else None
     vote_summaries = bill_votes(db, congress, bill_id)
+    # Its short or popular title from Congress.gov's titles list, as cached
+    # (fetch/bill_display_titles): the h1 when there is one, with `title`
+    # beside it. Read from the cache, never fetched here, so the page costs
+    # no extra request.
+    named = cached_display_titles(db, [(congress, bill_id, bill.get("title") or "")]).get(
+        titles_key(congress, bill_id),
+    )
     return {
         "billId": bill_id,
         "billLabel": bill_label(bill_id),
         "congress": congress,
         "title": bill.get("title"),
+        "shortTitle": named.title if named else None,
+        "shortTitleType": named.title_type if named else None,
+        "officialTitle": named.official if named else None,
         "introducedDate": bill.get("introducedDate"),
         "originChamber": bill.get("originChamber"),
         "policyArea": (bill.get("policyArea") or {}).get("name"),
