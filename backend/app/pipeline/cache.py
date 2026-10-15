@@ -31,6 +31,7 @@ results for that prompt to be ignored on the next pipeline run. The LLM is calle
 fresh for every document and results are stored under the new version key.
 Old version rows remain in the DB until pruned — they do not affect correctness.
 """
+import hashlib
 import json
 import logging
 from datetime import datetime, timedelta
@@ -45,10 +46,38 @@ from app.time_utils import utcnow
 logger = logging.getLogger(__name__)
 
 
+# How much earlier than its TTL a `spread` entry may expire, as a share of
+# the TTL, decided per key. The nightly fetches thousands of entries of one
+# kind in one run; with one TTL for all of them they all expired on the same
+# later night, and that night refetched every one. Through the rate limits
+# (Congress.gov 1.2/s, the FEC 0.25/s) that made one night in three or four
+# take 4-6 hours longer than the rest: 23,533 Congress.gov and 3,124 FEC
+# entries were refetched on 2026-10-14, a few hundred on the nights before.
+# Expiring each key somewhere in [TTL x (1 - spread), TTL] gives keys
+# different periods, so entries written together fall out of step after a
+# cycle and each night refetches about its share. Earlier, never later: no
+# TTL a caller chose is stretched.
+EXPIRY_SPREAD = 1 / 3
+
+
+def spread_ttl_hours(key: str, ttl_hours: float) -> float:
+    """`key`'s own expiry within [ttl x (1 - EXPIRY_SPREAD), ttl]: the same
+    for a key every time, so a key's refresh period is fixed."""
+    unit = int.from_bytes(hashlib.sha256(key.encode()).digest()[:4], "big") / 2**32
+    return ttl_hours * (1 - EXPIRY_SPREAD * unit)
+
+
 def api_cache_get(
     db: Session, tier: str, key: str, max_age_hours: int | None = None,
+    *, spread: bool = False, written_since: datetime | None = None,
 ) -> dict | None:
-    """Get cached API response, return None if expired or missing."""
+    """Get cached API response, return None if expired or missing.
+
+    `spread`: expire this key a little early, by its own amount
+    (spread_ttl_hours) — for the high-volume per-entity fetches the nightly
+    run makes. An empty payload keeps its exact TTL, so the short life
+    api_cache_set gives it stays what it is. `written_since`: an entry
+    written before then counts as expired."""
     entry = (
         db.query(ApiCache)
         .filter(ApiCache.tier == tier, ApiCache.cache_key == key)
@@ -56,11 +85,31 @@ def api_cache_get(
     )
     if not entry:
         return None
+    if written_since is not None and entry.cached_at < written_since:
+        return None
     age = utcnow() - entry.cached_at
     ttl = max_age_hours if max_age_hours is not None else settings.PIPELINE_CACHE_TTL_HOURS
+    if spread and entry.data_json not in _EMPTY_JSON:
+        ttl = spread_ttl_hours(key, ttl)
     if age > timedelta(hours=ttl):
         return None
     return json.loads(entry.data_json)
+
+
+def api_cache_mark_stale(db: Session, tier: str, keys: list[str], age: timedelta) -> int:
+    """Make the entries for `keys` read as `age` old, keeping their data: they
+    fail every freshness check shorter than that, and are still there for a
+    caller that falls back to a stale copy when the source can't be read.
+    Returns how many entries were marked."""
+    marked = 0
+    for i in range(0, len(keys), 500):  # stay under SQLite's bind-parameter limit
+        marked += (
+            db.query(ApiCache)
+            .filter(ApiCache.tier == tier, ApiCache.cache_key.in_(keys[i:i + 500]))
+            .update({ApiCache.cached_at: utcnow() - age}, synchronize_session=False)
+        )
+    db.commit()
+    return marked
 
 
 def api_cache_stamp(

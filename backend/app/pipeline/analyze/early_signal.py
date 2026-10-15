@@ -146,7 +146,10 @@ def _compose_developing_issue(vote: dict) -> tuple[str, str, list[str]]:
     question, the result, the tally and the date."""
     chamber_name, _ = _chamber_labels(vote)
     short = "House" if vote.get("chamber") == "House" else "Senate"
-    measure = (vote.get("documentName") or vote.get("voteTitle") or "the measure").strip()
+    document = (vote.get("documentName") or "").strip()
+    # A bill as the site and the Record print it ("H.R. 9497"), not the
+    # Clerk's file spelling ("H R 9497"); anything else as the record has it.
+    measure = bill_label(bill_id_from_number(document)) or document or (vote.get("voteTitle") or "").strip() or "the measure"
     question = (vote.get("question") or "").strip()
     result = (vote.get("result") or "").strip()
     measure_title = (vote.get("documentTitle") or "").strip()
@@ -400,6 +403,9 @@ def retire_covered_developing_issues(db: Session) -> int:
 # A summary quotes the rule's abstract up to this many characters, ending
 # at a sentence; the whole abstract is among the facts.
 _ABSTRACT_SUMMARY_CHARS = 400
+# A title quotes at most this much of an abstract, for a rule the Federal
+# Register gave no title: a card's headline, not a paragraph.
+_TITLE_ABSTRACT_CHARS = 200
 
 
 # A period that ends a word like these doesn't end the sentence. The dotted
@@ -436,7 +442,14 @@ def _compose_developing_rule_issue(rule: dict) -> tuple[str, str, list[str]]:
     either the template's or the Federal Register record's own: the
     agency, the rule's title, its abstract, the publication date and the
     document number. The model's drafts were dropped with the vote
-    drafts', for the same reason (the module docstring)."""
+    drafts', for the same reason (the module docstring).
+
+    The title leads with what the rule is, in the Federal Register's own
+    title (its abstract's opening sentence when it has none). It used to
+    lead with the agencies, which ran to five departments and put the
+    rule's subject past the second line of a card on a phone ("Treasury
+    Department, Internal Revenue Service, Labor Department, ... final
+    rule: Transparency in Coverage"). The agencies open the summary."""
     agencies = ", ".join(rule.get("agencies") or []) or "A federal agency"
     rule_title = " ".join((rule.get("title") or "").split())
     day = rule.get("publicationDate") or ""
@@ -444,9 +457,12 @@ def _compose_developing_rule_issue(rule: dict) -> tuple[str, str, list[str]]:
     abstract = " ".join((rule.get("abstract") or "").split())
     opening = _first_sentences(abstract, _ABSTRACT_SUMMARY_CHARS)
 
-    title = f"{agencies} final rule: {rule_title}"
+    subject = rule_title or _first_sentences(abstract, _TITLE_ABSTRACT_CHARS) or (
+        f"Federal Register document {number}" if number else "Federal Register document")
+    title = f"Final rule: {subject}"
+    what = f'the final rule "{rule_title}"' if rule_title else "a final rule"
     summary = (
-        f"{agencies} published the final rule \"{rule_title}\" in the Federal Register"
+        f"{agencies} published {what} in the Federal Register"
         f"{f' on {day}' if day else ''}. {opening + ' ' if opening else ''}"
         "This is from the Federal Register; news coverage of the rule has not appeared yet."
     )

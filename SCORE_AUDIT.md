@@ -475,6 +475,7 @@ After running the audit, use this framework to decide what to change:
 | Derived consistency check ✗ | Vote/finance matching broken, or algorithm regression | The failure's rationale names the raw metric that decoupled; check key_votes/donor tables and the corresponding fetch |
 | >20% senators in data desert | API fetch failure | Check API cache, rate limits, name matching |
 | High score variance (>15 pts) on specific senator | Inconsistent vote/FEC matching | Add name normalization or use bioguide_id as primary key |
+| LE stdev or rank order jumps between two runs on one `ALGORITHM_VERSION` (the run raises a "Score drift … on an unchanged scoring method" ops alert, `score_calibration.SAME_METHOD_*`) | Not a method change, so an input or reference problem: on 2026-10-14 one failed bill-actions request stopped the House sponsorship read for 296 members (stdev 15.32 → 10.26, rho 0.755) | Read the run's "Congress.gov sponsorship data unread" alert and `/data/les_reference.json`'s `n` against `n_members`: only members whose bills the run read are measured, so the two should be close. Members it couldn't read carry `legislativeEffectivenessBills: carried:<date>` or `unavailable` in their stored confidence |
 | LE median far from 50 | The LES reference was measured on a different population (a stale `/data/les_reference.json`, or a congress boundary) | Compare its `stage_totals` / `n_members` with the current chamber's; the next pipeline run re-measures it |
 
 ## Algorithm change history

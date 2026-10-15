@@ -5,6 +5,7 @@ import axe from "axe-core";
 import DayReportView from "./DayReportView";
 import PeriodReportView from "./PeriodReportView";
 import BillPageView from "./BillPageView";
+import RollCallView from "./RollCallView";
 import type {
   BillRecord,
   ChamberDay,
@@ -205,12 +206,12 @@ describe("day report", () => {
     ).toBeTruthy();
     expect(screen.getByText(day.sentence)).toBeTruthy();
     expect(screen.getByText("Passed both chambers")).toBeTruthy();
-    // A bill links to its page; a vote on a bill opens that vote there.
+    // A bill links to its page; every vote, on a bill or not, to its own.
     expect(screen.getByRole("link", { name: /H\.R\. 2388/ }).getAttribute("href")).toBe(
       "/congress/bills/HR.2388?congress=119"
     );
     expect(screen.getByRole("link", { name: "S. 4668" }).getAttribute("href")).toBe(
-      "/congress/bills/S.4668?congress=119#vote-senate-2-243"
+      "/congress/bills/S.4668?congress=119"
     );
     expect(screen.getByRole("link", { name: /Wed, Sep 23/ }).getAttribute("href")).toBe(
       "/congress/2026-09-23"
@@ -463,6 +464,56 @@ const detail: VoteDetail = {
     },
   ],
 };
+
+describe("roll call page", () => {
+  // A nomination: no bill, which is why the page exists at all.
+  const nomination: VoteDetail = {
+    ...detail,
+    number: 256,
+    question: "On the Nomination PN1",
+    title: "A nominee, of a state, to be an officer",
+    result: "Nomination Confirmed",
+    billId: null,
+    billLabel: null,
+    sourceUrl:
+      "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1192/vote_119_2_00256.xml",
+  };
+
+  it("shows what was voted on, the result, each party and every member", async () => {
+    render(<RollCallView vote={nomination} path="/congress/votes/senate/119/2/256" />);
+    expect(
+      screen.getByRole("heading", { level: 1, name: "A nominee, of a state, to be an officer" })
+    ).toBeTruthy();
+    expect(screen.getByText("Nomination Confirmed")).toBeTruthy();
+    expect(screen.getByText("74–25")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Rob Delgado" })).toHaveAttribute(
+      "href",
+      "/politicians/rob-delgado"
+    );
+    expect(screen.getByRole("link", { name: "the official record (XML)" })).toHaveAttribute(
+      "href",
+      nomination.sourceUrl
+    );
+    expect(
+      screen.getAllByRole("link", { name: /Thursday, September 24, 2026/ })[0]
+    ).toHaveAttribute("href", "/congress/2026-09-24");
+    await userEvent.selectOptions(screen.getByLabelText("State"), "KY");
+    expect(screen.queryByRole("link", { name: "Rob Delgado" })).toBeNull();
+  });
+
+  it("links a vote on a bill to the bill", () => {
+    render(<RollCallView vote={detail} path="/congress/votes/senate/119/2/243" />);
+    expect(screen.getAllByRole("link", { name: /S\. 4668/ })[0]).toHaveAttribute(
+      "href",
+      "/congress/bills/S.4668?congress=119"
+    );
+  });
+
+  it("has no axe violations", async () => {
+    render(<RollCallView vote={nomination} path="/congress/votes/senate/119/2/256" />);
+    expect(await violations()).toEqual([]);
+  });
+});
 
 describe("bill page", () => {
   it("shows the record, every member's vote, and filters by state", async () => {
