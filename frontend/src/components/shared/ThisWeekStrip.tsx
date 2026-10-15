@@ -24,7 +24,16 @@ const REVALIDATE_S = 300;
  * Supplementary: when the backend can't answer, the strip is left out and
  * the page renders as it would without it.
  */
-export default async function ThisWeekStrip({ variant }: { variant: "full" | "compact" }) {
+export default async function ThisWeekStrip({
+  variant,
+  pageDate,
+}: {
+  variant: "full" | "compact";
+  /** The day the page reports (a Congress day page): when it isn't today,
+   * the strip is labelled with today's date, since its "meets today" and
+   * "this week" are about now, not the page's day. */
+  pageDate?: string;
+}) {
   // Per request, never prerendered: `next build` can't reach the backend,
   // and the homepage would otherwise ship the strip-less page until a
   // revalidation. The fetch itself is cached for the backend's lifetime.
@@ -37,7 +46,11 @@ export default async function ThisWeekStrip({ variant }: { variant: "full" | "co
     data = null;
   }
   if (!data?.election || !data.congress) return null;
-  return variant === "full" ? <FullStrip data={data} /> : <CompactStrip data={data} />;
+  return variant === "full" ? (
+    <FullStrip data={data} />
+  ) : (
+    <CompactStrip data={data} pageDate={pageDate} />
+  );
 }
 
 const LABEL = "font-mono text-xs uppercase tracking-[0.16em] text-ink-min";
@@ -254,17 +267,23 @@ function FullStrip({ data }: { data: ThisWeek }) {
   );
 }
 
-function CompactStrip({ data }: { data: ThisWeek }) {
+function CompactStrip({ data, pageDate }: { data: ThisWeek; pageDate?: string }) {
   const { election, congress, commentDeadlines } = data;
   const line = electionLine(election);
   const next = commentDeadlines[0];
+  // On a page about another day, "This week … meets today" read as that
+  // day's (2026-09-16's page, on 2026-10-15): say which day it is.
+  const label =
+    pageDate && congress.today && pageDate !== congress.today
+      ? `Now · ${shortDate(congress.today)}`
+      : "This week";
   return (
     <aside
-      aria-label="This week"
+      aria-label={label}
       className="mb-6 border border-white/15 bg-surface px-4 py-3 font-mono text-xs text-ink-lo"
     >
       <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
-        <span className="uppercase tracking-[0.16em] text-ink-min">This week</span>
+        <span className="uppercase tracking-[0.16em] text-ink-min">{label}</span>
         <span>
           <span className="font-semibold text-ink-hi">{line.figure}</span> {line.caption}
         </span>

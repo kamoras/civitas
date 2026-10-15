@@ -7,6 +7,7 @@ import type { ThisWeek } from "@/types/thisWeek";
 const data: ThisWeek = {
   election: { date: "2026-11-03", phase: "campaign", daysUntil: 23, states: ["AK", "AL", "DC"] },
   congress: {
+    today: "2026-10-15",
     weekStart: "2026-10-12",
     sentence: "Congress is out until Tuesday, October 20.",
     chambers: {
@@ -163,6 +164,15 @@ describe("ThisWeekStrip", () => {
       within(details).getByRole("link", { name: "Alabama ballot", hidden: true })
     ).toHaveAttribute("href", "/elections/states/AL");
     expect(await violations()).toEqual([]);
+  });
+
+  it("compact, on a page about another day: labelled with today's date", () => {
+    // 2026-09-16's page read "This week … meets today" on 2026-10-15.
+    const { rerender } = render(<CompactStrip data={data} pageDate="2026-09-16" />);
+    expect(screen.getByRole("complementary", { name: "Now · Thu, Oct 15" })).toBeInTheDocument();
+    expect(screen.queryByText("This week")).toBeNull();
+    rerender(<CompactStrip data={data} pageDate="2026-10-15" />);
+    expect(screen.getByRole("complementary", { name: "This week" })).toBeInTheDocument();
   });
 
   it("names the count after the election, not a countdown", () => {
