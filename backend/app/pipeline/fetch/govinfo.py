@@ -57,7 +57,7 @@ async def fetch_bill_package(
         Bill package info with text links, or None.
     """
     cache_key = f"bill-package-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "govinfo", cache_key)
+    cached = api_cache_get(db, "govinfo", cache_key, spread=True)
     if cached is not None:
         return cached
 
@@ -102,7 +102,7 @@ async def fetch_bill_text(
         Bill text content (HTML stripped), or None.
     """
     cache_key = f"bill-text-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "govinfo", cache_key)
+    cached = api_cache_get(db, "govinfo", cache_key, spread=True)
     if cached is not None:
         return cached
 

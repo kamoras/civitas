@@ -84,7 +84,7 @@ async def _candidate_latest_election(
     member files for a new cycle.
     """
     cache_key = f"candidate-profile-{candidate_id}"
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         return int(cached.get("latest_election") or 0)
 
@@ -143,7 +143,7 @@ async def find_candidate(
     """
     district_suffix = f"-{district}" if district else ""
     cache_key = f"candidate-search-{re.sub(r'\\s+', '_', name)}-{state}-{office}{district_suffix}"
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         return cached
 
@@ -564,7 +564,7 @@ async def fetch_candidate_financials(
 ) -> list[dict]:
     """Fetch candidate financial totals, most recent election period first."""
     cache_key = financials_cache_key(candidate_id)
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         # Sort cached entries too — entries cached before 2026-07 were
         # stored in whatever order the API returned.
@@ -584,7 +584,7 @@ async def fetch_candidate_committees(
 ) -> list[dict]:
     """Fetch the candidate's principal campaign committee."""
     cache_key = f"candidate-committees-{candidate_id}"
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         return cached
 
@@ -637,7 +637,7 @@ async def with_seat_election(
         # Every cycle in one page: asked for a cycle it has no row for, the
         # endpoint answers 404, which can't be told from a dead link.
         cache_key = f"committee-totals-{cid}"
-        rows = api_cache_get(db, "fec", cache_key)
+        rows = api_cache_get(db, "fec", cache_key, spread=True)
         if rows is None:
             data = await _fetch_or_raise(client, f"{FEC_API_BASE}/committee/{cid}/totals/?per_page=100")
             rows = data.get("results") or []
@@ -706,7 +706,7 @@ async def fetch_committee_receipts(
             Omit to fetch unwindowed (career-lifetime) data.
     """
     cache_key = f"committee-receipts-indiv-v2-{committee_id}-{_cycle_tag(cycles)}"
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         return cached
 
@@ -728,7 +728,7 @@ async def fetch_pac_receipts(
     used for receipt totals.
     """
     cache_key = f"committee-receipts-pac-v2-{committee_id}-{_cycle_tag(cycles)}"
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         return cached
 

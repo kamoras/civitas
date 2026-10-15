@@ -540,6 +540,14 @@ _NOT_ANALYSIS_PATHS = {
     # services/explore_summary.py, a reader's on-request summary. Nothing
     # classified or scored reads it.
     "pipeline/analyze/prompts.py",
+    # Votes with the president: reads roll calls and OMB's statements and
+    # writes its own tables, an informational rate beside the scores. The
+    # stance reading (sap_position) is an embedding classifier, but it
+    # keeps nothing in the learning store, the analysis cache or the
+    # reference corpus, and versions its own results. Hashed code reaches
+    # it only through run_presidential_support (tested).
+    "pipeline/analyze/presidential_support.py",
+    "pipeline/analyze/sap_position.py",
     *_COORDINATION_PATHS,
     *_PUBLISHING_PATHS,
     *_ACTION_CENTER_PATHS,
