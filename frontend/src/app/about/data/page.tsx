@@ -528,6 +528,16 @@ export default function DataChapter() {
           Using an open-weight model means no per-use fees that could make the project unaffordable,
           no dependence on another company staying in business, and nothing leaving the device.
         </P>
+        <Sub title="The nightly runs" id="nightly-runs">
+          <P>
+            Every night five runs go one after another: the Senate; a supplementary run (Explore
+            documents, the Supreme Court and presidents); the House; stock trades; and elections.
+            Each reads what the database already holds, so one that fails leaves the others&apos;
+            records current, and the next still runs. The band at the top of every page names any
+            run whose latest attempt failed, says when, and counts how many of the five completed.
+            Until a failed run completes again, its pages show its last completed run.
+          </P>
+        </Sub>
         <Facts>
           <Fact label="Hardware">Raspberry Pi 5 (16 GB), NVMe SSD</Fact>
           <Fact label="Backend">Python 3.13, FastAPI, SQLAlchemy, SQLite</Fact>

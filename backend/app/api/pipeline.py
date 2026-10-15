@@ -5,12 +5,31 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
 from app.database import get_db
-from app.models import PipelineRun
-from app.schemas import PipelineRunSchema, PipelineStatusSchema
+from app.models import (
+    ElectionPipelineRun,
+    HousePipelineRun,
+    PipelineRun,
+    PipelineStatus,
+    StockTradesPipelineRun,
+    SupplementaryPipelineRun,
+)
+from app.pipeline.run_tracker import live_run, run_in_progress
+from app.schemas import PipelineLinkSchema, PipelineRunSchema, PipelineStatusSchema
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# The nightly chain's links in the order it runs them (scheduler's chain),
+# each with the name the records band prints for it.
+CHAIN_LINKS = (
+    ("senate", "Senate", PipelineRun),
+    ("supplementary", "Supplementary", SupplementaryPipelineRun),
+    ("house", "House", HousePipelineRun),
+    ("stock_trades", "Stock trades", StockTradesPipelineRun),
+    ("election", "Election", ElectionPipelineRun),
+)
+
 
 def _is_pipeline_running(db: Session) -> bool:
     """Check the shared database for a currently running pipeline.
@@ -18,9 +37,37 @@ def _is_pipeline_running(db: Session) -> bool:
     A leftover row a dead run left is ignored (run_tracker.live_run), so it
     can't wedge the "is a pipeline already running?" guard.
     """
-    from app.pipeline.run_tracker import run_in_progress
-
     return run_in_progress(db, PipelineRun)
+
+
+def _link_state(db: Session, model, run) -> str:
+    """The band's word for a link's latest row. A RUNNING row counts as
+    running only while live_run speaks for it; a dead one never finished,
+    so it reads as failed rather than as a run still going."""
+    if run.status == PipelineStatus.RUNNING:
+        live = live_run(db, model)
+        return "running" if live is not None and live.id == run.id else "failed"
+    if run.status in (PipelineStatus.COMPLETED, PipelineStatus.PARTIAL):
+        return run.status
+    return "failed"
+
+
+def chain_links(db: Session) -> list[PipelineLinkSchema]:
+    """Each chain link's latest run, links that never ran left out."""
+    links = []
+    for key, label, model in CHAIN_LINKS:
+        run = db.query(model).order_by(model.started_at.desc()).first()
+        if run is None:
+            continue
+        links.append(PipelineLinkSchema(
+            pipeline=key,
+            label=label,
+            state=_link_state(db, model, run),
+            run_id=run.id,
+            started_at=run.started_at,
+            completed_at=run.completed_at,
+        ))
+    return links
 
 
 @router.get("/pipeline/status", response_model=PipelineStatusSchema)
@@ -57,10 +104,15 @@ def pipeline_status(db: Session = Depends(get_db)) -> PipelineStatusSchema:
     except Exception:
         next_time = None
 
+    links = chain_links(db)
+    completed = [link for link in links if link.state == "completed" and link.completed_at]
     return PipelineStatusSchema(
         last_run=last_run_schema,
         next_scheduled=next_time,
         is_running=_is_pipeline_running(db),
+        links=links,
+        links_completed=len(completed),
+        filed_at=max((link.completed_at for link in completed), default=None),
     )
 
 

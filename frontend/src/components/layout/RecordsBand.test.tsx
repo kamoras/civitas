@@ -5,7 +5,7 @@ import RecordsBand, {
   describeRunState,
   formatRunTimestamp,
 } from "./RecordsBand";
-import type { PipelineRunInfo, PipelineStatus } from "@/lib/api";
+import type { PipelineLink, PipelineRunInfo, PipelineStatus } from "@/lib/api";
 
 function run(overrides: Partial<PipelineRunInfo> = {}): PipelineRunInfo {
   return {
@@ -27,12 +27,36 @@ function run(overrides: Partial<PipelineRunInfo> = {}): PipelineRunInfo {
   };
 }
 
-const status = (o: Partial<PipelineStatus> = {}): PipelineStatus => ({
-  lastRun: run(),
-  nextScheduled: null,
-  isRunning: false,
-  ...o,
-});
+const LABELS = ["Senate", "Supplementary", "House", "Stock trades", "Election"];
+
+/** The five links' latest runs: every one completed unless overridden by label. */
+function links(states: Partial<Record<string, PipelineLink["state"]>> = {}): PipelineLink[] {
+  return LABELS.map((label, i) => {
+    const state = states[label] ?? "completed";
+    return {
+      pipeline: label.toLowerCase().replace(" ", "_"),
+      label,
+      state,
+      runId: 100 + i,
+      startedAt: `2026-08-18T0${3 + i}:00:00`,
+      completedAt: state === "running" ? null : `2026-08-18T0${3 + i}:26:00`,
+    };
+  });
+}
+
+const status = (o: Partial<PipelineStatus> = {}): PipelineStatus => {
+  const l = o.links ?? links();
+  const done = l.filter((x) => x.state === "completed");
+  return {
+    lastRun: run(),
+    nextScheduled: null,
+    isRunning: false,
+    links: l,
+    linksCompleted: done.length,
+    filedAt: done.at(-1)?.completedAt ?? null,
+    ...o,
+  };
+};
 
 const fetchPipelineStatus = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api", () => ({ fetchPipelineStatus }));
@@ -68,31 +92,39 @@ describe("formatRunTimestamp", () => {
 });
 
 describe("describeRunState", () => {
-  it("reports COMPLETE only for a run that actually finished", () => {
+  it("reports COMPLETE only when every link's latest run finished", () => {
     expect(describeRunState(status()).label).toBe("COMPLETE");
+    expect(describeRunState(status()).complete).toBe(true);
   });
 
-  it("does not dress a failed run as fresh data", () => {
-    // A stale record has to be visible rather than assumed — that is the
-    // entire reason this band exists.
-    expect(describeRunState(status({ lastRun: run({ status: "failed" }) })).label).toBe(
-      "LAST RUN FAILED"
-    );
-    expect(describeRunState(status({ lastRun: run({ errorMessage: "boom" }) })).label).toBe(
-      "LAST RUN FAILED"
-    );
+  it("names the one link that failed, and when, instead of the whole site", () => {
+    const s = describeRunState(status({ links: links({ Senate: "failed" }) }));
+    expect(s.label).toBe("SENATE RUN FAILED");
+    expect(s.short).toBe("SENATE FAILED");
+    expect(s.at).toBe("2026-08-18T03:26:00");
+    expect(s.tone).toBe("text-signal-red");
   });
 
-  it("distinguishes a run still going from one that never finished", () => {
-    expect(describeRunState(status({ isRunning: true })).label).toBe("RUN IN PROGRESS");
-    expect(describeRunState(status({ lastRun: run({ completedAt: null }) })).label).toBe(
-      "RUN INCOMPLETE"
-    );
+  it("names every failed link, with no single time", () => {
+    const s = describeRunState(status({ links: links({ Senate: "failed", House: "failed" }) }));
+    expect(s.label).toBe("SENATE + HOUSE RUNS FAILED");
+    expect(s.at).toBeNull();
+  });
+
+  it("ranks a failure over a partial run over a run in progress", () => {
+    const all = links({ Senate: "running", House: "partial", Election: "failed" });
+    expect(describeRunState(status({ links: all })).label).toBe("ELECTION RUN FAILED");
+    expect(
+      describeRunState(status({ links: links({ Senate: "running", House: "partial" }) })).label
+    ).toBe("HOUSE RUN PARTIAL");
+    const running = describeRunState(status({ links: links({ House: "running" }) }));
+    expect(running.label).toBe("HOUSE RUN IN PROGRESS");
+    expect(running.at).toBeNull();
   });
 
   it("handles an unreachable endpoint and an empty history separately", () => {
     expect(describeRunState(null).label).toBe("STATUS UNAVAILABLE");
-    expect(describeRunState(status({ lastRun: null })).label).toBe("NO RUN RECORDED");
+    expect(describeRunState(status({ links: [] })).label).toBe("NO RUN RECORDED");
   });
 
   it("never colours a non-complete state with the phosphor accent", () => {
@@ -100,10 +132,10 @@ describe("describeRunState", () => {
     // would make a broken pipeline read as a healthy one at a glance.
     for (const s of [
       null,
-      status({ isRunning: true }),
-      status({ lastRun: null }),
-      status({ lastRun: run({ status: "failed" }) }),
-      status({ lastRun: run({ completedAt: null }) }),
+      status({ links: [] }),
+      status({ links: links({ House: "running" }) }),
+      status({ links: links({ House: "partial" }) }),
+      status({ links: links({ Senate: "failed" }) }),
     ]) {
       expect(describeRunState(s).tone).not.toBe("text-phos");
     }
@@ -111,27 +143,43 @@ describe("describeRunState", () => {
 });
 
 describe("RecordsBand rendering", () => {
-  it("does not print a FILED stamp beside a failed run", async () => {
-    // A completedAt survives on a failed run, so printing it unconditionally
-    // would claim the record is current as of a run that wrote nothing —
-    // exactly the misreading this band exists to prevent.
-    fetchPipelineStatus.mockResolvedValue(status({ lastRun: run({ status: "failed" }) }));
+  it("names the failed link, says how many links filed, and links the explanation", async () => {
+    fetchPipelineStatus.mockResolvedValue(status({ links: links({ Senate: "failed" }) }));
     render(<RecordsBand />);
 
-    expect(await screen.findByText(/LAST RUN FAILED/)).toBeInTheDocument();
-    expect(screen.queryByText(/FILED/)).not.toBeInTheDocument();
+    // jsdom applies no CSS, so the phone and desktop wordings both show here.
+    const link = await screen.findByRole("link");
+    expect(link).toHaveAttribute("href", "/about/data#nightly-runs");
+    expect(link).toHaveTextContent("SENATE RUN FAILED");
+    expect(link).toHaveTextContent("2026-08-18 03:26 UTC");
+    expect(screen.getByText(/4 OF 5 FILED/)).toBeInTheDocument();
+    // The filed stamp is the newest completion among the four that completed.
+    expect(screen.getByText(/2026-08-18 07:26 UTC/)).toBeInTheDocument();
+    expect(screen.queryByText(/COMPLETE/)).not.toBeInTheDocument();
   });
 
-  it("prints the FILED stamp for a run that actually completed", async () => {
+  it("prints the FILED stamp and COMPLETE when every link completed", async () => {
     fetchPipelineStatus.mockResolvedValue(status());
     render(<RecordsBand />);
 
-    expect(await screen.findByText(/FILED 2026-08-18 03:07 UTC/)).toBeInTheDocument();
+    expect(await screen.findByText(/FILED 2026-08-18 07:26 UTC/)).toBeInTheDocument();
+    expect(screen.getByText("COMPLETE")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("prints no FILED time when no link has completed", async () => {
+    fetchPipelineStatus.mockResolvedValue(
+      status({ links: links({ Senate: "failed" }).slice(0, 1) })
+    );
+    render(<RecordsBand />);
+
+    expect(await screen.findByText(/0 OF 1 FILED/)).toBeInTheDocument();
+    expect(screen.queryByText(/UTC.*UTC/)).not.toBeInTheDocument();
   });
 
   it("fetches once across remounts instead of on every navigation", async () => {
     // Navbar (and so this band) mounts per page, not in the root layout, and
-    // /api/pipeline/status runs db.expire_all() plus two queries with no
+    // /api/pipeline/status runs db.expire_all() and a query per link with no
     // Cache-Control — on a Raspberry Pi.
     fetchPipelineStatus.mockResolvedValue(status());
 
