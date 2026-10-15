@@ -254,3 +254,38 @@ export interface BillRecord {
   /** Parts Congress.gov could not return this time: shown as unavailable, never as empty. */
   unavailable: string[];
 }
+
+/** A committee meeting or a report filed on a measure, as the Daily Digest
+ * printed it (GET /api/congress/committee-record). */
+export interface CommitteeEntry {
+  id: number;
+  kind: "meeting" | "report";
+  chamber: "senate" | "house";
+  date: string;
+  /** The Congress the day fell in, for links to the bills it names. */
+  congress: number | null;
+  /** A meeting's committee as the Digest names it; null for a report. */
+  committee: string | null;
+  text: string;
+  pages: string;
+  /** "H. Rept. 119-851"; null when the entry names none. */
+  report: string | null;
+  bills: { billId: string; billLabel: string }[];
+}
+
+export interface CommitteeRecordPage {
+  entries: CommitteeEntry[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+  /** The bill the search was read as, when it was one. */
+  bill: { billId: string; billLabel: string } | null;
+}
+
+export interface CommitteeSummary {
+  chamber: "senate" | "house";
+  name: string;
+  meetings: number;
+  latest: string;
+}

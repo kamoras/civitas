@@ -52,6 +52,7 @@ from app.pipeline.analyze.score_calculator import (
 from app.pipeline.candidate_dedup import dedupe_candidates, dedupe_merge_map, normalized_surname
 from app.pipeline.fetch.state_candidates_common import last_name_matches
 from app.election_phase import ActiveElection, active_election, election_today
+from app.live_results.summary import state_summaries
 from app.live_results.sync import elected_congress_sits, redrawn_states
 from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
@@ -1762,6 +1763,19 @@ def live_results(
         "races": races,
         "updates": updates,
     }, max_age=CACHE_TTL_RESULTS_S)
+
+
+@router.get("/results/summary")
+def results_summary(db: Session = Depends(get_db)):
+    """The live count, one entry per state with votes counted, for the
+    homepage (live_results/summary.py): fixed sentences around the state's
+    own figures, how many counts it lists as official, and its page. No
+    states outside the results window."""
+    election = active_election(db)
+    return cached_json(
+        {"phase": _phase_json(election), "states": state_summaries(db, election)},
+        max_age=phase_cache_s(election),
+    )
 
 
 @router.get("/races")

@@ -10,6 +10,7 @@ import PageFallback from "@/components/layout/PageFallback";
 import BackToTop from "@/components/BackToTop";
 import {
   searchExplore,
+  fetchCommitteeRecordTotal,
   fetchExploreStats,
   splitHighlights,
   type ExploreResult,
@@ -321,6 +322,13 @@ function ExplorePageInner() {
   // term must not silently relabel the results still showing from the old one.
   const resultsFor = submitted?.query ?? "";
   const billHref = resultsFor ? billPageHref(resultsFor) : null;
+  // Committee meetings and reports aren't in the index; how many the Daily
+  // Digest has that match, offered beside the results.
+  const committeeQuery = resultsFor.trim() && !politicianId ? resultsFor.trim() : "";
+  const committee = useAsyncData(
+    `committee:${committeeQuery}`,
+    committeeQuery ? () => fetchCommitteeRecordTotal(committeeQuery) : null
+  );
   // Whose record the results are limited to. The name comes from the results
   // themselves; the filter is shown either way.
   const politicianName = politicianId
@@ -647,6 +655,20 @@ function ExplorePageInner() {
               <span className="font-mono text-xs uppercase tracking-[0.12em] text-phos">Bill</span>{" "}
               Open the page for {resultsFor.trim()}: where it stands, who sponsored it, and how each
               member voted →
+            </Link>
+          )}
+
+          {!loading && searched && committeeQuery && (committee.data ?? 0) > 0 && (
+            <Link
+              href={`/congress/committees?q=${encodeURIComponent(committeeQuery)}#committee-results`}
+              className="mb-4 block border border-white/15 px-4 py-3 text-sm text-ink-hi hover:border-phos/40"
+            >
+              <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                Committees
+              </span>{" "}
+              {committee.data} committee{" "}
+              {committee.data === 1 ? "meeting or report" : "meetings and reports"} in the Daily
+              Digest match &ldquo;{committeeQuery}&rdquo; →
             </Link>
           )}
 

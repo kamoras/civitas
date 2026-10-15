@@ -901,3 +901,23 @@ export interface OtherPrimary {
   /** ISO date. */
   date: string;
 }
+
+/** One state's live count, for the homepage (GET /api/elections/results/summary). */
+export interface ResultsSummaryState {
+  state: string;
+  stateName: string;
+  racesCounted: number;
+  /** How many of those counts the state lists as official. */
+  official: number;
+  status: "official" | "not_final";
+  /** The backend's fixed sentences around the state's figures. */
+  lines: string[];
+  source: string;
+  lastChangeAt: string;
+  href: string;
+}
+
+export interface ResultsSummary {
+  phase: ElectionPhaseInfo;
+  states: ResultsSummaryState[];
+}
