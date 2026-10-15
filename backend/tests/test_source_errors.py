@@ -13,7 +13,9 @@ from app.pipeline.fetch import congress, fec
 
 pytestmark = pytest.mark.asyncio
 
-_HOUSE_KEY = f"recent-house-rollcalls-2026-5-v{congress.ROLL_CALL_PARSE_VERSION}"
+_HOUSE_KEY = (
+    f"recent-house-rollcalls-2026-5-v{congress.ROLL_CALL_PARSE_VERSION}.{congress.HOUSE_ROLL_CALL_PARSE_REVISION}"
+)
 _SENATE_KEY = f"recent-rollcalls-119-2-5-v{congress.ROLL_CALL_PARSE_VERSION}"
 
 
