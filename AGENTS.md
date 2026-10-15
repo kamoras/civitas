@@ -512,6 +512,25 @@ The correct pattern, established by `_district_pvi()` /
    `pipeline/analyze/population_reference.py`. A value frozen on one date
    can't track a quantity that accumulates over a congress.
 
+   Measured in the run, but only on enough of the chamber. A step that fails
+   part-way leaves the run's inputs for a subset, and a subset a failure
+   leaves is not random — a read stops at a point in the roster (2026-10-15:
+   the House sponsorship read covered the first 105 of 433 members; the LES
+   reference measured on them alone raised 61 members 5–11 points, 133 of
+   the 149 who rose Republicans). Each reference records the share of the
+   chamber it was measured on (`coverage`, `roster`), and below the floor in
+   `app/data/reference_coverage.json` (per chamber and reference, from
+   `scripts/calibrate_reference_coverage.py`: the smallest share at which a
+   reference measured on a random subset or the roster's first members moves
+   neither the 95th-percentile member by more than their own noise nor a
+   party's average by more than its standard error) a run carries the last
+   reference measured on full coverage instead of measuring, without
+   rewriting it, and raises an ops alert naming it and its date
+   (`live_references`, `ChamberReference.last_good`). With no full-coverage
+   reference on file, LES is measured on every member as scored (the bills
+   read plus the stored bills carried for the rest). Regenerate the floors
+   after a scoring change.
+
 This also applies to constants that are themselves the *output* of a
 fitting script (regression coefficients, saturation points derived from
 a residual stdev, min/max clamp ranges) — if a script prints "paste this
@@ -1574,7 +1593,8 @@ stored (`sponsorship_backfill.carry_forward_sponsored_bills`), and one with none
 stored has Legislative Effectiveness's bill part unmeasured, its weight carried
 by the other parts. Only members whose bills the run read are measured into the
 LES reference (`live_les_reference`): counting the others as members with no
-bills put that night's mean credit at 3.16 on a scale defined as 1.0. How a
+bills put that night's mean credit at 3.16 on a scale defined as 1.0 — and
+only when enough of the chamber was read (§3a's coverage floor). How a
 stored score treated its bills is kept in its confidence
 (`legislativeEffectivenessBills`: `fetched:<date>`, `carried:<date>`,
 `unavailable`), so the breakdown and the startup rescore score the stored bills

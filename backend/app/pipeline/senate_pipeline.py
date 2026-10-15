@@ -136,7 +136,7 @@ from app.pipeline.analyze.score_calculator import calculate_confidence, calculat
 from app.pipeline.live_references import (
     live_constituent_reference_measured,
     live_funding_reference,
-    bills_read_this_run,
+    bills_source,
     live_les_reference,
 )
 from app.pipeline.partisan_depth_store import finalize_stored_partisan_depth
@@ -2116,14 +2116,19 @@ async def run_senate_pipeline(
                              if scored else []):
             p["votingRecord"]["partyLineRecord"] = record
 
+        # Each measured on the senators prepared, out of the whole chamber
+        # (`roster`): under the coverage floor the last full-coverage one is
+        # carried. A single-senator run is partial by design, so says nothing.
         funding_reference = live_funding_reference(
             "senate", [p.get("funding") or {} for p in senator_prepared],
             [p["senator"].get("state", "") for p in senator_prepared],
             [p["senator"].get("party", "") for p in senator_prepared],
+            roster=len(roster), quiet=bool(senator_filter),
         )
         constituent_reference, constituent_reference_measured = live_constituent_reference_measured(
             "senate",
             [{**p["senator"], "votingRecord": p["votingRecord"]} for p in senator_prepared],
+            roster=len(roster), quiet=bool(senator_filter),
         )
         les_reference = live_les_reference(
             "senate",
@@ -2131,11 +2136,12 @@ async def run_senate_pipeline(
                 (
                     p.get("sponsoredBills", []),
                     p["votingRecord"].get("effectiveParty") or p["senator"].get("party"),
-                    bills_read_this_run(p),
+                    bills_source(p),
                 )
                 for p in senator_prepared
             ],
             db,
+            roster=len(roster), quiet=bool(senator_filter),
         )
 
         lda_totals: dict[str, int] = {}

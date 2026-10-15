@@ -13,6 +13,9 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.pipeline.analyze.population_reference import reference_coverage_floor
+from app.ops_alerts import resolve_ops_alert, send_ops_alert
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -50,28 +53,37 @@ def measure_les_reference(
 
 
 def live_les_reference(
-    chamber: str, members: list[tuple[list[dict], str | None, bool]], db: Session,
+    chamber: str, members: list[tuple[list[dict], str | None, str]], db: Session,
+    roster: int | None = None, quiet: bool = False,
 ) -> dict | None:
     """This run's Legislative Effectiveness population reference for
     `chamber`, persisted for the API and returned merged with the other
     chamber's last reference for calculate_scores. None (score against the
     last persisted reference) when this run has too few members to measure
-    one — a single-member filter run, or the first days of a congress.
+    one — the first days of a congress.
 
-    `members` is (sponsored bills, caucus party, read this run) per member
-    of the chamber. Only members whose bills this run read are measured: a
-    member whose read failed (scored on their stored bills, or not at all —
-    sponsorship_backfill.carry_forward_sponsored_bills) is left out of the
-    stage totals and the member count alike. Counting them as members with
-    no bills is what poisoned the 2026-10-14 House reference: one failed
-    request stopped the read for 296 of 433 members, and the reference was
-    measured as 433 members holding 137 members' bills — a mean credit of
-    3.16 where the scale is defined as 1.0. The majority is still derived
-    from the whole roster.
-    """
+    `members` is (sponsored bills, caucus party, where the bills came from:
+    bills_source) per member scored; `roster` the chamber's serving members
+    (default: len(members)). Only bills this run read are measured: a member
+    whose read failed is left out of the stage totals and the member count
+    alike (counting them as members with no bills put 2026-10-14's House
+    mean credit at 3.16 on a scale defined as 1.0).
+
+    And only when enough of the chamber was read (reference_coverage_floor,
+    calibrated): a read that stops part-way stops at a point in the roster,
+    so its members are not a random sample — on 2026-10-15, 105 of 433 House
+    members read, measured alone, raised 61 members' scores by 5 to 11
+    points, 133 of the 149 who rose Republicans. Below the floor the last
+    reference measured on full coverage is carried (not rewritten, so the
+    breakdown reads the same one); with none on file, the reference is
+    measured on every member as scored — the bills read and the stored bills
+    carried for the rest — and persisted. Either way an ops alert says so
+    (`quiet` for a deliberately partial run: a single-member filter). The
+    majority is always derived from the whole roster."""
     from app.pipeline.analyze.population_reference import LES_REFERENCE
-    from app.pipeline.analyze.score_calculator import derive_chamber_majority
+    from app.pipeline.analyze.score_calculator import _LES_MAX_STAGE, derive_chamber_majority
 
+    roster = roster or len(members)
     majority = derive_chamber_majority(
         [party for _, party, _ in members], chamber, sitting_president_party(db),
     )
@@ -81,13 +93,31 @@ def live_les_reference(
             "adjustment falls back to the historical table for this congress",
             chamber,
         )
-    measured = [(bills, party) for bills, party, read in members if read]
-    if len(measured) < len(members):
+    read = [(bills, party) for bills, party, source in members if source == "read"]
+    if len(read) < len(members):
         logger.warning(
-            "LES reference (%s): %d of %d members' bills weren't read this run — measured on the other %d",
-            chamber, len(members) - len(measured), len(members), len(measured),
+            "LES reference (%s): %d of %d members' bills weren't read this run",
+            chamber, len(members) - len(read), len(members),
         )
-    ref = measure_les_reference(chamber, measured, majority)
+    floor = reference_coverage_floor(LES_REFERENCE.name, chamber)
+    if roster and len(read) / roster < floor:
+        carried = LES_REFERENCE.last_good(
+            chamber, roster, floor,
+            usable=lambda entry: len(entry.get("stage_totals") or []) == _LES_MAX_STAGE,
+        )
+        if carried is not None:
+            _coverage_alert(LES_REFERENCE.name, chamber, len(read), roster, floor, carried, quiet)
+            return {**LES_REFERENCE.load(), chamber: carried}
+        known = [(bills, party) for bills, party, source in members if source != "unavailable"]
+        _coverage_alert(LES_REFERENCE.name, chamber, len(read), roster, floor, None, quiet, basis=len(known))
+        ref = measure_les_reference(chamber, known, majority)
+        if ref is not None:
+            ref = {**ref, **_coverage(len(known), roster), "basis": f"stored bills for {len(known) - len(read)} members"}
+    else:
+        ref = measure_les_reference(chamber, read, majority)
+        if ref is not None:
+            ref = {**ref, **_coverage(len(read), roster)}
+            _coverage_resolved(LES_REFERENCE.name, chamber, quiet)
     if ref is None:
         logger.warning(
             "Too few %s members with substantive bills to measure an LES reference "
@@ -98,21 +128,95 @@ def live_les_reference(
     return LES_REFERENCE.with_live(chamber, ref)
 
 
-def bills_read_this_run(member: dict) -> bool:
-    """Whether this run read the member's sponsored bills (live_les_reference
-    measures only those): not unavailable, and not carried forward."""
-    return not member.get("sponsoredBillsUnavailable") and member.get("sponsoredBillsCarriedFrom") is None
+def bills_source(member: dict) -> str:
+    """Where a member's sponsored bills came from this run, as
+    live_les_reference reads it: "read", "carried" (an earlier run's,
+    sponsorship_backfill.carry_forward_sponsored_bills) or "unavailable"."""
+    if member.get("sponsoredBillsUnavailable"):
+        return "unavailable"
+    return "read" if member.get("sponsoredBillsCarriedFrom") is None else "carried"
+
+
+def _coverage(measured: int, roster: int) -> dict:
+    """The coverage fields a written reference records, which a later run
+    reads to tell a full measurement from a partial one (last_good)."""
+    return {"coverage": round(measured / roster, 4), "roster": roster}
+
+
+def _coverage_condition(name: str, chamber: str) -> str:
+    return f"reference-coverage-{name}-{chamber}"
+
+
+def _coverage_alert(
+    name: str, chamber: str, measured: int, roster: int, floor: float, carried: dict | None,
+    quiet: bool, basis: int | None = None,
+) -> None:
+    """One ops alert per run and reference that wasn't measured on the run's
+    own reads: how many were read, the floor, and what stood in. Never
+    raises."""
+    if carried is not None:
+        when = carried.get("computed_at") or carried.get("measured_on") or "(undated)"
+        outcome = f"carried the reference measured {when}"
+    elif basis is not None:
+        outcome = (
+            f"no full-coverage reference on file, so measured on the {basis} members as scored "
+            "(the rest on their stored inputs)"
+        )
+    else:
+        outcome = "no full-coverage reference on file, so measured on the members read"
+    logger.warning(
+        "%s (%s): %d of %d members read, under the %.0f%% floor — %s",
+        name, chamber, measured, roster, floor * 100, outcome,
+    )
+    if quiet:
+        return
+    try:
+        send_ops_alert(
+            f"{chamber.capitalize()} {name} not re-measured: {measured} of {roster} members read",
+            f"Under the {floor:.0%} coverage floor (app/data/reference_coverage.json), a reference measured "
+            f"on the members read would lean toward where the read stopped; {outcome}.",
+            dedupe_key=f"{_coverage_condition(name, chamber)}-{utcnow().date().isoformat()}",
+            condition=_coverage_condition(name, chamber),
+        )
+    except Exception:
+        logger.exception("Reference-coverage alert failed (non-fatal)")
+
+
+def _coverage_resolved(name: str, chamber: str, quiet: bool) -> None:
+    """Close a reference's open coverage alert once a run measures it whole."""
+    if quiet:
+        return
+    try:
+        resolve_ops_alert(_coverage_condition(name, chamber))
+    except Exception:
+        logger.exception("Reference-coverage alert resolve failed (non-fatal)")
 
 
 def live_funding_reference(
     chamber: str, fundings: list[dict], states: list[str] | None = None, parties: list[str] | None = None,
+    roster: int | None = None, quiet: bool = False,
 ) -> dict:
     """This run's Funding Independence reference for `chamber` (median PAC
     share of contributions — see score_calculator.compute_funding_reference),
     persisted and merged the same way as live_les_reference. Falls back to
-    the last persisted reference when too few members have funding."""
+    the last persisted reference when too few members have funding.
+
+    `fundings` are the members this run prepared; `roster` the chamber's
+    serving members. A member whose FEC read failed is not among them, so
+    an outage leaves a subset — below reference_coverage_floor the last
+    full-coverage reference is carried, as for Legislative Effectiveness."""
     from app.pipeline.analyze.population_reference import FUNDING_REFERENCE
     from app.pipeline.analyze.score_calculator import compute_funding_reference
+
+    roster = roster or len(fundings)
+    floor = reference_coverage_floor(FUNDING_REFERENCE.name, chamber)
+    if roster and len(fundings) / roster < floor:
+        carried = FUNDING_REFERENCE.last_good(chamber, roster, floor)
+        _coverage_alert(FUNDING_REFERENCE.name, chamber, len(fundings), roster, floor, carried, quiet)
+        if carried is not None:
+            return {**FUNDING_REFERENCE.load(), chamber: carried}
+    else:
+        _coverage_resolved(FUNDING_REFERENCE.name, chamber, quiet)
 
     ref = compute_funding_reference(fundings, states, parties)
     if ref is None:
@@ -123,12 +227,14 @@ def live_funding_reference(
         return FUNDING_REFERENCE.load()
     # A stat this run couldn't measure (e.g. too few measurable donor pools
     # for concentration) keeps its last persisted value.
-    ref = {**(FUNDING_REFERENCE.load().get(chamber) or {}), **ref}
+    ref = {**(FUNDING_REFERENCE.load().get(chamber) or {}), **ref, **_coverage(len(fundings), roster)}
     logger.info("Funding reference (%s): %s", chamber, ref)
     return FUNDING_REFERENCE.with_live(chamber, ref)
 
 
-def live_constituent_reference_measured(chamber: str, members: list[dict]) -> tuple[dict, bool]:
+def live_constituent_reference_measured(
+    chamber: str, members: list[dict], roster: int | None = None, quiet: bool = False,
+) -> tuple[dict, bool]:
     """This run's Constituent Alignment expectation for `chamber` (per-party
     break rate by seat lean — see score_calculator.compute_constituent_
     reference), persisted and merged the same way as live_funding_reference,
@@ -136,12 +242,26 @@ def live_constituent_reference_measured(chamber: str, members: list[dict]) -> tu
     calculate_scores-shaped dicts. Falls back to the last persisted
     reference (measured False) when either party has too few measurable
     members (e.g. a single-member filtered run) — the ground-truth gate's
-    saturation-share probe needs to know which it got."""
+    saturation-share probe needs to know which it got.
+
+    `roster` is the chamber's serving members: below reference_coverage_floor
+    of them prepared this run, the last full-coverage reference is carried
+    (measured False), as for Legislative Effectiveness."""
     from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
     from app.pipeline.analyze.score_calculator import (
         compute_constituent_reference,
         constituent_reference_inputs,
     )
+
+    roster = roster or len(members)
+    floor = reference_coverage_floor(CONSTITUENT_REFERENCE.name, chamber)
+    if roster and len(members) / roster < floor:
+        carried = CONSTITUENT_REFERENCE.last_good(chamber, roster, floor)
+        _coverage_alert(CONSTITUENT_REFERENCE.name, chamber, len(members), roster, floor, carried, quiet)
+        if carried is not None:
+            return {**CONSTITUENT_REFERENCE.load(), chamber: carried}, False
+    else:
+        _coverage_resolved(CONSTITUENT_REFERENCE.name, chamber, quiet)
 
     ref = compute_constituent_reference(constituent_reference_inputs(members))
     if ref is None:
@@ -152,5 +272,6 @@ def live_constituent_reference_measured(chamber: str, members: list[dict]) -> tu
             "Congress; scoring against the last persisted one", chamber,
         )
         return CONSTITUENT_REFERENCE.load(), False
+    ref = {**ref, **_coverage(len(members), roster)}
     logger.info("Constituent Alignment reference (%s): %s", chamber, ref)
     return CONSTITUENT_REFERENCE.with_live(chamber, ref), True
