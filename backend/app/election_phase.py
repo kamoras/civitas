@@ -25,13 +25,14 @@ The database is consulted only between an election day and that January
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.election_calendar import new_congress_day, next_election_day, previous_election_day
+from app.time_utils import eastern_date
 
 # How long a finished count stays the page's subject before it moves on to
 # the next election: two weeks after the last change is long enough to read
@@ -68,14 +69,6 @@ class ActiveElection:
 
 def election_today() -> date:
     return datetime.now(ELECTION_TZ).date()
-
-
-def eastern_date(stamp: datetime) -> date:
-    """The Eastern calendar date of a stored (naive UTC) timestamp: a count
-    that last moved at 9 PM ET on the 16th is stored as the 17th."""
-    if stamp.tzinfo is None:
-        stamp = stamp.replace(tzinfo=timezone.utc)
-    return stamp.astimezone(ELECTION_TZ).date()
 
 
 def results_window_end(election_day: date, last_change: date | None) -> date:
