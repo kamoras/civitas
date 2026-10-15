@@ -65,6 +65,20 @@ _ROLL_CALL_PROBE_TIMEOUT_S = 15.0
 # cache.py) are re-fetched and re-parsed instead of serving dicts that lack
 # it. v2 (2026-09): the chamber's own result ("result" / "rejected").
 ROLL_CALL_PARSE_VERSION = 2
+# The House parse's own revision, on top of the shared one, so a fix that
+# only changes the House dicts re-reads House rolls without re-fetching
+# every cached Senate roll. 1 (2026-10): "session" read from the Clerk's
+# "2nd" (it was 0 for every House roll, so no House vote stored its roll
+# call — see _ordinal_number).
+HOUSE_ROLL_CALL_PARSE_REVISION = 1
+
+
+def _ordinal_number(text: str) -> int:
+    """The number an ordinal names: 2 for the Clerk's "2nd", 119 for "119"
+    or "119th". 0 when it names none. The House Clerk writes the session
+    as an ordinal (<session>2nd</session>); senate.gov writes a digit."""
+    match = re.match(r"\d+", text)
+    return int(match.group()) if match else 0
 _ROLL_CALL_NARROW_SEARCH_TIMEOUT_S = 10.0
 _ROLL_CALL_NARROW_SEARCH_WINDOW = 50
 
@@ -1084,7 +1098,10 @@ async def fetch_house_roll_call_vote(
     early-signal poller needs a much shorter one than the nightly
     scoring caller.
     """
-    cache_key = f"rollcall-house-{year}-{roll_call_number}-v{ROLL_CALL_PARSE_VERSION}"
+    cache_key = (
+        f"rollcall-house-{year}-{roll_call_number}"
+        f"-v{ROLL_CALL_PARSE_VERSION}.{HOUSE_ROLL_CALL_PARSE_REVISION}"
+    )
     cached = api_cache_get(db, "congress", cache_key, max_age_hours=max_age_hours)
     if cached is not None:
         return cached
@@ -1183,8 +1200,8 @@ def parse_house_vote_xml(
 
     return {
         "year": year,
-        "congress": int(congress_str) if congress_str.isdigit() else 0,
-        "session": int(session_str) if session_str.isdigit() else 0,
+        "congress": _ordinal_number(congress_str),
+        "session": _ordinal_number(session_str),
         "rollNumber": roll_number,
         "voteTitle": vote_desc or legis_num,
         "voteDate": vote_date,
@@ -1221,7 +1238,7 @@ async def fetch_recent_house_roll_calls(
     early-signal poller needs a much shorter one than the nightly scoring
     caller. Forwarded to each underlying fetch_house_roll_call_vote call too.
     """
-    cache_key = f"recent-house-rollcalls-{year}-{count}-v{ROLL_CALL_PARSE_VERSION}"
+    cache_key = f"recent-house-rollcalls-{year}-{count}-v{ROLL_CALL_PARSE_VERSION}.{HOUSE_ROLL_CALL_PARSE_REVISION}"
     cached = api_cache_get(db, "congress", cache_key, max_age_hours=max_age_hours)
     if cached is not None:
         return cached

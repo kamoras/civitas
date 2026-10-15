@@ -3,13 +3,14 @@ in particular the action-date extraction early_signal.py's ActionIssue.date
 relies on."""
 
 from app.pipeline.fetch.congress import parse_house_vote_xml
+from app.pipeline.transform.normalize_votes import roll_call_ref
 
 _SAMPLE_XML = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <rollcall-vote>
   <vote-metadata>
     <congress>119</congress>
-    <session>2</session>
+    <session>2nd</session>
     <action-date>22-Jul-2026</action-date>
     <vote-question>On Passage</vote-question>
     <legis-num>H.R. 1</legis-num>
@@ -41,6 +42,21 @@ def test_parses_core_fields():
     assert result["session"] == 2
     assert result["rollNumber"] == 42
     assert len(result["members"]) == 2
+
+
+def test_session_ordinal_gives_every_house_vote_its_roll_call():
+    """The Clerk writes the session as an ordinal ("1st", "2nd"). Read as
+    a digit it was 0, so roll_call_ref returned None and no House vote row
+    stored its roll call: no member's vote list linked a roll-call page."""
+    first = parse_house_vote_xml(_SAMPLE_XML.replace("2nd", "1st"), year=2025, roll_number=7)
+    assert first["session"] == 1
+    assert roll_call_ref(parse_house_vote_xml(_SAMPLE_XML, year=2026, roll_number=42)) == "house-119-2-42"
+
+
+def test_session_naming_no_number_is_unknown():
+    result = parse_house_vote_xml(_SAMPLE_XML.replace("2nd", ""), year=2026, roll_number=42)
+    assert result["session"] == 0
+    assert roll_call_ref(result) is None
 
 
 def test_unrecognized_date_format_degrades_to_empty_string():
