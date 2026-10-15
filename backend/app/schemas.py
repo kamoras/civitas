@@ -381,12 +381,28 @@ class LobbyingClientSchema(CamelModel):
     complete: bool = True
 
 
+class RelatedVoteSchema(CamelModel):
+    """The member's vote on one of a match's related bills
+    (_scorecard_common.related_votes)."""
+    bill_id: str | None = Field(description="The bill, in the site's spelling (\"SJRES.196\"); null when the "
+                                            "record names none")
+    label: str | None = Field(description="The bill as the Record prints it (\"S.J.Res. 196\")")
+    title: str = Field(description="The roll call's title as the chamber recorded it, else the bill's")
+    vote: Literal["Yea", "Nay"]
+    date: str = Field(description="YYYY-MM-DD")
+    roll_call: dict | None = Field(None, description="The roll call it was cast in (date, question, result, "
+                                                     "each party's tally); null for a vote stored before "
+                                                     "its roll call was recorded")
+
+
 class LobbyingMatchSchema(CamelModel):
     lobbyist_org: str
     industry: str
     lobbying_spend: float
     donation_to_senator: float
     bills_influenced: list[str]
+    # The member's own vote on each of bills_influenced, with its roll call.
+    related_votes: list[RelatedVoteSchema] = []
     senator_vote_aligned: bool | None = None
     description: str
     lobbied_bills: list[LobbiedBillSchema] = []

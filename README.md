@@ -216,7 +216,7 @@ per-vote reasoning — regardless of prompting approach. See
 2. Classify donors by type and industry (tiered: FEC metadata → learning store → embedding → kNN)
 3. Party alignment per bill: how the parties actually split on its roll call; a vote with no roll call carries no party label for loyalty (content similarity to party platforms stands in only where no roll call recorded each party's vote; see "Party Alignment" below)
 4. Sponsorship network over the chamber: PageRank legislative leadership and SVD ideology from the cosponsorship matrix
-5. Donor–vote connections: substantial industry funding matched against policy-anchored vote similarity, with registered lobbying spend (LDA) by client attached, and bills the member voted on that the organization's own filings name
+5. Donor–vote connections: substantial industry funding matched against policy-anchored vote similarity, with registered lobbying spend (LDA) by client attached, and bills the member voted on that the organization's own filings name. The scorecard lists the member's own vote on each related bill (Yea or Nay, the roll call's question, date and page), read from the stored vote rows when the profile is served (`_scorecard_common.related_votes`); until 2026-10 the panel showed only bill ids and a cut sentence
 6. Select key votes: against the party line, related to a top donor's industry, substantive
 7. Compute the representation sub-scores against population references measured from the chamber this run, and persist the member's scorecard
 
