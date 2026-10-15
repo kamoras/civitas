@@ -114,7 +114,7 @@ export function ElectionNightList({ data }: { data: ResultsSummary }) {
           ))}
         </p>
       )}
-      <p className="pb-1 text-sm leading-relaxed text-ink-lo">
+      <p className="pb-1 font-display text-sm leading-relaxed text-ink-lo">
         Counts as each state&apos;s election office publishes them. Civitas never calls a race:
         &ldquo;leads&rdquo; is the count so far, not a result.{" "}
         <Link href="/about/elections" className="underline underline-offset-2 hover:text-phos">
