@@ -1058,10 +1058,32 @@ class PipelineRunSchema(CamelModel):
     error_message: str | None = None
 
 
+class PipelineLinkSchema(CamelModel):
+    """One link of the nightly chain, as its latest run left it.
+
+    `state` is the reader's word for the row, decided by the API:
+    "completed", "partial" (some members failed), "running" (a live run)
+    or "failed" (anything else: a failed or stale row, or a RUNNING row
+    whose run is dead)."""
+    pipeline: str
+    label: str
+    state: str
+    run_id: int
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
 class PipelineStatusSchema(CamelModel):
     last_run: PipelineRunSchema | None = None
     next_scheduled: str | None = None
     is_running: bool = False
+    # Each chain link's latest run, in the order the chain runs them. The
+    # records band reads these, not `last_run` (the Senate's alone), so one
+    # failed link is named as that link rather than as the whole site.
+    links: list[PipelineLinkSchema] = []
+    links_completed: int = 0
+    # The newest completion among the links that completed, or None.
+    filed_at: datetime | None = None
 
 
 class HealthSchema(CamelModel):

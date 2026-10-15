@@ -67,6 +67,7 @@ from app.pipeline.analyze.early_signal import (
     covering_issue,
     expire_stale_developing_issues,
     retire_covered_developing_issues,
+    retire_stale_vote_drafts,
 )
 from app.pipeline.analyze.grounding import (
     grounding_violations,
@@ -4982,6 +4983,7 @@ def _run_refresh(db: Session) -> int:
     # not just the runs that make it to the main flush/retire stage.
     try:
         expire_stale_developing_issues(db, utcnow())
+        retire_stale_vote_drafts(db, today)
         retire_covered_developing_issues(db)
     except Exception:
         logger.exception("expire_stale_developing_issues failed (non-fatal)")

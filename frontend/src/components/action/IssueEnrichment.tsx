@@ -305,6 +305,22 @@ interface ActionRow {
 function actionRows(issue: ActionIssue, today: string): ActionRow[] {
   const rows: ActionRow[] = [];
 
+  // A roll-call issue's vote on its page here, every member's position by
+  // party (backend api/action.py). Same-site paths only, as the backend
+  // writes them; the chamber's own record stays among the sources.
+  for (const action of issue.actions ?? []) {
+    if (action.type !== "roll_call" || !action.url?.startsWith("/congress/votes/")) continue;
+    rows.push({
+      key: "roll-call",
+      verb: "See",
+      what: action.text,
+      detail: "Every member's vote, by party, from the chamber's record",
+      href: action.url,
+      internal: true,
+      label: "Roll call →",
+    });
+  }
+
   (issue.deciders ?? []).forEach((d, i) => {
     rows.push({ key: `decides-${i}`, verb: "Decides", what: d.body, detail: capitalize(d.basis) });
   });
