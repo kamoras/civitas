@@ -528,7 +528,7 @@ def test_a_vote_cards_alt_text_states_every_figure_the_image_shows(world):
 @pytest.mark.parametrize("key", ["bill:119/S.100", "event:1"])
 def test_every_card_has_a_source_line_and_a_nonempty_alt(world, key):
     card = record_cards.card_for_key(world["db"], key)
-    assert card.source.startswith("Source: ") and "civitas-research.org/" in card.source and "data as of" in card.source
+    assert re.fullmatch(r"Source: .+ · civitas-research\.org/[\w/.-]+ · data as of .+", card.source), card.source
     assert card.alt.strip() and card.source in card.alt
 
 
