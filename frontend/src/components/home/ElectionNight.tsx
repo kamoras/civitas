@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import type { ResultsSummary, ResultsSummaryState } from "@/types/election";
-import { formatEasternTime } from "@/lib/results";
+import { NOT_FINAL, formatEasternTime } from "@/lib/results";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -14,7 +14,7 @@ const REVALIDATE_S = 30;
 const SHOWN = 5;
 
 const STATUS: Record<ResultsSummaryState["status"], { tag: string; tone: string }> = {
-  not_final: { tag: "LEADING · NOT FINAL", tone: "text-signal-amber" },
+  not_final: { tag: `LEADING · ${NOT_FINAL}`, tone: "text-signal-amber" },
   official: { tag: "LEADS · OFFICIAL COUNT", tone: "text-phos" },
 };
 
