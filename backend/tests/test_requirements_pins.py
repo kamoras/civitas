@@ -48,7 +48,7 @@ DIRECT = {
     "opencv-python-headless",
     "packaging", "pdfplumber", "pillow", "playwright", "pydantic",
     "pydantic-settings", "pytesseract", "pytest", "pytest-asyncio",
-    "pytest-cov", "pyyaml", "requests", "scikit-learn", "scipy",
+    "pytest-cov", "pytest-xdist", "pyyaml", "requests", "scikit-learn", "scipy",
     "sentence-transformers", "sqlalchemy", "sqlite-vec", "starlette",
     "tokenizers", "torch", "uvicorn", "uvloop", "watchfiles", "xlrd",
 }

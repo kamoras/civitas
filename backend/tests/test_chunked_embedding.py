@@ -346,7 +346,7 @@ def test_a_switch_that_failed_at_open_is_retried_later(tmp_path, monkeypatch):
     path = str(tmp_path / "vectors.db")
     monkeypatch.setattr(vs, "_VECTOR_DB_PATH", path)
     monkeypatch.setattr(vs, "_vec_conn", None)
-    monkeypatch.setattr(vs, "SQLITE_BUSY_TIMEOUT_S", 1)  # keep the test quick
+    monkeypatch.setattr(vs, "SQLITE_BUSY_TIMEOUT_S", 0.1)  # keep the test quick
     writer = sqlite3.connect(path, isolation_level=None)
     writer.execute("CREATE TABLE t (x)")
     writer.execute("BEGIN EXCLUSIVE")
