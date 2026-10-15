@@ -1405,6 +1405,25 @@ a document both channels ranked middling outscored the keyword channel's
 exact hit: measured on 124 identifier probes, fused R@1 was 0.25 against
 keyword's 0.65 (2026-10).
 
+**A document is found by its own name.** A Federal Register document's
+citation ("91 FR 48248") is printed in the page header, never in the text, and
+its document number ("2026-15603") survives in the body only when the body is
+short enough to keep the closing "[FR Doc. ...]" line, so neither channel could
+answer a reference a researcher holds: on known-item probes the citation put
+its document first 1% of the time and in the top 20 10%, the document number
+47% and 75%. Exact identifier matching is a third, partial ranker
+(`explore_search._identifier_matches`): the identifiers a query names (any
+case, a bare document number too) are matched against the identifiers each
+document is *known by* — `document_authority.declared_identifiers`, the same
+names the citation graph uses: the stored FR citation, document number and
+RINs, the external id, an executive order's number — and the documents they
+name lead, ahead of crowding control. Documents that cite the identifier are
+not matches; they follow, ranked as before. Measured on 300 sampled documents
+(2026-10-14): FR citation R@1 0.011 → 0.854, R@5 0.090 → 1.000; FR document
+number R@1 0.465 → 1.000; every other style unchanged. An FR citation is a page,
+and 34% of cited documents share their first page with another notice, so a
+citation can name up to four documents; all of them lead.
+
 **Why rank fusion rather than score blending.** Cosine distance and BM25 live
 on unrelated scales; min-max normalising each makes the blend depend on
 whatever the best and worst scores happened to be for that one query.
@@ -1444,8 +1463,9 @@ cross-references the ranking is empty and the prior does nothing.
 **Ranking weights are measured, not asserted.** They live in
 `config_definitions.py` under "Explore search ranking".
 `backend/scripts/evaluate_explore_search.py` measures MRR and Recall@k for
-semantic, keyword and hybrid separately, using known-item retrieval over five
-query styles (title, paraphrase, identifier, rare-term, passage) with relevance
+semantic, keyword and hybrid separately, using known-item retrieval over seven
+query styles (title, paraphrase, identifier, the document's own FR citation and
+document number, rare-term, passage) with relevance
 judgments derived from the corpus rather than hand-labelled. Change a weight,
 re-run it. Every probe is built from the document's own words, so the
 keyword channel leads by construction; compare the semantic channel with
