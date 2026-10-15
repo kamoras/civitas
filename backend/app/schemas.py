@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
@@ -403,11 +403,15 @@ class PolicyAlignmentSchema(CamelModel):
 
 
 class PartisanDepthSchema(CamelModel):
-    overall_lean: float = Field(description="Negative leans Democratic, positive Republican")
+    overall_lean: float = Field(description="Negative leans Democratic, positive Republican: the Yea/Nay votes "
+                                            "on party-leaning bills, per policy area; the cosponsorship ideology "
+                                            "fills in only while the member has fewer than 15 such votes")
     overall_party: Literal["R", "D", "centrist"]
     depth: Literal["deep", "moderate", "centrist", "cross-cutting"] = Field(
-        description="The member's tercile of lean within their own party; cross-cutting when many areas "
-                    "lean to the other party")
+        description="The member's tercile of overallLean within their own party, from roll-call votes; "
+                    "cross-cutting when many areas lean to the other party. A different measure from "
+                    "ideologyLabel, which reads cosponsorship, so the two can disagree (a member can vote "
+                    "with the party deep in its ranks while cosponsoring near its center)")
     cross_party_count: int = Field(description="Policy areas leaning to the other party")
     total_positions: int = Field(description="Policy areas with a lean")
     policy_breakdown: list[PolicyAlignmentSchema] = []
@@ -578,14 +582,17 @@ class _PersonDetailBase(CamelModel):
         [], description="Always empty: campaign-promise tracking was removed in 2026-07 (see "
                         "representationScore.promisePersistence). Kept so existing clients still find the field")
     partisan_depth: PartisanDepthSchema | None = Field(
-        None, description="How strongly the member's votes lean to one party, by policy area")
+        None, description="How strongly the member's roll-call votes lean to one party, by policy area (votes, "
+                          "not cosponsorship: see ideologyLabel for that)")
     sponsored_bills: list[SponsoredBillSchema] = Field([], description="Bills the member sponsored this Congress")
     leadership_score: float | None = Field(None, description=_LEADERSHIP)
     bipartisanship_score: float | None = Field(
         None, description="Cross-party cosponsorship, given and received (after the Lugar Center's Bipartisan "
                           "Index), 0-1: 0.5 is the chamber median, 1 twice it or more; null with too little data")
     ideology_score: float | None = Field(None, description=_IDEOLOGY)
-    sponsorship_description: str = Field("", description="Ideology and leadership in words")
+    sponsorship_description: str = Field(
+        "", description="Ideology and leadership in words, both from cosponsorship (ideologyScore, "
+                        "leadershipScore); not the voting record's partisanDepth")
     constituent_approval: ConstituentApprovalSchema | None = Field(
         None, description="How the member's constituents rated them in the Cooperative Election Study, by party")
     website_url: str = ""
@@ -649,7 +656,9 @@ class LeaderboardEntrySchema(CamelModel):
     # frontend must never re-derive this from ideology_score itself, since
     # the party-relative bucketing (D/R use a 30/70 split, independents
     # 35/65) isn't reproducible from the number alone.
-    ideology_label: str | None = Field(None, description="ideologyScore in words, relative to the member's own party")
+    ideology_label: str | None = Field(
+        None, description="ideologyScore in words, relative to the member's own party: from cosponsorship, not "
+                          "votes, so it can differ from partisanDepth.depth, which reads the voting record")
     # PageRank cosponsorship centrality (sponsorship_analysis.
     # compute_leadership_scores), log-rescaled to [0, 1] to counter its
     # power-law distribution — most members cluster low, a few attract
@@ -836,7 +845,7 @@ class PublicSearchResultSchema(_PublicModel):
     comments_close_on: str = Field(description="When the document's comment period closes or closed, YYYY-MM-DD; "
                                                "empty when it has none")
     cited_by_count: int = Field(description="How many indexed documents cite this one")
-    matched_by: list[Literal["semantic", "keyword"]] = Field(description="Which search found it: by meaning, by exact words, or both")
+    matched_by: list[Literal["semantic", "keyword", "identifier"]] = Field(description="Which search found it: by meaning, by exact words, and/or as the document a citation or document number in the query names (\"91 FR 48248\", \"2026-15603\"), which is listed first")
     distance: float | None = Field(description="Distance in meaning from the query; null when only the exact words matched")
     snippet: str = Field(description="Text around the matched words, plain")
     duplicate_count: int = Field(description="Near-identical copies folded into this result")
@@ -848,6 +857,104 @@ class PublicSearchResponseSchema(_PublicModel):
     count: int = Field(description="Results returned (at most the request's limit), not a total")
     partial: bool = Field(description="True when only the exact-words search could answer, so the ranking is incomplete")
     index_building: bool = Field(description="True while the search index is being built; results are empty until it is")
+
+
+_BREAKDOWN_RULE = (
+    "score = clamp(round(sum(w * s for mean components) / sum(w for mean components) "
+    "+ sum(w * (s - 50) for points components)), 0, 100), over the components whose score is not null; "
+    "a neutral 50 when none has one (note says why)"
+)
+
+
+class PublicScoreComponentSchema(_PublicModel):
+    label: str = Field(description="The component, in words")
+    weight: float = Field(description="Its weight within the dimension (rounded to 4 decimals)")
+    score: float | None = Field(description="0-100, rounded to one decimal; null when it could not be measured, "
+                                            "and then it is left out and the others carry its weight")
+    combines: Literal["mean", "points"] = Field(
+        description="mean: takes part in the weighted mean; points: adds weight x (score - 50) points to it")
+    detail: str = Field(description="How the component was worked out, with the member's figures and the "
+                                    "reference values it was compared against")
+
+
+class PublicScoreDimensionSchema(_PublicModel):
+    stored_score: float = Field(description="The dimension's score on the record (representationScore), "
+                                            "from the last scoring run")
+    score: int = Field(description="The score recomputed now from the components below, by: " + _BREAKDOWN_RULE
+                                   + ". Equal to storedScore unless something changed since the run (a later "
+                                   "run part-way through, or a code change: compare algorithmVersion with "
+                                   "recomputedWith)")
+    weight_in_overall: float | None = Field(
+        description="Its weight in representationScore.overall; null for an informational dimension")
+    components: list[PublicScoreComponentSchema] = Field(
+        description="Component scores are rounded to one decimal; the score is worked out from unrounded ones, "
+                    "so recomputing from these lands within 0.1 of a value that rounds to score")
+    note: str | None = Field(description="Why the dimension is a neutral 50, when no component could be measured")
+    finding: str | None = Field(description="The one-sentence finding the profile states")
+    facts: dict[str, Any] | None = Field(
+        description="The figures the profile's sentences are written from, as numbers (shares 0-1): funding "
+                    "shares, the party-line votes and every break counted, bills by furthest stage")
+
+
+class PublicScoreDimensionsSchema(_PublicModel):
+    funding_independence: PublicScoreDimensionSchema
+    constituent_alignment: PublicScoreDimensionSchema
+    funding_diversity: PublicScoreDimensionSchema
+    legislative_effectiveness: PublicScoreDimensionSchema
+
+
+class PublicSeatSchema(_PublicModel):
+    state: str
+    district: int | None = Field(description="House district, 0 at-large; null for senators")
+    cook_pvi: int = Field(description="The seat's Cook PVI the score used, positive leaning Republican (the "
+                                      "district's for a House seat, the state's for a senator; 0 when unknown)")
+    district_lines_congress: int | None = Field(
+        description="The Congress whose district lines the House score was computed on; null for senators, or "
+                    "a score stored before this was recorded")
+
+
+class PublicScoreReferencesSchema(_PublicModel):
+    funding: dict[str, Any] | None = Field(
+        description="Funding Independence's chamber reference as the last run measured it from the members it "
+                    "scored (PAC-share fit by campaign size, small-donor baselines, donor and industry "
+                    "concentration deciles; computed_at UTC)")
+    constituent: dict[str, Any] | None = Field(
+        description="Constituent Alignment's chamber reference: per party, the fitted expected break rate by "
+                    "seat lean (logit a + b x lean, b_opposed for seats leaning to the other party), its scale "
+                    "and the party's typical score")
+    legislative: dict[str, Any] | None = Field(
+        description="Legislative Effectiveness's chamber reference: bill totals per stage, median credit by "
+                    "majority/minority status, advancement rates and the majority party")
+    positions: dict[str, Any] | None = Field(
+        description="Position congruence's inputs: the roll-call ideal-point measure and Congress, the per-party "
+                    "fit of position on seat lean, the chamber's extremity scale (extremity_p90) and reliability, "
+                    "and this member's position and scaled vote count (null when Voteview has none)")
+    seat: PublicSeatSchema
+    legislative_bills: str | None = Field(
+        description="Where Legislative Effectiveness's bills came from in the stored score: \"fetched:<date>\" "
+                    "(read that day), \"carried:<date>\" (that run couldn't read them; the bills read on that date) "
+                    "or \"unavailable\" (none known, so the bill part is not measured); null for a score stored "
+                    "before this was recorded, which was scored on its bills as fetched")
+
+
+class PublicScoreBreakdownSchema(_PublicModel):
+    id: str = Field(description="The member's id")
+    name: str
+    chamber: Literal["senate", "house"]
+    party: str
+    site_url: str = _SITE_URL
+    algorithm_version: str | None = Field(description="The scoring version that stored these scores (the newest "
+                                                      "history snapshot's); null when none is recorded")
+    scored_on: str | None = Field(description="When the stored scores were computed, YYYY-MM-DD (the newest "
+                                              "history snapshot)")
+    recomputed_with: str = Field(description="The scoring version the breakdown was recomputed with now")
+    overall: float = Field(description="representationScore.overall: sum(weights[k] x dimensions[k].storedScore), "
+                                       "rounded to 2 decimals")
+    weights: dict[str, float] = Field(description="Each weighted dimension's weight in overall (they sum to 1)")
+    dimensions: PublicScoreDimensionsSchema
+    references: PublicScoreReferencesSchema = Field(
+        description="The population and seat reference values the components were compared against, as the "
+                    "last run wrote them")
 
 
 class PublicPolicyStatementSchema(_PublicModel):

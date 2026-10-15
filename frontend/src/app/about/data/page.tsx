@@ -358,6 +358,8 @@ export default function DataChapter() {
           <Item label="Keywords">
             A keyword index
             <Cite id="robertson2009" />, the only way to find an executive order number or a docket.
+            A document&apos;s own Federal Register citation or document number finds that document
+            first.
           </Item>
           <Item label="Recency">A newer document is usually the more useful answer.</Item>
           <Item label="Authority">
