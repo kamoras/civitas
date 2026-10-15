@@ -151,7 +151,8 @@ class TestClusterArticles:
         arts = [NewsArticle(title="Council passes budget", summary="x" * 300, url="u0", source_name="s"),
                 NewsArticle(title="Port strike ends", summary=None, url="u1", source_name="s")]
         ac._cluster_articles([(a, None) for a in arts])
-        assert seen == ["Council passes budget. " + "x" * ac.CLUSTER_DESCRIPTION_CHARS, "Port strike ends. "]
+        chars = ac.cluster_calibration()["description_chars"]
+        assert seen == ["Council passes budget. " + "x" * chars, "Port strike ends. "]
 
     @staticmethod
     def _pair_at(cosine):
@@ -166,7 +167,7 @@ class TestClusterArticles:
     def test_the_cut_is_the_calibrated_threshold(self, monkeypatch, cosine, together):
         from app.pipeline.analyze import action_center as ac
 
-        monkeypatch.setattr(ac, "cluster_calibration", lambda: {"threshold": 0.76})
+        monkeypatch.setattr(ac, "cluster_calibration", lambda: {"threshold": 0.76, "description_chars": 200})
         clusters = self._cluster(monkeypatch, self._pair_at(cosine))
         assert (["t0", "t1"] in clusters) is together
 
@@ -306,7 +307,8 @@ class TestClusterArticlesModel:
         cut = ac.cluster_calibration()["threshold"]
         merged = [p for p, s in zip(pairs, scores) if s >= cut]
         assert not [p for p in merged if p["label"] == "different"]
-        assert sum(p["label"] == "same" for p in merged) == ac.cluster_calibration()["candidates"]["title+description"]["same_merged"]
+        calibration = ac.cluster_calibration()
+        assert sum(p["label"] == "same" for p in merged) == calibration["candidates"][calibration["text"]]["same_merged"]
 
 
 class TestClusterCalibration:
@@ -318,9 +320,9 @@ class TestClusterCalibration:
 
         calibration = ac.cluster_calibration()
         assert calibration["judgments_hash"] == ac.cluster_judgments_hash()
-        assert calibration["text"] == "title+description" and calibration["entity_gate"] is False
+        assert calibration["text"] == f"title+description[{calibration['description_chars']}]"
         assert 0.0 < calibration["threshold"] < 1.0
-        chosen = calibration["candidates"]["title+description"]
+        chosen = calibration["candidates"][calibration["text"]]
         assert chosen["cut"] == calibration["threshold"]
         # Precision first: no other candidate merges more same-event pairs
         # at its own zero-chimera cut.

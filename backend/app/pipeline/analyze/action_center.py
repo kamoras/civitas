@@ -258,18 +258,17 @@ def _relevance_reference() -> np.ndarray:
 _CLUSTER_JUDGMENTS_PATH = _DATA_DIR / "cluster_pair_judgments.json"
 _CLUSTER_CALIBRATION_PATH = _DATA_DIR / "cluster_pair_calibration.json"
 _cluster_calibration_cache: dict | None = None
-# How much of the description clustering reads after the title: the
-# relevance gate's own input (_filter_policy_relevant), and on the judged
-# pairs it beat 300 and 500 characters (the calibration file's "text").
-CLUSTER_DESCRIPTION_CHARS = 200
 
 
-def cluster_text(title: str, summary: str | None) -> str:
-    """What clustering embeds for an article: its headline and the start of
-    its description. Headlines alone can't tell a second outlet's account
-    of an event from another event on the same theme; the description's
-    first sentence names who did what."""
-    return f"{title}. {(summary or '')[:CLUSTER_DESCRIPTION_CHARS]}"
+def cluster_text(title: str, summary: str | None, chars: int | None = None) -> str:
+    """What clustering embeds for an article: its headline and the first
+    `chars` characters of its description (the calibration's
+    description_chars unless given). Headlines alone can't tell a second
+    outlet's account of an event from another event on the same theme; the
+    description's first sentence names who did what."""
+    if chars is None:
+        chars = int(cluster_calibration()["description_chars"])
+    return f"{title}. {(summary or '')[:chars]}"
 
 
 def cluster_calibration() -> dict:
