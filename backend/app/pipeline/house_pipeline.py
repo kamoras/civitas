@@ -49,7 +49,7 @@ from app.pipeline.fetch.congress import (
     fetch_bill_actions,
     fetch_bill_cosponsors,
     fetch_bill_summaries,
-    fetch_bill_titles,
+    fetch_bill_titles_or_none,
     fetch_house_roll_call_vote,
     fetch_member_detail,
     fetch_member_sponsored,
@@ -347,7 +347,7 @@ async def run_house_pipeline() -> dict:
                     actions = await fetch_bill_actions(client, db, b["congress"], b["type"], b["number"])
                 except CongressUnavailable:
                     # No roll call is discovered from this bill this run.
-                    unread_bills.append(f"{bill_key} ({b['congress']})")
+                    unread_bills.append(f"{bill_key} ({b['congress']}) actions")
                     continue
                 if actions:
                     bill_actions_map[bill_key] = actions
@@ -422,11 +422,16 @@ async def run_house_pipeline() -> dict:
                 bill_key = f"{b['type'].upper()}.{b['number']}"
                 detail = bill_details_map.get(bill_key, {})
                 summaries = await fetch_bill_summaries(client, db, b["congress"], b["type"], b["number"])
+                if summaries is None:
+                    # Classified from its title this run; named in the alert.
+                    unread_bills.append(f"{bill_key} ({b['congress']}) summary")
                 summary_text = ""
                 if summaries:
                     summary_text = summaries[0].get("text", "")
 
-                titles = await fetch_bill_titles(client, db, b["congress"], b["type"], b["number"])
+                titles = await fetch_bill_titles_or_none(client, db, b["congress"], b["type"], b["number"])
+                if titles is None:
+                    unread_bills.append(f"{bill_key} ({b['congress']}) titles")
                 official_title = extract_official_title(titles or [])
 
                 bills_for_classification.append({
@@ -523,6 +528,12 @@ async def run_house_pipeline() -> dict:
                     cosponsors = await fetch_bill_cosponsors(
                         client, db, b["congress"], b["type"], b["number"],
                     )
+                    if cosponsors is None:
+                        # Unread, and no earlier read to stand in: the bill
+                        # is left out of the cosponsorship graphs rather
+                        # than read as having no cosponsors.
+                        unread_bills.append(f"{bill_key} ({b['congress']}) cosponsors")
+                        continue
                     if cosponsors:
                         cosponsors_map[bill_key] = cosponsors
                     all_bills_for_analysis.append({
@@ -568,7 +579,7 @@ async def run_house_pipeline() -> dict:
                                 # (Legislative Effectiveness reads the latest
                                 # action instead, _les_bill_stage).
                                 bill_actions = None
-                                unread_bills.append(f"{sp_key} ({sp_congress})")
+                                unread_bills.append(f"{sp_key} ({sp_congress}) actions")
                             is_law = is_enacted(latest_action_text, bill_actions)
                             # Sponsored bills previously got no policy/party
                             # classification at all here (always None/[]) —
@@ -663,6 +674,10 @@ async def run_house_pipeline() -> dict:
                                 parts[0].lower(),
                                 int(parts[1]),
                             )
+                            if cosponsors is None:
+                                # Left out of the graphs, not read as none.
+                                unread_bills.append(f"{sp_bill_id} ({sp_data.get('congress')}) cosponsors")
+                                continue
                             if cosponsors:
                                 cosponsors_map[sp_bill_id] = cosponsors
                         sponsored_for_cosponsor.append({

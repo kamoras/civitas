@@ -163,8 +163,11 @@ def alert_unread_sponsorship(
     *, close_when_clean: bool = True,
 ) -> None:
     """One ops alert per ``chamber`` run for what Congress.gov couldn't give
-    the run's sponsorship read, each degraded only itself: bills whose
-    action history couldn't be read (staged from their latest action),
+    the run's bill and sponsorship reads, each degraded only itself: bill
+    records that couldn't be read, each entry naming the part (actions:
+    staged from the latest action; cosponsors: the bill left out of the
+    cosponsorship graphs, not read as having none; summary / titles:
+    classified from what was read),
     members whose sponsored legislation couldn't be read and were scored on
     their stored bills (``carried``), and members with none stored, whose
     Legislative Effectiveness bill part went unmeasured (``unmeasured``).
@@ -180,7 +183,7 @@ def alert_unread_sponsorship(
             return
         lines = []
         for label, ids in (
-            ("bills whose actions couldn't be read (staged from their latest action)", unread_bills),
+            ("bill records that couldn't be read (each degraded only itself)", unread_bills),
             ("members scored on their stored bills", carried),
             ("members with no stored bills (bill part not measured)", unmeasured),
         ):

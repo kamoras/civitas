@@ -49,7 +49,7 @@ from app.pipeline.fetch.congress import (
     fetch_bill_actions,
     fetch_bill_cosponsors,
     fetch_bill_summaries,
-    fetch_bill_titles,
+    fetch_bill_titles_or_none,
     fetch_member_detail,
     fetch_member_sponsored,
     fetch_recent_roll_calls,
@@ -930,7 +930,7 @@ async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], 
                 # isLaw/latestAction for this bill. One unreachable
                 # bill must not abort every senator's scoring.
                 stage_failures += 1
-                unread.append(f"{sp.get('billId') or '?'} ({sp.get('congress') or '?'})")
+                unread.append(f"{sp.get('billId') or '?'} ({sp.get('congress') or '?'}) actions")
             # Every _PROGRESS_EVERY bills, not each: an update commits the
             # run row, and a warm cache makes each bill a fast cache hit.
             if progress is not None and (done % _PROGRESS_EVERY == 0 or done == len(bills)):
@@ -1241,9 +1241,14 @@ async def run_senate_pipeline(
                 bill = await fetch_bill(
                     client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
                 )
+                bill_label = f"{bill_ref['type'].upper()}.{bill_ref['number']} ({bill_ref['congress']})"
                 summaries = await fetch_bill_summaries(
                     client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
                 )
+                if summaries is None:
+                    # Classified without its summary this run; named in the alert.
+                    unread_bills.append(f"{bill_label} summary")
+                    summaries = []
                 try:
                     actions = await fetch_bill_actions(
                         client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
@@ -1253,10 +1258,13 @@ async def run_senate_pipeline(
                     # the latest action its detail record carries. One
                     # failed request must not stop the run.
                     actions = []
-                    unread_bills.append(f"{bill_ref['type'].upper()}.{bill_ref['number']} ({bill_ref['congress']})")
-                titles = await fetch_bill_titles(
+                    unread_bills.append(f"{bill_label} actions")
+                titles = await fetch_bill_titles_or_none(
                     client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
                 )
+                if titles is None:
+                    unread_bills.append(f"{bill_label} titles")
+                    titles = []
 
                 # Fetch full bill text from GovInfo
                 full_text = await fetch_bill_text(
@@ -1405,6 +1413,9 @@ async def run_senate_pipeline(
             progress.begin("fetch_cosponsors", total=len(bills_data))
             # bill_id → list of cosponsor dicts (each has bioguideId, party)
             cosponsors_map: dict[str, list[dict]] = {}
+            # Bills whose cosponsor list couldn't be read (and had no earlier
+            # read to stand in): left out of every cosponsorship graph.
+            cosponsors_unread: set[str] = set()
             for cs_idx, bill_ref in enumerate(bills_data):
                 bill_id = bill_ref.get("billId", "")
                 # Parse bill type and number from the composite ID (e.g. "S.123")
@@ -1416,7 +1427,13 @@ async def run_senate_pipeline(
                         parts[0].lower(),
                         int(parts[1]),
                     )
-                    if cosponsors:
+                    if cosponsors is None:
+                        # Unread, and no earlier read to stand in: left out
+                        # of the cosponsorship graphs and profiles, not read
+                        # as a bill nobody cosponsored.
+                        cosponsors_unread.add(bill_id)
+                        unread_bills.append(f"{bill_id} ({bill_ref['congress']}) cosponsors")
+                    elif cosponsors:
                         cosponsors_map[bill_id] = cosponsors
                 progress.update("fetch_cosponsors", done=cs_idx + 1)
             total_cosponsors = sum(len(v) for v in cosponsors_map.values())
@@ -1515,7 +1532,10 @@ async def run_senate_pipeline(
                 # nothing in progress_detail to show for it.
                 progress.begin("fetch_official_titles", total=len(short_title_bills))
                 for ot_idx, (bid, (cg, bt, bn)) in enumerate(short_title_bills.items()):
-                    titles = await fetch_bill_titles(client, db, cg, bt, bn)
+                    titles = await fetch_bill_titles_or_none(client, db, cg, bt, bn)
+                    if titles is None:
+                        # Classified from its short title this run.
+                        unread_bills.append(f"{bid} ({cg}) titles")
                     official = extract_official_title(titles)
                     if official:
                         official_titles_map[bid] = official
@@ -1939,7 +1959,10 @@ async def run_senate_pipeline(
                             parts[0].lower(),
                             int(parts[1]),
                         )
-                        if cosponsors:
+                        if cosponsors is None:
+                            cosponsors_unread.add(bill_id)
+                            unread_bills.append(f"{bill_id} ({sp_bill['congress']}) cosponsors")
+                        elif cosponsors:
                             cosponsors_map[bill_id] = cosponsors
                             enriched_count += 1
                     progress.update("fetch_sponsored_cosponsors", done=sc_idx + 1)
@@ -1956,6 +1979,7 @@ async def run_senate_pipeline(
         else:
             progress.skip("fetch_sponsored_cosponsors", detail="no eligible sponsored bills")
             all_bills_for_analysis = bills_data
+        all_bills_for_analysis = [b for b in all_bills_for_analysis if b.get("billId") not in cosponsors_unread]
 
         # 3f. Sponsorship analysis: PageRank leadership + SVD ideology
         from app.pipeline.analyze.sponsorship_analysis import (

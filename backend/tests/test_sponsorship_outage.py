@@ -18,9 +18,10 @@ exclusion itself is in test_les_reference.py.
 
 import asyncio
 import json
+from datetime import timedelta
 from unittest.mock import patch
 
-from app.models import Representative, RepSponsoredBill
+from app.models import ApiCache, Representative, RepSponsoredBill
 from app.pipeline import run_checks, senate_pipeline
 from app.pipeline.analyze import score_calibration
 from app.pipeline.analyze.score_calculator import (
@@ -29,10 +30,13 @@ from app.pipeline.analyze.score_calculator import (
     calculate_scores,
     load_les_reference,
 )
+from app.pipeline.cache import api_cache_set
+from app.pipeline.fetch import congress
 from app.pipeline.fetch.congress import CongressUnavailable
 from app.pipeline.live_references import bills_read_this_run
 from app.pipeline.sponsorship_backfill import carry_forward_sponsored_bills
 from app.services.representative_service import get_representative_score_breakdown, upsert_representative
+from app.time_utils import utcnow
 
 
 def _bill(n, stage="REFERRED", law=False):
@@ -142,16 +146,45 @@ class TestOneBillDegradesOnlyItself:
             unread = asyncio.run(senate_pipeline._classify_sponsored_stages(
                 db_session, [{"sponsoredBills": bills}],
             ))
-        assert unread == ["S.1 (119)"]
+        assert unread == ["S.1 (119) actions"]
         assert "stage" not in bills[0]  # falls back to its latest action (_les_bill_stage)
         assert bills[1]["stage"]
+
+
+class TestFailedBillRecordsAreNotEmpty:
+    """A cosponsor list, summary or title list whose request failed is None
+    (unread), or the last read when one is cached, never [] — a bill nobody
+    cosponsored and a failed request used to look alike to leadership and
+    coalition attraction."""
+
+    def test_unread_without_a_cached_read(self, db_session, monkeypatch):
+        async def failed(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(congress, "_fetch_with_retry", failed)
+        assert asyncio.run(congress.fetch_bill_cosponsors(None, db_session, 119, "hr", 1)) is None
+        assert asyncio.run(congress.fetch_bill_summaries(None, db_session, 119, "hr", 1)) is None
+
+    def test_the_last_read_stands_in(self, db_session, monkeypatch):
+        listed = [{"bioguideId": "X1", "party": "D"}]
+        api_cache_set(db_session, "congress", "bill-cosponsors-119-hr-2", listed)
+        db_session.query(ApiCache).filter_by(cache_key="bill-cosponsors-119-hr-2").update(
+            {"cached_at": utcnow() - timedelta(days=60)},
+        )
+        db_session.commit()
+
+        async def failed(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(congress, "_fetch_with_retry", failed)
+        assert asyncio.run(congress.fetch_bill_cosponsors(None, db_session, 119, "hr", 2)) == listed
 
 
 class TestUnreadSponsorshipAlert:
     def test_names_each_gap_and_closes_when_clean(self):
         with patch.object(run_checks, "send_ops_alert") as alert, \
                 patch.object(run_checks, "resolve_ops_alert") as resolve:
-            run_checks.alert_unread_sponsorship("house", ["HR.1228 (119)"], ["C1"], ["N1"])
+            run_checks.alert_unread_sponsorship("house", ["HR.1228 (119) actions"], ["C1"], ["N1"])
             body = alert.call_args.args[1]
             assert "HR.1228 (119)" in body and "C1" in body and "N1" in body
             assert alert.call_args.kwargs["condition"] == "sponsorship-unread-house"

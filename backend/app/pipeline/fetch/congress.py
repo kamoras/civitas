@@ -530,6 +530,16 @@ def _bill_record_get(
     )
 
 
+def _last_read(db: Session, cache_key: str, label: str):
+    """The last cached read of a record whose request just failed, past its
+    TTL (up to _STALE_RECORD_MAX_HOURS), or None when there is none — so
+    a failure never reads as an empty record."""
+    stale = api_cache_get(db, "congress", cache_key, max_age_hours=_STALE_RECORD_MAX_HOURS)
+    if stale is not None:
+        logger.warning("%s failed — using the last cached read", label)
+    return stale
+
+
 async def fetch_bill(
     client: httpx.AsyncClient,
     db: Session,
@@ -607,8 +617,9 @@ async def fetch_bill_cosponsors(
     congress: int,
     bill_type: str,
     bill_number: int,
-) -> list[dict]:
-    """Fetch cosponsors for a bill (includes bioguideId, party, state)."""
+) -> list[dict] | None:
+    """Fetch cosponsors for a bill (includes bioguideId, party, state).
+    None when the request failed and no earlier read is cached."""
     cache_key = f"bill-cosponsors-{congress}-{bill_type}-{bill_number}"
     cached = _bill_record_get(db, congress, cache_key, COSPONSORS_CACHE_HOURS)
     if cached is not None:
@@ -619,7 +630,10 @@ async def fetch_bill_cosponsors(
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/cosponsors?limit=250",
     )
     if data is None:
-        return []  # not cached: this run goes without, the next asks again
+        # The last list read stands in; with none, None (not []): a bill
+        # nobody cosponsored and a request that failed must not look alike,
+        # since the list feeds leadership and coalition attraction.
+        return _last_read(db, cache_key, f"cosponsors of {bill_type.upper()}.{bill_number} ({congress})")
     raw = data.get("cosponsors", [])
     results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results, normal_ttl_hours=COSPONSORS_CACHE_HOURS)
@@ -632,8 +646,9 @@ async def fetch_bill_summaries(
     congress: int,
     bill_type: str,
     bill_number: int,
-) -> list[dict]:
-    """Fetch bill summary text."""
+) -> list[dict] | None:
+    """Fetch bill summary text. None when the request failed and no earlier
+    read is cached."""
     cache_key = f"bill-summaries-{congress}-{bill_type}-{bill_number}"
     cached = _bill_record_get(db, congress, cache_key)
     if cached is not None:
@@ -644,7 +659,9 @@ async def fetch_bill_summaries(
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}/summaries",
     )
     if data is None:
-        return []  # not cached: this run classifies from the title, the next asks again
+        # The last read stands in; with none, None: the caller classifies
+        # from the title and names the bill (alert_unread_sponsorship).
+        return _last_read(db, cache_key, f"summaries of {bill_type.upper()}.{bill_number} ({congress})")
     raw = data.get("summaries", [])
     results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
@@ -732,24 +749,6 @@ async def fetch_congress_bill_titles(
     return titles
 
 
-async def fetch_bill_titles(
-    client: httpx.AsyncClient,
-    db: Session,
-    congress: int,
-    bill_type: str,
-    bill_number: int,
-) -> list[dict]:
-    """Fetch all titles for a bill, including the official descriptive title.
-
-    Congress.gov bills have multiple title types: display title (short name
-    like 'Jaime's Law'), official title ('A bill to prevent the purchase of
-    ammunition by prohibited purchasers'), and short titles as introduced/
-    passed.  The official title (titleTypeCode 6) provides the most
-    descriptive text for semantic classification.
-    """
-    return await fetch_bill_titles_or_none(client, db, congress, bill_type, bill_number) or []
-
-
 async def fetch_bill_titles_or_none(
     client: httpx.AsyncClient,
     db: Session,
@@ -757,12 +756,13 @@ async def fetch_bill_titles_or_none(
     bill_type: str,
     bill_number: int,
 ) -> list[dict] | None:
-    """fetch_bill_titles, telling a failed fetch (None, not cached) from a
+    """A bill's titles, telling a failed fetch (None, not cached) from a
     bill with no titles or no such bill (a 404 is a real answer: []).
 
     The distinction matters to the LDA bill matcher, which reads "the
     previous congress had no H.R. 82" as permission: a timeout must not.
     fetch_bill_titles used to cache a failure as [] for the cache lifetime.
+    A failed request with an earlier read cached returns that read.
     """
     cache_key = f"bill-titles-{congress}-{bill_type}-{bill_number}"
     cached = _bill_record_get(db, congress, cache_key)
@@ -783,7 +783,7 @@ async def fetch_bill_titles_or_none(
         request_url=full_url, expected_statuses=(404,), log_label="Congress API",
     )
     if resp is None:
-        return None
+        return _last_read(db, cache_key, f"titles of {bill_type.upper()}.{bill_number} ({congress})")
     if resp.status_code == 404:
         api_cache_set(db, "congress", f"{cache_key}-absent", {"absent": True})
         return []
@@ -791,14 +791,14 @@ async def fetch_bill_titles_or_none(
         try:
             raw = resp.json().get("titles", [])
         except ValueError:
-            return None
+            return _last_read(db, cache_key, f"titles of {bill_type.upper()}.{bill_number} ({congress})")
         results = raw.get("item", []) if isinstance(raw, dict) else (raw or [])
     api_cache_set(db, "congress", cache_key, results)
     return results
 
 
 def extract_official_title(titles: list[dict]) -> str:
-    """Extract the official descriptive title from fetch_bill_titles's result.
+    """Extract the official descriptive title from fetch_bill_titles_or_none's result.
 
     The official title (titleTypeCode 6) is the full legislative description
     (e.g., 'A bill to prevent the purchase of ammunition by prohibited
