@@ -19,29 +19,14 @@ RETRY_BACKOFF_S = 2.0
 
 _rate_limiter = RateLimiter(settings.GOVINFO_RPS)
 
+# How old a cached package or text may be and still stand in for a failed read.
+_STALE_TEXT_HOURS = 24 * 365 * 2
 
-async def _fetch_with_retry(
-    client: httpx.AsyncClient, url: str, retries: int = MAX_RETRIES
-) -> dict | None:
-    """Fetch a GovInfo API URL with rate limiting, retries, and API key injection.
 
-    Thin wrapper over the shared http_utils.fetch_with_retry. A 404 is an
-    expected miss (bill text not published yet), so it terminates immediately
-    via no_retry_statuses rather than being retried; the api-key-bearing URL
-    is passed via request_url so the key is never part of the logged `url`.
-    """
-    separator = "&" if "?" in url else "?"
-    full_url = f"{url}{separator}api_key={settings.DATA_GOV_API_KEY}"
-    resp = await fetch_with_retry(
-        client, _rate_limiter, "GET", url,
-        retries=retries,
-        backoff_s=RETRY_BACKOFF_S,
-        no_retry_statuses=(404,),
-        timeout=DEFAULT_FETCH_TIMEOUT_S,
-        log_label="GovInfo API",
-        request_url=full_url,
-    )
-    return resp.json() if resp is not None else None
+class GovinfoUnavailable(RuntimeError):
+    """GovInfo could not be read for a bill (not a 404) and nothing earlier
+    is cached: the caller names the bill rather than classify it as one with
+    no text published."""
 
 
 async def fetch_bill_package(
@@ -57,7 +42,7 @@ async def fetch_bill_package(
         Bill package info with text links, or None.
     """
     cache_key = f"bill-package-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "govinfo", cache_key)
+    cached = api_cache_get(db, "govinfo", cache_key, spread=True)
     if cached is not None:
         return cached
 
@@ -72,16 +57,40 @@ async def fetch_bill_package(
     type_map = {"hr": "hr", "s": "s", "hjres": "hjres", "sjres": "sjres"}
     govinfo_type = type_map.get(bill_type, bill_type)
 
+    failed = False
     for version in versions:
         package_id = f"BILLS-{congress}{govinfo_type}{bill_number}{version}"
-        data = await _fetch_with_retry(
-            client,
-            f"{GOVINFO_API_BASE}/packages/{package_id}/summary",
+        url = f"{GOVINFO_API_BASE}/packages/{package_id}/summary"
+        resp = await fetch_with_retry(
+            client, _rate_limiter, "GET", url,
+            retries=MAX_RETRIES,
+            backoff_s=RETRY_BACKOFF_S,
+            expected_statuses=(404,),
+            timeout=DEFAULT_FETCH_TIMEOUT_S,
+            log_label="GovInfo API",
+            request_url=f"{url}?api_key={settings.DATA_GOV_API_KEY}",
         )
+        if resp is None:
+            failed = True  # not a 404: this version is unknown, not absent
+            continue
+        if resp.status_code == 404:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            failed = True
+            continue
         if data:
             api_cache_set(db, "govinfo", cache_key, data)
             return data
 
+    if failed:
+        # Some version couldn't be read, so "no text published" isn't known:
+        # the last package read stands in, and with none the caller is told.
+        stale = api_cache_get(db, "govinfo", cache_key, max_age_hours=_STALE_TEXT_HOURS)
+        if stale is not None:
+            return stale
+        raise GovinfoUnavailable(f"package of {bill_type.upper()}.{bill_number} ({congress})")
     logger.warning(
         "No GovInfo package found for %d-%s-%d", congress, bill_type, bill_number
     )
@@ -99,14 +108,18 @@ async def fetch_bill_text(
     """Fetch the plain text content of a bill from GovInfo.
 
     Returns:
-        Bill text content (HTML stripped), or None.
+        Bill text content (HTML stripped), or None when none is published;
+        the last text read when GovInfo fails, GovinfoUnavailable with none.
     """
     cache_key = f"bill-text-{congress}-{bill_type}-{bill_number}"
-    cached = api_cache_get(db, "govinfo", cache_key)
+    cached = api_cache_get(db, "govinfo", cache_key, spread=True)
     if cached is not None:
         return cached
 
-    pkg = await fetch_bill_package(client, db, congress, bill_type, bill_number)
+    try:
+        pkg = await fetch_bill_package(client, db, congress, bill_type, bill_number)
+    except GovinfoUnavailable:
+        return _last_text(db, cache_key, f"package of {bill_type.upper()}.{bill_number} ({congress})")
     if not pkg or not pkg.get("packageId"):
         return None
 
@@ -139,5 +152,19 @@ async def fetch_bill_text(
         logger.warning(
             "Failed to fetch bill text for %s: %s", pkg["packageId"], str(e)
         )
+        return _last_text(db, cache_key, f"text of {pkg['packageId']}")
+    else:
+        if resp.status_code != 404:
+            return _last_text(db, cache_key, f"text of {pkg['packageId']} (HTTP {resp.status_code})")
 
     return None
+
+
+def _last_text(db: Session, cache_key: str, label: str) -> str:
+    """The last text read for a bill whose read just failed, or
+    GovinfoUnavailable with none: an outage is not a bill with no text."""
+    stale = api_cache_get(db, "govinfo", cache_key, max_age_hours=_STALE_TEXT_HOURS)
+    if stale is not None:
+        logger.warning("GovInfo %s failed — using the last text read", label)
+        return stale
+    raise GovinfoUnavailable(label)

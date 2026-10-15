@@ -200,7 +200,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           </header>
 
           <div className="mt-8">
-            <IssueImage issue={issue} />
+            <IssueImage issue={issue} priority />
           </div>
 
           {/* Full story */}

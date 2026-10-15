@@ -249,6 +249,37 @@ class TestNormalizedSource:
                             py, ast.unparse(node))
 
 
+    def test_hashed_code_reaches_presidential_support_only_through_its_entry_point(self):
+        """Exempt because it writes only its own tables: a hashed module
+        taking any other name from it (or anything from sap_position) into
+        an analysis decision would be a change the hash no longer notices."""
+        import ast
+        import pathlib
+
+        from app.pipeline import senate_pipeline
+
+        app_dir = pathlib.Path(senate_pipeline.__file__).resolve().parent.parent
+        support = "app.pipeline.analyze.presidential_support"
+        stance = "app.pipeline.analyze.sap_position"
+        assert {"pipeline/analyze/presidential_support.py", "pipeline/analyze/sap_position.py"} <= (
+            senate_pipeline._NOT_ANALYSIS_PATHS)
+        hashed = [
+            py for py in [*(app_dir / "pipeline").rglob("*.py"), app_dir / "config_definitions.py"]
+            if "/fetch/" not in str(py)
+            and py.relative_to(app_dir).as_posix() not in senate_pipeline._NOT_ANALYSIS_PATHS
+        ]
+        for py in hashed:
+            for node in ast.walk(ast.parse(py.read_text())):
+                if isinstance(node, ast.Import):
+                    assert not any(a.name in (support, stance) for a in node.names), (py, ast.unparse(node))
+                elif isinstance(node, ast.ImportFrom):
+                    assert node.module != stance, (py, ast.unparse(node))
+                    if node.module == support:
+                        assert all(a.name == "run_presidential_support" for a in node.names), (py, ast.unparse(node))
+                    elif node.module == "app.pipeline.analyze":
+                        assert not any(a.name in ("presidential_support", "sap_position") for a in node.names), (
+                            py, ast.unparse(node))
+
     def test_hashed_code_imports_none_of_the_action_center(self):
         """The Action Center is exempt because nothing classified or scored
         reads it. A hashed module importing any part of it would make an

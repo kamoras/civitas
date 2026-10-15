@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchCompareAgreement } from "@/lib/api";
 import { asciiScoreBar } from "@/lib/representation";
-import { dayHref, shortDate } from "@/lib/congress";
-import { voteHref } from "@/components/congress/ReportParts";
+import { rollCallHref, shortDate } from "@/lib/congress";
 import type { AgreementSplit } from "@/types/compare";
 
 /**
@@ -75,7 +74,7 @@ function Split({ vote: v, left, right }: { vote: AgreementSplit; left: string; r
   return (
     <li className="border-b border-white/[0.07] py-2 last:border-b-0">
       <Link
-        href={voteHref(v) ?? dayHref(v.date)}
+        href={rollCallHref(v)}
         className="line-clamp-2 font-display text-sm leading-snug text-ink-hi hover:underline"
       >
         {what}
