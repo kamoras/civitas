@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import ExplorePage from "./page";
 
 const api = vi.hoisted(() => ({
   searchExplore: vi.fn(),
   fetchExploreStats: vi.fn(),
   fetchCommitteeRecordTotal: vi.fn(),
+  fetchExploreMatches: vi.fn(),
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -32,12 +33,17 @@ const doc = (id: number, title: string) => ({
   url: "https://www.congress.gov/x",
 });
 
+const NO_MATCHES = { members: { total: 0, items: [] }, bills: { total: 0, items: [] } };
+
 function open(search: string) {
   params = new URLSearchParams(search);
   window.history.replaceState(null, "", `/explore${search ? `?${search}` : ""}`);
   api.fetchExploreStats.mockResolvedValue({ totalDocuments: 0, openForComment: 0 });
   if (!api.fetchCommitteeRecordTotal.getMockImplementation()) {
     api.fetchCommitteeRecordTotal.mockResolvedValue(0);
+  }
+  if (!api.fetchExploreMatches.getMockImplementation()) {
+    api.fetchExploreMatches.mockResolvedValue(NO_MATCHES);
   }
   return render(<ExplorePage />);
 }
@@ -131,12 +137,78 @@ describe("ExplorePage", () => {
     expect(window.location.search).toBe("?comment=open");
   });
 
-  it("offers a searched bill number's own page above the results", async () => {
+  it("offers a searched bill number's own page, in the Bills group", async () => {
     api.searchExplore.mockResolvedValue({ query: "H.R. 7008", results: [], count: 0 });
+    api.fetchExploreMatches.mockResolvedValue({
+      members: { total: 0, items: [] },
+      bills: {
+        total: 1,
+        items: [
+          {
+            billId: "HR.7008",
+            congress: 119,
+            label: "H.R. 7008",
+            title: "A bill to restrict stock trading",
+            shortTitle: null,
+            stage: "REFERRED",
+          },
+        ],
+      },
+    });
+    open("q=H.R.%207008");
+
+    const link = await screen.findByRole("link", {
+      name: /H\.R\. 7008.*A bill to restrict stock trading/,
+    });
+    expect(link).toHaveAttribute("href", "/congress/bills/HR.7008?congress=119");
+    api.fetchExploreMatches.mockReset();
+  });
+
+  it("still opens a bill number's page when the groups can't be read", async () => {
+    api.searchExplore.mockResolvedValue({ query: "H.R. 7008", results: [], count: 0 });
+    api.fetchExploreMatches.mockRejectedValue(new Error("502"));
     open("q=H.R.%207008");
 
     const link = await screen.findByRole("link", { name: /Open the page for H\.R\. 7008/ });
     expect(link).toHaveAttribute("href", "/congress/bills/HR.7008");
+    api.fetchExploreMatches.mockReset();
+  });
+
+  it("names the members a search names, beside the documents, not among them", async () => {
+    api.searchExplore.mockResolvedValue({
+      query: "holt",
+      results: [doc(1, "Remarks")],
+      count: 1,
+    });
+    api.fetchExploreMatches.mockResolvedValue({
+      members: {
+        total: 1,
+        items: [
+          {
+            id: "avery-holt",
+            name: "Avery Holt",
+            party: "D",
+            state: "SW",
+            chamber: "senate",
+            district: null,
+            thumbnailUrl: null,
+          },
+        ],
+      },
+      bills: { total: 0, items: [] },
+    });
+    open("q=holt");
+
+    const group = (await screen.findByRole("heading", { name: /Members 1 match/ })).closest(
+      "section"
+    )!;
+    expect(within(group).getByRole("link", { name: /Avery Holt/ })).toHaveAttribute(
+      "href",
+      "/politicians/avery-holt"
+    );
+    // The document results are untouched: one result, as searched.
+    expect(screen.getByText(/1 result for/)).toBeInTheDocument();
+    api.fetchExploreMatches.mockReset();
   });
 
   it("offers the committee meetings and reports that match a search", async () => {
