@@ -46,7 +46,7 @@ from app.pipeline.fetch.floor_logs import bill_id_from_number, house_roll_call_u
 from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.services.bill_service import names_phrase, short_title
 from app.services.congress_service import bill_label
-from app.time_utils import utcnow
+from app.time_utils import eastern_date, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +280,7 @@ def check_roll_call_signals(db: Session, today: str | None = None) -> int:
     ("September 28, 2026,  09:42 PM") sorted after every ISO date and hid
     them all.
     """
-    today = today or utcnow().strftime("%Y-%m-%d")
+    today = today or eastern_date(utcnow()).isoformat()
     created = 0
     seen_keys: set[str] = set()
 
@@ -582,7 +582,7 @@ def check_federal_register_signals(db: Session, today: str | None = None) -> int
         title, summary, facts = _compose_developing_rule_issue(rule)
 
         row = ActionIssue(
-            date=today or utcnow().strftime("%Y-%m-%d"),
+            date=today or eastern_date(utcnow()).isoformat(),
             rank=999,  # placeholder — renumbered alongside every other row each run
             title=title[:500],
             summary=summary,

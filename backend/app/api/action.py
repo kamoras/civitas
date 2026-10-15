@@ -28,7 +28,7 @@ from app.pipeline.transform.normalize_votes import is_housekeeping
 from app.services.bill_record import MemberLinks, parse_bill_id
 from app.services.congress_service import bill_label
 from app.state_names import STATE_NAMES
-from app.time_utils import comment_period_today, utcnow
+from app.time_utils import comment_period_today, eastern_date, utcnow
 from app.timeline_entries import without_repeat_leads
 from app.trending import compute_trending_issue_ids
 from app.models import (
@@ -563,7 +563,7 @@ def _build_issue_response(
     return ActionIssueSchema(
         id=issue.id,
         public_id=to_public_id(issue.id),
-        first_surfaced=issue.created_at.strftime("%Y-%m-%d"),
+        first_surfaced=eastern_date(issue.created_at).isoformat(),
         date=issue.date,
         rank=issue.rank,
         title=issue.title,
@@ -1054,11 +1054,11 @@ def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False):
         category=m.category,
         status=m.status,
         policy_areas=_parse_json_field(m.policy_areas),
-        created_at=m.created_at.strftime("%Y-%m-%d"),
-        updated_at=m.updated_at.strftime("%Y-%m-%d"),
+        created_at=eastern_date(m.created_at).isoformat(),
+        updated_at=eastern_date(m.updated_at).isoformat(),
         last_article_date=m.last_article_date,
         update_count=len(m.updates) if m.updates else 0,
-        closed_on=m.updated_at.strftime("%Y-%m-%d") if m.status == MonitorStatus.CLOSED else None,
+        closed_on=eastern_date(m.updated_at).isoformat() if m.status == MonitorStatus.CLOSED else None,
     )
     if not include_updates:
         return base.model_dump(by_alias=True)
