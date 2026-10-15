@@ -50,19 +50,30 @@ def measure_les_reference(
 
 
 def live_les_reference(
-    chamber: str, members: list[tuple[list[dict], str | None]], db: Session,
+    chamber: str, members: list[tuple[list[dict], str | None, bool]], db: Session,
 ) -> dict | None:
     """This run's Legislative Effectiveness population reference for
     `chamber`, persisted for the API and returned merged with the other
     chamber's last reference for calculate_scores. None (score against the
     last persisted reference) when this run has too few members to measure
     one — a single-member filter run, or the first days of a congress.
+
+    `members` is (sponsored bills, caucus party, read this run) per member
+    of the chamber. Only members whose bills this run read are measured: a
+    member whose read failed (scored on their stored bills, or not at all —
+    sponsorship_backfill.carry_forward_sponsored_bills) is left out of the
+    stage totals and the member count alike. Counting them as members with
+    no bills is what poisoned the 2026-10-14 House reference: one failed
+    request stopped the read for 296 of 433 members, and the reference was
+    measured as 433 members holding 137 members' bills — a mean credit of
+    3.16 where the scale is defined as 1.0. The majority is still derived
+    from the whole roster.
     """
     from app.pipeline.analyze.population_reference import LES_REFERENCE
     from app.pipeline.analyze.score_calculator import derive_chamber_majority
 
     majority = derive_chamber_majority(
-        [party for _, party in members], chamber, sitting_president_party(db),
+        [party for _, party, _ in members], chamber, sitting_president_party(db),
     )
     if majority is None:
         logger.warning(
@@ -70,7 +81,13 @@ def live_les_reference(
             "adjustment falls back to the historical table for this congress",
             chamber,
         )
-    ref = measure_les_reference(chamber, members, majority)
+    measured = [(bills, party) for bills, party, read in members if read]
+    if len(measured) < len(members):
+        logger.warning(
+            "LES reference (%s): %d of %d members' bills weren't read this run — measured on the other %d",
+            chamber, len(members) - len(measured), len(members), len(measured),
+        )
+    ref = measure_les_reference(chamber, measured, majority)
     if ref is None:
         logger.warning(
             "Too few %s members with substantive bills to measure an LES reference "
@@ -79,6 +96,12 @@ def live_les_reference(
         return None
     logger.info("LES reference (%s): %s", chamber, ref)
     return LES_REFERENCE.with_live(chamber, ref)
+
+
+def bills_read_this_run(member: dict) -> bool:
+    """Whether this run read the member's sponsored bills (live_les_reference
+    measures only those): not unavailable, and not carried forward."""
+    return not member.get("sponsoredBillsUnavailable") and member.get("sponsoredBillsCarriedFrom") is None
 
 
 def live_funding_reference(

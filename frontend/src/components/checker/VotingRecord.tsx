@@ -7,7 +7,7 @@ import {
   VoteCounts,
   VotingRecord as VotingRecordType,
 } from "@/types/senator";
-import { billPageHref } from "@/lib/congress";
+import { billPageHref, rollCallHref } from "@/lib/congress";
 import { fetchSenatorVotes, fetchRepVotes, type VotePeriod } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
@@ -75,7 +75,18 @@ function VoteRow({ vote }: { vote: KeyVote }) {
           <span className="block text-sm text-ink break-words">{title}</span>
         )}
         <p className="mt-0.5 text-xs text-ink-min">
-          {[rc?.question, shortDate(rc?.date ?? vote.date)].filter(Boolean).join(" · ")}
+          {rc ? (
+            // Every roll call has a page with each member's position,
+            // nominations and procedural votes included.
+            <Link
+              href={rollCallHref(rc)}
+              className="underline decoration-white/20 underline-offset-2 hover:text-phos"
+            >
+              {[rc.question, shortDate(rc.date)].filter(Boolean).join(" · ")}
+            </Link>
+          ) : (
+            shortDate(vote.date)
+          )}
         </p>
       </div>
       {/* Stacked below sm: side by side, AGAINST PARTY and the vote badge

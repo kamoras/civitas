@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchRepVotes, fetchSenatorVotes } from "@/lib/api";
-import { billPageHref } from "@/lib/congress";
+import { billPageHref, rollCallHref } from "@/lib/congress";
 import type { AlignmentFacts, BreakVote, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
 import type { ConstituentApproval as Approval } from "@/types/senator";
 import ComponentBars from "./ComponentBars";
@@ -122,7 +122,14 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
             // screen, and two lines cut a nomination's office off).
             <span className="break-words">{voteTitle(rc?.title, rc?.billLabel, fallback)}</span>
           )}
-          {rc?.question && <span className="block text-[13px] text-ink-lo">{rc.question}</span>}
+          {rc?.question && (
+            <Link
+              href={rollCallHref(rc)}
+              className="block text-[13px] text-ink-lo underline decoration-white/20 underline-offset-2 hover:text-phos"
+            >
+              {rc.question}
+            </Link>
+          )}
         </span>
         <span className="shrink-0 border border-signal-red/45 px-1.5 py-px font-mono text-xs text-signal-red">
           VOTED {vote.vote.toUpperCase()}

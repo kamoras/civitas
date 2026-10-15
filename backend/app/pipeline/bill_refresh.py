@@ -40,8 +40,15 @@ from app.pipeline.analyze.bill_stage import (
     classify_bill_stage_from_actions,
     is_enacted,
 )
-from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.congress import CONGRESS_API_BASE, _fetch_with_retry, congress_first_year
+from app.pipeline.cache import api_cache_get, api_cache_mark_stale, api_cache_set
+from app.pipeline.fetch.congress import (
+    BILL_RECORD_STALE_AGE,
+    BILL_REFRESH_MARKER_KEY,
+    CONGRESS_API_BASE,
+    _fetch_with_retry,
+    bill_record_keys,
+    congress_first_year,
+)
 from app.pipeline.run_tracker import PipelineRunTracker
 from app.time_utils import utcnow
 
@@ -49,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 # Last-successful-run marker, persisted through the ApiCache table (same
 # store the fetchers already use) so the update window survives restarts.
-LAST_RUN_CACHE_KEY = "bill-status-refresh-last-run"
+LAST_RUN_CACHE_KEY = BILL_REFRESH_MARKER_KEY
 _LAST_RUN_TIER = "congress"
 
 _DEFAULT_LOOKBACK = timedelta(hours=24)
@@ -90,6 +97,37 @@ def _window_start(db: Session, now: datetime) -> datetime:
         except ValueError:
             logger.warning("Unparseable %s marker %r — using default lookback", LAST_RUN_CACHE_KEY, stored)
     return now - _DEFAULT_LOOKBACK
+
+
+def _covered_since(db: Session, now: datetime, since: datetime) -> datetime:
+    """Since when this pass's window, joined to the passes before it, has
+    read every bill update — the marker's `coveredSince`, which lets the
+    nightly keep a bill's records until the bill changes
+    (congress.bill_changes_covered_since). It carries over while each window
+    starts inside the last one (_window_start's overlap); a window that
+    doesn't (no marker, or a marker past _MAX_LOOKBACK) starts it again."""
+    stored = api_cache_get(
+        db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY,
+        max_age_hours=int(_MAX_LOOKBACK.total_seconds() // 3600),
+    ) or {}
+    try:
+        last_run = datetime.fromisoformat(stored["lastRun"])
+        covered = datetime.fromisoformat(stored["coveredSince"])
+    except (KeyError, TypeError, ValueError):
+        return since
+    return covered if since <= last_run and now - last_run <= _MAX_LOOKBACK else since
+
+
+def mark_bill_records_stale(db: Session, recent: dict[str, dict]) -> int:
+    """Mark the cached records of every bill the update list returned stale,
+    so the nightly reads them again (congress._bill_record_get). Before this
+    pass refetches any of them, so what it writes stays fresh."""
+    keys = [
+        key
+        for item in recent.values()
+        for key in bill_record_keys(item.get("congress") or settings.CURRENT_CONGRESS, item["type"], item["number"])
+    ]
+    return api_cache_mark_stale(db, "congress", keys, BILL_RECORD_STALE_AGE) if keys else 0
 
 
 def _update_time(item: dict) -> datetime | None:
@@ -465,8 +503,10 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
     try:
         now = utcnow()
         since = _window_start(db, now)
+        covered_since = _covered_since(db, now, since)
         async with make_async_client() as client:
             recent, listing_cut_at = await _fetch_recently_updated(client, since)
+            records_marked = mark_bill_records_stale(db, recent)
             summary = await _apply_updates(db, client, recent)
             laws_added = await sync_laws(db, client, settings.CURRENT_CONGRESS)
             if now.date() < date(congress_first_year(settings.CURRENT_CONGRESS), 1, 3) + _LATE_LAWS:
@@ -476,7 +516,10 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
         # a crashed cycle is retried over the same window next hour — and
         # only as far as what it applied.
         resume = _resume_point(now, listing_cut_at, summary.pop("deferred_from", None))
-        api_cache_set(db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY, {"lastRun": resume.isoformat()})
+        api_cache_set(
+            db, _LAST_RUN_TIER, LAST_RUN_CACHE_KEY,
+            {"lastRun": resume.isoformat(), "coveredSince": covered_since.isoformat()},
+        )
     finally:
         if owns_session:
             db.close()
@@ -490,5 +533,6 @@ async def refresh_bill_statuses(db: Session | None = None) -> dict:
     if resume != now:
         summary["resumes_at"] = resume.isoformat()
     summary["recently_updated"] = len(recent)
+    summary["records_marked_stale"] = records_marked
     summary["laws_added"] = laws_added  # None: the law list couldn't be read
     return summary

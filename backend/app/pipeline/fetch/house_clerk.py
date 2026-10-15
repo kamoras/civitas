@@ -92,9 +92,16 @@ def parse_caucuses(xml: bytes) -> dict[str, str]:
     return caucuses
 
 
-async def fetch_house_caucuses(client: httpx.AsyncClient, db: Session) -> dict[str, str]:
-    """{bioguide ID: caucus} for the sitting House, or {} when the list
-    can't be read (caucus inference then decides for an independent)."""
+# How old a caucus list may be and still stand in for a failed read: one
+# Congress (caucuses change with membership, which a new Congress resets).
+_STALE_CAUCUS_HOURS = 24 * 365 * 2
+
+
+async def fetch_house_caucuses(client: httpx.AsyncClient, db: Session) -> dict[str, str] | None:
+    """{bioguide ID: caucus} for the sitting House. When the list can't be
+    read, the last one read (however old), or None with none: the caller
+    keeps each member's stored caucus rather than read the outage as "no
+    caucus recorded" and let inference decide an independent's party."""
     cached = api_cache_get(db, "congress", _CAUCUS_CACHE_KEY, max_age_hours=_CACHE_HOURS)
     if cached:
         return cached
@@ -103,7 +110,7 @@ async def fetch_house_caucuses(client: httpx.AsyncClient, db: Session) -> dict[s
         resp.raise_for_status()
     except httpx.HTTPError as e:
         logger.warning("House Clerk member list unavailable: %s", e)
-        return {}
+        return api_cache_get(db, "congress", _CAUCUS_CACHE_KEY, max_age_hours=_STALE_CAUCUS_HOURS)
     caucuses = parse_caucuses(resp.content)
     if caucuses:
         api_cache_set(db, "congress", _CAUCUS_CACHE_KEY, caucuses, normal_ttl_hours=_CACHE_HOURS)

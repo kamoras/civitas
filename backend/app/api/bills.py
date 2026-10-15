@@ -11,7 +11,7 @@ from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, ca
 from app.database import get_db, off_loop
 from app.http_client import make_async_client
 from app.pipeline.fetch.congress import expected_current_congress
-from app.services.bill_record import fetch_bill_record, parse_bill_id, shape_record
+from app.services.bill_record import canonical_bill_id, fetch_bill_record, shape_record
 from app.services.bill_service import get_bill_detail, get_bills_in_flight
 
 router = APIRouter()
@@ -82,7 +82,8 @@ async def get_bill_record(
     and fetched by a later visit. A self-declared crawler spends from its
     own share of the budget, so crawlers can't spend the readers' hour. A congress that hasn't begun is refused
     before anything is fetched."""
-    if parse_bill_id(bill_id) is None:
+    bill_id = canonical_bill_id(bill_id)
+    if bill_id is None:
         raise HTTPException(status_code=404, detail="Not a bill id")
     current = expected_current_congress()
     congress = congress or current
