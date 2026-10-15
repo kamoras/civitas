@@ -101,6 +101,9 @@ function tally(p: { yea: number; nay: number }): string {
 function BreakRow({ vote }: { vote: ListedBreak }) {
   const rc = vote.rollCall;
   const fallback = vote.billName ?? "";
+  // The bill's short title from Congress.gov when the chamber titled the vote
+  // by its official one (the chamber's stays on hover and the roll call page).
+  const title = rc?.billShortTitle || voteTitle(rc?.title, rc?.billLabel, fallback);
   const href = rc ? billPageHref(rc.billId, rc.congress) : billPageHref(vote.billId);
   const parties = rc?.parties.filter((p) => PARTY_SHORT[p.party] && p.yea + p.nay > 0) ?? [];
   return (
@@ -114,13 +117,13 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
               className="line-clamp-2 underline decoration-white/20 underline-offset-2 hover:text-phos"
               title={rc?.title || fallback}
             >
-              {voteTitle(rc?.title, rc?.billLabel, fallback)}
+              {title}
             </Link>
           ) : (
             // A nomination or a procedural question: no bill to open, so
             // not clamped (a title attribute can't be read on a touch
             // screen, and two lines cut a nomination's office off).
-            <span className="break-words">{voteTitle(rc?.title, rc?.billLabel, fallback)}</span>
+            <span className="break-words">{title}</span>
           )}
           {rc?.question && (
             <Link

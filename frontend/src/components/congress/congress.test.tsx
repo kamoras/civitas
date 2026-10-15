@@ -554,6 +554,29 @@ describe("bill page", () => {
     ).toBeTruthy();
   });
 
+  it("leads with Congress.gov's short title, its type, and the official title under it", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={{
+          ...record,
+          title: "An act to provide for reconciliation.",
+          shortTitle: "Big Bill Act",
+          shortTitleType: "Short Title(s) as Passed House",
+          officialTitle: "An act to provide for reconciliation.",
+        }}
+        detail={null}
+        stageName={null}
+      />
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Big Bill Act" })).toBeTruthy();
+    expect(screen.getByText("Short Title(s) as Passed House · Congress.gov")).toBeTruthy();
+    expect(screen.getByText("Official title")).toBeTruthy();
+    expect(screen.getByText("An act to provide for reconciliation.")).toBeTruthy();
+  });
+
   it("has no axe violations", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
     render(

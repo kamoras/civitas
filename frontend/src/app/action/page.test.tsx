@@ -193,3 +193,24 @@ describe("the list beside the top issue", () => {
     );
   });
 });
+
+describe("the masthead's freshness line", () => {
+  it("names the last check and, apart, the last story change", async () => {
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 3600 * 1000);
+    vi.mocked(fetchActionIssues).mockImplementation((() =>
+      Promise.resolve({
+        date: LATEST,
+        availableDates: DATES,
+        checkedAt: now.toISOString(),
+        generatedAt: yesterday.toISOString(),
+        issues: [issueFor(LATEST, "a")],
+      })) as unknown as typeof fetchActionIssues);
+    window.history.replaceState(null, "", "/action?tab=issues");
+    render(<ActionPage />);
+    const line = await screen.findByText(/^Checked /);
+    expect(line.textContent).toMatch(
+      /^Checked \d{1,2}:\d{2}.* · stories updated [A-Z][a-z]{2} \d{1,2}, /
+    );
+  });
+});

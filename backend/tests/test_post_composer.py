@@ -378,3 +378,32 @@ class TestBracketsAndQuotesTheSpanCuts:
     ])
     def test_a_span_from_mid_sentence_starts_with_a_capital(self, actor, predicate, source, want):
         assert compose(actor, predicate, source) == want
+
+
+class TestHouseStyleTheModelCannotCopy:
+    """Right words, rejected anyway (live sample, 2026-10-11..15): a period
+    inside "(D-Conn.)" read as a sentence end, and a quoted phrase the model
+    could only copy with single marks, since it answers in JSON."""
+
+    PAREN = "Sen. Jane Roe (D-Conn.) on Sunday slammed the agency's new fee rule."
+    QUOTED = 'Lawyers for the governor called the review panel “demonstrably biased.” A hearing is set.'
+
+    def test_a_period_inside_a_parenthetical_does_not_end_the_sentence(self):
+        assert compose("Sen. Jane Roe", "slammed the agency's new fee rule", self.PAREN) == self.PAREN
+
+    def test_a_period_outside_brackets_still_ends_it(self):
+        src = "Sen. Jane Roe spoke. On Sunday slammed the agency's new fee rule."
+        assert compose("Sen. Jane Roe", "slammed the agency's new fee rule", src) is None
+
+    def test_single_marks_match_the_sources_double_ones(self):
+        got = compose("Lawyers for the governor", "called the review panel 'demonstrably biased'", self.QUOTED)
+        assert got == 'Lawyers for the governor called the review panel "demonstrably biased."'
+
+    def test_only_the_marks_are_loose(self):
+        # Any other changed character is still a paraphrase.
+        assert compose("Lawyers for the governor", "called the panel 'demonstrably biased'", self.QUOTED) is None
+
+    def test_a_mark_mid_span_with_its_comma_dropped(self):
+        src = 'Mayor Ann Lee called the plan “unworkable,” and vetoed it on Friday.'
+        got = compose("Mayor Ann Lee", "called the plan 'unworkable' and vetoed it on Friday", src)
+        assert got == 'Mayor Ann Lee called the plan "unworkable," and vetoed it on Friday.'

@@ -88,10 +88,9 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
       type: "article",
     });
   }
+  const named = record!.shortTitle || record!.title;
   return pageMetadata({
-    title: record!.title
-      ? `${record!.billLabel ?? billId}: ${record!.title}`
-      : (record!.billLabel ?? billId),
+    title: named ? `${record!.billLabel ?? billId}: ${named}` : (record!.billLabel ?? billId),
     description:
       record!.summary?.paragraphs[1] ??
       record!.latestAction?.text ??

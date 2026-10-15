@@ -40,6 +40,9 @@ def senator(db_session):
     ("7008", ["H.R. 7008"]),  # the number alone
     ("S 1", ["S. 1"]),  # not S. Res. 15, whose bare form "SRES15" contains "S1"
     ("highways", ["S. 1"]),
+    ("highway funding", ["S. 1"]),  # each word, stemmed, in any order
+    ("trading stocks", ["H.R. 7008"]),
+    ("teacher", ["S.Res. 15"]),
     ("cloture", ["PN1129"]),  # the roll call's question
     ("100%", []),  # a LIKE wildcard is a character here
 ])

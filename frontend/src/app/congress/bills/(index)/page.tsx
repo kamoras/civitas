@@ -269,8 +269,12 @@ function AllBillsGroups({
     );
   }
 
-  // A search whose matches all sit at one stage (a bill number, nearly
-  // always) opens that stage, so the bill is on screen without another click.
+  // A search opens every stage its matches sit at, so they are on screen
+  // without a click per stage. It used to open a stage only when all the
+  // matches sat at one (a bill number, nearly always): while a search had to
+  // match a title as one unbroken string it seldom found more, but matched
+  // word by word "student loans" finds 34 bills at five stages, and a
+  // reader saw five closed headers instead of the bills.
   const matchingStages =
     q && stageTotals !== "error" ? ALL_STAGE_CODES.filter((code) => stageTotals[code] > 0) : [];
 
@@ -280,7 +284,7 @@ function AllBillsGroups({
         <BillStageGroup
           key={code}
           stageCode={code}
-          forceExpanded={matchingStages.length === 1 && matchingStages[0] === code}
+          forceExpanded={matchingStages.includes(code)}
           count={stageTotals === "error" ? undefined : (stageTotals[code] ?? 0)}
           chamber={chamber}
           party={party}

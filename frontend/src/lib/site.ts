@@ -34,7 +34,9 @@ export const SITE_NAME = "Civitas Research";
 export const TITLE_TEMPLATE = `%s | ${SITE_NAME}`;
 /** Other names the site goes by, for WebSite/Organization `alternateName`. */
 export const SITE_ALTERNATE_NAMES = ["Civitas", "civitas-research.org"];
-export const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.org";
+/** Civitas's Bluesky account, the only social account it has. */
+export const BSKY_HANDLE = "civitas-research.org";
+export const BSKY_PROFILE_URL = `https://bsky.app/profile/${BSKY_HANDLE}`;
 export const GITHUB_REPO_URL = "https://github.com/kamoras/civitas";
 
 /** Everything Civitas publishes, as Atom (backend/app/api/feed.py). Topic
