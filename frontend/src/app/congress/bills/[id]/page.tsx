@@ -5,8 +5,8 @@ import type { BillRecord } from "@/types/congress";
 import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import { describeBill, legislationJsonLd } from "@/lib/seo";
-import { fetchBillRecord } from "@/lib/congressServer";
-import { billCanonicalPath, parseCongressParam } from "@/lib/congress";
+import { fetchBillCommitteeRecord, fetchBillRecord } from "@/lib/congressServer";
+import { billCanonicalPath, currentCongress, parseCongressParam } from "@/lib/congress";
 import { ordinal } from "@/components/scorecard/format";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import BillPageView from "@/components/congress/BillPageView";
@@ -108,6 +108,10 @@ export default async function BillPage({ params, searchParams }: PageProps) {
   if (!record && !detail) notFound();
   const billId = record?.billId ?? detail!.billId;
   const canonical = billCanonicalPath(billId, record?.congress ?? detail!.congress);
+  const committee = await fetchBillCommitteeRecord(
+    billId,
+    record?.congress ?? detail?.congress ?? congress ?? currentCongress()
+  );
   return (
     <>
       <JsonLd
@@ -128,6 +132,7 @@ export default async function BillPage({ params, searchParams }: PageProps) {
         detail={detail}
         stageName={detail ? (stages[detail.stage]?.name ?? null) : null}
         strip={<ThisWeekStrip variant="compact" />}
+        committee={committee}
       />
     </>
   );

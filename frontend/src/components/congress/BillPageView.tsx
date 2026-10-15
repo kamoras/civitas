@@ -4,13 +4,14 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import type { BillDetail } from "@/types/bill";
-import type { BillPerson, BillRecord } from "@/types/congress";
+import type { BillPerson, BillRecord, CommitteeRecordPage } from "@/types/congress";
 import { billStageStyle } from "@/lib/billStages";
 import { policyAreaLabel } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { CHAMBER_NAME, dayHref, longDate, shortDate } from "@/lib/congress";
 import { CongressTabs } from "./CongressNav";
 import BillSources from "./BillSources";
+import CommitteeEntries from "./CommitteeEntries";
 import StageLadder from "./StageLadder";
 import VotePanel from "./VotePanel";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
@@ -85,6 +86,7 @@ export default function BillPageView({
   detail,
   stageName,
   strip,
+  committee,
 }: {
   billId: string;
   /** The page's own URL path, with ?congress= for an earlier Congress's bill. */
@@ -94,6 +96,9 @@ export default function BillPageView({
   stageName: string | null;
   /** The "this week" strip, rendered by the server page. */
   strip?: ReactNode;
+  /** The committee meetings and reports that name the bill, as the Daily
+   *  Digest printed them; null when they couldn't be read just now. */
+  committee?: CommitteeRecordPage | null;
 }) {
   const label = record?.billLabel ?? detail?.billId ?? billId;
   const title = record?.title ?? detail?.title ?? "";
@@ -337,6 +342,7 @@ export default function BillPageView({
                 ["summary", "Summary"],
                 ["votes", "Votes"],
                 ["history", "History"],
+                ["committee", "In committee"],
                 ["text", "Text"],
                 ["sources", "Data & citation"],
               ].map(([id, name]) => (
@@ -428,6 +434,29 @@ export default function BillPageView({
                         : "No actions recorded."}
                     </p>
                   )}
+                </section>
+
+                <section className="flex flex-col gap-3">
+                  <SectionHead
+                    id="committee"
+                    title="In committee"
+                    count={committee ? `${committee.total} in the Daily Digest` : undefined}
+                  />
+                  {committee && committee.entries.length > 0 ? (
+                    <CommitteeEntries entries={committee.entries} />
+                  ) : (
+                    <p className="text-ink-lo">
+                      {committee
+                        ? "No committee meeting or report in the Daily Digest names this bill."
+                        : "The committee record could not be loaded just now."}
+                    </p>
+                  )}
+                  <Link
+                    href="/congress/committees"
+                    className="font-mono text-xs tracking-[0.1em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+                  >
+                    Search every committee meeting and report →
+                  </Link>
                 </section>
 
                 <section className="flex flex-col gap-3">

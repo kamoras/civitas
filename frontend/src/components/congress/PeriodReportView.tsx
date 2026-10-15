@@ -30,6 +30,12 @@ function chamberCell(day: PeriodDay, chamber: "senate" | "house") {
     parts.push(`${c.counts.recordVotes} vote${c.counts.recordVotes === 1 ? "" : "s"}`);
   if (c.counts.billsPassed)
     parts.push(`${c.counts.billsPassed} bill${c.counts.billsPassed === 1 ? "" : "s"} passed`);
+  // The day's committee meetings are listed on its own page; a week or month
+  // said nothing of them.
+  if (c.counts.committeeMeetings)
+    parts.push(
+      `${c.counts.committeeMeetings} committee meeting${c.counts.committeeMeetings === 1 ? "" : "s"}`
+    );
   if (!parts.length && c.minutesInSession !== null && c.minutesInSession < 60)
     // A Senate pro forma session lasts seconds; "0 min" read as no session.
     parts.push(c.minutesInSession === 0 ? "<1 min" : `${c.minutesInSession} min`);
