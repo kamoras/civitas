@@ -1628,7 +1628,7 @@ Below the masthead, the homepage lists what stood out in Congress's latest week 
 
 The week is the latest Monday-to-Sunday week either chamber recorded a vote in, labelled with its dates, so a recess shows the last week in session. Past 28 days without a record vote the list is empty and the section is left out: an empty week shows nothing, never filler. A score's week-on-week "biggest mover" was considered and left out: a change is only comparable on one scoring method, and on 2026-10-13 none of 534 members had a comparable seven-day change, because methods change more often than that.
 
-The masthead also carries a "For researchers" line — methods, sources, the API and the scoring changelog — so they are one click from the first screen rather than only in the footer.
+The masthead also carries a "For researchers" line — methods, sources, the API and the scoring changelog — so they are one click from the first screen rather than only in the footer. Above it, a "For voters" line puts a state list beside "Your members", "Your ballot" and "Congress this week": picking a state only fills in the first two links (`/politicians?state=XX`, `/elections/states/XX`), nothing is kept, and before a pick they go to the pages that ask for one. On a phone, one of a student's five first tasks had a labelled way in on the first screen before this, the ballot's state picker two screens down; three do now.
 
 ## Score Data Transparency
 
