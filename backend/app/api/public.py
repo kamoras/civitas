@@ -48,6 +48,7 @@ from app.broadcast import SITE_URL
 from app.config import settings
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db, off_loop
+from app.district_lean import lean_for as computed_lean_for
 from app.member_ids import resolve_member_id
 from app.models import Justice, President, Representative, ScoreSnapshot, Senator
 from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE, FUNDING_REFERENCE, LES_REFERENCE
@@ -58,7 +59,7 @@ from app.pipeline.analyze.score_calculator import (
     compute_overall_score,
     stored_bills_status,
 )
-from app.pipeline.fetch.district_pvi import lines_of
+from app.pipeline.fetch.district_pvi import lines_congress, lines_of
 from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
 from app.score_display import displayed_rank
 from app.schemas import (
@@ -362,6 +363,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
     district = member.district if house else None
     with lines_of(member.district_lines_congress if house else None):
         cook_pvi = _seat_pvi(member.state, district)
+        computed = computed_lean_for(member.state, district, lines_congress()) if house else None
     dimensions = {}
     for key, column in _BREAKDOWN_DIMENSIONS.items():
         part = explained[key]
@@ -400,6 +402,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
                     "district": district,
                     "cookPvi": cook_pvi,
                     "districtLinesCongress": member.district_lines_congress if house else None,
+                    "computedLean": computed,
                 },
                 "legislativeBills": stored_bills_status(member),
             },

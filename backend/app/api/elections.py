@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json, retry_soon_json
 from app.database import get_db
+from app.district_lean import lean_for as computed_lean_for
 from app.district_places import places_on_lines_of
 from app.office_terms import term_years
 from app.state_ballot_scope import on_november_ballot
@@ -260,6 +261,15 @@ def _pvi_for_race(race: Race, state_pvi: dict, district_pvi: dict) -> tuple[int 
             return district_pvi[key], "district"
     pvi = state_pvi.get(race.state)
     return pvi, ("state" if pvi is not None else None)
+
+
+def _computed_lean(race: Race, pvi_level: str | None) -> float | None:
+    """Civitas's computed lean for a House race's district, on the lines
+    its cycle is fought on — beside the Cook figure, only where that is a
+    district figure too (never against the statewide stand-in)."""
+    if race.office != "H" or pvi_level != "district":
+        return None
+    return computed_lean_for(race.state, race.district, congress_for_election(race.cycle_year))
 
 
 def _iso_utc(dt) -> str | None:
@@ -775,6 +785,7 @@ def _race_full(
         "isSpecial": race.is_special,
         "pvi": pvi,
         "pviLevel": pvi_level,
+        "computedLean": _computed_lean(race, pvi_level),
         # Where this seat's lean sits among all seats of its kind.
         "leanContext": lean_context(race.office, pvi, pvi_level, state_pvi, district_pvi),
         "counties": counties,
@@ -2078,6 +2089,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "isSpecial": race.is_special,
         "pvi": pvi,
         "pviLevel": pvi_level,
+        "computedLean": _computed_lean(race, pvi_level),
         "leanContext": lean_context(race.office, pvi, pvi_level, state_pvi, district_pvi),
         "candidateSource": _candidate_source(race.candidates, complete),
         "candidates": [_candidate_summary(c, stale_incumbent_ids) for c in candidates],

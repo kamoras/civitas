@@ -911,6 +911,11 @@ class PublicSeatSchema(_PublicModel):
     district_lines_congress: int | None = Field(
         description="The Congress whose district lines the House score was computed on; null for senators, or "
                     "a score stored before this was recorded")
+    computed_lean: float | None = Field(
+        description="Civitas's own lean for the House district on those same lines, positive leaning Republican, "
+                    "one decimal: Cook's formula worked out from open precinct returns (VEST 2020, MEDSL 2024), "
+                    "for comparison with cook_pvi. Not used in any score; null for senators or lines with no "
+                    "computed table")
 
 
 class PublicScoreReferencesSchema(_PublicModel):

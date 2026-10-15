@@ -1,5 +1,5 @@
 # Research and calibration scripts only (backend/scripts/research_*.py,
-# calibrate_commemorative.py, audit_funding_components.py,
+# calibrate_commemorative.py, audit_funding_components.py, build_district_lean.py,
 # evaluate_embedding_models.py, frozen_clock_plugin.py) — never installed
 # into the backend image.
 #
@@ -12,7 +12,9 @@
 # (evaluate_embedding_models.py's ONNX comparison), time-machine
 # (frozen_clock_plugin.py, the test suite run on another date), websockets
 # (fetch_bluesky_activity.py's Jetstream sampling; its pin is requirements.txt's,
-# where uvicorn already brings it). The rest is what those pull in beyond
+# where uvicorn already brings it), pyproj (build_district_lean.py puts Census
+# block points into each VEST shapefile's own projection; its one dependency,
+# certifi, is requirements.txt's). The rest is what those pull in beyond
 # requirements.txt.
 et-xmlfile==2.0.0
 flatbuffers==25.12.19
@@ -23,6 +25,7 @@ openpyxl==3.1.5
 pandas==3.0.6
 patsy==1.0.3
 protobuf==7.36.2
+pyproj==3.8.0
 pyreadr==0.5.7
 python-dateutil==2.9.0.post0
 rdata==1.1.0

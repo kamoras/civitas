@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import { getScoreColor } from "@/lib/representation";
 import { displayScore } from "@/lib/formatting";
 import {
+  COMPUTED_LEAN_HREF,
   candidateName,
+  formatComputedLean,
   formatPvi,
   incumbencyLabel,
   isActiveCandidate,
@@ -142,6 +144,17 @@ export default function RaceContext({
           <Row label={`The seat · ${formatPvi(race.pvi)}`}>
             {leanSentence(race.pvi, lean.unit)} {leanCountsSentence(lean)}
             <LeanSquares context={lean} />
+            {race.computedLean != null && (
+              <p className="mt-2 text-[13px]">
+                Civitas-computed lean{" "}
+                <span className="font-mono text-ink">{formatComputedLean(race.computedLean)}</span>:
+                the same formula, worked out by Civitas from open precinct returns, shown beside
+                Cook&apos;s figure and used in no score.{" "}
+                <Link href={COMPUTED_LEAN_HREF} className="text-signal-cyan hover:text-phos">
+                  How it is computed
+                </Link>
+              </p>
+            )}
           </Row>
         )}
         {incumbent?.incumbentRecord && (

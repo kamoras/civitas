@@ -69,6 +69,14 @@ export interface AlignmentFacts {
     z: number;
     survey: string;
   } | null;
+  /** The seat's lean as the score read it (Cook's PVI), and Civitas's own
+   *  computed lean beside it (House seats; null for senators, or lines
+   *  with no computed table). Shown, never scored. */
+  seatLean?: {
+    cookPvi: number;
+    computedLean: number | null;
+    linesCongress: number | null;
+  };
 }
 
 /** legislativeEffectiveness.facts: bills and joint resolutions whose

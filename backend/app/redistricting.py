@@ -21,6 +21,7 @@ import logging
 import pathlib
 from collections import Counter, defaultdict
 
+from app import district_lean
 from app.live_results.sync import _maps
 from app.pipeline.fetch.district_pvi import district_pvi_for_congress
 
@@ -97,6 +98,10 @@ def state_changes(state: str) -> dict | None:
     floor = int(doc["minResidents"])
     old_pvi, old_meta = district_pvi_for_congress(int(doc["fromCongress"]))
     new_pvi, new_meta = district_pvi_for_congress(int(doc["toCongress"]))
+    # Civitas's own computed lean on each map, shown beside Cook's (never
+    # used for the summary counts, which stay Cook's).
+    old_computed = district_lean.computed_lean(int(doc["fromCongress"]))
+    new_computed = district_lean.computed_lean(int(doc["toCongress"]))
 
     new_pop: Counter = Counter()
     old_pop: Counter = Counter()
@@ -145,6 +150,8 @@ def state_changes(state: str) -> dict | None:
             "pviBeforeWeighted": weighted,
             "pviAfter": after,
             "pviShift": after - before if after is not None and before is not None else None,
+            "computedLeanBefore": old_computed.get(predecessor[new]),
+            "computedLeanAfter": new_computed.get(new),
             "leanBefore": lean_category(before),
             "leanAfter": lean_category(after),
             # Same people, same district: every resident came from one old
@@ -162,6 +169,7 @@ def state_changes(state: str) -> dict | None:
             "destinations": dests,
             "sliverResidents": sliver,
             "pvi": old_pvi.get(old),
+            "computedLean": old_computed.get(old),
             # Whether any new district grew mainly from this one; a
             # district split up so that none did has no successor.
             "hasSuccessor": old in predecessor.values(),
@@ -220,6 +228,7 @@ def state_changes(state: str) -> dict | None:
             "overlap": doc.get("_source"),
             "pviBefore": old_meta,
             "pviAfter": new_meta,
+            "computedLean": district_lean.meta(),
         },
     }
 

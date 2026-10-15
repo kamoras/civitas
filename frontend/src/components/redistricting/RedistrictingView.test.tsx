@@ -137,6 +137,35 @@ describe("RedistrictingStateView", () => {
     expect(screen.getByText(/were in the old 2nd/)).toBeInTheDocument();
   });
 
+  it("shows Civitas's computed lean beside Cook's on both maps, with its source", () => {
+    const withComputed: StateRedistricting = {
+      ...data,
+      newDistricts: data.newDistricts.map((d, i) => ({
+        ...d,
+        computedLeanBefore: i === 0 ? 3.4 : -1.2,
+        computedLeanAfter: i === 0 ? 8.8 : -0.04,
+      })),
+      oldDistricts: data.oldDistricts.map((d) => ({ ...d, computedLean: 2.6 })),
+      sources: {
+        ...data.sources,
+        computedLean: {
+          source: "Computed by Civitas.",
+          method: null,
+          window: "2020+2024",
+          asOf: "2026-10-15",
+          href: "/about/data#computed-lean",
+        },
+      },
+    };
+    render(<RedistrictingStateView data={withComputed} />);
+    expect(screen.getByText("CIVITAS-COMPUTED R+3.4 → R+8.8")).toBeInTheDocument();
+    expect(screen.getByText("CIVITAS-COMPUTED D+1.2 → EVEN")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "How it is computed" })).toHaveAttribute(
+      "href",
+      "/about/data#computed-lean"
+    );
+  });
+
   it("leads with the net seat change the strips show, and keeps the predecessor count in the method", () => {
     render(<RedistrictingStateView data={data} />);
     const r = screen.getByText("R-LEANING SEATS").closest("div")!;

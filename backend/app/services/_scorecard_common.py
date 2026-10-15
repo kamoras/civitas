@@ -16,15 +16,18 @@ from sqlalchemy import ColumnElement, String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.district_lean import lean_for as computed_lean_for
 from app.models import RollCall
 from app.pipeline.analyze.party_line_record import load_record
 from app.pipeline.analyze.score_calculator import (
     bills_inputs_from_status,
     explain_scores,
     funding_share_base,
+    _seat_pvi,
     party_line_tally,
     stored_bills_status,
 )
+from app.pipeline.fetch.district_pvi import lines_congress, lines_of
 from app.pipeline.transform.normalize_votes import stored_vote
 from app.services.bill_record import roll_call_summaries, typed_bill_number
 from app.services.score_findings import add_findings
@@ -202,17 +205,23 @@ def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) ->
     can't disagree. Each dimension also carries its one-sentence finding
     (score_findings)."""
     entity_dict = build_score_breakdown_entity(entity, lobbying_donation_attr=lobbying_donation_attr)
-    if entity_dict["district"] is None:
+    district = entity_dict["district"]
+    # A House score is recomputed on the district lines it was stored on,
+    # which differ from the sitting ones between a change of Congress and
+    # the House run that rescores the member (or for good, for a member
+    # who left then) — see district_pvi.lines_of. A senator's (None) reads
+    # the sitting lines, which no state lean depends on.
+    with lines_of(getattr(entity, "district_lines_congress", None) if district is not None else None):
         breakdown = explain_scores(entity_dict)
-    else:
-        # A House score is recomputed on the district lines it was stored
-        # on, which differ from the sitting ones between a change of
-        # Congress and the House run that rescores the member (or for good,
-        # for a member who left then) — see district_pvi.lines_of.
-        from app.pipeline.fetch.district_pvi import lines_of
-
-        with lines_of(getattr(entity, "district_lines_congress", None)):
-            breakdown = explain_scores(entity_dict)
+        # The seat's lean as the score read it (Cook's), and beside it the
+        # one Civitas computes from precinct returns — shown, never scored.
+        seat_lean = {
+            "cookPvi": _seat_pvi(entity_dict["state"], district),
+            "computedLean": (
+                computed_lean_for(entity_dict["state"], district, lines_congress()) if district is not None else None
+            ),
+            "linesCongress": lines_congress() if district is not None else None,
+        }
     record = entity_dict["votingRecord"]["partyLineRecord"]
     facts = (breakdown.get("constituentAlignment") or {}).get("facts")
     if record and facts is not None:
@@ -223,4 +232,6 @@ def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) ->
                 {"vote": b.get("vote"), "rollCall": summaries.get(b.get("rollCall"))}
                 for b in record.get(key) or []
             ]
-    return add_findings(breakdown, "senate" if entity_dict["district"] is None else "house")
+    if facts is not None:
+        facts["seatLean"] = seat_lean
+    return add_findings(breakdown, "senate" if district is None else "house")

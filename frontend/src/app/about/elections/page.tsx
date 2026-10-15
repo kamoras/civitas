@@ -108,7 +108,9 @@ export default async function ElectionsChapter() {
           states for a Senate race. The count of seats leaning further each way is worked out on the
           server from the same table the lean comes from. A district that only has its state&apos;s
           figure is not placed among districts, and from election day the lean is not shown at all,
-          so that it can&apos;t be read as a call on the count.
+          so that it can&apos;t be read as a call on the count. A House district also shows the lean
+          Civitas computes from precinct returns with the same formula, beside Cook&apos;s and used
+          in no score (<A href="/about/data#computed-lean">how it is computed</A>).
         </P>
         <P>
           <strong>The money.</strong> Each candidate&apos;s contributions are split into the

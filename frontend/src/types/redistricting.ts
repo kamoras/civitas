@@ -32,6 +32,10 @@ export interface NewDistrict {
   pviBeforeWeighted: number | null;
   pviAfter: number | null;
   pviShift: number | null;
+  /** Civitas's computed lean of the predecessor (old lines) and of this
+   * district, beside Cook's; never scored. */
+  computedLeanBefore?: number | null;
+  computedLeanAfter?: number | null;
   leanBefore: LeanCategory | null;
   leanAfter: LeanCategory | null;
   unchanged: boolean;
@@ -46,6 +50,8 @@ export interface OldDistrict {
   destinations: DistrictShare[];
   sliverResidents: number;
   pvi: number | null;
+  /** Civitas's computed lean on the old lines, beside Cook's. */
+  computedLean?: number | null;
   hasSuccessor: boolean;
   counties: string[];
   places: string[];
@@ -86,6 +92,15 @@ export interface PviProvenance {
   revision: { page: string; revid: number; timestamp: string } | null;
 }
 
+/** Where Civitas's computed lean comes from (app/data/district_lean.json). */
+export interface ComputedLeanProvenance {
+  source: string | null;
+  method: string | null;
+  window: string | null;
+  asOf: string | null;
+  href: string;
+}
+
 export interface StateRedistricting {
   state: string;
   stateName: string;
@@ -103,6 +118,7 @@ export interface StateRedistricting {
     overlap: string | null;
     pviBefore: PviProvenance | null;
     pviAfter: PviProvenance | null;
+    computedLean?: ComputedLeanProvenance | null;
   };
   /** The members now sitting were elected on the old lines. */
   fromCongressSitting: boolean;

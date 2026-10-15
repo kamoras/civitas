@@ -478,6 +478,19 @@ The correct pattern, established by `_district_pvi()` /
    regenerates the bundled pre-first-ingest fallback through the same
    code.
 
+   Beside the pinned Cook figures, `app/data/district_lean.json`
+   (`scripts/build_district_lean.py`, 2026-10) is a lean Civitas computes
+   itself with Cook's formula from open inputs only — VEST 2020 precinct
+   shapefiles (CC BY), MEDSL 2024 precinct returns (CC0), Census blocks
+   and BEFs; never Dave's Redistricting (share-alike) or a news-site
+   scrape — per Congress's lines, with MEDSL's errors corrected solely
+   from certified canvasses listed in
+   `app/data/district_lean_corrections.json` (a correction that can only
+   come from behind a wall marks the district unavailable). It is display
+   only (`app/district_lean.py`): nothing in scoring reads it. Its build
+   gates are its contract; when a new error turns up, add a correction
+   entry with its official source, not a code path.
+
    Better still, when the population a value describes is the one the
    pipeline is scoring, measure it in the run itself. Legislative
    Effectiveness's reference (per-stage bill totals, chamber median credit,
@@ -1695,6 +1708,7 @@ the pending list).
 | Representative service + paginated votes | `backend/app/services/representative_service.py` |
 | Finance normalization (embedding-based skip detection) | `backend/app/pipeline/transform/normalize_finance.py` |
 | Data validation | `backend/app/pipeline/assemble/validator.py` |
+| Civitas-computed district lean (display only, beside Cook) | `backend/scripts/build_district_lean.py`, `backend/app/data/district_lean.json`, `backend/app/data/district_lean_corrections.json`, `backend/app/district_lean.py` |
 | Ground-truth regression gate | `backend/app/pipeline/analyze/ground_truth.py` |
 | Score/data-quality diagnostic playbook | `SCORE_AUDIT.md` |
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |

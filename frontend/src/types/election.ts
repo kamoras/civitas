@@ -191,6 +191,10 @@ export interface RaceWithCandidates {
   /** Null when the race has no lean, or a House race shows its state's.
    * Optional: an older backend omits it. */
   leanContext?: LeanContext | null;
+  /** Civitas's own computed lean for a House district (positive = R,
+   * one decimal), beside Cook's `pvi`; never scored. Null where no
+   * district figure is shown or none is computed for these lines. */
+  computedLean?: number | null;
   /** WHICH answer this race's candidate list is, decided by the backend
    * (never re-derived here): "confirmed" = the state has named its whole
    * November ballot, minor parties included; "nominees" = the state

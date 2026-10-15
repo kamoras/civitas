@@ -29,6 +29,8 @@ from app.models import (
     Senator,
     SponsoredBill,
 )
+from app import district_lean
+from app.pipeline.analyze import score_calculator
 from app.pipeline.analyze.president_scorer import (
     _effectiveness_core,
     _historical_legacy_core,
@@ -261,6 +263,8 @@ class TestSenatorScoreBreakdownService:
         fi = breakdown["fundingIndependence"]
         assert 0 <= fi["score"] <= 100
         assert len(fi["components"]) == 4
+        seat = breakdown["constituentAlignment"]["facts"]["seatLean"]
+        assert seat["computedLean"] is None and seat["linesCongress"] is None
 
 
 class TestRepresentativeScoreBreakdownService:
@@ -286,6 +290,13 @@ class TestRepresentativeScoreBreakdownService:
         breakdown = get_representative_score_breakdown(db_session, "test-rep")
         assert breakdown is not None
         assert 0 <= breakdown["fundingIndependence"]["score"] <= 100
+        # The seat lean the score read, and Civitas's computed lean beside
+        # it on the same lines (shown in the methods ledger, never scored).
+        seat = breakdown["constituentAlignment"]["facts"]["seatLean"]
+        assert seat["cookPvi"] == score_calculator._seat_pvi("CA", 12)
+        assert seat["linesCongress"] in (119, 120)
+        assert seat["computedLean"] == district_lean.lean_for("CA", 12, seat["linesCongress"])
+        assert seat["computedLean"] is not None
 
     def test_returns_none_for_missing_rep(self, db_session):
         assert get_representative_score_breakdown(db_session, "nope") is None

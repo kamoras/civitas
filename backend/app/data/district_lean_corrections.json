@@ -1,0 +1,324 @@
+{
+ "_about": "Input to backend/scripts/build_district_lean.py: the errors found in MEDSL's 2024 precinct returns and how each is corrected, always from the state's or county's own certified canvass (the script fetches each source below and gates the corrected county against it). A district whose correction could only come from a source behind a wall goes under `unavailable`, never filled from anywhere else. Edit this file, not the script, when a new error is found.",
+ "inputs": [
+  {
+   "name": "VEST 2020 Precinct-Level Election Results",
+   "url": "https://doi.org/10.7910/DVN/K7760H",
+   "version": "Dataverse version 49.0 (2026-10-03)",
+   "license": "CC BY 4.0",
+   "use": "2020 presidential votes and precinct shapes"
+  },
+  {
+   "name": "MEDSL 2024 precinct returns",
+   "url": "https://github.com/MEDSL/2024-elections-official/tree/df531089c78e6d0098db1a6bfb3849a066a06995",
+   "version": "commit df53108 (2026-05-04)",
+   "license": "CC0 1.0 (as declared on Harvard Dataverse)",
+   "use": "2024 presidential votes by precinct, with each precinct's U.S. House district"
+  },
+  {
+   "name": "MEDSL state-level presidential returns, 2020 and 2024",
+   "url": "backend/app/data/state_pvi.json",
+   "version": "the state PVI file's stored inputs",
+   "license": "CC0 1.0",
+   "use": "national two-party shares and the state-total gate"
+  },
+  {
+   "name": "U.S. Census Bureau 2020 P.L. 94-171 redistricting data",
+   "url": "https://www2.census.gov/programs-surveys/decennial/2020/data/01-Redistricting_File--PL_94-171/",
+   "version": "2020 Census",
+   "license": "public domain",
+   "use": "block population and internal points"
+  },
+  {
+   "name": "U.S. Census Bureau 119th- and 120th-Congress block equivalency files",
+   "url": "https://www2.census.gov/programs-surveys/decennial/rdo/mapping-files/",
+   "version": "cd119.zip (2024), cd120.zip (2026-10-05)",
+   "license": "public domain",
+   "use": "which district each block is in"
+  },
+  {
+   "name": "Certified state and county canvasses",
+   "url": "see sources",
+   "version": "2024 general election, certified",
+   "license": "public records",
+   "use": "the corrections below and the county gate"
+  },
+  {
+   "name": "Texas Legislative Council Red-206; California Supplement to the Statement of Vote",
+   "url": "https://data.capitol.texas.gov/dataset/planc2193",
+   "version": "PLANC2193 and PLANC2333, 2020 and 2024 general; CA 2024 general",
+   "license": "public records",
+   "use": "independent per-district cross-check"
+  }
+ ],
+ "sources": {
+  "in_enr": {
+   "title": "Indiana Election Division, certified 2024 general election results (election night reporting archive), President by county",
+   "url": "https://enr.indianavoters.in.gov/archive/2024General/data/OffCatC_1019_A.json",
+   "page": "https://enr.indianavoters.in.gov/archive/2024General/index.html"
+  },
+  "nj_dos": {
+   "title": "New Jersey Division of Elections, official 2024 general election results, President, by municipality",
+   "url": "https://www.nj.gov/state/elections/assets/pdf/election-results/2024/2024-official-general-results-president-{county}.pdf",
+   "page": "https://www.nj.gov/state/elections/election-information-2024.shtml",
+   "state_url": "https://www.nj.gov/state/elections/assets/pdf/election-results/2024/2024-official-general-results-president.pdf"
+  },
+  "la_sos": {
+   "title": "Louisiana Secretary of State, official results of the November 5, 2024 election, Presidential Electors by parish",
+   "url": "https://voterportal.sos.la.gov/ElectionResults/ElectionResults/Data?blob=20241105/VotesRaceByParish/Votes_67190.htm",
+   "races_url": "https://voterportal.sos.la.gov/ElectionResults/ElectionResults/Data?blob=20241105/RacesCandidates_Multiparish.htm",
+   "race_id": "67190",
+   "page": "https://voterportal.sos.la.gov/Graphical"
+  },
+  "king_county": {
+   "title": "King County Elections, November 2024 General Election final precinct results",
+   "url": "https://data.kingcounty.gov/api/views/uuda-pmuy/rows.csv?accessType=DOWNLOAD",
+   "page": "https://data.kingcounty.gov/d/uuda-pmuy"
+  },
+  "ca_sos": {
+   "title": "California Secretary of State, Supplement to the Statement of Vote, November 5, 2024 general election: President by congressional district (each district's counties)",
+   "url": "https://elections.cdn.sos.ca.gov/sov/2024-general/ssov/pres-by-congress.xlsx",
+   "page": "https://www.sos.ca.gov/elections/prior-elections/statewide-election-results/general-election-nov-5-2024/statement-vote"
+  },
+  "me_sos": {
+   "title": "Maine Secretary of State, November 5, 2024 general election: President and Vice President by Congressional District",
+   "url": "https://www.maine.gov/sos/sites/maine.gov.sos/files/inline-files/President%20and%20Vice%20President%20by%20Congressional%20District%202024.xlsx",
+   "page": "https://www.maine.gov/sos/elections-voting/election-results-data/election-results-2024"
+  },
+  "fec_2020": {
+   "title": "Federal Election Commission, Federal Elections 2020, Table 2: 2020 presidential electoral and popular vote (the 2020 state-total gate)",
+   "url": "https://www.fec.gov/resources/cms-content/documents/federalelections2020.xlsx",
+   "sheet": "sheet3",
+   "page": "https://www.fec.gov/introduction-campaign-finance/election-results-and-voting-information/federal-elections-2020/"
+  }
+ },
+ "fixes": [
+  {
+   "state": "IN",
+   "county": "18141",
+   "county_name": "St. Joseph",
+   "action": "county_total",
+   "official": "in_enr",
+   "why": "Every precinct is listed twice, once by its numeric code and once by its township name, so the county counts double. The county is one district on both maps, so its official total is exact."
+  },
+  {
+   "state": "IN",
+   "county": "18063",
+   "county_name": "Hendricks",
+   "action": "county_total",
+   "official": "in_enr",
+   "why": "The row for precinct Washington 29 holds the county's total instead of the precinct's, so the county counts double and that precinct is missing. The county is one district on both maps, so its official total is exact."
+  },
+  {
+   "state": "IN",
+   "county": "18105",
+   "county_name": "Monroe",
+   "action": "county_total",
+   "official": "in_enr",
+   "why": "Only 26 precincts, about 30% of the county's vote, are present. The county is one district on both maps, so its official total is exact."
+  },
+  {
+   "state": "IN",
+   "county": "18091",
+   "county_name": "LaPorte",
+   "action": "verify",
+   "official": "county_canvass",
+   "official_url": "https://laporteco.in.gov/Elections/ElectionResults/2024General/Laporte_ElecSumm_All.htm",
+   "official_totals": [
+    20077,
+    26726
+   ],
+   "why": "MEDSL's precincts are 70 Democratic votes above the Indiana Election Division's certified county figure (20,007), but equal the county election board's own official summary (20,077 D / 26,726 R). The county's canvass is the one the precincts come from, so it is the one gated; no change."
+  },
+  {
+   "state": "IN",
+   "county": "18161",
+   "county_name": "Union",
+   "action": "county_total",
+   "official": "in_enr",
+   "why": "MEDSL's precincts differ from the certified county total by -2 D (0.27%), found by the county gate. The county is one district on both maps, so its official total is exact."
+  },
+  {
+   "state": "IN",
+   "county": "18173",
+   "county_name": "Warrick",
+   "action": "county_total",
+   "official": "in_enr",
+   "why": "MEDSL's precincts differ from the certified county total by -79 D / +108 R (0.7% / 0.5%), found by the county gate. The county is one district on both maps, so its official total is exact."
+  },
+  {
+   "state": "NJ",
+   "county": "34003",
+   "county_name": "Bergen",
+   "action": "drop_rows",
+   "precinct_regex": "^(?!.*Provisional)[^0-9]*$",
+   "official": "nj_dos",
+   "why": "Each municipality appears again as a single summary row beside its own districts, so the county counts double. The summary rows are dropped; the districts remain."
+  },
+  {
+   "state": "NJ",
+   "county": "34015",
+   "county_name": "Gloucester",
+   "action": "drop_rows",
+   "precinct_regex": "^COUNTY TOTAL$",
+   "official": "nj_dos",
+   "why": "A 'COUNTY TOTAL' row sits beside the municipalities it sums, so the county counts double. It is dropped."
+  },
+  {
+   "state": "NJ",
+   "county": "34021",
+   "county_name": "Mercer",
+   "action": "municipal_totals",
+   "official": "nj_dos",
+   "why": "About a quarter of the county's vote is missing from the precincts. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total, and the county-wide overseas ballots are spread over the county's districts."
+  },
+  {
+   "state": "NJ",
+   "county": "34001",
+   "county_name": "Atlantic",
+   "action": "municipal_totals",
+   "official": "nj_dos",
+   "why": "MEDSL's precincts are 441 D / 206 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total."
+  },
+  {
+   "state": "NJ",
+   "county": "34013",
+   "county_name": "Essex",
+   "action": "municipal_totals",
+   "official": "nj_dos",
+   "why": "MEDSL's precincts are 1,054 D / 3,045 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total."
+  },
+  {
+   "state": "NJ",
+   "county": "34039",
+   "county_name": "Union",
+   "action": "municipal_totals",
+   "official": "nj_dos",
+   "why": "MEDSL's precincts are 4,550 D / 2,574 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total."
+  },
+  {
+   "state": "NJ",
+   "county": "34041",
+   "county_name": "Warren",
+   "action": "municipal_totals",
+   "official": "nj_dos",
+   "why": "MEDSL's precincts are 593 D / 1,215 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total."
+  },
+  {
+   "state": "NJ",
+   "county": "34031",
+   "county_name": "Passaic",
+   "action": "verify",
+   "official": "nj_dos",
+   "why": "Reported as partial; checked against the official county total, which MEDSL's precincts match exactly (95,156 D / 100,954 R). No change; the county stays gated."
+  },
+  {
+   "state": "LA",
+   "action": "county_residual",
+   "official": "la_sos",
+   "why": "Louisiana reports early and provisional votes only for a whole parish, and MEDSL's precincts carry election-day votes alone. Each parish's remainder (official total minus its precincts) is spread over the parish's districts in proportion to each district's election-day vote, party by party."
+  },
+  {
+   "state": "WA",
+   "county": "53033",
+   "county_name": "King",
+   "action": "replace_precincts",
+   "official": "king_county",
+   "why": "MEDSL holds King County as one county-wide row. It is replaced by the county's own precinct results, each precinct labelled with its congressional district."
+  },
+  {
+   "state": "CA",
+   "action": "district_cells",
+   "official": "ca_sos",
+   "why": "California counties suppress the counts of small precincts (MEDSL writes '*', 9,368 Harris or Trump cells), so some districts come up short by a few hundred votes (CA-13 by 512 D / 1,122 R). The Secretary of State's own count of every county x district cell replaces the precinct sums; within a cell the precincts still place each block for the 120th lines."
+  },
+  {
+   "state": "ME",
+   "action": "district_totals",
+   "official": "me_sos",
+   "why": "MEDSL's Maine precincts fall 1.2% short of the state's Democratic total (430,342 against 435,652), found by the state-total gate. Maine publishes its own count for each of its two districts (each town is wholly in one), which replaces the precinct sums."
+  }
+ ],
+ "unavailable": [],
+ "turnout_exceptions": [
+  {
+   "congress": 119,
+   "district": "CA-12",
+   "ratio": 0.841,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 119,
+   "district": "CA-29",
+   "ratio": 0.844,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 119,
+   "district": "CA-34",
+   "ratio": 0.828,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 119,
+   "district": "CA-37",
+   "ratio": 0.83,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 119,
+   "district": "CA-42",
+   "ratio": 0.848,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 119,
+   "district": "CA-43",
+   "ratio": 0.817,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 120,
+   "district": "CA-12",
+   "ratio": 0.841,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 120,
+   "district": "CA-29",
+   "ratio": 0.849,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 120,
+   "district": "CA-34",
+   "ratio": 0.828,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 120,
+   "district": "CA-37",
+   "ratio": 0.83,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 120,
+   "district": "CA-43",
+   "ratio": 0.817,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 120,
+   "district": "CA-44",
+   "ratio": 0.838,
+   "why": "Los Angeles County's two-party presidential vote fell to 0.864 of 2020's (4,174,275 to 3,605,749 in these inputs); this district's 2024 count is the Secretary of State's own (Supplement to the Statement of Vote) and its 2020 count is VEST's, so the drop is the electorate's, not an allocation error."
+  },
+  {
+   "congress": 119,
+   "district": "TN-9",
+   "ratio": 0.813,
+   "why": "Shelby County's two-party presidential vote fell to 0.853 of 2020's (375,920 to 320,676 in these inputs), and this Memphis district is the county's lowest-turnout part; its 2024 precincts are all labelled TN-9 in MEDSL, so the drop is the electorate's, not an allocation error."
+  }
+ ],
+ "_turnout_exceptions": "Districts whose 2024/2020 two-party vote ratio is outside the 0.85-1.15 gate for a reason the evidence shows is real. Each passes only at its recorded ratio (within 0.005): any change to its inputs trips the gate again."
+}
