@@ -505,7 +505,9 @@ The correct pattern, established by `_district_pvi()` /
    `funding_reference.json`, `scripts/audit_pac_ratio.py`), and so does
    Constituent Alignment's per-party expected break rate by seat lean
    (`compute_constituent_reference`, `constituent_reference.json`,
-   `scripts/calibrate_constituent_reference.py`); all go through
+   `scripts/calibrate_constituent_reference.py`; its swing-seat bend is
+   kept only when it predicts the party's members better out of sample,
+   `select_opposed_kink`, not by a count of opposed seats); all go through
    `pipeline/analyze/population_reference.py`. A value frozen on one date
    can't track a quantity that accumulates over a congress.
 
@@ -1777,7 +1779,11 @@ the pending list).
   FastAPI would otherwise never check the body against the documented shape.
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
-  time. The `senator_service.py` and `representative_service.py` read paths use
+  time. Anything a response needs that takes a model — the Action Center's
+  "new since last update" facts (`ActionIssue.new_facts`, `app/fact_diff.py`),
+  the homepage feed's duplicates (`duplicate_of_id`) — is worked out when the
+  pipeline writes the row and stored; `test_action_api.py` fails if serving
+  issues loads the model. The `senator_service.py` and `representative_service.py` read paths use
   only string operations and ORM queries with `selectinload` for eager loading.
   Foreign key columns on child tables (`donors.senator_id`,
   `key_votes.senator_id`, etc.) must have `index=True` for acceptable query

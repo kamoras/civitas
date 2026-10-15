@@ -347,6 +347,19 @@ describe("week report", () => {
     ).toHaveLength(2);
   });
 
+  it("says how many committees met each day", () => {
+    const busy = {
+      ...week,
+      days: week.days.map((d, i) =>
+        i === 3 ? { ...d, senate: { ...d.senate, counts: { ...counts, committeeMeetings: 5 } } } : d
+      ),
+    };
+    render(<PeriodReportView report={busy} kind="week" />);
+    expect(
+      within(screen.getByRole("link", { name: /Thu, Sep 24/ })).getByText(/5 committee meetings/)
+    ).toBeTruthy();
+  });
+
   it("has no axe violations", async () => {
     render(<PeriodReportView report={week} kind="week" />);
     expect(await violations()).toEqual([]);

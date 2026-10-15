@@ -196,7 +196,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.34"
+ALGORITHM_VERSION = "v6.35"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -1780,12 +1780,23 @@ def _seat_pvi(state: str, district: int | None = None) -> int:
 # (v6.13). Each run fits, per chamber and per party, the chamber's own
 # break rate on seat alignment (compute_constituent_reference); the members
 # it is about to score are the population. A party needs this many members
-# for its fit, and the fit only bends at a swing seat (the kink term) when
-# at least _MIN_OPPOSED_SEATS_FOR_KINK of them hold seats that lean to the
-# other party — otherwise a line through a handful of points decides every
-# opposed-seat member's expectation.
+# for its fit. Whether the fit also bends at a swing seat (the kink term) is
+# decided by held-out fit in the same population (select_opposed_kink), not
+# by a count of opposed seats.
 _MIN_CONSTITUENT_REFERENCE_PARTY = 20
-_MIN_OPPOSED_SEATS_FOR_KINK = 5
+
+# How far the kinked fit's leave-one-out quasi-likelihood must beat the
+# single slope's for the kink to be kept, in standard errors of the summed
+# per-member differences: the one-standard-error rule (Breiman, Friedman,
+# Olshen & Stone 1984, CART section 3.4.3; Hastie, Tibshirani & Friedman
+# 2009, section 7.10) — prefer the simpler model unless the richer one is
+# better by more than the noise in the comparison. A rule from the model-
+# selection literature, not a fitted value. v6.35 replaced a fixed count
+# (five opposed seats) with it: the 119th House's Democrats had seven, enough
+# to fit a kink whose 95% bootstrap interval included zero and whose held-out
+# gain was -0.02 against a standard error of 0.19, and it doubled their
+# opposed-seat slope.
+_KINK_MARGIN_SE = 1.0
 
 
 
@@ -1937,6 +1948,68 @@ def _fractional_logit(X, y, w=None):
     return beta
 
 
+def _logit_design(al, bend: bool):
+    """Columns of the seat-lean logit: intercept, alignment, and with `bend`
+    the kink term min(alignment, 0)."""
+    import numpy as np
+
+    return np.column_stack([np.ones_like(al), al] + ([np.minimum(al, 0.0)] if bend else []))
+
+
+def select_opposed_kink(al, y, w=None) -> tuple:
+    """Fit the seat-lean logit of proportions `y` on party-signed alignment
+    `al` (weights `w`, as _fractional_logit), with the kink term only when
+    it predicts better out of sample: (coefficients or None, kinked, the
+    evidence).
+
+    The kinked and single-slope fits are compared by leave-one-out
+    quasi-log-likelihood — each member's rate predicted by the fit to every
+    other member, the same objective the fit maximizes. The kink is kept
+    when its summed gain exceeds _KINK_MARGIN_SE standard errors of the
+    per-member differences. Leave-one-out has no random folds, so the same
+    population always gives the same answer. A fold whose kinked fit has no
+    finite solution predicts with the single slope, as the full procedure
+    would; a fold where neither fits counts as no difference. The kink is
+    considered at all only with seats on both sides of a swing seat (with
+    none on one side its term has nothing to separate it from the slope).
+    Coefficients are None when not even the single slope has a finite fit.
+
+    The evidence ({"opposed", "kept", "loo_gain", "loo_se"}) goes into the
+    reference beside the coefficients, so the choice can be checked."""
+    import numpy as np
+
+    al = np.asarray(al, dtype=float)
+    y = np.asarray(y, dtype=float)
+    w = np.ones(len(y)) if w is None else np.asarray(w, dtype=float)
+    straight = _fractional_logit(_logit_design(al, False), y, w)
+    opposed = int((al < 0).sum())
+    evidence: dict = {"opposed": opposed, "kept": False, "loo_gain": None, "loo_se": None}
+    if straight is None or opposed == 0 or opposed == len(al):
+        return straight, False, evidence
+    kinked = _fractional_logit(_logit_design(al, True), y, w)
+    if kinked is None:
+        return straight, False, evidence
+
+    def loglik(coef, bend, i):
+        eta = float((_logit_design(al[i:i + 1], bend) @ coef)[0])
+        # log expit(eta) and log(1 - expit(eta)), overflow-safe.
+        return w[i] * (-y[i] * np.logaddexp(0.0, -eta) - (1.0 - y[i]) * np.logaddexp(0.0, eta))
+
+    gains = np.zeros(len(al))
+    for i in range(len(al)):
+        keep = np.arange(len(al)) != i
+        s = _fractional_logit(_logit_design(al[keep], False), y[keep], w[keep])
+        if s is None:
+            continue
+        k = _fractional_logit(_logit_design(al[keep], True), y[keep], w[keep])
+        gains[i] = (loglik(k, True, i) if k is not None else loglik(s, False, i)) - loglik(s, False, i)
+    gain = float(gains.sum())
+    se = float(np.sqrt(len(gains)) * gains.std(ddof=1))
+    kept = gain > _KINK_MARGIN_SE * se
+    evidence.update(kept=kept, loo_gain=round(gain, 5), loo_se=round(se, 5))
+    return (kinked if kept else straight), kept, evidence
+
+
 def compute_constituent_reference(members: list[tuple[str, float, float, int]]) -> dict | None:
     """Measure the seat expectation Constituent Alignment scores against.
 
@@ -1948,7 +2021,10 @@ def compute_constituent_reference(members: list[tuple[str, float, float, int]]) 
 
     alignment is the party-signed seat lean (_signed_state_alignment), so
     the kink lets the slope differ between seats that lean to the member's
-    party and seats that lean away. Per-party because the two parties'
+    party and seats that lean away. Since v6.35 the kink is fitted only when
+    it predicts the party's members better out of sample
+    (select_opposed_kink), and b_opposed is 0 otherwise; each fit records
+    the comparison under "kink". Per-party because the two parties'
     break rates differ at the same seat lean (majority status, whip
     strength — measured 2026-09 on the 108th House: D intercept 0.128, R
     0.076), and a per-party expectation predicted re-election vote share
@@ -1983,17 +2059,10 @@ def compute_constituent_reference(members: list[tuple[str, float, float, int]]) 
             return None
         al = np.array([r[0] for r in rows])
         br = np.array([r[1] for r in rows])
-        kinked = int((al < 0).sum()) >= _MIN_OPPOSED_SEATS_FOR_KINK
-        coef = None
-        # The kinked fit first; if it has no finite solution (every
-        # opposed-seat member at zero breaks, say), a single slope; if that
-        # has none either, no measured reference this run.
-        for bend in ((True, False) if kinked else (False,)):
-            cols = [np.ones_like(al), al] + ([np.minimum(al, 0.0)] if bend else [])
-            coef = _fractional_logit(np.column_stack(cols), br)
-            if coef is not None:
-                kinked = bend
-                break
+        # The single slope, or the kinked fit where it predicts members it
+        # wasn't fitted to better (select_opposed_kink); with no finite
+        # single slope, no measured reference this run.
+        coef, kinked, kink_evidence = select_opposed_kink(al, br)
         if coef is None:
             return None
         fit = {
@@ -2002,6 +2071,7 @@ def compute_constituent_reference(members: list[tuple[str, float, float, int]]) 
             "b": round(float(coef[1]), 5),
             "b_opposed": round(float(coef[2]), 5) if kinked else 0.0,
             "n": len(rows),
+            "kink": kink_evidence,
         }
         residuals = [seat_residual(r, _expected_break_rate(fit, a), n) for a, r, n in rows]
         scale = round(float(np.quantile(np.abs(residuals), SATURATION_QUANTILE)), 5)

@@ -59,6 +59,26 @@ def first_bill_id(text: str) -> str | None:
     return None
 
 
+def bill_ids(text: str) -> list[str]:
+    """Every bill or resolution number the text names, as site bill ids, in
+    order and without repeats: a committee's markup names each measure it
+    ordered reported ("S. 465, to ...; S. 1254, to ...")."""
+    found: list[str] = []
+    for m in _MEASURE_RE.finditer(text):
+        prefix = next(p for pattern, p in _MEASURE_TYPES if re.fullmatch(pattern, m.group(1)))
+        bill_id = f"{prefix}.{m.group(2)}"
+        if bill_id not in found:
+            found.append(bill_id)
+    return found
+
+
+def only_bill_id(text: str) -> str | None:
+    """The site bill id when the text is one bill number and nothing else
+    ("S. 465", "H. Con. Res. 89"), else None."""
+    m = _MEASURE_RE.fullmatch(text.strip())
+    return first_bill_id(m.group(0)) if m else None
+
+
 # ── Numbers written as words ──────────────────────────────────────
 
 _UNITS = {w: i for i, w in enumerate(

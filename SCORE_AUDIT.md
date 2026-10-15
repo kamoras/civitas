@@ -106,6 +106,12 @@ EOF
   totals all zero).
 - This is also logged automatically as `DERIVED CHECK FAIL` warnings after
   every pipeline run — check backend logs first before running this manually.
+- A Constituent Alignment expectation that bends at swing seats records why:
+  each party's fit in `/data/constituent_reference.json` carries `kink`
+  (`opposed` seats, `kept`, and the leave-one-out `loo_gain` against its
+  `loo_se`; `select_opposed_kink`). A kept bend with only a few opposed seats
+  steepens their members' expectation, so check it when opposed-seat members'
+  scores move a lot between runs.
 
 ---
 
