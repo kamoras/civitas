@@ -1612,6 +1612,10 @@ The layer surfaces the underlying `KeyVote`, `Donor`, `IndustryDonation` and `Sp
 
 ---
 
+## Sharing a section as an image
+
+A section marked `data-share-section` with a `ShareSectionButton` in it can be shared as a PNG, drawn in the reader's browser from the live page (`frontend/src/lib/shareImage.ts`; nothing is requested from another host). A picture travels without its page, so the frame says what it is: a strip naming the page's subject (a member's badge reads "72/100"), and under the capture where the figures come from, the section's link, the date the figures are as of, the scale any score is on, and the capture date ("Source: FEC filings; roll calls as the House Clerk records them; … · civitas-research.org/politicians/…#funding-independence · Data as of Oct 14, 2026 · scores out of 100 · captured Oct 15, 2026"). `ShareSubject.source` and `asOf` are required, so a page can't offer a picture without them; the as-of date is the backend's (a member's latest scoring run, the chamber's for the leaderboard strip, a vote's own date, the latest roll call read for a compare pair, the pinned Cook revision for a new map, a count's read time), or the capture day where the page reads its figures live. A section with figures of its own names them with `shareMetaAttrs` (a profile's holdings: the annual disclosure and its date; votes with the president: OMB's statements and the run's time; a race's live count: the state's feed). Until 2026-10 the frame printed only the link and "Captured {date}". Shareable: each scorecard column and summary, holdings, votes with the president, an issue and its facts, a bill's overview, summary and votes, a roll call, a ballot contest and the research on it ("What shapes this race"), a race's live count, the leaderboard's field strip, a compare pair's voting agreement, and a new House map's delegation by lean.
+
 ## Public API and MCP server
 
 An open, read-only API at `/api/public/v1` — no key, no account, CORS open to

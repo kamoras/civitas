@@ -44,6 +44,12 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
         title: subject,
         subtitle: `${eyebrow} · ${longDate(vote.date)}`,
         url: absoluteUrl(path),
+        source:
+          vote.chamber === "senate"
+            ? "U.S. Senate roll-call vote record"
+            : "Clerk of the House roll-call vote record",
+        // A recorded vote doesn't change after the day it was cast.
+        asOf: vote.date,
       }}
     >
       <div className="min-h-screen bg-surface-base font-sans text-ink-hi">

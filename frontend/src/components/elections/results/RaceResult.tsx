@@ -17,6 +17,8 @@ import {
 } from "@/lib/results";
 import { safeHref } from "@/lib/formatting";
 import type { LiveRaceResult } from "@/types/election";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 
 /** Where the count stands, in the state's own words: leading, tied, or no
  * votes yet — with "official count" once the state lists it so, and "not
@@ -91,6 +93,10 @@ export function RaceResultCard({
       // fixed header, as AboutPage's anchors are.
       tabIndex={-1}
       className="scroll-mt-[var(--header-clearance)] border border-white/[0.09] bg-surface p-4 sm:p-5"
+      // A shared picture of the count names the state's own source and
+      // when it was read, as the card does.
+      {...{ [SHARE_SECTION_ATTR]: `race-${result.raceId}` }}
+      {...shareMetaAttrs({ source: result.sourceName, asOf: result.fetchedAt, scaleMax: null })}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Heading
@@ -101,8 +107,15 @@ export function RaceResultCard({
             ? `U.S. Senate${result.isSpecial ? " (special)" : ""}`
             : raceLabel(result)}
         </Heading>
-        <span className={`border px-2 py-0.5 font-mono text-xs tracking-[0.1em] ${tag.className}`}>
-          {tag.text}
+        <span className="flex items-center gap-2">
+          <span
+            className={`border px-2 py-0.5 font-mono text-xs tracking-[0.1em] ${tag.className}`}
+          >
+            {tag.text}
+          </span>
+          <ShareSectionButton
+            label={result.office === "S" ? "U.S. Senate count" : `${raceLabel(result)} count`}
+          />
         </span>
       </div>
       <p className="mt-1 font-mono text-xs tracking-[0.06em] text-ink-min">
