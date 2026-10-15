@@ -609,9 +609,11 @@ export default async function ElectionsChapter() {
           <List>
             <Item label="Leads, not wins">
               A candidate &ldquo;leads&rdquo;. The lead is &ldquo;not final&rdquo; while the state
-              hasn&apos;t listed its count as official. It still &ldquo;leads&rdquo; once it has,
-              and never &ldquo;wins&rdquo;: an official count&apos;s leader can still face a runoff
-              (Georgia requires a majority), a recount or a court.
+              hasn&apos;t listed its count as official, and the tag beside the leader says so itself
+              (LEADING · NOT FINAL), not only the note under the candidates. It still
+              &ldquo;leads&rdquo; once it has, and never &ldquo;wins&rdquo;: an official
+              count&apos;s leader can still face a runoff (Georgia requires a majority), a recount
+              or a court.
             </Item>
             <Item label="A seat changing party">
               A seat is only described as changing party once half its reporting areas are in. Where

@@ -21,6 +21,10 @@
  */
 export const ACTION_CENTER_HREF = "/action?tab=issues";
 
+/** The Action Center's Archive tab (the year-in-review timeline). Same
+ * reasoning as above. */
+export const ACTION_CENTER_ARCHIVE_HREF = "/action?tab=timeline";
+
 /** The Action Center's national-monitors tab. Same reasoning as above. */
 export const ACTION_CENTER_MONITORS_HREF = "/action?tab=monitors";
 

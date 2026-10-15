@@ -8,7 +8,6 @@ the one canonical copy (mirrors the ``pagination``/``score_trends`` shared
 helpers).
 """
 
-import re
 import string
 from datetime import date, timedelta, timezone
 from typing import Any
@@ -19,9 +18,15 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import RollCall
 from app.pipeline.analyze.party_line_record import load_record
-from app.pipeline.analyze.score_calculator import explain_scores, funding_share_base, party_line_tally
+from app.pipeline.analyze.score_calculator import (
+    bills_inputs_from_status,
+    explain_scores,
+    funding_share_base,
+    party_line_tally,
+    stored_bills_status,
+)
 from app.pipeline.transform.normalize_votes import stored_vote
-from app.services.bill_record import roll_call_summaries
+from app.services.bill_record import roll_call_summaries, typed_bill_number
 from app.services.score_findings import add_findings
 from app.time_utils import CONGRESS_TZ, utcnow
 
@@ -77,8 +82,8 @@ def vote_search(model: Any, q: str) -> ColumnElement[bool]:
         model.description.contains(text, autoescape=True),
         model.roll_call.in_(asked),
     ]
-    number = re.sub(r"[^A-Za-z0-9]", "", text).upper()
-    if any(c.isdigit() for c in number):  # a bill number has one; "S" alone would match every Senate bill
+    number = typed_bill_number(text)
+    if number:
         bare = func.replace(func.replace(func.upper(model.bill_id), ".", ""), " ", "")
         if number.isdigit():  # "123" alone: the number, of any bill type
             bare = func.ltrim(bare, string.ascii_uppercase)
@@ -181,7 +186,12 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
         "swornDate": getattr(entity, "sworn_date", None),
         "ideologyScore": entity.ideology_score,
         "bioguideId": entity.bioguide_id,
+        # How the stored score treated these bills (scored as read that day,
+        # carried forward from an earlier run's, or not measured): the
+        # breakdown recomputes from the same stored bills the same way.
+        **bills_inputs_from_status(stored_bills_status(entity)),
     }
+
 
 
 def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) -> dict:

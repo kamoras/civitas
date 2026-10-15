@@ -72,9 +72,12 @@ export const TEXT_LINK =
 export function IssueImage({
   issue,
   size = "full",
+  priority = false,
 }: {
   issue: ActionIssue;
   size?: "full" | "thumbnail";
+  /** The page's lead picture (its LCP element): fetched first. */
+  priority?: boolean;
 }) {
   if (!issue.imageUrl) return null;
   const alt = issue.imageAlt || issue.title;
@@ -84,6 +87,7 @@ export function IssueImage({
       <Photo
         src={issue.imageUrl}
         alt={alt}
+        sizes="(min-width: 640px) 80px, 64px"
         className="h-16 w-16 shrink-0 border border-white/[0.07] object-cover sm:h-20 sm:w-20"
       />
     );
@@ -94,6 +98,10 @@ export function IssueImage({
       <Photo
         src={issue.imageUrl}
         alt={alt}
+        // The column's width: the full screen on a phone, at most ~830px
+        // (the Action Center's lead card, the issue page's column).
+        sizes="(min-width: 1024px) 832px, 100vw"
+        priority={priority}
         className="max-h-96 w-full border border-white/[0.07] object-cover"
       />
       {(issue.imageAlt || issue.imageCredit) && (

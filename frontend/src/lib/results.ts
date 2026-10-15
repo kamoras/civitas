@@ -609,9 +609,16 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       : "";
   const reporting = reportingText(d);
   const holders = d.heldBy ? (HOLDERS[d.heldBy] ?? d.heldBy) : "another party";
+  // Every update about a count the state hasn't listed as official ends
+  // with it, as the backend's posts do (live_results/bluesky.py).
+  const notFinal = d.official ? "" : "Not final";
   switch (event.kind) {
     case "first_returns":
-      return { tag: "FIRST", tone: "neutral", text: sentence("First returns", reporting, shares) };
+      return {
+        tag: "FIRST",
+        tone: "neutral",
+        text: sentence("First returns", reporting, shares, notFinal),
+      };
     case "lead_change":
       return {
         tag: "LEAD",
@@ -621,7 +628,8 @@ export function describeUpdate(event: ResultEvent): UpdateText {
             ? `${withParty(d.leader)} moves ahead of ${withParty(d.previousLeader)}`
             : `${withParty(d.leader)} moves ahead`,
           shares,
-          reporting
+          reporting,
+          notFinal
         ),
       };
     case "all_reporting":
@@ -677,7 +685,8 @@ export function describeUpdate(event: ResultEvent): UpdateText {
             : !d.leader && (d.votesCounted ?? 0) > 0
               ? "The count is now tied, so the seat no longer shows a change of party"
               : "The count no longer shows the seat changing party",
-          reporting
+          reporting,
+          notFinal
         ),
       };
     default:
@@ -699,6 +708,19 @@ export function formatEasternTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   })} ET`;
+}
+
+/** Beside every "leading" or "tied" that isn't an official count, in the
+ * same tag or line: the card's sentence ("The count is not final.") sits
+ * below the candidate list, more than a screen under the tag on a phone
+ * (1.16 viewport heights for a seven-candidate Senate race, measured on a
+ * simulated election night, 2026-10-14), so a reader saw LEADING alone. */
+export const NOT_FINAL = "NOT FINAL";
+
+/** Some race among these has votes in a count the state doesn't list as
+ * official: a tally of leads over them is not final either. */
+export function anyCountNotFinal(races: LiveRaceResult[]): boolean {
+  return races.some((r) => r.votesCounted > 0 && !r.official);
 }
 
 export interface StateResultSummary {
@@ -815,7 +837,9 @@ export function raceStatusText(r: LiveRaceResult): string {
       ? // A tie, or a leader whose party isn't given, the head already says.
         `change of party announced earlier${r.leaderParty && !isTied(r) ? `, ${notShown}` : ""}`
       : "";
-  return [head, progress, flip].filter(Boolean).join(", ");
+  // Until the state lists its count as official, said beside the lead in
+  // the same phrase, as the tags and the live updates say it.
+  return [head, progress, r.official ? "" : "not final", flip].filter(Boolean).join(", ");
 }
 
 /** The opacity for a set of races led by one party, on resultFill's scale:
