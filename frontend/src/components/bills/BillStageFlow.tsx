@@ -104,6 +104,7 @@ export default function BillStageFlow({
         <button
           type="button"
           onClick={() => onSelectStage(activeStage === "VETOED" ? null : "VETOED")}
+          aria-pressed={activeStage === "VETOED"}
           className={`border px-2 py-1 font-mono text-xs uppercase tracking-wider transition-colors ${
             activeStage === "VETOED"
               ? "border-signal-red bg-signal-red/10 text-signal-red"
