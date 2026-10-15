@@ -37,6 +37,7 @@ import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import { countIsOfficial } from "@/lib/developing";
 import { tabControl } from "@/lib/controlStyles";
 import { issuesUrl } from "@/lib/routes";
+import AgencyLink from "@/components/agencies/AgencyLink";
 
 /** Plain status line, the loading state the records pages use: no pulse. */
 function Status({ children }: { children: React.ReactNode }) {
@@ -296,7 +297,9 @@ function OpenComments() {
           >
             <span className="min-w-0">
               <span className="block font-mono text-xs uppercase tracking-[0.08em] text-ink-min">
-                {[item.agencyName, item.docType?.replace(/_/g, " ")].filter(Boolean).join(" · ")}
+                <AgencyLink name={item.agencyName} slug={item.agencySlug} />
+                {item.agencyName && item.docType ? " · " : ""}
+                {item.docType?.replace(/_/g, " ")}
               </span>
               <Link
                 href={`/explore/${item.id}`}

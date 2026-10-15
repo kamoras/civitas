@@ -1387,6 +1387,8 @@ query-independent priors.
 **What is indexed:** Senate and House floor speeches, presidential actions
 (executive orders, proclamations, memoranda), Supreme Court opinions, and
 Federal Register rulemaking documents — five source types, not bill text.
+A search, or a browse with no query, can be limited to one agency and its
+sub-agencies (`agency`, a Federal Register slug; see Agencies).
 Floor speeches come from the Congressional Record, a day at a time
 (`fetch/congressional_record.py`, `analyze/floor_speech.py`):
 
@@ -1600,6 +1602,17 @@ The homepage, and in a one-line form the pages most readers arrive on (a member'
 - **Comment deadlines.** The next three on federal rules: rules an Action Center issue from the last two weeks cites first, then rules other documents cite, then any other rule, soonest deadline first within each. Notices (with them every information-collection and meeting notice) are left out by type, and so is a templated series: a Regulation Identifier Number shared by three or more open rules, as every FAA airworthiness directive shares one (on 2026-10-11, 79 RINs covered one open rule, 2 covered two, then 4, 4, 11 and 54). A series also inflates the citation count, since every document under the RIN reads as citing the rest.
 
 Every sentence is a template around stored figures. When the backend can't answer, the strip is left out and the page renders as before. On a Congress day page about another day (a past day's report, or `/congress` when the latest sitting wasn't today), the one-line strip is headed "Now · Thu, Oct 15" (the API's `congress.today`, Eastern) rather than "This week": a reader on September 16's page read "This week … The Senate meets today" as September 16.
+
+## Agencies
+
+`/agencies` and `/agencies/{slug}` make federal agencies records of their own (`api/agencies.py`). An agency is the Federal Register's: its `/api/v1/agencies.json` lists 473 (abolished ones included), each with a slug, a description, a parent and sub-agencies, stored in `agencies`. Each agency page shows what it spends, the documents it issued and the executive orders that name it, every block with its source and the day it was read.
+
+- **Spending** comes from USAspending.gov: the toptier list (`/api/v2/references/toptier_agencies/`, one request) for the current fiscal year's budgetary resources, obligations and outlays, and `/api/v2/agency/{code}/budgetary_resources/` for the same by fiscal year (one request per agency, about 110). USAspending names no Federal Register agency, so the two lists are joined by name (`fetch/agencies.crosswalk`): token-sorted names ("Agriculture Department" and "Department of Agriculture" sort alike) compared by SequenceMatcher ratio, one USAspending agency to at most one Register agency, at a threshold derived by `scripts/calibrate_agency_crosswalk.py` and stored in `app/data/agency_crosswalk.json`. Its labels come from evidence the score never reads: where an agency's USAspending abbreviation equals exactly one Register agency's short name, that pair is a positive, and the same agency's best score against every other Register agency a negative; the threshold maximizes Youden's J over them (0.834 on 2026-10-15: 76 of 80 positives and 1 of 80 negatives at or above it). 94 of 111 toptier agencies matched; the other 17 are stored with no match and named on the page as not linked, never paired with a runner-up. A sub-agency's page points to its department's budget, which includes it.
+- **Documents.** A Federal Register document's agency is the most specific one its `agencies[]` lists (the FAA, not the Transportation Department it sits under), stored with its slug in `explore_documents.agency_slug` at ingest, so a document reaches its agency with no name matching. Documents stored before the column are read for it by the nightly Federal Register refresh, 2,000 a night beyond the refresh's own 90-day window. A department's page lists its sub-agencies' documents too: open comment periods (closing soonest first), proposed and final rules (newest first), and a link to Explore filtered to the agency (`GET /api/explore?agency={slug}`; the agency select on Explore lists every agency with documents). A joint rule counts for its first listed issuer only.
+- **Executive orders naming it**: every executive order lists the Executive Office of the President as its agency, so these are found by text, the keyword index's exact phrase for the agency's Register name or its USAspending name. When the keyword index can't be asked the section says so rather than reading as "none".
+- **Lobbying aimed at an agency** is not shown. LDA filings list the government entities each activity lobbied, but the LDA API can't filter filings by entity, so a per-agency figure would mean downloading every filing of a year.
+
+Both lists are read by a weekly job outside the nightly chain (`scheduler._agency_sync`, under the `AGENCY_SYNC` lease): tried hourly at :30, each source read once a week has passed since it last stored, so a source that failed is retried within the hour (one request while it is down) and a new deploy fills the agency pages within the hour. A source that can't be read returns None, leaves what is stored as it was, and raises an ops alert; an empty list counts as unread.
 
 ## Source ledger
 

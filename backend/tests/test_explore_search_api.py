@@ -79,7 +79,7 @@ async def _search(db, q: str = "wildfire", **overrides):
     """
     params = {
         "doc_type": None, "chamber": None, "commentable": False,
-        "sort": "relevance", "limit": 20, "politician_id": None,
+        "sort": "relevance", "limit": 20, "politician_id": None, "agency": None,
     }
     params.update(overrides)
     return await search_explore(None, q=q, db=db, **params)

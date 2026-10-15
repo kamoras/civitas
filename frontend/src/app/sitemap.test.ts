@@ -55,6 +55,21 @@ describe("sitemap", () => {
     expect(urls).toContainEqual(["/congress/votes/senate/119/2/256", "2026-09-30"]);
   });
 
+  it("lists the agency directory and each agency with something to show", async () => {
+    backend({
+      "/api/sitemap": {
+        ...INDEX,
+        agencies: [{ id: "environmental-protection-agency", lastmod: "2026-10-14" }],
+      },
+    });
+    const urls = (await sitemap()).map((e) => [
+      e.url.replace(/^https:\/\/[^/]+/, ""),
+      e.lastModified,
+    ]);
+    expect(urls).toContainEqual(["/agencies/environmental-protection-agency", "2026-10-14"]);
+    expect(urls.some(([u]) => u === "/agencies")).toBe(true);
+  });
+
   it("still serves a backend image that predates congressDays", async () => {
     backend({ "/api/sitemap": INDEX });
     const urls = (await sitemap()).map((e) => e.url);

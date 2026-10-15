@@ -825,6 +825,9 @@ export interface ExploreResult {
   url: string;
   summary: string;
   agencyName: string;
+  /** The issuing agency's page (/agencies/{slug}); empty when not read yet.
+   * Optional only for a response cached before the field. */
+  agencySlug?: string;
   commentUrl: string;
   commentsCloseOn: string;
 }
@@ -931,6 +934,10 @@ export interface ExploreStats {
   byType: Record<string, number>;
   byChamber: Record<string, number>;
   openForComment: number;
+  /** The agency filter's options: departments by name, each followed by
+   * its sub-agencies with documents (depth 1+); counts include sub-agencies.
+   * Optional only for a response cached before the field. */
+  agencies?: { slug: string; name: string; depth: number; documents: number }[];
 }
 
 export async function searchExplore(
@@ -942,6 +949,8 @@ export async function searchExplore(
     commentableOnly?: boolean;
     sort?: "relevance" | "date";
     politicianId?: string;
+    /** An agency's slug: its documents and its sub-agencies'. */
+    agency?: string;
   }
 ): Promise<ExploreResponse> {
   // No query with a politician lists that member's documents, newest first
@@ -953,6 +962,7 @@ export async function searchExplore(
   if (options?.commentableOnly) params.set("commentable", "true");
   if (options?.sort) params.set("sort", options.sort);
   if (options?.politicianId) params.set("politician_id", options.politicianId);
+  if (options?.agency) params.set("agency", options.agency);
 
   // Can't route through requestJson: it throws on any !res.ok and discards
   // the body, which would turn the 503 "index still building" contract into a
@@ -992,6 +1002,9 @@ export interface ExploreDocumentDetail {
   politicianId: string;
   chamber: string;
   agencyName: string;
+  /** The issuing agency's page (/agencies/{slug}); empty when not read yet.
+   * Optional only for a backend older than the field. */
+  agencySlug?: string;
   commentUrl: string;
   commentsCloseOn: string;
   /** The document's own Federal Register citation ("91 FR 48248") and
@@ -2022,6 +2035,8 @@ export interface OpenCommentItem {
   id: number;
   title: string;
   agencyName: string | null;
+  /** The agency's page (/agencies/{slug}); null when not read yet. */
+  agencySlug?: string | null;
   commentsCloseOn: string;
   commentUrl: string;
   docType: string;

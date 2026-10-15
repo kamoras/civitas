@@ -415,6 +415,7 @@ def _build_issue_response(
                 comment_url=d.comment_url or None,
                 comments_close_on=d.comments_close_on or None,
                 agency_name=d.agency_name or None,
+                agency_slug=d.agency_slug or None,
             ).model_dump(by_alias=True)
             for d in docs
         ]
@@ -991,7 +992,7 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
     # and there are hundreds open at once.
     open_docs = (
         db.query(
-            ExploreDocument.id, ExploreDocument.title, ExploreDocument.agency_name,
+            ExploreDocument.id, ExploreDocument.title, ExploreDocument.agency_name, ExploreDocument.agency_slug,
             ExploreDocument.comments_close_on, ExploreDocument.comment_url, ExploreDocument.doc_type,
             ExploreDocument.date, ExploreDocument.summary, ExploreDocument.fr_page_views,
         )
@@ -1014,6 +1015,7 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
             "id": d.id,
             "title": d.title,
             "agencyName": d.agency_name,
+            "agencySlug": d.agency_slug or None,
             "commentsCloseOn": d.comments_close_on,
             "commentUrl": d.comment_url,
             "docType": d.doc_type,

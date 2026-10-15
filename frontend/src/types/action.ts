@@ -8,6 +8,8 @@ export interface RelatedExploreDoc {
   commentsCloseOn?: string | null;
   /** The issuing agency, for a Federal Register document. */
   agencyName?: string | null;
+  /** Its page (/agencies/{slug}); null when not read yet. */
+  agencySlug?: string | null;
 }
 
 export interface RelatedSenator {

@@ -87,14 +87,23 @@ FIELDS = [
 ]
 
 
-def _primary_agency(agencies: list[dict]) -> str:
-    """Extract the top-level agency name from the agencies list."""
+def issuing_agency(agencies: list[dict]) -> tuple[str, str]:
+    """(name, slug) of the agency that issued a document: the most specific
+    one its agencies[] lists. The Register lists a sub-agency's document
+    under its department too ("Transportation Department", then "Federal
+    Aviation Administration"), and the issuer is the agency no other listed
+    one sits under. The slug is "" when the Register gives none (an agency
+    it names only by raw_name)."""
     if not agencies:
-        return ""
-    for agency in agencies:
-        if not agency.get("parent_id"):
-            return agency.get("name", agency.get("raw_name", ""))
-    return agencies[0].get("name", agencies[0].get("raw_name", ""))
+        return "", ""
+    parents = {a.get("parent_id") for a in agencies if a.get("parent_id")}
+    # ponytail: a joint rule (two departments) keeps its first listed
+    # issuer only; an association table if agency pages need joint rules.
+    leaf = next((a for a in agencies if a.get("slug") and a.get("id") not in parents), None)
+    if leaf is None:
+        first = agencies[0]
+        return first.get("name") or first.get("raw_name", ""), first.get("slug") or ""
+    return leaf.get("name") or leaf.get("raw_name", ""), leaf["slug"]
 
 
 _BOILERPLATE_END = re.compile(
@@ -139,7 +148,7 @@ async def _fetch_body_text(client: httpx.AsyncClient, url: str) -> str:
 # publication, never the body.
 REFRESH_FIELDS = [
     "document_number", "title", "publication_date", "signing_date",
-    "comments_close_on", "comment_url", "executive_order_number",
+    "comments_close_on", "comment_url", "executive_order_number", "agencies",
 ]
 REFRESH_BATCH = 20
 
@@ -187,7 +196,8 @@ async def fetch_fr_rulemaking(
     """Fetch recent rulemaking documents from the Federal Register.
 
     Returns list of dicts with keys: external_id, title, summary, body,
-    date, doc_type, url, agency_name, comment_url, comments_close_on, chamber.
+    date, doc_type, url, agency_name, agency_slug, comment_url, comments_close_on,
+    chamber.
     """
     pending: list[dict] = []
     seen_ids: set[str] = set()
@@ -249,8 +259,7 @@ async def fetch_fr_rulemaking(
             raw_type = doc.get("type", "")
             doc_type = FR_TYPE_LABELS.get(raw_type, raw_type)
 
-            agencies = doc.get("agencies") or []
-            agency_name = _primary_agency(agencies)
+            agency_name, agency_slug = issuing_agency(doc.get("agencies") or [])
 
             abstract = (doc.get("abstract") or "").strip()
             action = (doc.get("action") or "").strip()
@@ -293,6 +302,7 @@ async def fetch_fr_rulemaking(
                 "doc_type": doc_type,
                 "url": doc.get("html_url", ""),
                 "agency_name": agency_name,
+                "agency_slug": agency_slug,
                 "comment_url": comment_url,
                 "comments_close_on": comments_close,
                 "chamber": "Regulatory",

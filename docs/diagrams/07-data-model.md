@@ -360,7 +360,8 @@ Three things worth knowing about that table:
 
 | Table | Purpose |
 |---|---|
-| `explore_documents` | Hybrid search corpus; source of truth for the vector index, the FTS5 keyword index, and citation authority — see [09](09-explore-search.md) |
+| `explore_documents` | Hybrid search corpus; source of truth for the vector index, the FTS5 keyword index, and citation authority — see [09](09-explore-search.md). `agency_slug` names its issuing agency's `agencies` row |
+| `agencies`, `agency_budgets` | The Federal Register's agency list, keyed by its slug, and USAspending's toptier budgets with the Register agency each one's name matched (`agency_slug`, NULL when none did) — read weekly by `fetch/agencies.py` |
 | `api_cache`, `analysis_cache`, `learned_classifications` | See [06 — Caching](06-caching.md) |
 | `pipeline_runs`, `house_pipeline_runs`, `supplementary_pipeline_runs`, `stock_trades_pipeline_runs`, `election_pipeline_runs` | Per-pipeline run bookkeeping; `pipeline_runs.status` also serves as the concurrency mutex |
 | `bsky_senator_spotlights` | Which members have been spotlighted, to cycle without repeats |
