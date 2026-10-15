@@ -1,0 +1,14 @@
+{
+ "before": {
+  "field_kinds_published": "6/9",
+  "values_dropped": 4,
+  "fixes_with_dropped_values": 3,
+  "equal_to_input": false
+ },
+ "after": {
+  "field_kinds_published": "9/9",
+  "values_dropped": 0,
+  "fixes_with_dropped_values": 0,
+  "equal_to_input": true
+ }
+}
