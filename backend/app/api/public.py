@@ -56,6 +56,7 @@ from app.pipeline.analyze.score_calculator import (
     _member_ideal_points,
     _seat_pvi,
     compute_overall_score,
+    stored_bills_status,
 )
 from app.pipeline.fetch.district_pvi import lines_of
 from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
@@ -400,6 +401,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
                     "cookPvi": cook_pvi,
                     "districtLinesCongress": member.district_lines_congress if house else None,
                 },
+                "legislativeBills": stored_bills_status(member),
             },
         },
         request,

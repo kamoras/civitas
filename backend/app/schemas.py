@@ -930,6 +930,11 @@ class PublicScoreReferencesSchema(_PublicModel):
                     "fit of position on seat lean, the chamber's extremity scale (extremity_p90) and reliability, "
                     "and this member's position and scaled vote count (null when Voteview has none)")
     seat: PublicSeatSchema
+    legislative_bills: str | None = Field(
+        description="Where Legislative Effectiveness's bills came from in the stored score: \"fetched:<date>\" "
+                    "(read that day), \"carried:<date>\" (that run couldn't read them; the bills read on that date) "
+                    "or \"unavailable\" (none known, so the bill part is not measured); null for a score stored "
+                    "before this was recorded, which was scored on its bills as fetched")
 
 
 class PublicScoreBreakdownSchema(_PublicModel):

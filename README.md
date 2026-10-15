@@ -1583,8 +1583,9 @@ measured; beside them the three weights, the scoring version and date, and
 the reference values the last run measured and compared against: the
 chamber's funding, Constituent Alignment and Legislative Effectiveness
 references (`/data/*_reference.json`, `population_reference`), the
-ideal-point fit and this member's position, and the seat's Cook PVI and
-district lines. `tests/test_public_score_breakdown.py` stores fixture
+ideal-point fit and this member's position, the seat's Cook PVI and
+district lines, and where the LES score's bills came from (`legislativeBills`:
+fetched, carried from an earlier read, or unavailable). `tests/test_public_score_breakdown.py` stores fixture
 members' scores with the pipeline's `calculate_scores` and recomputes every
 dimension and the overall from the response: the overall exactly, each
 dimension to within the one-decimal rounding of its components (on the

@@ -30,10 +30,18 @@ from app.models import (
     SponsoredBill,
 )
 from app.pipeline.analyze import score_calculator
-from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, calculate_scores, compute_overall_score
+from app.pipeline.analyze.score_calculator import (
+    ALGORITHM_VERSION,
+    LES_BILLS_STATUS,
+    calculate_confidence,
+    calculate_scores,
+    compute_overall_score,
+    load_les_reference,
+)
+from app.pipeline.sponsorship_backfill import carry_forward_sponsored_bills
 from app.schemas import PublicScoreBreakdownSchema
 from app.services._scorecard_common import build_score_breakdown_entity
-from app.services.representative_service import _rep_eager_options
+from app.services.representative_service import _rep_eager_options, upsert_representative
 from app.services.senator_service import _senator_eager_options
 
 # A survey reading for the fixture senator, so Constituent Approval (the one
@@ -185,3 +193,56 @@ def test_the_points_component_is_what_the_rule_says(client, db_session):
 @pytest.mark.parametrize("chamber", ["senators", "representatives"])
 def test_unknown_member_is_404(client, chamber):
     assert client.get(f"/api/public/v1/{chamber}/nobody/breakdown").status_code == 404
+
+
+def _bill(n, stage="REFERRED", law=False):
+    return {
+        "billId": f"HR.{n}", "title": f"Act {n}", "introducedDate": "2025-03-01",
+        "latestAction": "Referred to committee", "latestActionDate": "2025-03-01",
+        "policyArea": "HEALTH", "policyAreas": [], "partyLeaning": None,
+        "congress": 119, "billType": "hr", "isLaw": law, "stage": stage, "commemorative": False,
+    }
+
+
+def _member(rid, bio, **kw):
+    return {
+        "id": rid, "bioguideId": bio, "name": f"Member {rid}", "state": "TX", "district": 2,
+        "party": "R", "yearsInOffice": 5, "leadershipScore": 0.6, "attractedBipartisanshipScore": 0.3,
+        "funding": {}, "votingRecord": {"keyVotes": [], "recentVotes": []}, **kw,
+    }
+
+
+def test_fetched_carried_and_never_stored_bills_reproduce(client, db_session, pinned_les_reference):
+    """The pipeline's sequence (carry bills forward, score, store) and the
+    public breakdown recomputed from what was stored agree for each way a
+    member's bills can arrive: read this run, carried from an earlier run
+    that read them, or never read at all."""
+    db_session.add(Representative(
+        id="r-c", bioguide_id="C1", name="Member r-c", state="TX", district=2, party="R", years_in_office=5,
+        score_confidence=json.dumps({LES_BILLS_STATUS: "fetched:2026-10-13"}),
+    ))
+    for b in (_bill(1, "ENACTED", True), _bill(2)):
+        db_session.add(RepSponsoredBill(
+            representative_id="r-c", bill_id=b["billId"], title=b["title"], congress=119, bill_type="hr",
+            stage=b["stage"], is_law=b["isLaw"], latest_action=b["latestAction"],
+        ))
+    db_session.commit()
+    members = [
+        _member("r-f", "F1", sponsoredBills=[_bill(5, "PASSED_CHAMBER"), _bill(6)]),
+        _member("r-c", "C1", sponsoredBills=[], sponsoredBillsUnavailable=True),
+        _member("r-n", "N1"),  # never stored, never read
+    ]
+    carry_forward_sponsored_bills(db_session, Representative, members)
+    reference = load_les_reference()
+    for rep in members:
+        scores = calculate_scores({**rep, "lesReference": reference})
+        scores["confidence"] = calculate_confidence(rep)
+        upsert_representative(db_session, {**rep, "representationScore": scores})
+    db_session.commit()
+
+    sources = {}
+    for rid in ("r-f", "r-c", "r-n"):
+        body = _breakdown(client, "representatives", rid)
+        _assert_reproduced(body)
+        sources[rid] = body["references"]["legislativeBills"].split(":")[0]
+    assert sources == {"r-f": "fetched", "r-c": "carried", "r-n": "unavailable"}
