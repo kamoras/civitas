@@ -1509,6 +1509,16 @@ raises another (`score_calibration.SAME_METHOD_*`). That one alerts rather than
 holding the previous scores: it is measured on the scores just saved, and a held
 score beside the run's stored inputs would disagree with its own breakdown.
 
+The same rule holds for every fetcher the member pipelines read: a failed
+request returns the last cached read, or says it failed (`None`, or raises
+`CongressUnavailable` / `FecUnavailable` / `GovinfoUnavailable`) — never an
+empty answer a caller would take for the source's. A bill whose cosponsor
+list wasn't read is left out of the cosponsorship graphs (leadership,
+coalition attraction) rather than read as one nobody cosponsored; a failed
+roster page stops the run rather than shrink the roster (which
+`member_lifecycle` reads as departures); an FEC committee registration that
+couldn't be read keeps that member's stored funding. New fetchers follow it.
+
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption. A member (either
 chamber) whose prepare or score step raises keeps the scorecard of the
