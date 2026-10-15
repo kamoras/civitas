@@ -5,7 +5,9 @@ import {
   describeElections,
   describeProfile,
   describeStateBallot,
+  aboutPageJsonLd,
   personJsonLd,
+  siteJsonLd,
 } from "./seo";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { BillDetail } from "@/types/bill";
@@ -182,5 +184,58 @@ describe("elections metadata", () => {
       expect(d.description.length).toBeLessThanOrEqual(160);
       expect(d.description).not.toMatch(/\bwins?\b|\bwon\b|until official/);
     }
+  });
+});
+
+describe("siteJsonLd", () => {
+  // The names Google's site-name system reads. "Civitas" alone is shared by
+  // many organizations, so the full name leads and the short one is an
+  // alternate, never the other way round.
+  const [website, organization] = siteJsonLd();
+
+  it("names the WebSite in full, with its alternates and the canonical origin", () => {
+    expect(website).toMatchObject({
+      "@type": "WebSite",
+      "@id": "https://civitas-research.org/#website",
+      name: "Civitas Research",
+      alternateName: ["Civitas", "civitas-research.org"],
+      url: "https://civitas-research.org/",
+      publisher: { "@id": "https://civitas-research.org/#organization" },
+    });
+  });
+
+  it("describes /explore's search as a SearchAction whose template /explore reads", () => {
+    expect(website.potentialAction).toEqual({
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: "https://civitas-research.org/explore?q={search_term_string}",
+      },
+      "query-input": "required name=search_term_string",
+    });
+  });
+
+  it("names the Organization with a raster logo and its own profiles", () => {
+    expect(organization).toMatchObject({
+      "@type": "Organization",
+      "@id": "https://civitas-research.org/#organization",
+      name: "Civitas Research",
+      alternateName: ["Civitas", "civitas-research.org"],
+      url: "https://civitas-research.org/",
+      logo: "https://civitas-research.org/apple-icon.png",
+      sameAs: [
+        "https://bsky.app/profile/civitas-research.org",
+        "https://github.com/kamoras/civitas",
+      ],
+    });
+  });
+
+  it("points the About page at the Organization and the WebSite", () => {
+    expect(aboutPageJsonLd("d")).toMatchObject({
+      "@type": "AboutPage",
+      url: "https://civitas-research.org/about",
+      about: { "@id": organization["@id"] },
+      isPartOf: { "@id": website["@id"] },
+    });
   });
 });

@@ -727,7 +727,7 @@ describe("MemberScorecard", () => {
       "/about/references#kirkland2017"
     );
     expect(
-      within(section).getByText(/^Civitas\. \(n\.d\.\)\. Jordan Hale, Representative/)
+      within(section).getByText(/^Civitas Research\. \(n\.d\.\)\. Jordan Hale, Representative/)
     ).toBeInTheDocument();
   });
 
