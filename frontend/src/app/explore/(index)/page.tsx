@@ -10,6 +10,7 @@ import PageFallback from "@/components/layout/PageFallback";
 import BackToTop from "@/components/BackToTop";
 import {
   searchExplore,
+  fetchCommitteeRecordTotal,
   fetchExploreStats,
   splitHighlights,
   type ExploreResult,
@@ -172,13 +173,47 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
   );
 }
 
+/** The index's counts beside the title. Both lines always take their
+ * place, hidden until the counts arrive: on a phone they wrap under the
+ * title, and appearing after the masthead had painted they pushed the
+ * whole page down. */
+function IndexCounts({ stats }: { stats: ExploreStats | null }) {
+  const docs = stats?.totalDocuments ?? 0;
+  const open = stats?.openForComment ?? 0;
+  return (
+    <div className="text-right font-mono text-xs">
+      <p className={`text-ink-lo tabular-nums ${docs > 0 ? "" : "invisible"}`}>
+        {docs.toLocaleString("en-US")} documents indexed
+      </p>
+      <p className={`text-signal-cyan tabular-nums ${docs > 0 && open > 0 ? "" : "invisible"}`}>
+        {open} open for comment
+      </p>
+    </div>
+  );
+}
+
+// The masthead's line, sent with the server's fallback too (PageFallback).
+const EXPLORE_EYEBROW = "Explore · search across every branch";
+const EXPLORE_TITLE = "Explore the record";
+const EXPLORE_LEDE = (
+  <p>
+    Search any issue to see what all branches of government and federal agencies have done about it:
+    by topic, or by exact name, number, or &ldquo;quoted phrase&rdquo;. Many regulatory documents
+    are open for public comment: make your voice heard.
+  </p>
+);
+
 export default function ExplorePage() {
   return (
     <Suspense
       fallback={
         <PageFallback
-          eyebrow={"Explore · search across every branch"}
-          title={"Explore the record"}
+          eyebrow={EXPLORE_EYEBROW}
+          title={EXPLORE_TITLE}
+          lede={EXPLORE_LEDE}
+          aside={<IndexCounts stats={null} />}
+          width="max-w-4xl"
+          mastheadClassName="mb-8"
           rows={4}
         />
       }
@@ -287,6 +322,13 @@ function ExplorePageInner() {
   // term must not silently relabel the results still showing from the old one.
   const resultsFor = submitted?.query ?? "";
   const billHref = resultsFor ? billPageHref(resultsFor) : null;
+  // Committee meetings and reports aren't in the index; how many the Daily
+  // Digest has that match, offered beside the results.
+  const committeeQuery = resultsFor.trim() && !politicianId ? resultsFor.trim() : "";
+  const committee = useAsyncData(
+    `committee:${committeeQuery}`,
+    committeeQuery ? () => fetchCommitteeRecordTotal(committeeQuery) : null
+  );
   // Whose record the results are limited to. The name comes from the results
   // themselves; the filter is shown either way.
   const politicianName = politicianId
@@ -388,28 +430,11 @@ function ExplorePageInner() {
           {/* Header */}
           <PageMasthead
             className="mb-8"
-            eyebrow="Explore · search across every branch"
-            title="Explore the record"
-            aside={
-              stats && stats.totalDocuments > 0 ? (
-                <div className="text-right font-mono text-xs">
-                  <p className="text-ink-lo tabular-nums">
-                    {stats.totalDocuments.toLocaleString()} documents indexed
-                  </p>
-                  {stats.openForComment > 0 && (
-                    <p className="text-signal-cyan tabular-nums">
-                      {stats.openForComment} open for comment
-                    </p>
-                  )}
-                </div>
-              ) : null
-            }
+            eyebrow={EXPLORE_EYEBROW}
+            title={EXPLORE_TITLE}
+            aside={<IndexCounts stats={stats} />}
           >
-            <p>
-              Search any issue to see what all branches of government and federal agencies have done
-              about it: by topic, or by exact name, number, or &ldquo;quoted phrase&rdquo;. Many
-              regulatory documents are open for public comment: make your voice heard.
-            </p>
+            {EXPLORE_LEDE}
           </PageMasthead>
 
           {/* Search form */}
@@ -630,6 +655,20 @@ function ExplorePageInner() {
               <span className="font-mono text-xs uppercase tracking-[0.12em] text-phos">Bill</span>{" "}
               Open the page for {resultsFor.trim()}: where it stands, who sponsored it, and how each
               member voted →
+            </Link>
+          )}
+
+          {!loading && searched && committeeQuery && (committee.data ?? 0) > 0 && (
+            <Link
+              href={`/congress/committees?q=${encodeURIComponent(committeeQuery)}#committee-results`}
+              className="mb-4 block border border-white/15 px-4 py-3 text-sm text-ink-hi hover:border-phos/40"
+            >
+              <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                Committees
+              </span>{" "}
+              {committee.data} committee{" "}
+              {committee.data === 1 ? "meeting or report" : "meetings and reports"} in the Daily
+              Digest match &ldquo;{committeeQuery}&rdquo; →
             </Link>
           )}
 

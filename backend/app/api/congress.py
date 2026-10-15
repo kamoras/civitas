@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -10,8 +10,8 @@ from app.api.response_helpers import cached_json
 from app.database import get_db
 from app.models import RollCall
 from app.pipeline.congress_activity import eastern_today
-from app.services import congress_service
-from app.services.bill_record import vote_detail
+from app.services import committee_record, congress_service
+from app.services.bill_record import parse_bill_id, vote_detail
 
 router = APIRouter(prefix="/congress")
 
@@ -100,3 +100,35 @@ def vote(
     if rc is None:
         raise HTTPException(status_code=404, detail="Vote not recorded")
     return cached_json(vote_detail(db, rc), max_age=3600)
+
+
+@router.get("/committees")
+def committees(db: Session = Depends(get_db)) -> JSONResponse:
+    """Every committee with a meeting on record, by chamber, with how many
+    meetings and the latest one's date (committee_record.committees)."""
+    return cached_json({"committees": committee_record.committees(db)}, max_age=_TTL_S)
+
+
+@router.get("/committee-record")
+def committee_search(
+    chamber: str | None = Query(None, pattern="^(senate|house)$"),
+    committee: str | None = Query(None, max_length=200),
+    q: str | None = Query(None, max_length=200),
+    bill: str | None = Query(None, max_length=16),
+    kind: str | None = Query(None, pattern="^(meeting|report)$"),
+    congress: int | None = Query(None, ge=93, le=200),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Committee meetings and the reports filed on measures, newest first,
+    as the Daily Digest printed them, narrowed by chamber, committee, words
+    (all of them), a bill (named anywhere in the entry, as Civitas names it:
+    S.465), kind and Congress. A `q` that is one bill number is read as that
+    bill (committee_record.search)."""
+    if bill is not None and parse_bill_id(bill.upper()) is None:
+        raise HTTPException(status_code=422, detail="Expected a bill as Civitas names it, e.g. S.465")
+    return cached_json(committee_record.search(
+        db, chamber=chamber, committee=committee, q=q, bill=bill.upper() if bill else None, kind=kind,
+        congress=congress, page=page, per_page=per_page,
+    ), max_age=_TTL_S)

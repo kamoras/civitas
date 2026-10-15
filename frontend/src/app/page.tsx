@@ -4,6 +4,7 @@ import Masthead from "@/components/home/Masthead";
 import RecordIndex from "@/components/home/RecordIndex";
 import Holdings from "@/components/home/Holdings";
 import OnTheRecord from "@/components/home/OnTheRecord";
+import ElectionNight from "@/components/home/ElectionNight";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import JsonLd from "@/components/seo/JsonLd";
 import {
@@ -58,6 +59,9 @@ export default function Home() {
       <JsonLd data={SITE_JSON_LD} />
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16">
+        {/* Renders only while election results are up (from election night
+            until the count settles): the count is the news then. */}
+        <ElectionNight />
         <Masthead />
         <OnTheRecord />
         <ThisWeekStrip variant="full" />
