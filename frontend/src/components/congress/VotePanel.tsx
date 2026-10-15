@@ -12,8 +12,9 @@ function voteKey(v: { chamber: string; session: number; number: number }) {
   return `vote-${v.chamber}-${v.session}-${v.number}`;
 }
 
-/** A bill's recorded votes, and for the selected one every member's
- * position, filterable to a state (a drill-down, never an address). */
+/** A bill's recorded votes, and for the selected one each party's split
+ * and every member's position, collapsed behind a state pick or "Show all"
+ * (the roll call's own page lists them all). */
 export default function VotePanel({
   votes,
   congress,
@@ -135,7 +136,7 @@ export default function VotePanel({
           )}
           {detail && (
             <div className="border-t border-white/[0.09] pt-4">
-              <VoteMembers members={detail.members} />
+              <VoteMembers members={detail.members} collapsible />
             </div>
           )}
         </div>
