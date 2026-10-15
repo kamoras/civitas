@@ -5,7 +5,6 @@ import json
 from datetime import datetime
 from unittest.mock import patch
 
-import numpy as np
 import pytest
 from fastapi import Response
 
@@ -617,26 +616,16 @@ class TestNewFactsField:
 
         assert resp["newFacts"] == []
 
-    @patch("app.pipeline.analyze.action_center._embed_texts_sim")
-    async def test_updated_issue_reports_only_the_added_fact(self, mock_embed, db_session):
+    async def test_updated_issue_reports_the_stored_new_facts(self, db_session):
         from fastapi import Response
 
         from app.api.action import get_action_issue
-
-        # "Brand new fact." (remaining) and "Old fact." (previous_facts)
-        # are both non-empty, so app.fact_diff.new_facts_since falls
-        # through to a real, unmocked embedding call unless mocked here
-        # -- this test's intent (the API reports the right fact as new)
-        # has nothing to do with real embedding similarity, and letting
-        # real model output decide the result is fragile (confirmed
-        # flaky under coverage instrumentation, live 2026-09-06).
-        # Mocked orthogonal so only the response-shape logic is tested.
-        mock_embed.return_value = np.array([[1.0, 0.0], [0.0, 1.0]])
 
         issue = ActionIssue(
             date="2026-08-19", rank=1, title="Issue", summary="s",
             facts=json.dumps(["Old fact.", "Brand new fact."]),
             previous_facts=json.dumps(["Old fact."]),
+            new_facts=json.dumps(["Brand new fact."]),
         )
         db_session.add(issue)
         db_session.commit()
@@ -645,6 +634,35 @@ class TestNewFactsField:
 
         assert resp["newFacts"] == ["Brand new fact."]
         assert resp["facts"] == ["Old fact.", "Brand new fact."]
+
+    async def test_reading_issues_never_loads_the_embedding_model(self, db_session):
+        """A GET must never load a model (AGENTS.md "Read path must stay
+        lightweight"). It did: the "new" diff ran the similarity model per
+        issue on every /api/action/issues request. Now it is stored when
+        the facts are written; a row not yet backfilled reads as nothing
+        new rather than being diffed here."""
+        from fastapi import Response
+
+        from app.api.action import get_action_issue, get_action_issues, get_recent_action_issues
+
+        for public, new in (("Backfilled", json.dumps(["New."])), ("Not yet backfilled", None)):
+            db_session.add(ActionIssue(
+                date="2026-08-19", rank=1 if new else 2, title=public, summary="s", is_current=True,
+                facts=json.dumps(["Old.", "New."]), previous_facts=json.dumps(["Old."]), new_facts=new,
+            ))
+        db_session.commit()
+        issue_id = db_session.query(ActionIssue).filter_by(title="Not yet backfilled").one().id
+
+        with patch("app.pipeline.vector_store.get_similarity_model",
+                   side_effect=AssertionError("model loaded on a read")):
+            listed = await get_action_issues(Response(), date=None, db=db_session, db_visits=db_session)
+            recent = await get_recent_action_issues(Response(), limit=10, db=db_session)
+            single = await get_action_issue(to_public_id(issue_id), Response(), db=db_session)
+
+        by_title = {i["title"]: i["newFacts"] for i in listed["issues"]}
+        assert by_title == {"Backfilled": ["New."], "Not yet backfilled": []}
+        assert {i["title"]: i["newFacts"] for i in recent["issues"]} == by_title
+        assert single["newFacts"] == []
 
 
 class TestCacheHeaderMatchesNginx:

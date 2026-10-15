@@ -27,6 +27,7 @@ import { useResultsNow } from "@/hooks/useResultsNow";
 import { fetchPviMap } from "@/lib/api";
 import { describeInterval, useLiveResults } from "@/hooks/useLiveResults";
 import type { PviMap } from "@/types/election";
+import { useElectionsInitial } from "./ElectionsInitial";
 
 /*
   Second page onto the records palette, after the homepage. Same recipe:
@@ -67,13 +68,17 @@ const STATES = Array.from(new Set(Object.values(FIPS_TO_STATE)))
   .filter((s) => s !== "DC")
   .sort();
 
-/** Whole days from `asOf`'s calendar date to `isoDate`, both in local time. */
+/** Whole days from `asOf`'s calendar date to `isoDate`, counted on the
+ * Eastern calendar, as election day is: the server renders the countdown
+ * and the browser re-renders it, and both must read the same day whatever
+ * zone each is in. */
 function daysUntil(isoDate: string, asOf: number): number | null {
-  const target = new Date(`${isoDate}T00:00:00`);
-  if (Number.isNaN(target.getTime())) return null;
-  const today = new Date(asOf);
-  today.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  const target = Date.parse(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(target)) return null;
+  const today = Date.parse(
+    `${new Date(asOf).toLocaleDateString("en-CA", { timeZone: "America/New_York" })}T00:00:00Z`
+  );
+  return Math.round((target - today) / 86_400_000);
 }
 
 /** The masthead's figure: how far off the next federal Election Day is. */
@@ -100,10 +105,13 @@ function ElectionCountdown({ electionDay, asOf }: { electionDay: string; asOf: n
 
 export default function ElectionsPage() {
   const router = useRouter();
-  const [pvi, setPvi] = useState<PviMap | null>(null);
+  // What the server already read (elections/layout.tsx), when it could.
+  const initial = useElectionsInitial();
+  const [pvi, setPvi] = useState<PviMap | null>(initial?.pvi ?? null);
   // The clock is read when the data lands, not on every render, so the
-  // countdown is a function of what was fetched.
-  const [asOf, setAsOf] = useState<number | null>(null);
+  // countdown is a function of what was fetched: the server's clock for
+  // the lean map it sent.
+  const [asOf, setAsOf] = useState<number | null>(initial?.pvi ? initial.renderedAt : null);
   const [error, setError] = useState<string | null>(null);
   // From election day until the results window closes the page leads with
   // the live count (backend election_phase). One request says which; it
@@ -112,12 +120,17 @@ export default function ElectionsPage() {
   // that keeps failing is retried on a growing backoff.
   const { data: results, error: resultsError, retryMs, failedAt } = useLiveResults();
   const retryEvery = describeInterval(retryMs ?? 60_000).toUpperCase();
-  const resultsMode = !!results && showsResults(results.phase);
+  // Until the page's own read answers, the mode the server read decides, so
+  // the frame it sent is the one that stays.
+  const serverMode = results ? null : (initial?.phase?.mode ?? null);
+  const resultsMode = results
+    ? showsResults(results.phase)
+    : !!serverMode && serverMode !== "campaign";
   // The lean map waits until the phase is known: on election night a lean
   // map drawn first, then swapped for the count, reads as a prediction of
   // it. If the results check fails the campaign page stands (and says the
   // check failed); the hook keeps retrying and switches when it answers.
-  const phaseKnown = !!results || !!resultsError;
+  const phaseKnown = !!results || !!resultsError || !!serverMode;
   const campaignMode = phaseKnown && !resultsMode;
   // The clock is read only while the page shows results — for when polls
   // close, and for whether the backend is still reading the feeds. Any
@@ -223,7 +236,9 @@ export default function ElectionsPage() {
             }
           : null;
 
+  const haveServerPvi = !!initial?.pvi;
   useEffect(() => {
+    if (haveServerPvi) return;
     let cancelled = false;
     fetchPviMap()
       .then((p) => {
@@ -238,7 +253,7 @@ export default function ElectionsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [haveServerPvi]);
 
   const goToBallot = (state: string) => router.push(stateBallotHref(state));
 
@@ -279,24 +294,34 @@ export default function ElectionsPage() {
                   ? `Elections · ${results.phase.phase === "election_day" ? "election day" : "results"} · ${
                       results.phase.electionDate
                     }`
-                  : campaignMode
-                    ? "Elections · partisan lean by state"
-                    : "Elections"
+                  : serverMode === "election_day" && initial?.phase
+                    ? `Elections · election day · ${initial.phase.phase.electionDate}`
+                    : serverMode === "results" && initial?.phase
+                      ? `Elections · ${initial.phase.phase.phase === "election_day" ? "election day" : "results"} · ${
+                          initial.phase.phase.electionDate
+                        }`
+                      : campaignMode
+                        ? "Elections · partisan lean by state"
+                        : "Elections"
             }
             title={
               stillVoting && results
                 ? `${results.cycleYear} midterms: election day`
                 : resultsMode && results
                   ? `${results.cycleYear} midterm results`
-                  : campaignMode
-                    ? pvi?.cycleYear
-                      ? `${pvi.cycleYear} midterm ballot`
-                      : "Midterm ballot"
-                    : // Phase not known yet: say nothing either mode would
-                      // contradict.
-                      pvi?.cycleYear
-                      ? `${pvi.cycleYear} midterm elections`
-                      : "Midterm elections"
+                  : serverMode === "election_day" && initial?.phase
+                    ? `${initial.phase.cycleYear} midterms: election day`
+                    : serverMode === "results" && initial?.phase
+                      ? `${initial.phase.cycleYear} midterm results`
+                      : campaignMode
+                        ? pvi?.cycleYear
+                          ? `${pvi.cycleYear} midterm ballot`
+                          : "Midterm ballot"
+                        : // Phase not known yet: say nothing either mode would
+                          // contradict.
+                          pvi?.cycleYear
+                          ? `${pvi.cycleYear} midterm elections`
+                          : "Midterm elections"
             }
             aside={
               <div className="flex flex-col items-end gap-3">
@@ -341,13 +366,13 @@ export default function ElectionsPage() {
               </div>
             }
           >
-            {stillVoting && results ? (
+            {(stillVoting && results) || serverMode === "election_day" ? (
               <>
                 It&apos;s election day. Counts appear here as each state&apos;s last polls close, as
                 the state&apos;s own election office publishes them: nothing of a state&apos;s count
                 is shown before then. Every state&apos;s ballot research is one click away.
               </>
-            ) : resultsMode && results ? (
+            ) : resultsMode ? (
               <>
                 Counts as each state&apos;s own election office publishes them. Civitas reads each
                 state&apos;s feed every five minutes (hourly once no count has moved for a day), and
