@@ -6,8 +6,12 @@ being matched: see post_composer's own docstring for why the previous
 filter-the-output approach could not hold.
 """
 
+import json
+
+import numpy as np
 import pytest
 
+from app.pipeline.analyze import post_composer
 from app.pipeline.analyze.post_composer import compose, headline_source
 
 IRAN = (
@@ -66,6 +70,7 @@ class TestEmptinessIsImpossible:
     """60 of 160 live posts said only that they were coverage. With no
     fact extracted there is simply no post."""
 
+    @pytest.mark.slow
     @pytest.mark.parametrize("actor", ["This coverage", "The race", "It", "They"])
     def test_a_non_actor_opener_is_not_an_actor(self, actor):
         assert compose(actor, "tracks the TX-4 House race", "This coverage tracks the TX-4 House race") is None
@@ -265,8 +270,8 @@ class TestATruncatedPredicateIsCompletedFromItsSource:
         assert compose("Governor", "signs", src) is None
 
     def test_no_boundary_at_all_is_refused_in_running_text(self):
-        src = "The governor signs the order and then"
-        assert compose("The governor", "signs", src) is None
+        src = "Gov. Dana Hart signs the order and then"
+        assert compose("Gov. Dana Hart", "signs", src) is None
 
     @pytest.mark.parametrize("source,expected", [
         ("Pentagon cuts $1.5 billion from the program.", "Pentagon cuts $1.5 billion from the program."),
@@ -407,3 +412,157 @@ class TestHouseStyleTheModelCannotCopy:
         src = 'Mayor Ann Lee called the plan “unworkable,” and vetoed it on Friday.'
         got = compose("Mayor Ann Lee", "called the plan 'unworkable' and vetoed it on Friday", src)
         assert got == 'Mayor Ann Lee called the plan "unworkable," and vetoed it on Friday.'
+
+
+class TestQuotationsAreTheSpeakers:
+    """A claim lifted from inside a quotation is the speaker's account,
+    published as the outlet's fact once the speaker is cut away; one hung on
+    the quotation's attribution says only that something was said."""
+
+    def test_an_actor_inside_a_quotation_is_refused(self):
+        src = ('"During the campaign, Acme Media mistakenly placed $25,000 in ads in the '
+               'wrong state," a spokesperson for the group said.')
+        assert compose("Acme Media", "mistakenly placed $25,000 in ads in the wrong state", src) is None
+
+    def test_the_attribution_of_a_quotation_is_refused(self):
+        src = '"The agency overstepped its authority," House Democratic leaders said in a statement.'
+        assert compose("House Democratic leaders", "said in a statement", src) is None
+
+    def test_an_actor_after_a_closed_quotation_still_composes(self):
+        src = 'The bill is "dead on arrival." Sen. Jane Roe vowed to block it on Tuesday.'
+        assert compose("Sen. Jane Roe", "vowed to block it on Tuesday", src) == (
+            "Sen. Jane Roe vowed to block it on Tuesday."
+        )
+
+
+def test_a_predicate_copied_with_its_period_does_not_run_into_the_next_sentence():
+    """It read as stopping short of a clause end, and was "completed" with
+    the next sentence (replay, 2026-10-11..15)."""
+    src = ("The Treasury Department on Tuesday announced it was fining Northwind Bank more than "
+           "$1.2 billion for violating sanctions laws. The Treasury's enforcement office fined the bank.")
+    got = compose("Treasury Department", "announced it was fining Northwind Bank more than "
+                  "$1.2 billion for violating sanctions laws.", src)
+    assert got == ("Treasury Department on Tuesday announced it was fining Northwind Bank more than "
+                   "$1.2 billion for violating sanctions laws.")
+
+
+class TestTheActingPartyVote:
+    """The capitalised-word rule admits named parties; what it refuses gets
+    the labelled spans' vote (post_composer's comment above
+    ACTOR_EXAMPLES_PATH has the measurement)."""
+
+    def test_the_calibration_matches_its_examples(self):
+        """Rerun scripts/calibrate_claim_actor.py after editing
+        app/data/claim_actor_examples.json."""
+        assert post_composer.actor_calibration()["examples_hash"] == post_composer.actor_examples_hash()
+
+    def test_the_examples_say_where_they_came_from_and_how_they_were_labelled(self):
+        data = json.loads(post_composer.ACTOR_EXAMPLES_PATH.read_text())
+        assert data["_source"] and data["_rubric"]
+        examples = data["examples"]
+        assert {e["origin"] for e in examples} == {"replay", "variation"}
+        assert all(isinstance(e["actor"], bool) and e["text"].strip() for e in examples)
+        assert any(e["actor"] for e in examples) and not all(e["actor"] for e in examples)
+
+    def test_a_named_party_never_consults_the_vote(self, monkeypatch):
+        consulted = []
+        monkeypatch.setattr(post_composer, "_actor_vote", lambda span: consulted.append(span) or 1.0)
+        assert compose("Sen. Jane Roe", "slammed the agency's new fee rule",
+                       "Sen. Jane Roe on Sunday slammed the agency's new fee rule.") is not None
+        assert consulted == []
+
+    def test_a_pronoun_led_party_never_reaches_the_vote(self, monkeypatch):
+        """"its spokesman" points at a party only through someone the span
+        doesn't name; the embedding reads "spokesman" and would vote actor."""
+        consulted = []
+        monkeypatch.setattr(post_composer, "_actor_vote", lambda span: consulted.append(span) or 1.0)
+        src = "The agency declined to comment, but its spokesman denied the report on Friday."
+        assert compose("its spokesman", "denied the report on Friday", src) is None
+        assert consulted == []
+
+    def test_a_failed_vote_refuses_the_span_not_the_run(self, monkeypatch):
+        def broken(span):
+            raise RuntimeError("similarity model unavailable")
+        monkeypatch.setattr(post_composer, "_actor_vote", broken)
+        src = "A federal judge on Sunday blocked the agency's new fee rule."
+        assert compose("A federal judge", "blocked the agency's new fee rule", src) is None
+
+    def test_the_vote_decides_what_the_rule_refuses(self, monkeypatch):
+        src = "A federal judge on Sunday blocked the agency's new fee rule."
+        threshold = post_composer.actor_calibration()["threshold"]
+        monkeypatch.setattr(post_composer, "_actor_vote", lambda span: threshold)
+        assert compose("A federal judge", "blocked the agency's new fee rule", src) == (
+            "A federal judge on Sunday blocked the agency's new fee rule."
+        )
+        monkeypatch.setattr(post_composer, "_actor_vote", lambda span: threshold - 0.01)
+        assert compose("A federal judge", "blocked the agency's new fee rule", src) is None
+
+    def test_votes_weigh_neighbours_by_similarity(self):
+        reference = np.array([[1.0, 0.0], [0.0, 1.0], [0.6, 0.8]])
+        labels = np.array([1.0, 0.0, 1.0])
+        span = np.array([[1.0, 0.0]])
+        # k=2: neighbours 0 (sim 1.0, actor) and 2 (sim 0.6, actor).
+        assert post_composer.actor_votes(span, reference, labels, 2)[0] == pytest.approx(1.0)
+        # k=3 adds neighbour 1 at similarity 0, which weighs nothing.
+        assert post_composer.actor_votes(span, reference, labels, 3)[0] == pytest.approx(1.0)
+        assert post_composer.actor_votes(np.array([[0.0, 1.0]]), reference, labels, 2)[0] == pytest.approx(0.8 / 1.8)
+
+
+@pytest.mark.slow
+class TestTheActingPartyVoteOnTheModel:
+    """The real vote, on the similarity model."""
+
+    @pytest.mark.parametrize("actor,source,want", [
+        # Parties a story describes rather than names: the rule refused all
+        # of these, and 33 of 136 rejected claims in a live sample with them.
+        ("a federal judge", "On Sunday a federal judge blocked the agency's new fee rule.",
+         "A federal judge blocked the agency's new fee rule."),
+        ("federal agents", "Federal agents searched the home of a state senator early Monday.",
+         "Federal agents searched the home of a state senator early Monday."),
+        ("a bipartisan group of senators",
+         "A bipartisan group of senators urged the president to rescind the fuel deal.",
+         "A bipartisan group of senators urged the president to rescind the fuel deal."),
+        ("state election officials", "State election officials certified the results on Friday.",
+         "State election officials certified the results on Friday."),
+    ])
+    def test_a_described_party_composes(self, actor, source, want):
+        predicate = want[len(actor):].strip().rstrip(".")
+        got = compose(actor, predicate, source)
+        assert got is not None and got.lower() == want.lower()
+
+    @pytest.mark.parametrize("actor,predicate,source", [
+        ("the settlement", "resolves a lawsuit brought in 2024",
+         "The settlement resolves a lawsuit brought in 2024 against the company."),
+        ("This year's increase", "is 3.6% based on inflation data",
+         "This year's increase is 3.6% based on inflation data, about $900 next year."),
+        ("fines", "amount to the third-largest in the department's history",
+         "The fines amount to the third-largest in the department's history."),
+        ("the move", "drew criticism from both parties",
+         "The move drew criticism from both parties on Tuesday."),
+        ("this coverage", "tracks the House race",
+         "Below, this coverage tracks the House race and related developments."),
+        ("they", "said the deal would raise prices",
+         "Officials met Tuesday, and they said the deal would raise prices."),
+    ])
+    def test_a_non_actor_is_still_refused(self, actor, predicate, source):
+        assert compose(actor, predicate, source) is None
+
+    def test_no_labelled_non_actor_the_rule_refused_clears_the_vote_left_out(self):
+        """The calibration's hard constraint, re-measured: leave one out, the
+        vote admits no labelled non-actor the capitalised-word rule refused
+        (a pronoun-led span never reaches the vote)."""
+        examples = post_composer.actor_examples()
+        texts = [e["text"] for e in examples]
+        labels = np.array([float(e["actor"]) for e in examples])
+        keys = np.array([t.lower() for t in texts])
+        embeddings = post_composer.embed_spans(texts)
+        calibration = post_composer.actor_calibration()
+        admitted = []
+        for i, e in enumerate(examples):
+            if e["actor"] or post_composer._looks_like_an_actor(e["text"]) or post_composer._names_no_one(e["text"]):
+                continue
+            others = keys != keys[i]
+            vote = post_composer.actor_votes(embeddings[i:i + 1], embeddings[others], labels[others], calibration["k"])[0]
+            if vote >= calibration["threshold"]:
+                admitted.append(e["text"])
+        assert admitted == []

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { notFoundMetadata, pageMetadata } from "@/lib/site";
+import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import ExploreDocumentView from "./ExploreDocumentView";
 import { fetchExploreDoc } from "./fetchDoc";
 
@@ -33,6 +33,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       : `${byline}. Full text and plain-language summary on Civitas.`,
     path,
     type: "article",
+    images: [
+      {
+        url: absoluteUrl(`/api/og?explore=${doc.id}`),
+        width: 1200,
+        height: 630,
+        alt: doc.title,
+      },
+    ],
   });
 }
 

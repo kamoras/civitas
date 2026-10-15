@@ -1,6 +1,8 @@
 """Tests for Action Center deduplication and national monitor creation logic."""
 
+import importlib.util
 import json
+import pathlib
 import sqlite3
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
@@ -24,6 +26,7 @@ from app.models import (
 )
 from app.pipeline.analyze.grounding import validate_facts as _validate_facts
 from app.database import Base
+from app.pipeline.analyze import action_center as ac
 from app.time_utils import utcnow
 from app.pipeline.fetch.news_feeds import NewsArticle
 from app.pipeline.analyze.action_center import (
@@ -55,7 +58,6 @@ from app.pipeline.analyze.action_center import (
     _issue_signature,
     _center_titles,
     _mentions_full_name,
-    _signatures_match,
     _surname_owned_by_other_name,
     _log_summary_source_consistency,
 )
@@ -120,8 +122,6 @@ class TestClusterArticles:
     never a chain of pairwise resemblances (issue 759, 2026-09-27)."""
 
     def _cluster(self, monkeypatch, vectors):
-        from app.pipeline.analyze import action_center as ac
-
         arts = [NewsArticle(title=f"t{i}", summary="", url=f"u{i}", source_name="s", published=None)
                 for i in range(len(vectors))]
         monkeypatch.setattr(ac, "_embed_texts", lambda texts: np.array(vectors, dtype=float))
@@ -143,6 +143,192 @@ class TestClusterArticles:
 
     def test_one_article(self, monkeypatch):
         assert self._cluster(monkeypatch, [[1, 0]]) == [["t0"]]
+
+    def test_embeds_the_headline_and_the_start_of_the_description(self, monkeypatch):
+        seen = []
+        monkeypatch.setattr(ac, "_embed_texts", lambda texts: seen.extend(texts) or np.eye(len(texts)))
+        arts = [NewsArticle(title="Council passes budget", summary="x" * 300, url="u0", source_name="s"),
+                NewsArticle(title="Port strike ends", summary=None, url="u1", source_name="s")]
+        ac._cluster_articles([(a, None) for a in arts])
+        chars = ac.cluster_calibration()["description_chars"]
+        assert seen == ["Council passes budget. " + "x" * chars, "Port strike ends. "]
+
+    @staticmethod
+    def _pair_at(cosine):
+        # Each vector beside its negative, so the day's mean is zero and
+        # centering leaves t0 and t1 at exactly `cosine`.
+        a = [1.0, 0.0, 0.0]
+        b = [cosine, (1 - cosine ** 2) ** 0.5, 0.0]
+        c = [0.0, 0.0, 1.0]
+        return [a, b, c, [-x for x in a], [-x for x in b], [-x for x in c]]
+
+    @pytest.mark.parametrize("cosine, together", [(0.80, True), (0.72, False)])
+    def test_the_cut_is_the_calibrated_threshold(self, monkeypatch, cosine, together):
+        monkeypatch.setattr(ac, "cluster_calibration", lambda: {"threshold": 0.76, "description_chars": 200})
+        clusters = self._cluster(monkeypatch, self._pair_at(cosine))
+        assert (["t0", "t1"] in clusters) is together
+
+    def test_grouping_does_not_depend_on_article_order(self, monkeypatch):
+        vectors = [[1, 0.05, 0], [1, -0.05, 0], [0.98, 0, 0.05], [0, 1, 0], [0, 0, 1], [-1, -1, -1]]
+        first = self._cluster(monkeypatch, vectors)
+        assert self._cluster(monkeypatch, vectors) == first
+        order = [4, 2, 0, 5, 3, 1]
+
+        arts = [NewsArticle(title=f"t{i}", summary="", url=f"u{i}", source_name="s") for i in order]
+        monkeypatch.setattr(ac, "_embed_texts", lambda texts: np.array([vectors[i] for i in order], dtype=float))
+        permuted = sorted(sorted(a.title for a in c) for c in ac._cluster_articles([(a, None) for a in arts]))
+        assert permuted == first
+
+
+def _story(title, summary):
+    return NewsArticle(title=title, summary=summary, url=title, source_name="outlet")
+
+
+# The rest of a run's feed: clustering centres on the whole pool's mean, so
+# a test pool needs a realistic spread of unrelated stories around its cases.
+_FEED = [
+    _story("Senate confirms new ambassador to Canada",
+           "The Senate voted 61-35 on Tuesday to confirm the nominee as ambassador to Canada after months of delay."),
+    _story("Treasury announces new sanctions on shipping firms",
+           "The Treasury Department on Monday sanctioned eight shipping companies accused of moving oil for a blacklisted network."),
+    _story("House passes farm bill extension",
+           "The House approved a one-year extension of the farm bill on Wednesday, sending it to the Senate."),
+    _story("Supreme Court agrees to hear dispute over water rights",
+           "The justices said they would decide a long-running fight between two Western states over river water."),
+    _story("Governor signs law expanding school meal program",
+           "The governor signed legislation on Thursday providing free breakfast and lunch to every public school student."),
+    _story("FAA orders inspections of regional jet engines",
+           "The Federal Aviation Administration ordered airlines to inspect engines on 300 regional jets after a cracked fan blade was found."),
+    _story("Census Bureau delays release of population estimates",
+           "The bureau said a software problem would push the annual county estimates back by six weeks."),
+    _story("Federal judge blocks state clinic building rule",
+           "A federal judge on Friday temporarily blocked a state rule requiring clinics to meet hospital building standards."),
+    _story("Labor Department reports jobless claims fell",
+           "Initial claims for unemployment benefits fell by 12,000 last week, the Labor Department said Thursday."),
+    _story("EPA finalizes limits on power plant mercury",
+           "The Environmental Protection Agency issued a final rule tightening mercury limits for coal-fired power plants."),
+]
+
+
+@pytest.mark.slow
+class TestClusterArticlesModel:
+    """The calibrated clustering on the real retrieval model: one event told
+    by two outlets is one cluster, and stories that share only a theme or a
+    storyline are not (the shapes of the 2026-09-27 chimeras and of the
+    judged different-event pairs, in invented text)."""
+
+    def _groups(self, case):
+        clusters = ac._cluster_articles([(a, None) for a in _FEED + case])
+        return sorted(sorted(case.index(a) for a in c if a in case) for c in clusters if any(a in case for a in c))
+
+    def test_one_event_from_two_outlets_is_one_cluster(self):
+        contract = [
+            _story("Pentagon awards $4 billion contract for new trainer jets",
+                   "The Defense Department on Tuesday awarded a $4 billion contract to build 350 trainer jets for the Air Force, the Pentagon said."),
+            _story("Air Force picks builder for 350 trainer jets in $4B deal",
+                   "The Pentagon awarded a $4 billion contract Tuesday for 350 new Air Force trainer jets, ending a two-year competition."),
+        ]
+        settlement = [
+            _story("Drugmaker agrees to pay $210 million to settle pricing case",
+                   "The Justice Department said Wednesday the drugmaker agreed to pay $210 million to settle claims it overcharged Medicare for an insulin pump."),
+            _story("Insulin pump maker to pay $210M over Medicare overcharges",
+                   "The Justice Department announced Wednesday that the company will pay $210 million to resolve allegations it overbilled Medicare."),
+        ]
+        assert self._groups(contract) == [[0, 1]]
+        assert self._groups(settlement) == [[0, 1]]
+
+    def test_weather_and_disease_stories_stay_apart(self):
+        # Issue 759's shape: floods, a hurricane, a nor'easter and an
+        # epidemic, each somewhere else.
+        case = [
+            _story("Floods swamp riverside city after record rainfall",
+                   "Rivers burst their banks in the city after three days of record rain, forcing thousands from their homes."),
+            _story("Hurricane makes landfall on island chain",
+                   "The hurricane came ashore on the island chain with winds of 120 mph, knocking out power across the territory."),
+            _story("Nor'easter brings heavy snow to coastal towns",
+                   "A powerful nor'easter dumped up to two feet of snow on coastal towns and cut power to 200,000 homes."),
+            _story("Health officials report surge in measles cases abroad",
+                   "Health officials reported a sharp rise in measles cases in the capital, with hospitals running short of beds."),
+        ]
+        assert self._groups(case) == [[0], [1], [2], [3]]
+
+    def test_one_officials_rallies_in_two_states_stay_apart(self):
+        case = [
+            _story("Watch live: Vice president rallies voters in Ohio",
+                   "The vice president heads to Ohio on Tuesday to boost the Republican Senate candidate in a tightening race."),
+            _story("Watch live: Vice president rallies voters in Arizona",
+                   "The vice president is in Arizona on Thursday seeking to help Republicans flip the governor's mansion."),
+        ]
+        assert self._groups(case) == [[0], [1]]
+
+    def test_a_statement_and_the_later_letter_stay_apart(self):
+        case = [
+            _story("Six senators urge president to reverse course on grain export plan",
+                   "Four Republican and two Democratic senators released a statement Sunday urging the president to drop the grain export plan."),
+            _story("Bipartisan group of 12 senators demands president rescind grain deal",
+                   "Twelve senators from both parties wrote to the president on Tuesday demanding he rescind the grain export deal."),
+        ]
+        assert self._groups(case) == [[0], [1]]
+
+    def test_clustering_is_deterministic(self):
+        items = [(a, None) for a in _FEED]
+        runs = [sorted(sorted(a.title for a in c) for c in ac._cluster_articles(items)) for _ in range(2)]
+        assert runs[0] == runs[1]
+
+    def test_no_judged_different_event_pair_reaches_the_cut(self):
+        """Re-measures the calibration's constraint on the judged pairs with
+        the scoring the script uses."""
+        path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "calibrate_cluster_pairs.py"
+        spec = importlib.util.spec_from_file_location("calibrate_cluster_pairs", path)
+        script = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(script)
+        data = json.loads(ac._CLUSTER_JUDGMENTS_PATH.read_text())
+        articles = data["articles"]
+        dropped = {
+            a["id"] for a in articles
+            if ac._digest_reason(NewsArticle(title=a["title"], url="", source_name="", summary=a["description"]))
+        }
+        pairs = [p for p in data["pairs"]
+                 if p["label"] != "unsure" and p["a"] not in dropped and p["b"] not in dropped]
+        scores = script.pair_scores(articles, pairs, [ac.cluster_text(a["title"], a["description"]) for a in articles])
+        cut = ac.cluster_calibration()["threshold"]
+        merged = [p for p, s in zip(pairs, scores) if s >= cut]
+        assert not [p for p in merged if p["label"] == "different"]
+        calibration = ac.cluster_calibration()
+        assert sum(p["label"] == "same" for p in merged) == calibration["candidates"][calibration["text"]]["same_merged"]
+
+
+class TestClusterCalibration:
+    """app/data/cluster_pair_calibration.json is fitted to the judged pairs
+    by scripts/calibrate_cluster_pairs.py."""
+
+    def test_cluster_calibration_matches_judgments(self):
+        calibration = ac.cluster_calibration()
+        assert calibration["judgments_hash"] == ac.cluster_judgments_hash()
+        assert calibration["text"] == f"title+description[{calibration['description_chars']}]"
+        assert 0.0 < calibration["threshold"] < 1.0
+        chosen = calibration["candidates"][calibration["text"]]
+        assert chosen["cut"] == calibration["threshold"]
+        # Precision first: no other candidate merges more same-event pairs
+        # at its own zero-chimera cut.
+        assert all(c["same_merged"] <= chosen["same_merged"] for c in calibration["candidates"].values())
+
+    def test_judged_pairs_are_well_formed(self):
+        data = json.loads(ac._CLUSTER_JUDGMENTS_PATH.read_text())
+        assert data["_source"] and data["_rubric"]
+        when = {a["id"]: datetime.fromisoformat(a["published"].replace("Z", "+00:00")) for a in data["articles"]}
+        assert len(when) == len(data["articles"])
+        relations = {"same": {"report", "reaction"}, "different": {"storyline", "other"}, "unsure": {None}}
+        seen = set()
+        for p in data["pairs"]:
+            assert p["a"] in when and p["b"] in when and p["a"] != p["b"]
+            assert p.get("relation") in relations[p["label"]]
+            assert abs(when[p["a"]] - when[p["b"]]) <= timedelta(hours=48)
+            key = frozenset((p["a"], p["b"]))
+            assert key not in seen
+            seen.add(key)
+        labels = {p["label"] for p in data["pairs"]}
+        assert labels == {"same", "different", "unsure"}
 
 
 class TestRankClusters:
@@ -580,8 +766,6 @@ class TestNationalMonitorCreation:
         """A monitor still named after one of its own headlines is named again
         by the model on a later run; its slug stays (links point at it). A
         monitor with a real name is never asked about."""
-        import app.pipeline.analyze.action_center as ac
-
         headline = "Senator talks Trump's diesel deal"
         named = NationalMonitor(slug="senator-talks-trumps-diesel-deal", title=headline,
                                 description=headline, status=MonitorStatus.ACTIVE)
@@ -621,8 +805,6 @@ class TestNationalMonitorCreation:
         monitor opens one monitor of its own, even when the model names it
         after the existing one, and a second issue on it the same run does
         not open another."""
-        import app.pipeline.analyze.action_center as ac
-
         topic = [1.0, 0.0, 0.0]
         vectors = {
             "Ongoing standoff Long-running coverage.": [0.0, 1.0, 0.0],
@@ -1156,52 +1338,6 @@ class TestIssueSignatureMatching:
     in place; the published post described a different story than its
     permalink). Every case below uses the real production rows' text."""
 
-    def test_same_defense_bill_rows_match(self):
-        # ids 394/405: same $95B bill, same 216-212 vote, two rows.
-        sig_a = _issue_signature(
-            "Defense policy bill passage and budget debates",
-            ["A defense policy bill was passed with a narrow 216-212 vote.",
-             "Six Democrats supported the bill, and seven Republicans opposed it.",
-             "House Republicans approved a $95 billion framework for a third budget reconciliation package."],
-        )
-        sig_b = _issue_signature(
-            "House approves Pentagon funding framework",
-            ["A $95 billion framework was approved for defense spending.",
-             "The vote resulted in a narrow 216-212 outcome.",
-             "Six Democrats supported the measure while seven Republicans opposed it."],
-        )
-        assert _signatures_match(sig_a, sig_b) is True
-
-    def test_same_outbreak_rows_match(self):
-        # ids 396/401: same cyclospora outbreak on adjacent days.
-        sig_a = _issue_signature(
-            "FDA investigation continues over Taylor Farms lettuce",
-            ["A lettuce sample from Taylor Farms was initially flagged as positive for cyclospora.",
-             "Multiple states are reporting over 7,000 confirmed cases of cyclosporiasis nationwide."],
-        )
-        sig_b = _issue_signature(
-            "Cyclosporiasis outbreak investigation updates",
-            ["Over 7,000 cases have been reported across several states.",
-             "The FDA has stated that a sample from Taylor Farms was later identified as a false positive."],
-        )
-        assert _signatures_match(sig_a, sig_b) is True
-
-    def test_different_stories_with_similar_titles_do_not_match(self):
-        # The drift shape: a shutdown stopgap story vs. the $95B package —
-        # titles alike enough that raw cosine matched them (0.88 measured),
-        # overwriting a posted row with a different story's content.
-        sig_a = _issue_signature(
-            "House advances funding bill to avoid government shutdown",
-            ["The House passed a temporary funding measure to avoid a shutdown.",
-             "Senators plan a response next week."],
-        )
-        sig_b = _issue_signature(
-            "House approves Pentagon funding framework",
-            ["A $95 billion framework was approved for defense spending.",
-             "The vote resulted in a narrow 216-212 outcome."],
-        )
-        assert _signatures_match(sig_a, sig_b) is False
-
     def test_generic_civic_vocabulary_carries_no_identity(self):
         sig = _issue_signature(
             "House Republicans debate the bill",
@@ -1213,26 +1349,6 @@ class TestIssueSignatureMatching:
         assert "house" not in sig
         assert "republicans" not in sig
         assert "congress" not in sig
-
-    def test_empty_signature_never_matches(self):
-        assert _signatures_match(set(), {"taylor", "farms"}) is False
-
-    def test_sparse_single_token_signature_cannot_match_even_itself(self):
-        # Live 2026-07-23 bug: a story whose only extractable entity is one
-        # name ("Varga") produces a 1-token signature. _SIGNATURE_MATCH_MIN_SHARED
-        # (2) means it can never clear the floor, even compared to an
-        # exact copy of itself — this is exactly why _run_refresh's loop
-        # needs the exact-content check ahead of signature matching (see
-        # test_byte_identical_issues_are_duplicates below), not a reason
-        # to lower the shared-token floor (that would risk merging
-        # different stories that happen to mention the same one person).
-        facts = [
-            "A new bill text was released by Republican representatives.",
-            "The legislation includes a provision endorsed by former President Varga.",
-        ]
-        sig = _issue_signature("Republicans introduce crypto legislation with ethical clause", facts)
-        assert sig == {"varga"}
-        assert _signatures_match(sig, sig) is False
 
     def test_byte_identical_issues_are_duplicates(self):
         title = "Republicans introduce crypto legislation with ethical clause"
@@ -1273,11 +1389,10 @@ class TestIssueSignatureMatching:
     def test_find_matching_issue_catches_identical_title_with_reworded_facts(self):
         # Live 2026-08-22 bug: "Varga defends beef import plan amid GOP
         # criticism" was regenerated an hour apart with the same title but
-        # "cattle producers"/"ranchers" swapped between generations — enough
-        # to sink _issue_signature's sparse entity overlap below
-        # _signatures_match's floor, and _is_exact_content_duplicate
-        # requires facts to match too so it didn't catch this either. Two
-        # rows created, two Bluesky posts for the same story.
+        # "cattle producers"/"ranchers" swapped between generations, and
+        # _is_exact_content_duplicate requires facts to match too so it
+        # didn't catch this. Two rows created, two Bluesky posts for the
+        # same story.
         title = "Varga defends beef import plan amid GOP criticism"
         old_facts = [
             "Varga said the decision was driven by public pressure to lower beef prices.",
@@ -1321,11 +1436,7 @@ class TestIssueSignatureMatching:
     def test_find_matching_issue_does_not_merge_distinct_developments_in_the_same_saga(self):
         # Real production title-cosine (0.795) between two genuinely
         # separate steps of the same funding-bill saga — related, but not
-        # the same specific development. Facts are written to give both
-        # sides a non-empty, non-overlapping signature (1 shared token,
-        # below _SIGNATURE_MATCH_MIN_SHARED) so this isolates the new
-        # near-identical-title path rather than tripping the pre-existing
-        # empty-signature fallback. Below _NEAR_IDENTICAL_TITLE_THRESHOLD
+        # the same specific development. Below _NEAR_IDENTICAL_TITLE_THRESHOLD
         # (0.92), this must NOT auto-merge — collapsing every step of an
         # ongoing saga into one row would hide real distinct developments.
         title = "Senate passes funding bill to avert October shutdown"
@@ -1720,8 +1831,6 @@ class TestRecordGenerationSample:
         """The row is the prompt the model got, with the article in it —
         not the template with a literal {source} (every row from 2026-09-24
         to 2026-10-10) — and whether its spans verified."""
-        from app.pipeline.analyze import action_center as ac
-
         source = "Senate passes the budget. The Senate passed the budget 51-49 on Tuesday."
         spans = {"actor": "The Senate", "predicate": "passed the budget 51-49 on Tuesday"}
         with patch.object(ac, "call_llm", return_value=spans):
@@ -1740,7 +1849,6 @@ class TestRecordGenerationSample:
         import ast
         import inspect
 
-        from app.pipeline.analyze import action_center as ac
 
         tree = ast.parse(inspect.getsource(ac))
         calls = [
@@ -2580,6 +2688,53 @@ class TestDigestFiltering:
         article.summary = body
         assert _digest_reason(article) is None
 
+    @pytest.mark.parametrize("title,body", [
+        # A two-story briefing names both stories in its headline, so the
+        # body check's headline condition passes it, and its body has two
+        # items, under that check's floor. Live, 2026-10-13: its two lines
+        # about the second story made a two-claim issue under a two-story
+        # headline.
+        ("Government spent millions on Varga ads. And, federal agents raid Dana Okafor's home",
+         "The government is using millions of taxpayers' dollars on pro-Varga ads, even after "
+         "officials said this would not happen. And, federal agents search Rep. Dana Okafor's "
+         "home. (Image credit: Lee Quillen)"),
+        ("Live updates: Judge scolds Interior over Brandt Park tree cutting; feds search Okafor's home",
+         "U.S. District Judge Ana Lindqvist scolded Interior lawyers over tree cutting in Brandt "
+         "Park. Agents searched the home of Rep. Dana Okafor (D-Minn.) on Monday."),
+    ])
+    def test_a_headline_and_body_telling_the_same_unrelated_stories_are_dropped(self, title, body):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        article = _make_article(title)
+        article.summary = body
+        assert _digest_reason(article) == "headline and body list the same unrelated stories"
+
+    @pytest.mark.parametrize("title,body", [
+        # One story in two headline sentences: its teaser names both
+        # halves in one item...
+        ("Varga claims he was an assembly line worker. The UAW said that is a stretch.",
+         "Varga told voters he worked the line, but the UAW said his time at the plant was a "
+         "summer job."),
+        # ...or adds an item naming neither (a photo caption first).
+        ("Lawmakers added $1 to Texans' car insurance. The money paid for Flock cameras.",
+         "Mayor Lee Quillen speaks at a news conference in Honolulu. Texas lawmakers added $1 "
+         "to every policy. Flock now runs the cameras."),
+        # Two candidates after one debate.
+        ("Rep. Moore says he puts policy over politics; Crosby calls himself a chance for change",
+         "Rep. Blake Moore and Peter Crosby met in a debate on Tuesday. Moore defended his record "
+         "and Crosby called for change."),
+        # A live blog whose teaser covers one of its stories is left to the
+        # checks downstream (precision first).
+        ("Live updates: Varga marks Columbus Day; Okafor rallies voters in Ohio",
+         "Varga set up a panel on Friday to investigate the Fed governor. Varga said more was to come."),
+    ])
+    def test_a_single_story_told_in_two_headline_sentences_is_kept(self, title, body):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        article = _make_article(title)
+        article.summary = body
+        assert _digest_reason(article) is None
+
     @pytest.mark.parametrize("title", [
         # A possessive-led headline is the most common shape there is, and
         # _issue_signature keeps "'s" inside the token — so "Varga's" shared
@@ -2705,7 +2860,6 @@ class TestDigestFiltering:
 
     def test_digests_are_dropped_before_embedding_and_counted(self):
         from app.pipeline.analyze import action_metrics
-        from app.pipeline.analyze import action_center as ac
 
         digest = _make_article("Up First briefing: three stories to start your day")
         story = _make_article("House approves Pentagon funding framework")
@@ -2753,8 +2907,6 @@ class TestSimilarityModelGates:
         """The gate is a vote among the nearest labelled examples, not a
         similarity bar: an article lands with whichever examples it sits
         closest to."""
-        from app.pipeline.analyze import action_center as ac
-
         civic = _make_article("House approves Pentagon funding framework in narrow vote")
         sports = _make_article("Spain defeats Argentina 1-0 in World Cup final")
         # Two relevant examples along x, two not-relevant along y.
@@ -2788,8 +2940,6 @@ class TestSimilarityModelGates:
         """scripts/calibrate_policy_relevance.py fits k and the threshold to
         one labelled set; editing the set without rerunning it would gate
         on a fit to different data."""
-        from app.pipeline.analyze import action_center as ac
-
         calibration = ac.relevance_calibration()
         examples = ac.relevance_examples()
         assert calibration["examples_hash"] == ac.relevance_examples_hash()
@@ -2922,7 +3072,6 @@ class TestPeriodicBlueskyPosts:
     def test_runs_on_the_no_articles_abort_path(self, db_session):
         from unittest.mock import patch
 
-        import app.pipeline.analyze.action_center as ac
 
         with patch.object(ac, "check_roll_call_signals"), \
                 patch.object(ac, "check_federal_register_signals"), \
@@ -2938,7 +3087,6 @@ class TestPeriodicBlueskyPosts:
     def test_runs_on_the_no_relevant_articles_abort_path(self, db_session):
         from unittest.mock import patch
 
-        import app.pipeline.analyze.action_center as ac
 
         with patch.object(ac, "check_roll_call_signals"), \
                 patch.object(ac, "check_federal_register_signals"), \
@@ -2974,8 +3122,6 @@ class TestRefreshActionIssuesClearsIsRunningOnError:
     5+ hours, blocking deploys of CI-green commits already on main."""
 
     def test_is_running_cleared_when_run_refresh_raises(self, db_session):
-        import app.pipeline.analyze.action_center as ac
-
         saved_state = ac.get_action_refresh_state()
         try:
             with patch.object(ac, "_run_refresh", side_effect=RuntimeError("boom")):

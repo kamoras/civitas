@@ -1,9 +1,11 @@
-"""Tests for the claim layer — selection logic, no model involved.
+"""Tests for the claim layer — selection logic; only the actor check loads a model (slow).
 
 Every test names the real published failure it makes unreachable.
 """
 
 from dataclasses import dataclass
+
+import pytest
 
 from app.pipeline.analyze.claims import (
     Claim, build_facts, build_lede, build_story, dedupe_claims, extract_body_claims,
@@ -129,6 +131,7 @@ class TestTheOldPromptsRulesAreNowStructural:
         assert self._claims(src, "The Pentagon", "cut a significant number of jobs") == []
         assert len(self._claims(src, "The Pentagon", "cut 1,200 jobs in the reorganisation")) == 1
 
+    @pytest.mark.slow
     def test_the_coverage_cannot_be_the_subject_of_a_sentence(self):
         """Prompt clause: "Do not write about 'the coverage' or 'the
         reporting' as the subject" — the vacuity that produced 60 of 160
@@ -288,3 +291,67 @@ class TestBuildStory:
         """Summary and facts are already on the page. A story made of
         only those would print them twice."""
         assert build_story([_claim("A did x."), _claim("B did y.")], shown=["A did x.", "B did y."]) is None
+
+
+class TestDistinctClaims:
+    """One fact told twice is one fact: the two-claim gate counted a
+    headline and its own lede as two (replay, 2026-10-11..15)."""
+
+    def test_the_calibration_matches_its_pairs(self):
+        """Rerun scripts/calibrate_claim_restatement.py after editing
+        app/data/claim_restatement_pairs.json."""
+        from app.pipeline.analyze import claims as mod
+
+        assert mod.restatement_calibration()["pairs_hash"] == mod.restatement_pairs_hash()
+
+    def test_the_pairs_say_where_they_came_from_and_how_they_were_labelled(self):
+        import json
+
+        from app.pipeline.analyze import claims as mod
+
+        data = json.loads(mod.RESTATEMENT_PAIRS_PATH.read_text())
+        assert data["_source"] and data["_rubric"]
+        assert {p["restatement"] for p in data["pairs"]} == {True, False}
+
+    def test_a_claim_at_the_threshold_of_an_earlier_one_is_dropped(self, monkeypatch):
+        import numpy as np
+
+        from app.pipeline import vector_store
+        from app.pipeline.analyze import claims as mod
+
+        t = mod.restatement_calibration()["threshold"]
+        # A and B at cosine t (one fact), C orthogonal to both.
+        b = np.array([t, np.sqrt(1 - t * t), 0.0])
+        vectors = {"A did X.": np.array([1.0, 0.0, 0.0]), "A did X again.": b, "C did Y.": np.array([0.0, 0.0, 1.0])}
+        monkeypatch.setattr(vector_store, "get_similarity_model", lambda: None)
+        monkeypatch.setattr(vector_store, "encode_normalized", lambda model, texts: np.array([vectors[x] for x in texts]))
+        claims = [_claim("A did X."), _claim("A did X again."), _claim("C did Y.")]
+        assert [c.text for c in mod.distinct_claims(claims)] == ["A did X.", "C did Y."]
+
+    def test_a_failure_keeps_every_claim(self, monkeypatch):
+        from app.pipeline import vector_store
+        from app.pipeline.analyze import claims as mod
+
+        def boom():
+            raise RuntimeError("no model")
+        monkeypatch.setattr(vector_store, "get_similarity_model", boom)
+        claims = [_claim("A did X."), _claim("B did Y.")]
+        assert mod.distinct_claims(claims) == claims
+
+    @pytest.mark.slow
+    def test_a_restatement_in_other_words_is_one_fact(self):
+        from app.pipeline.analyze import claims as mod
+
+        # A headline and its own lede.
+        claims = [_claim("Acme Health agrees to pay $315 million to settle Justice Department opioid case."),
+                  _claim("Justice Department announced Tuesday that Acme Health has agreed to pay $315 "
+                         "million to settle lawsuits over opioid prescriptions.")]
+        assert len(mod.distinct_claims(claims)) == 1
+
+    @pytest.mark.slow
+    def test_two_facts_about_one_story_stay_two(self):
+        from app.pipeline.analyze import claims as mod
+
+        claims = [_claim("A federal judge ordered the agency to restore the reporters' access."),
+                  _claim("The agency said it would appeal the ruling to the circuit court.")]
+        assert len(mod.distinct_claims(claims)) == 2

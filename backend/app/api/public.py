@@ -282,6 +282,26 @@ _RENAMED_ID = (" An id the member had before a rename still works: the record co
                " current id (`id`, `siteUrl`).")
 
 
+def _latest_snapshot(db: Session, entity_type: str, member_id: str) -> ScoreSnapshot | None:
+    """The member's newest score snapshot: the run that stored the scores
+    a profile and a breakdown publish."""
+    return (
+        db.query(ScoreSnapshot)
+        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
+        .order_by(ScoreSnapshot.date.desc())
+        .first()
+    )
+
+
+def _method(snapshot: ScoreSnapshot | None) -> dict:
+    """Which scoring version stored the scores, and when: what a citation
+    of a score needs (the same two fields as the breakdown's)."""
+    return {
+        "algorithmVersion": snapshot.algorithm_version if snapshot else None,
+        "scoredOn": snapshot.date if snapshot else None,
+    }
+
+
 def _history(db: Session, entity_type: str, model, member_id: str, request: Request) -> JSONResponse:
     member_id = resolve_member_id(db, member_id)
     if db.get(model, member_id) is None:
@@ -305,6 +325,7 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
                     "constituentAlignment": round(s.score_3, 1),
                     "fundingDiversity": round(s.score_4, 1),
                     "legislativeEffectiveness": round(s.score_5, 1),
+                    "algorithmVersion": s.algorithm_version,
                 }
                 for s in snapshots
             ],
@@ -354,12 +375,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
     house = entity_type == "representative"
     chamber = "house" if house else "senate"
     explained = (get_representative_score_breakdown if house else get_senator_score_breakdown)(db, member_id)
-    snapshot = (
-        db.query(ScoreSnapshot)
-        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
-        .order_by(ScoreSnapshot.date.desc())
-        .first()
-    )
+    snapshot = _latest_snapshot(db, entity_type, member_id)
     district = member.district if house else None
     with lines_of(member.district_lines_congress if house else None):
         cook_pvi = _seat_pvi(member.state, district)
@@ -386,8 +402,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
             "chamber": chamber,
             "party": member.party,
             "siteUrl": _member_url(member_id),
-            "algorithmVersion": snapshot.algorithm_version if snapshot else None,
-            "scoredOn": snapshot.date if snapshot else None,
+            **_method(snapshot),
             "recomputedWith": ALGORITHM_VERSION,
             "overall": compute_overall_score(member),
             "weights": SCORE_WEIGHTS,
@@ -651,7 +666,11 @@ def get_senator(
     if senator is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     return _pub_json(
-        {**senator.model_dump(by_alias=True), "siteUrl": _member_url(senator.id)},
+        {
+            **senator.model_dump(by_alias=True),
+            "siteUrl": _member_url(senator.id),
+            **_method(_latest_snapshot(db, "senator", senator.id)),
+        },
         request, max_age=CACHE_TTL_DETAIL_S,
     )
 
@@ -775,7 +794,11 @@ def get_representative(
     if rep is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     return _pub_json(
-        {**rep.model_dump(by_alias=True), "siteUrl": _member_url(rep.id)},
+        {
+            **rep.model_dump(by_alias=True),
+            "siteUrl": _member_url(rep.id),
+            **_method(_latest_snapshot(db, "representative", rep.id)),
+        },
         request, max_age=CACHE_TTL_DETAIL_S,
     )
 
