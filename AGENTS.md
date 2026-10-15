@@ -1488,6 +1488,37 @@ third phase (`ingest_president_holdings`): it has no asset-type column, so a
 category comes only from what the form states, and every other security is
 `UNSTATED` ("Type not stated"), never typed from its name.
 
+**An outage in the sponsorship read is never a record of no bills** (2026-10-15).
+A bill whose actions Congress.gov can't give the run (`CongressUnavailable`)
+degrades only itself: no roll call is discovered from it, or it is staged from
+its latest action (`_les_bill_stage`). One such request used to stop the House
+sponsorship step for every member after it (296 of 433 on 2026-10-14). A member
+whose sponsored legislation wasn't read is scored on the bills an earlier run
+stored (`sponsorship_backfill.carry_forward_sponsored_bills`), and one with none
+stored has Legislative Effectiveness's bill part unmeasured, its weight carried
+by the other parts. Only members whose bills the run read are measured into the
+LES reference (`live_les_reference`): counting the others as members with no
+bills put that night's mean credit at 3.16 on a scale defined as 1.0. How a
+stored score treated its bills is kept in its confidence
+(`legislativeEffectivenessBills`: `fetched:<date>`, `carried:<date>`,
+`unavailable`), so the breakdown and the startup rescore score the stored bills
+the same way. The run raises one ops alert naming what went unread
+(`run_checks.alert_unread_sponsorship`), and a score-distribution shift on an
+unchanged `ALGORITHM_VERSION` and Congress past what such nights have produced
+raises another (`score_calibration.SAME_METHOD_*`). That one alerts rather than
+holding the previous scores: it is measured on the scores just saved, and a held
+score beside the run's stored inputs would disagree with its own breakdown.
+
+The same rule holds for every fetcher the member pipelines read: a failed
+request returns the last cached read, or says it failed (`None`, or raises
+`CongressUnavailable` / `FecUnavailable` / `GovinfoUnavailable`) — never an
+empty answer a caller would take for the source's. A bill whose cosponsor
+list wasn't read is left out of the cosponsorship graphs (leadership,
+coalition attraction) rather than read as one nobody cosponsored; a failed
+roster page stops the run rather than shrink the roster (which
+`member_lifecycle` reads as departures); an FEC committee registration that
+couldn't be read keeps that member's stored funding. New fetchers follow it.
+
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption. A member (either
 chamber) whose prepare or score step raises keeps the scorecard of the
@@ -1676,7 +1707,7 @@ the pending list).
 | Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
 | Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/` |
-| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; detector process `face_detection.py`; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
+| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; detector process `face_detection.py`; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts` (and `[width]/route.ts`, the sized copies `Photo`'s srcset asks for), `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
 | Issue contact surface (state picker, phones, roll-call record, call script) + action-tap counter | `frontend/src/components/action/ContactYourMembers.tsx`, `backend/app/api/action.py` (`get_issue_members`, `issue_roll_calls`, `bill_decider`), `backend/app/api/visits.py` (`track_action`), `GET /api/admin/action-taps` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
@@ -1881,7 +1912,15 @@ the pending list).
   inherited by every page and declare the whole site a duplicate of the
   homepage). A section layout's canonical is inherited the same way, so a
   dynamic child (`/politicians/[id]`, `/explore/[id]`…) must set its own,
-  taken from the record, not the request's spelling.
+  taken from the record, not the request's spelling. Its 404 can't (a
+  route's `notFound()` discards its page's metadata; the head comes from
+  the layouts above), so a section whose index page is a client component
+  keeps that page's metadata in a layout inside an `(index)` route group
+  (`politicians/(index)`, `congress/bills/(index)`, `elections/(index)`,
+  `explore/(index)`), and each record route has a layout setting only its
+  404's title; a not-found head has no canonical (`notFoundMetadata`).
+  `app/sectionMetadata.test.ts` fails on a layout with a canonical above a
+  record route.
 - Titles lead with what people type into a search box (member name +
   party-state, bill number, full state name); the root template appends
   " | Civitas" (no em dashes in site prose, 2026-10). Search-facing wording lives in `src/lib/seo.ts`, not in

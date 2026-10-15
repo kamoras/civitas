@@ -170,7 +170,7 @@ function SenatorSelector({
       </div>
 
       {loading && (
-        <div className="text-ink-min font-mono text-xs tracking-widest animate-pulse">
+        <div className="text-ink-min font-mono text-xs tracking-widest pulse-subtle">
           LOADING...
         </div>
       )}
@@ -606,7 +606,7 @@ function ComparePageInner() {
         <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
           <div className="max-w-5xl mx-auto">
             <div className="panel p-8 text-center">
-              <div className="font-mono text-xs text-ink-min tracking-widest animate-pulse">
+              <div className="font-mono text-xs text-ink-min tracking-widest pulse-subtle">
                 LOADING...
               </div>
             </div>

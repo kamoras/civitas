@@ -23,6 +23,8 @@ import {
   flipNotShownText,
   flipShown,
   formatEasternTime,
+  NOT_FINAL,
+  anyCountNotFinal,
   formatLed,
   isTied,
   ledParty,
@@ -84,7 +86,8 @@ function senateLine(r: LiveRaceResult, several: boolean): string {
   // Announced earlier: said before "tied" and "no votes yet", as every
   // other surface says it, so no line drops what the counter counts.
   const announced = flipNotShownText(r) ? " · flip announced, not in latest count" : "";
-  if (isTied(r)) return `${name}: tied${r.official ? " · official count" : ""}${announced}`;
+  if (isTied(r))
+    return `${name}: tied · ${r.official ? "official count" : NOT_FINAL.toLowerCase()}${announced}`;
   const lead = r.candidates[0];
   if (!lead || !r.votesCounted)
     return announced
@@ -93,7 +96,7 @@ function senateLine(r: LiveRaceResult, several: boolean): string {
   const share = reportingShare(r);
   const early = !r.official && share != null && share < 0.5;
   return `${name}: ${lead.name} (${partyTag(lead.party)}) ${
-    r.official ? "leads · official count" : "leads"
+    r.official ? "leads · official count" : `leads · ${NOT_FINAL.toLowerCase()}`
   }${early ? " · early" : ""}${flipShown(r) ? " · flip" : announced}`;
 }
 
@@ -416,7 +419,10 @@ export default function ResultsOverview({
           </p>
           <p className="mt-1 text-sm text-ink-lo">
             Leader from a different party than the holder, with enough of the count in (
-            <Link href="/about/elections#election-night" className="text-phos hover:underline">
+            <Link
+              href="/about/elections#election-night"
+              className="text-phos underline underline-offset-4"
+            >
               what counts as enough
             </Link>
             )
@@ -539,6 +545,7 @@ export default function ResultsOverview({
                   {summary.house.length > 0 ? (
                     <span className="font-mono text-xs text-ink-min">
                       HOUSE {formatLed(summary.houseLeads)} LEADING
+                      {anyCountNotFinal(summary.house) ? ` · ${NOT_FINAL}` : ""}
                     </span>
                   ) : (
                     isLive &&

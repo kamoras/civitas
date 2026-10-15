@@ -107,6 +107,23 @@ export default function ScoresChapter() {
             computed&rdquo;.
           </P>
         </Sub>
+        <Sub title="Check the arithmetic yourself">
+          <P>
+            Every score here can be recomputed from published numbers. The public API&apos;s
+            breakdown of a member (
+            <span className="font-mono text-[0.9em]">
+              /api/public/v1/senators/&#123;id&#125;/breakdown
+            </span>
+            , or <span className="font-mono text-[0.9em]">representatives</span>) lists each
+            part&apos;s components with their weights and scores, how they combine, the three
+            parts&apos; weights, and the reference values the nightly run measured: the seat&apos;s
+            lean, the break rate expected of the party there, the chamber&apos;s typical PAC share
+            and bill record. The Representation Score is the weighted sum of the stored part scores,
+            exactly; each part recomputes from its components to within the rounding of one decimal.
+            No key is needed: see the <A href="/developers">API reference</A>, or the link under
+            &ldquo;Methods, data and citation&rdquo; on any profile.
+          </P>
+        </Sub>
         <Sub title="Thin records and missing data">
           <P>
             Where a part of a score rests on few observations, it is pulled toward a reference in

@@ -14,6 +14,7 @@ never reads as a bill with no actions or no cosponsors.
 import asyncio
 import html as html_lib
 import re
+import string
 import time
 import unicodedata
 from collections.abc import Awaitable, Callable
@@ -61,6 +62,41 @@ def parse_bill_id(bill_id: str) -> tuple[str, int] | None:
     if prefix not in _TYPE_PATH or not number.isdigit():
         return None
     return _TYPE_PATH[prefix], int(number)
+
+
+def canonical_bill_id(raw: str | None) -> str | None:
+    """"H.R. 997", "hr997", "S 2398", "S.2398" -> "HR.997" / "S.2398": the
+    site's own spelling of a bill id, from any of the spellings people and
+    the site itself print (the hub shows "S. 2398"); None for anything that
+    is not a bill id. Spaces and dots carry nothing in a bill number, which
+    is how frontend/src/lib/congress.ts billPageHref reads one too."""
+    if not raw or len(raw) > 24:
+        return None
+    compact = raw.replace(".", "").replace(" ", "").upper()
+    prefix = compact.rstrip("0123456789")
+    number = compact[len(prefix):]
+    if prefix not in _TYPE_PATH or not number:
+        return None
+    return f"{prefix}.{number}"
+
+
+def typed_bill_number(query: str) -> str | None:
+    """A search box's text as a bill number, dots, spaces and punctuation
+    dropped ("S. 2398" -> "S2398", "h.r.99" -> "HR99", "123" -> "123"), or
+    None when it has no digit: "S" alone would match every Senate bill."""
+    number = re.sub(r"[^A-Za-z0-9]", "", query or "").upper()
+    return number if any(c.isdigit() for c in number) else None
+
+
+def bill_number_matches(bill_id: str, number: str) -> bool:
+    """Whether a stored bill id starts with a typed bill number: a prefix,
+    so "HR 99" finds H.R. 997 while it is being typed, but "S 1" never finds
+    S. Res. 15; a number alone ("997") matches any bill type. The rule
+    `_scorecard_common.vote_search` applies in SQL to a member's votes."""
+    bare = bill_id.replace(".", "").replace(" ", "").upper()
+    if number.isdigit():
+        bare = bare.lstrip(string.ascii_uppercase)
+    return bare.startswith(number)
 
 
 NOT_FOUND = object()

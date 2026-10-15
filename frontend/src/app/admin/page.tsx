@@ -341,7 +341,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
   if (loading) {
     return (
       <div className="min-h-screen bg-surface-base flex items-center justify-center">
-        <span className="text-ink-hi font-mono animate-pulse">Loading dashboard...</span>
+        <span className="text-ink-hi font-mono pulse-subtle">Loading dashboard...</span>
       </div>
     );
   }
