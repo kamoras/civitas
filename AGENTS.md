@@ -1488,6 +1488,37 @@ third phase (`ingest_president_holdings`): it has no asset-type column, so a
 category comes only from what the form states, and every other security is
 `UNSTATED` ("Type not stated"), never typed from its name.
 
+**An outage in the sponsorship read is never a record of no bills** (2026-10-15).
+A bill whose actions Congress.gov can't give the run (`CongressUnavailable`)
+degrades only itself: no roll call is discovered from it, or it is staged from
+its latest action (`_les_bill_stage`). One such request used to stop the House
+sponsorship step for every member after it (296 of 433 on 2026-10-14). A member
+whose sponsored legislation wasn't read is scored on the bills an earlier run
+stored (`sponsorship_backfill.carry_forward_sponsored_bills`), and one with none
+stored has Legislative Effectiveness's bill part unmeasured, its weight carried
+by the other parts. Only members whose bills the run read are measured into the
+LES reference (`live_les_reference`): counting the others as members with no
+bills put that night's mean credit at 3.16 on a scale defined as 1.0. How a
+stored score treated its bills is kept in its confidence
+(`legislativeEffectivenessBills`: `fetched:<date>`, `carried:<date>`,
+`unavailable`), so the breakdown and the startup rescore score the stored bills
+the same way. The run raises one ops alert naming what went unread
+(`run_checks.alert_unread_sponsorship`), and a score-distribution shift on an
+unchanged `ALGORITHM_VERSION` and Congress past what such nights have produced
+raises another (`score_calibration.SAME_METHOD_*`). That one alerts rather than
+holding the previous scores: it is measured on the scores just saved, and a held
+score beside the run's stored inputs would disagree with its own breakdown.
+
+The same rule holds for every fetcher the member pipelines read: a failed
+request returns the last cached read, or says it failed (`None`, or raises
+`CongressUnavailable` / `FecUnavailable` / `GovinfoUnavailable`) — never an
+empty answer a caller would take for the source's. A bill whose cosponsor
+list wasn't read is left out of the cosponsorship graphs (leadership,
+coalition attraction) rather than read as one nobody cosponsored; a failed
+roster page stops the run rather than shrink the roster (which
+`member_lifecycle` reads as departures); an FEC committee registration that
+couldn't be read keeps that member's stored funding. New fetchers follow it.
+
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption. A member (either
 chamber) whose prepare or score step raises keeps the scorecard of the

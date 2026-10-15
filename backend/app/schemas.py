@@ -68,7 +68,10 @@ class RepresentationScoreSchema(CamelModel):
         None, description='How much data backs each sub-score, by its name: "high", "medium" or "low". Also '
                           'constituentAlignmentVotePart, how that score\'s vote part was scored: "full"; '
                           '"shrunk:<share kept>" or "shrunk-neutral:<share kept>" (few votes, pulled toward the '
-                          'party\'s typical score or toward 50); "typical:few-votes"; or "neutral:<reason>" (scored 50)')
+                          'party\'s typical score or toward 50); "typical:few-votes"; or "neutral:<reason>" (scored 50). And '
+                          'legislativeEffectivenessBills, where that score\'s bills came from: "fetched:<date>" (read '
+                          'that day), "carried:<date>" (this run couldn\'t read them; the bills read on that date) or '
+                          '"unavailable" (none known, so the bill part is not measured)')
 
 
 class PolicyAreaDetail(CamelModel):
