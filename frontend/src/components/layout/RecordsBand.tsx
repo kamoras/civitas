@@ -96,8 +96,16 @@ export function describeRunState(status: PipelineStatus | null): RunState {
     const first = hit[0].label.toUpperCase();
     const one = hit.length === 1;
     return {
-      label: one ? `${first} RUN ${verb}` : `${first} + ${hit.length - 1} MORE RUNS ${verb}`,
-      short: one ? `${first} ${shortVerb}` : `${first} +${hit.length - 1} ${shortVerb}`,
+      // "DATA": the band is about Civitas's own nightly runs. "SENATE
+      // FAILED 05:26 UTC", the first words a phone visitor read, said to a
+      // student that the Senate had failed.
+      label: one
+        ? `${first} DATA RUN ${verb}`
+        : `${first} + ${hit.length - 1} MORE DATA RUNS ${verb}`,
+      // Two or more, on a phone, by count alone ("3 DATA RUNS FAILED"):
+      // the first name plus a count overran 320px; every name is in the
+      // link's title and accessible name.
+      short: one ? `${first} DATA ${shortVerb}` : `${hit.length} DATA RUNS ${shortVerb}`,
       everyName: one ? null : hit.map((l) => l.label).join(", "),
       tone,
       // One time per line: with two links named, whose time it was is unclear.
@@ -229,11 +237,13 @@ export default function RecordsBand() {
             <>
               {/* One line at every width: the fixed header's 96px clearance
                   (`--header-clearance`) allows no wrap. So the phone line
-                  (288px at 320) is the short form, "SUPPLEMENTARY FAILED
-                  06:47 · 4/5 FILED", with UTC from 370px; from `sm` the
-                  full words and dates; the filed time from `lg`. Two or more
-                  failed links name the first and count the rest, every name
-                  in the link's title and its accessible name. Measured for
+                  (288px at 320) is the short form, "SUPPLEMENTARY DATA
+                  FAILED · 4/5 FILED", with the time from 360px and UTC from
+                  370px; from `sm` the full words and dates; the filed time
+                  from `lg`. Two or more failed links name the first and
+                  count the rest (on a phone, the count alone: "3 DATA RUNS
+                  FAILED"), every name in the link's title and its
+                  accessible name. Measured for
                   every link and state, one to five failed, at 320, 360, 375,
                   640, 1024 and 1280. */}
               {state.complete ? (
@@ -260,7 +270,9 @@ export default function RecordsBand() {
                       <>
                         {" "}
                         <span className="hidden sm:inline">{at}</span>
-                        <span className="sm:hidden">
+                        {/* From 360px: at 320, "SUPPLEMENTARY DATA FAILED"
+                            leaves no room for it on the one line. */}
+                        <span className="hidden min-[360px]:inline sm:hidden">
                           {atShort}
                           <span className="hidden min-[370px]:inline"> UTC</span>
                         </span>
