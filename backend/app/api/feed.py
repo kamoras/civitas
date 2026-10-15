@@ -77,14 +77,24 @@ def _sub(parent: ET.Element, tag: str, text: str | None = None, **attrs: str) ->
     return el
 
 
+def _picture(post: BroadcastPost) -> tuple[str | None, str | None]:
+    """The entry's picture and its alt text: the post's own image when it
+    carries one (a trend post's record image, the one Bluesky shows),
+    otherwise the linked page's card."""
+    if post.image_url:
+        return post.image_url, post.alt_text
+    return post.card_image, post.card_image_alt
+
+
 def _content_html(post: BroadcastPost) -> str:
     """The entry as a reader shows it, like the Bluesky post with its card:
     the card's picture, the post's words, a link to the page on Civitas,
     and the source it restates, when it restates one."""
     parts = []
-    if post.card_image:
-        alt = escape(post.card_image_alt or post.title)
-        parts.append(f'<p><a href="{escape(post.url)}"><img src="{escape(post.card_image)}" alt="{alt}"></a></p>')
+    image, image_alt = _picture(post)
+    if image:
+        alt = escape(image_alt or post.title)
+        parts.append(f'<p><a href="{escape(post.url)}"><img src="{escape(image)}" alt="{alt}"></a></p>')
     parts += [f"<p>{escape(p)}</p>" for p in post.text.split("\n") if p.strip()]
     parts.append(f'<p><a href="{escape(post.url)}">Read on Civitas</a></p>')
     if post.source_url:
@@ -125,14 +135,15 @@ def render_atom(*, title: str, subtitle: str, path: str, posts: list[BroadcastPo
         if post.card_description:
             _sub(entry, "summary", post.card_description, type="text")
         _sub(entry, "content", _content_html(post), type="html")
-        if post.card_image:
-            # The card's picture, for readers that show one beside the entry.
+        image, image_alt = _picture(post)
+        if image:
+            # The picture, for readers that show one beside the entry.
             # No type: the page names the image, not its format.
-            _sub(entry, "link", rel="enclosure", href=post.card_image)
-            _sub(entry, f"{{{MEDIA_NS}}}thumbnail", url=post.card_image)
-            media = _sub(entry, f"{{{MEDIA_NS}}}content", url=post.card_image, medium="image")
-            if post.card_image_alt:
-                _sub(media, f"{{{MEDIA_NS}}}description", post.card_image_alt, type="plain")
+            _sub(entry, "link", rel="enclosure", href=image)
+            _sub(entry, f"{{{MEDIA_NS}}}thumbnail", url=image)
+            media = _sub(entry, f"{{{MEDIA_NS}}}content", url=image, medium="image")
+            if image_alt:
+                _sub(media, f"{{{MEDIA_NS}}}description", image_alt, type="plain")
     return b'<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(feed, encoding="utf-8")
 
 

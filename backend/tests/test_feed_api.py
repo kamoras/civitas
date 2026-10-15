@@ -144,6 +144,7 @@ def test_the_index_lists_every_feed_and_state(client):
     body = client.get("/api/feeds").json()
     assert [f["path"] for f in body["feeds"]] == [
         "/feed.xml", "/feed/issues.xml", "/feed/congress.xml", "/feed/members.xml", "/feed/elections.xml",
+        "/feed/trends.xml",
     ]
     georgia = next(s for s in body["states"] if s["code"] == "GA")
     assert georgia == {"code": "GA", "name": "Georgia", "path": "/feed/states/GA.xml"}

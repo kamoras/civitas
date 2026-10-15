@@ -1,0 +1,3801 @@
+{
+ "_source": "Bluesky trend display names (as in trend_relevance_examples.json, cut at 24 characters): 300 drawn at random from the 3,029 distinct topics the policy-relevance vote scores >= 0.5, and 147 more drawn from topics whose name contains an evaluative word (slams, backlash, scandal, mocked, feud, threat, woke, ...) so the loaded class has enough examples; that sampling list only chose what to label, every example is labelled by reading it. Plus the display names of the 350 trend_relevance examples (a random sample of all topics), so the neutral class covers the same subjects the loaded one does: without them a plainly named topic on a subject with loaded neighbours (an agency, a lawsuit) was voted loaded by topic alone. ' (Archived)' suffixes removed. Labelled 2026-10-15 by an AI agent (Claude) against _rubric, for trend_relevance's loaded-language gate.",
+ "_rubric": "loaded = the name itself judges, mocks or characterises (backlash, slams, blasts, mocked, feud, scandal, gaffe, rant, grift, snub, regime, fascism, corruption or abuse stated as fact, hoax, rigged, woke, an advocacy slogan as a bill title), so quoting it would carry its framing. Neutral = a person, place, event, official action, product or topic named plainly, including attributed claims ('corruption claims') and proper names that happen to contain such a word (a wrestling event called Backlash).",
+ "examples": [
+  {
+   "text": "Burnham as PM",
+   "date": "2026-07-28",
+   "loaded": false
+  },
+  {
+   "text": "Scottish referendum cond",
+   "date": "2026-09-10",
+   "loaded": false
+  },
+  {
+   "text": "Trump backs data centers",
+   "date": "2026-07-24",
+   "loaded": false
+  },
+  {
+   "text": "Netanyahu defies Mamdani",
+   "date": "2026-07-29",
+   "loaded": true
+  },
+  {
+   "text": "Leavitt resigns",
+   "date": "2026-08-16",
+   "loaded": false
+  },
+  {
+   "text": "VAR review",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Lisa Cook probe",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "Food safety recalls",
+   "date": "2026-08-12",
+   "loaded": false
+  },
+  {
+   "text": "LAPD-ICE case",
+   "date": "2026-09-25",
+   "loaded": false
+  },
+  {
+   "text": "Alzheimer's study cut",
+   "date": "2026-09-19",
+   "loaded": false
+  },
+  {
+   "text": "Human-mouse brain chimer",
+   "date": "2026-09-18",
+   "loaded": false
+  },
+  {
+   "text": "Jan. 6 suits",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "AI parenting tools",
+   "date": "2026-08-25",
+   "loaded": false
+  },
+  {
+   "text": "Kennedy Center takeover",
+   "date": "2026-09-22",
+   "loaded": true
+  },
+  {
+   "text": "DHS official resigns",
+   "date": "2026-07-28",
+   "loaded": false
+  },
+  {
+   "text": "Trump Grok",
+   "date": "2026-10-02",
+   "loaded": false
+  },
+  {
+   "text": "EPA limits input",
+   "date": "2026-08-26",
+   "loaded": false
+  },
+  {
+   "text": "Cobb slams Blanche",
+   "date": "2026-07-23",
+   "loaded": true
+  },
+  {
+   "text": "Renee Good's mother test",
+   "date": "2026-09-25",
+   "loaded": false
+  },
+  {
+   "text": "Mail-voting case",
+   "date": "2026-08-29",
+   "loaded": false
+  },
+  {
+   "text": "Iglesias Snubs Trump",
+   "date": "2026-07-19",
+   "loaded": true
+  },
+  {
+   "text": "Two chokepoints closed",
+   "date": "2026-07-24",
+   "loaded": false
+  },
+  {
+   "text": "Vance trolls critics",
+   "date": "2026-08-07",
+   "loaded": true
+  },
+  {
+   "text": "Chargers vs. Bills",
+   "date": "2026-09-24",
+   "loaded": false
+  },
+  {
+   "text": "Duskbloods Network Test",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "March anniversary rally",
+   "date": "2026-08-29",
+   "loaded": false
+  },
+  {
+   "text": "Johnson recess backlash",
+   "date": "2026-09-05",
+   "loaded": true
+  },
+  {
+   "text": "Altman AI genie claim",
+   "date": "2026-07-29",
+   "loaded": false
+  },
+  {
+   "text": "Rubio Cuba threat",
+   "date": "2026-08-14",
+   "loaded": true
+  },
+  {
+   "text": "Third Way vs. DSA",
+   "date": "2026-08-13",
+   "loaded": false
+  },
+  {
+   "text": "UK AI Minister Role",
+   "date": "2026-07-19",
+   "loaded": false
+  },
+  {
+   "text": "McConnell Hospitalized,",
+   "date": "2026-07-11",
+   "loaded": false
+  },
+  {
+   "text": "Max Miller allegations",
+   "date": "2026-08-08",
+   "loaded": false
+  },
+  {
+   "text": "Jimothy raccoon viral",
+   "date": "2026-07-26",
+   "loaded": false
+  },
+  {
+   "text": "Rogers tariffs",
+   "date": "2026-10-09",
+   "loaded": false
+  },
+  {
+   "text": "Labour wins Manchester",
+   "date": "2026-08-01",
+   "loaded": false
+  },
+  {
+   "text": "Waltz blames Biden stock",
+   "date": "2026-07-28",
+   "loaded": false
+  },
+  {
+   "text": "EU Finds Meta Breaches D",
+   "date": "2026-07-10",
+   "loaded": false
+  },
+  {
+   "text": "SCOTUS cap proposal",
+   "date": "2026-09-02",
+   "loaded": false
+  },
+  {
+   "text": "Pentagon - NIH funds",
+   "date": "2026-09-06",
+   "loaded": false
+  },
+  {
+   "text": "Caldwell resignation cal",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "Jonah Hill jiu jitsu",
+   "date": "2026-08-04",
+   "loaded": false
+  },
+  {
+   "text": "Rove remarks",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Rogan on Trump fans",
+   "date": "2026-09-19",
+   "loaded": false
+  },
+  {
+   "text": "Tropical Storm Bertha",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "Anti-Israel opinion shif",
+   "date": "2026-07-24",
+   "loaded": false
+  },
+  {
+   "text": "Talarico faith row",
+   "date": "2026-08-16",
+   "loaded": false
+  },
+  {
+   "text": "WNBA trans task force",
+   "date": "2026-08-10",
+   "loaded": false
+  },
+  {
+   "text": "Darnold injury update",
+   "date": "2026-09-11",
+   "loaded": false
+  },
+  {
+   "text": "Australia algorithm law",
+   "date": "2026-09-09",
+   "loaded": false
+  },
+  {
+   "text": "Horrorfest challenge",
+   "date": "2026-08-28",
+   "loaded": false
+  },
+  {
+   "text": "Elegant birds theme",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "Reflecting Pool's No-Bid",
+   "date": "2026-07-12",
+   "loaded": false
+  },
+  {
+   "text": "Mail voting rule",
+   "date": "2026-08-27",
+   "loaded": false
+  },
+  {
+   "text": "Fetterman misspeaks",
+   "date": "2026-09-29",
+   "loaded": false
+  },
+  {
+   "text": "Mamdani's NYC Mayoralty",
+   "date": "2026-07-10",
+   "loaded": false
+  },
+  {
+   "text": "Reflecting Pool Drained",
+   "date": "2026-07-10",
+   "loaded": false
+  },
+  {
+   "text": "MI5 warning",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Trump pauses Iran strike",
+   "date": "2026-07-26",
+   "loaded": false
+  },
+  {
+   "text": "Medicaid & ACA cuts",
+   "date": "2026-08-09",
+   "loaded": false
+  },
+  {
+   "text": "Eagles sign Carter",
+   "date": "2026-07-28",
+   "loaded": false
+  },
+  {
+   "text": "Wemby Takes Below-Max De",
+   "date": "2026-07-11",
+   "loaded": false
+  },
+  {
+   "text": "Trump Ocean",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "McConnell health",
+   "date": "2026-08-14",
+   "loaded": false
+  },
+  {
+   "text": "McMahon praises AI schoo",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Sharron Davies backlash",
+   "date": "2026-09-12",
+   "loaded": true
+  },
+  {
+   "text": "Snap Map mom",
+   "date": "2026-09-18",
+   "loaded": false
+  },
+  {
+   "text": "Markets React to Inflati",
+   "date": "2026-07-14",
+   "loaded": false
+  },
+  {
+   "text": "Fed decision",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "Edwards drops reelection",
+   "date": "2026-08-06",
+   "loaded": false
+  },
+  {
+   "text": "Herzog on AI",
+   "date": "2026-09-10",
+   "loaded": false
+  },
+  {
+   "text": "Missouri map",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Bessent's Canada jab",
+   "date": "2026-09-07",
+   "loaded": true
+  },
+  {
+   "text": "Hegseth troops testoster",
+   "date": "2026-07-25",
+   "loaded": false
+  },
+  {
+   "text": "Worst sitcom",
+   "date": "2026-08-23",
+   "loaded": false
+  },
+  {
+   "text": "Trump's doctor",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Cunningham backs rallier",
+   "date": "2026-08-02",
+   "loaded": false
+  },
+  {
+   "text": "ICE crackdown",
+   "date": "2026-08-29",
+   "loaded": false
+  },
+  {
+   "text": "Gas prices",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Nvidia - Hugging Face",
+   "date": "2026-08-28",
+   "loaded": false
+  },
+  {
+   "text": "Acton incident",
+   "date": "2026-09-08",
+   "loaded": false
+  },
+  {
+   "text": "GOP immigration",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "Iceland referendum",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "Scott's Native gift",
+   "date": "2026-09-13",
+   "loaded": false
+  },
+  {
+   "text": "Fuel standards",
+   "date": "2026-09-28",
+   "loaded": false
+  },
+  {
+   "text": "Diggs joins Commanders",
+   "date": "2026-08-05",
+   "loaded": false
+  },
+  {
+   "text": "Centrist Democrat club",
+   "date": "2026-07-24",
+   "loaded": false
+  },
+  {
+   "text": "Hegseth joined Trump's s",
+   "date": "2026-08-13",
+   "loaded": false
+  },
+  {
+   "text": "U.S. GDP slows Q2",
+   "date": "2026-07-30",
+   "loaded": false
+  },
+  {
+   "text": "Hoekstra expulsion petit",
+   "date": "2026-08-13",
+   "loaded": false
+  },
+  {
+   "text": "Carville vs. Piker",
+   "date": "2026-08-03",
+   "loaded": false
+  },
+  {
+   "text": "Hegseth blocks Democrats",
+   "date": "2026-08-14",
+   "loaded": false
+  },
+  {
+   "text": "GOP fake news sites",
+   "date": "2026-08-06",
+   "loaded": true
+  },
+  {
+   "text": "Politico dispute",
+   "date": "2026-09-24",
+   "loaded": false
+  },
+  {
+   "text": "Sparks Part Ways with GM",
+   "date": "2026-07-12",
+   "loaded": false
+  },
+  {
+   "text": "Measles vaccine debate",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "McConnell health jokes",
+   "date": "2026-09-22",
+   "loaded": true
+  },
+  {
+   "text": "Leavitt exits WH",
+   "date": "2026-08-13",
+   "loaded": false
+  },
+  {
+   "text": "NYC Federal Building Att",
+   "date": "2026-07-21",
+   "loaded": false
+  },
+  {
+   "text": "Netanyahu mentions Piker",
+   "date": "2026-09-24",
+   "loaded": false
+  },
+  {
+   "text": "Anachronisms",
+   "date": "2026-10-13",
+   "loaded": false
+  },
+  {
+   "text": "Bond sell-off",
+   "date": "2026-10-02",
+   "loaded": false
+  },
+  {
+   "text": "Reform UK expos\u00e9",
+   "date": "2026-09-04",
+   "loaded": true
+  },
+  {
+   "text": "Kane's Golf Game with Tr",
+   "date": "2026-07-12",
+   "loaded": false
+  },
+  {
+   "text": "Jelly Roll uninvited",
+   "date": "2026-08-27",
+   "loaded": false
+  },
+  {
+   "text": "Miller parties",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "Lanterns finale",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Doomsday watchlist",
+   "date": "2026-08-17",
+   "loaded": false
+  },
+  {
+   "text": "Vance in NC",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Hegseth curse",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "Charlie Kirk Times Sq St",
+   "date": "2026-07-14",
+   "loaded": false
+  },
+  {
+   "text": "Trump orders 250 Escalad",
+   "date": "2026-07-29",
+   "loaded": false
+  },
+  {
+   "text": "Rogue casting",
+   "date": "2026-08-16",
+   "loaded": false
+  },
+  {
+   "text": "Bezos SI",
+   "date": "2026-10-08",
+   "loaded": false
+  },
+  {
+   "text": "Paxton Donation Scandal",
+   "date": "2026-07-17",
+   "loaded": true
+  },
+  {
+   "text": "Third-country deportatio",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "Musk regrets DOGE",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "Amazon gas power plant",
+   "date": "2026-08-09",
+   "loaded": false
+  },
+  {
+   "text": "Anti-AI writing trend",
+   "date": "2026-07-29",
+   "loaded": false
+  },
+  {
+   "text": "Hastert death",
+   "date": "2026-10-05",
+   "loaded": false
+  },
+  {
+   "text": "WWE - Rumble deal",
+   "date": "2026-09-25",
+   "loaded": false
+  },
+  {
+   "text": "Paramount leaves Califor",
+   "date": "2026-08-12",
+   "loaded": false
+  },
+  {
+   "text": "Robot in NY school",
+   "date": "2026-07-25",
+   "loaded": false
+  },
+  {
+   "text": "Digger",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "X Money launches",
+   "date": "2026-07-28",
+   "loaded": false
+  },
+  {
+   "text": "Musk Pentagon",
+   "date": "2026-10-03",
+   "loaded": false
+  },
+  {
+   "text": "UK-Israel sanctions",
+   "date": "2026-09-12",
+   "loaded": false
+  },
+  {
+   "text": "Trump Nation Address",
+   "date": "2026-07-14",
+   "loaded": false
+  },
+  {
+   "text": "Envoys visit Kyiv",
+   "date": "2026-09-08",
+   "loaded": false
+  },
+  {
+   "text": "Trump on Putin",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Texas police",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Anthropic's $30T claim",
+   "date": "2026-08-26",
+   "loaded": false
+  },
+  {
+   "text": "Net zero error",
+   "date": "2026-10-10",
+   "loaded": true
+  },
+  {
+   "text": "Leavitt blames Biden",
+   "date": "2026-07-27",
+   "loaded": false
+  },
+  {
+   "text": "USS Lincoln crisis",
+   "date": "2026-08-16",
+   "loaded": false
+  },
+  {
+   "text": "Passport data hunt",
+   "date": "2026-09-24",
+   "loaded": false
+  },
+  {
+   "text": "Bannon on Newsom",
+   "date": "2026-10-01",
+   "loaded": false
+  },
+  {
+   "text": "Mamdani sues council",
+   "date": "2026-08-21",
+   "loaded": false
+  },
+  {
+   "text": "Universal credit cuts",
+   "date": "2026-09-25",
+   "loaded": false
+  },
+  {
+   "text": "Trump's new citizenship",
+   "date": "2026-08-07",
+   "loaded": false
+  },
+  {
+   "text": "McConnell resurfaces",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "Iran war casualties",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "BC election call",
+   "date": "2026-09-25",
+   "loaded": false
+  },
+  {
+   "text": "Pandemic declaration",
+   "date": "2026-09-27",
+   "loaded": false
+  },
+  {
+   "text": "House recess",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Midterm voting",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Rodgers Fauci meltdown",
+   "date": "2026-08-03",
+   "loaded": true
+  },
+  {
+   "text": "Bills new alternate unif",
+   "date": "2026-07-27",
+   "loaded": false
+  },
+  {
+   "text": "Trump midterm polling",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "Hegseth TRT Plan",
+   "date": "2026-07-19",
+   "loaded": false
+  },
+  {
+   "text": "Cyclospora research",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "FBI breach claim",
+   "date": "2026-09-25",
+   "loaded": false
+  },
+  {
+   "text": "Lombardi on UNC leave",
+   "date": "2026-07-27",
+   "loaded": false
+  },
+  {
+   "text": "Jones calls impeach Trum",
+   "date": "2026-07-30",
+   "loaded": false
+  },
+  {
+   "text": "Trump Booed at FIFA",
+   "date": "2026-07-19",
+   "loaded": true
+  },
+  {
+   "text": "Aircraft losses",
+   "date": "2026-10-10",
+   "loaded": false
+  },
+  {
+   "text": "Contract review",
+   "date": "2026-08-22",
+   "loaded": false
+  },
+  {
+   "text": "Carney may seek EU statu",
+   "date": "2026-09-15",
+   "loaded": false
+  },
+  {
+   "text": "Heinz ketchup slices",
+   "date": "2026-08-07",
+   "loaded": false
+  },
+  {
+   "text": "New joke format",
+   "date": "2026-08-27",
+   "loaded": false
+  },
+  {
+   "text": "US-Iran strikes",
+   "date": "2026-09-06",
+   "loaded": false
+  },
+  {
+   "text": "Sen. Lindsey Graham Dies",
+   "date": "2026-07-15",
+   "loaded": false
+  },
+  {
+   "text": "Ukraine Defense Minister",
+   "date": "2026-07-15",
+   "loaded": false
+  },
+  {
+   "text": "Dodgers ring for Trump",
+   "date": "2026-07-26",
+   "loaded": false
+  },
+  {
+   "text": "Werwulf trailer",
+   "date": "2026-09-28",
+   "loaded": false
+  },
+  {
+   "text": "FBI whistleblower",
+   "date": "2026-10-08",
+   "loaded": false
+  },
+  {
+   "text": "Trump-Iran reparations",
+   "date": "2026-08-11",
+   "loaded": false
+  },
+  {
+   "text": "City verdict",
+   "date": "2026-10-14",
+   "loaded": false
+  },
+  {
+   "text": "GOP distances from Trump",
+   "date": "2026-10-02",
+   "loaded": false
+  },
+  {
+   "text": "Anti-surveillance shirt",
+   "date": "2026-09-01",
+   "loaded": false
+  },
+  {
+   "text": "Joe Buck DWTS",
+   "date": "2026-10-14",
+   "loaded": false
+  },
+  {
+   "text": "Watts directs Star Wars",
+   "date": "2026-09-29",
+   "loaded": false
+  },
+  {
+   "text": "Penn Jewish subpoena dro",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "FAA AI air traffic",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Leon Black",
+   "date": "2026-09-17",
+   "loaded": false
+  },
+  {
+   "text": "Bell defeats Bush again",
+   "date": "2026-08-05",
+   "loaded": false
+  },
+  {
+   "text": "Woke Sports mailer",
+   "date": "2026-10-10",
+   "loaded": true
+  },
+  {
+   "text": "Trump asks SCOTUS mail-i",
+   "date": "2026-07-30",
+   "loaded": false
+  },
+  {
+   "text": "GTA 6 leaks",
+   "date": "2026-08-20",
+   "loaded": false
+  },
+  {
+   "text": "Singapore GP",
+   "date": "2026-10-13",
+   "loaded": false
+  },
+  {
+   "text": "Attiah case",
+   "date": "2026-08-25",
+   "loaded": false
+  },
+  {
+   "text": "James Orr profile",
+   "date": "2026-09-04",
+   "loaded": false
+  },
+  {
+   "text": "Trump eyes Iran attack",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "IRS report delay",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "California blackouts cla",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "Harris calls for ruthles",
+   "date": "2026-08-08",
+   "loaded": false
+  },
+  {
+   "text": "Miami vs. FAMU",
+   "date": "2026-09-12",
+   "loaded": false
+  },
+  {
+   "text": "Coyote vs. Acme",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Energy ceasefire push",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Reform Navy boat plan",
+   "date": "2026-08-04",
+   "loaded": false
+  },
+  {
+   "text": "Collins rejects Blanche",
+   "date": "2026-08-06",
+   "loaded": false
+  },
+  {
+   "text": "ACA cuts spike uninsured",
+   "date": "2026-07-30",
+   "loaded": false
+  },
+  {
+   "text": "RNLI support",
+   "date": "2026-09-10",
+   "loaded": false
+  },
+  {
+   "text": "Hegseth struggles",
+   "date": "2026-08-10",
+   "loaded": true
+  },
+  {
+   "text": "Rings of Power S3",
+   "date": "2026-07-24",
+   "loaded": false
+  },
+  {
+   "text": "DSA outraises DNC",
+   "date": "2026-07-29",
+   "loaded": false
+  },
+  {
+   "text": "Epstein files",
+   "date": "2026-08-26",
+   "loaded": false
+  },
+  {
+   "text": "McConnell to return",
+   "date": "2026-09-10",
+   "loaded": false
+  },
+  {
+   "text": "US naval force shortage",
+   "date": "2026-08-01",
+   "loaded": false
+  },
+  {
+   "text": "FIFA World Cup sale",
+   "date": "2026-07-30",
+   "loaded": false
+  },
+  {
+   "text": "MAC protest",
+   "date": "2026-09-09",
+   "loaded": false
+  },
+  {
+   "text": "FBI - UFC",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "Engineer iron ring",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "FEMA remarks",
+   "date": "2026-09-18",
+   "loaded": false
+  },
+  {
+   "text": "Wolf protections order",
+   "date": "2026-09-07",
+   "loaded": false
+  },
+  {
+   "text": "Illinois Primaries",
+   "date": "2026-03-18",
+   "loaded": false
+  },
+  {
+   "text": "Ohtani vs. PCA homers",
+   "date": "2026-08-06",
+   "loaded": false
+  },
+  {
+   "text": "Cassidy on measles",
+   "date": "2026-09-17",
+   "loaded": false
+  },
+  {
+   "text": "WNBA trans conspiracy",
+   "date": "2026-08-27",
+   "loaded": true
+  },
+  {
+   "text": "Grassley texts",
+   "date": "2026-10-02",
+   "loaded": false
+  },
+  {
+   "text": "Vance Travel Abuse",
+   "date": "2026-07-17",
+   "loaded": true
+  },
+  {
+   "text": "QueerWritersChat meetup",
+   "date": "2026-09-19",
+   "loaded": false
+  },
+  {
+   "text": "ICE locations",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Mustang sales",
+   "date": "2026-08-24",
+   "loaded": false
+  },
+  {
+   "text": "Canada-US talks stall",
+   "date": "2026-08-13",
+   "loaded": false
+  },
+  {
+   "text": "Yankees acquire Ramos",
+   "date": "2026-08-04",
+   "loaded": false
+  },
+  {
+   "text": "Coyote vs. Acme hits the",
+   "date": "2026-09-01",
+   "loaded": false
+  },
+  {
+   "text": "AI misalignment rise",
+   "date": "2026-08-29",
+   "loaded": false
+  },
+  {
+   "text": "Socialism resolution",
+   "date": "2026-09-03",
+   "loaded": false
+  },
+  {
+   "text": "Ossoff - Collins",
+   "date": "2026-10-09",
+   "loaded": false
+  },
+  {
+   "text": "Trump Backs Russia Sanct",
+   "date": "2026-07-11",
+   "loaded": false
+  },
+  {
+   "text": "Trump $5,000 dividend",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "DOJ Subpoenas Journalist",
+   "date": "2026-07-21",
+   "loaded": false
+  },
+  {
+   "text": "BRICS Delhi summit",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Conference sword",
+   "date": "2026-09-04",
+   "loaded": false
+  },
+  {
+   "text": "GOP Fumes at Vance",
+   "date": "2026-07-18",
+   "loaded": true
+  },
+  {
+   "text": "Musgrove playoff roster",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Canada retaliatory tarif",
+   "date": "2026-08-26",
+   "loaded": false
+  },
+  {
+   "text": "Blanche ordered to court",
+   "date": "2026-07-27",
+   "loaded": false
+  },
+  {
+   "text": "50k vs. 1M poll",
+   "date": "2026-07-24",
+   "loaded": false
+  },
+  {
+   "text": "D.C. troop deployment",
+   "date": "2026-08-11",
+   "loaded": false
+  },
+  {
+   "text": "EA acquired by PIF",
+   "date": "2026-08-05",
+   "loaded": false
+  },
+  {
+   "text": "Blanche RNC speech",
+   "date": "2026-09-07",
+   "loaded": false
+  },
+  {
+   "text": "Alphabet AI spending",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "Greenland deal",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Dealership bad practices",
+   "date": "2026-08-07",
+   "loaded": false
+  },
+  {
+   "text": "Medal Ceremony Snub",
+   "date": "2026-07-19",
+   "loaded": true
+  },
+  {
+   "text": "Johnson reelection bid",
+   "date": "2026-09-14",
+   "loaded": false
+  },
+  {
+   "text": "Ted Lasso returns",
+   "date": "2026-08-06",
+   "loaded": false
+  },
+  {
+   "text": "Reform donation law",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Margaret Hamilton",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "Red Sox - Tracy",
+   "date": "2026-09-23",
+   "loaded": false
+  },
+  {
+   "text": "Emmer beef prices",
+   "date": "2026-09-18",
+   "loaded": false
+  },
+  {
+   "text": "SOTEU speech",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Pre-GPS driving",
+   "date": "2026-10-04",
+   "loaded": false
+  },
+  {
+   "text": "Ruin a book",
+   "date": "2026-10-14",
+   "loaded": false
+  },
+  {
+   "text": "Sarkisian - Trump curse",
+   "date": "2026-09-26",
+   "loaded": true
+  },
+  {
+   "text": "Trump reshapes D.C.",
+   "date": "2026-08-05",
+   "loaded": false
+  },
+  {
+   "text": "Iran-US conflict",
+   "date": "2026-08-13",
+   "loaded": false
+  },
+  {
+   "text": "Watson - Palantir",
+   "date": "2026-10-10",
+   "loaded": false
+  },
+  {
+   "text": "United 93 shirt",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "Clinton on China",
+   "date": "2026-09-11",
+   "loaded": false
+  },
+  {
+   "text": "Coal order case",
+   "date": "2026-09-13",
+   "loaded": false
+  },
+  {
+   "text": "Welcome Home",
+   "date": "2026-10-10",
+   "loaded": false
+  },
+  {
+   "text": "SCOTUS ad case",
+   "date": "2026-09-05",
+   "loaded": false
+  },
+  {
+   "text": "Democratic agenda",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "US water cyberattacks",
+   "date": "2026-08-03",
+   "loaded": false
+  },
+  {
+   "text": "Vader speech",
+   "date": "2026-08-21",
+   "loaded": false
+  },
+  {
+   "text": "Obama summer playlist",
+   "date": "2026-07-30",
+   "loaded": false
+  },
+  {
+   "text": "Gender cartoon backlash",
+   "date": "2026-08-13",
+   "loaded": true
+  },
+  {
+   "text": "Badenoch childcare",
+   "date": "2026-10-05",
+   "loaded": false
+  },
+  {
+   "text": "Saxony-Anhalt election",
+   "date": "2026-09-12",
+   "loaded": false
+  },
+  {
+   "text": "Warsh hawkish Fed",
+   "date": "2026-08-29",
+   "loaded": false
+  },
+  {
+   "text": "Name-letter theme",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "ICE detention abuses",
+   "date": "2026-08-11",
+   "loaded": true
+  },
+  {
+   "text": "Automattic dispute",
+   "date": "2026-09-11",
+   "loaded": false
+  },
+  {
+   "text": "Trump Iran sanctions",
+   "date": "2026-08-11",
+   "loaded": false
+  },
+  {
+   "text": "White minority fears",
+   "date": "2026-09-09",
+   "loaded": true
+  },
+  {
+   "text": "Hormuz incident",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Blanche Meets Survivors",
+   "date": "2026-07-17",
+   "loaded": false
+  },
+  {
+   "text": "Stephens book award",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "EU fines Google",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "RFK Jr security funding",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "Football alcohol ban",
+   "date": "2026-09-25",
+   "loaded": false
+  },
+  {
+   "text": "Lu Dort Trade",
+   "date": "2026-07-19",
+   "loaded": false
+  },
+  {
+   "text": "Lake America renaming",
+   "date": "2026-09-11",
+   "loaded": false
+  },
+  {
+   "text": "El-Sayed 9/11 posts",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "Biden cancer spreads",
+   "date": "2026-08-10",
+   "loaded": false
+  },
+  {
+   "text": "Pheromonemaxxing trend",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "Traitors: Jag, Taylor",
+   "date": "2026-09-19",
+   "loaded": false
+  },
+  {
+   "text": "ESPN - WWE",
+   "date": "2026-08-25",
+   "loaded": false
+  },
+  {
+   "text": "AG nominee advanced",
+   "date": "2026-08-04",
+   "loaded": false
+  },
+  {
+   "text": "Jeffries - Medicare",
+   "date": "2026-08-17",
+   "loaded": false
+  },
+  {
+   "text": "Flock surveillance",
+   "date": "2026-08-17",
+   "loaded": false
+  },
+  {
+   "text": "Beckham Wears Suit in Mi",
+   "date": "2026-07-12",
+   "loaded": false
+  },
+  {
+   "text": "Trump renames AI",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "AIPAC Michigan primary",
+   "date": "2026-07-29",
+   "loaded": false
+  },
+  {
+   "text": "Russia-Iran missiles",
+   "date": "2026-09-02",
+   "loaded": false
+  },
+  {
+   "text": "Carney hustle",
+   "date": "2026-10-07",
+   "loaded": true
+  },
+  {
+   "text": "Trucker strike",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Pirro crypto briefing",
+   "date": "2026-09-10",
+   "loaded": false
+  },
+  {
+   "text": "Drumcree march",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Raskin - Piker",
+   "date": "2026-09-07",
+   "loaded": false
+  },
+  {
+   "text": "RFK Jr. AI claims",
+   "date": "2026-10-02",
+   "loaded": false
+  },
+  {
+   "text": "Pentagon alters death to",
+   "date": "2026-07-26",
+   "loaded": false
+  },
+  {
+   "text": "Golden endorses Lawler",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "ICE robot dogs",
+   "date": "2026-08-30",
+   "loaded": false
+  },
+  {
+   "text": "Food recalls",
+   "date": "2026-09-01",
+   "loaded": false
+  },
+  {
+   "text": "Graham Senate Succession",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "Bike lanes DEI",
+   "date": "2026-09-15",
+   "loaded": true
+  },
+  {
+   "text": "Fast & Furious",
+   "date": "2026-10-03",
+   "loaded": false
+  },
+  {
+   "text": "Ted Lieu",
+   "date": "2026-02-12",
+   "loaded": false
+  },
+  {
+   "text": "ICE enforcement backlash",
+   "date": "2026-08-19",
+   "loaded": true
+  },
+  {
+   "text": "RFK Jr backlash",
+   "date": "2026-08-31",
+   "loaded": true
+  },
+  {
+   "text": "Resident Evil",
+   "date": "2026-09-24",
+   "loaded": false
+  },
+  {
+   "text": "Traitors US cast",
+   "date": "2026-09-19",
+   "loaded": false
+  },
+  {
+   "text": "Resident Evil buzz",
+   "date": "2026-09-07",
+   "loaded": false
+  },
+  {
+   "text": "Benevolent dictator",
+   "date": "2026-10-07",
+   "loaded": false
+  },
+  {
+   "text": "MA DA software mocked",
+   "date": "2026-08-06",
+   "loaded": true
+  },
+  {
+   "text": "Ms. Rachel backlash",
+   "date": "2026-09-17",
+   "loaded": true
+  },
+  {
+   "text": "Bret Stephens backlash",
+   "date": "2026-09-23",
+   "loaded": true
+  },
+  {
+   "text": "Barron Trump threat",
+   "date": "2026-08-27",
+   "loaded": true
+  },
+  {
+   "text": "Smith emotional backlash",
+   "date": "2026-09-21",
+   "loaded": true
+  },
+  {
+   "text": "Reform UK scandals",
+   "date": "2026-08-07",
+   "loaded": true
+  },
+  {
+   "text": "Hegseth backlash",
+   "date": "2026-09-22",
+   "loaded": true
+  },
+  {
+   "text": "Trump apostrophe gaffe",
+   "date": "2026-08-10",
+   "loaded": true
+  },
+  {
+   "text": "Trump crypto scandal",
+   "date": "2026-08-09",
+   "loaded": true
+  },
+  {
+   "text": "Collins Voter Backlash",
+   "date": "2026-07-15",
+   "loaded": true
+  },
+  {
+   "text": "Snubbed Oscar actors",
+   "date": "2026-07-25",
+   "loaded": false
+  },
+  {
+   "text": "Musk rigged election",
+   "date": "2026-08-10",
+   "loaded": true
+  },
+  {
+   "text": "Trump convention snub",
+   "date": "2026-09-05",
+   "loaded": true
+  },
+  {
+   "text": "GD factory fails",
+   "date": "2026-08-12",
+   "loaded": true
+  },
+  {
+   "text": "Converse ad backlash",
+   "date": "2026-09-22",
+   "loaded": true
+  },
+  {
+   "text": "UAE threat",
+   "date": "2026-10-03",
+   "loaded": true
+  },
+  {
+   "text": "Layton AI backlash",
+   "date": "2026-09-16",
+   "loaded": true
+  },
+  {
+   "text": "Infantino slams critics",
+   "date": "2026-07-27",
+   "loaded": true
+  },
+  {
+   "text": "Extreme heat alerts",
+   "date": "2026-08-15",
+   "loaded": false
+  },
+  {
+   "text": "Gun Rights",
+   "date": "2026-07-03",
+   "loaded": false
+  },
+  {
+   "text": "The Traitors",
+   "date": "2026-09-21",
+   "loaded": false
+  },
+  {
+   "text": "Trump Feud",
+   "date": "2026-08-02",
+   "loaded": true
+  },
+  {
+   "text": "Sark snubs Rowe",
+   "date": "2026-09-13",
+   "loaded": true
+  },
+  {
+   "text": "Russia Threat",
+   "date": "2026-09-25",
+   "loaded": true
+  },
+  {
+   "text": "Hasan Piker backlash",
+   "date": "2026-09-20",
+   "loaded": true
+  },
+  {
+   "text": "Duckworth backlash",
+   "date": "2026-09-26",
+   "loaded": true
+  },
+  {
+   "text": "Fridge failures",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Blanche on Migrant Right",
+   "date": "2026-07-15",
+   "loaded": false
+  },
+  {
+   "text": "GTA VI outrage",
+   "date": "2026-09-13",
+   "loaded": true
+  },
+  {
+   "text": "Trump windmill rant",
+   "date": "2026-07-24",
+   "loaded": true
+  },
+  {
+   "text": "Netanyahu slams UK",
+   "date": "2026-08-14",
+   "loaded": true
+  },
+  {
+   "text": "Aaron Sorkin mocked",
+   "date": "2026-10-01",
+   "loaded": true
+  },
+  {
+   "text": "Neo-Nazi Tory candidate",
+   "date": "2026-08-04",
+   "loaded": true
+  },
+  {
+   "text": "Cohen-Stiles feud",
+   "date": "2026-09-18",
+   "loaded": true
+  },
+  {
+   "text": "Gamescom backlash",
+   "date": "2026-08-27",
+   "loaded": true
+  },
+  {
+   "text": "DHS Threatens States",
+   "date": "2026-07-19",
+   "loaded": true
+  },
+  {
+   "text": "M\u00f6tley Cr\u00fce rant",
+   "date": "2026-10-15",
+   "loaded": true
+  },
+  {
+   "text": "Newsom veto backlash",
+   "date": "2026-09-22",
+   "loaded": true
+  },
+  {
+   "text": "Student voting rights",
+   "date": "2026-08-13",
+   "loaded": false
+  },
+  {
+   "text": "Pentagon Feud",
+   "date": "2026-04-11",
+   "loaded": true
+  },
+  {
+   "text": "Tory neo-Nazi candidate",
+   "date": "2026-08-04",
+   "loaded": true
+  },
+  {
+   "text": "Sex strike mockery",
+   "date": "2026-09-10",
+   "loaded": true
+  },
+  {
+   "text": "Gamescom AI backlash",
+   "date": "2026-08-26",
+   "loaded": true
+  },
+  {
+   "text": "Equal Rights Amendment",
+   "date": "2025-01-25",
+   "loaded": false
+  },
+  {
+   "text": "Sony PS backlash",
+   "date": "2026-07-28",
+   "loaded": true
+  },
+  {
+   "text": "Cuba Threat",
+   "date": "2026-05-22",
+   "loaded": true
+  },
+  {
+   "text": "Rogan slams Trump",
+   "date": "2026-08-14",
+   "loaded": true
+  },
+  {
+   "text": "WWE Backlash",
+   "date": "2026-05-10",
+   "loaded": false
+  },
+  {
+   "text": "Trump slams blue cities",
+   "date": "2026-08-04",
+   "loaded": true
+  },
+  {
+   "text": "Crazy Taxi",
+   "date": "2026-06-08",
+   "loaded": false
+  },
+  {
+   "text": "Drinkwitz slams Kansas",
+   "date": "2026-09-13",
+   "loaded": true
+  },
+  {
+   "text": "Cuti Snubs Trump",
+   "date": "2026-07-20",
+   "loaded": true
+  },
+  {
+   "text": "Carney-Lutnick feud",
+   "date": "2026-09-02",
+   "loaded": true
+  },
+  {
+   "text": "Fetterman backlash",
+   "date": "2026-09-12",
+   "loaded": true
+  },
+  {
+   "text": "War on Fraud",
+   "date": "2026-02-26",
+   "loaded": true
+  },
+  {
+   "text": "Voters tolerate scandals",
+   "date": "2026-07-31",
+   "loaded": true
+  },
+  {
+   "text": "Pentagon Scandal",
+   "date": "2025-05-27",
+   "loaded": true
+  },
+  {
+   "text": "Trump Regime",
+   "date": "2026-09-11",
+   "loaded": true
+  },
+  {
+   "text": "HP series backlash",
+   "date": "2026-08-15",
+   "loaded": true
+  },
+  {
+   "text": "AI data center backlash",
+   "date": "2026-07-31",
+   "loaded": true
+  },
+  {
+   "text": "Jericho Feud",
+   "date": "2026-10-15",
+   "loaded": true
+  },
+  {
+   "text": "Iran Threats",
+   "date": "2026-09-17",
+   "loaded": true
+  },
+  {
+   "text": "Camera charm backlash",
+   "date": "2026-09-28",
+   "loaded": true
+  },
+  {
+   "text": "Tariffs fail on deficit",
+   "date": "2026-07-29",
+   "loaded": true
+  },
+  {
+   "text": "End Times Fascism",
+   "date": "2026-09-16",
+   "loaded": true
+  },
+  {
+   "text": "Sanders slams both parti",
+   "date": "2026-08-03",
+   "loaded": true
+  },
+  {
+   "text": "Lucas Slams Fans",
+   "date": "2026-07-16",
+   "loaded": true
+  },
+  {
+   "text": "Melty Blood",
+   "date": "2026-05-03",
+   "loaded": false
+  },
+  {
+   "text": "Reflecting Pool scandal",
+   "date": "2026-08-08",
+   "loaded": true
+  },
+  {
+   "text": "Stop WOKE Act",
+   "date": "2026-07-08",
+   "loaded": true
+  },
+  {
+   "text": "Fetterman blasts Democra",
+   "date": "2026-07-30",
+   "loaded": true
+  },
+  {
+   "text": "Double Fine rights",
+   "date": "2026-08-22",
+   "loaded": false
+  },
+  {
+   "text": "Proclaimers backlash",
+   "date": "2026-09-14",
+   "loaded": true
+  },
+  {
+   "text": "Sanders blasts establish",
+   "date": "2026-07-27",
+   "loaded": true
+  },
+  {
+   "text": "Iran threat doubted",
+   "date": "2026-08-15",
+   "loaded": true
+  },
+  {
+   "text": "Flock backlash",
+   "date": "2026-09-22",
+   "loaded": true
+  },
+  {
+   "text": "CDU Failure",
+   "date": "2026-09-21",
+   "loaded": true
+  },
+  {
+   "text": "Traitors",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "Airport Chaos",
+   "date": "2026-03-24",
+   "loaded": true
+  },
+  {
+   "text": "AOC vs. Woke 1.0",
+   "date": "2026-08-12",
+   "loaded": true
+  },
+  {
+   "text": "Meta glasses backlash",
+   "date": "2026-08-14",
+   "loaded": true
+  },
+  {
+   "text": "Flock camera backlash",
+   "date": "2026-08-27",
+   "loaded": true
+  },
+  {
+   "text": "Angus slams Americans",
+   "date": "2026-08-27",
+   "loaded": true
+  },
+  {
+   "text": "Bombardier ban threat",
+   "date": "2026-09-09",
+   "loaded": true
+  },
+  {
+   "text": "Lutnick threat",
+   "date": "2026-10-15",
+   "loaded": true
+  },
+  {
+   "text": "Starship Troopers fascis",
+   "date": "2026-09-12",
+   "loaded": true
+  },
+  {
+   "text": "OpenAI agent attack",
+   "date": "2026-08-04",
+   "loaded": false
+  },
+  {
+   "text": "Resident Evil jokes cut",
+   "date": "2026-09-13",
+   "loaded": false
+  },
+  {
+   "text": "Trans rights rollback",
+   "date": "2026-09-15",
+   "loaded": true
+  },
+  {
+   "text": "Tories pick extremist MP",
+   "date": "2026-08-05",
+   "loaded": true
+  },
+  {
+   "text": "LGBTQ Rights",
+   "date": "2026-05-15",
+   "loaded": false
+  },
+  {
+   "text": "Tech oligarch backlash",
+   "date": "2026-08-19",
+   "loaded": true
+  },
+  {
+   "text": "Anti-AI backlash post",
+   "date": "2026-08-06",
+   "loaded": true
+  },
+  {
+   "text": "Vivian slams Musk",
+   "date": "2026-07-27",
+   "loaded": true
+  },
+  {
+   "text": "Political Corruption",
+   "date": "2026-04-15",
+   "loaded": true
+  },
+  {
+   "text": "Discord age backlash",
+   "date": "2026-09-30",
+   "loaded": true
+  },
+  {
+   "text": "EA rich-lives backlash",
+   "date": "2026-09-18",
+   "loaded": true
+  },
+  {
+   "text": "Bill Mitchell mocked",
+   "date": "2026-09-19",
+   "loaded": true
+  },
+  {
+   "text": "ICE Scandal",
+   "date": "2026-05-23",
+   "loaded": true
+  },
+  {
+   "text": "Iran trolls online",
+   "date": "2026-09-10",
+   "loaded": true
+  },
+  {
+   "text": "Trump corruption claims",
+   "date": "2026-08-02",
+   "loaded": false
+  },
+  {
+   "text": "Janice Turner backlash",
+   "date": "2026-09-27",
+   "loaded": true
+  },
+  {
+   "text": "Mullin Threatens Officia",
+   "date": "2026-07-18",
+   "loaded": true
+  },
+  {
+   "text": "Dobby grave hoax",
+   "date": "2026-08-13",
+   "loaded": true
+  },
+  {
+   "text": "Melt ICE Act",
+   "date": "2026-01-22",
+   "loaded": true
+  },
+  {
+   "text": "Corruption poll",
+   "date": "2026-09-03",
+   "loaded": false
+  },
+  {
+   "text": "Trans Rights",
+   "date": "2026-07-28",
+   "loaded": false
+  },
+  {
+   "text": "Daniel Thomas mocked",
+   "date": "2026-09-11",
+   "loaded": true
+  },
+  {
+   "text": "Beshear on trans rights",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Data Center Backlash",
+   "date": "2026-07-23",
+   "loaded": true
+  },
+  {
+   "text": "1Password backlash",
+   "date": "2026-09-04",
+   "loaded": true
+  },
+  {
+   "text": "DOJ vs. trans rights",
+   "date": "2026-09-29",
+   "loaded": true
+  },
+  {
+   "text": "DCCC fundraising scam",
+   "date": "2026-08-17",
+   "loaded": true
+  },
+  {
+   "text": "Bret Stephens mocked",
+   "date": "2026-09-18",
+   "loaded": true
+  },
+  {
+   "text": "Musk mockery",
+   "date": "2026-09-14",
+   "loaded": true
+  },
+  {
+   "text": "GOP Scandals",
+   "date": "2026-10-12",
+   "loaded": true
+  },
+  {
+   "text": "Meta Scams",
+   "date": "2025-11-06",
+   "loaded": true
+  },
+  {
+   "text": "Resident Evil reviews",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Trump slams GOP",
+   "date": "2026-08-27",
+   "loaded": true
+  },
+  {
+   "text": "Voting Rights",
+   "date": "2026-10-05",
+   "loaded": false
+  },
+  {
+   "text": "Iran wedding blast",
+   "date": "2026-09-04",
+   "loaded": false
+  },
+  {
+   "text": "Landry Shamet",
+   "date": "2026-06-07",
+   "loaded": false
+  },
+  {
+   "text": "Spencer-Morgan feud",
+   "date": "2026-09-22",
+   "loaded": true
+  },
+  {
+   "text": "NFL Scams",
+   "date": "2026-08-29",
+   "loaded": true
+  },
+  {
+   "text": "Ritchson slams Trump",
+   "date": "2026-07-25",
+   "loaded": true
+  },
+  {
+   "text": "Gorka's \"SI\" gaffe",
+   "date": "2026-09-25",
+   "loaded": true
+  },
+  {
+   "text": "Hormuz Closure Threat",
+   "date": "2026-07-20",
+   "loaded": false
+  },
+  {
+   "text": "Trump Threats",
+   "date": "2026-04-08",
+   "loaded": true
+  },
+  {
+   "text": "Trump's Gas Grift",
+   "date": "2026-07-21",
+   "loaded": true
+  },
+  {
+   "text": "Hassett inflation mocker",
+   "date": "2026-09-13",
+   "loaded": true
+  },
+  {
+   "text": "Unhinged doctor quotes",
+   "date": "2026-08-06",
+   "loaded": true
+  },
+  {
+   "text": "Trump halts Iran attack",
+   "date": "2026-08-03",
+   "loaded": false
+  },
+  {
+   "text": "Hegseth speech mocked",
+   "date": "2026-10-01",
+   "loaded": true
+  },
+  {
+   "text": "Musk traitor remarks",
+   "date": "2026-07-27",
+   "loaded": true
+  },
+  {
+   "text": "Tim Hortons HP backlash",
+   "date": "2026-07-29",
+   "loaded": true
+  },
+  {
+   "text": "Rhea Ripley",
+   "date": "2026-05-24",
+   "loaded": false
+  },
+  {
+   "text": "Traitors IRL",
+   "date": "2026-09-23",
+   "loaded": false
+  },
+  {
+   "text": "Force of Evil",
+   "date": "2026-07-05",
+   "loaded": false
+  },
+  {
+   "text": "UK Diplomats",
+   "date": "2026-10-06",
+   "loaded": false
+  },
+  {
+   "text": "Rutgers coaching turmoil",
+   "date": "2026-09-12",
+   "loaded": true
+  },
+  {
+   "text": "Argentina Coach Incident",
+   "date": "2026-07-19",
+   "loaded": false
+  },
+  {
+   "text": "James Cook",
+   "date": "2026-09-19",
+   "loaded": false
+  },
+  {
+   "text": "Democrats",
+   "date": "2026-07-06",
+   "loaded": false
+  },
+  {
+   "text": "AEW Rebel Heart",
+   "date": "2026-09-11",
+   "loaded": false
+  },
+  {
+   "text": "Trump hot mic",
+   "date": "2026-09-29",
+   "loaded": false
+  },
+  {
+   "text": "Skills meme",
+   "date": "2026-10-07",
+   "loaded": false
+  },
+  {
+   "text": "Jeff Flake",
+   "date": "2026-08-05",
+   "loaded": false
+  },
+  {
+   "text": "Russia aids Iran targeti",
+   "date": "2026-07-27",
+   "loaded": false
+  },
+  {
+   "text": "McDonald's AI pricing",
+   "date": "2026-10-01",
+   "loaded": false
+  },
+  {
+   "text": "Rachel Reeves",
+   "date": "2026-07-21",
+   "loaded": false
+  },
+  {
+   "text": "Flock breach",
+   "date": "2026-09-23",
+   "loaded": false
+  },
+  {
+   "text": "Microsoft Tasks Obsidian",
+   "date": "2026-07-10",
+   "loaded": false
+  },
+  {
+   "text": "Biden",
+   "date": "2026-08-15",
+   "loaded": false
+  },
+  {
+   "text": "US economy slows",
+   "date": "2026-07-31",
+   "loaded": false
+  },
+  {
+   "text": "F-35B Miramar crash",
+   "date": "2026-07-31",
+   "loaded": false
+  },
+  {
+   "text": "Max Caster",
+   "date": "2026-10-13",
+   "loaded": false
+  },
+  {
+   "text": "PMQs",
+   "date": "2026-09-10",
+   "loaded": false
+  },
+  {
+   "text": "Iowa Football",
+   "date": "2026-09-14",
+   "loaded": false
+  },
+  {
+   "text": "Hefner FBI tip",
+   "date": "2026-08-15",
+   "loaded": false
+  },
+  {
+   "text": "Mario Kart 8 update",
+   "date": "2026-09-02",
+   "loaded": false
+  },
+  {
+   "text": "Andy Burnham as Next UK",
+   "date": "2026-07-13",
+   "loaded": false
+  },
+  {
+   "text": "Canada Q2 growth",
+   "date": "2026-08-28",
+   "loaded": false
+  },
+  {
+   "text": "Myles Garrett",
+   "date": "2026-09-12",
+   "loaded": false
+  },
+  {
+   "text": "Olde English Romeo",
+   "date": "2026-09-24",
+   "loaded": false
+  },
+  {
+   "text": "Abdul El-Sayed",
+   "date": "2026-09-13",
+   "loaded": false
+  },
+  {
+   "text": "Star Trek",
+   "date": "2026-07-27",
+   "loaded": false
+  },
+  {
+   "text": "BBC funding",
+   "date": "2026-10-14",
+   "loaded": false
+  },
+  {
+   "text": "Hanning inquiry",
+   "date": "2026-10-07",
+   "loaded": false
+  },
+  {
+   "text": "Cat TNR",
+   "date": "2026-07-12",
+   "loaded": false
+  },
+  {
+   "text": "AEW Collision",
+   "date": "2026-07-13",
+   "loaded": false
+  },
+  {
+   "text": "Artfight",
+   "date": "2026-07-21",
+   "loaded": false
+  },
+  {
+   "text": "Taylor Farms recall",
+   "date": "2026-08-11",
+   "loaded": false
+  },
+  {
+   "text": "Tim Curry",
+   "date": "2026-08-26",
+   "loaded": false
+  },
+  {
+   "text": "Phillies",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "Spain",
+   "date": "2026-07-20",
+   "loaded": false
+  },
+  {
+   "text": "Meryl Streep",
+   "date": "2026-09-18",
+   "loaded": false
+  },
+  {
+   "text": "Burnham new PM",
+   "date": "2026-07-27",
+   "loaded": false
+  },
+  {
+   "text": "Monster Hunter Wilds - S",
+   "date": "2026-09-10",
+   "loaded": false
+  },
+  {
+   "text": "Nvidia earnings",
+   "date": "2026-08-27",
+   "loaded": false
+  },
+  {
+   "text": "Ross Douthat",
+   "date": "2026-07-29",
+   "loaded": false
+  },
+  {
+   "text": "Reacher season 6",
+   "date": "2026-09-29",
+   "loaded": false
+  },
+  {
+   "text": "Trump Accounts",
+   "date": "2026-10-03",
+   "loaded": false
+  },
+  {
+   "text": "Polygon - Erika Ishii",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Svengoolie",
+   "date": "2026-09-14",
+   "loaded": false
+  },
+  {
+   "text": "Galaxy Z Fold 8",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "Kevin Gausman",
+   "date": "2026-08-04",
+   "loaded": false
+  },
+  {
+   "text": "Farmer struggles",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "LeBron James",
+   "date": "2026-07-25",
+   "loaded": false
+  },
+  {
+   "text": "F1 Singapore",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "Emily Wilson",
+   "date": "2026-07-28",
+   "loaded": false
+  },
+  {
+   "text": "Eminem - Kid Rock",
+   "date": "2026-10-05",
+   "loaded": false
+  },
+  {
+   "text": "Drake - Pomni shirt",
+   "date": "2026-09-17",
+   "loaded": false
+  },
+  {
+   "text": "Ro Khanna Detained by Is",
+   "date": "2026-07-13",
+   "loaded": false
+  },
+  {
+   "text": "Timbers Rout Sounders",
+   "date": "2026-07-17",
+   "loaded": false
+  },
+  {
+   "text": "AOC",
+   "date": "2026-07-21",
+   "loaded": false
+  },
+  {
+   "text": "TTRPG Authors",
+   "date": "2026-07-25",
+   "loaded": false
+  },
+  {
+   "text": "Mick Foley",
+   "date": "2026-07-10",
+   "loaded": false
+  },
+  {
+   "text": "Gosport Dave quote",
+   "date": "2026-09-24",
+   "loaded": false
+  },
+  {
+   "text": "Freedom 250 race",
+   "date": "2026-08-25",
+   "loaded": false
+  },
+  {
+   "text": "Letterboxd",
+   "date": "2026-08-01",
+   "loaded": false
+  },
+  {
+   "text": "Superpower suicide",
+   "date": "2026-10-06",
+   "loaded": true
+  },
+  {
+   "text": "Flu, COVID shots",
+   "date": "2026-09-28",
+   "loaded": false
+  },
+  {
+   "text": "Donald Trump",
+   "date": "2026-07-27",
+   "loaded": false
+  },
+  {
+   "text": "Batman Day",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Miguel Vargas",
+   "date": "2026-07-16",
+   "loaded": false
+  },
+  {
+   "text": "Jon Kyl dies",
+   "date": "2026-09-18",
+   "loaded": false
+  },
+  {
+   "text": "Campaign News",
+   "date": "2026-08-19",
+   "loaded": false
+  },
+  {
+   "text": "US missiles depleted",
+   "date": "2026-07-30",
+   "loaded": false
+  },
+  {
+   "text": "Sony digital ownership",
+   "date": "2026-09-02",
+   "loaded": false
+  },
+  {
+   "text": "Julian Love",
+   "date": "2026-09-11",
+   "loaded": false
+  },
+  {
+   "text": "Netherlands gold move",
+   "date": "2026-09-06",
+   "loaded": false
+  },
+  {
+   "text": "Giga Digger",
+   "date": "2026-10-09",
+   "loaded": false
+  },
+  {
+   "text": "AEW All In",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "Drag Race UK cancelled",
+   "date": "2026-09-10",
+   "loaded": false
+  },
+  {
+   "text": "Digital Art",
+   "date": "2026-09-04",
+   "loaded": false
+  },
+  {
+   "text": "AEW Wrestling",
+   "date": "2026-09-28",
+   "loaded": false
+  },
+  {
+   "text": "US Expands Iran Strikes",
+   "date": "2026-07-17",
+   "loaded": false
+  },
+  {
+   "text": "NFL on CBS",
+   "date": "2026-10-06",
+   "loaded": false
+  },
+  {
+   "text": "Record El Ni\u00f1o",
+   "date": "2026-09-07",
+   "loaded": false
+  },
+  {
+   "text": "Brighton beats Man Unite",
+   "date": "2026-09-17",
+   "loaded": false
+  },
+  {
+   "text": "Grand Slam ratings",
+   "date": "2026-10-09",
+   "loaded": false
+  },
+  {
+   "text": "Gotham FC wins",
+   "date": "2026-09-12",
+   "loaded": false
+  },
+  {
+   "text": "Sadiq Khan",
+   "date": "2026-07-24",
+   "loaded": false
+  },
+  {
+   "text": "X-Men",
+   "date": "2026-08-07",
+   "loaded": false
+  },
+  {
+   "text": "Brandon Dukes",
+   "date": "2026-08-20",
+   "loaded": false
+  },
+  {
+   "text": "Rick Astley TOTP",
+   "date": "2026-09-12",
+   "loaded": false
+  },
+  {
+   "text": "FrightClub",
+   "date": "2026-10-02",
+   "loaded": false
+  },
+  {
+   "text": "MysteryWrestling29 event",
+   "date": "2026-09-14",
+   "loaded": false
+  },
+  {
+   "text": "US Open",
+   "date": "2026-09-05",
+   "loaded": false
+  },
+  {
+   "text": "SpaceX below IPO price",
+   "date": "2026-07-28",
+   "loaded": false
+  },
+  {
+   "text": "World Cup",
+   "date": "2026-07-18",
+   "loaded": false
+  },
+  {
+   "text": "Favorite movie at 20",
+   "date": "2026-09-03",
+   "loaded": false
+  },
+  {
+   "text": "Kenny Omega",
+   "date": "2026-08-14",
+   "loaded": false
+  },
+  {
+   "text": "Medevac GPS jam crash",
+   "date": "2026-08-05",
+   "loaded": false
+  },
+  {
+   "text": "Donalds drops Trump",
+   "date": "2026-09-23",
+   "loaded": false
+  },
+  {
+   "text": "Inktober",
+   "date": "2026-10-02",
+   "loaded": false
+  },
+  {
+   "text": "Russian drone warning",
+   "date": "2026-09-25",
+   "loaded": false
+  },
+  {
+   "text": "Tesla stock plunges",
+   "date": "2026-07-24",
+   "loaded": false
+  },
+  {
+   "text": "Big Brother",
+   "date": "2026-08-23",
+   "loaded": false
+  },
+  {
+   "text": "Namjoon",
+   "date": "2026-09-13",
+   "loaded": false
+  },
+  {
+   "text": "Kevin Keegan Dies",
+   "date": "2026-07-20",
+   "loaded": false
+  },
+  {
+   "text": "Jodrell Bank axed",
+   "date": "2026-07-27",
+   "loaded": false
+  },
+  {
+   "text": "Balogun",
+   "date": "2026-07-03",
+   "loaded": false
+  },
+  {
+   "text": "EPA data center rule",
+   "date": "2026-08-25",
+   "loaded": false
+  },
+  {
+   "text": "Driscoll's lawsuit",
+   "date": "2026-09-28",
+   "loaded": false
+  },
+  {
+   "text": "Nacua inactive",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Jacob",
+   "date": "2026-07-24",
+   "loaded": false
+  },
+  {
+   "text": "Green card rule lawsuit",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Housing crisis",
+   "date": "2026-09-29",
+   "loaded": false
+  },
+  {
+   "text": "Chicago Marathon",
+   "date": "2026-10-12",
+   "loaded": false
+  },
+  {
+   "text": "The Archers",
+   "date": "2026-10-09",
+   "loaded": false
+  },
+  {
+   "text": "Turkey's S-400 Deal Bloc",
+   "date": "2026-07-10",
+   "loaded": false
+  },
+  {
+   "text": "Klobuchar",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "NYC Subway",
+   "date": "2026-08-19",
+   "loaded": false
+  },
+  {
+   "text": "Mamdani helmet debate",
+   "date": "2026-08-26",
+   "loaded": false
+  },
+  {
+   "text": "Pablo Torre",
+   "date": "2026-09-03",
+   "loaded": false
+  },
+  {
+   "text": "NDAA Israel integration",
+   "date": "2026-07-23",
+   "loaded": false
+  },
+  {
+   "text": "Sam Neill Dies",
+   "date": "2026-07-15",
+   "loaded": false
+  },
+  {
+   "text": "Ratko Mladic",
+   "date": "2026-08-28",
+   "loaded": false
+  },
+  {
+   "text": "Israel conflict",
+   "date": "2026-08-13",
+   "loaded": false
+  },
+  {
+   "text": "America250",
+   "date": "2026-07-03",
+   "loaded": false
+  },
+  {
+   "text": "Mike Collins",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Horror writers chat",
+   "date": "2026-10-02",
+   "loaded": false
+  },
+  {
+   "text": "City - Bouaddi",
+   "date": "2026-08-23",
+   "loaded": false
+  },
+  {
+   "text": "Operation Vivaldi",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Dateline",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "Trump Lawsuit",
+   "date": "2026-07-22",
+   "loaded": false
+  },
+  {
+   "text": "UK climate crisis",
+   "date": "2026-08-17",
+   "loaded": false
+  },
+  {
+   "text": "Fortnite Linux",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Naomi Osaka",
+   "date": "2026-09-07",
+   "loaded": false
+  },
+  {
+   "text": "Thom Tillis",
+   "date": "2026-10-09",
+   "loaded": false
+  },
+  {
+   "text": "Trump's arch review",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "Vikings-Bears",
+   "date": "2026-09-21",
+   "loaded": false
+  },
+  {
+   "text": "Bulgaria drones",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Lions final",
+   "date": "2026-09-28",
+   "loaded": false
+  },
+  {
+   "text": "Bessent vs. bond market",
+   "date": "2026-09-17",
+   "loaded": false
+  },
+  {
+   "text": "Trump remarks",
+   "date": "2026-09-02",
+   "loaded": false
+  },
+  {
+   "text": "Terror arrests",
+   "date": "2026-10-03",
+   "loaded": false
+  },
+  {
+   "text": "Beneficiary drug tests",
+   "date": "2026-10-08",
+   "loaded": false
+  },
+  {
+   "text": "Paxton pediatricians",
+   "date": "2026-10-07",
+   "loaded": false
+  },
+  {
+   "text": "Stars and Stripes lawsui",
+   "date": "2026-08-28",
+   "loaded": false
+  },
+  {
+   "text": "Jackson vs. emergency do",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "Trump DEI rally",
+   "date": "2026-08-16",
+   "loaded": false
+  },
+  {
+   "text": "Meta Muse flaw",
+   "date": "2026-09-23",
+   "loaded": false
+  },
+  {
+   "text": "Davey coup",
+   "date": "2026-10-10",
+   "loaded": true
+  },
+  {
+   "text": "Heat pump rebates",
+   "date": "2026-10-10",
+   "loaded": false
+  },
+  {
+   "text": "Iran bomb plans",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Cuban deportations",
+   "date": "2026-09-02",
+   "loaded": false
+  },
+  {
+   "text": "Hegseth - 60 Minutes",
+   "date": "2026-09-14",
+   "loaded": false
+  },
+  {
+   "text": "LSU beats Clemson",
+   "date": "2026-09-07",
+   "loaded": false
+  },
+  {
+   "text": "Disney price hike",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "Trump Nobel",
+   "date": "2026-10-10",
+   "loaded": false
+  },
+  {
+   "text": "Harden - Cavaliers",
+   "date": "2026-08-20",
+   "loaded": false
+  },
+  {
+   "text": "Misiorowski start",
+   "date": "2026-10-12",
+   "loaded": false
+  },
+  {
+   "text": "Drumcree parade",
+   "date": "2026-09-29",
+   "loaded": false
+  },
+  {
+   "text": "Trump approval poll",
+   "date": "2026-08-25",
+   "loaded": false
+  },
+  {
+   "text": "Durbin SCOTUS remarks",
+   "date": "2026-09-17",
+   "loaded": false
+  },
+  {
+   "text": "No Kings Day",
+   "date": "2026-09-29",
+   "loaded": false
+  },
+  {
+   "text": "Gary power outage",
+   "date": "2026-08-25",
+   "loaded": false
+  },
+  {
+   "text": "Apple succession",
+   "date": "2026-09-01",
+   "loaded": false
+  },
+  {
+   "text": "Africa war poll",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Lottery song challenge",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Kushner lawsuit",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Reagan legacy",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "Patriot missile shortage",
+   "date": "2026-08-27",
+   "loaded": false
+  },
+  {
+   "text": "ICE deportations",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "Profile memo",
+   "date": "2026-09-18",
+   "loaded": false
+  },
+  {
+   "text": "Iran conflict",
+   "date": "2026-08-23",
+   "loaded": false
+  },
+  {
+   "text": "Boulder climate suit",
+   "date": "2026-10-08",
+   "loaded": false
+  },
+  {
+   "text": "Gatorade recall",
+   "date": "2026-10-07",
+   "loaded": false
+  },
+  {
+   "text": "Roadless rule repeal",
+   "date": "2026-08-23",
+   "loaded": false
+  },
+  {
+   "text": "Trump midterm ads",
+   "date": "2026-08-26",
+   "loaded": false
+  },
+  {
+   "text": "NIH grant scrutiny",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "Paramount settlement tal",
+   "date": "2026-09-19",
+   "loaded": false
+  },
+  {
+   "text": "Carville on messaging",
+   "date": "2026-09-25",
+   "loaded": false
+  },
+  {
+   "text": "BB28 jury interview",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Superintelligence Force",
+   "date": "2026-10-07",
+   "loaded": false
+  },
+  {
+   "text": "Trump's arch",
+   "date": "2026-09-17",
+   "loaded": false
+  },
+  {
+   "text": "Galactic Racer",
+   "date": "2026-10-05",
+   "loaded": false
+  },
+  {
+   "text": "AP Top 25",
+   "date": "2026-10-05",
+   "loaded": false
+  },
+  {
+   "text": "Funding cap dropped",
+   "date": "2026-08-27",
+   "loaded": false
+  },
+  {
+   "text": "Guile popcorn bucket",
+   "date": "2026-09-19",
+   "loaded": false
+  },
+  {
+   "text": "AI fantasy football",
+   "date": "2026-10-09",
+   "loaded": false
+  },
+  {
+   "text": "IGN layoffs",
+   "date": "2026-09-15",
+   "loaded": false
+  },
+  {
+   "text": "Iran rally",
+   "date": "2026-09-19",
+   "loaded": false
+  },
+  {
+   "text": "MacArthur genius grants",
+   "date": "2026-10-01",
+   "loaded": false
+  },
+  {
+   "text": "Banned Books Week",
+   "date": "2026-10-10",
+   "loaded": false
+  },
+  {
+   "text": "UK energy prices",
+   "date": "2026-08-26",
+   "loaded": false
+  },
+  {
+   "text": "RFK Samoa",
+   "date": "2026-08-27",
+   "loaded": false
+  },
+  {
+   "text": "Stanford photo",
+   "date": "2026-09-24",
+   "loaded": false
+  },
+  {
+   "text": "Alberta separation",
+   "date": "2026-09-01",
+   "loaded": false
+  },
+  {
+   "text": "Pentagon promotion test",
+   "date": "2026-09-24",
+   "loaded": false
+  },
+  {
+   "text": "Claude watermarking",
+   "date": "2026-08-20",
+   "loaded": false
+  },
+  {
+   "text": "One Ring game",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Tk'emlups gathering",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Canada hires researchers",
+   "date": "2026-08-29",
+   "loaded": false
+  },
+  {
+   "text": "Cattle groups vs. ICE",
+   "date": "2026-09-29",
+   "loaded": false
+  },
+  {
+   "text": "Bond yields",
+   "date": "2026-10-09",
+   "loaded": false
+  },
+  {
+   "text": "Bluesky users share favo",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "Australia skips sanction",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "Collins staffer",
+   "date": "2026-08-27",
+   "loaded": false
+  },
+  {
+   "text": "Donalds military blame",
+   "date": "2026-08-20",
+   "loaded": false
+  },
+  {
+   "text": "Draganfly - Trump Jr.",
+   "date": "2026-10-01",
+   "loaded": false
+  },
+  {
+   "text": "Labour leads polls",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Guilfoyle topples-govern",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Prison experiment show",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Fuel costs",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Army Secretary Dan Drisc",
+   "date": "2026-09-01",
+   "loaded": false
+  },
+  {
+   "text": "MA primary",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "Grassley diesel remark",
+   "date": "2026-09-21",
+   "loaded": false
+  },
+  {
+   "text": "Vance on Carney",
+   "date": "2026-08-22",
+   "loaded": false
+  },
+  {
+   "text": "RFK Jr. keynote",
+   "date": "2026-09-18",
+   "loaded": false
+  },
+  {
+   "text": "Week 4 results",
+   "date": "2026-09-28",
+   "loaded": false
+  },
+  {
+   "text": "Bombs to Israel",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Social Security hearing",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "Texas primary",
+   "date": "2026-08-29",
+   "loaded": false
+  },
+  {
+   "text": "Walmart - Apple Pay",
+   "date": "2026-08-21",
+   "loaded": false
+  },
+  {
+   "text": "Aaron Donald returns",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "CLARITY Act",
+   "date": "2026-09-17",
+   "loaded": false
+  },
+  {
+   "text": "Treasury yield surges",
+   "date": "2026-09-29",
+   "loaded": false
+  },
+  {
+   "text": "GTA 6 hype",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "Odyssey box office",
+   "date": "2026-09-13",
+   "loaded": false
+  },
+  {
+   "text": "ICE case",
+   "date": "2026-08-27",
+   "loaded": false
+  },
+  {
+   "text": "Mike Johnson comments",
+   "date": "2026-10-01",
+   "loaded": false
+  },
+  {
+   "text": "Military aid shift",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "El-Sayed responds to Ken",
+   "date": "2026-10-10",
+   "loaded": false
+  },
+  {
+   "text": "Reform housing plan",
+   "date": "2026-08-24",
+   "loaded": false
+  },
+  {
+   "text": "Gates warns on AI",
+   "date": "2026-08-28",
+   "loaded": false
+  },
+  {
+   "text": "Paxton vs. Talarico",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "MLB lineups today",
+   "date": "2026-09-06",
+   "loaded": false
+  },
+  {
+   "text": "Senate midterms",
+   "date": "2026-08-30",
+   "loaded": false
+  },
+  {
+   "text": "Execution will be stream",
+   "date": "2026-10-09",
+   "loaded": false
+  },
+  {
+   "text": "Oyer lawsuit",
+   "date": "2026-09-04",
+   "loaded": false
+  },
+  {
+   "text": "Jeffries on socialists",
+   "date": "2026-08-16",
+   "loaded": false
+  },
+  {
+   "text": "Carney - strike law",
+   "date": "2026-09-20",
+   "loaded": false
+  },
+  {
+   "text": "SpaceX funding",
+   "date": "2026-10-08",
+   "loaded": false
+  },
+  {
+   "text": "Lynx clinch No. 1 seed",
+   "date": "2026-09-23",
+   "loaded": false
+  },
+  {
+   "text": "Eldridge's homer",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "FDA chemicals",
+   "date": "2026-10-14",
+   "loaded": false
+  },
+  {
+   "text": "Trump-Zelensky Moscow",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "Natalie Harp",
+   "date": "2026-10-13",
+   "loaded": false
+  },
+  {
+   "text": "UN vote",
+   "date": "2026-09-26",
+   "loaded": false
+  },
+  {
+   "text": "NFL vs. DHS",
+   "date": "2026-10-01",
+   "loaded": false
+  },
+  {
+   "text": "Resume gap meme",
+   "date": "2026-10-14",
+   "loaded": false
+  },
+  {
+   "text": "Annie Andrews",
+   "date": "2026-10-08",
+   "loaded": false
+  },
+  {
+   "text": "Rogers ad",
+   "date": "2026-09-29",
+   "loaded": false
+  },
+  {
+   "text": "Ebenezer casts Depp",
+   "date": "2026-09-01",
+   "loaded": false
+  },
+  {
+   "text": "DHS voter data",
+   "date": "2026-09-19",
+   "loaded": false
+  },
+  {
+   "text": "2010s Twitter",
+   "date": "2026-10-03",
+   "loaded": false
+  },
+  {
+   "text": "LNG Canada expansion",
+   "date": "2026-10-01",
+   "loaded": false
+  },
+  {
+   "text": "Amazon workers on SNAP",
+   "date": "2026-09-28",
+   "loaded": false
+  },
+  {
+   "text": "Blueberry recall",
+   "date": "2026-08-21",
+   "loaded": false
+  },
+  {
+   "text": "Jason Watson",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Polanski fallout",
+   "date": "2026-10-09",
+   "loaded": true
+  },
+  {
+   "text": "Nolan Wells",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Rally protester",
+   "date": "2026-10-14",
+   "loaded": false
+  },
+  {
+   "text": "Tohono O'odham wall",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "Carney approval",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "McClatchy layoffs",
+   "date": "2026-09-11",
+   "loaded": false
+  },
+  {
+   "text": "WSJ - water bottles",
+   "date": "2026-08-29",
+   "loaded": false
+  },
+  {
+   "text": "Jobs gender gap",
+   "date": "2026-10-03",
+   "loaded": false
+  },
+  {
+   "text": "Chretien's 9/11 speech",
+   "date": "2026-09-13",
+   "loaded": false
+  },
+  {
+   "text": "Kushner diplomacy",
+   "date": "2026-08-19",
+   "loaded": false
+  },
+  {
+   "text": "\"Clanker\" debate",
+   "date": "2026-08-25",
+   "loaded": false
+  },
+  {
+   "text": "Trump's Beast",
+   "date": "2026-10-02",
+   "loaded": false
+  },
+  {
+   "text": "Reform inquiry",
+   "date": "2026-10-09",
+   "loaded": false
+  },
+  {
+   "text": "Mobile game ads",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "Hoskins case",
+   "date": "2026-09-12",
+   "loaded": false
+  },
+  {
+   "text": "Reacher militia season",
+   "date": "2026-09-21",
+   "loaded": false
+  },
+  {
+   "text": "Ben-Gvir expulsion plan",
+   "date": "2026-09-05",
+   "loaded": false
+  },
+  {
+   "text": "Socialist Batman villain",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Celebrities turning 80",
+   "date": "2026-08-26",
+   "loaded": false
+  },
+  {
+   "text": "Dancing with Stars",
+   "date": "2026-10-07",
+   "loaded": false
+  },
+  {
+   "text": "Gallego - ballroom",
+   "date": "2026-09-14",
+   "loaded": false
+  },
+  {
+   "text": "Obamacare broker halt",
+   "date": "2026-09-23",
+   "loaded": false
+  },
+  {
+   "text": "Google Maps renames Lake",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "Canvasser video",
+   "date": "2026-09-18",
+   "loaded": false
+  },
+  {
+   "text": "Air Force One playlist",
+   "date": "2026-09-15",
+   "loaded": false
+  },
+  {
+   "text": "Trump son's gift",
+   "date": "2026-09-16",
+   "loaded": false
+  },
+  {
+   "text": "Hasan Piker fixation",
+   "date": "2026-09-05",
+   "loaded": true
+  },
+  {
+   "text": "Ex-chief case",
+   "date": "2026-10-01",
+   "loaded": false
+  },
+  {
+   "text": "Brexit interference",
+   "date": "2026-10-15",
+   "loaded": false
+  },
+  {
+   "text": "JD Vance's stance",
+   "date": "2026-09-21",
+   "loaded": false
+  },
+  {
+   "text": "Burgum interview",
+   "date": "2026-10-08",
+   "loaded": false
+  },
+  {
+   "text": "Knies-Marchenko trade",
+   "date": "2026-10-01",
+   "loaded": false
+  },
+  {
+   "text": "Trump hair color",
+   "date": "2026-09-06",
+   "loaded": false
+  },
+  {
+   "text": "Testosterone screening",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "AI data centers",
+   "date": "2026-10-03",
+   "loaded": false
+  },
+  {
+   "text": "Hegseth extends deployme",
+   "date": "2026-09-04",
+   "loaded": false
+  },
+  {
+   "text": "Reflecting Pool case",
+   "date": "2026-10-03",
+   "loaded": false
+  },
+  {
+   "text": "Porter Jr. trade",
+   "date": "2026-10-02",
+   "loaded": false
+  },
+  {
+   "text": "Kennedy Center",
+   "date": "2026-08-20",
+   "loaded": false
+  },
+  {
+   "text": "Jeffries-Kushner meeting",
+   "date": "2026-08-26",
+   "loaded": false
+  },
+  {
+   "text": "USMNT vs. Peru",
+   "date": "2026-09-27",
+   "loaded": false
+  },
+  {
+   "text": "Collins inquiry",
+   "date": "2026-09-22",
+   "loaded": false
+  },
+  {
+   "text": "Fuel economy rollback",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Navy base damage",
+   "date": "2026-08-21",
+   "loaded": false
+  },
+  {
+   "text": "DOGE records",
+   "date": "2026-10-14",
+   "loaded": false
+  },
+  {
+   "text": "MLB playoff race",
+   "date": "2026-09-17",
+   "loaded": false
+  },
+  {
+   "text": "Katie Zacharia",
+   "date": "2026-10-11",
+   "loaded": false
+  },
+  {
+   "text": "Trump on Ukraine war",
+   "date": "2026-09-21",
+   "loaded": false
+  },
+  {
+   "text": "Clippers inquiry",
+   "date": "2026-09-02",
+   "loaded": false
+  },
+  {
+   "text": "Working class poll",
+   "date": "2026-09-09",
+   "loaded": false
+  },
+  {
+   "text": "Spain election",
+   "date": "2026-10-07",
+   "loaded": false
+  },
+  {
+   "text": "Oates vs. Maher",
+   "date": "2026-08-30",
+   "loaded": false
+  },
+  {
+   "text": "Expand Supreme Court",
+   "date": "2026-08-31",
+   "loaded": false
+  },
+  {
+   "text": "SCOTUS amendment",
+   "date": "2026-09-04",
+   "loaded": false
+  },
+  {
+   "text": "Democrats defund ICE",
+   "date": "2026-09-07",
+   "loaded": true
+  },
+  {
+   "text": "Alito recusal",
+   "date": "2026-09-30",
+   "loaded": false
+  },
+  {
+   "text": "Trump-Cohen podcast",
+   "date": "2026-08-20",
+   "loaded": false
+  },
+  {
+   "text": "Garvaghy Road case",
+   "date": "2026-09-27",
+   "loaded": false
+  }
+ ]
+}

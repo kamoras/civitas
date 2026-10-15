@@ -6,7 +6,7 @@ import { fetchPhoto, parsePhotoPath } from "@/lib/photos";
 import { STATE_CODES } from "@/lib/stateCodes";
 import { usableRecord } from "@/lib/ssrPayload";
 import { ISO_DATE, fetchDay, fetchWeek } from "@/lib/congressServer";
-import { longDate } from "@/lib/congress";
+import { calendarDate, longDate } from "@/lib/congress";
 import type { Chamber, ChamberStatus, DayReport, PeriodReport } from "@/types/congress";
 import type { StateBallot } from "@/types/election";
 
@@ -672,6 +672,246 @@ async function congressWeekImage(date: string) {
   });
 }
 
+// One official record (a roll call, a bill, a congressional-record event, a
+// Federal Register document) as the backend's record card describes it
+// (backend app/services/record_cards.py). The card's `alt` text is built
+// from exactly these fields, so the image shows every one of them and
+// nothing else: no wordmark, no label of our own.
+export type RecordCardParty = { party: string; name: string; count: number };
+export type RecordCardTally = {
+  position: string;
+  label: string;
+  total: number;
+  parties: RecordCardParty[];
+};
+export type RecordCard = {
+  kind: string;
+  key: string;
+  eyebrow: string;
+  headline: string;
+  date: string | null;
+  path: string;
+  source_name: string;
+  as_of: string;
+  lines: string[];
+  tally: RecordCardTally[];
+  source: string;
+  alt: string;
+};
+
+async function fetchRecordCard(key: string, title: boolean): Promise<RecordCard | null> {
+  try {
+    const res = await fetch(`${BACKEND}/api/cards/${key}?title=${title ? 1 : 0}`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return null;
+    return usableRecord<RecordCard>(await res.json(), "key", "source");
+  } catch {
+    return null;
+  }
+}
+
+// The record's date as the alt text writes it ("October 9, 2026"), or
+// nothing when it has none (backend record_cards.long_date).
+function recordDate(card: RecordCard): string {
+  const iso = (card.date ?? "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? calendarDate(iso) : "";
+}
+
+// The alt text names a party with a count of zero nowhere, so neither does
+// the image.
+function countedParties(row: RecordCardTally): RecordCardParty[] {
+  return row.parties.filter((p) => p.count > 0);
+}
+
+/** Every string the record card image renders, in order. The font subset
+ *  is built from these, and the tests check each is one of the card's own
+ *  fields. The date is the record's, written as the alt text writes it. */
+export function recordCardTexts(card: RecordCard): string[] {
+  return [
+    card.eyebrow,
+    recordDate(card),
+    card.headline,
+    ...card.lines,
+    ...card.tally.flatMap((row) => [
+      row.label,
+      String(row.total),
+      ...countedParties(row).map((p) => `${p.name} ${p.count}`),
+    ]),
+    card.source,
+  ].filter(Boolean);
+}
+
+function headlineSize(card: RecordCard): number {
+  const length = card.headline.length + card.lines.join("").length;
+  if (length > 300) return 28;
+  if (length > 140) return 34;
+  return card.headline.length > 60 ? 40 : 48;
+}
+
+async function recordCardImage(card: RecordCard) {
+  const date = recordDate(card);
+  const widest = Math.max(1, ...card.tally.map((row) => row.total));
+  let archivoBold: ArrayBuffer | null = null;
+  try {
+    archivoBold = await loadArchivoBold(recordCardTexts(card).join(""));
+  } catch {
+    // fall through with archivoBold still null — degrade to Satori's
+    // default face rather than fail the whole image over a font fetch.
+  }
+
+  return new ImageResponse(
+    <div
+      style={{
+        width: 1200,
+        height: 630,
+        background: SURFACE_BASE,
+        display: "flex",
+        flexDirection: "column",
+        padding: "56px 72px 48px",
+        fontFamily: "Archivo",
+        border: `1px solid ${HAIRLINE}`,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 24,
+          color: INK_LO,
+          fontSize: 18,
+          letterSpacing: 2,
+          marginBottom: 28,
+        }}
+      >
+        <span>{card.eyebrow}</span>
+        {date && <span style={{ color: INK_MIN }}>{date}</span>}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
+        {card.headline && (
+          <div
+            style={{
+              color: INK_HI,
+              fontSize: headlineSize(card),
+              fontWeight: 700,
+              lineHeight: 1.2,
+            }}
+          >
+            {card.headline}
+          </div>
+        )}
+        {card.lines.map((line) => (
+          <div key={line} style={{ color: INK, fontSize: 20, lineHeight: 1.4, marginTop: 16 }}>
+            {line}
+          </div>
+        ))}
+        {card.tally.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 28 }}>
+            {card.tally.map((row) => (
+              <div key={row.position} style={{ display: "flex", alignItems: "center", gap: 20 }}>
+                <span style={{ display: "flex", width: 150, color: INK_LO, fontSize: 20 }}>
+                  {row.label}
+                </span>
+                <span
+                  style={{
+                    display: "flex",
+                    width: 70,
+                    justifyContent: "flex-end",
+                    color: INK_HI,
+                    fontSize: 26,
+                    fontWeight: 700,
+                  }}
+                >
+                  {String(row.total)}
+                </span>
+                <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 6 }}>
+                  <div style={{ display: "flex", width: `${(row.total / widest) * 100}%` }}>
+                    {countedParties(row).map((p) => (
+                      <div
+                        key={p.party}
+                        style={{
+                          display: "flex",
+                          height: 14,
+                          flex: p.count,
+                          background: PARTY_ACCENT[p.party] ?? INK_MIN,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 18, fontSize: 15 }}>
+                    {countedParties(row).map((p) => (
+                      <span key={p.party} style={{ color: PARTY_ACCENT[p.party] ?? INK_MIN }}>
+                        {`${p.name} ${p.count}`}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          borderTop: `1px solid ${HAIRLINE}`,
+          paddingTop: 22,
+          marginTop: 24,
+          color: INK_LO,
+          fontSize: 16,
+        }}
+      >
+        {card.source}
+      </div>
+    </div>,
+    {
+      width: 1200,
+      height: 630,
+      headers: OG_HEADERS,
+      ...(archivoBold
+        ? {
+            fonts: [
+              {
+                name: "Archivo",
+                data: archivoBold,
+                weight: 700 as const,
+                style: "normal" as const,
+              },
+            ],
+          }
+        : {}),
+    }
+  );
+}
+
+// `vote=<chamber>/<congress>/<session>/<number>` -> "senate/119/2/123".
+export function parseVoteRef(raw: string | null): string | null {
+  return raw && /^(senate|house)\/\d{1,3}\/\d\/\d{1,5}$/.test(raw) ? raw : null;
+}
+
+// `bill=<congress>/<BILLID>`: a bill type's letters, one dot, its number
+// ("119/S.4668", "119/HJRES.5").
+export function parseBillRef(raw: string | null): string | null {
+  return raw && /^\d{1,3}\/[A-Za-z]{1,8}\.\d{1,5}$/.test(raw) ? raw : null;
+}
+
+// A congressional-record event's or an Explore document's numeric id.
+export function parseRecordId(raw: string | null): string | null {
+  return raw && /^\d{1,12}$/.test(raw) ? raw : null;
+}
+
+// The backend card key for the record a request names, or null.
+export function recordCardKey(params: URLSearchParams): string | null {
+  const vote = parseVoteRef(params.get("vote"));
+  if (vote) return `vote:${vote}`;
+  const bill = parseBillRef(params.get("bill"));
+  if (bill) return `bill:${bill}`;
+  const event = parseRecordId(params.get("congressEvent"));
+  if (event) return `event:${event}`;
+  const document = parseRecordId(params.get("explore"));
+  return document ? `document:${document}` : null;
+}
+
 // A day's or week's date, checked before it reaches the backend URL.
 export function parseCongressDate(raw: string | null): string | null {
   return raw && ISO_DATE.test(raw) ? raw : null;
@@ -723,6 +963,18 @@ export async function GET(req: NextRequest) {
   if (stateCode) {
     const ballot = await fetchStateBallot(stateCode);
     return electionImage(ballot, stateCode);
+  }
+
+  const recordKey = recordCardKey(req.nextUrl.searchParams);
+  if (recordKey) {
+    const card = await fetchRecordCard(recordKey, req.nextUrl.searchParams.get("title") !== "0");
+    if (card) return recordCardImage(card);
+    return genericCard({
+      section: "PUBLIC RECORD",
+      title: "Civitas",
+      description: "The official record, in its own words.",
+      footerLabel: "PUBLIC FEDERAL DATA",
+    });
   }
 
   const congressDay = parseCongressDate(req.nextUrl.searchParams.get("congress"));

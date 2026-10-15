@@ -1,0 +1,2751 @@
+{
+ "_source": "Bluesky trend topics, as in trend_relevance_examples.json: 221 topics the relevance vote scores >= 0.4 whose text contains a word about appointments or departures (nominate, confirm, hearing, pick, appoint, resign, replace, fired, ...), so the positive class has enough examples (that list only chose what to label; every example is labelled by reading it), plus the 350 relevance examples. Labelled 2026-10-15 by an AI agent (Claude) against _rubric, for trend_evidence's nominee match.",
+ "_rubric": "appointment = the topic is about a U.S. federal nomination or appointment itself: the pick, the confirmation hearing, the committee or floor vote, senators' positions on confirming, or the nomination's prospects. Not an appointment: a story about something the official does or says once in office (a letter, a profile, a lawsuit against them, a policy), a resignation or firing, a party or election nomination, or a foreign or private-sector appointment.",
+ "examples": [
+  {
+   "text": "Social Security hearing. The hearing drew criticism over who it serves, with commentary naming Harlan Crow.",
+   "date": "2026-09-26",
+   "appointment": false
+  },
+  {
+   "text": "Kawhi to Raptors. Clippers send Kawhi to Toronto for Ingram, Dick, and draft picks.",
+   "date": "2026-09-15",
+   "appointment": false
+  },
+  {
+   "text": "Cyclospora outbreak. Over 4,000 confirmed cases across 41 states, as scrutiny grows over Taylor Farms and FDA response.",
+   "date": "2026-07-24",
+   "appointment": false
+  },
+  {
+   "text": "Schiff corners nominees. Nominees dodged questions on who won 2020, looking like election deniers of Trump's own wins.",
+   "date": "2026-08-06",
+   "appointment": true
+  },
+  {
+   "text": "Andy Burnham's Rise to L. Andy Burnham secures 322 Labour MP nominations, putting him on the brink of becoming party leader and Prime Minister.",
+   "date": "2026-07-11",
+   "appointment": false
+  },
+  {
+   "text": "Fauci Senate hearing. Republicans accused of spreading lies about Fauci's COVID response, framing him as the villain.",
+   "date": "2026-07-30",
+   "appointment": false
+  },
+  {
+   "text": "Musk Pentagon. Defense Secretary Pete Hegseth picks Elon Musk to co-lead Project Meridian on future of warfare.",
+   "date": "2026-10-03",
+   "appointment": false
+  },
+  {
+   "text": "Maine picks Jackson. Jackson, a progressive ex-state Senate president, won the nomination 566\u20135 to challenge Susan Collins.",
+   "date": "2026-07-26",
+   "appointment": false
+  },
+  {
+   "text": "Blanche Meets Survivors. Senator Tillis pressured AG nominee Todd Blanche to meet with Epstein survivors, with critics calling any resulting meeting performative and insufficient.",
+   "date": "2026-07-17",
+   "appointment": true
+  },
+  {
+   "text": "Arch Manning debate. Posts mock quarterback Arch Manning's play, questioning his top draft pick status.",
+   "date": "2026-09-14",
+   "appointment": false
+  },
+  {
+   "text": "Platner Withdraws from M. Graham Platner has formally withdrawn from Maine's U.S. Senate race, prompting Democrats to begin selecting a replacement candidate by July 27.",
+   "date": "2026-07-11",
+   "appointment": false
+  },
+  {
+   "text": "Replace McConnell?. Following McConnell's hospitalization and prolonged silence, pressure mounts on Kentucky Governor Andy Beshear to appoint a Senate replacement.",
+   "date": "2026-07-16",
+   "appointment": false
+  },
+  {
+   "text": "Bailey resigns FBI. Former Missouri attorney general leaves the co-deputy director post after less than a year.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "Big Brother UK. Housemates like Twinks face nominations as a debate about trans rights draws criticism.",
+   "date": "2026-10-07",
+   "appointment": false
+  },
+  {
+   "text": "Leavitt resigns. White House press secretary exits end of August to spend time with family.",
+   "date": "2026-08-16",
+   "appointment": false
+  },
+  {
+   "text": "US measles record high. 2,295 confirmed cases reported in 2026, surpassing any year since 1991, amid declining vaccination rates.",
+   "date": "2026-07-23",
+   "appointment": false
+  },
+  {
+   "text": "Burnham Epstein inquiry. Victims minister says she discussed a public inquiry with the PM upon her reappointment.",
+   "date": "2026-08-05",
+   "appointment": false
+  },
+  {
+   "text": "Burnham's Cabinet. Andy Burnham is forming his cabinet as PM, with critics accusing him of appointing centrist ministers and offering continuity with the previous government.",
+   "date": "2026-07-23",
+   "appointment": false
+  },
+  {
+   "text": "Watson Palantir. Reported appointment draws revolving-door criticism amid Palantir's \u00a3330m NHS contract debate.",
+   "date": "2026-09-19",
+   "appointment": false
+  },
+  {
+   "text": "DSA Ukraine stance. Co-chair Megan Romer's anti-weapons position draws criticism from within the left.",
+   "date": "2026-08-11",
+   "appointment": false
+  },
+  {
+   "text": "Cobb slams Blanche. Former Trump lawyer warns there will be no ethical lines between the White House and the AG if Blanche is confirmed.",
+   "date": "2026-07-23",
+   "appointment": true
+  },
+  {
+   "text": "Musk vs. nudification ba. Court denied xAI's emergency injunction; law took effect Aug 1 as hearing is scheduled.",
+   "date": "2026-08-01",
+   "appointment": false
+  },
+  {
+   "text": "Reform Wales. Helen Jenner is named to the role following Dan Thomas's resignation.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "CFB Week 0. Games, schedules, and betting picks flood social media as the 2026 season begins.",
+   "date": "2026-08-30",
+   "appointment": false
+  },
+  {
+   "text": "Flock backlash. Cities drop contracts, Flock offers buyouts, and Senate plans hearings on the cameras.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "AG nominee advanced. Sen. Whitehouse called it a \"sad day,\" citing the Epstein files as the nominee cleared on a party-line vote.",
+   "date": "2026-08-04",
+   "appointment": true
+  },
+  {
+   "text": "Cassidy vaccine criticis. Cassidy called Trump's vaccine remarks \"crazy, stupid\" while facing backlash for his RFK Jr. confirmation vote.",
+   "date": "2026-08-17",
+   "appointment": false
+  },
+  {
+   "text": "DHS official resigns. Marc Rosenblum, head of DHS statistics, cited the administration's \"war on immigrants\" and \"war on facts\" in his exit statement.",
+   "date": "2026-07-28",
+   "appointment": false
+  },
+  {
+   "text": "Flock replaced by Axon. Cities dropping Flock are switching to Axon's harder-to-spot cameras, raising new surveillance concerns.",
+   "date": "2026-08-06",
+   "appointment": false
+  },
+  {
+   "text": "FPL gameweek 2. Managers debate captains, transfers, and squad picks ahead of GW2 deadline.",
+   "date": "2026-08-28",
+   "appointment": false
+  },
+  {
+   "text": "Trump at World Cup. The White House confirmed Trump will attend the 2026 World Cup final, with FIFA president Infantino set to have him present the trophy, amid growing corruption concerns.",
+   "date": "2026-07-19",
+   "appointment": false
+  },
+  {
+   "text": "WNBA trans conspiracy. Social media users accuse WNBA players of being trans despite no confirmed trans athletes.",
+   "date": "2026-08-27",
+   "appointment": false
+  },
+  {
+   "text": "Beshear McConnell seat. Kentucky's GOP rewrote state law twice to block Beshear from appointing a Democrat.",
+   "date": "2026-07-27",
+   "appointment": false
+  },
+  {
+   "text": "2026 MLB Draft Picks. Teams make selections across rounds of the 2026 MLB Draft, with picks including pitchers, position players, and two-way players from college programs nationwide.",
+   "date": "2026-07-13",
+   "appointment": false
+  },
+  {
+   "text": "Collins rejects Blanche. Both senators cite DOJ independence concerns, putting Blanche's full Senate confirmation at risk.",
+   "date": "2026-08-06",
+   "appointment": true
+  },
+  {
+   "text": "Starmer's New Peers. Keir Starmer has appointed 26 new peers, including Sadiq Khan and June Sarpong, sparking debate about House of Lords reform and the balance of party representation.",
+   "date": "2026-07-17",
+   "appointment": false
+  },
+  {
+   "text": "McConnell proof of life. After 39 days missing, calls grow for Gov. Beshear to appoint a replacement senator.",
+   "date": "2026-07-23",
+   "appointment": false
+  },
+  {
+   "text": "Saber Interactive CEO. CEO Matt Karch's dismissive, hostile response to AI-replacement claims sparked widespread backlash.",
+   "date": "2026-08-13",
+   "appointment": false
+  },
+  {
+   "text": "Baby asylum case. Advocates say migrant children face deportation hearings without legal representation.",
+   "date": "2026-08-23",
+   "appointment": false
+  },
+  {
+   "text": "Clayton Dodges 2020 Win. Trump's DNI nominee Jay Clayton refuses to say Biden won the 2020 election during his Senate confirmation hearing, drawing sharp criticism from Sen. Ossoff.",
+   "date": "2026-07-16",
+   "appointment": true
+  },
+  {
+   "text": "Blanche AG Confirmation. Trump's acting AG pick Todd Blanche faces significant Senate opposition ahead of his confirmation hearings, with critics accusing him of weaponizing the Justice Department.",
+   "date": "2026-07-15",
+   "appointment": true
+  },
+  {
+   "text": "Senate debate. Talarico accepted a CNN debate invite; Paxton has not yet confirmed.",
+   "date": "2026-09-03",
+   "appointment": false
+  },
+  {
+   "text": "Blanche rescinds fund or. Senators remain skeptical, warning Trump could sue to enforce the underlying IRS settlement or revive the fund after confirmation.",
+   "date": "2026-08-03",
+   "appointment": true
+  },
+  {
+   "text": "Blanche AG Hearing. Acting Attorney General Todd Blanche faces a high-stakes Senate confirmation hearing, with hundreds of ex-colleagues condemning his nomination amid multiple controversies.",
+   "date": "2026-07-16",
+   "appointment": true
+  },
+  {
+   "text": "McConnell absence crisis. Kentucky Gov. Beshear and others demand McConnell speak publicly or resign amid prolonged disappearance.",
+   "date": "2026-07-30",
+   "appointment": false
+  },
+  {
+   "text": "Music taste trend. Users share their musical identity through just three artist picks, no genres allowed.",
+   "date": "2026-08-19",
+   "appointment": false
+  },
+  {
+   "text": "Bethesda Confirms Fallou. Bethesda has confirmed Fallout 5, Fallout 3 and New Vegas remasters, and a new Obsidian-developed Fallout game, amid controversy over Xbox layoffs.",
+   "date": "2026-07-19",
+   "appointment": false
+  },
+  {
+   "text": "Beshear fills McConnell . Debate centers on whether Kentucky's constitution allows Beshear to appoint a Democrat despite Republican-rewritten law.",
+   "date": "2026-07-29",
+   "appointment": false
+  },
+  {
+   "text": "Avengers Doomsday cast. Hayley Atwell returns as Peggy Carter; Pedro Pascal confirms Reed Richards has history with Doctor Doom.",
+   "date": "2026-07-27",
+   "appointment": false
+  },
+  {
+   "text": "Forbes editor fired. Randall Lane received $6M from Shook Research, a firm Forbes partnered with on wealth adviser rankings.",
+   "date": "2026-08-13",
+   "appointment": false
+  },
+  {
+   "text": "Jackson Wins Maine Prima. Troy Jackson has secured enough delegates to win the Democratic Senate nomination in Maine, and will face Republican Susan Collins in November.",
+   "date": "2026-07-19",
+   "appointment": false
+  },
+  {
+   "text": "Robinson quits. David Robinson criticizes OpenAI's culture as he resigns; posts cite claims about AI agent testing.",
+   "date": "2026-10-05",
+   "appointment": false
+  },
+  {
+   "text": "Jason Arday. Reports circulating about the UK academic; details unconfirmed amid debate over media coverage.",
+   "date": "2026-08-23",
+   "appointment": false
+  },
+  {
+   "text": "Florida primary. Nixon and Alexander Vindman competed for the nomination ahead of November's race with Ashley Moody.",
+   "date": "2026-08-23",
+   "appointment": false
+  },
+  {
+   "text": "Fund lawsuit. Lawsuit by a fired Jan. 6 prosecutor concerns the $1.8B anti-weaponization fund.",
+   "date": "2026-09-05",
+   "appointment": false
+  },
+  {
+   "text": "Fetterman blasts Democra. Bernie Sanders fired back, questioning Fetterman's Democratic credentials and loyalty.",
+   "date": "2026-07-30",
+   "appointment": false
+  },
+  {
+   "text": "Bautista as Kratos. He replaces Ryan Hurst, who was reportedly dropped after an on-set injury.",
+   "date": "2026-08-21",
+   "appointment": false
+  },
+  {
+   "text": "McCarthy trade. Giants get McCarthy for a 2027 fifth-round pick as Jaxson Dart is out for the season.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "Hamas confirms disarmame. Hamas agreed to hand weapons to a Palestinian committee; Israel has not accepted the deal.",
+   "date": "2026-08-01",
+   "appointment": false
+  },
+  {
+   "text": "Fetterman vs. Lamb. Users debate if Conor Lamb would've been a better pick than Fetterman in the 2016 Senate primary.",
+   "date": "2026-09-10",
+   "appointment": false
+  },
+  {
+   "text": "NFL Week 2 Sunday games. Minnesota beats Chicago 9\u20133 to lead the NFC North, plus injuries to McConkey, Olave, Black, and McMillan.",
+   "date": "2026-09-21",
+   "appointment": false
+  },
+  {
+   "text": "Banknote animals. Hedgehogs, puffins, barn owls and bumblebees will replace figures like Winston Churchill.",
+   "date": "2026-10-10",
+   "appointment": false
+  },
+  {
+   "text": "McConnell health saga. Debate swirls over McConnell's condition and whether Gov. Beshear can appoint a replacement.",
+   "date": "2026-07-31",
+   "appointment": false
+  },
+  {
+   "text": "Tuchel Picks Rogers. England manager Tuchel raised eyebrows by starting Rogers at right wing instead of Madueke, citing only \"a feeling\" when pressed for justification.",
+   "date": "2026-07-16",
+   "appointment": false
+  },
+  {
+   "text": "WNBA commissioner. Betting odds list Michelle Obama, Rice, and Cash as top candidates to replace Engelbert.",
+   "date": "2026-09-05",
+   "appointment": false
+  },
+  {
+   "text": "CBS editor audio. Bari Weiss's pick Raice told staff to cut reporting on Netanyahu's warning before October 7",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Hegseth's Pentagon turmo. Critics cite ousted generals, budget woes, and controversial policy moves under Hegseth.",
+   "date": "2026-09-05",
+   "appointment": false
+  },
+  {
+   "text": "Game comeback picks. Fans name forgotten titles like F-Zero, NOLF, and Rocket Slime as deserving revivals.",
+   "date": "2026-08-02",
+   "appointment": false
+  },
+  {
+   "text": "Cyclospora lettuce outbr. CDC and FDA have widened their probe to 15 states, with over 10,000 confirmed cases linked to iceberg lettuce from central Mexico.",
+   "date": "2026-08-06",
+   "appointment": false
+  },
+  {
+   "text": "Howe leaves Newcastle. Al Ahli's Matthias Jaissle is lined up as his replacement after five years in charge.",
+   "date": "2026-07-30",
+   "appointment": false
+  },
+  {
+   "text": "Maine Senate Race. Shenna Bellows and Nirav Shah dropped out, clearing the way for Troy Jackson to become the Democratic nominee to challenge incumbent Susan Collins in Maine's U.S. Senate race.",
+   "date": "2026-07-20",
+   "appointment": false
+  },
+  {
+   "text": "Tyson - Trump. Boxer Mike Tyson appeared with Donald Trump; posts discuss an unconfirmed Diddy pardon letter.",
+   "date": "2026-10-12",
+   "appointment": false
+  },
+  {
+   "text": "Seattle chief resigns. Chief Shon Barnes stepped down after criticism of his response to a fatal shooting at Bite of Seattle festival.",
+   "date": "2026-07-31",
+   "appointment": false
+  },
+  {
+   "text": "Arday Cambridge resignat. Investigations found false data, unpublished books, and AI-copied text in his academic work.",
+   "date": "2026-08-06",
+   "appointment": false
+  },
+  {
+   "text": "Katie Zacharia. Conservative commentator and Trump Media adviser to replace Karoline Leavitt at the White House.",
+   "date": "2026-10-10",
+   "appointment": true
+  },
+  {
+   "text": "EHRC toilet rules. The EHRC chair faces scrutiny over how new single-sex space guidance will be enforced.",
+   "date": "2026-08-06",
+   "appointment": false
+  },
+  {
+   "text": "Jon Kyl dies. He shaped Western water policy and guided Kavanaugh's Supreme Court confirmation.",
+   "date": "2026-09-18",
+   "appointment": false
+  },
+  {
+   "text": "Ace Attorney VR. Fans are disappointed it's a VR port of Dual Destinies, not a new game.",
+   "date": "2026-09-26",
+   "appointment": false
+  },
+  {
+   "text": "Conservative art debate. Users swap picks like Cobra and Mishima for best conservative work of art.",
+   "date": "2026-09-17",
+   "appointment": false
+  },
+  {
+   "text": "Mamdani backs Jeffries. Some leftists reacted with disappointment to his continued support for Jeffries.",
+   "date": "2026-08-25",
+   "appointment": false
+  },
+  {
+   "text": "Clippers inquiry. Reports of NBA action involving the Clippers, Ballmer and draft picks",
+   "date": "2026-09-05",
+   "appointment": false
+  },
+  {
+   "text": "Chicago Sky. After another loss, fans question the WNBA team's leadership for trading Reese for draft picks.",
+   "date": "2026-10-10",
+   "appointment": false
+  },
+  {
+   "text": "Obama visits WNBA All-St. Obama delivered a personal message to Caitlin Clark, picked up on a hot mic, at his Presidential Center.",
+   "date": "2026-07-26",
+   "appointment": false
+  },
+  {
+   "text": "Ossoff Grills Clayton. Sen. Jon Ossoff is drawing widespread praise for aggressively questioning Jay Clayton in a Senate hearing, with his 2028 presidential prospects gaining buzz.",
+   "date": "2026-07-15",
+   "appointment": true
+  },
+  {
+   "text": "Hegseth TRT Plan. Pete Hegseth reportedly plans to screen service members' testosterone levels and offer testosterone replacement therapy, framing it as boosting military lethality.",
+   "date": "2026-07-19",
+   "appointment": false
+  },
+  {
+   "text": "Leavitt steps down. Scott Jennings is reportedly the front-runner to replace her as White House press secretary.",
+   "date": "2026-08-15",
+   "appointment": true
+  },
+  {
+   "text": "US picks Cuba's leader. The CIA is reportedly vetting candidates, with officials warning a harder-line figure could emerge.",
+   "date": "2026-08-08",
+   "appointment": false
+  },
+  {
+   "text": "MTG nuke warning. The claim is unconfirmed by the White House; Iran's army chief declared \"victory\" and placed a bounty on US soldiers.",
+   "date": "2026-08-19",
+   "appointment": false
+  },
+  {
+   "text": "Beshear demands McConnel. Kentucky's governor gave McConnell an ultimatum: prove capacity to serve or resign after 43 days absent.",
+   "date": "2026-07-29",
+   "appointment": false
+  },
+  {
+   "text": "WWE SummerSlam 2026. The two-night event is set for US Bank Stadium in Minneapolis, with main events now confirmed.",
+   "date": "2026-08-02",
+   "appointment": false
+  },
+  {
+   "text": "Tafoya gas prices. The MN Senate GOP nominee urged Americans to \"be patriots\" amid rising gas prices during the Iran war.",
+   "date": "2026-08-13",
+   "appointment": false
+  },
+  {
+   "text": "Billy Bishop expansion h. Transport Minister Steven MacKinnon confirmed the federal focus stays on safety enhancements only, citing noise, housing, and environmental concerns.",
+   "date": "2026-07-25",
+   "appointment": false
+  },
+  {
+   "text": "Creative Emmys. Muppet Show and Bad Bunny's Super Bowl halftime show among the nominees in contention.",
+   "date": "2026-09-09",
+   "appointment": false
+  },
+  {
+   "text": "Assistant replaced by Ge. Access to Google Assistant ends September 4, affecting phones, tablets, Wear OS, and Android Auto.",
+   "date": "2026-08-06",
+   "appointment": false
+  },
+  {
+   "text": "Platner Exits Maine Sena. Graham Platner withdraws from Maine's Democratic US Senate primary amid rape allegations, forcing the party to select a new nominee at a July 25 convention.",
+   "date": "2026-07-12",
+   "appointment": false
+  },
+  {
+   "text": "McConnell absence. Unverified posts speculate about McConnell's absence; no confirmation from official sources.",
+   "date": "2026-09-08",
+   "appointment": false
+  },
+  {
+   "text": "McConnell prolonged abse. Kentucky Gov. Beshear demands McConnell address constituents or resign after 46+ days missing from public view.",
+   "date": "2026-07-29",
+   "appointment": false
+  },
+  {
+   "text": "DNC broke and divided. Chair Ken Martin faces calls to resign as the DNC carries $18M in debt ahead of midterms.",
+   "date": "2026-07-28",
+   "appointment": false
+  },
+  {
+   "text": "Pickford's Mouth-Cover v. Fans react to Everton goalkeeper Pickford covering his mouth while speaking to Arsenal's \u00d8degaard, debating whether it warranted a red card.",
+   "date": "2026-07-12",
+   "appointment": false
+  },
+  {
+   "text": "Miller abuse allegations. Speaker Johnson defends Rep. Max Miller, facing calls to resign over domestic abuse claims involving his ex-wife and daughter.",
+   "date": "2026-08-07",
+   "appointment": false
+  },
+  {
+   "text": "India minister resigns. Dharmendra Pradhan stepped down amid nationwide youth protests over the NEET exam paper leak scandal.",
+   "date": "2026-07-25",
+   "appointment": false
+  },
+  {
+   "text": "COVID memory-hole push. Posts recall NYC's darkest pandemic days \u2014 mass graves, body bag shortages \u2014 amid Senate hearings seen as whitewashing the crisis.",
+   "date": "2026-07-30",
+   "appointment": false
+  },
+  {
+   "text": "Trump backs J6 fund. Trump's $1.7B fund faces Senate GOP resistance, threatening Todd Blanche's AG nomination.",
+   "date": "2026-08-01",
+   "appointment": true
+  },
+  {
+   "text": "Community Shield lineup. Maresca picks his first competitive lineup as Man City boss; Martinelli and Jesus absent for Arsenal.",
+   "date": "2026-08-17",
+   "appointment": false
+  },
+  {
+   "text": "Fed decision. Reports discuss a Federal Reserve rate decision under new chair Kevin Warsh.",
+   "date": "2026-09-20",
+   "appointment": false
+  },
+  {
+   "text": "Grassley texts. Questions raised over sharing of texts with Democrats ahead of a Senate hearing.",
+   "date": "2026-10-02",
+   "appointment": false
+  },
+  {
+   "text": "Sassoon Resignation. ",
+   "date": "2025-02-13",
+   "appointment": false
+  },
+  {
+   "text": "Angela Praises Yash on R. Houseguest Angela calls Yash \"classy\" for accepting his nomination, though she can't remember his name, sparking fan reaction.",
+   "date": "2026-07-11",
+   "appointment": false
+  },
+  {
+   "text": "Bret Stephens backlash. Critics mock his NYT column calling diverse book award nominees a 'DEI checklist'.",
+   "date": "2026-09-23",
+   "appointment": false
+  },
+  {
+   "text": "Tories pick extremist MP. Joshua Bonehill-Paine, jailed for neo-Nazi activism, was selected for a Somerset Council seat, drawing criticism of Badenoch.",
+   "date": "2026-08-05",
+   "appointment": false
+  },
+  {
+   "text": "DOGE Hearing. ",
+   "date": "2025-02-12",
+   "appointment": false
+  },
+  {
+   "text": "North Korea missile laun. Kim's sister dismissed Trump's outreach, and North Korea fired missiles, rejecting talks.",
+   "date": "2026-08-21",
+   "appointment": false
+  },
+  {
+   "text": "Hugging Face. Unverified reports allege AI agents accessed Hugging Face systems; claims remain unconfirmed.",
+   "date": "2026-09-06",
+   "appointment": false
+  },
+  {
+   "text": "Fauci faces Fifth Amendm. A Senate committee voted 8\u20135 to refer Fauci to the DOJ after he invoked the Fifth Amendment at a COVID origins hearing.",
+   "date": "2026-08-09",
+   "appointment": false
+  },
+  {
+   "text": "Kawhi trade. Reports link Leonard to Toronto in a deal involving Ingram, Dick and draft picks.",
+   "date": "2026-09-16",
+   "appointment": false
+  },
+  {
+   "text": "Data center boom. Satellite images show farmland and desert replaced by AI data centers.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "Max Miller resign calls. Ohio Rep. faces growing pressure after ex-wife alleges abuse of her and their toddler.",
+   "date": "2026-08-07",
+   "appointment": false
+  },
+  {
+   "text": "TdF Stage 17. Stage 17 of the 2026 Tour de France is underway, with Jonas Abrahamsen and Baptiste Veistroffer breaking away to lead the race.",
+   "date": "2026-07-23",
+   "appointment": false
+  },
+  {
+   "text": "Adams pitches data cente. The former NYC mayor was heckled at a public hearing, with one resident shouting \"You belong in prison!\"",
+   "date": "2026-08-04",
+   "appointment": false
+  },
+  {
+   "text": "Blanche hides Epstein fi. Blanche defied a court order to release files; Senate Democrats urge his AG nomination be rejected.",
+   "date": "2026-07-30",
+   "appointment": true
+  },
+  {
+   "text": "Trump's AG Nominee. ",
+   "date": "2026-07-19",
+   "appointment": true
+  },
+  {
+   "text": "Blanche AG nomination. Senators Cornyn and Tillis are blocking the vote over Trump's IRS settlement deal.",
+   "date": "2026-07-30",
+   "appointment": true
+  },
+  {
+   "text": "Overton FDA hearing. Senators pressed her on abortion pill access and vaccine views, including measles.",
+   "date": "2026-09-26",
+   "appointment": true
+  },
+  {
+   "text": "Trump Fires U.S. Attorne. President Trump fired Roger Rogoff, the newly sworn-in U.S. Attorney for the Western District of Washington, just 54 minutes after he took office.",
+   "date": "2026-07-16",
+   "appointment": false
+  },
+  {
+   "text": "Miller locked in ballot. The GOP replacement window closed, leaving Miller as the nominee despite abuse allegations.",
+   "date": "2026-08-10",
+   "appointment": false
+  },
+  {
+   "text": "Rays Draft Grady Emerson. The Tampa Bay Rays selected Texas high school shortstop Grady Emerson with the No. 2 overall pick in the 2026 MLB Draft.",
+   "date": "2026-07-12",
+   "appointment": false
+  },
+  {
+   "text": "Healey Chancellor. John Healey has been appointed as UK Chancellor, a surprise move drawing widespread reaction and comparisons to former Labour Chancellor Denis Healey.",
+   "date": "2026-07-20",
+   "appointment": false
+  },
+  {
+   "text": "States sue over tariffs. States call the tariffs an illegal pretext to replace taxes the Supreme Court struck down.",
+   "date": "2026-08-04",
+   "appointment": false
+  },
+  {
+   "text": "EAC leadership ousted. Staff memo warns key agency functions cannot proceed without appointed leaders.",
+   "date": "2026-08-10",
+   "appointment": false
+  },
+  {
+   "text": "Findlay resigns. Findlay resigned as leader; Rustad and McInnis have rejoined the BC Conservative caucus.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Barbara Thornhill. Trump named Barbara Thornhill to lead US efforts against human trafficking.",
+   "date": "2026-10-15",
+   "appointment": true
+  },
+  {
+   "text": "Davey coup. Charlie Maynard resigns as Treasury spokesperson and moves to topple the Liberal Democrat leader.",
+   "date": "2026-10-10",
+   "appointment": false
+  },
+  {
+   "text": "Watson trade. Nuggets get draft picks, Clippers get Max Strus; Watson signs $88M deal with Cavs.",
+   "date": "2026-08-20",
+   "appointment": false
+  },
+  {
+   "text": "Ontario bike lanes. Critics say side streets can't replace major routes like Bloor and Yonge.",
+   "date": "2026-09-02",
+   "appointment": false
+  },
+  {
+   "text": "Transfer deadline day. Fans discuss deadline day moves and Fantasy Premier League gameweek picks.",
+   "date": "2026-09-02",
+   "appointment": false
+  },
+  {
+   "text": "DSA political rise. A Democratic Socialist is poised to be Wisconsin's gubernatorial nominee, rattling centrists and media figures like Cillizza.",
+   "date": "2026-07-31",
+   "appointment": false
+  },
+  {
+   "text": "Hegseth under scrutiny. Concerns mount over military readiness, munitions shortages, and Hegseth's Army chief pick losing Republican support.",
+   "date": "2026-08-05",
+   "appointment": false
+  },
+  {
+   "text": "Overton to lead FDA. Overton, a White House aide, is seen as aligned with RFK Jr.'s health views.",
+   "date": "2026-08-20",
+   "appointment": true
+  },
+  {
+   "text": "Clayton confirmed as DNI. Clayton, a Trump ally with no intelligence background, was confirmed 51-47 along party lines.",
+   "date": "2026-07-29",
+   "appointment": true
+  },
+  {
+   "text": "AEW signs Luna. Tony Khan confirmed Dani Luna joins AEW's growing women's roster.",
+   "date": "2026-09-28",
+   "appointment": false
+  },
+  {
+   "text": "Mahmood Chancellor Tip. The FT reports Andy Burnham is set to name Shabana Mahmood as UK Chancellor, a notable pick as she is a barrister rather than an economist.",
+   "date": "2026-07-15",
+   "appointment": false
+  },
+  {
+   "text": "Vega CBS misinformation. Fired 60 Minutes correspondent says Bari Weiss pushed her to air events that never happened.",
+   "date": "2026-07-25",
+   "appointment": false
+  },
+  {
+   "text": "Omar inquiry. Posts discuss unconfirmed reports of a federal search at Rep. Ilhan Omar's DC residence.",
+   "date": "2026-10-13",
+   "appointment": false
+  },
+  {
+   "text": "Mascot survival game. Users pick 4 mascots to protect them, debating Kool-Aid Man, The King, and Colonel Sanders' combat skills.",
+   "date": "2026-07-24",
+   "appointment": false
+  },
+  {
+   "text": "Fedorov Dismissed. Zelenskyy dismissed Defense Minister Mykhailo Fedorov, sparking rare public protests in Kyiv and other Ukrainian cities, while a replacement has yet to be named.",
+   "date": "2026-07-17",
+   "appointment": false
+  },
+  {
+   "text": "Onion DNC satire. A satirical piece quotes DNC chair Ken Martin predicting the party will bungle October messaging.",
+   "date": "2026-10-08",
+   "appointment": false
+  },
+  {
+   "text": "US jobs disappoint. Trump officials defend economy amid job losses; critics call their claims blatant lies.",
+   "date": "2026-08-09",
+   "appointment": false
+  },
+  {
+   "text": "Harry, Meghan status. Letter sent to Harry's team, government, military confirms their non-working royal status.",
+   "date": "2026-09-10",
+   "appointment": false
+  },
+  {
+   "text": "RFK Nomination. ",
+   "date": "2025-01-29",
+   "appointment": true
+  },
+  {
+   "text": "January 6 Hearing. ",
+   "date": "2025-12-29",
+   "appointment": false
+  },
+  {
+   "text": "Zelenskyy replaces army . President Zelenskyy has dismissed Commander-in-Chief Syrskyi and appointed Major General Drapatyi as his replacement, amid protests.",
+   "date": "2026-07-23",
+   "appointment": false
+  },
+  {
+   "text": "OBR Resignation. ",
+   "date": "2025-12-01",
+   "appointment": false
+  },
+  {
+   "text": "Smithsonian Hearing. A House Oversight hearing examines the Smithsonian's museums, with Republicans challenging exhibits on oppression and the Trump administration pushing to reshape how American history is presented at federal cultural institutions.",
+   "date": "2026-07-22",
+   "appointment": false
+  },
+  {
+   "text": "Bunch resigns. He faced escalating White House pressure over how museums present American history.",
+   "date": "2026-09-11",
+   "appointment": false
+  },
+  {
+   "text": "Franchise crossover pick. Users share creative dream crossovers, from John Wick + Nobody to the Muppets + Lars Von Trier.",
+   "date": "2026-07-31",
+   "appointment": false
+  },
+  {
+   "text": "Sony kills PS discs. CFO Lin Tao confirmed plans won't change despite fan backlash over ending physical media.",
+   "date": "2026-07-31",
+   "appointment": false
+  },
+  {
+   "text": "Badenoch strategy backla. Critics question how Tories can regain Lib Dem seats; Badenoch faces heat over neo-Nazi adviser appointment.",
+   "date": "2026-08-06",
+   "appointment": false
+  },
+  {
+   "text": "Cassidy on measles. Cassidy blamed Trump's vaccine approach for measles deaths during health nominee hearings.",
+   "date": "2026-09-17",
+   "appointment": true
+  },
+  {
+   "text": "Caldwell resignation cal. An ethics inquiry reviewed claims about a promotion request and a staffer complaint.",
+   "date": "2026-09-26",
+   "appointment": false
+  },
+  {
+   "text": "Oscars Nominations. ",
+   "date": "2025-01-25",
+   "appointment": false
+  },
+  {
+   "text": "Flock replacement tech. Cities dropping Flock are adopting other ALPR systems, which critics say may be just as invasive.",
+   "date": "2026-09-08",
+   "appointment": false
+  },
+  {
+   "text": "Jan. 6 nominee hearings. Nominees dodged direct answers on the 2020 election and Capitol attack; Oath Keepers charges also dismissed.",
+   "date": "2026-08-05",
+   "appointment": true
+  },
+  {
+   "text": "Fauci GOP hearings. Rand Paul pushes to indict Fauci for lying to Congress amid broader MAGA backlash.",
+   "date": "2026-08-10",
+   "appointment": false
+  },
+  {
+   "text": "Chicago Marathon. Vinny Mauri leads US men, Emma Grace Hurley debuts, and Catherine Debrunner sets a wheelchair record.",
+   "date": "2026-10-12",
+   "appointment": false
+  },
+  {
+   "text": "Big Brother Feeds. Fans discuss houseguest drama involving Rome, Lyric, Jason, and Melody, including veto picks and HOH strategy.",
+   "date": "2026-07-19",
+   "appointment": false
+  },
+  {
+   "text": "Clayton DNI Hearing. Trump's DNI nominee Jay Clayton faces a contentious Senate confirmation hearing, with senators including Jon Ossoff sharply questioning his record and candor.",
+   "date": "2026-07-18",
+   "appointment": true
+  },
+  {
+   "text": "Harrison trade. Arizona sends the receiver to Houston for 2027 second- and sixth-round draft picks.",
+   "date": "2026-10-12",
+   "appointment": false
+  },
+  {
+   "text": "Jurgens trade. Philadelphia sends its center to Baltimore for a 2028 second-round pick and a 2027 fifth-rounder.",
+   "date": "2026-10-08",
+   "appointment": false
+  },
+  {
+   "text": "Trump disputes polls. Trump posted claiming his \"real\" numbers are the best ever, offering no evidence, as critics note his rating rivals Nixon's pre-resignation low.",
+   "date": "2026-08-04",
+   "appointment": false
+  },
+  {
+   "text": "Bluesky users share favo. Users swap picks like Entwistle, McCartney, and Jackie Jackson.",
+   "date": "2026-09-26",
+   "appointment": false
+  },
+  {
+   "text": "Penn Station rename. DOT Secretary Duffy's letter confirms plans as part of an $8B redesign of the transit hub.",
+   "date": "2026-07-24",
+   "appointment": false
+  },
+  {
+   "text": "McConnell health doubts. Kentucky Gov. Beshear demands McConnell prove fitness or resign after weeks-long disappearance.",
+   "date": "2026-07-30",
+   "appointment": false
+  },
+  {
+   "text": "Trump vs. Morning Joe. Hosts Scarborough and Lemire fired back live after Trump's Truth Social attack.",
+   "date": "2026-09-28",
+   "appointment": false
+  },
+  {
+   "text": "Barrett picks Yash. Drew is furious after Barrett chose Yash for veto instead of him.",
+   "date": "2026-09-07",
+   "appointment": false
+  },
+  {
+   "text": "Chagos deal review. Streeting confirmed the review after Trump told Burnham the deal was \"terrible\".",
+   "date": "2026-09-24",
+   "appointment": false
+  },
+  {
+   "text": "Bove Nomination. ",
+   "date": "2025-07-17",
+   "appointment": true
+  },
+  {
+   "text": "Senate Hearings. ",
+   "date": "2025-01-25",
+   "appointment": false
+  },
+  {
+   "text": "FIFA sacks executive. COO Kevin Lamour was fired after opposing Infantino's plan to sell a World Cup stake.",
+   "date": "2026-08-19",
+   "appointment": false
+  },
+  {
+   "text": "Trump judges dodge 2020. Nearly 60 confirmed nominees refused to say Biden won, raising fears over 2026 midterm oversight.",
+   "date": "2026-08-07",
+   "appointment": true
+  },
+  {
+   "text": "McConnell fitness demand. McConnell has not been seen publicly in 43 days, fueling calls to resign or prove he can serve.",
+   "date": "2026-07-29",
+   "appointment": false
+  },
+  {
+   "text": "Jack Smith Hearing. Sen. Grassley leads a Senate hearing attacking special counsel Jack Smith, while Sen. Durbin defends him; Republicans blocked Smith's offer to testify under oath.",
+   "date": "2026-07-15",
+   "appointment": false
+  },
+  {
+   "text": "Iran War Diplomacy. Iranian FM spokesperson Baghaei says Tehran pursued diplomacy until the last moment, while confirming mediators are presenting new peace proposals amid ongoing conflict.",
+   "date": "2026-07-21",
+   "appointment": false
+  },
+  {
+   "text": "Gulf strikes. Reports of strikes affecting Kuwait, Bahrain and Jordan; details and casualties unconfirmed.",
+   "date": "2026-09-02",
+   "appointment": false
+  },
+  {
+   "text": "FPL gameweek 6. Managers share lineups, transfers and captain picks like Haaland, Palmer and Saka",
+   "date": "2026-10-11",
+   "appointment": false
+  },
+  {
+   "text": "Harington joins Potter. He replaces Nicholas Hoult as Gilderoy Lockhart after scheduling conflicts.",
+   "date": "2026-08-25",
+   "appointment": false
+  },
+  {
+   "text": "Army Secretary Dan Drisc. Reports concern Driscoll's role and Senate-confirmed leadership at the Army.",
+   "date": "2026-09-01",
+   "appointment": false
+  },
+  {
+   "text": "Ex-chief case. Woman held five days; former chief resigned and was decertified.",
+   "date": "2026-10-01",
+   "appointment": false
+  },
+  {
+   "text": "Horrorfest challenge. Users pick horror films whose titles start with letters of their first name.",
+   "date": "2026-08-28",
+   "appointment": false
+  },
+  {
+   "text": "Hewett & Reid Win Wimble. Alfie Hewett and Gordon Reid won the wheelchair doubles final at Wimbledon, drawing a large crowd and warm atmosphere.",
+   "date": "2026-07-12",
+   "appointment": false
+  },
+  {
+   "text": "Schmitt VP buzz. Critics mock Axios's timing after Schmitt's rough performance in a hearing the same day.",
+   "date": "2026-09-30",
+   "appointment": false
+  },
+  {
+   "text": "Apple succession. Reports point to John Ternus as a possible successor to Tim Cook amid Apple's AI push.",
+   "date": "2026-09-01",
+   "appointment": false
+  },
+  {
+   "text": "Carroll Victoria premier. Carroll was elected by Labor caucus after Sonya Kilkenny withdrew her nomination, with Gabrielle Williams as deputy.",
+   "date": "2026-07-28",
+   "appointment": false
+  },
+  {
+   "text": "ICE bonus clawback. Fired ICE agents must repay $50,000 signing bonuses, sparking mockery online.",
+   "date": "2026-09-23",
+   "appointment": false
+  },
+  {
+   "text": "Wielicki Tapped to Lead . The Trump administration appointed Matthew Wielicki, a geochemist with no formal climate science training, to oversee the government's flagship climate report.",
+   "date": "2026-07-10",
+   "appointment": true
+  },
+  {
+   "text": "Best TV shows. Sparked by NYT's list, users share their own top TV picks and debate Lost's legacy.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "Fed Chair Powell. ",
+   "date": "2025-04-18",
+   "appointment": false
+  },
+  {
+   "text": "Stars and Stripes lawsui. Fired journalists say Pentagon retaliated after they reported on carrier conditions.",
+   "date": "2026-08-28",
+   "appointment": false
+  },
+  {
+   "text": "IRS Resignation. ",
+   "date": "2025-04-09",
+   "appointment": false
+  },
+  {
+   "text": "Trudeau Resignation. ",
+   "date": "2025-01-25",
+   "appointment": false
+  },
+  {
+   "text": "Iran wedding blast. NYT reports bomb was American; Iran says 5 killed, 67 wounded. Details unconfirmed.",
+   "date": "2026-09-04",
+   "appointment": false
+  },
+  {
+   "text": "DOJ voter roll loss. A Trump-appointed judge tossed the case, putting DOJ's record at 0-17 on voter roll lawsuits.",
+   "date": "2026-07-23",
+   "appointment": false
+  },
+  {
+   "text": "CDC Nomination. ",
+   "date": "2025-03-13",
+   "appointment": true
+  },
+  {
+   "text": "Tory neo-Nazi candidate. Joshua Bonehill-Paine, jailed for antisemitic posts and harassing Jewish MP Luciana Berger, was picked for Somerset council.",
+   "date": "2026-08-04",
+   "appointment": false
+  },
+  {
+   "text": "Blanche, Epstein files. Epstein survivors delivered file books to lawmakers, challenging Blanche's fitness as AG nominee.",
+   "date": "2026-07-31",
+   "appointment": true
+  },
+  {
+   "text": "Ballroom resignation. Architect McCrery stepped down amid reported concerns over fire code and restroom capacity.",
+   "date": "2026-09-24",
+   "appointment": false
+  },
+  {
+   "text": "Paxton Donation Scandal. The Texas Tech board chair donated $275K to AG Ken Paxton the day before Paxton intervened in the Brendan Sorsby controversy, raising conflict-of-interest concerns.",
+   "date": "2026-07-17",
+   "appointment": false
+  },
+  {
+   "text": "Tillis Cornyn cave. Senators flip to confirm nominee despite opposing a $1.8B IRS fund shielding Trump.",
+   "date": "2026-08-05",
+   "appointment": true
+  },
+  {
+   "text": "Maine debate. Senator Susan Collins faces Troy Jackson over Trump and her Brett Kavanaugh confirmation vote.",
+   "date": "2026-10-08",
+   "appointment": false
+  },
+  {
+   "text": "Polanski fallout. Zack Polanski faces resignation calls amid the Holborn and St Pancras by-election.",
+   "date": "2026-10-09",
+   "appointment": false
+  },
+  {
+   "text": "Best album run debate. Users nominate their top consecutive three-album runs, from Rush and Nirvana to Kate Bush and Yes.",
+   "date": "2026-08-03",
+   "appointment": false
+  },
+  {
+   "text": "Rutgers coaching turmoil. Fans debate Schiano's costly buyout and possible replacements like Brian Kelly.",
+   "date": "2026-09-12",
+   "appointment": false
+  },
+  {
+   "text": "Melody Faces Eviction. After winning HoH and using the PoV to save Lyric, Devens nominated Rome and Melody, with houseguests now debating whether Melody will go home this week.",
+   "date": "2026-07-21",
+   "appointment": false
+  },
+  {
+   "text": "Kushner lawsuit. Jared Kushner allegedly acts as a top negotiator without Senate confirmation or following ethics rules.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Pink vs. Macklemore. Pink weighed in on Macklemore's Free Palestine remarks, and he fired back at her.",
+   "date": "2026-09-11",
+   "appointment": false
+  },
+  {
+   "text": "SDNY subpoenas NYT. Judge questions DOJ conduct; contempt hearing threatened over undisclosed reporter subpoenas.",
+   "date": "2026-07-24",
+   "appointment": false
+  },
+  {
+   "text": "Politico barred. Trump administration blocks the outlet from press pool duties before a court hearing on access.",
+   "date": "2026-10-07",
+   "appointment": false
+  },
+  {
+   "text": "New God of War revealed. Cory Barlog confirmed the game at Comic Con 2026, set after Laufey.",
+   "date": "2026-07-25",
+   "appointment": false
+  },
+  {
+   "text": "Murdock resignation. John Murdock leaves after 18 years, warning of an assault on the rule of law under Trump.",
+   "date": "2026-10-07",
+   "appointment": false
+  },
+  {
+   "text": "Husted staffer. Husted's political director resigns amid reports over photo and playlist controversy.",
+   "date": "2026-09-13",
+   "appointment": false
+  },
+  {
+   "text": "Favorite narrators. Users share their dream picks, from Bruce Campbell to Lauren Bacall and Bob Balaban.",
+   "date": "2026-07-26",
+   "appointment": false
+  },
+  {
+   "text": "Jordan refers Jack Smith. House Judiciary Chair Jim Jordan recommended criminal charges against former special counsel Jack Smith for alleged false statements to Congress.",
+   "date": "2026-07-24",
+   "appointment": false
+  },
+  {
+   "text": "UK Diplomats (Archived)",
+   "date": "2026-10-06",
+   "appointment": false
+  },
+  {
+   "text": "Argentina Coach Incident. Argentina's coach was seen pushing Spanish players away, sparking widespread confusion and debate among football fans.",
+   "date": "2026-07-19",
+   "appointment": false
+  },
+  {
+   "text": "James Cook (Archived)",
+   "date": "2026-09-19",
+   "appointment": false
+  },
+  {
+   "text": "Democrats (Archived)",
+   "date": "2026-07-06",
+   "appointment": false
+  },
+  {
+   "text": "AEW Rebel Heart. The special episode supports ALS research and features multiple title matches.",
+   "date": "2026-09-11",
+   "appointment": false
+  },
+  {
+   "text": "Trump hot mic. Trump was overheard asking staff if he could leave the Presidents Cup event early.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "Skills meme. Users rate their own cooking, whistling, singing, driving, guitar and public speaking abilities.",
+   "date": "2026-10-07",
+   "appointment": false
+  },
+  {
+   "text": "Jeff Flake (Archived)",
+   "date": "2026-08-05",
+   "appointment": false
+  },
+  {
+   "text": "Russia aids Iran targeti. Zelenskyy says Russian satellites guided Iranian strikes on U.S. bases in Bahrain, Jordan, and Kuwait.",
+   "date": "2026-07-27",
+   "appointment": false
+  },
+  {
+   "text": "McDonald's AI pricing. Critics call the dynamic pricing algorithm surveillance pricing and price gouging.",
+   "date": "2026-10-01",
+   "appointment": false
+  },
+  {
+   "text": "Rachel Reeves (Archived)",
+   "date": "2026-07-21",
+   "appointment": false
+  },
+  {
+   "text": "Flock breach. Reports describe a Flock camera encryption key exposure involving over 27,000 footage clips.",
+   "date": "2026-09-23",
+   "appointment": false
+  },
+  {
+   "text": "Microsoft Tasks Obsidian. Microsoft has reportedly directed Obsidian Entertainment to develop a new Fallout game, sparking debate about timing given recent studio layoffs and years of franchise inactivity.",
+   "date": "2026-07-10",
+   "appointment": false
+  },
+  {
+   "text": "Biden (Archived)",
+   "date": "2026-08-15",
+   "appointment": false
+  },
+  {
+   "text": "US economy slows. GDP grew just 1.5%, with weak productivity and rising inflation despite AI investment.",
+   "date": "2026-07-31",
+   "appointment": false
+  },
+  {
+   "text": "F-35B Miramar crash. The Marine Corps pilot ejected safely; the crash drew criticism of Pentagon leadership.",
+   "date": "2026-07-31",
+   "appointment": false
+  },
+  {
+   "text": "Max Caster. Caster's Bound For Glory entrance rap included a line about bombs and Riyadh.",
+   "date": "2026-10-13",
+   "appointment": false
+  },
+  {
+   "text": "PMQs (Archived)",
+   "date": "2026-09-10",
+   "appointment": false
+  },
+  {
+   "text": "Iowa Football (Archived)",
+   "date": "2026-09-14",
+   "appointment": false
+  },
+  {
+   "text": "Hefner FBI tip. Playmate Audra Christiansen asked Hefner to report her abuse; FBI didn't follow up for 15 years.",
+   "date": "2026-08-15",
+   "appointment": false
+  },
+  {
+   "text": "Mario Kart 8 update. Update adds 8-player split-screen, 96-race GPs, and faster load times.",
+   "date": "2026-09-02",
+   "appointment": false
+  },
+  {
+   "text": "Andy Burnham as Next UK. Posts discuss Andy Burnham's anticipated rise to UK Prime Minister, with supporters and critics raising policy demands and controversy warnings.",
+   "date": "2026-07-13",
+   "appointment": false
+  },
+  {
+   "text": "Canada Q2 growth. Exports and business investment drove the fastest growth since early 2023.",
+   "date": "2026-08-28",
+   "appointment": false
+  },
+  {
+   "text": "Myles Garrett (Archived)",
+   "date": "2026-09-12",
+   "appointment": false
+  },
+  {
+   "text": "Olde English Romeo. Fans debate and mock reports that Eggers' film will use 'Olde English' dialogue.",
+   "date": "2026-09-24",
+   "appointment": false
+  },
+  {
+   "text": "Abdul El-Sayed. Senate candidate El-Sayed answers questions from TV hosts, sparking conversation online.",
+   "date": "2026-09-13",
+   "appointment": false
+  },
+  {
+   "text": "Star Trek (Archived)",
+   "date": "2026-07-27",
+   "appointment": false
+  },
+  {
+   "text": "BBC funding. The UK broadcaster's licence fee, presenter salaries, flag rules and Reform coverage draw criticism.",
+   "date": "2026-10-14",
+   "appointment": false
+  },
+  {
+   "text": "Hanning inquiry. Posts discuss reports about August Hanning, head of Germany's foreign intelligence 1998\u20132005.",
+   "date": "2026-10-07",
+   "appointment": false
+  },
+  {
+   "text": "Midterm voting. Activists urge Americans to register, pledge to vote early, and train in election protection.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Cat TNR (Archived)",
+   "date": "2026-07-12",
+   "appointment": false
+  },
+  {
+   "text": "AEW Collision (Archived)",
+   "date": "2026-07-13",
+   "appointment": false
+  },
+  {
+   "text": "Artfight (Archived)",
+   "date": "2026-07-21",
+   "appointment": false
+  },
+  {
+   "text": "Taylor Farms recall. Guacamole, pico de gallo, and taco dip among items pulled from Walmart and Whole Foods.",
+   "date": "2026-08-11",
+   "appointment": false
+  },
+  {
+   "text": "Tim Curry. Fans share his Red Alert 3 'Premier Cherdenko' space clip amid unverified reports.",
+   "date": "2026-08-26",
+   "appointment": false
+  },
+  {
+   "text": "Phillies (Archived)",
+   "date": "2026-07-23",
+   "appointment": false
+  },
+  {
+   "text": "Spain (Archived)",
+   "date": "2026-07-20",
+   "appointment": false
+  },
+  {
+   "text": "Meryl Streep (Archived)",
+   "date": "2026-09-18",
+   "appointment": false
+  },
+  {
+   "text": "Burnham new PM. Posts react to his designer clothing, spending pledges, and early decisions as the new PM.",
+   "date": "2026-07-27",
+   "appointment": false
+  },
+  {
+   "text": "Monster Hunter Wilds - S. Port launches December 4, with an Ascendance expansion planned for 2027.",
+   "date": "2026-09-10",
+   "appointment": false
+  },
+  {
+   "text": "Nvidia earnings. Revenue jumped 106% YoY, but memory shortages and margin guidance raised concerns.",
+   "date": "2026-08-27",
+   "appointment": false
+  },
+  {
+   "text": "Ross Douthat (Archived)",
+   "date": "2026-07-29",
+   "appointment": false
+  },
+  {
+   "text": "Reacher season 6. Prime Video renewed it just days after the season 4 finale aired.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "Trump Accounts. The Trump administration signed up more than 60 million kids for 530A savings accounts.",
+   "date": "2026-10-03",
+   "appointment": false
+  },
+  {
+   "text": "Polygon - Erika Ishii. Gamers accuse Polygon of clickbait for calling Erika Ishii a \"controversial\" figure.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Svengoolie (Archived)",
+   "date": "2026-09-14",
+   "appointment": false
+  },
+  {
+   "text": "Galaxy Z Fold 8. Samsung has unveiled the Galaxy Z Fold 8 lineup, including an Ultra model at $2,099, featuring a new passport-sized form factor, Flex Titanium display, and Android 17.",
+   "date": "2026-07-23",
+   "appointment": false
+  },
+  {
+   "text": "Kevin Gausman (Archived)",
+   "date": "2026-08-04",
+   "appointment": false
+  },
+  {
+   "text": "Farmer struggles. A Trump-voting farmer says soaring prices are pushing some to quit farming.",
+   "date": "2026-09-20",
+   "appointment": false
+  },
+  {
+   "text": "LeBron James (Archived)",
+   "date": "2026-07-25",
+   "appointment": false
+  },
+  {
+   "text": "F1 Singapore (Archived)",
+   "date": "2026-10-11",
+   "appointment": false
+  },
+  {
+   "text": "Emily Wilson (Archived)",
+   "date": "2026-07-28",
+   "appointment": false
+  },
+  {
+   "text": "Eminem - Kid Rock. The rappers say their new song puts friendship over politics and hope it sets an example.",
+   "date": "2026-10-05",
+   "appointment": false
+  },
+  {
+   "text": "Drake - Pomni shirt. Fans mock Drake for wearing a Pomni shirt from The Amazing Digital Circus in new music video.",
+   "date": "2026-09-17",
+   "appointment": false
+  },
+  {
+   "text": "Ro Khanna Detained by Is. Armed Israeli settlers detained US Congressman Ro Khanna, sparking debate over settler violence, US-Israel relations, and Netanyahu's government.",
+   "date": "2026-07-13",
+   "appointment": false
+  },
+  {
+   "text": "Timbers Rout Sounders. The Portland Timbers dominated the Seattle Sounders 3-0, stunning fans and sparking renewed excitement following a recent coaching change.",
+   "date": "2026-07-17",
+   "appointment": false
+  },
+  {
+   "text": "AOC (Archived)",
+   "date": "2026-07-21",
+   "appointment": false
+  },
+  {
+   "text": "TTRPG Authors (Archived)",
+   "date": "2026-07-25",
+   "appointment": false
+  },
+  {
+   "text": "Mick Foley (Archived)",
+   "date": "2026-07-10",
+   "appointment": false
+  },
+  {
+   "text": "Gosport Dave quote. Dave Palmer's claim migrants 'get everything' sparks mockery and housing benefit debate.",
+   "date": "2026-09-24",
+   "appointment": false
+  },
+  {
+   "text": "Russia Threat (Archived)",
+   "date": "2026-09-25",
+   "appointment": false
+  },
+  {
+   "text": "Freedom 250 race. The race snarled DC traffic and drew criticism over cost and alcohol sales near monuments.",
+   "date": "2026-08-25",
+   "appointment": false
+  },
+  {
+   "text": "Letterboxd (Archived)",
+   "date": "2026-08-01",
+   "appointment": false
+  },
+  {
+   "text": "Superpower suicide. The historian tells Ben Meiselas no major country has lost power as fast as the US under Trump.",
+   "date": "2026-10-06",
+   "appointment": false
+  },
+  {
+   "text": "Flu, COVID shots. Users share experiences getting flu and COVID vaccines, some noting free clinics.",
+   "date": "2026-09-28",
+   "appointment": false
+  },
+  {
+   "text": "Donald Trump (Archived)",
+   "date": "2026-07-27",
+   "appointment": false
+  },
+  {
+   "text": "Batman Day. Fans share art, interviews, and a new Batman Kamen Rider crossover comic.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Miguel Vargas (Archived)",
+   "date": "2026-07-16",
+   "appointment": false
+  },
+  {
+   "text": "Campaign News (Archived)",
+   "date": "2026-08-19",
+   "appointment": false
+  },
+  {
+   "text": "US missiles depleted. CSIS analysis finds fewer than 827 Patriot and 278 THAAD interceptors remain in US inventory.",
+   "date": "2026-07-30",
+   "appointment": false
+  },
+  {
+   "text": "Sony digital ownership. Sony's lawyers argue in court that buyers only license, not own, digital games.",
+   "date": "2026-09-02",
+   "appointment": false
+  },
+  {
+   "text": "Julian Love (Archived)",
+   "date": "2026-09-11",
+   "appointment": false
+  },
+  {
+   "text": "Netherlands gold move. Dutch central bank cites geopolitical unrest for shifting 86 tonnes from US, Canada.",
+   "date": "2026-09-06",
+   "appointment": false
+  },
+  {
+   "text": "Giga Digger (Archived)",
+   "date": "2026-10-09",
+   "appointment": false
+  },
+  {
+   "text": "AEW All In (Archived)",
+   "date": "2026-08-31",
+   "appointment": false
+  },
+  {
+   "text": "Drag Race UK cancelled. WOW Presents Plus will pick it up, launching a UK All Stars in 2027.",
+   "date": "2026-09-10",
+   "appointment": false
+  },
+  {
+   "text": "Digital Art (Archived)",
+   "date": "2026-09-04",
+   "appointment": false
+  },
+  {
+   "text": "AEW Wrestling (Archived)",
+   "date": "2026-09-28",
+   "appointment": false
+  },
+  {
+   "text": "US Expands Iran Strikes. The US has entered a sixth consecutive night of strikes on Iran, expanding targets to bridges, energy sites, and a key port, amid a broken ceasefire and continued Hormuz tensions.",
+   "date": "2026-07-17",
+   "appointment": false
+  },
+  {
+   "text": "NFL on CBS. Viewers complain about regional game choices, Paramount+ streaming limits, and ads during Sunday games.",
+   "date": "2026-10-06",
+   "appointment": false
+  },
+  {
+   "text": "Record El Ni\u00f1o. Scientists warn the surging El Ni\u00f1o could push global temperatures to record highs.",
+   "date": "2026-09-07",
+   "appointment": false
+  },
+  {
+   "text": "Student voting rights. Nichols' claim that students should vote where they pay taxes sparked pushback online.",
+   "date": "2026-08-13",
+   "appointment": false
+  },
+  {
+   "text": "Brighton beats Man Unite. United lose 3-2 at home in Carabao Cup, fans question manager Carrick's job security.",
+   "date": "2026-09-17",
+   "appointment": false
+  },
+  {
+   "text": "ICE crackdown. Arrests hit record highs as most detained last month had no criminal record.",
+   "date": "2026-08-29",
+   "appointment": false
+  },
+  {
+   "text": "Grand Slam ratings. Tony Khan's Paris show drew fewer total viewers than WWE NXT but won the key demographic.",
+   "date": "2026-10-09",
+   "appointment": false
+  },
+  {
+   "text": "Gotham FC wins. Jaedyn Shaw scored a key goal as Gotham FC topped Racing Louisville 2-1.",
+   "date": "2026-09-12",
+   "appointment": false
+  },
+  {
+   "text": "Sadiq Khan (Archived)",
+   "date": "2026-07-24",
+   "appointment": false
+  },
+  {
+   "text": "Lombardi on UNC leave. The move comes amid Belichick's tenure at Carolina, with reasons for the leave undisclosed.",
+   "date": "2026-07-27",
+   "appointment": false
+  },
+  {
+   "text": "X-Men (Archived)",
+   "date": "2026-08-07",
+   "appointment": false
+  },
+  {
+   "text": "Brandon Dukes (Archived)",
+   "date": "2026-08-20",
+   "appointment": false
+  },
+  {
+   "text": "Rick Astley TOTP. Viewers joke about being Rick-rolled during a Top of the Pops rerun.",
+   "date": "2026-09-12",
+   "appointment": false
+  },
+  {
+   "text": "FrightClub (Archived)",
+   "date": "2026-10-02",
+   "appointment": false
+  },
+  {
+   "text": "MysteryWrestling29 event. Fans praised Jody Threat vs. Nicole Matthews and a standout referee performance.",
+   "date": "2026-09-14",
+   "appointment": false
+  },
+  {
+   "text": "US Open (Archived)",
+   "date": "2026-09-05",
+   "appointment": false
+  },
+  {
+   "text": "SpaceX below IPO price. Shares have lost $1.2T from peak, falling more than 20 points under IPO price.",
+   "date": "2026-07-28",
+   "appointment": false
+  },
+  {
+   "text": "World Cup (Archived)",
+   "date": "2026-07-18",
+   "appointment": false
+  },
+  {
+   "text": "Favorite movie at 20. Users share nostalgic picks like Fight Club, Collateral, and Quantum of Solace.",
+   "date": "2026-09-03",
+   "appointment": false
+  },
+  {
+   "text": "Contract review. A $158M contract for migrant children's care went to a group led by a former ICE agent.",
+   "date": "2026-08-22",
+   "appointment": false
+  },
+  {
+   "text": "Kenny Omega (Archived)",
+   "date": "2026-08-14",
+   "appointment": false
+  },
+  {
+   "text": "Medevac GPS jam crash. A US military GPS jamming drill near White Sands disoriented pilots; all four aboard died and sparked a 30,000-acre wildfire.",
+   "date": "2026-08-05",
+   "appointment": false
+  },
+  {
+   "text": "Donalds drops Trump. Florida governor candidate quietly removed Trump endorsement mentions as approval ratings fall.",
+   "date": "2026-09-23",
+   "appointment": false
+  },
+  {
+   "text": "Inktober (Archived)",
+   "date": "2026-10-02",
+   "appointment": false
+  },
+  {
+   "text": "Russian drone warning. CIA reportedly warned Spain, France, Italy of ship-launched Gerbera drone strikes.",
+   "date": "2026-09-25",
+   "appointment": false
+  },
+  {
+   "text": "Tesla stock plunges. TSLA dropped over 14% \u2014 its worst single day in 13 months \u2014 dragging Nasdaq lower.",
+   "date": "2026-07-24",
+   "appointment": false
+  },
+  {
+   "text": "Big Brother (Archived)",
+   "date": "2026-08-23",
+   "appointment": false
+  },
+  {
+   "text": "Namjoon (Archived)",
+   "date": "2026-09-13",
+   "appointment": false
+  },
+  {
+   "text": "Kevin Keegan Dies. Football legend Kevin Keegan has passed away, prompting tributes from fans remembering his iconic career at Liverpool, Hamburg, and Newcastle.",
+   "date": "2026-07-20",
+   "appointment": false
+  },
+  {
+   "text": "Jodrell Bank axed. The iconic Lovell telescope costs just \u00a32.8m a year; scientists warn cuts would devastate UK science.",
+   "date": "2026-07-27",
+   "appointment": false
+  },
+  {
+   "text": "Balogun (Archived)",
+   "date": "2026-07-03",
+   "appointment": false
+  },
+  {
+   "text": "EPA data center rule. EPA proposal could end public notice on air pollution permits for new data centers.",
+   "date": "2026-08-25",
+   "appointment": false
+  },
+  {
+   "text": "Driscoll's lawsuit. Lawsuit alleges some 2022-24 shipments to Canada exceeded pesticide limits; claims unproven.",
+   "date": "2026-09-28",
+   "appointment": false
+  },
+  {
+   "text": "Nacua inactive. Rams WR ruled out for MNF with hip injury; Isiah Likely to start in his place.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Jacob (Archived)",
+   "date": "2026-07-24",
+   "appointment": false
+  },
+  {
+   "text": "Green card rule lawsuit. 22 states sue to block a DHS rule expanding denials of green cards over public benefits use.",
+   "date": "2026-09-16",
+   "appointment": false
+  },
+  {
+   "text": "Housing crisis. Critics blame decades of policy for gutting public housing and fueling a property casino.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "The Archers (Archived)",
+   "date": "2026-10-09",
+   "appointment": false
+  },
+  {
+   "text": "Turkey's S-400 Deal Bloc. Turkey is negotiating with Russia to transfer its S-400 missiles to a Gulf state, hoping to lift US sanctions and unlock access to F-35 fighter jets.",
+   "date": "2026-07-10",
+   "appointment": false
+  },
+  {
+   "text": "Klobuchar (Archived)",
+   "date": "2026-09-30",
+   "appointment": false
+  },
+  {
+   "text": "Duskbloods Network Test. Nintendo and FromSoftware announced a closed network test for The Duskbloods on Switch 2, running August 21\u201324, with applications open July 22\u201328.",
+   "date": "2026-07-15",
+   "appointment": false
+  },
+  {
+   "text": "NYC Subway (Archived)",
+   "date": "2026-08-19",
+   "appointment": false
+  },
+  {
+   "text": "Mamdani helmet debate. Critics say the mayor blames cyclists, not unsafe streets, for deadly crashes.",
+   "date": "2026-08-26",
+   "appointment": false
+  },
+  {
+   "text": "Pablo Torre (Archived)",
+   "date": "2026-09-03",
+   "appointment": false
+  },
+  {
+   "text": "NDAA Israel integration. The House passed the NDAA including Section 219, which deepens US-Israel military ties. Progressives and critics are urging the Senate to strip the provision.",
+   "date": "2026-07-23",
+   "appointment": false
+  },
+  {
+   "text": "Engineer iron ring. The uncomfortable ring, made from a collapsed bridge, symbolizes engineering ethics and diligence.",
+   "date": "2026-09-26",
+   "appointment": false
+  },
+  {
+   "text": "Sam Neill Dies. Actor Sam Neill, best known for playing Dr. Alan Grant in Jurassic Park, has died, prompting an outpouring of tributes from colleagues, friends, and fans.",
+   "date": "2026-07-15",
+   "appointment": false
+  },
+  {
+   "text": "Snubbed Oscar actors. Users name actors like Angela Bassett and Stephanie Hsu who deserved a win.",
+   "date": "2026-07-25",
+   "appointment": false
+  },
+  {
+   "text": "Flock camera backlash. Critics cite wrongful stops, abortion tracking claims, and a city dropping its contract.",
+   "date": "2026-08-27",
+   "appointment": false
+  },
+  {
+   "text": "Ratko Mladic (Archived)",
+   "date": "2026-08-28",
+   "appointment": false
+  },
+  {
+   "text": "Israel conflict. Posts cover Israeli strikes, Gaza genocide claims, and Hamas disarmament talks.",
+   "date": "2026-08-13",
+   "appointment": false
+  },
+  {
+   "text": "America250 (Archived)",
+   "date": "2026-07-03",
+   "appointment": false
+  },
+  {
+   "text": "Mike Collins. At a Georgia Senate debate, the Republican candidate said \"these people\" feel forgotten and are lashing out.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Horror writers chat. Writers share favorite music and horror genres in a weekly HorrorWritersChat thread.",
+   "date": "2026-10-02",
+   "appointment": false
+  },
+  {
+   "text": "City - Bouaddi. Lille agree to sell the 18-year-old midfielder for a fee reaching around 100m.",
+   "date": "2026-08-23",
+   "appointment": false
+  },
+  {
+   "text": "Operation Vivaldi. Ukraine's 3rd Army Corps reports gains near Shandryholove and Derylove.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Dateline (Archived)",
+   "date": "2026-10-11",
+   "appointment": false
+  },
+  {
+   "text": "Trump Lawsuit (Archived)",
+   "date": "2026-07-22",
+   "appointment": false
+  },
+  {
+   "text": "UK climate crisis. Posts cover drought, water pricing, North Sea oil, and Britain's inadequate climate response.",
+   "date": "2026-08-17",
+   "appointment": false
+  },
+  {
+   "text": "Fortnite Linux. Epic Games previews a faster launcher and is rebuilding Easy Anti-Cheat to support Linux players.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Naomi Osaka (Archived)",
+   "date": "2026-09-07",
+   "appointment": false
+  },
+  {
+   "text": "Thom Tillis. Republican Sen. Thom Tillis talks about his book and claims Democrats ignored Republicans on Obamacare.",
+   "date": "2026-10-09",
+   "appointment": false
+  },
+  {
+   "text": "Trump's arch review. Preservation officials say the required historic review was abruptly terminated despite concerns.",
+   "date": "2026-09-26",
+   "appointment": false
+  },
+  {
+   "text": "Vikings-Bears (Archived)",
+   "date": "2026-09-21",
+   "appointment": false
+  },
+  {
+   "text": "Bulgaria drones. One commercial vessel sank in the Black Sea; PM Rumen Radev summoned Russia's ambassador.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Lions final. Brisbane's \"wharfie time\" comeback sparks debate after the AFL grand final.",
+   "date": "2026-09-28",
+   "appointment": false
+  },
+  {
+   "text": "Bessent vs. bond market. Bessent's 'I am the house' bet falters as yields hit 2007 highs and Norway trims Treasuries.",
+   "date": "2026-09-17",
+   "appointment": false
+  },
+  {
+   "text": "Trump remarks. Comments attributed to Trump in a Fox interview drew online reaction from trans advocates.",
+   "date": "2026-09-02",
+   "appointment": false
+  },
+  {
+   "text": "Terror arrests. Five British men arrested near a base the US has used to strike Iran are being released on bail.",
+   "date": "2026-10-03",
+   "appointment": false
+  },
+  {
+   "text": "Beneficiary drug tests. New Zealand's National Party plans random tests for Jobseeker benefit recipients, with sanctions for failures.",
+   "date": "2026-10-08",
+   "appointment": false
+  },
+  {
+   "text": "Paxton pediatricians. Texas attorney general Ken Paxton alleges a profit-driven conspiracy over childhood vaccines.",
+   "date": "2026-10-07",
+   "appointment": false
+  },
+  {
+   "text": "Jackson vs. emergency do. She says the court's frequent use of the docket has aided Trump policies pending lower court review.",
+   "date": "2026-09-26",
+   "appointment": false
+  },
+  {
+   "text": "Trump DEI rally. Uniformed officers attended the event, drawing comparisons to authoritarian spectacles.",
+   "date": "2026-08-16",
+   "appointment": false
+  },
+  {
+   "text": "Meta Muse flaw. Researcher warns the zero-day could turn Muse into an 'ultimate backdoor'.",
+   "date": "2026-09-23",
+   "appointment": false
+  },
+  {
+   "text": "Heat pump rebates. Mark Carney's government commits $2 billion to retrofit one million homes and help families switch.",
+   "date": "2026-10-10",
+   "appointment": false
+  },
+  {
+   "text": "Iran bomb plans. Military plans would use the \"mother of all bombs\" on Iranian energy and nuclear sites if Trump orders it.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Cuban deportations. Third-country removals of Cubans from Florida draw legal challenges and criticism.",
+   "date": "2026-09-02",
+   "appointment": false
+  },
+  {
+   "text": "Hegseth - 60 Minutes. Airmen reportedly had reservations, and officials worried about classified details leaking.",
+   "date": "2026-09-14",
+   "appointment": false
+  },
+  {
+   "text": "LSU beats Clemson. Lane Kiffin's LSU debut ended in a 51-10 blowout of Dabo Swinney's Clemson.",
+   "date": "2026-09-07",
+   "appointment": false
+  },
+  {
+   "text": "Disney price hike. Monthly price jumps from $13 to $21.49, fueling frustration over streaming costs.",
+   "date": "2026-09-26",
+   "appointment": false
+  },
+  {
+   "text": "Trump Nobel. Donald Trump criticizes Norway over the Nobel Peace Prize selection.",
+   "date": "2026-10-10",
+   "appointment": false
+  },
+  {
+   "text": "Harden - Cavaliers. The 97M deal is fully guaranteed, pushing Harden's career earnings past 500 million.",
+   "date": "2026-08-20",
+   "appointment": false
+  },
+  {
+   "text": "Misiorowski start. Brewers' \"Miz\" opens with triple-digit four-seamers, gets an early double play off Will Smith.",
+   "date": "2026-10-12",
+   "appointment": false
+  },
+  {
+   "text": "Drumcree parade. Reports of a contested Orange Order march on Garvaghy Road and residents' response.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "Trump approval poll. YouGov/Economist poll finds Trump approval underwater in all but Wyoming, Idaho, West Virginia.",
+   "date": "2026-08-25",
+   "appointment": false
+  },
+  {
+   "text": "Durbin SCOTUS remarks. Democrats react angrily, many calling for Durbin to retire over his SCOTUS comments.",
+   "date": "2026-09-17",
+   "appointment": false
+  },
+  {
+   "text": "No Kings Day. Organizers call October 17 a critical day for mass voter outreach and protests.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "Gary power outage. Governor Braun orders probe as data centers kept power while residents went without for weeks.",
+   "date": "2026-08-25",
+   "appointment": false
+  },
+  {
+   "text": "Africa war poll. An X poll asked who would win a war; users call its premise racist for ignoring modern weapons.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Trucker strike. Posts claim truckers will halt deliveries nationwide over fuel costs and wages.",
+   "date": "2026-09-23",
+   "appointment": false
+  },
+  {
+   "text": "Lottery song challenge. Users share songs for winning the lottery and disappearing as part of a daily music challenge.",
+   "date": "2026-09-16",
+   "appointment": false
+  },
+  {
+   "text": "Reagan legacy. Users revisit the former president's record on national debt, taxes, Iran arms sales, and AIDS.",
+   "date": "2026-10-11",
+   "appointment": false
+  },
+  {
+   "text": "Patriot missile shortage. Officials warn Iran war has drained US Patriot interceptor stocks in Europe.",
+   "date": "2026-08-27",
+   "appointment": false
+  },
+  {
+   "text": "ICE deportations. Deportees to Haiti and Liberia describe alleged mistreatment; ICE responds.",
+   "date": "2026-08-31",
+   "appointment": false
+  },
+  {
+   "text": "Profile memo. Memo cites alleged fake profiles said to target ICE agents' information.",
+   "date": "2026-09-18",
+   "appointment": false
+  },
+  {
+   "text": "Iran conflict. Commentators discuss troop casualties, munitions stocks, and contested oil tanker accounts.",
+   "date": "2026-08-23",
+   "appointment": false
+  },
+  {
+   "text": "Boulder climate suit. ExxonMobil and Suncor Energy ask the justices to end Boulder's lawsuit as the new term begins.",
+   "date": "2026-10-08",
+   "appointment": false
+  },
+  {
+   "text": "Gatorade recall. PepsiCo pulls over 122,000 cases in 37 states over food colorings missing from labels.",
+   "date": "2026-10-07",
+   "appointment": false
+  },
+  {
+   "text": "Roadless rule repeal. Plan would open 45 million acres of forest to roads and logging.",
+   "date": "2026-08-23",
+   "appointment": false
+  },
+  {
+   "text": "Trump midterm ads. Trump reportedly plans to spend his $400M super PAC on ads touting his own record.",
+   "date": "2026-08-26",
+   "appointment": false
+  },
+  {
+   "text": "NIH grant scrutiny. Budget chief Vought clashed with officials, calling NIH grants overly 'woke'.",
+   "date": "2026-09-20",
+   "appointment": false
+  },
+  {
+   "text": "Paramount settlement tal. Talks aim to resolve antitrust suit over Paramount's $81B deal to buy Warner Bros.",
+   "date": "2026-09-19",
+   "appointment": false
+  },
+  {
+   "text": "Carville on messaging. Carville's comments spark debate over Democratic strategy and his relevance today.",
+   "date": "2026-09-25",
+   "appointment": false
+  },
+  {
+   "text": "FBI breach claim. Group claims 3TB of agent data taken via PeopleSoft flaw; FBI investigating the claim.",
+   "date": "2026-09-25",
+   "appointment": false
+  },
+  {
+   "text": "BB28 jury interview. Jurors Lala, Angela, Barrett, Yash, Melody and Dee discuss the game and finale in exclusive interview.",
+   "date": "2026-09-30",
+   "appointment": false
+  },
+  {
+   "text": "Superintelligence Force. Trump's new AI task force will be led by Jay Clayton and Andrew Ferguson and report to him.",
+   "date": "2026-10-07",
+   "appointment": true
+  },
+  {
+   "text": "Trump's arch. Park Service says the planned arch could damage historic DC monuments but must proceed.",
+   "date": "2026-09-17",
+   "appointment": false
+  },
+  {
+   "text": "Galactic Racer. Critics praise the new arcade podracing game, though some fans want split-screen co-op.",
+   "date": "2026-10-05",
+   "appointment": false
+  },
+  {
+   "text": "AP Top 25. Missouri climbs to No. 14, Florida drops, LSU returns to the top 10, and Pitt enters at No. 25.",
+   "date": "2026-10-05",
+   "appointment": false
+  },
+  {
+   "text": "Funding cap dropped. Unions warned a donor cap could hurt their ability to fund Labour.",
+   "date": "2026-08-27",
+   "appointment": false
+  },
+  {
+   "text": "Guile popcorn bucket. AMC's Street Fighter bucket, modeled on Cody Rhodes, mimics Guile's hairstyle.",
+   "date": "2026-09-19",
+   "appointment": false
+  },
+  {
+   "text": "AI fantasy football. Nic Carter says chatbots run his league because it's a social obligation, not his hobby.",
+   "date": "2026-10-09",
+   "appointment": false
+  },
+  {
+   "text": "IGN layoffs. Cuts hit long-time video hosts, including Nintendo Voice Chat's Seth Macy.",
+   "date": "2026-09-15",
+   "appointment": false
+  },
+  {
+   "text": "Iran rally. Hundreds of thousands joined a government-organized show of defiance after months of war.",
+   "date": "2026-09-19",
+   "appointment": false
+  },
+  {
+   "text": "MacArthur genius grants. Twenty fellows, including a jazz saxophonist and a forensic anthropologist, each get $800,000.",
+   "date": "2026-10-01",
+   "appointment": false
+  },
+  {
+   "text": "Banned Books Week. Readers share favorite challenged titles and push back against censorship.",
+   "date": "2026-10-10",
+   "appointment": false
+  },
+  {
+   "text": "UK energy prices. Ofgem's price cap rises 4% in October, pushing typical bills to \u00a31,723 a year.",
+   "date": "2026-08-26",
+   "appointment": false
+  },
+  {
+   "text": "RFK Samoa. Documents about his 2019 Samoa trip are being compared with his Senate testimony.",
+   "date": "2026-08-27",
+   "appointment": false
+  },
+  {
+   "text": "Stanford photo. Stanford faces backlash over an AI-altered student photo said to change the subject's race.",
+   "date": "2026-09-24",
+   "appointment": false
+  },
+  {
+   "text": "Alberta separation. Poll on Albertans' views on separation as Smith faces criticism over her stance.",
+   "date": "2026-09-01",
+   "appointment": false
+  },
+  {
+   "text": "Pentagon promotion test. Critics question the new war-game test and its designer's background.",
+   "date": "2026-09-24",
+   "appointment": false
+  },
+  {
+   "text": "Claude watermarking. Some users are canceling subscriptions, fearing clients will flag their work as AI-generated.",
+   "date": "2026-08-20",
+   "appointment": false
+  },
+  {
+   "text": "One Ring game. Users pitch pop-culture characters like Lois Lane or Clouseau who could resist Sauron's ring.",
+   "date": "2026-09-16",
+   "appointment": false
+  },
+  {
+   "text": "Tk'emlups gathering. Masked group spotted on reserve ahead of Truth and Reconciliation Day sparks concern.",
+   "date": "2026-09-30",
+   "appointment": false
+  },
+  {
+   "text": "Canada hires researchers. 48 of 64 recruits left US campuses amid Trump-era funding and visa crackdowns.",
+   "date": "2026-08-29",
+   "appointment": false
+  },
+  {
+   "text": "Proclaimers backlash. Users mock the duo's Telegraph interview criticizing the 'trans lobby' and free speech.",
+   "date": "2026-09-14",
+   "appointment": false
+  },
+  {
+   "text": "Gamescom AI backlash. Many criticize Gamescom's Opening Night games as AI-generated slop, souring reactions.",
+   "date": "2026-08-26",
+   "appointment": false
+  },
+  {
+   "text": "Cattle groups vs. ICE. Texas, Oklahoma and Kansas cattle groups warn ICE raids could raise beef prices.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "Bond yields. S&P 500 and Nasdaq ease from record highs as 30-year Treasury rates hit 24-year peak.",
+   "date": "2026-10-09",
+   "appointment": false
+  },
+  {
+   "text": "Australia skips sanction. European allies say they were surprised Australia withdrew from the joint sanctions statement.",
+   "date": "2026-09-20",
+   "appointment": false
+  },
+  {
+   "text": "Collins staffer. Reports allege a former staffer for GOP's Mike Collins shared extremist imagery online.",
+   "date": "2026-08-27",
+   "appointment": false
+  },
+  {
+   "text": "Donalds military blame. NBC's Peter Alexander pushed back, noting Trump has led the military for nearly two years.",
+   "date": "2026-08-20",
+   "appointment": false
+  },
+  {
+   "text": "Margaret Hamilton. The computing pioneer led software development for the Apollo program and coined \"software engineering.\"",
+   "date": "2026-10-11",
+   "appointment": false
+  },
+  {
+   "text": "Draganfly - Trump Jr.. Canadians push MPs to probe drone firm Draganfly's contract tied to Don Jr.",
+   "date": "2026-10-01",
+   "appointment": false
+  },
+  {
+   "text": "Labour leads polls. Labour tops every major pollster for the first time since October 2024.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Guilfoyle topples-govern. She reportedly told Greek officials the US could topple any country's government, as with Romania.",
+   "date": "2026-09-30",
+   "appointment": false
+  },
+  {
+   "text": "Prison experiment show. Critics compare it to Squid Game and warn it echoes the original experiment's harms.",
+   "date": "2026-09-16",
+   "appointment": false
+  },
+  {
+   "text": "Fuel costs. Brown University's tracker puts extra US gasoline and diesel spending at $131 billion.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Trans rights rollback. Posts note dozens of US states now restrict trans healthcare, IDs, and bathroom access.",
+   "date": "2026-09-15",
+   "appointment": false
+  },
+  {
+   "text": "MA primary. Emerson poll surveys Markey and Moulton ahead of Massachusetts Senate primary.",
+   "date": "2026-08-31",
+   "appointment": false
+  },
+  {
+   "text": "Epstein files. Posts call for full disclosure of Epstein records and accountability for connected figures.",
+   "date": "2026-08-17",
+   "appointment": false
+  },
+  {
+   "text": "Grassley diesel remark. Critics mock Grassley's call to limit oil profits as hypocritical or incoherent.",
+   "date": "2026-09-21",
+   "appointment": false
+  },
+  {
+   "text": "Vance on Carney. Vance called Carney's stance in trade talks with Trump \"hilarious\" at a private fundraiser.",
+   "date": "2026-08-22",
+   "appointment": false
+  },
+  {
+   "text": "RFK Jr. keynote. He spoke to Children's Health Defense as measles cases surge across the US.",
+   "date": "2026-09-18",
+   "appointment": false
+  },
+  {
+   "text": "Week 4 results. Oregon beat USC and several ranked teams like Penn State fell in a wild Saturday.",
+   "date": "2026-09-28",
+   "appointment": false
+  },
+  {
+   "text": "Angus slams Americans. Canadian commentator asks why Americans aren't protesting Trump more forcefully.",
+   "date": "2026-08-27",
+   "appointment": false
+  },
+  {
+   "text": "Bombs to Israel. Critics say US taxpayers fund the sale amid Gaza's rising civilian death toll.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Texas primary. Crockett and Talarico face off in the Texas Senate primary; attention turns to down-ballot races.",
+   "date": "2026-08-29",
+   "appointment": false
+  },
+  {
+   "text": "Walmart - Apple Pay. Tap-to-pay rolls out August 24, ending years of Walmart holding out on Apple/Google Pay.",
+   "date": "2026-08-21",
+   "appointment": false
+  },
+  {
+   "text": "Aaron Donald returns. He signs a one-year, $20M deal with incentives up to $30M, joining Myles Garrett.",
+   "date": "2026-08-31",
+   "appointment": false
+  },
+  {
+   "text": "CLARITY Act. Senate voted on the crypto market structure bill; Warren led opposition citing Trump ethics concerns.",
+   "date": "2026-09-17",
+   "appointment": false
+  },
+  {
+   "text": "Treasury yield surges. Rising yields spark comparisons to the UK's 2022 gilt crisis and bond market jitters.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "GTA 6 hype. Rockstar says the game will skip microtransactions and generative AI at launch.",
+   "date": "2026-08-31",
+   "appointment": false
+  },
+  {
+   "text": "Odyssey box office. The film hit $1.68 billion worldwide, becoming Universal's highest-grossing movie ever.",
+   "date": "2026-09-13",
+   "appointment": false
+  },
+  {
+   "text": "ICE case. Texas judge weighs extradition of ICE officer in Minneapolis shooting case.",
+   "date": "2026-08-27",
+   "appointment": false
+  },
+  {
+   "text": "Mike Johnson comments. Johnson says Republicans would continue current course if they keep the House.",
+   "date": "2026-10-01",
+   "appointment": false
+  },
+  {
+   "text": "Military aid shift. State Dept moves $52M from Slovakia, Iraq and others to Panama, Peru, Colombia.",
+   "date": "2026-09-16",
+   "appointment": false
+  },
+  {
+   "text": "El-Sayed responds to Ken. Barack Obama will campaign with El-Sayed in Detroit, the AP reports.",
+   "date": "2026-10-10",
+   "appointment": false
+  },
+  {
+   "text": "Reform housing plan. Critics say the plan would deprioritize UK citizens born abroad, including military families.",
+   "date": "2026-08-24",
+   "appointment": false
+  },
+  {
+   "text": "Gates warns on AI. Gates fears mass unemployment, bioterrorism, and a public backlash against AI.",
+   "date": "2026-08-28",
+   "appointment": false
+  },
+  {
+   "text": "Paxton vs. Talarico. Paxton defends owning 15 homes as Talarico surges in polling ahead of election.",
+   "date": "2026-08-31",
+   "appointment": false
+  },
+  {
+   "text": "MLB lineups today. Fans debate lineup choices, including Freeman's absence and platoon splits.",
+   "date": "2026-09-06",
+   "appointment": false
+  },
+  {
+   "text": "Senate midterms. Alaska Senate primary draws attention as Peltola's campaign shapes Democratic outlook.",
+   "date": "2026-08-30",
+   "appointment": false
+  },
+  {
+   "text": "Execution will be stream. The execution by firing squad of Fort Hood shooter Nidal Malik Hasan will be livestreamed, per an Associated Press report.",
+   "date": "2026-10-09",
+   "appointment": false
+  },
+  {
+   "text": "Oyer lawsuit. Former pardon attorney's suit follows her removal amid a gun-rights restoration dispute.",
+   "date": "2026-09-04",
+   "appointment": false
+  },
+  {
+   "text": "Jeffries on socialists. House Minority Leader rejects defunding police, open borders, and abolishing the Senate.",
+   "date": "2026-08-16",
+   "appointment": false
+  },
+  {
+   "text": "Carney - strike law. Unions warn new binding mediation rules could strip workers' right to strike.",
+   "date": "2026-09-20",
+   "appointment": false
+  },
+  {
+   "text": "SpaceX funding. Elon Musk's rocket company is pursuing an Apollo-led debt deal to buy AI hardware, per FT.",
+   "date": "2026-10-08",
+   "appointment": false
+  },
+  {
+   "text": "Lynx clinch No. 1 seed. Minnesota beats Indiana Fever, setting up a playoff matchup vs. the No. 5 seed.",
+   "date": "2026-09-23",
+   "appointment": false
+  },
+  {
+   "text": "Eldridge's homer. Giants prospect's 17th home run set a new career-long distance mark.",
+   "date": "2026-09-16",
+   "appointment": false
+  },
+  {
+   "text": "FDA chemicals. The regulator may widen a loophole that lets non-carcinogenic harmful compounds skip safety review.",
+   "date": "2026-10-14",
+   "appointment": false
+  },
+  {
+   "text": "Trump-Zelensky Moscow. Zelensky rejected the idea, reportedly upset Trump raised it during their UN meeting.",
+   "date": "2026-09-26",
+   "appointment": false
+  },
+  {
+   "text": "Natalie Harp. Photos show the Trump aide with Stephen Miller and Press Secretary Katie Zacharia",
+   "date": "2026-10-13",
+   "appointment": false
+  },
+  {
+   "text": "UN vote. A UN vote on women's equality drew attention to the US position and online reaction.",
+   "date": "2026-09-26",
+   "appointment": false
+  },
+  {
+   "text": "NFL vs. DHS. DHS used Brian Dawkins' hits to promote immigration enforcement, angering the NFL and fans.",
+   "date": "2026-10-01",
+   "appointment": false
+  },
+  {
+   "text": "Converse ad backlash. Converse apologized and removed the ad after backlash over the imagery.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Resume gap meme. Users imagine how different professions and figures would answer a job interviewer's question.",
+   "date": "2026-10-14",
+   "appointment": false
+  },
+  {
+   "text": "Annie Andrews. Backing Darline Graham for South Carolina Senate, Donald Trump used an anti-trans slur on her rival.",
+   "date": "2026-10-08",
+   "appointment": false
+  },
+  {
+   "text": "Trump's arch. Critics mock the $100M triumphal arch planned near Arlington Cemetery.",
+   "date": "2026-09-04",
+   "appointment": false
+  },
+  {
+   "text": "Rogers ad. A Tim Robinson-style ad targets Rogers ahead of his Michigan Senate run.",
+   "date": "2026-09-29",
+   "appointment": false
+  },
+  {
+   "text": "Ebenezer casts Depp. Director Ti West says his Christmas Carol take gives Scrooge a \"gray area\" and sympathetic logic.",
+   "date": "2026-09-01",
+   "appointment": false
+  },
+  {
+   "text": "DHS voter data. Whistleblowers and senators raise questions over DHS handling of voter data.",
+   "date": "2026-09-19",
+   "appointment": false
+  },
+  {
+   "text": "2010s Twitter. Users recall the platform's chaotic scandals, like Bean Dad, hacked accounts, and joke-stealing pastors.",
+   "date": "2026-10-03",
+   "appointment": false
+  },
+  {
+   "text": "LNG Canada expansion. The Kitimat project could double LNG export capacity, sparking climate concerns.",
+   "date": "2026-10-01",
+   "appointment": false
+  },
+  {
+   "text": "Amazon workers on SNAP. Posts say reliance on SNAP and Medicaid tripled since 2020 as profits soared.",
+   "date": "2026-09-28",
+   "appointment": false
+  },
+  {
+   "text": "Blueberry recall. FDA's highest alert covers Publix frozen blueberries and mixed berries in several states.",
+   "date": "2026-08-21",
+   "appointment": false
+  },
+  {
+   "text": "Jason Watson. Posts discuss the detention of Maj. Jason Watson, who publicly called for Trump's impeachment.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Nolan Wells. Grand jury reviewed phone data, GPS logs and 43 witnesses in the Nolan Wells case.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Rally protester. Reports of an altercation with a woman in an Epstein files shirt at Trump's Ohio rally",
+   "date": "2026-10-14",
+   "appointment": false
+  },
+  {
+   "text": "Tohono O'odham wall. ProPublica reports DHS used masked agents, drones and surveillance on the Arizona tribe as construction began.",
+   "date": "2026-10-11",
+   "appointment": false
+  },
+  {
+   "text": "Carney approval. A Liaison poll measures the Canadian prime minister's net approval across regions.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "McClatchy layoffs. The layoffs leave the Herald-Leader with just two reporters covering city and state government.",
+   "date": "2026-09-11",
+   "appointment": false
+  },
+  {
+   "text": "WSJ - water bottles. Reactions mock WSJ's claim that big water bottles are overkill for hydration.",
+   "date": "2026-08-29",
+   "appointment": false
+  },
+  {
+   "text": "Jobs gender gap. Data shows nearly all new jobs in Donald Trump's second term went to women, many in healthcare.",
+   "date": "2026-10-03",
+   "appointment": false
+  },
+  {
+   "text": "Chretien's 9/11 speech. He told the US not to mistake Canada's kindness for weakness.",
+   "date": "2026-09-13",
+   "appointment": false
+  },
+  {
+   "text": "Kushner diplomacy. Kushner urges Netanyahu on Hamas disarmament while pushing Iran nuclear deal.",
+   "date": "2026-08-19",
+   "appointment": false
+  },
+  {
+   "text": "\"Clanker\" debate. Some argue it's a slur rooted in racism, others say it's just silly AI slang.",
+   "date": "2026-08-25",
+   "appointment": false
+  },
+  {
+   "text": "Trump's Beast. Donald Trump says weather grounded his flight from Texas, so the presidential limo is driving him to a rally.",
+   "date": "2026-10-02",
+   "appointment": false
+  },
+  {
+   "text": "Reform inquiry. Nigel Farage plans to sue journalists after an internal probe of an undercover donations sting.",
+   "date": "2026-10-09",
+   "appointment": false
+  },
+  {
+   "text": "Mobile game ads. A viral TikTok by ayoships shows how a free app adjusts difficulty to push more advertising.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "Hoskins case. Missouri court proceedings involving Hoskins and the use of the 2022 map.",
+   "date": "2026-09-12",
+   "appointment": false
+  },
+  {
+   "text": "Reacher militia season. Ritchson says the white-supremacist militia book was shelved after Trump's re-election.",
+   "date": "2026-09-21",
+   "appointment": false
+  },
+  {
+   "text": "Layton AI backlash. Fans say Level 5's use of GenAI is souring excitement for the new title.",
+   "date": "2026-09-16",
+   "appointment": false
+  },
+  {
+   "text": "Ben-Gvir expulsion plan. The $20B, 7-year plan targets removal of nearly 2 million Palestinians; US has rejected it.",
+   "date": "2026-09-05",
+   "appointment": false
+  },
+  {
+   "text": "Socialist Batman villain. A viral post reimagines Batman villains as charismatic advocates for Gotham's poor.",
+   "date": "2026-09-30",
+   "appointment": false
+  },
+  {
+   "text": "Celebrities turning 80. A viral list of 80-year-old celebrities sparks jokes, disbelief, and some pointed political jabs.",
+   "date": "2026-08-26",
+   "appointment": false
+  },
+  {
+   "text": "Johnson recess backlash. Critics slam Johnson for scheduling only 4 working days through November, calling it avoidance.",
+   "date": "2026-09-05",
+   "appointment": false
+  },
+  {
+   "text": "Dancing with Stars. Viewers rally votes for Tatyana and her partner Jan and praise this season's judges' scoring.",
+   "date": "2026-10-07",
+   "appointment": false
+  },
+  {
+   "text": "ICE robot dogs. Critics fear abuse as ICE reportedly plans $2M purchase of door-opening, tracking robot dogs.",
+   "date": "2026-08-30",
+   "appointment": false
+  },
+  {
+   "text": "Gallego - ballroom. Sen. Gallego says he'd support tearing down Trump's White House ballroom and arch.",
+   "date": "2026-09-14",
+   "appointment": false
+  },
+  {
+   "text": "Obamacare broker halt. CMS chief Oz says no new ACA brokers will be approved for months, sparking backlash.",
+   "date": "2026-09-23",
+   "appointment": false
+  },
+  {
+   "text": "Google Maps renames Lake. Users debate whether Google's automated GNIS data policy is really a neutral choice.",
+   "date": "2026-08-31",
+   "appointment": false
+  },
+  {
+   "text": "Bannon on Newsom. Bannon's comment sparks mixed reactions, with some mocking the 'MAGA philosopher' label.",
+   "date": "2026-10-01",
+   "appointment": false
+  },
+  {
+   "text": "Canvasser video. Ring footage of a Stronger Maine PAC canvasser and a doorstep package draws online reaction.",
+   "date": "2026-09-18",
+   "appointment": false
+  },
+  {
+   "text": "Air Force One playlist. Reporters called the eclectic mix, including WWE and ABBA, wild and incoherent.",
+   "date": "2026-09-15",
+   "appointment": false
+  },
+  {
+   "text": "Trump son's gift. Blanche says Trump family doesn't know who gave son a gift tied to Putin.",
+   "date": "2026-09-16",
+   "appointment": false
+  },
+  {
+   "text": "Hasan Piker fixation. Fox News mentioned Piker more than 'transgender' in August, sparking debate on his influence.",
+   "date": "2026-09-05",
+   "appointment": false
+  },
+  {
+   "text": "Brexit interference. Andy Burnham comments on claims of Russian interference in the 2016 Brexit referendum.",
+   "date": "2026-10-15",
+   "appointment": false
+  },
+  {
+   "text": "JD Vance's stance. A photo of Vance standing oddly sparked mocking jokes and memes online.",
+   "date": "2026-09-21",
+   "appointment": false
+  },
+  {
+   "text": "Burgum interview. On Squawk Box, the Interior Secretary said Trump stopped World War 3 and climate talk has faded.",
+   "date": "2026-10-08",
+   "appointment": false
+  },
+  {
+   "text": "Knies-Marchenko trade. Habs reportedly tried to land Marchenko too, but Leafs won the deal.",
+   "date": "2026-10-01",
+   "appointment": false
+  },
+  {
+   "text": "Trump hair color. Users mock the sudden darker hair, linking it to jokes about his health and image.",
+   "date": "2026-09-06",
+   "appointment": false
+  },
+  {
+   "text": "Politico dispute. Posts discuss claims about who sourced a Politico story and the White House press ban.",
+   "date": "2026-09-24",
+   "appointment": false
+  },
+  {
+   "text": "Testosterone screening. Male troops 30+ must be screened for low testosterone, including sexual symptoms.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Trump Nobel. Donald Trump claims nobody has been more deserving, saying he settled eight wars.",
+   "date": "2026-10-07",
+   "appointment": false
+  },
+  {
+   "text": "AI data centers. Posts cover tax breaks for Meta, strain on power grids, and political fights over regulation.",
+   "date": "2026-10-03",
+   "appointment": false
+  },
+  {
+   "text": "Hegseth extends deployme. Move gives Trump open-ended options in the Iran conflict, straining troops further.",
+   "date": "2026-09-04",
+   "appointment": false
+  },
+  {
+   "text": "Reflecting Pool case. Judge Edelman's ruling in the DOJ case involving ex-Olympian David Hearn.",
+   "date": "2026-10-03",
+   "appointment": false
+  },
+  {
+   "text": "Porter Jr. trade. Steelers send cornerback Joey Porter Jr. to the Cowboys, per Tom Pelissero.",
+   "date": "2026-10-02",
+   "appointment": false
+  },
+  {
+   "text": "Kennedy Center. Lawsuit concerns board vote on adding Trump's name; center delays action until after Sept. 8.",
+   "date": "2026-08-20",
+   "appointment": false
+  },
+  {
+   "text": "Jeffries-Kushner meeting. Reported private meeting draws mixed reactions from Democrats ahead of midterms.",
+   "date": "2026-08-26",
+   "appointment": false
+  },
+  {
+   "text": "USMNT vs. Peru. 16-year-old Sullivan debuts alongside fellow teens Ellis and Miller against Peru.",
+   "date": "2026-09-27",
+   "appointment": false
+  },
+  {
+   "text": "Collins inquiry. Reports describe an FBI inquiry involving donations from a defense CEO and official intervention.",
+   "date": "2026-09-22",
+   "appointment": false
+  },
+  {
+   "text": "Fuel economy rollback. Critics say the new rules favor gas cars over EVs, sparking pushback online.",
+   "date": "2026-09-30",
+   "appointment": false
+  },
+  {
+   "text": "Navy base damage. Reporting concerns damage to a Navy resupply base and its effect on USS Lincoln resupply.",
+   "date": "2026-08-21",
+   "appointment": false
+  },
+  {
+   "text": "DOGE records. Justices agree to hear the Trump administration's appeal to block discovery in a DOGE FOIA suit.",
+   "date": "2026-10-14",
+   "appointment": false
+  },
+  {
+   "text": "MLB playoff race. Blue Jays, White Sox, and other teams jockey for AL wild card spots late in season.",
+   "date": "2026-09-17",
+   "appointment": false
+  },
+  {
+   "text": "Katie Zacharia. Trump's new White House spokesperson draws scrutiny over Zelenskyy comments on Fox and abortion claims.",
+   "date": "2026-10-11",
+   "appointment": false
+  },
+  {
+   "text": "Trump on Ukraine war. Trump says Russia lost control of its diesel industry due to Ukrainian strikes.",
+   "date": "2026-09-21",
+   "appointment": false
+  },
+  {
+   "text": "Clippers inquiry. NBA reviews Clippers, Ballmer and Kawhi Leonard contract over salary cap questions.",
+   "date": "2026-09-02",
+   "appointment": false
+  },
+  {
+   "text": "Working class poll. Voters cited Homer Simpson, Fran Fine, Peter Griffin, and Hank Hill as working class.",
+   "date": "2026-09-09",
+   "appointment": false
+  },
+  {
+   "text": "Spain election. Spain's prime minister sets a November 29 vote amid a parliamentary fight over housing measures.",
+   "date": "2026-10-07",
+   "appointment": false
+  },
+  {
+   "text": "Oates vs. Maher. Oates says Maher trivializes 'woke' by equating it with deadly MAGA policies.",
+   "date": "2026-08-30",
+   "appointment": false
+  },
+  {
+   "text": "Expand Supreme Court. Clyburn suggests adding four seats; some reactions call for even more, like 19.",
+   "date": "2026-08-31",
+   "appointment": false
+  },
+  {
+   "text": "Emmer beef prices. Critics mock Emmer's claim that ground beef costs under $2 a pound.",
+   "date": "2026-09-18",
+   "appointment": false
+  },
+  {
+   "text": "SCOTUS amendment. A House vote on the court-size amendment, amid debate over expanding the Supreme Court.",
+   "date": "2026-09-04",
+   "appointment": false
+  },
+  {
+   "text": "Democrats defund ICE. Stuart Stevens says Democrats should act as a dissident movement, not governing party.",
+   "date": "2026-09-07",
+   "appointment": false
+  },
+  {
+   "text": "Alito recusal. Alito reverses course, stepping aside from Suncor climate liability case at Supreme Court.",
+   "date": "2026-09-30",
+   "appointment": false
+  },
+  {
+   "text": "Trump-Cohen podcast. Trump is set to record with his former lawyer, sparking mockery online.",
+   "date": "2026-08-20",
+   "appointment": false
+  },
+  {
+   "text": "Garvaghy Road case. High Court hears residents' injunction bid over claims about PSNI information.",
+   "date": "2026-09-27",
+   "appointment": false
+  }
+ ]
+}

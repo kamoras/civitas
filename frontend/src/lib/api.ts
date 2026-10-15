@@ -16,6 +16,7 @@ import type { LiveResults, PviMap, TownBallot, TownEntry } from "@/types/electio
 import type { SignalOverlap } from "@/types/scoreBreakdown";
 import type { Agreement } from "@/types/compare";
 import type { MemberSupport } from "@/types/presidentialSupport";
+import type { TrendPostsAudit } from "@/types/trendPosts";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -1618,6 +1619,15 @@ export interface ApiUsage {
 
 export async function fetchAdminApiUsage(token: string, days: number = 30): Promise<ApiUsage> {
   return requestJson(`${API_BASE}/admin/api-usage?days=${days}`, "API usage failed", {
+    init: { headers: adminHeaders(token) },
+  });
+}
+
+export async function fetchAdminTrendPosts(
+  token: string,
+  days: number = 30
+): Promise<TrendPostsAudit> {
+  return requestJson(`${API_BASE}/admin/trend-posts?days=${days}`, "Trend posts audit failed", {
     init: { headers: adminHeaders(token) },
   });
 }

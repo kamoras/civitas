@@ -25,7 +25,8 @@ from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_
 from app.pipeline.analyze.congress_bluesky import post_congress_lookahead, post_daily_congress, post_weekly_congress
 from app.time_utils import utcnow
 from app.background import WritesHeld, start_writer
-from app.broadcast import deliver_pending
+from app.broadcast import deliver_pending, refresh_engagement
+from app.pipeline.analyze.trend_poster import run_trend_posts
 from app.pipeline import lease
 
 if TYPE_CHECKING:
@@ -348,8 +349,28 @@ def _hourly_action_refresh() -> None:
             warm_bill_collection_cache()
         except Exception:
             logger.exception("Action center refresh failed")
+        _post_trends()
 
     _start_job(_run, name="action-refresh")
+
+
+def _post_trends() -> None:
+    """The hourly trend posts (analyze/trend_poster.py), after the refresh
+    so an issue posted this hour already counts as covering its record, and
+    the engagement read their image-vs-card trial is measured by. Under the
+    Action Center's lease, which yields to a data reset."""
+    db = SessionLocal()
+    try:
+        with lease.holding(db, lease.ACTION_REFRESH, yield_to=lease.DATA_RESET) as token:
+            if token is None:
+                logger.info("Trend posts skipped: %s", lease.code_and_refusal(db, lease.ACTION_REFRESH)[1])
+                return
+            logger.info("Trend posts: %s", run_trend_posts(db))
+            refresh_engagement(db)
+    except Exception:
+        logger.exception("Trend posts failed (non-fatal)")
+    finally:
+        db.close()
 
 
 def _hourly_bill_status_refresh() -> None:

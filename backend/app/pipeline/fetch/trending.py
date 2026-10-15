@@ -8,6 +8,10 @@ Sources:
   - Google Trends (daily trending searches RSS)
   - Bluesky (getTrendingTopics via AT Protocol, requires BSKY credentials)
 
+And, for the trend posts (analyze/trend_poster.py), Bluesky's public
+getTrends (fetch_bluesky_trends): ranked trends with a status, category and
+start time, read without an account.
+
 Reddit was a third source until 2026-09-24, reading the public
 /r/<sub>/hot.json endpoints. Reddit now requires OAuth for datacenter
 traffic and returns 403 to everything else: verified from the production
@@ -26,7 +30,7 @@ difference.
 
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from defusedxml import ElementTree as SafeET
 
@@ -143,6 +147,75 @@ def _fetch_bluesky_trending() -> list[TrendingTopic] | None:
 
     logger.info("Bluesky: fetched %d trending topics", len(topics))
     return topics
+
+
+# Bluesky's public AppView: getTrends needs no account, unlike the
+# getTrendingTopics call above, so the trend posts read it whether or not
+# posting credentials are set.
+_BSKY_TRENDS_URL = "https://public.api.bsky.app/xrpc/app.bsky.unspecced.getTrends"
+BSKY_TRENDS_LIMIT = 25
+
+
+@dataclass(frozen=True)
+class BlueskyTrend:
+    """One entry of Bluesky's getTrends, in its listed order (rank 0 first)."""
+    topic: str
+    display_name: str
+    description: str
+    rank: int
+    status: str
+    category: str
+    started_at: datetime | None  # naive UTC
+    post_count: int | None
+
+
+def _naive_utc(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment.astimezone(timezone.utc).replace(tzinfo=None) if moment.tzinfo else moment
+
+
+def fetch_bluesky_trends() -> list[BlueskyTrend] | None:
+    """Bluesky's current trends from the public getTrends endpoint.
+
+    None when the read failed (network, status, a body without a `trends`
+    list): an outage is not "nothing is trending", and the trend poster
+    must neither drop the trends it is holding nor record an empty hour on
+    it. [] only when Bluesky answered with an empty list."""
+    try:
+        resp = httpx.get(
+            _BSKY_TRENDS_URL,
+            params={"limit": BSKY_TRENDS_LIMIT},
+            timeout=FETCH_TIMEOUT,
+            headers={"User-Agent": BOT_USER_AGENT},
+        )
+        resp.raise_for_status()
+        raw = resp.json()["trends"]
+        if not isinstance(raw, list):
+            raise ValueError("trends is not a list")
+    except Exception as e:
+        logger.warning("Bluesky getTrends fetch failed: %s", e)
+        return None
+    trends = []
+    for rank, item in enumerate(raw):
+        if not isinstance(item, dict) or not item.get("topic") or not item.get("displayName"):
+            continue
+        count = item.get("postCount")
+        trends.append(BlueskyTrend(
+            topic=str(item["topic"])[:64],
+            display_name=str(item["displayName"]).strip(),
+            description=str(item.get("description") or "").strip(),
+            rank=rank,
+            status=str(item.get("status") or ""),
+            category=str(item.get("category") or ""),
+            started_at=_naive_utc(item.get("startedAt")),
+            post_count=count if isinstance(count, int) else None,
+        ))
+    return trends
 
 
 def fetch_trending_topics() -> list[TrendingTopic]:

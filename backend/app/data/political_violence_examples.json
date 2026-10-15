@@ -1,0 +1,3012 @@
+{
+ "_source": "Bluesky trend topics, as in trend_relevance_examples.json: 160 drawn at random from the 260 topics most similar to three violence/death prototype sentences (so most are tragedies), plus the 350 relevance examples (a few duplicates dropped). Labelled 2026-10-15 by an AI agent (Claude) against _rubric, for trend_relevance's tragedy and political-violence gates.",
+ "_rubric": "tragedy = the topic is about people killed, injured, attacked, abused or detained by force, a deadly disaster, a war's violence, or a death. political = the topic has a U.S. government or policy angle a Civitas reader would want (an agency's use of force, a death in federal custody, U.S. military casualties, an attack on the political process, a government response); a foreign war with no U.S. actor, a crime by a private person, a celebrity death or a natural disaster with no government angle is not.",
+ "examples": [
+  {
+   "text": "Pac dies. AEW wrestler Pac (Benjamin Satterley) died at 40, days after All Out.",
+   "date": "2026-10-01",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Europe wildfire crisis. Spain declares national emergency near Madrid; France seeks EU aid as thousands flee fires.",
+   "date": "2026-07-24",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "West Bank siege. Two families trapped for days; US ambassador Huckabee condemns it as \"horrific act of terror.\"",
+   "date": "2026-08-14",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Oz measles remarks. Oz questioned whether measles caused the deaths, drawing backlash and Covid-response comparisons.",
+   "date": "2026-08-28",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Madison police shooting. Madison, WI police fatally shot a Black man on Willy Street, with videos circulating online showing officers tackling, tasing, and shooting him at close range.",
+   "date": "2026-07-23",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Mladi\u0107 reports. The former Bosnian Serb commander was convicted of genocide and given a life sentence.",
+   "date": "2026-08-27",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Colombia quake deaths. At least 169 killed, 600+ injured; rescue teams search rubble for 2,700 missing.",
+   "date": "2026-08-11",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Death of Ann Widdecombe. Former Conservative minister and Reform UK spokeswoman Ann Widdecombe has died aged 78.",
+   "date": "2026-07-11",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Tuberville targets Fauci. Sen. Tuberville vowed to prosecute Fauci in Alabama, claiming he \"killed millions.\"",
+   "date": "2026-07-29",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Wrestler Pac dies. AEW wrestler Pac (Benjamin Satterley) died at 40, days after All Out.",
+   "date": "2026-10-05",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Weinstein retrial. Harvey Weinstein's retrial in the case involving Miriam Haley reaches the sentencing stage.",
+   "date": "2026-09-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Doomsday deaths. The Russo brothers' Marvel film is described as one of the darkest movies ever made.",
+   "date": "2026-10-03",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Hasan execution. On Face the Nation, Markwayne Mullin told Margaret Brennan that televising Nidal Hasan's death is an American value.",
+   "date": "2026-10-11",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Renee Good lawsuits. Two federal suits target Stephen Miller, Kristi Noem, and agent Jonathan Ross over her death.",
+   "date": "2026-10-04",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Kyiv depot. Reports of an blast at an ammunition depot near Kyiv, with casualties and evacuations.",
+   "date": "2026-08-31",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Assad death sentence. Syrian court convicted Assad of murder, torture, and crimes against humanity; Syria now seeks an international arrest warrant.",
+   "date": "2026-08-11",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Ann Widdecombe's Murder. Former UK MP and Reform politician Ann Widdecombe has been murdered; a 28-year-old man was arrested and later released as the investigation continues.",
+   "date": "2026-07-13",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Women's March ICE arrest. Protesters were arrested while holding a vigil for people killed in ICE custody.",
+   "date": "2026-08-06",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Duane Ward Dies. Toronto Blue Jays legend Duane Ward has died of natural causes in his early 60s, remembered as a key contributor to the team's back-to-back World Series championships.",
+   "date": "2026-07-19",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "PA-CDC clash. PA threatens to withdraw its CDC aid request unless deaths are officially recognized.",
+   "date": "2026-09-19",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "ICE case. Texas judge weighs extradition of ICE officer in Minneapolis shooting case.",
+   "date": "2026-08-27",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Kyushu earthquake. A 6.8\u20137.1 magnitude quake hit near Kumamoto, prompting safety concerns across the region.",
+   "date": "2026-07-29",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Lloyd Robertson dies. Robertson anchored CTV National News for 35 years, covering major events like 9/11 and the fall of the Berlin Wall.",
+   "date": "2026-08-05",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Haitian immigrant. After Trump ended his legal status, Pierre died on an Ohio road, shaking a pro-Trump trucker.",
+   "date": "2026-10-05",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Russia Strikes Kyiv with. Russia launched a large-scale missile and drone attack on Kyiv, sparking fires in residential buildings and injuring multiple people amid ongoing war.",
+   "date": "2026-07-15",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Butler shooting. Trump points to Biden-era FBI, cites new information; critics call it a midterm distraction.",
+   "date": "2026-09-16",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Climate extremes. Record temperatures, droughts, and wildfires are intensifying globally, driven by climate change.",
+   "date": "2026-08-11",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "ICE Arrests & Immigratio. ICE enforcement actions are intensifying across the US, with rising arrests, detentions, and reported killings drawing widespread criticism and legal scrutiny.",
+   "date": "2026-07-13",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Iran conflict. Commentators discuss troop casualties, munitions stocks, and contested oil tanker accounts.",
+   "date": "2026-08-23",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Berlin Pride attack. One killed, dozens injured; Germany classifies the attack as Islamist terror. Chancellor Merz calls for tighter monitoring.",
+   "date": "2026-07-27",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Climate extremes worsen. El Ni\u00f1o temperatures surpass 1997\u201398 records, while wildfires, heat waves, and hunger crises escalate globally.",
+   "date": "2026-08-06",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Canada wildfires. Wildfires are burning across Canada, forcing highway closures and drawing US firefighter assistance, while Indigenous leaders call for an inquiry into Ontario's response.",
+   "date": "2026-07-23",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Verstappen crash. His car hit the wall hard on lap two at Zandvoort; he was reportedly unwell that weekend.",
+   "date": "2026-08-23",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Barry Melrose dies. Fans recall the ESPN analyst who brought hockey to casual viewers for decades.",
+   "date": "2026-09-11",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Indonesia earthquake. Aftershocks hamper rescue; ~5,000 evacuated and 130+ injured near Flores Island.",
+   "date": "2026-08-17",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Christa Pike. Pike survived Tennessee's failed lethal injection attempt and is now back in prison, her attorneys say.",
+   "date": "2026-10-12",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Hastert death. Posts discuss reports of the death of the former Republican House speaker from Illinois.",
+   "date": "2026-10-05",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "US bomb kills Iranians. A 2,000-lb bomb struck a residential home; Pentagon inspector general says civilian-harm staff cuts may have violated laws.",
+   "date": "2026-08-02",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Ecuador prosecutor kille. The prosecutor was shot in broad daylight; NASA images and Coast Guard footage corroborate survivor testimony.",
+   "date": "2026-07-26",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Colombia earthquake. A 7.4-magnitude quake hit Choc\u00f3; over 3,000 missing, 1,600 buildings damaged.",
+   "date": "2026-08-12",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Survivor 51. Fans debate who's in danger, from Jenna's puzzle skills to tribal council strategy.",
+   "date": "2026-09-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Gaza Airstrikes Deaths. Israeli airstrikes in Gaza have killed multiple civilians, including children and entire families, amid ongoing conflict and an ICC indictment of Netanyahu for war crimes.",
+   "date": "2026-07-15",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Deportation case. Court will hear arguments on the policy's legality in December.",
+   "date": "2026-10-02",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Ann Widdecombe's Murder. Ann Widdecombe has been killed, with police investigating her murder and public debate erupting over political figures' responses, including Farage's conduct.",
+   "date": "2026-07-13",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "USS Lincoln sailor. Sailor's overboard incident and subsequent Navy proceedings draw attention to mental health care.",
+   "date": "2026-08-27",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Shelley Fabares dies. The Donna Reed Show and Coach star, 82, had a No. 1 hit and starred in Elvis films.",
+   "date": "2026-08-24",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Coal industry rescue. A lobbyist letter proposed emergency powers to keep aging coal plants running.",
+   "date": "2026-09-30",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Israel Lebanon wildfires. Firefighters say Israel dropped flares to destroy forests and crops in southern Lebanon.",
+   "date": "2026-08-12",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "HorrorWritersChat. Authors introduce themselves and name favorite war depictions, from Day of the Dead to Deathwatch.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Kyiv strike. Reported attack follows departure of US peace envoys; homes and a passenger train hit.",
+   "date": "2026-09-09",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Thomas case. He faces charges over a dinghy incident in the Channel; a bail decision was made.",
+   "date": "2026-09-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Settler justifies attack. Settler violence in the West Bank is rising as a BBC interview draws widespread condemnation.",
+   "date": "2026-08-01",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Texas police. Closure follows detention of a resident over online posts about local water quality.",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Ratko Mladic. The former Bosnian Serb general was convicted by the ICTY and is serving a life sentence.",
+   "date": "2026-08-28",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Israel Gaza genocide. Posts highlight settler violence in the West Bank, starvation in Gaza, and calls for international accountability.",
+   "date": "2026-07-27",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "ICE kills man in Maine. Officer David Brouillette had prior abuse allegations; Trump's border czar says he shouldn't have cleared vetting.",
+   "date": "2026-07-27",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Ann Widdecombe's Murder. Ann Widdecombe has died in what police are treating as murder on Dartmoor; a 26-year-old man arrested on suspicion of murder has since been released.",
+   "date": "2026-07-12",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Widdecombe Murder Detail. The CPS has revealed Ann Widdecombe died after being struck on the head 21 times with a hammer, in an attack caught on camera.",
+   "date": "2026-07-22",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Police fail victims. People share personal stories of police inaction after theft, robbery, and carjacking.",
+   "date": "2026-08-02",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Erie shooting. Nine people, including children, are reported dead along with the suspect, Gov. Shapiro says.",
+   "date": "2026-10-13",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Pennsylvania measles. An unvaccinated Franklin County woman, 39, died as cases reach 1,136 with 219 hospitalized.",
+   "date": "2026-10-14",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Jordan casualties remove. The Pentagon cited Trump's ceasefire declaration as justification for erasing the four deaths from official records.",
+   "date": "2026-07-24",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Zhang case. Federal case involving a California real estate agent and Taiwan's president's family",
+   "date": "2026-10-06",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Hegseth Pentagon. Discussion of religious rhetoric, trans policy, and reported USS Lincoln deaths.",
+   "date": "2026-09-25",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Dennis Haskins dies. Haskins played Principal Belding on Saved by the Bell and was a noted wrestling fan.",
+   "date": "2026-09-30",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Mexico Earthquake. A 7.3\u20137.4 magnitude earthquake struck off the Pacific coast of Chiapas, Mexico near the Guatemala border, triggering a tsunami alert and producing multiple aftershocks.",
+   "date": "2026-07-18",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Thetford asylum violence. Police escorted residents to safety as crowds targeted homes believed to house asylum seekers.",
+   "date": "2026-08-08",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "ICE agents' racial slurs. ACLU court filing includes body cam footage and texts showing agents calling Latinos \"tonks\" and \"wet.\"",
+   "date": "2026-07-28",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Israel strikes amid deal. Israel bombed medical warehouses and killed civilians days after Trump announced a breakthrough ceasefire deal.",
+   "date": "2026-08-02",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Isaias remnants. Four deaths are linked to the storm as Florida and Alabama clean up and flooding threatens Appalachia.",
+   "date": "2026-10-12",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Extreme heat alerts. Heat advisories, flash floods, and storm warnings span the US and Europe.",
+   "date": "2026-08-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Flock cameras. Reported arrests at a Springfield meeting on Flock cameras, as other cities weigh bans.",
+   "date": "2026-09-24",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Grim Reaper jokes. Many joke a string of celebrity deaths, mostly people born in 1946, seems oddly targeted.",
+   "date": "2026-08-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Simon Andriesz. British banker who made claims about Howard Lutnick's Epstein ties has reportedly died at 57.",
+   "date": "2026-10-08",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "West Bank Gaza attacks. UN chief condemned settler attacks on Palestinian villages, including the torching of two mosques.",
+   "date": "2026-07-29",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Spokane wildfire damage. Thousands have evacuated as three major wildfires burn across Spokane County, among the most destructive in Washington history.",
+   "date": "2026-08-04",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "DJ Kavinsky dies. The French DJ, known for \"Nightcall,\" was found dead at home. He was 50.",
+   "date": "2026-07-30",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Brenden Cuni. Federal judges Gary Brown and Brian Cogan review the officer's arrest warrants and sworn statements.",
+   "date": "2026-10-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "AI grief bots. People discuss using AI to recreate deceased loved ones, calling it \"deathslop\".",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Jace Beleren dies. The Reality Fracture story reveals Jace's death, with Nicol Bolas behind the deception.",
+   "date": "2026-09-12",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "250k flee wildfires. France deployed its military; Bordeaux faces its biggest peacetime evacuation as fires remain unchecked.",
+   "date": "2026-07-26",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Ann Widdecombe's Murder. Counter-terror police have taken over the investigation into Ann Widdecombe's death, sparking political controversy and speculation from figures like Nigel Farage and Liz Truss.",
+   "date": "2026-07-13",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Miller abuse allegations. His ex-wife alleges scalding, a gun to her head, and their daughter's broken collarbone.",
+   "date": "2026-07-29",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Murray injury. Murray was hit hard by two Packers defenders, sparking concussion concerns.",
+   "date": "2026-09-14",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "ICE Operation Deaths. Three men have died during ICE street operations within a week, sparking calls for Congress to hold ICE accountable for use of force.",
+   "date": "2026-07-17",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Gulf strikes. Reports of strikes affecting Kuwait, Bahrain and Jordan; details and casualties unconfirmed.",
+   "date": "2026-09-02",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "WWII Memorial vandalism. Melissa L. Farris arrested and charged with two felonies; Trump condemns the act.",
+   "date": "2026-08-14",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "West Bank violence. Allies including the US and UK criticize Israeli settler actions and Gaza convoy strike probe.",
+   "date": "2026-08-22",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Michael Wright dies. Wright was known for The Five Heartbeats and Sugar Hill; his wife confirmed his death.",
+   "date": "2026-08-22",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Austin ICE shooting. Attorney says a Venezuelan DoorDash driver was shot during an ICE encounter, then detained.",
+   "date": "2026-09-21",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "School pepper-spray dron. Non-lethal drones in Colorado, Florida, and Georgia spark backlash over gun reform failure.",
+   "date": "2026-07-29",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Bizarre MLB injuries. Fans share wild stories, from a spider nightmare to a scooter-fire-engine crash.",
+   "date": "2026-07-31",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Brenda Fricker Dies. Oscar-winning Irish actress Brenda Fricker has died at the age of 81, prompting tributes from fans and admirers.",
+   "date": "2026-07-17",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "USAID cuts deaths. Gates Foundation predicts 2025 will be first year this century child deaths rise.",
+   "date": "2026-08-14",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Poga\u010dar crash. Reports say a stone caused the fall; impact on his Vuelta campaign unclear.",
+   "date": "2026-08-29",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Seattle earthquake. A magnitude 4.0 quake near Seattle was felt widely, but no tsunami was expected.",
+   "date": "2026-09-30",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Lorenzo Salgado Araujo K. Lorenzo Salgado Araujo, a Mexican national, was shot and killed by ICE agents in Houston, sparking protests and vigils.",
+   "date": "2026-07-13",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Chad Gilbert dies. New Found Glory guitarist and co-founder Chad Gilbert has died at 45.",
+   "date": "2026-09-22",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "AI doomer cult. Writer says AI safety event silenced skeptics, sparking debate on rationalist culture.",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Deportee allegations. Witnesses allege deportees were hooded and beaten by police at a remote hotel site.",
+   "date": "2026-09-20",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Global heatwaves. Record temperatures strain health systems, with thousands of excess deaths feared across Europe.",
+   "date": "2026-08-13",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "UK Heatwave Deaths Estim. The Met Office estimates 2,700 people died prematurely during UK heatwaves in May and June, with peaks of ~440 deaths per day.",
+   "date": "2026-07-13",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "9/11 remembrance. Posts recall firefighters lost, memorials, and the war deaths that followed 9/11.",
+   "date": "2026-09-11",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "NYC crime drop. NYPD data shows the fewest murders on record through nine months, with major crime down 6.6%.",
+   "date": "2026-10-08",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Flock cameras. Officers charged; a plate mismatch led to a Florida woman's days-long detention.",
+   "date": "2026-09-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Haitian immigrant death. Family says ankle monitor and lost protections led to his suicide after ICE action.",
+   "date": "2026-09-02",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "ICE agents reportedly sh. A man was hospitalized after being shot in Marble Hill, per press reports.",
+   "date": "2026-10-09",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Nepal flood death toll t. Villages, roads, and bridges swept away in northern Nepal. The death toll is rising and hundreds are missing.",
+   "date": "2026-09-01",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Medevac GPS jam crash. A US military GPS jamming drill near White Sands disoriented pilots; all four aboard died and sparked a 30,000-acre wildfire.",
+   "date": "2026-08-05",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Grayson death. Reports concern Grayson, convicted in the Sonya Massey case, while in custody.",
+   "date": "2026-08-24",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Iran war casualties. The Pentagon quietly added 140+ wounded and restored 4 killed, bringing total casualties past 600.",
+   "date": "2026-07-28",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "McConnell death rumors. Posts joke and speculate about McConnell's status, with several suggesting he has died.",
+   "date": "2026-08-05",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Bangkok floods. Nearly 300mm of rain hit Bangkok, prompting a citywide flood-disaster declaration.",
+   "date": "2026-09-29",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Pentagon alters death to. Military families express outrage after four soldiers' names vanished, with officials giving conflicting explanations.",
+   "date": "2026-07-26",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "9/11 air. Newly surfaced documents raise questions about official health-risk statements after 9/11.",
+   "date": "2026-09-09",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Wildfires spread globall. 330,000 displaced in France and Spain; First Nations communities evacuate as 900+ fires burn in Canada.",
+   "date": "2026-07-31",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Acton incident. Reported confrontation involving Ohio governor candidate at fair; police responded.",
+   "date": "2026-09-08",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Lil Durk trial. Federal murder-for-hire case involving the rapper reaches a verdict.",
+   "date": "2026-09-13",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Cheetah Chrome dies. Punk pioneer, guitarist for Dead Boys and Rocket From The Tombs, died at 71.",
+   "date": "2026-09-15",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Alex Pretti shooting. Father says he learned of his son's shooting death by watching it on TV.",
+   "date": "2026-08-26",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "VSU shooting. Five people were injured, one critically, near residence halls during a campus lockdown.",
+   "date": "2026-08-15",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Death at Delaney Hall. Edwin Jovanny Lopez Cornejo, a Salvadoran man, reportedly died after being denied medication and family visits.",
+   "date": "2026-08-04",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Wounded soldiers. Troops hurt in an Iranian drone attack that killed six in Kuwait question Army leaders.",
+   "date": "2026-10-07",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "ICE Fatal Shooting. ICE agents shot and killed Joan Sebastian Guerrero in Biddeford, the agency's second fatal shooting in a week, prompting vigils and calls for justice.",
+   "date": "2026-07-16",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "BC wildfire emergency. Nearly 22,000 under evacuation orders as fast-moving fires burn across the province.",
+   "date": "2026-08-11",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Palmer Luckey. Anduril co-founder wrote on X that celebrating deaths of those who \"deserve it\" is normal and good.",
+   "date": "2026-10-14",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Lebanon strikes. Strikes hit southern Lebanon despite a fragile truce, killing children and destroying infrastructure.",
+   "date": "2026-08-16",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Death at Delaney Hall. Edwin Lopez-Cornejo died at Delaney Hall; his daughter says he was denied medication for diabetes and high blood pressure.",
+   "date": "2026-08-05",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "ICE Agent Fatally Shoots. An ICE officer fatally shot Lorenzo Salgado Araujo, a Mexican national, during an attempted traffic stop in Houston. His family and LULAC are demanding an independent investigation.",
+   "date": "2026-07-11",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Tarling crash death. The 19-year-old Brit, brother of Josh Tarling, was reportedly hit by an unauthorized car on the route.",
+   "date": "2026-08-14",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Lethal force. Nigel Farage says Robert Jenrick was misconstrued about Royal Marines firing on small boats.",
+   "date": "2026-10-14",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Kramatorsk strike. Early reports describe a deadly strike near two crowded buses in Kramatorsk, eastern Ukraine.",
+   "date": "2026-10-10",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Kyiv strike. Zelensky says Western partners again gave no alert before ballistic strikes killed one.",
+   "date": "2026-10-14",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Death of Jayden Adams. South Africa World Cup midfielder Jayden Adams has died at age 25, weeks after representing his country in three group stage matches.",
+   "date": "2026-07-12",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Flock surveillance backl. Officers abused the system to track individuals; cities are canceling contracts.",
+   "date": "2026-08-14",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Settler justifies attack. A lawyer-settler told BBC one Jewish life outweighs millions of Palestinians, calling attacks justified revenge.",
+   "date": "2026-08-02",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Shanahan car accident. He broke his nose, three ribs, and hand, and suffered a severe concussion; he'll be limited at training camp.",
+   "date": "2026-07-26",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Iran wedding blast. NYT reports bomb was American; Iran says 5 killed, 67 wounded. Details unconfirmed.",
+   "date": "2026-09-04",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Chad Gilbert dies. New Found Glory guitarist and co-founder Chad Gilbert has died at 45.",
+   "date": "2026-09-22",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Twin Falls shooter ID'd. Chad Williams, 24, died from a self-inflicted gunshot wound; death toll now at 3 dead, 7 injured.",
+   "date": "2026-08-03",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "England Loss & DV Rise. Domestic abuse incidents rise 38% when England's men's football team loses, prompting widespread concern for victims' safety following a defeat.",
+   "date": "2026-07-16",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Clancy case. Her lawyer contests the evidence presented in the case.",
+   "date": "2026-09-30",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Chicago-area tornadoes. Sirens reported multiple rounds; Naperville and Land O' Lakes among areas affected.",
+   "date": "2026-07-28",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Texas ICE shooting. Reports cite no body camera footage, raising questions about the investigation.",
+   "date": "2026-09-24",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Max Miller abuse case. Miller dropped a case against his ex-wife and was hit with a restraining order after allegedly touching her attorney.",
+   "date": "2026-07-31",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Wells case. Family and supporters push back, saying cause of death remains undetermined.",
+   "date": "2026-09-24",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Cops misuse Flock camera. At least 50 officers used the surveillance network to stalk ex-partners.",
+   "date": "2026-08-02",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Epstein Scout Dead. Daniel Siad, a French model scout who arranged meetings between young women and Jeffrey Epstein, was found dead near Paris. He was under investigation in France.",
+   "date": "2026-07-22",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "France Spain wildfires. Over 320,000 people evacuated; at least one death reported in Spain as fires overwhelm firefighters.",
+   "date": "2026-07-28",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Ectopic pregnancy. Analysis reports changes in ectopic pregnancy deaths since 2020, including by state abortion law.",
+   "date": "2026-09-11",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Seattle festival shootin. At least 3 suspects exchanged gunfire; a teen is arrested, a 2-year-old boy has been discharged.",
+   "date": "2026-07-28",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Iran war casualties. Wounded U.S. troop count rises to 861, fueling distrust of official reporting.",
+   "date": "2026-09-26",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Ukraine strikes refinery. Refineries in Samara Oblast and Krasnodar Krai were hit; Russian attacks on civilians also reported.",
+   "date": "2026-08-11",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Gaza allegations. Posts cite Hind Rajab's death, IDF actions, and settler violence in abuse allegations.",
+   "date": "2026-08-21",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Mexico Files ICE Death C. Mexico's foreign ministry is filing criminal complaints with U.S. state prosecutors and the DOJ over the deaths of Mexican nationals in ICE custody and during enforcement operations.",
+   "date": "2026-07-15",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Delaney Hall deaths. Three immigrants have died at the Newark facility, raising concerns over inadequate medical care.",
+   "date": "2026-08-14",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Arday death. Arday, 41, had resigned from Cambridge last week; death treated as unexpected but not suspicious.",
+   "date": "2026-08-14",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Bovino - Tucker intervie. Former Border Patrol commander tells Tucker Carlson he thinks Trump wants him killed.",
+   "date": "2026-08-28",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Epstein scout found dead. Daniel Siad, a French modeling scout whose name appears thousands of times in Epstein files, was found dead near Paris while under investigation for trafficking.",
+   "date": "2026-07-23",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "COVID memory-hole push. Posts recall NYC's darkest pandemic days \u2014 mass graves, body bag shortages \u2014 amid Senate hearings seen as whitewashing the crisis.",
+   "date": "2026-07-30",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "UK Diplomats (Archived)",
+   "date": "2026-10-06",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Rutgers coaching turmoil. Fans debate Schiano's costly buyout and possible replacements like Brian Kelly.",
+   "date": "2026-09-12",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Argentina Coach Incident. Argentina's coach was seen pushing Spanish players away, sparking widespread confusion and debate among football fans.",
+   "date": "2026-07-19",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "James Cook (Archived)",
+   "date": "2026-09-19",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Democrats (Archived)",
+   "date": "2026-07-06",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "AEW Rebel Heart. The special episode supports ALS research and features multiple title matches.",
+   "date": "2026-09-11",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trump hot mic. Trump was overheard asking staff if he could leave the Presidents Cup event early.",
+   "date": "2026-09-29",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Skills meme. Users rate their own cooking, whistling, singing, driving, guitar and public speaking abilities.",
+   "date": "2026-10-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Jeff Flake (Archived)",
+   "date": "2026-08-05",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Russia aids Iran targeti. Zelenskyy says Russian satellites guided Iranian strikes on U.S. bases in Bahrain, Jordan, and Kuwait.",
+   "date": "2026-07-27",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "McDonald's AI pricing. Critics call the dynamic pricing algorithm surveillance pricing and price gouging.",
+   "date": "2026-10-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Rachel Reeves (Archived)",
+   "date": "2026-07-21",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Flock breach. Reports describe a Flock camera encryption key exposure involving over 27,000 footage clips.",
+   "date": "2026-09-23",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Microsoft Tasks Obsidian. Microsoft has reportedly directed Obsidian Entertainment to develop a new Fallout game, sparking debate about timing given recent studio layoffs and years of franchise inactivity.",
+   "date": "2026-07-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Biden (Archived)",
+   "date": "2026-08-15",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "US economy slows. GDP grew just 1.5%, with weak productivity and rising inflation despite AI investment.",
+   "date": "2026-07-31",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "F-35B Miramar crash. The Marine Corps pilot ejected safely; the crash drew criticism of Pentagon leadership.",
+   "date": "2026-07-31",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Max Caster. Caster's Bound For Glory entrance rap included a line about bombs and Riyadh.",
+   "date": "2026-10-13",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "PMQs (Archived)",
+   "date": "2026-09-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Iowa Football (Archived)",
+   "date": "2026-09-14",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Hefner FBI tip. Playmate Audra Christiansen asked Hefner to report her abuse; FBI didn't follow up for 15 years.",
+   "date": "2026-08-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Mario Kart 8 update. Update adds 8-player split-screen, 96-race GPs, and faster load times.",
+   "date": "2026-09-02",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Andy Burnham as Next UK. Posts discuss Andy Burnham's anticipated rise to UK Prime Minister, with supporters and critics raising policy demands and controversy warnings.",
+   "date": "2026-07-13",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Canada Q2 growth. Exports and business investment drove the fastest growth since early 2023.",
+   "date": "2026-08-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Myles Garrett (Archived)",
+   "date": "2026-09-12",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Olde English Romeo. Fans debate and mock reports that Eggers' film will use 'Olde English' dialogue.",
+   "date": "2026-09-24",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Abdul El-Sayed. Senate candidate El-Sayed answers questions from TV hosts, sparking conversation online.",
+   "date": "2026-09-13",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Star Trek (Archived)",
+   "date": "2026-07-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "BBC funding. The UK broadcaster's licence fee, presenter salaries, flag rules and Reform coverage draw criticism.",
+   "date": "2026-10-14",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Hanning inquiry. Posts discuss reports about August Hanning, head of Germany's foreign intelligence 1998\u20132005.",
+   "date": "2026-10-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Midterm voting. Activists urge Americans to register, pledge to vote early, and train in election protection.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Cat TNR (Archived)",
+   "date": "2026-07-12",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "AEW Collision (Archived)",
+   "date": "2026-07-13",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Artfight (Archived)",
+   "date": "2026-07-21",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Taylor Farms recall. Guacamole, pico de gallo, and taco dip among items pulled from Walmart and Whole Foods.",
+   "date": "2026-08-11",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Tim Curry. Fans share his Red Alert 3 'Premier Cherdenko' space clip amid unverified reports.",
+   "date": "2026-08-26",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Phillies (Archived)",
+   "date": "2026-07-23",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Spain (Archived)",
+   "date": "2026-07-20",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Meryl Streep (Archived)",
+   "date": "2026-09-18",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Burnham new PM. Posts react to his designer clothing, spending pledges, and early decisions as the new PM.",
+   "date": "2026-07-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Monster Hunter Wilds - S. Port launches December 4, with an Ascendance expansion planned for 2027.",
+   "date": "2026-09-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Nvidia earnings. Revenue jumped 106% YoY, but memory shortages and margin guidance raised concerns.",
+   "date": "2026-08-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Ross Douthat (Archived)",
+   "date": "2026-07-29",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Reacher season 6. Prime Video renewed it just days after the season 4 finale aired.",
+   "date": "2026-09-29",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trump Accounts. The Trump administration signed up more than 60 million kids for 530A savings accounts.",
+   "date": "2026-10-03",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Polygon - Erika Ishii. Gamers accuse Polygon of clickbait for calling Erika Ishii a \"controversial\" figure.",
+   "date": "2026-09-22",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Svengoolie (Archived)",
+   "date": "2026-09-14",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Galaxy Z Fold 8. Samsung has unveiled the Galaxy Z Fold 8 lineup, including an Ultra model at $2,099, featuring a new passport-sized form factor, Flex Titanium display, and Android 17.",
+   "date": "2026-07-23",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Kevin Gausman (Archived)",
+   "date": "2026-08-04",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Farmer struggles. A Trump-voting farmer says soaring prices are pushing some to quit farming.",
+   "date": "2026-09-20",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "LeBron James (Archived)",
+   "date": "2026-07-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "F1 Singapore (Archived)",
+   "date": "2026-10-11",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Emily Wilson (Archived)",
+   "date": "2026-07-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Eminem - Kid Rock. The rappers say their new song puts friendship over politics and hope it sets an example.",
+   "date": "2026-10-05",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Drake - Pomni shirt. Fans mock Drake for wearing a Pomni shirt from The Amazing Digital Circus in new music video.",
+   "date": "2026-09-17",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Ro Khanna Detained by Is. Armed Israeli settlers detained US Congressman Ro Khanna, sparking debate over settler violence, US-Israel relations, and Netanyahu's government.",
+   "date": "2026-07-13",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Timbers Rout Sounders. The Portland Timbers dominated the Seattle Sounders 3-0, stunning fans and sparking renewed excitement following a recent coaching change.",
+   "date": "2026-07-17",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "AOC (Archived)",
+   "date": "2026-07-21",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "TTRPG Authors (Archived)",
+   "date": "2026-07-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Mick Foley (Archived)",
+   "date": "2026-07-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Gosport Dave quote. Dave Palmer's claim migrants 'get everything' sparks mockery and housing benefit debate.",
+   "date": "2026-09-24",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Russia Threat (Archived)",
+   "date": "2026-09-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Freedom 250 race. The race snarled DC traffic and drew criticism over cost and alcohol sales near monuments.",
+   "date": "2026-08-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Letterboxd (Archived)",
+   "date": "2026-08-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Superpower suicide. The historian tells Ben Meiselas no major country has lost power as fast as the US under Trump.",
+   "date": "2026-10-06",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Flu, COVID shots. Users share experiences getting flu and COVID vaccines, some noting free clinics.",
+   "date": "2026-09-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Donald Trump (Archived)",
+   "date": "2026-07-27",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Batman Day. Fans share art, interviews, and a new Batman Kamen Rider crossover comic.",
+   "date": "2026-09-22",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Miguel Vargas (Archived)",
+   "date": "2026-07-16",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Jon Kyl dies. He shaped Western water policy and guided Kavanaugh's Supreme Court confirmation.",
+   "date": "2026-09-18",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Campaign News (Archived)",
+   "date": "2026-08-19",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "US missiles depleted. CSIS analysis finds fewer than 827 Patriot and 278 THAAD interceptors remain in US inventory.",
+   "date": "2026-07-30",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Sony digital ownership. Sony's lawyers argue in court that buyers only license, not own, digital games.",
+   "date": "2026-09-02",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Julian Love (Archived)",
+   "date": "2026-09-11",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Netherlands gold move. Dutch central bank cites geopolitical unrest for shifting 86 tonnes from US, Canada.",
+   "date": "2026-09-06",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Giga Digger (Archived)",
+   "date": "2026-10-09",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "AEW All In (Archived)",
+   "date": "2026-08-31",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Drag Race UK cancelled. WOW Presents Plus will pick it up, launching a UK All Stars in 2027.",
+   "date": "2026-09-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Digital Art (Archived)",
+   "date": "2026-09-04",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "AEW Wrestling (Archived)",
+   "date": "2026-09-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "US Expands Iran Strikes. The US has entered a sixth consecutive night of strikes on Iran, expanding targets to bridges, energy sites, and a key port, amid a broken ceasefire and continued Hormuz tensions.",
+   "date": "2026-07-17",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "NFL on CBS. Viewers complain about regional game choices, Paramount+ streaming limits, and ads during Sunday games.",
+   "date": "2026-10-06",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Record El Ni\u00f1o. Scientists warn the surging El Ni\u00f1o could push global temperatures to record highs.",
+   "date": "2026-09-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Student voting rights. Nichols' claim that students should vote where they pay taxes sparked pushback online.",
+   "date": "2026-08-13",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Brighton beats Man Unite. United lose 3-2 at home in Carabao Cup, fans question manager Carrick's job security.",
+   "date": "2026-09-17",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "ICE crackdown. Arrests hit record highs as most detained last month had no criminal record.",
+   "date": "2026-08-29",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Grand Slam ratings. Tony Khan's Paris show drew fewer total viewers than WWE NXT but won the key demographic.",
+   "date": "2026-10-09",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Gotham FC wins. Jaedyn Shaw scored a key goal as Gotham FC topped Racing Louisville 2-1.",
+   "date": "2026-09-12",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Sadiq Khan (Archived)",
+   "date": "2026-07-24",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Lombardi on UNC leave. The move comes amid Belichick's tenure at Carolina, with reasons for the leave undisclosed.",
+   "date": "2026-07-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "X-Men (Archived)",
+   "date": "2026-08-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Brandon Dukes (Archived)",
+   "date": "2026-08-20",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Rick Astley TOTP. Viewers joke about being Rick-rolled during a Top of the Pops rerun.",
+   "date": "2026-09-12",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "FrightClub (Archived)",
+   "date": "2026-10-02",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "MysteryWrestling29 event. Fans praised Jody Threat vs. Nicole Matthews and a standout referee performance.",
+   "date": "2026-09-14",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "US Open (Archived)",
+   "date": "2026-09-05",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "SpaceX below IPO price. Shares have lost $1.2T from peak, falling more than 20 points under IPO price.",
+   "date": "2026-07-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "World Cup (Archived)",
+   "date": "2026-07-18",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Favorite movie at 20. Users share nostalgic picks like Fight Club, Collateral, and Quantum of Solace.",
+   "date": "2026-09-03",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Contract review. A $158M contract for migrant children's care went to a group led by a former ICE agent.",
+   "date": "2026-08-22",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Kenny Omega (Archived)",
+   "date": "2026-08-14",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Donalds drops Trump. Florida governor candidate quietly removed Trump endorsement mentions as approval ratings fall.",
+   "date": "2026-09-23",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Inktober (Archived)",
+   "date": "2026-10-02",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Russian drone warning. CIA reportedly warned Spain, France, Italy of ship-launched Gerbera drone strikes.",
+   "date": "2026-09-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Tesla stock plunges. TSLA dropped over 14% \u2014 its worst single day in 13 months \u2014 dragging Nasdaq lower.",
+   "date": "2026-07-24",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Big Brother (Archived)",
+   "date": "2026-08-23",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Namjoon (Archived)",
+   "date": "2026-09-13",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Kevin Keegan Dies. Football legend Kevin Keegan has passed away, prompting tributes from fans remembering his iconic career at Liverpool, Hamburg, and Newcastle.",
+   "date": "2026-07-20",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Jodrell Bank axed. The iconic Lovell telescope costs just \u00a32.8m a year; scientists warn cuts would devastate UK science.",
+   "date": "2026-07-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Balogun (Archived)",
+   "date": "2026-07-03",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "EPA data center rule. EPA proposal could end public notice on air pollution permits for new data centers.",
+   "date": "2026-08-25",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Driscoll's lawsuit. Lawsuit alleges some 2022-24 shipments to Canada exceeded pesticide limits; claims unproven.",
+   "date": "2026-09-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Nacua inactive. Rams WR ruled out for MNF with hip injury; Isiah Likely to start in his place.",
+   "date": "2026-09-22",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Jacob (Archived)",
+   "date": "2026-07-24",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Green card rule lawsuit. 22 states sue to block a DHS rule expanding denials of green cards over public benefits use.",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Housing crisis. Critics blame decades of policy for gutting public housing and fueling a property casino.",
+   "date": "2026-09-29",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Chicago Marathon. Vinny Mauri leads US men, Emma Grace Hurley debuts, and Catherine Debrunner sets a wheelchair record.",
+   "date": "2026-10-12",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "The Archers (Archived)",
+   "date": "2026-10-09",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Turkey's S-400 Deal Bloc. Turkey is negotiating with Russia to transfer its S-400 missiles to a Gulf state, hoping to lift US sanctions and unlock access to F-35 fighter jets.",
+   "date": "2026-07-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Klobuchar (Archived)",
+   "date": "2026-09-30",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Duskbloods Network Test. Nintendo and FromSoftware announced a closed network test for The Duskbloods on Switch 2, running August 21\u201324, with applications open July 22\u201328.",
+   "date": "2026-07-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "NYC Subway (Archived)",
+   "date": "2026-08-19",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Mamdani helmet debate. Critics say the mayor blames cyclists, not unsafe streets, for deadly crashes.",
+   "date": "2026-08-26",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Pablo Torre (Archived)",
+   "date": "2026-09-03",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "NDAA Israel integration. The House passed the NDAA including Section 219, which deepens US-Israel military ties. Progressives and critics are urging the Senate to strip the provision.",
+   "date": "2026-07-23",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Engineer iron ring. The uncomfortable ring, made from a collapsed bridge, symbolizes engineering ethics and diligence.",
+   "date": "2026-09-26",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Sam Neill Dies. Actor Sam Neill, best known for playing Dr. Alan Grant in Jurassic Park, has died, prompting an outpouring of tributes from colleagues, friends, and fans.",
+   "date": "2026-07-15",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Snubbed Oscar actors. Users name actors like Angela Bassett and Stephanie Hsu who deserved a win.",
+   "date": "2026-07-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Flock camera backlash. Critics cite wrongful stops, abortion tracking claims, and a city dropping its contract.",
+   "date": "2026-08-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Ratko Mladic (Archived)",
+   "date": "2026-08-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Israel conflict. Posts cover Israeli strikes, Gaza genocide claims, and Hamas disarmament talks.",
+   "date": "2026-08-13",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "America250 (Archived)",
+   "date": "2026-07-03",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Mike Collins. At a Georgia Senate debate, the Republican candidate said \"these people\" feel forgotten and are lashing out.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Horror writers chat. Writers share favorite music and horror genres in a weekly HorrorWritersChat thread.",
+   "date": "2026-10-02",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "City - Bouaddi. Lille agree to sell the 18-year-old midfielder for a fee reaching around 100m.",
+   "date": "2026-08-23",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Operation Vivaldi. Ukraine's 3rd Army Corps reports gains near Shandryholove and Derylove.",
+   "date": "2026-09-22",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Dateline (Archived)",
+   "date": "2026-10-11",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trump Lawsuit (Archived)",
+   "date": "2026-07-22",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "UK climate crisis. Posts cover drought, water pricing, North Sea oil, and Britain's inadequate climate response.",
+   "date": "2026-08-17",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Fortnite Linux. Epic Games previews a faster launcher and is rebuilding Easy Anti-Cheat to support Linux players.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Naomi Osaka (Archived)",
+   "date": "2026-09-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Thom Tillis. Republican Sen. Thom Tillis talks about his book and claims Democrats ignored Republicans on Obamacare.",
+   "date": "2026-10-09",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Trump's arch review. Preservation officials say the required historic review was abruptly terminated despite concerns.",
+   "date": "2026-09-26",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Vikings-Bears (Archived)",
+   "date": "2026-09-21",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Bulgaria drones. One commercial vessel sank in the Black Sea; PM Rumen Radev summoned Russia's ambassador.",
+   "date": "2026-10-15",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Lions final. Brisbane's \"wharfie time\" comeback sparks debate after the AFL grand final.",
+   "date": "2026-09-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Bessent vs. bond market. Bessent's 'I am the house' bet falters as yields hit 2007 highs and Norway trims Treasuries.",
+   "date": "2026-09-17",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Horrorfest challenge. Users pick horror films whose titles start with letters of their first name.",
+   "date": "2026-08-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trump remarks. Comments attributed to Trump in a Fox interview drew online reaction from trans advocates.",
+   "date": "2026-09-02",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Terror arrests. Five British men arrested near a base the US has used to strike Iran are being released on bail.",
+   "date": "2026-10-03",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Beneficiary drug tests. New Zealand's National Party plans random tests for Jobseeker benefit recipients, with sanctions for failures.",
+   "date": "2026-10-08",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Paxton pediatricians. Texas attorney general Ken Paxton alleges a profit-driven conspiracy over childhood vaccines.",
+   "date": "2026-10-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Stars and Stripes lawsui. Fired journalists say Pentagon retaliated after they reported on carrier conditions.",
+   "date": "2026-08-28",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Jackson vs. emergency do. She says the court's frequent use of the docket has aided Trump policies pending lower court review.",
+   "date": "2026-09-26",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Trump DEI rally. Uniformed officers attended the event, drawing comparisons to authoritarian spectacles.",
+   "date": "2026-08-16",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Meta Muse flaw. Researcher warns the zero-day could turn Muse into an 'ultimate backdoor'.",
+   "date": "2026-09-23",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Davey coup. Charlie Maynard resigns as Treasury spokesperson and moves to topple the Liberal Democrat leader.",
+   "date": "2026-10-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Heat pump rebates. Mark Carney's government commits $2 billion to retrofit one million homes and help families switch.",
+   "date": "2026-10-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Iran bomb plans. Military plans would use the \"mother of all bombs\" on Iranian energy and nuclear sites if Trump orders it.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Cuban deportations. Third-country removals of Cubans from Florida draw legal challenges and criticism.",
+   "date": "2026-09-02",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Hegseth - 60 Minutes. Airmen reportedly had reservations, and officials worried about classified details leaking.",
+   "date": "2026-09-14",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "LSU beats Clemson. Lane Kiffin's LSU debut ended in a 51-10 blowout of Dabo Swinney's Clemson.",
+   "date": "2026-09-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Disney price hike. Monthly price jumps from $13 to $21.49, fueling frustration over streaming costs.",
+   "date": "2026-09-26",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trump Nobel. Donald Trump criticizes Norway over the Nobel Peace Prize selection.",
+   "date": "2026-10-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Harden - Cavaliers. The 97M deal is fully guaranteed, pushing Harden's career earnings past 500 million.",
+   "date": "2026-08-20",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Misiorowski start. Brewers' \"Miz\" opens with triple-digit four-seamers, gets an early double play off Will Smith.",
+   "date": "2026-10-12",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Drumcree parade. Reports of a contested Orange Order march on Garvaghy Road and residents' response.",
+   "date": "2026-09-29",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trump approval poll. YouGov/Economist poll finds Trump approval underwater in all but Wyoming, Idaho, West Virginia.",
+   "date": "2026-08-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Durbin SCOTUS remarks. Democrats react angrily, many calling for Durbin to retire over his SCOTUS comments.",
+   "date": "2026-09-17",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "No Kings Day. Organizers call October 17 a critical day for mass voter outreach and protests.",
+   "date": "2026-09-29",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Gary power outage. Governor Braun orders probe as data centers kept power while residents went without for weeks.",
+   "date": "2026-08-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Apple succession. Reports point to John Ternus as a possible successor to Tim Cook amid Apple's AI push.",
+   "date": "2026-09-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Africa war poll. An X poll asked who would win a war; users call its premise racist for ignoring modern weapons.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trucker strike. Posts claim truckers will halt deliveries nationwide over fuel costs and wages.",
+   "date": "2026-09-23",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Lottery song challenge. Users share songs for winning the lottery and disappearing as part of a daily music challenge.",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Kushner lawsuit. Jared Kushner allegedly acts as a top negotiator without Senate confirmation or following ethics rules.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Reagan legacy. Users revisit the former president's record on national debt, taxes, Iran arms sales, and AIDS.",
+   "date": "2026-10-11",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Patriot missile shortage. Officials warn Iran war has drained US Patriot interceptor stocks in Europe.",
+   "date": "2026-08-27",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "ICE deportations. Deportees to Haiti and Liberia describe alleged mistreatment; ICE responds.",
+   "date": "2026-08-31",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Profile memo. Memo cites alleged fake profiles said to target ICE agents' information.",
+   "date": "2026-09-18",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Boulder climate suit. ExxonMobil and Suncor Energy ask the justices to end Boulder's lawsuit as the new term begins.",
+   "date": "2026-10-08",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Gatorade recall. PepsiCo pulls over 122,000 cases in 37 states over food colorings missing from labels.",
+   "date": "2026-10-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Roadless rule repeal. Plan would open 45 million acres of forest to roads and logging.",
+   "date": "2026-08-23",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Trump midterm ads. Trump reportedly plans to spend his $400M super PAC on ads touting his own record.",
+   "date": "2026-08-26",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Bret Stephens backlash. Critics mock his NYT column calling diverse book award nominees a 'DEI checklist'.",
+   "date": "2026-09-23",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "NIH grant scrutiny. Budget chief Vought clashed with officials, calling NIH grants overly 'woke'.",
+   "date": "2026-09-20",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Paramount settlement tal. Talks aim to resolve antitrust suit over Paramount's $81B deal to buy Warner Bros.",
+   "date": "2026-09-19",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Carville on messaging. Carville's comments spark debate over Democratic strategy and his relevance today.",
+   "date": "2026-09-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "FBI breach claim. Group claims 3TB of agent data taken via PeopleSoft flaw; FBI investigating the claim.",
+   "date": "2026-09-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "BB28 jury interview. Jurors Lala, Angela, Barrett, Yash, Melody and Dee discuss the game and finale in exclusive interview.",
+   "date": "2026-09-30",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Superintelligence Force. Trump's new AI task force will be led by Jay Clayton and Andrew Ferguson and report to him.",
+   "date": "2026-10-07",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Trump's arch. Park Service says the planned arch could damage historic DC monuments but must proceed.",
+   "date": "2026-09-17",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Galactic Racer. Critics praise the new arcade podracing game, though some fans want split-screen co-op.",
+   "date": "2026-10-05",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "AP Top 25. Missouri climbs to No. 14, Florida drops, LSU returns to the top 10, and Pitt enters at No. 25.",
+   "date": "2026-10-05",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Funding cap dropped. Unions warned a donor cap could hurt their ability to fund Labour.",
+   "date": "2026-08-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Guile popcorn bucket. AMC's Street Fighter bucket, modeled on Cody Rhodes, mimics Guile's hairstyle.",
+   "date": "2026-09-19",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "AI fantasy football. Nic Carter says chatbots run his league because it's a social obligation, not his hobby.",
+   "date": "2026-10-09",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "IGN layoffs. Cuts hit long-time video hosts, including Nintendo Voice Chat's Seth Macy.",
+   "date": "2026-09-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Iran rally. Hundreds of thousands joined a government-organized show of defiance after months of war.",
+   "date": "2026-09-19",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "MacArthur genius grants. Twenty fellows, including a jazz saxophonist and a forensic anthropologist, each get $800,000.",
+   "date": "2026-10-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Banned Books Week. Readers share favorite challenged titles and push back against censorship.",
+   "date": "2026-10-10",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "UK energy prices. Ofgem's price cap rises 4% in October, pushing typical bills to \u00a31,723 a year.",
+   "date": "2026-08-26",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "RFK Samoa. Documents about his 2019 Samoa trip are being compared with his Senate testimony.",
+   "date": "2026-08-27",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Stanford photo. Stanford faces backlash over an AI-altered student photo said to change the subject's race.",
+   "date": "2026-09-24",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Alberta separation. Poll on Albertans' views on separation as Smith faces criticism over her stance.",
+   "date": "2026-09-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Pentagon promotion test. Critics question the new war-game test and its designer's background.",
+   "date": "2026-09-24",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Claude watermarking. Some users are canceling subscriptions, fearing clients will flag their work as AI-generated.",
+   "date": "2026-08-20",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "One Ring game. Users pitch pop-culture characters like Lois Lane or Clouseau who could resist Sauron's ring.",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Tk'emlups gathering. Masked group spotted on reserve ahead of Truth and Reconciliation Day sparks concern.",
+   "date": "2026-09-30",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Canada hires researchers. 48 of 64 recruits left US campuses amid Trump-era funding and visa crackdowns.",
+   "date": "2026-08-29",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Proclaimers backlash. Users mock the duo's Telegraph interview criticizing the 'trans lobby' and free speech.",
+   "date": "2026-09-14",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Gamescom AI backlash. Many criticize Gamescom's Opening Night games as AI-generated slop, souring reactions.",
+   "date": "2026-08-26",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Cattle groups vs. ICE. Texas, Oklahoma and Kansas cattle groups warn ICE raids could raise beef prices.",
+   "date": "2026-09-29",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Bond yields. S&P 500 and Nasdaq ease from record highs as 30-year Treasury rates hit 24-year peak.",
+   "date": "2026-10-09",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Bluesky users share favo. Users swap picks like Entwistle, McCartney, and Jackie Jackson.",
+   "date": "2026-09-26",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Australia skips sanction. European allies say they were surprised Australia withdrew from the joint sanctions statement.",
+   "date": "2026-09-20",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Collins staffer. Reports allege a former staffer for GOP's Mike Collins shared extremist imagery online.",
+   "date": "2026-08-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Donalds military blame. NBC's Peter Alexander pushed back, noting Trump has led the military for nearly two years.",
+   "date": "2026-08-20",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Margaret Hamilton. The computing pioneer led software development for the Apollo program and coined \"software engineering.\"",
+   "date": "2026-10-11",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Draganfly - Trump Jr.. Canadians push MPs to probe drone firm Draganfly's contract tied to Don Jr.",
+   "date": "2026-10-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Labour leads polls. Labour tops every major pollster for the first time since October 2024.",
+   "date": "2026-09-22",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Guilfoyle topples-govern. She reportedly told Greek officials the US could topple any country's government, as with Romania.",
+   "date": "2026-09-30",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Prison experiment show. Critics compare it to Squid Game and warn it echoes the original experiment's harms.",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Fuel costs. Brown University's tracker puts extra US gasoline and diesel spending at $131 billion.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Army Secretary Dan Drisc. Reports concern Driscoll's role and Senate-confirmed leadership at the Army.",
+   "date": "2026-09-01",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Trans rights rollback. Posts note dozens of US states now restrict trans healthcare, IDs, and bathroom access.",
+   "date": "2026-09-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "MA primary. Emerson poll surveys Markey and Moulton ahead of Massachusetts Senate primary.",
+   "date": "2026-08-31",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Epstein files. Posts call for full disclosure of Epstein records and accountability for connected figures.",
+   "date": "2026-08-17",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Grassley diesel remark. Critics mock Grassley's call to limit oil profits as hypocritical or incoherent.",
+   "date": "2026-09-21",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Vance on Carney. Vance called Carney's stance in trade talks with Trump \"hilarious\" at a private fundraiser.",
+   "date": "2026-08-22",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "RFK Jr. keynote. He spoke to Children's Health Defense as measles cases surge across the US.",
+   "date": "2026-09-18",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Week 4 results. Oregon beat USC and several ranked teams like Penn State fell in a wild Saturday.",
+   "date": "2026-09-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Angus slams Americans. Canadian commentator asks why Americans aren't protesting Trump more forcefully.",
+   "date": "2026-08-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Bombs to Israel. Critics say US taxpayers fund the sale amid Gaza's rising civilian death toll.",
+   "date": "2026-09-22",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "Social Security hearing. The hearing drew criticism over who it serves, with commentary naming Harlan Crow.",
+   "date": "2026-09-26",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Texas primary. Crockett and Talarico face off in the Texas Senate primary; attention turns to down-ballot races.",
+   "date": "2026-08-29",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Walmart - Apple Pay. Tap-to-pay rolls out August 24, ending years of Walmart holding out on Apple/Google Pay.",
+   "date": "2026-08-21",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Aaron Donald returns. He signs a one-year, $20M deal with incentives up to $30M, joining Myles Garrett.",
+   "date": "2026-08-31",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "CLARITY Act. Senate voted on the crypto market structure bill; Warren led opposition citing Trump ethics concerns.",
+   "date": "2026-09-17",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Treasury yield surges. Rising yields spark comparisons to the UK's 2022 gilt crisis and bond market jitters.",
+   "date": "2026-09-29",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "GTA 6 hype. Rockstar says the game will skip microtransactions and generative AI at launch.",
+   "date": "2026-08-31",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Odyssey box office. The film hit $1.68 billion worldwide, becoming Universal's highest-grossing movie ever.",
+   "date": "2026-09-13",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Mike Johnson comments. Johnson says Republicans would continue current course if they keep the House.",
+   "date": "2026-10-01",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Military aid shift. State Dept moves $52M from Slovakia, Iraq and others to Panama, Peru, Colombia.",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "El-Sayed responds to Ken. Barack Obama will campaign with El-Sayed in Detroit, the AP reports.",
+   "date": "2026-10-10",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Reform housing plan. Critics say the plan would deprioritize UK citizens born abroad, including military families.",
+   "date": "2026-08-24",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Gates warns on AI. Gates fears mass unemployment, bioterrorism, and a public backlash against AI.",
+   "date": "2026-08-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Paxton vs. Talarico. Paxton defends owning 15 homes as Talarico surges in polling ahead of election.",
+   "date": "2026-08-31",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "MLB lineups today. Fans debate lineup choices, including Freeman's absence and platoon splits.",
+   "date": "2026-09-06",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Senate midterms. Alaska Senate primary draws attention as Peltola's campaign shapes Democratic outlook.",
+   "date": "2026-08-30",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Execution will be stream. The execution by firing squad of Fort Hood shooter Nidal Malik Hasan will be livestreamed, per an Associated Press report.",
+   "date": "2026-10-09",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Oyer lawsuit. Former pardon attorney's suit follows her removal amid a gun-rights restoration dispute.",
+   "date": "2026-09-04",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Jeffries on socialists. House Minority Leader rejects defunding police, open borders, and abolishing the Senate.",
+   "date": "2026-08-16",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Carney - strike law. Unions warn new binding mediation rules could strip workers' right to strike.",
+   "date": "2026-09-20",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "SpaceX funding. Elon Musk's rocket company is pursuing an Apollo-led debt deal to buy AI hardware, per FT.",
+   "date": "2026-10-08",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Lynx clinch No. 1 seed. Minnesota beats Indiana Fever, setting up a playoff matchup vs. the No. 5 seed.",
+   "date": "2026-09-23",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Eldridge's homer. Giants prospect's 17th home run set a new career-long distance mark.",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "FDA chemicals. The regulator may widen a loophole that lets non-carcinogenic harmful compounds skip safety review.",
+   "date": "2026-10-14",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Trump-Zelensky Moscow. Zelensky rejected the idea, reportedly upset Trump raised it during their UN meeting.",
+   "date": "2026-09-26",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Natalie Harp. Photos show the Trump aide with Stephen Miller and Press Secretary Katie Zacharia",
+   "date": "2026-10-13",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "UN vote. A UN vote on women's equality drew attention to the US position and online reaction.",
+   "date": "2026-09-26",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "NFL vs. DHS. DHS used Brian Dawkins' hits to promote immigration enforcement, angering the NFL and fans.",
+   "date": "2026-10-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Converse ad backlash. Converse apologized and removed the ad after backlash over the imagery.",
+   "date": "2026-09-22",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Resume gap meme. Users imagine how different professions and figures would answer a job interviewer's question.",
+   "date": "2026-10-14",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Annie Andrews. Backing Darline Graham for South Carolina Senate, Donald Trump used an anti-trans slur on her rival.",
+   "date": "2026-10-08",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Fed decision. Reports discuss a Federal Reserve rate decision under new chair Kevin Warsh.",
+   "date": "2026-09-20",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Trump's arch. Critics mock the $100M triumphal arch planned near Arlington Cemetery.",
+   "date": "2026-09-04",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Rogers ad. A Tim Robinson-style ad targets Rogers ahead of his Michigan Senate run.",
+   "date": "2026-09-29",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Ebenezer casts Depp. Director Ti West says his Christmas Carol take gives Scrooge a \"gray area\" and sympathetic logic.",
+   "date": "2026-09-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "DHS voter data. Whistleblowers and senators raise questions over DHS handling of voter data.",
+   "date": "2026-09-19",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "2010s Twitter. Users recall the platform's chaotic scandals, like Bean Dad, hacked accounts, and joke-stealing pastors.",
+   "date": "2026-10-03",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "LNG Canada expansion. The Kitimat project could double LNG export capacity, sparking climate concerns.",
+   "date": "2026-10-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Amazon workers on SNAP. Posts say reliance on SNAP and Medicaid tripled since 2020 as profits soared.",
+   "date": "2026-09-28",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Blueberry recall. FDA's highest alert covers Publix frozen blueberries and mixed berries in several states.",
+   "date": "2026-08-21",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Jason Watson. Posts discuss the detention of Maj. Jason Watson, who publicly called for Trump's impeachment.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Polanski fallout. Zack Polanski faces resignation calls amid the Holborn and St Pancras by-election.",
+   "date": "2026-10-09",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Nolan Wells. Grand jury reviewed phone data, GPS logs and 43 witnesses in the Nolan Wells case.",
+   "date": "2026-09-22",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Rally protester. Reports of an altercation with a woman in an Epstein files shirt at Trump's Ohio rally",
+   "date": "2026-10-14",
+   "tragedy": true,
+   "political": false
+  },
+  {
+   "text": "Tohono O'odham wall. ProPublica reports DHS used masked agents, drones and surveillance on the Arizona tribe as construction began.",
+   "date": "2026-10-11",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Carney approval. A Liaison poll measures the Canadian prime minister's net approval across regions.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "McClatchy layoffs. The layoffs leave the Herald-Leader with just two reporters covering city and state government.",
+   "date": "2026-09-11",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "WSJ - water bottles. Reactions mock WSJ's claim that big water bottles are overkill for hydration.",
+   "date": "2026-08-29",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Jobs gender gap. Data shows nearly all new jobs in Donald Trump's second term went to women, many in healthcare.",
+   "date": "2026-10-03",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Chretien's 9/11 speech. He told the US not to mistake Canada's kindness for weakness.",
+   "date": "2026-09-13",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Kushner diplomacy. Kushner urges Netanyahu on Hamas disarmament while pushing Iran nuclear deal.",
+   "date": "2026-08-19",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "\"Clanker\" debate. Some argue it's a slur rooted in racism, others say it's just silly AI slang.",
+   "date": "2026-08-25",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trump's Beast. Donald Trump says weather grounded his flight from Texas, so the presidential limo is driving him to a rally.",
+   "date": "2026-10-02",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Reform inquiry. Nigel Farage plans to sue journalists after an internal probe of an undercover donations sting.",
+   "date": "2026-10-09",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Mobile game ads. A viral TikTok by ayoships shows how a free app adjusts difficulty to push more advertising.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Hoskins case. Missouri court proceedings involving Hoskins and the use of the 2022 map.",
+   "date": "2026-09-12",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Reacher militia season. Ritchson says the white-supremacist militia book was shelved after Trump's re-election.",
+   "date": "2026-09-21",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Layton AI backlash. Fans say Level 5's use of GenAI is souring excitement for the new title.",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Ben-Gvir expulsion plan. The $20B, 7-year plan targets removal of nearly 2 million Palestinians; US has rejected it.",
+   "date": "2026-09-05",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Socialist Batman villain. A viral post reimagines Batman villains as charismatic advocates for Gotham's poor.",
+   "date": "2026-09-30",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Celebrities turning 80. A viral list of 80-year-old celebrities sparks jokes, disbelief, and some pointed political jabs.",
+   "date": "2026-08-26",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Johnson recess backlash. Critics slam Johnson for scheduling only 4 working days through November, calling it avoidance.",
+   "date": "2026-09-05",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Dancing with Stars. Viewers rally votes for Tatyana and her partner Jan and praise this season's judges' scoring.",
+   "date": "2026-10-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "ICE robot dogs. Critics fear abuse as ICE reportedly plans $2M purchase of door-opening, tracking robot dogs.",
+   "date": "2026-08-30",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Gallego - ballroom. Sen. Gallego says he'd support tearing down Trump's White House ballroom and arch.",
+   "date": "2026-09-14",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Obamacare broker halt. CMS chief Oz says no new ACA brokers will be approved for months, sparking backlash.",
+   "date": "2026-09-23",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Google Maps renames Lake. Users debate whether Google's automated GNIS data policy is really a neutral choice.",
+   "date": "2026-08-31",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Bannon on Newsom. Bannon's comment sparks mixed reactions, with some mocking the 'MAGA philosopher' label.",
+   "date": "2026-10-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Canvasser video. Ring footage of a Stronger Maine PAC canvasser and a doorstep package draws online reaction.",
+   "date": "2026-09-18",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Air Force One playlist. Reporters called the eclectic mix, including WWE and ABBA, wild and incoherent.",
+   "date": "2026-09-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trump son's gift. Blanche says Trump family doesn't know who gave son a gift tied to Putin.",
+   "date": "2026-09-16",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Hasan Piker fixation. Fox News mentioned Piker more than 'transgender' in August, sparking debate on his influence.",
+   "date": "2026-09-05",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Ex-chief case. Woman held five days; former chief resigned and was decertified.",
+   "date": "2026-10-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Brexit interference. Andy Burnham comments on claims of Russian interference in the 2016 Brexit referendum.",
+   "date": "2026-10-15",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "JD Vance's stance. A photo of Vance standing oddly sparked mocking jokes and memes online.",
+   "date": "2026-09-21",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Burgum interview. On Squawk Box, the Interior Secretary said Trump stopped World War 3 and climate talk has faded.",
+   "date": "2026-10-08",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Knies-Marchenko trade. Habs reportedly tried to land Marchenko too, but Leafs won the deal.",
+   "date": "2026-10-01",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trump hair color. Users mock the sudden darker hair, linking it to jokes about his health and image.",
+   "date": "2026-09-06",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Politico dispute. Posts discuss claims about who sourced a Politico story and the White House press ban.",
+   "date": "2026-09-24",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Testosterone screening. Male troops 30+ must be screened for low testosterone, including sexual symptoms.",
+   "date": "2026-09-22",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Trump Nobel. Donald Trump claims nobody has been more deserving, saying he settled eight wars.",
+   "date": "2026-10-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "AI data centers. Posts cover tax breaks for Meta, strain on power grids, and political fights over regulation.",
+   "date": "2026-10-03",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Hegseth extends deployme. Move gives Trump open-ended options in the Iran conflict, straining troops further.",
+   "date": "2026-09-04",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Reflecting Pool case. Judge Edelman's ruling in the DOJ case involving ex-Olympian David Hearn.",
+   "date": "2026-10-03",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Porter Jr. trade. Steelers send cornerback Joey Porter Jr. to the Cowboys, per Tom Pelissero.",
+   "date": "2026-10-02",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Kennedy Center. Lawsuit concerns board vote on adding Trump's name; center delays action until after Sept. 8.",
+   "date": "2026-08-20",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Jeffries-Kushner meeting. Reported private meeting draws mixed reactions from Democrats ahead of midterms.",
+   "date": "2026-08-26",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "USMNT vs. Peru. 16-year-old Sullivan debuts alongside fellow teens Ellis and Miller against Peru.",
+   "date": "2026-09-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Collins inquiry. Reports describe an FBI inquiry involving donations from a defense CEO and official intervention.",
+   "date": "2026-09-22",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Fuel economy rollback. Critics say the new rules favor gas cars over EVs, sparking pushback online.",
+   "date": "2026-09-30",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Navy base damage. Reporting concerns damage to a Navy resupply base and its effect on USS Lincoln resupply.",
+   "date": "2026-08-21",
+   "tragedy": true,
+   "political": true
+  },
+  {
+   "text": "DOGE records. Justices agree to hear the Trump administration's appeal to block discovery in a DOGE FOIA suit.",
+   "date": "2026-10-14",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "MLB playoff race. Blue Jays, White Sox, and other teams jockey for AL wild card spots late in season.",
+   "date": "2026-09-17",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Katie Zacharia. Trump's new White House spokesperson draws scrutiny over Zelenskyy comments on Fox and abortion claims.",
+   "date": "2026-10-11",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Trump on Ukraine war. Trump says Russia lost control of its diesel industry due to Ukrainian strikes.",
+   "date": "2026-09-21",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Clippers inquiry. NBA reviews Clippers, Ballmer and Kawhi Leonard contract over salary cap questions.",
+   "date": "2026-09-02",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Working class poll. Voters cited Homer Simpson, Fran Fine, Peter Griffin, and Hank Hill as working class.",
+   "date": "2026-09-09",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Spain election. Spain's prime minister sets a November 29 vote amid a parliamentary fight over housing measures.",
+   "date": "2026-10-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Oates vs. Maher. Oates says Maher trivializes 'woke' by equating it with deadly MAGA policies.",
+   "date": "2026-08-30",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Expand Supreme Court. Clyburn suggests adding four seats; some reactions call for even more, like 19.",
+   "date": "2026-08-31",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Emmer beef prices. Critics mock Emmer's claim that ground beef costs under $2 a pound.",
+   "date": "2026-09-18",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "SCOTUS amendment. A House vote on the court-size amendment, amid debate over expanding the Supreme Court.",
+   "date": "2026-09-04",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Democrats defund ICE. Stuart Stevens says Democrats should act as a dissident movement, not governing party.",
+   "date": "2026-09-07",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "WNBA trans conspiracy. Social media users accuse WNBA players of being trans despite no confirmed trans athletes.",
+   "date": "2026-08-27",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Alito recusal. Alito reverses course, stepping aside from Suncor climate liability case at Supreme Court.",
+   "date": "2026-09-30",
+   "tragedy": false,
+   "political": true
+  },
+  {
+   "text": "Trump-Cohen podcast. Trump is set to record with his former lawyer, sparking mockery online.",
+   "date": "2026-08-20",
+   "tragedy": false,
+   "political": false
+  },
+  {
+   "text": "Garvaghy Road case. High Court hears residents' injunction bid over claims about PSNI information.",
+   "date": "2026-09-27",
+   "tragedy": false,
+   "political": false
+  }
+ ]
+}

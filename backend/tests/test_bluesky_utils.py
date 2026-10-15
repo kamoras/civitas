@@ -21,7 +21,7 @@ def _post(text: str, url: str = "https://civitas-research.org/issue/i9e3779b1") 
 
         result = publish_post(text, url, success_msg="posted", error_context="test")
 
-    assert result is True
+    assert result is not None
     return mock_client.send_post.call_args.args[0]
 
 
@@ -82,7 +82,7 @@ class TestMissingCredentials:
 
             result = publish_post("text", "https://example.com", success_msg="posted", error_context="test")
 
-        assert result is False
+        assert result is None
         mock_client_cls.assert_not_called()
 
 
