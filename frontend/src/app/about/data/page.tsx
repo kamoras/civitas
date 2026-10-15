@@ -540,8 +540,10 @@ export default function DataChapter() {
             documents, the Supreme Court and presidents); the House; stock trades; and elections.
             Each reads what the database already holds, so one that fails leaves the others&apos;
             records current, and the next still runs. The band at the top of every page names any
-            run whose latest attempt failed, says when, and counts how many of the five completed.
-            Until a failed run completes again, its pages show its last completed run.
+            data run whose latest attempt failed (&ldquo;Senate data run failed&rdquo; means
+            Civitas&apos;s nightly update of the Senate pages, not anything the Senate did), says
+            when, and counts how many of the five completed. Until a failed run completes again, its
+            pages show its last completed run.
           </P>
         </Sub>
         <Facts>

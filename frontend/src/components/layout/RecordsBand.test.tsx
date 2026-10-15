@@ -99,8 +99,8 @@ describe("describeRunState", () => {
 
   it("names the one link that failed, and when, instead of the whole site", () => {
     const s = describeRunState(status({ links: links({ Senate: "failed" }) }));
-    expect(s.label).toBe("SENATE RUN FAILED");
-    expect(s.short).toBe("SENATE FAILED");
+    expect(s.label).toBe("SENATE DATA RUN FAILED");
+    expect(s.short).toBe("SENATE DATA FAILED");
     expect(s.at).toBe("2026-08-18T03:26:00");
     expect(s.tone).toBe("text-signal-red");
   });
@@ -109,20 +109,20 @@ describe("describeRunState", () => {
     const s = describeRunState(
       status({ links: links({ Senate: "failed", House: "failed", "Stock trades": "failed" }) })
     );
-    expect(s.label).toBe("SENATE + 2 MORE RUNS FAILED");
-    expect(s.short).toBe("SENATE +2 FAILED");
+    expect(s.label).toBe("SENATE + 2 MORE DATA RUNS FAILED");
+    expect(s.short).toBe("3 DATA RUNS FAILED");
     expect(s.everyName).toBe("Senate, House, Stock trades");
     expect(s.at).toBeNull();
   });
 
   it("ranks a failure over a partial run over a run in progress", () => {
     const all = links({ Senate: "running", House: "partial", Election: "failed" });
-    expect(describeRunState(status({ links: all })).label).toBe("ELECTION RUN FAILED");
+    expect(describeRunState(status({ links: all })).label).toBe("ELECTION DATA RUN FAILED");
     expect(
       describeRunState(status({ links: links({ Senate: "running", House: "partial" }) })).label
-    ).toBe("HOUSE RUN PARTIAL");
+    ).toBe("HOUSE DATA RUN PARTIAL");
     const running = describeRunState(status({ links: links({ House: "running" }) }));
-    expect(running.label).toBe("HOUSE RUN IN PROGRESS");
+    expect(running.label).toBe("HOUSE DATA RUN IN PROGRESS");
     expect(running.at).toBeNull();
   });
 
@@ -154,7 +154,7 @@ describe("RecordsBand rendering", () => {
     // jsdom applies no CSS, so the phone and desktop wordings both show here.
     const link = await screen.findByRole("link");
     expect(link).toHaveAttribute("href", "/about/data#nightly-runs");
-    expect(link).toHaveTextContent("SENATE RUN FAILED");
+    expect(link).toHaveTextContent("SENATE DATA RUN FAILED");
     expect(link).toHaveTextContent("2026-08-18 03:26 UTC");
     expect(screen.getByText(/4 OF 5 FILED/)).toBeInTheDocument();
     expect(screen.getByText("4/5 FILED")).toBeInTheDocument(); // the phone line
