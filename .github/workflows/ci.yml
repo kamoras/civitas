@@ -132,9 +132,14 @@ jobs:
       #      aspirational number that routine fixes can't meet. Ratchet
       #      it up (60 -> 70 -> 80) as testing culture matures; when the
       #      total rises meaningfully, drag the floor up behind it.
+      #
+      # -n auto: one pytest-xdist worker per runner CPU. pytest-cov combines
+      # the workers' data into the one coverage.xml both gates read (checked
+      # when this went in: the same lines covered as a serial run). Serial,
+      # the suite had grown to fill the job's whole timeout.
       - name: Run fast tests with total-coverage floor (no embedding model)
         run: >
-          python -m pytest tests/ -v -m "not slow"
+          python -m pytest tests/ -v -m "not slow" -n auto
           --cov=app --cov-report=term --cov-report=html --cov-report=xml
           --cov-fail-under=46
 
