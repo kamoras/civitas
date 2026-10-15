@@ -725,14 +725,25 @@ class PublicRepresentativeRowSchema(LeaderboardEntrySchema):
     site_url: str = _SITE_URL
 
 
+_ALGORITHM_VERSION = Field(description="The scoring version that stored the member's scores (the newest "
+                                        "history snapshot's), as the changelog names it; null when none is "
+                                        "recorded")
+_SCORED_ON = Field(description="When the member's stored scores were computed, YYYY-MM-DD (the newest "
+                               "history snapshot); null when none is recorded")
+
+
 class PublicSenatorProfileSchema(SenatorSchema):
     model_config = _PublicModel.model_config
     site_url: str = _SITE_URL
+    algorithm_version: str | None = _ALGORITHM_VERSION
+    scored_on: str | None = _SCORED_ON
 
 
 class PublicRepresentativeProfileSchema(RepresentativeSchema):
     model_config = _PublicModel.model_config
     site_url: str = _SITE_URL
+    algorithm_version: str | None = _ALGORITHM_VERSION
+    scored_on: str | None = _SCORED_ON
 
 
 class _PublicPage(_PublicModel):
@@ -819,6 +830,10 @@ class PublicScoreSnapshotSchema(_PublicModel):
     constituent_alignment: float
     funding_diversity: float
     legislative_effectiveness: float
+    algorithm_version: str | None = Field(description="The scoring version that computed this snapshot; a "
+                                                      "change between two snapshots is a method change, not "
+                                                      "only a change in the record. Null for snapshots taken "
+                                                      "before versions were recorded")
 
 
 class PublicHistorySchema(_PublicModel):
@@ -949,10 +964,8 @@ class PublicScoreBreakdownSchema(_PublicModel):
     chamber: Literal["senate", "house"]
     party: str
     site_url: str = _SITE_URL
-    algorithm_version: str | None = Field(description="The scoring version that stored these scores (the newest "
-                                                      "history snapshot's); null when none is recorded")
-    scored_on: str | None = Field(description="When the stored scores were computed, YYYY-MM-DD (the newest "
-                                              "history snapshot)")
+    algorithm_version: str | None = _ALGORITHM_VERSION
+    scored_on: str | None = _SCORED_ON
     recomputed_with: str = Field(description="The scoring version the breakdown was recomputed with now")
     overall: float = Field(description="representationScore.overall: sum(weights[k] x dimensions[k].storedScore), "
                                        "rounded to 2 decimals")
