@@ -198,6 +198,8 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                 <DevelopingDisclosure
                   sourceType={issue.sourceType}
                   countOfficial={countIsOfficial(issue)}
+                  retired={issue.isCurrent === false}
+                  coveredBy={issue.coveredBy}
                 />
               </div>
             )}

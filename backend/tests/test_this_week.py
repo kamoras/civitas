@@ -128,6 +128,13 @@ class TestCommentDeadlines:
         db_session.commit()
         assert [d["id"] for d in tw.comment_deadlines(db_session)] == [11]
 
+    def test_a_draft_retired_unconfirmed_is_not_news(self, db_session):
+        db_session.add(_rule(3, "Rule", "2026-12-01"))
+        db_session.add(ActionIssue(id=45, date="2026-10-08", rank=1, title="Final rule: x", related_explore_ids="[3]",
+                                   status="developing", is_current=False))
+        db_session.commit()
+        assert tw.comment_deadlines(db_session)[0]["issueId"] is None
+
     def test_an_old_issue_is_not_news(self, db_session):
         db_session.add(_rule(3, "Rule", "2026-12-01"))
         db_session.add(ActionIssue(id=44, date="2026-09-01", rank=1, title="Old", related_explore_ids="[3]"))

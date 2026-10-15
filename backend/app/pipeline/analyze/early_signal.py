@@ -419,6 +419,31 @@ def expire_stale_developing_issues(db: Session, now) -> int:
     return len(stale)
 
 
+# The clause a draft's summary closes on while it waits for news coverage
+# (the vote and rule templates above), and what it says once the draft is
+# retired without it: "has not appeared yet" on a month-old record reads as
+# a story still developing.
+_AWAITING_COVERAGE = re.compile(r"; news coverage of the (vote|rule) has not appeared yet\.$")
+_RETIRED_UNCONFIRMED = r"; news coverage of the \1 did not appear while it was on the Action Center."
+
+
+def reword_retired_drafts(db: Session) -> int:
+    """Close the summary of every developing draft no longer current on
+    what happened to it, whichever pass retired it (stale, expired, covered,
+    or one added later). Idempotent: a reworded summary no longer matches."""
+    reworded = 0
+    for row in db.query(ActionIssue).filter(
+        ActionIssue.status == ActionIssueStatus.DEVELOPING,
+        ActionIssue.is_current == False,  # noqa: E712
+        ActionIssue.summary.like("%has not appeared yet."),
+    ):
+        summary = _AWAITING_COVERAGE.sub(_RETIRED_UNCONFIRMED, row.summary)
+        if summary != row.summary:
+            row.summary = summary
+            reworded += 1
+    return reworded
+
+
 ROLL_CALL_SOURCES = ("senate_roll_call_vote", "house_roll_call_vote")
 
 

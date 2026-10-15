@@ -67,6 +67,7 @@ from app.pipeline.analyze.early_signal import (
     expire_stale_developing_issues,
     retire_covered_developing_issues,
     retire_stale_vote_drafts,
+    reword_retired_drafts,
 )
 from app.pipeline.analyze.grounding import (
     grounding_violations,
@@ -5030,6 +5031,7 @@ def _run_refresh(db: Session) -> int:
         expire_stale_developing_issues(db, utcnow())
         retire_stale_vote_drafts(db, today)
         retire_covered_developing_issues(db)
+        reword_retired_drafts(db)
     except Exception:
         logger.exception("expire_stale_developing_issues failed (non-fatal)")
     # Committed whichever call above raised: the two early-abort paths

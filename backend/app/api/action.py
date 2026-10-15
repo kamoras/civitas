@@ -95,6 +95,10 @@ def _renumber_for_display(issues: list[ActionIssue]) -> list[ActionIssue]:
 
 
 _NOT_DEVELOPING = or_(ActionIssue.status.is_(None), ActionIssue.status != ActionIssueStatus.DEVELOPING)
+# Not a draft taken off the Action Center unconfirmed: a developing issue
+# that is no longer current never had news coverage behind it, so it is not
+# part of the record the homepage keeps (retired confirmed stories are).
+NOT_RETIRED_DRAFT = or_(_NOT_DEVELOPING, ActionIssue.is_current.is_(True))
 
 
 def _latest_issue_date(db: Session) -> str | None:
@@ -598,6 +602,8 @@ def _build_issue_response(
         full_story=getattr(issue, "full_story", None),
         is_trending=is_trending,
         status=getattr(issue, "status", None) or "confirmed",
+        is_current=issue.is_current is not False,
+        covered_by=to_public_id(issue.duplicate_of_id) if issue.duplicate_of_id else None,
         source_type=getattr(issue, "source_type", None),
         count_as_of=count_as_of,
         count_official=count_official,
@@ -759,7 +765,9 @@ async def get_recent_action_issues(
     limit: int = Query(_RECENT_ISSUES_DEFAULT_LIMIT, ge=1, le=_RECENT_ISSUES_MAX_LIMIT),
     db: Session = Depends(get_db),
 ):
-    """The most recently touched issues, regardless of is_current.
+    """The most recently touched issues, regardless of is_current — except
+    developing drafts retired unconfirmed (NOT_RETIRED_DRAFT), which never
+    entered the record: two month-old vote drafts led it on 2026-10-15.
 
     Backs the homepage's "record index" — a permanent-feeling ledger of
     recent activity — which used to call the same endpoint as the Action
@@ -790,6 +798,7 @@ async def get_recent_action_issues(
     response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
     pool = (
         db.query(ActionIssue)
+        .filter(NOT_RETIRED_DRAFT)
         .order_by(ActionIssue.date.desc(), ActionIssue.rank.asc())
         .limit(RECENT_FEED_MAX_LIMIT * RECENT_FEED_POOL_MULTIPLIER)
         .all()
@@ -952,7 +961,7 @@ OPEN_COMMENTS_ISSUE_DAYS = 14
 def _issue_linked_doc_ids(db: Session, since: str) -> set[int]:
     ids: set[int] = set()
     for explore_ids, actions in db.query(ActionIssue.related_explore_ids, ActionIssue.actions).filter(
-        ActionIssue.date >= since, ActionIssue.duplicate_of_id.is_(None),
+        ActionIssue.date >= since, ActionIssue.duplicate_of_id.is_(None), NOT_RETIRED_DRAFT,
     ):
         ids.update(i for i in _parse_json_field(explore_ids) if isinstance(i, int))
         ids.update(a["docId"] for a in _parse_json_field(actions)

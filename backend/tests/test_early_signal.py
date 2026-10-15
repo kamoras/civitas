@@ -341,6 +341,21 @@ class TestStaleVotes:
         assert stale.is_current is False and stale.status == ActionIssueStatus.DEVELOPING
         assert fresh.is_current is True and confirmed.is_current is True
 
+    def test_a_retired_draft_stops_saying_coverage_has_not_appeared_yet(self, db_session):
+        live = self._draft(db_session, "2026-10-14")
+        retired = self._draft(db_session, "2026-09-16", url="u2")
+        rule = self._draft(db_session, "2026-09-16", url="u3")
+        for row, kind in ((live, "vote"), (retired, "vote"), (rule, "rule")):
+            row.summary = f"The House voted 401 to 14. This is from the record; news coverage of the {kind} has not appeared yet."
+        retired.is_current = rule.is_current = False
+        db_session.flush()
+        assert es.reword_retired_drafts(db_session) == 2
+        assert retired.summary.endswith(
+            "This is from the record; news coverage of the vote did not appear while it was on the Action Center.")
+        assert rule.summary.endswith("news coverage of the rule did not appear while it was on the Action Center.")
+        assert live.summary.endswith("news coverage of the vote has not appeared yet.")
+        assert es.reword_retired_drafts(db_session) == 0
+
     def test_a_current_draft_is_reworded_from_its_record(self, db_session):
         # "S 2403" was the Clerk's file spelling, stored before the template
         # printed bills as the site does.

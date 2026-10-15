@@ -1554,6 +1554,14 @@ class ActionIssueSchema(CamelModel):
     # uses this to show a disclosure badge and to exclude these from
     # normal top-story ranking competition.
     status: str = "confirmed"
+    # False once the issue is off the Action Center. With status
+    # "developing" that means the draft was retired unconfirmed (its vote
+    # past the window, its deadline passed, or a reported issue covering
+    # it), and the page says so rather than "Developing".
+    is_current: bool = True
+    # The issue this one was found to duplicate (duplicate_of_id): for a
+    # retired vote draft, the reported issue covering the same vote.
+    covered_by: str | None = None
     # What a DEVELOPING issue was drafted from ("senate_roll_call_vote",
     # "federal_register_significant_rule", "election_results", ...); None
     # for an ordinary news-derived issue. The page names the source in its

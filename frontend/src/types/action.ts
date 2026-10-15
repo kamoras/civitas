@@ -155,6 +155,13 @@ export interface ActionIssue {
    *  corroboration (see backend early_signal.py) — shown with a
    *  disclosure badge and ranked after every "confirmed" issue. */
   status: "developing" | "confirmed";
+  /** False once the issue is off the Action Center. A "developing" issue
+   *  that is not current was retired unconfirmed: it reads "Not confirmed",
+   *  never "Developing". Optional for an older backend. */
+  isCurrent?: boolean;
+  /** The issue this one duplicates — for a retired vote draft, the reported
+   *  issue covering the same vote. */
+  coveredBy?: string | null;
   /** What a developing issue was drafted from — "senate_roll_call_vote",
    *  "house_roll_call_vote", "federal_register_significant_rule",
    *  "election_results" — null for news-derived issues. Optional for an

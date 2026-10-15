@@ -149,7 +149,12 @@ export function IssueMeta({
           <span>{issueRef(issue.publicId)}</span>
         </>
       )}
-      {issue.status === "developing" && <span className="text-signal-amber">Developing</span>}
+      {issue.status === "developing" &&
+        (issue.isCurrent === false ? (
+          <span className="text-ink-lo">Not confirmed</span>
+        ) : (
+          <span className="text-signal-amber">Developing</span>
+        ))}
       {issue.isTrending && <span className="text-signal-cyan">Trending</span>}
     </Tag>
   );
@@ -157,16 +162,40 @@ export function IssueMeta({
 
 /** One-line disclosure paired with the "Developing" flag — explains what it
  *  means, and names what the story was drafted from, rather than leaving
- *  readers to guess. */
+ *  readers to guess. A draft retired unconfirmed says that instead: "has not
+ *  yet confirmed" on a month-old draft reads as a story still developing. */
 export function DevelopingDisclosure({
   sourceType,
   countOfficial = false,
+  retired = false,
+  coveredBy,
 }: {
   sourceType?: string | null;
   /** countIsOfficial(issue) — an official count must not read "not final". */
   countOfficial?: boolean;
+  /** The draft is off the Action Center (isCurrent false). */
+  retired?: boolean;
+  /** The reported issue covering the same vote, when that is why. */
+  coveredBy?: string | null;
 }) {
   const source = developingSource(sourceType, { countOfficial });
+  if (retired) {
+    return (
+      <p className="mb-4 font-mono text-xs leading-relaxed text-ink-min">
+        Not confirmed. Based on {source}; taken off the Action Center before broader news coverage
+        confirmed it.
+        {coveredBy && (
+          <>
+            {" "}
+            <Link href={`/issue/${coveredBy}`} className="text-ink underline underline-offset-2">
+              The reported issue on the same{" "}
+              {sourceType === "federal_register_significant_rule" ? "rule" : "vote"} →
+            </Link>
+          </>
+        )}
+      </p>
+    );
+  }
   return (
     <p className="mb-4 font-mono text-xs leading-relaxed text-ink-min">
       Based on {source}; broader news coverage has not yet confirmed this story.
