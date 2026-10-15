@@ -17,6 +17,7 @@ coverage==7.16.2
 defusedxml==0.7.1
 diff-cover==10.6.0
 dnspython==2.8.0
+execnet==2.1.2
 fastapi==0.142.2
 filelock==4.0.9
 fsspec==2026.9.0
@@ -67,6 +68,7 @@ playwright==1.63.0
 pytest==9.1.1
 pytest-cov==7.1.0
 pytest-asyncio==1.4.0
+pytest-xdist==3.8.0
 python-dotenv==1.2.3
 python-multipart==0.0.32
 PyYAML==6.0.3
