@@ -101,7 +101,20 @@ export default function BillPageView({
   committee?: CommitteeRecordPage | null;
 }) {
   const label = record?.billLabel ?? detail?.billId ?? billId;
-  const title = record?.title ?? detail?.title ?? "";
+  const listed = record?.title ?? detail?.title ?? "";
+  // Congress.gov's short or popular title leads when the listing title isn't
+  // it (H.R. 1: "One Big Beautiful Bill Act" over "An act to provide for
+  // reconciliation…"), with the official title right under it.
+  const shortTitle = record?.shortTitle ?? detail?.shortTitle ?? null;
+  const shortTitleType = record?.shortTitle
+    ? record.shortTitleType
+    : (detail?.shortTitleType ?? null);
+  const title = shortTitle || listed;
+  // Under a short title, the official one from Congress.gov's same list; the
+  // listing title only when the list gives none (it can be a short title the
+  // bill no longer goes by, so it is not called official).
+  const officialTitle = record?.shortTitle ? record.officialTitle : (detail?.officialTitle ?? null);
+  const under = officialTitle || listed;
   const reportedDays = new Set((record?.days ?? []).map((d) => d.date));
   const unavailable = record?.unavailable ?? [];
   const stage = detail ? billStageStyle(detail.stage) : null;
@@ -166,6 +179,22 @@ export default function BillPageView({
                 <h1 className="font-display text-2xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
                   {title}
                 </h1>
+                {shortTitle && under && (
+                  <div className="-mt-2 flex flex-col gap-2">
+                    {/* The title type exactly as Congress.gov's titles list
+                        names it, so a reader can tell a short title as
+                        enacted from a popular name. */}
+                    <p className="font-mono text-xs text-ink-min">
+                      {shortTitleType || "Short title"} · Congress.gov
+                    </p>
+                    <p className="max-w-3xl text-sm leading-relaxed text-ink">
+                      <span className="mr-2 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                        {officialTitle ? "Official title" : "Listed as"}
+                      </span>
+                      {under}
+                    </p>
+                  </div>
+                )}
                 {record?.sponsors.length ? (
                   <p className="flex flex-wrap items-baseline gap-x-2 text-sm lg:hidden">
                     <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">

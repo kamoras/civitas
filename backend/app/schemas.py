@@ -447,7 +447,17 @@ class SponsoredBillSchema(CamelModel):
 
 class BillInFlightSchema(CamelModel):
     bill_id: str
+    # The title the sponsor's listing gives (the official one for a bill
+    # introduced without a short title).
     title: str
+    # The bill's short or popular title, verbatim from Congress.gov's titles
+    # list, when it has one the listing title isn't, with its title type as
+    # Congress.gov names it ("Short Title(s) as Passed House", "Popular
+    # Titles"); fetch/bill_display_titles.display_title.
+    short_title: str | None = None
+    short_title_type: str | None = None
+    # The official title from that list, shown under the short title.
+    official_title: str | None = None
     chamber: Literal["senate", "house"]
     sponsor_id: str
     sponsor_name: str
@@ -1126,10 +1136,32 @@ class PipelineRunSchema(CamelModel):
     error_message: str | None = None
 
 
+class PipelineLinkSchema(CamelModel):
+    """One link of the nightly chain, as its latest run left it.
+
+    `state` is the reader's word for the row, decided by the API:
+    "completed", "partial" (some members failed), "running" (a live run)
+    or "failed" (anything else: a failed or stale row, or a RUNNING row
+    whose run is dead)."""
+    pipeline: str
+    label: str
+    state: str
+    run_id: int
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
 class PipelineStatusSchema(CamelModel):
     last_run: PipelineRunSchema | None = None
     next_scheduled: str | None = None
     is_running: bool = False
+    # Each chain link's latest run, in the order the chain runs them. The
+    # records band reads these, not `last_run` (the Senate's alone), so one
+    # failed link is named as that link rather than as the whole site.
+    links: list[PipelineLinkSchema] = []
+    links_completed: int = 0
+    # The newest completion among the links that completed, or None.
+    filed_at: datetime | None = None
 
 
 class HealthSchema(CamelModel):

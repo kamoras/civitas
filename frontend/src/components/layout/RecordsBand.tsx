@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchPipelineStatus } from "@/lib/api";
 import type { PipelineStatus } from "@/lib/api";
@@ -37,30 +38,81 @@ export function formatRunTimestamp(iso: string): string | null {
   );
 }
 
-interface RunState {
-  label: string;
-  /** Tailwind text colour for the status word. */
-  tone: string;
+/** "HH:MM" (UTC), for the phone line: the failed run's day is almost always
+ * last night's, and the full stamp shows from `sm` up. */
+function formatRunTime(iso: string): string | null {
+  return formatRunTimestamp(iso)?.slice(11, 16) ?? null;
 }
+
+interface RunState {
+  /** The status words, full (from `sm`) and short (phones). */
+  label: string;
+  short: string;
+  /** Every link named, when the label names one and counts the rest
+   *  ("SENATE + 2 MORE"); null when the label already names them all. */
+  everyName: string | null;
+  /** Tailwind text colour for the status words. */
+  tone: string;
+  /** When the named run ended (or started, if it never ended); null for none. */
+  at: string | null;
+  /** Whether every link's latest run completed. */
+  complete: boolean;
+}
+
+const plain = (label: string, tone: string): RunState => ({
+  label,
+  short: label,
+  everyName: null,
+  tone,
+  at: null,
+  complete: false,
+});
 
 /**
- * A run is only "COMPLETE" when it actually finished. Anything else says so
- * plainly instead of dressing a stalled or failed run as fresh data — the
- * whole point of the band is that a stale record is visible rather than
- * assumed.
+ * The nightly chain is five independent runs (Senate, Supplementary, House,
+ * Stock trades, Election), and one failing leaves the other four's records
+ * current. So the band names the link that failed, and when, instead of
+ * calling the whole site failed: until 2026-10 it read only the Senate's run,
+ * and one Senate failure printed "LAST RUN FAILED" over a night where the
+ * other four completed. A failure outranks a partial run, which outranks a run
+ * still going: a run in progress is transient, a failed one is what a reader
+ * should weigh. "COMPLETE" only when every link's latest run completed.
  */
 export function describeRunState(status: PipelineStatus | null): RunState {
-  if (!status) return { label: "STATUS UNAVAILABLE", tone: "text-ink-min" };
-  if (status.isRunning) return { label: "RUN IN PROGRESS", tone: "text-signal-amber" };
+  if (!status) return plain("STATUS UNAVAILABLE", "text-ink-min");
+  const links = status.links ?? [];
+  if (links.length === 0) return plain("NO RUN RECORDED", "text-ink-min");
 
-  const run = status.lastRun;
-  if (!run) return { label: "NO RUN RECORDED", tone: "text-ink-min" };
-  if (run.errorMessage || run.status === "failed") {
-    return { label: "LAST RUN FAILED", tone: "text-signal-red" };
+  for (const [state, verb, shortVerb, tone] of [
+    ["failed", "FAILED", "FAILED", "text-signal-red"],
+    ["partial", "PARTIAL", "PARTIAL", "text-signal-amber"],
+    ["running", "IN PROGRESS", "RUNNING", "text-signal-amber"],
+  ] as const) {
+    const hit = links.filter((l) => l.state === state);
+    if (hit.length === 0) continue;
+    // Two or more name the first and count the rest: every name in a row
+    // ("SENATE + SUPPLEMENTARY + STOCK TRADES RUNS FAILED") wrapped the band
+    // at 640px and the phone line at 320, past the header's clearance.
+    const first = hit[0].label.toUpperCase();
+    const one = hit.length === 1;
+    return {
+      label: one ? `${first} RUN ${verb}` : `${first} + ${hit.length - 1} MORE RUNS ${verb}`,
+      short: one ? `${first} ${shortVerb}` : `${first} +${hit.length - 1} ${shortVerb}`,
+      everyName: one ? null : hit.map((l) => l.label).join(", "),
+      tone,
+      // One time per line: with two links named, whose time it was is unclear.
+      at: one && state !== "running" ? (hit[0].completedAt ?? hit[0].startedAt) : null,
+      complete: false,
+    };
   }
-  if (!run.completedAt) return { label: "RUN INCOMPLETE", tone: "text-signal-amber" };
-  return { label: "COMPLETE", tone: "text-phos" };
+  return { ...plain("COMPLETE", "text-phos"), complete: true };
 }
+
+const Dot = () => (
+  <span className="mx-2 text-ink-min" aria-hidden="true">
+    ·
+  </span>
+);
 
 /**
  * Module-scoped cache for the run status.
@@ -134,13 +186,14 @@ export default function RecordsBand() {
   }, []);
 
   const state = describeRunState(status);
-  const run = status?.lastRun;
-  // Only a run that actually succeeded gets a "FILED" stamp. Printing one
-  // beside "LAST RUN FAILED" would say the record is current as of a run
-  // that wrote nothing, which is the exact misreading this band exists to
-  // prevent.
-  const filed =
-    run?.completedAt && state.label === "COMPLETE" ? formatRunTimestamp(run.completedAt) : null;
+  // Only a run that actually completed gets a "FILED" stamp, and with a link
+  // named as failed it says how many links it covers: "FILED" alone beside
+  // "SENATE RUN FAILED" would read as the whole record being current.
+  const filedAt = status?.filedAt ? formatRunTimestamp(status.filedAt) : null;
+  const total = status?.links?.length ?? 0;
+  const done = status?.linksCompleted ?? 0;
+  const at = state.at ? formatRunTimestamp(state.at) : null;
+  const atShort = state.at ? formatRunTime(state.at) : null;
 
   return (
     <div className="border-b-3 border-ink-min/60 bg-surface-base">
@@ -174,33 +227,58 @@ export default function RecordsBand() {
         <span className="font-mono text-xs tracking-[0.06em] text-ink-lo lg:tracking-[0.16em]">
           {loaded ? (
             <>
-              {/* Dropped on mobile. The full string wraps to a second line
-                  on narrow phones and pushes this fixed header past the 96px
-                  (`--header-clearance`) every page reserves for it — measured across every
-                  run-state label at 320-1280px, not guessed. The run number is
-                  the least load-bearing part; the timestamp and the state are
-                  what make a stale record visible.
-
-                  The tighter mobile letter-spacing above is part of the same
-                  budget: at 0.16em the COMPLETE line needs ~311px of the 288px
-                  available at 320px, so the tracking alone caused the wrap. */}
-              {run?.id != null && (
-                <span className="hidden sm:inline">
-                  RUN NO. {run.id}
-                  <span className="mx-2 text-ink-min" aria-hidden="true">
-                    ·
-                  </span>
-                </span>
-              )}
-              {filed && (
+              {/* One line at every width: the fixed header's 96px clearance
+                  (`--header-clearance`) allows no wrap. So the phone line
+                  (288px at 320) is the short form, "SUPPLEMENTARY FAILED
+                  06:47 · 4/5 FILED", with UTC from 370px; from `sm` the
+                  full words and dates; the filed time from `lg`. Two or more
+                  failed links name the first and count the rest, every name
+                  in the link's title and its accessible name. Measured for
+                  every link and state, one to five failed, at 320, 360, 375,
+                  640, 1024 and 1280. */}
+              {state.complete ? (
                 <>
-                  FILED {filed}
-                  <span className="mx-2 text-ink-min" aria-hidden="true">
-                    ·
+                  {filedAt && (
+                    <>
+                      FILED {filedAt}
+                      <Dot />
+                    </>
+                  )}
+                  <span className={state.tone}>{state.label}</span>
+                </>
+              ) : total > 0 ? (
+                <>
+                  <Link
+                    href="/about/data#nightly-runs"
+                    title={state.everyName ?? undefined}
+                    className={`${state.tone} underline decoration-dotted underline-offset-2 hover:decoration-solid`}
+                  >
+                    <span className="hidden sm:inline">{state.label}</span>
+                    <span className="sm:hidden">{state.short}</span>
+                    {state.everyName && <span className="sr-only"> ({state.everyName})</span>}
+                    {at && (
+                      <>
+                        {" "}
+                        <span className="hidden sm:inline">{at}</span>
+                        <span className="sm:hidden">
+                          {atShort}
+                          <span className="hidden min-[370px]:inline"> UTC</span>
+                        </span>
+                      </>
+                    )}
+                  </Link>
+                  <Dot />
+                  <span className="sm:hidden">
+                    {done}/{total} FILED
+                  </span>
+                  <span className="hidden sm:inline">
+                    {done} OF {total} FILED
+                    {filedAt && <span className="hidden lg:inline"> {filedAt}</span>}
                   </span>
                 </>
+              ) : (
+                <span className={state.tone}>{state.label}</span>
               )}
-              <span className={state.tone}>{state.label}</span>
             </>
           ) : (
             <span className="text-ink-min">READING RUN STATUS…</span>

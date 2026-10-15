@@ -191,6 +191,8 @@ export interface VoteMember {
 }
 
 export interface VoteDetail extends RollCallSummary {
+  /** The bill's short or popular title from Congress.gov, when the chamber's title isn't it. */
+  billShortTitle?: string | null;
   parties: PartySplit[];
   members: VoteMember[];
 }
@@ -229,6 +231,12 @@ export interface BillRecord {
   billLabel: string | null;
   congress: number;
   title: string | null;
+  /** Congress.gov's short or popular title for the bill, verbatim, as cached; the h1 when present. */
+  shortTitle?: string | null;
+  /** Its title type as Congress.gov names it. */
+  shortTitleType?: string | null;
+  /** The official title from that same list. */
+  officialTitle?: string | null;
   introducedDate: string | null;
   originChamber: string | null;
   policyArea: string | null;
