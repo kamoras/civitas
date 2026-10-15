@@ -401,7 +401,6 @@ function IssuesTab({
   );
 }
 
-/** Previous/next day and the refresh time, in the masthead's aside slot. */
 /** "1:21 PM", or "Oct 14, 4:17 AM" for an earlier day; "" when unparseable. */
 function clockTime(iso: string | undefined): string {
   const d = iso ? new Date(iso) : null;
@@ -412,6 +411,7 @@ function clockTime(iso: string | undefined): string {
     : d.toLocaleString(undefined, { month: "short", day: "numeric", ...time });
 }
 
+/** Previous/next day and the refresh time, in the masthead's aside slot. */
 function DayPager({
   data,
   selectedDate,

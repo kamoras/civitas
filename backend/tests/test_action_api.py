@@ -8,9 +8,9 @@ from unittest.mock import patch
 import pytest
 from fastapi import Response
 
-from app.api.action import _build_issue_response, _latest_current_issues, list_monitors
+from app.api.action import _build_issue_response, _latest_current_issues, get_action_issues, list_monitors
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ActionIssueStatus, MonitorStatus, NationalMonitor
+from app.models import ActionIssue, ActionIssueStatus, ApiCache, MonitorStatus, NationalMonitor
 
 
 def _make_issue(date: str, rank: int, title: str, is_current: bool) -> ActionIssue:
@@ -1030,14 +1030,6 @@ class TestIssuesListPagerFields:
         # 2026-10-15: hourly runs that found nothing to publish left the page
         # reading "Updated 4:17 AM" all afternoon. The last check is shown
         # as such; a run with the feeds down (no articles) is not a check.
-        import json
-        from datetime import datetime
-
-        from fastapi import Response
-
-        from app.api.action import get_action_issues
-        from app.models import ApiCache
-
         def run(key, at, **counts):
             return ApiCache(tier="action-metrics", cache_key=key,
                             data_json=json.dumps({"counts": counts}), cached_at=at)
