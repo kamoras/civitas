@@ -2,12 +2,13 @@
 comment periods ranked by salience (app/api/action.py)."""
 
 import json
+from datetime import datetime
 from unittest.mock import patch
 
 from fastapi import Response
 
 from app.api.action import _build_issue_response, get_open_comments
-from app.models import ActionIssue, ExploreDocument, Representative, Senator
+from app.models import ActionIssue, ExploreDocument, Representative, RollCall, Senator
 
 
 def _issue(db, actions, explore_ids=()):
@@ -86,10 +87,6 @@ def test_open_comments_lead_with_linked_documents_then_rules_by_readers_then_not
 def test_a_roll_call_issue_leads_with_its_vote_page_here(db_session):
     """Issue 801 (2026-10-15) linked only the Clerk's XML: a reader couldn't
     get from the issue to how each member voted."""
-    from datetime import datetime
-
-    from app.models import RollCall
-
     xml = "https://clerk.house.gov/evs/2026/roll314.xml"
     db_session.add(RollCall(chamber="house", congress=119, session=2, number=314, date="2026-10-14",
                             question="On Passage", result="Passed", source_url=xml,
