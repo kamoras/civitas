@@ -113,3 +113,20 @@ describe("Explore document page", () => {
     expect(await screen.findByText(/An order \[Data set\]/)).toBeInTheDocument();
   });
 });
+
+describe("A floor speech's bill", () => {
+  it("links the bill its Record heading names", async () => {
+    withDocument();
+    api.streamExploreDocumentSummary.mockResolvedValue({ summary: "", keyPoints: [], impact: "" });
+    renderPage({
+      ...DOC,
+      title: "S. 2",
+      docType: "Senate Floor Speech",
+      chamber: "Senate",
+      bills: [{ billId: "S.2", label: "S. 2", congress: 119 }],
+    });
+    const link = await screen.findByRole("link", { name: "S. 2" });
+    expect(link.getAttribute("href")).toMatch(/^\/congress\/bills\/S\.2/);
+    expect(screen.getByText(/^BILL:/)).toBeInTheDocument();
+  });
+});

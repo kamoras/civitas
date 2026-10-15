@@ -74,3 +74,37 @@ class TestDonorVoteBillsAreReadable:
         bills = build_rep_response(rep, db_session).lobbying_matches[0].bills_influenced
         # 999 is no vote of this member's: nothing readable to show, so dropped.
         assert bills == ["H.R. 5823", "Example Rule Resolution", "S. 12"]
+
+    def test_each_related_bill_carries_the_members_vote_and_roll_call(self, db_session):
+        """The panel had no vote for any of its 129 matches (2026-10-15):
+        each related bill now carries the member's Yea or Nay and the roll
+        call it was cast in, once per roll call, in the match's order."""
+        rep = _make_rep(db_session, "test-rep-4", [])
+        db_session.add_all([
+            RollCall(chamber="house", congress=119, session=2, number=314, date="2026-09-16",
+                     question="On Passage", title="Example Savings Act", bill_id="HR.5823"),
+            RepKeyVote(representative_id=rep.id, bill_name="Example Savings Act", bill_id="HouseRC-2026-314",
+                       date="2026-09-16", vote="Yea", roll_call="house-119-2-314", vote_category="key"),
+            # The same vote listed again under "recent": counted once.
+            RepKeyVote(representative_id=rep.id, bill_name="Example Savings Act", bill_id="HouseRC-2026-314",
+                       date="2026-09-16", vote="Yea", roll_call="house-119-2-314", vote_category="recent"),
+            # Stored before its roll call was recorded: the vote, no roll call.
+            RepKeyVote(representative_id=rep.id, bill_name="Example Clean Water Act", bill_id="S.12",
+                       date="2026-03-01", vote="Nay"),
+            RepKeyVote(representative_id=rep.id, bill_name="Unrelated", bill_id="HR.1", date="2026-03-01",
+                       vote="Yea"),
+        ])
+        db_session.add(RepLobbyingMatch(
+            representative_id=rep.id, lobbyist_org="Org", industry="LABOR", lobbying_spend=0,
+            donation_to_representative=1000, description="",
+            bills_influenced=json.dumps(["S.12", "HouseRC-2026-314"]),
+        ))
+        db_session.commit()
+        db_session.refresh(rep)
+        votes = build_rep_response(rep, db_session).lobbying_matches[0].related_votes
+        assert [(v.bill_id, v.label, v.vote, v.title) for v in votes] == [
+            ("S.12", "S. 12", "Nay", "Example Clean Water Act"),
+            ("HR.5823", "H.R. 5823", "Yea", "Example Savings Act"),
+        ]
+        assert votes[0].roll_call is None
+        assert (votes[1].roll_call["chamber"], votes[1].roll_call["number"]) == ("house", 314)

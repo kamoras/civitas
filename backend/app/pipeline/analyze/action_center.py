@@ -56,7 +56,6 @@ from app.models import (
     Senator,
 )
 from app.pipeline.analyze import action_metrics
-from app.pipeline.analyze import action_thresholds
 from app.committee_routing import route_committees
 from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight
 from app.pipeline.analyze.early_signal import (
@@ -247,7 +246,43 @@ def _relevance_reference() -> np.ndarray:
     if key not in _relevance_reference_cache:
         _relevance_reference_cache[key] = _embed_texts_sim([e["text"] for e in relevance_examples()])
     return _relevance_reference_cache[key]
-# The clustering cut is calibrated, not typed: action_thresholds.get("cluster_title").
+
+
+# Article clustering (_cluster_articles): which text is embedded and where
+# the complete-linkage cut sits, both chosen by
+# scripts/calibrate_cluster_pairs.py against hand-judged article pairs
+# (app/data/cluster_pair_judgments.json) and written to
+# app/data/cluster_pair_calibration.json with the measurement behind them.
+# Rerun the script when the judged pairs change
+# (test_cluster_calibration_matches_judgments fails until you do).
+_CLUSTER_JUDGMENTS_PATH = _DATA_DIR / "cluster_pair_judgments.json"
+_CLUSTER_CALIBRATION_PATH = _DATA_DIR / "cluster_pair_calibration.json"
+_cluster_calibration_cache: dict | None = None
+
+
+def cluster_text(title: str, summary: str | None, chars: int | None = None) -> str:
+    """What clustering embeds for an article: its headline and the first
+    `chars` characters of its description (the calibration's
+    description_chars unless given). Headlines alone can't tell a second
+    outlet's account of an event from another event on the same theme; the
+    description's first sentence names who did what."""
+    if chars is None:
+        chars = int(cluster_calibration()["description_chars"])
+    return f"{title}. {(summary or '')[:chars]}"
+
+
+def cluster_calibration() -> dict:
+    global _cluster_calibration_cache
+    if _cluster_calibration_cache is None:
+        _cluster_calibration_cache = json.loads(_CLUSTER_CALIBRATION_PATH.read_text())
+    return _cluster_calibration_cache
+
+
+def cluster_judgments_hash() -> str:
+    """Identifies the judged pair set a calibration was fitted to."""
+    return hashlib.sha256(_CLUSTER_JUDGMENTS_PATH.read_bytes()).hexdigest()[:16]
+
+
 # How many candidate clusters get an LLM generation attempt per hourly run.
 # 2026-08: lowered from 4 to 2 as a deliberate capacity choice, not a
 # recalibrated quality threshold — there's a real difference between the
@@ -293,8 +328,12 @@ ACTION_CENTER_PROMPT_VERSION = "action-v21"
 # retirement pass in _run_refresh for the full reasoning.
 _RETIREMENT_GRACE_HOURS = 24
 
-# Where title cosine alone decides "same story": action_thresholds
-# .get("near_identical"), hand-measured 0.92 on 120 issues (2026-07).
+# Where title cosine alone decides "same story": hand-measured 0.92 on 120
+# issue pairs (2026-07), bundled with its provenance in
+# app/data/action_thresholds.json. Not fitted: its only automatic label was
+# the signature test, which on 2026-10-08 called 65 issue pairs the same
+# story when 16 were.
+_NEAR_IDENTICAL_TITLE_THRESHOLD = json.loads((_DATA_DIR / "action_thresholds.json").read_text())["values"]["near_identical"]
 
 
 def _full_story_should_invalidate(
@@ -696,47 +735,21 @@ def _promote_developing_issue(
     )
 
 
-# Minimum signature containment for two issues to be the same story, and
-# the minimum shared-token count backing it (containment over a tiny
-# signature is noisy). Calibrated on real production pairs: genuine
-# same-story pairs measured 0.78-1.00 containment after generic-token
-# stripping, while a different-story pair that wrongly shared a row
-# measured 0.0. Wide gap, so the threshold sits in the middle of it.
-_SIGNATURE_MATCH_MIN_CONTAINMENT = 0.35
-_SIGNATURE_MATCH_MIN_SHARED = 2
-
 # Candidate floor for topic matching by title similarity — a compute
-# guard, not a decider (signature overlap decides same-story; see
-# _run_refresh's matching loop). Measured under the similarity model on
-# real production titles: title cosine cannot decide identity on its own
-# under any model tested — same-story pairs scored as low as +0.134 while
-# a different-story same-vocabulary pair outscored them at +0.552 — which
-# is exactly why signatures carry the decision. The floor only excludes
-# clearly-unrelated candidates from signature comparison.
+# guard, not a decider (_same_story decides; see _run_refresh's matching
+# loop). Measured under the similarity model on real production titles:
+# same-story pairs scored as low as +0.134 while a different-story
+# same-vocabulary pair outscored them at +0.552. The floor only excludes
+# clearly-unrelated candidates from the same-story comparison.
 _TOPIC_MATCH_CANDIDATE_FLOOR = 0.10
-
-
-def _signatures_match(sig_a: set[str], sig_b: set[str]) -> bool:
-    if not sig_a or not sig_b:
-        return False
-    shared = sig_a & sig_b
-    containment = len(shared) / min(len(sig_a), len(sig_b))
-    return (
-        len(shared) >= _SIGNATURE_MATCH_MIN_SHARED
-        and containment >= _SIGNATURE_MATCH_MIN_CONTAINMENT
-    )
 
 
 def _is_exact_content_duplicate(
     title: str, facts: list, cand_title: str, cand_facts: list,
 ) -> bool:
-    """Byte-identical title+facts always means the same issue, checked
-    BEFORE signature overlap. _signatures_match requires >=
-    _SIGNATURE_MATCH_MIN_SHARED (2) tokens even for an exact match, but a
-    sparse, single-entity story (e.g. one signature token, nothing else
-    extractable) can never clear that floor — even against itself, which
-    would otherwise let the same source article reprocessed later create
-    a duplicate row instead of matching the existing one."""
+    """Byte-identical title+facts always means the same issue, whatever
+    the title similarity: the same source article reprocessed later must
+    match its existing row, never create a duplicate."""
     return title == cand_title and facts == cand_facts
 
 
@@ -747,7 +760,7 @@ def _same_story(sim: float, title: str, facts: list, cand_title: str, cand_facts
     content, or a title near-identical to the other's. A shared source
     article, the strongest evidence, is checked by each caller first.
 
-    Shared names and numbers (_signatures_match) decided it until
+    Shared names and numbers (_issue_signature overlap) decided it until
     2026-10-08, when 65 pairs of issues two days apart or less that the
     test called the same story were read by their titles: 16 were. Two
     stories about one senator, or two about Iran, share two names. Above
@@ -757,7 +770,7 @@ def _same_story(sim: float, title: str, facts: list, cand_title: str, cand_facts
     story under its earlier posts; a missed match shows a second card.
     """
     return _is_exact_content_duplicate(title, facts, cand_title, cand_facts) or (
-        sim >= action_thresholds.get("near_identical")
+        sim >= _NEAR_IDENTICAL_TITLE_THRESHOLD
     )
 
 
@@ -1590,48 +1603,39 @@ def _center_titles(embeddings: np.ndarray, mean: np.ndarray) -> np.ndarray:
     return centered / np.where(norms < 1e-9, 1.0, norms)
 
 
-def _record_title_pairs(items: list[tuple[NewsArticle, np.ndarray]], centered: np.ndarray) -> None:
-    """Every pair of today's articles, labelled for cluster_title's
-    calibration: their day-centered title similarity, and whether their
-    named entities and numbers overlap — a label title similarity cannot
-    produce about itself (see action_thresholds)."""
-    sigs = [_issue_signature(a.title, [a.summary or ""]) for a, _ in items]
-    sims = centered @ centered.T
-    for i in range(len(items)):
-        for j in range(i + 1, len(items)):
-            if sigs[i] and sigs[j]:
-                action_thresholds.record("cluster_title", float(sims[i, j]), _signatures_match(sigs[i], sigs[j]))
-
-
 def _cluster_articles(
     items: list[tuple[NewsArticle, np.ndarray]],
 ) -> list[list[NewsArticle]]:
-    """Group articles reporting the same story: complete linkage on
-    day-centered title embeddings, so EVERY pair in a cluster is at least
-    CLUSTER_TITLE_THRESHOLD alike.
+    """Group articles reporting the same event: complete linkage on
+    day-centered embeddings of headline and description start
+    (cluster_text), so EVERY pair in a cluster clears the calibrated cut
+    (cluster_calibration()["threshold"]).
 
     Single linkage asked only that each article resemble ONE other, and a
     second pass then merged whole clusters whose centroids scored as low as
     0.20, to join different-angle coverage of one event. Both chained
-    stories that merely share a theme. Issue 759 (2026-09-27) was titled
-    for Bangkok's floods, led with a Hawaii hurricane and listed facts about
-    a Northeast nor'easter and an HIV epidemic in Fiji; issue 753's two-leader summit
-    summit took its title from an article about Chinese students and a
-    professor. Replayed on that day's 50 policy-relevant articles, the old
-    passes built a 9-article weather cluster and an 8-article China/AI/
-    Russia one whose mean pairwise similarity was 0.09.
+    stories that merely share a theme: issue 759 (2026-09-27) was titled
+    for one city's floods, led with a hurricane elsewhere and listed facts
+    about a nor'easter and an epidemic abroad. Complete linkage fixed the
+    chaining; what remains is where the cut sits and what is compared.
 
-    No threshold rescues either pass, because title similarity cannot tell
-    "same event" from "same theme": on 18 hand-labelled pairs from that
-    feed, same-event pairs scored 0.16-0.82 and different-event pairs
-    0.24-0.46, and adding the summary or switching to the similarity model
-    left the ranges overlapping just as much. So the linkage has to be
-    conservative. A missed merge costs source breadth — the thinner cluster
-    is dropped by _deduplicate_top_clusters or matched to the same issue by
-    _find_matching_issue — while a wrong merge publishes a chimera. Complete linkage at the same threshold turned
-    that feed into 12 multi-article clusters, 10 of them one story each and
-    the other two a pair apiece, and lost the summit's different-angle
-    merges.
+    Headlines alone can't separate "same event" from "same theme". On 530
+    hand-judged pairs of feed articles (2026-09-28 to 10-15,
+    app/data/cluster_pair_judgments.json), no title-cosine cut merged more
+    than 6 of 114 same-event pairs without also merging a different-event
+    one, and the 0.57 a daily self-labelled fit had settled on merged 38
+    same-event pairs and 22 different-event ones: two polls of one race, one
+    official's rallies in two states, a statement and the letter that
+    followed it. That fit was labelled by shared names and numbers, which
+    call two stories about one person the same story. Adding the first 200
+    characters of the description lets the description's first sentence
+    say who did what; at the cut where it merges no judged different-event
+    pair it merges 17 same-event ones. Requiring a shared distinctive
+    entity as well changed nothing: every pair above the cut shares one.
+    The cut is precision-first because a wrong merge publishes a chimera,
+    while a missed merge costs breadth — the thinner cluster is dropped by
+    _deduplicate_top_clusters or matched to the same issue by
+    _find_matching_issue.
     """
     if not items:
         return []
@@ -1641,19 +1645,20 @@ def _cluster_articles(
     # Centered because the embedding model puts every English headline in a
     # tight band (~0.74 median cosine); removing the day's mean leaves the
     # topic-specific directions.
-    title_embeddings = _embed_texts([a.title for a, _ in items])
-    centered = _center_titles(title_embeddings, title_embeddings.mean(axis=0))
+    embeddings = _embed_texts([cluster_text(a.title, a.summary) for a, _ in items])
+    centered = _center_titles(embeddings, embeddings.mean(axis=0))
     distance = np.clip(1.0 - centered @ centered.T, 0.0, None)
+    threshold = float(cluster_calibration()["threshold"])
     labels = fcluster(
         linkage(squareform(distance, checks=False), method="complete"),
-        t=1.0 - action_thresholds.get("cluster_title"), criterion="distance",
+        t=1.0 - threshold, criterion="distance",
     )
     groups: dict[int, list[NewsArticle]] = {}
     for (article, _), label in zip(items, labels):
         groups.setdefault(int(label), []).append(article)
     logger.info(
         "Clustering (complete linkage, threshold=%.2f): %d articles → %d clusters",
-        action_thresholds.get("cluster_title"), len(items), len(groups),
+        threshold, len(items), len(groups),
     )
     return list(groups.values())
 
@@ -4985,11 +4990,6 @@ def _run_refresh(db: Session) -> int:
 
     logger.info("Action center refresh starting for %s", today)
     action_metrics.reset()
-    try:
-        action_thresholds.calibrate(db)
-    except Exception:
-        logger.exception("Action threshold calibration failed — keeping the previous values")
-        db.rollback()
     _set_refresh_state(
         is_running=True, stage="primary_source_signals", stage_detail=None,
         started_at=utcnow(),
@@ -5070,12 +5070,11 @@ def _run_refresh(db: Session) -> int:
     # 4. Cluster by topic
     _set_refresh_state(stage="cluster")
     clusters = _cluster_articles(relevant)
-    # The day's mean title embedding: the "generic news headline" direction
-    # clustering subtracted. Every per-cluster check below measures in that
-    # same space (see the coherence filter for why not the cluster's own).
+    # The day's mean title embedding: the "generic news headline" direction.
+    # Every per-cluster check below measures in that day-centered title
+    # space (see the coherence filter for why not the cluster's own mean).
     title_embs = _embed_texts([a.title for a, _ in relevant])
     day_title_mean = title_embs.mean(axis=0)
-    _record_title_pairs(relevant, _center_titles(title_embs, day_title_mean))
 
     # 5. Rank clusters using coverage breadth + trending relevance
     _set_refresh_state(stage="rank")

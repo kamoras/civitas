@@ -136,7 +136,6 @@ def test_the_signal_stages_commit_before_the_next_fetch(file_sessionmaker, pipel
     monkeypatch.setattr(early_signal, "_fetch_recent_votes", lambda session: [vote])
     monkeypatch.setattr(early_signal, "classify_policy_area", lambda text: ("PUBLIC_LANDS", 0.9))
     monkeypatch.setattr(early_signal, "_fetch_recent_rules", rules)
-    monkeypatch.setattr(ac.action_thresholds, "calibrate", lambda session: None)
     monkeypatch.setattr(ac, "fetch_news_articles", news)
     monkeypatch.setattr(ac, "_run_periodic_bluesky_posts", lambda session: None)
 
