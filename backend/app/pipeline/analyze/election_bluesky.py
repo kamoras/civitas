@@ -333,8 +333,9 @@ def _drain_stale_unconsidered(db: Session) -> int:
         )
         .update({RaceCoverageItem.bsky_posted_at: utcnow()}, synchronize_session="fetch")
     )
-    if drained:
-        db.commit()
+    # Committed even with nothing matched: the statement opened the write
+    # transaction either way (database.WRITE_HOLD_WARN_S).
+    db.commit()
     return drained
 
 

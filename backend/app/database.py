@@ -1,8 +1,12 @@
 import logging
+import os
+import sys
+import time
 from collections.abc import Generator
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
@@ -89,8 +93,93 @@ def _set_sqlite_pragmas(dbapi_conn, _connection_record):
     cursor.close()
 
 
+# SQLite has one writer. Under pysqlite's implicit transactions the write
+# lock is taken by a transaction's first INSERT/UPDATE/DELETE and held until
+# its commit or rollback, so a writer that does slow work (a model call, an
+# embedding pass, a network fetch) between the two makes every other writer
+# wait, and past SQLITE_BUSY_TIMEOUT_S fail. 2026-10-15: the Action Center
+# refresh's monitor stage opened one with an orphan sweep and held it across
+# an LLM call, and the nightly Senate run (05:26) and the House sponsorship
+# step (07:23) each died on "database is locked" inside that window. A hold
+# this long is logged, naming where its first write came from, so the next
+# one is found from the logs rather than reconstructed from row timestamps.
+WRITE_HOLD_WARN_S = 10.0
+_DML = ("INSERT", "UPDATE", "DELETE", "REPLACE")
+
+
+_APP_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
+
+
+def _first_app_frame() -> str:
+    """The innermost caller in this app's own code, outside this module."""
+    frame = sys._getframe(2)
+    while frame is not None:
+        path = frame.f_code.co_filename
+        if path.startswith(_APP_DIR) and os.path.abspath(path) != os.path.abspath(__file__):
+            return f"{path.removeprefix(_APP_DIR)}:{frame.f_lineno} ({frame.f_code.co_name})"
+        frame = frame.f_back
+    return "unknown"
+
+
+def _note_write(conn, _cursor, statement, _parameters, _context, _executemany) -> None:
+    if "write_began" not in conn.info and statement.lstrip()[:7].upper().startswith(_DML):
+        conn.info["write_began"] = (time.monotonic(), _first_app_frame())
+
+
+def _end_write(conn) -> None:
+    began = conn.info.pop("write_began", None)
+    if began is not None and (held := time.monotonic() - began[0]) > WRITE_HOLD_WARN_S:
+        logger.warning(
+            "SQLite write lock held %.1fs (first write at %s): every other writer waited", held, began[1],
+        )
+
+
+def watch_write_holds(bind) -> None:
+    """Log write transactions held past WRITE_HOLD_WARN_S on `bind`."""
+    event.listen(bind, "before_cursor_execute", _note_write)
+    event.listen(bind, "commit", _end_write)
+    event.listen(bind, "rollback", _end_write)
+    # A connection returned to the pool is rolled back by the pool, not by
+    # the Connection, so no rollback event fires: forget its write there,
+    # or its next transaction would be timed from this one's start.
+    event.listen(bind, "checkin", lambda _dbapi, record: record.info.pop("write_began", None))
+
+
+# A "database is locked" past the busy timeout on a statement that opens a
+# write is retried, a few times with backoff, rather than failing its whole
+# run: it was the transaction's first write (a connection already holding
+# the lock is never refused it), so nothing earlier is lost by running it
+# again. Resilience on top of short transactions, not instead of them: each
+# attempt still waits out the busy timeout, so the worst case is
+# LOCK_RETRY_ATTEMPTS x 30 s plus the backoff.
+LOCK_RETRY_ATTEMPTS = 3
+LOCK_RETRY_BACKOFF_S = 2.0
+
+
+def is_locked(error: OperationalError) -> bool:
+    """SQLite's busy timeout ran out: another writer held the database.
+    Any other OperationalError (a missing table, a corrupt file) is not
+    'busy' and must not be treated as one."""
+    return "locked" in str(getattr(error, "orig", error)).lower()
+
+
+def execute_retrying_lock(db: Session, statement):
+    """db.execute(statement), retried while the database is locked."""
+    for attempt in range(1, LOCK_RETRY_ATTEMPTS + 1):
+        try:
+            return db.execute(statement)
+        except OperationalError as error:
+            if not is_locked(error) or attempt == LOCK_RETRY_ATTEMPTS:
+                raise
+            wait = LOCK_RETRY_BACKOFF_S * 2 ** (attempt - 1)
+            logger.warning("Database locked (attempt %d of %d); retrying in %.0fs",
+                           attempt, LOCK_RETRY_ATTEMPTS, wait)
+            time.sleep(wait)
+
+
 if "sqlite" in settings.DATABASE_URL:
     event.listens_for(engine, "connect")(_set_sqlite_pragmas)
+    watch_write_holds(engine)
 if "sqlite" in VISITS_DATABASE_URL:
     event.listens_for(visits_engine, "connect")(_set_sqlite_pragmas)
 
