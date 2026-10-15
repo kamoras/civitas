@@ -159,7 +159,7 @@ of these approaches:
   and its category is the issues' policy area), timeline period summaries, locating the actor and
   predicate in a race's coverage for its post (`election_bluesky.py`,
   verbatim spans), and on-request Explore document summaries
-  (`POST /api/explore/{id}/summary`, a write). Spotlight, issue and
+  (`POST /api/explore/{id}/summary`, a write). Spotlight, issue, trend and
   early-signal posts are fixed templates around stored figures or verified
   ledes, and the justice profile carries no generated summary. Never a score, and never ballot content (§7). (Per-senator/rep
   narrative generation and promise evaluation used to be LLM-based; both
@@ -244,7 +244,8 @@ modules, the election run's orchestration, the LDA bill-name matcher
 the votes-with-the-president rate (`analyze/presidential_support.py`,
 `analyze/sap_position.py`),
 the modules that word and publish posts, the Action Center's hourly run
-(`_ACTION_CENTER_PATHS`), which keeps no learned data) and
+and the trend posts' gates and record matching (`_ACTION_CENTER_PATHS`),
+which keep no learned data) and
 `_DISPLAY_ONLY_NAMES` (display-only constants such as `HOLDING_CATEGORIES`),
 both in `senate_pipeline.py`. This fingerprint is
 compared to the stored hash from the last pipeline run:
@@ -1177,6 +1178,44 @@ presidential leaderboard ranks the *historical* field and excludes the
 sitting president (see `president_service.get_president_leaderboard`) — for
 that office, comparison against predecessors is the only meaningful ranking.
 
+**Trend posts ("On the record", `analyze/trend_poster.py`)** run after each
+hourly Action Center refresh (`scheduler._post_trends`, under the same lease).
+They read Bluesky's public `getTrends` (`fetch/trending.fetch_bluesky_trends`:
+`None` is an outage — nothing recorded, held or dropped — never "no trends"),
+keep every listing as `TrendObservation` rows, and post at most one trend a run,
+two an Eastern day, four hours apart, inside the posting window (held outside
+it, dropped if the trend has left the list by the next run), the same record at
+most once in 14 days and never a record an issue post already carried. A trend
+posts only on a **pinned match** to an official record (`trend_evidence.py`):
+an Action Center issue at cosine ≥ 0.5 that shares a distinctive entity with
+the trend's own name (described trends only); an Act's full title (the whole
+capitalised run must be the record's title, or the trend gives the bill
+number — a shorter name inside a longer title, or a qualifier like "EU" in
+front, is another act); a nominee's confirmation vote, only when the
+appointment kNN vote says the trend is about the nomination; or a named
+member's own recent bill on the topic — never a person alone. Records must be
+dated on or before the trend's start plus two days, and a record more than 30
+days older than the trend counts only when the trend's name names it; a vote
+with no measure title and no bill is never a record. All of this sits on
+top of a kNN relevance vote ≥ 0.5 over labelled trends (`trend_relevance.py`,
+`app/data/trend_*`/`political_violence_examples.json`/`loaded_language_examples.json`/`appointment_examples.json`,
+calibrated by `scripts/calibrate_trend_gates.py` into
+`trend_gates_calibration.json`). The trend's name must pass a neutrality gate
+(`grounding`'s electioneering, editorializing and advocacy-as-fact checks plus a
+loaded-language vote); a tragedy is eligible only with a high political-violence
+vote and an official record (not an issue). Every word is template text, a
+stored record field, or the trend's name quoted and attributed to Bluesky — no
+model. Selection is party-blind (rank weight × match strength); each trend gets
+one `TrendCandidate` audit row with the parties of the members it names and of
+the record's sponsors, and `check_party_balance` alerts when the posted share
+diverges from the eligible pool's (exact binomial). The post's picture is the
+record's card (`services/record_cards.py`, `GET /api/cards/<key>`, rendered by
+`/api/og?vote=|bill=|congressEvent=|explore=`), with alt text built from the
+same object; for its first 28 days Bluesky gets the image on even Eastern days
+and the link card on odd ones (`BroadcastPost.embed_kind`), and
+`broadcast.refresh_engagement` reads each post's public counts for the admin
+Trends tab's comparison.
+
 In addition to the main pipeline, the **Action Center pipeline** runs hourly to
 surface trending civic issues. It fetches RSS feeds from low-bias news sources,
 filters articles for U.S. policy relevance by a kNN vote against hand-labelled
@@ -1756,7 +1795,8 @@ the pending list).
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |
 | Action Center API | `backend/app/api/action.py` |
-| Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`) decide what and when; the hours a non-news post reaches Bluesky are `app/data/bluesky_post_windows.json` (`scripts/fetch_bluesky_activity.py`, `broadcast.SCHEDULED_KINDS`) |
+| Trend posts ("On the record"): getTrends reader, gates, pinned record matching, audit, record cards | `backend/app/pipeline/fetch/trending.py` (`fetch_bluesky_trends`), `analyze/trend_relevance.py`, `analyze/trend_evidence.py`, `analyze/trend_poster.py`, `backend/scripts/calibrate_trend_gates.py`, `backend/app/services/record_cards.py`, `backend/app/api/cards.py`, `frontend/src/app/api/og/route.tsx`, `frontend/src/components/admin/TrendPostsDashboard.tsx`, `docs/research/trend-posts.md` |
+| Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`, `trend_poster.py`) decide what and when; a post may carry its own image (`image_url`/`alt_text`, sent as an image embed with the link card as fallback); the hours a non-news post reaches Bluesky are `app/data/bluesky_post_windows.json` (`scripts/fetch_bluesky_activity.py`, `broadcast.SCHEDULED_KINDS`) |
 | Representative API routes | `backend/app/api/representatives.py` |
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
 | Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline tabs], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |

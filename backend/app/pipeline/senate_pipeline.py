@@ -508,6 +508,7 @@ _PUBLISHING_PATHS = {
     "pipeline/analyze/bluesky_utils.py",
     "pipeline/analyze/congress_bluesky.py",
     "pipeline/analyze/election_bluesky.py",
+    "pipeline/analyze/trend_poster.py",
 }
 # The Action Center's hourly run: news clustering, the claim layer that
 # quotes sources, the developing-issue drafts and its engagement. It reads
@@ -524,6 +525,10 @@ _ACTION_CENTER_PATHS = {
     "pipeline/analyze/early_signal.py",
     "pipeline/analyze/post_composer.py",
     "pipeline/analyze/story_actor.py",
+    # The trend posts' gates and record matching (trend_poster publishes):
+    # kNN votes and lookups over records, nothing kept in the learning store.
+    "pipeline/analyze/trend_evidence.py",
+    "pipeline/analyze/trend_relevance.py",
 }
 _NOT_ANALYSIS_PATHS = {
     "pipeline/holdings_pipeline.py",

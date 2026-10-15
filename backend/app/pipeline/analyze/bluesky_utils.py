@@ -2,6 +2,7 @@
 
 import logging
 import re
+from dataclasses import dataclass
 from html import unescape
 
 import httpx
@@ -13,6 +14,28 @@ logger = logging.getLogger(__name__)
 
 # Bluesky's per-post character limit.
 BSKY_MAX_CHARS = 300
+# Bluesky's limit on one image blob (app.bsky.embed.images: maxSize 1000000).
+BSKY_MAX_IMAGE_BYTES = 1_000_000
+# Bluesky's limit on an image's alt text is far longer; this keeps it short
+# enough for a screen reader to read through.
+MAX_ALT_CHARS = 1000
+
+
+@dataclass(frozen=True)
+class PostImage:
+    """A picture to post as an image embed instead of a link card."""
+    data: bytes
+    alt: str
+    width: int
+    height: int
+
+
+@dataclass(frozen=True)
+class SentPost:
+    """What Bluesky took: the post's at:// URI and the embed it carried
+    ("image", "card" or "text")."""
+    uri: str
+    embed_kind: str
 
 
 def truncate_on_boundary(text: str, budget: int) -> str:
@@ -48,10 +71,15 @@ def strip_hashtags(text: str) -> str:
     return _HASHTAG_RE.sub(r"\1", text).strip()
 
 
-def publish_post(text: str, url: str, *, success_msg: str, error_context: str) -> bool:
+def publish_post(
+    text: str, url: str, *, success_msg: str, error_context: str, image: PostImage | None = None,
+) -> SentPost | None:
     """Post `text` followed by `url` to Bluesky, rendering the URL as a
-    clickable link (rich-text facet) with an OG link card. Returns True on
-    success, False on missing credentials or any failure.
+    clickable link (rich-text facet), with `image` as an image embed when
+    given and usable (under BSKY_MAX_IMAGE_BYTES, with alt text) and the
+    page's OG link card otherwise. Returns what was sent, or None on missing
+    credentials or any failure. An image Bluesky won't take falls back to
+    the card: the post is never held for its picture.
 
     Consolidates the near-identical posting bodies of bluesky_poster._publish,
     bluesky_spotlight._publish_spotlight and _publish_weekly, including the
@@ -62,7 +90,7 @@ def publish_post(text: str, url: str, *, success_msg: str, error_context: str) -
     app_password = getattr(settings, "BSKY_APP_PASSWORD", "")
     if not handle or not app_password:
         logger.debug("Bluesky credentials not set — skipping publish")
-        return False
+        return None
 
     # A single space, not a blank line — confirmed live against NPR's own
     # Bluesky posts (public.api.bsky.app getAuthorFeed), the account this
@@ -96,16 +124,41 @@ def publish_post(text: str, url: str, *, success_msg: str, error_context: str) -
             )
         ]
 
-        embed = build_link_card(client, url)
-        client.send_post(full_text, facets=facets, embed=embed)
+        embed = build_image_embed(client, image) if image is not None else None
+        kind = "image"
+        if embed is None:
+            embed = build_link_card(client, url)
+            kind = "card" if embed is not None else "text"
+        response = client.send_post(full_text, facets=facets, embed=embed)
         logger.info("%s", success_msg)
-        return True
+        return SentPost(uri=str(getattr(response, "uri", "") or ""), embed_kind=kind)
     except ImportError:
         logger.error("atproto package not installed — cannot post to Bluesky")
-        return False
+        return None
     except Exception:
         logger.exception("Bluesky post failed (%s)", error_context)
-        return False
+        return None
+
+
+def build_image_embed(client, image: PostImage):
+    """An image embed for `image`, or None (and the caller's link card) when
+    it is too big, has no alt text, or the upload fails."""
+    from atproto import models as bsky_models
+
+    if not image.data or len(image.data) > BSKY_MAX_IMAGE_BYTES or not image.alt.strip():
+        logger.warning("Post image unusable (%d bytes, alt %d chars); sending the link card",
+                       len(image.data or b""), len(image.alt or ""))
+        return None
+    try:
+        blob = client.upload_blob(image.data).blob
+        return bsky_models.AppBskyEmbedImages.Main(images=[bsky_models.AppBskyEmbedImages.Image(
+            alt=image.alt[:MAX_ALT_CHARS],
+            image=blob,
+            aspect_ratio=bsky_models.AppBskyEmbedDefs.AspectRatio(width=image.width, height=image.height),
+        )])
+    except Exception:
+        logger.warning("Post image upload failed; sending the link card", exc_info=True)
+        return None
 
 
 def og_card(html: str) -> dict[str, str]:

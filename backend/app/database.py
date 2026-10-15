@@ -1133,6 +1133,10 @@ RESET_KEEPS = frozenset({
     # every feed would empty, and the Congress days and races posted in
     # the last few days would be posted a second time.
     "broadcast_posts",
+    # The trend posts' audit (what was eligible, posted and why, and the
+    # parties involved) and the trend observations their lifetimes come
+    # from: history a re-ingest can't rebuild, since the trends are gone.
+    "trend_candidates", "trend_observations",
     # LLM generations captured as fine-tuning data, accumulated over months.
     "llm_generation_samples",
     # Run history. ops_alerts.check_pipeline_staleness reads a pipeline with

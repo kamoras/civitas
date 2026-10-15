@@ -68,6 +68,7 @@ from app.models import (
     StockTradesPipelineRun,
     SupplementaryPipelineRun,
     TimelineEntry,
+    TrendCandidate,
 )
 from app.pipeline import (
     election_pipeline,
@@ -81,7 +82,7 @@ from app.pipeline import (
     vector_store,
 )
 from app.pipeline.analyze import document_authority
-from app.pipeline.analyze import story_actor
+from app.pipeline.analyze import story_actor, trend_poster
 from app.pipeline.analyze.action_center import get_action_refresh_state
 from app.pipeline.analyze.bill_learning import get_health_metrics
 from app.pipeline.analyze.ollama_client import get_llm_stats
@@ -2044,6 +2045,38 @@ def admin_actor_concentration(
             "noGovernment": sum(n for a, n in counts.items() if not story_actor.has_government_actor(a)),
         })
     return {"weeks": out}
+
+
+@router.get("/trend-posts", dependencies=[Depends(require_admin)])
+def admin_trend_posts(
+    days: int = Query(30, ge=1, le=366), limit: int = Query(100, ge=1, le=500), db: Session = Depends(get_db),
+) -> dict:
+    """The trend posts' audit (analyze/trend_poster.py): the party balance
+    of what was posted against the eligible pool over the last `days`, with
+    its binomial test; how long trends stay listed; the image-vs-card
+    trial's engagement; and the newest `limit` audit rows, each with its
+    scores, match, record, parties and decision."""
+    rows = (db.query(TrendCandidate).order_by(TrendCandidate.decided_at.desc()).limit(limit).all())
+    return {
+        "partyAudit": trend_poster.party_audit(db, since=utcnow() - timedelta(days=days)),
+        "partyAuditAllTime": trend_poster.party_audit(db),
+        "lifetimes": trend_poster.trend_lifetimes(db),
+        "embedTrial": trend_poster.engagement_by_embed(db),
+        "decisions": dict(db.query(TrendCandidate.decision, func.count()).group_by(TrendCandidate.decision).all()),
+        "candidates": [{
+            "topic": r.topic, "name": r.display_name, "rank": r.rank,
+            "firstSeen": r.first_seen_at.isoformat(), "decidedAt": r.decided_at.isoformat(),
+            "relevance": round(r.relevance, 3), "tragedy": round(r.tragedy, 3),
+            "politicalViolence": round(r.political_violence, 3), "loaded": round(r.loaded, 3),
+            "neutrality": json.loads(r.neutrality or "[]"),
+            "matchType": r.match_type, "matchStrength": r.match_strength,
+            "recordKind": r.record_kind, "recordKey": r.record_key, "recordDate": r.record_date,
+            "recordUrl": r.record_url,
+            "namedParties": json.loads(r.named_parties or "[]"),
+            "sponsorParties": json.loads(r.sponsor_parties or "[]"),
+            "selectionScore": r.selection_score, "decision": r.decision, "reason": r.reason,
+        } for r in rows],
+    }
 
 
 @router.get("/action-metrics", dependencies=[Depends(require_admin)])
