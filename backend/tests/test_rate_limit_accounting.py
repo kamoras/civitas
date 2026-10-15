@@ -22,13 +22,12 @@ STEPS = [
 
 
 @pytest.fixture(autouse=True)
-def clean_registry():
+def clean_registry(monkeypatch):
     """Limiters register themselves at construction and live for the life
-    of the process. Tests build their own, so the registry is reset around
-    each one to keep counters from leaking between them."""
-    rl.reset_registry()
-    yield
-    rl.reset_registry()
+    of the process. Tests build their own, so each starts with an empty
+    registry, and the fetch modules' own limiters are back in it afterwards
+    (conftest's _fetches_do_not_wait finds them there)."""
+    monkeypatch.setattr(rl, "_REGISTRY", {})
 
 
 def test_limiter_counts_requests_and_blocked_time():
