@@ -13,6 +13,18 @@ export function formatPvi(pvi: number | null): string {
   return pvi > 0 ? `R+${pvi}` : `D+${Math.abs(pvi)}`;
 }
 
+/** Formats Civitas's computed lean (one decimal) as "R+5.3"/"D+0.4"/"EVEN" —
+ * display-only, the value is the backend's. */
+export function formatComputedLean(lean: number | null | undefined): string {
+  if (lean == null) return "N/A";
+  const tenths = Math.round(Math.abs(lean) * 10) / 10;
+  if (tenths === 0) return "EVEN";
+  return `${lean > 0 ? "R" : "D"}+${tenths.toFixed(1)}`;
+}
+
+/** The page every computed-lean figure links to for its method. */
+export const COMPUTED_LEAN_HREF = "/about/data#computed-lean";
+
 /** Solid palette hex, so a lean figure never renders below the contrast
  * floor. One function, not two: this used to also exist as pviTextColor,
  * copy-pasted into the elections hub while this file's own copy served

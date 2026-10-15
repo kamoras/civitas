@@ -50,6 +50,21 @@ describe("RaceContext", () => {
     expect(container.querySelectorAll("[role=img] .aspect-square")).toHaveLength(435);
   });
 
+  it("shows Civitas's computed lean beside Cook's, with its method", () => {
+    render(<RaceContext race={race({ computedLean: 5.34 })} />);
+    expect(screen.getByText("R+5.3")).toBeInTheDocument();
+    expect(screen.getByText(/used in no score/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "How it is computed" })).toHaveAttribute(
+      "href",
+      "/about/data#computed-lean"
+    );
+  });
+
+  it("has no computed-lean line without a computed figure", () => {
+    render(<RaceContext race={race({ computedLean: null })} />);
+    expect(screen.queryByText(/Civitas-computed lean/)).not.toBeInTheDocument();
+  });
+
   it("says plainly it is not a forecast, and offers the data", () => {
     render(<RaceContext race={race()} />);
     expect(screen.getByText(/publishes no prediction or odds/)).toBeInTheDocument();

@@ -10,6 +10,8 @@ import CiteThis from "@/components/shared/CiteThis";
 import { displayScore } from "@/lib/formatting";
 import { getScoreColor } from "@/lib/representation";
 import { currentCongressLabel } from "@/lib/sources";
+import { COMPUTED_LEAN_HREF, formatComputedLean, formatPvi } from "@/lib/elections";
+import type { AlignmentFacts } from "@/types/scoreBreakdown";
 
 type Dimension =
   "fundingIndependence" | "constituentAlignment" | "legislativeEffectiveness" | "fundingDiversity";
@@ -112,6 +114,36 @@ function Components({ components, name }: { components: ScoreBreakdownComponent[
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** The seat lean the score read (Cook's PVI) and, for a House seat,
+ * Civitas's own computed lean beside it — both the API's figures. */
+function SeatLean({ lean }: { lean?: AlignmentFacts["seatLean"] }) {
+  if (!lean) return null;
+  return (
+    <>
+      <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Seat lean</dt>
+      <dd className="text-ink-lo">
+        Cook PVI <span className="font-mono text-ink">{formatPvi(lean.cookPvi)}</span>, the figure
+        the score uses
+        {lean.computedLean != null && (
+          <>
+            ; Civitas-computed{" "}
+            <span className="font-mono text-ink">{formatComputedLean(lean.computedLean)}</span>,
+            shown for comparison and not scored (
+            <Link
+              href={COMPUTED_LEAN_HREF}
+              className="underline underline-offset-2 hover:text-phos"
+            >
+              how it is computed
+            </Link>
+            )
+          </>
+        )}
+        .
+      </dd>
+    </>
   );
 }
 
@@ -268,6 +300,9 @@ export default function MethodsLedger({
                   Source
                 </dt>
                 <dd className="text-ink-lo">{m.source(chamber)}</dd>
+                {m.key === "constituentAlignment" && (
+                  <SeatLean lean={(dim?.facts as AlignmentFacts | undefined)?.seatLean} />
+                )}
               </dl>
             </article>
           );

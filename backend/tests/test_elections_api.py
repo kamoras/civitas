@@ -131,6 +131,21 @@ class TestListRaces:
         # from — a district figure, not the statewide fallback.
         assert data[0]["pviLevel"] == "district"
 
+    def test_house_race_carries_the_computed_lean_beside_cooks(self, db_session, on_date):
+        """Civitas's computed lean rides beside Cook's on the race detail,
+        on the lines the race is fought on (120th for 2026), and only for
+        a district figure: a Senate race shows none."""
+        from app import district_lean
+
+        on_date(datetime(2026, 10, 1))
+        _race(db_session, "2026-HOUSE-TN-9", "TN", office="H", district=9)
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.commit()
+        house = _body(elections.race_detail("2026-HOUSE-TN-9", db_session))
+        assert house["computedLean"] == district_lean.computed_lean(120)["TN-9"]
+        senate = _body(elections.race_detail("2026-SEN-GA", db_session))
+        assert senate["computedLean"] is None
+
     def test_2026_house_race_uses_the_lines_on_the_ballot(self, db_session, on_date):
         """TN redrew for 2026: the race is on the new TN-9 (R+9), while the
         sitting member — scored separately, from the bundled file's 119th-

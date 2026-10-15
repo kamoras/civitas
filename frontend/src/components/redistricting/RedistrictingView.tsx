@@ -11,6 +11,7 @@ import type {
 } from "@/types/redistricting";
 import {
   districtAreaLabel,
+  formatComputedLean,
   formatPvi,
   matchesDistrictQuery,
   placeDistrictSummary,
@@ -180,6 +181,12 @@ function NewRow({ d, filter }: { d: NewDistrict; filter: string }) {
             <span> · RESIDENTS&apos; OLD DISTRICTS AVERAGED {formatPvi(d.pviBeforeWeighted)}</span>
           )}
         </p>
+        {(d.computedLeanBefore != null || d.computedLeanAfter != null) && (
+          <p className="font-mono text-[11px] text-ink-min">
+            CIVITAS-COMPUTED {formatComputedLean(d.computedLeanBefore)} →{" "}
+            {formatComputedLean(d.computedLeanAfter)}
+          </p>
+        )}
       </div>
     </li>
   );
@@ -199,6 +206,9 @@ function OldRow({ d, filter }: { d: OldDistrict; filter: string }) {
         <ShareBar rows={d.destinations} prefix="new" />
         <p className="mt-1 font-mono text-[11px] text-ink-min">
           OLD LEAN <span className={pviColor(d.pvi)}>{formatPvi(d.pvi)}</span>
+          {d.computedLean != null && (
+            <span> · CIVITAS-COMPUTED {formatComputedLean(d.computedLean)}</span>
+          )}
         </p>
       </div>
     </li>
@@ -407,6 +417,19 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
             label={`New lean (${data.toCongress}th Congress lines)`}
             meta={data.sources.pviAfter}
           />
+          {data.sources.computedLean && (
+            <li>
+              <span className="text-ink-hi">Civitas-computed lean (both maps):</span>{" "}
+              {data.sources.computedLean.source} Shown beside Cook&apos;s figures; the counts above
+              are Cook&apos;s.{" "}
+              <Link
+                href={data.sources.computedLean.href}
+                className="text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
+              >
+                How it is computed
+              </Link>
+            </li>
+          )}
         </ul>
         <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs tracking-[0.1em]">
           <a href={downloads.csv} download className="text-signal-cyan hover:text-phos">

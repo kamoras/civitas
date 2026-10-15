@@ -107,6 +107,8 @@ def toy(monkeypatch):
     tables = {119: {"ZZ-1": 3, "ZZ-2": -10, "ZZ-3": -1}, 120: {"ZZ-1": 9, "ZZ-2": -10, "ZZ-3": 2}}
     monkeypatch.setattr(rd, "_cache", doc)
     monkeypatch.setattr(rd, "district_pvi_for_congress", lambda c: (tables[c], {"congress": c}))
+    computed = {119: {"ZZ-1": 3.4, "ZZ-2": -9.6, "ZZ-3": -0.7}, 120: {"ZZ-1": 8.8, "ZZ-2": -9.6, "ZZ-3": 2.3}}
+    monkeypatch.setattr(rd.district_lean, "computed_lean", lambda c: computed[c])
     monkeypatch.setattr(rd, "_maps", lambda: {"2026": {"ZZ": {"map": "CD120", "reason": "toy act",
         "source": {"title": "Act", "issuedBy": "Legislature", "url": "https://example.gov/act"}}}})
     return doc
@@ -127,6 +129,17 @@ def test_state_changes_sources_and_destinations(toy):
     assert [d["district"] for d in old_one["destinations"]] == ["ZZ-1"]
     assert old_one["sliverResidents"] == 20
     assert out["map"]["url"] == "https://example.gov/act"
+
+
+def test_computed_lean_rides_beside_cooks_and_never_into_the_counts(toy):
+    out = rd.state_changes("ZZ")
+    one = out["newDistricts"][0]
+    assert (one["computedLeanBefore"], one["computedLeanAfter"]) == (3.4, 8.8)
+    assert out["oldDistricts"][2]["computedLean"] == -0.7
+    assert out["sources"]["computedLean"]["href"] == "/about/data#computed-lean"
+    # The seat counts are Cook's: the toy's ZZ-3 is D on Cook's old table
+    # and on the computed one alike, but only Cook's decides.
+    assert out["summary"]["seatsByLeanBefore"] == {"R": 1, "EVEN": 0, "D": 2}
 
 
 def test_state_summary(toy):

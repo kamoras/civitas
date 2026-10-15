@@ -964,6 +964,37 @@ entry for the Congress a cycle seats) name the same redrawn states, and
 `test_redrawn_maps_and_pinned_pvi_sources_name_the_same_states` fails if the
 two lists drift, so a page never calls a district new while serving the old
 seat's lean.
+
+**Civitas-computed lean (display only).** Beside Cook's district PVI, the
+race context block, the redistricting pages, the scorecard's methods
+section and the public API's breakdown (`references.seat.computedLean`)
+show a lean Civitas computes itself with Cook's formula (two-party
+presidential share minus the nation's, 75% 2024 / 25% 2020), on the 119th
+and 120th Congress lines: `backend/scripts/build_district_lean.py` writes
+`backend/app/data/district_lean.json`, read through `app/district_lean.py`.
+Inputs are open-licensed only — VEST 2020 precinct results and shapefiles
+(CC BY 4.0; each populated Census block's internal point is placed in its
+precinct, which shares its votes among its blocks by population), MEDSL
+2024 precinct returns (CC0; each precinct's own U.S. House district, the
+119th lines), Census P.L. 94-171 blocks and the 119th/120th block
+equivalency files; the 120th lines in the nine redrawn states come by
+swing transfer within county x 119th district x state house district cells.
+MEDSL's known errors are corrected only from certified state or county
+canvasses, one entry each in `app/data/district_lean_corrections.json`
+(Indiana's ENR archive, New Jersey's municipal results, Louisiana's parish
+totals, King County's precinct file, California's Supplement to the
+Statement of Vote, Maine's district totals); a district whose correction
+could only come from behind a wall is written as unavailable. The build
+fails and writes nothing unless every state's totals are within 0.2% of
+the official state files (FEC for 2020, MEDSL's state file for 2024),
+every fetched county canvass matches, every district's 2024/2020 vote ratio
+is within 0.85-1.15 (or a recorded, evidenced exception at its own ratio),
+every district of both maps is present once, and the Texas and California
+official per-district tables agree; districts more than 1.5 points from
+Cook are listed as alerts. Against Cook: 119th lines r 0.9998, mean
+absolute difference 0.27, 423 of 435 equal when rounded, all within one;
+120th lines r 0.9997, 0.28, 403 equal, 432 within one. Texas's Red-206 tables are the independent cross-check; California's is also its correction source, so agreement there only confirms the correction was applied. It moves no score:
+Constituent Alignment still reads Cook's figure.
 The same list tells the election-night sync that a redrawn seat has no
 holder to measure a flip against, and lets an incumbent running under a new
 number link to their record — labelled a *sitting member* there (a *member before this election* from

@@ -125,7 +125,8 @@ export default function DataChapter() {
             <Fact label="Partisan lean">
               State and district Cook PVI. A state&apos;s is computed from its certified
               presidential returns (the FEC&apos;s 2020 compilation, the MIT Election Lab&apos;s for
-              2024); a district&apos;s is Cook&apos;s published figure.
+              2024); a district&apos;s is Cook&apos;s published figure, shown beside a{" "}
+              <A href="#computed-lean">lean Civitas computes</A> from precinct returns.
             </Fact>
           </Facts>
         </Sub>
@@ -340,6 +341,44 @@ export default function DataChapter() {
             each with its measurement.
           </P>
         </More>
+      </Section>
+
+      <Section id="computed-lean" title="A second partisan lean, computed here">
+        <P>
+          Every House district&apos;s lean on the site is Cook&apos;s published PVI, and that is the
+          figure the scores use. Beside it, the race pages, the redistricting pages and each
+          scorecard&apos;s methods section show a Civitas-computed lean: the same formula, worked
+          out here from open precinct returns, so anyone can check where the number comes from. It
+          is shown for comparison and used in no score.
+        </P>
+        <P>
+          The formula is Cook&apos;s: the district&apos;s Democratic share of the two-party
+          presidential vote minus the nation&apos;s, weighted 75% to 2024 and 25% to 2020, with a
+          Republican lean written R+. For 2020, each precinct&apos;s votes, from the Voting and
+          Election Science Team&apos;s precinct results and maps (CC BY 4.0), are shared among the
+          Census blocks inside it by population. For 2024, the MIT Election Data and Science
+          Lab&apos;s precinct returns (CC0) record the House district each precinct voted in, which
+          were the 119th Congress&apos;s lines. For the nine states that redrew for 2026, the 2024
+          vote is carried onto the new lines through each county&apos;s and state house
+          district&apos;s change from 2020. Census block files place every block in its district on
+          both maps.
+        </P>
+        <P>
+          Where the 2024 precinct file is wrong (counties counted twice, precincts missing, early
+          votes reported only county-wide), the state&apos;s or county&apos;s own certified count
+          replaces it, and every correction is listed with its source in the data file. A district
+          whose correction could only come from behind a login or a bot wall would be marked
+          unavailable rather than filled in from anywhere else; none is.
+        </P>
+        <P>
+          Against Cook&apos;s published figures the result differs by 0.27 points on average on the
+          119th Congress&apos;s lines (423 of 435 districts round to the same number, all within one
+          point) and by 0.28 on the 2026 lines (403 the same, 432 within one). The Texas Legislative
+          Council&apos;s official per-district tables match the 2024 counts on the lines they were
+          cast on to within 0.01 point, and the 2020 allocation on both maps to within about a
+          tenth; California&apos;s 2024 counts are taken from its own per-district table. Cook
+          publishes whole numbers; this figure keeps one decimal.
+        </P>
       </Section>
 
       <Section id="explore" title="How Explore search ranks results">

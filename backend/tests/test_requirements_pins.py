@@ -53,11 +53,13 @@ DIRECT = {
     "tokenizers", "torch", "uvicorn", "uvloop", "watchfiles", "xlrd",
 }
 # The research scripts' own imports beyond DIRECT (openpyxl: pandas loads it
-# by name in read_excel for .xlsx; time-machine: frozen_clock_plugin.py).
+# by name in read_excel for .xlsx; time-machine: frozen_clock_plugin.py;
+# pyproj: build_district_lean.py).
 RESEARCH_DIRECT = {
     "onnxruntime",
     "openpyxl",
     "pandas",
+    "pyproj",
     "pyreadr",
     "rdata",
     "statsmodels",

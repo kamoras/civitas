@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   candidateName,
   districtAreaLabel,
+  formatComputedLean,
   formatPvi,
   isActiveCandidate,
   majorPartyOf,
@@ -23,6 +24,16 @@ describe("formatPvi", () => {
     expect(formatPvi(-7)).toBe("D+7");
     expect(formatPvi(0)).toBe("EVEN");
     expect(formatPvi(null)).toBe("N/A");
+  });
+});
+
+describe("formatComputedLean", () => {
+  it("keeps one decimal, and calls anything rounding to zero even", () => {
+    expect(formatComputedLean(5.34)).toBe("R+5.3");
+    expect(formatComputedLean(-0.96)).toBe("D+1.0");
+    expect(formatComputedLean(0.04)).toBe("EVEN");
+    expect(formatComputedLean(-0.04)).toBe("EVEN");
+    expect(formatComputedLean(null)).toBe("N/A");
   });
 });
 
