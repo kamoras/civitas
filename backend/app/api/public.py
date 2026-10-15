@@ -50,6 +50,14 @@ from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db, off_loop
 from app.member_ids import resolve_member_id
 from app.models import Justice, President, Representative, ScoreSnapshot, Senator
+from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE, FUNDING_REFERENCE, LES_REFERENCE
+from app.pipeline.analyze.score_calculator import (
+    ALGORITHM_VERSION,
+    _member_ideal_points,
+    _seat_pvi,
+    compute_overall_score,
+)
+from app.pipeline.fetch.district_pvi import lines_of
 from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
 from app.score_display import displayed_rank
 from app.schemas import (
@@ -60,6 +68,7 @@ from app.schemas import (
     PublicPresidentialSupportSchema,
     PublicRepresentativePageSchema,
     PublicRepresentativeProfileSchema,
+    PublicScoreBreakdownSchema,
     PublicSearchResponseSchema,
     PublicSenatorPageSchema,
     PublicSenatorProfileSchema,
@@ -76,10 +85,12 @@ from app.services.representative_service import (
     get_rep_states_with_counts,
     get_rep_votes as rep_votes,
     get_representative_by_id,
+    get_representative_score_breakdown,
 )
 from app.services.senator_service import (
     get_leaderboard,
     get_senator_by_id,
+    get_senator_score_breakdown,
     get_senator_votes as senator_votes,
     get_states_with_counts,
 )
@@ -300,6 +311,110 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
         max_age=CACHE_TTL_CONFIG_S,
     )
 
+
+
+# Components that move a dimension's score by weight x (score - 50) rather
+# than taking part in its weighted mean: Constituent approval adds or takes
+# points around 50 (score_calculator._constituent_alignment_core). Keyed by
+# label because the breakdown carries no other marker;
+# test_public_score_breakdown recomputes every dimension from these, so a
+# renamed component fails there.
+POINTS_COMPONENTS = frozenset({"Constituent approval"})
+
+# The dimensions a breakdown covers, with each one's stored column.
+_BREAKDOWN_DIMENSIONS = {
+    "fundingIndependence": "score_funding_independence",
+    "constituentAlignment": "score_constituent_alignment",
+    "fundingDiversity": "score_funding_diversity",
+    "legislativeEffectiveness": "score_legislative_effectiveness",
+}
+
+
+def _positions(chamber: str, bioguide_id: str | None) -> dict | None:
+    """Position congruence's reference: the chamber's ideal-point fit and
+    scale, and this member's own position, without the other members'."""
+    section = _member_ideal_points(chamber)
+    if not section:
+        return None
+    shared = {k: v for k, v in section.items() if k not in ("members", "votes", "parties", "prior", "switched")}
+    return {
+        **shared,
+        "member_position": (section.get("members") or {}).get(bioguide_id or ""),
+        "member_votes": (section.get("votes") or {}).get(bioguide_id or ""),
+    }
+
+
+def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Request) -> JSONResponse:
+    member_id = resolve_member_id(db, member_id)
+    member = db.get(model, member_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
+    house = entity_type == "representative"
+    chamber = "house" if house else "senate"
+    explained = (get_representative_score_breakdown if house else get_senator_score_breakdown)(db, member_id)
+    snapshot = (
+        db.query(ScoreSnapshot)
+        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
+        .order_by(ScoreSnapshot.date.desc())
+        .first()
+    )
+    district = member.district if house else None
+    with lines_of(member.district_lines_congress if house else None):
+        cook_pvi = _seat_pvi(member.state, district)
+    dimensions = {}
+    for key, column in _BREAKDOWN_DIMENSIONS.items():
+        part = explained[key]
+        dimensions[key] = {
+            "storedScore": getattr(member, column),
+            "score": part["score"],
+            "weightInOverall": SCORE_WEIGHTS.get(key),
+            "components": [
+                {**c, "combines": "points" if c["label"] in POINTS_COMPONENTS else "mean"}
+                for c in part.get("components") or []
+            ],
+            "note": part.get("note"),
+            "finding": part.get("finding"),
+            "facts": part.get("facts"),
+        }
+    return _pub_json(
+        {
+            "id": member_id,
+            "name": member.name,
+            "chamber": chamber,
+            "party": member.party,
+            "siteUrl": _member_url(member_id),
+            "algorithmVersion": snapshot.algorithm_version if snapshot else None,
+            "scoredOn": snapshot.date if snapshot else None,
+            "recomputedWith": ALGORITHM_VERSION,
+            "overall": compute_overall_score(member),
+            "weights": SCORE_WEIGHTS,
+            "dimensions": dimensions,
+            "references": {
+                "funding": FUNDING_REFERENCE.load().get(chamber),
+                "constituent": CONSTITUENT_REFERENCE.load().get(chamber),
+                "legislative": LES_REFERENCE.load().get(chamber),
+                "positions": _positions(chamber, member.bioguide_id),
+                "seat": {
+                    "state": member.state,
+                    "district": district,
+                    "cookPvi": cook_pvi,
+                    "districtLinesCongress": member.district_lines_congress if house else None,
+                },
+            },
+        },
+        request,
+        max_age=CACHE_TTL_DETAIL_S,
+    )
+
+
+_BREAKDOWN_DOC = (
+    "Everything needed to recompute the member's representation score from stated inputs: each dimension's "
+    "components with their weights, scores and the figures behind them, how they combine, the dimension "
+    "weights, and the population and seat reference values the components were compared against, as the "
+    "last run measured them.\n\n"
+    "`overall` is the sum of `weights[k]` x `dimensions[k].storedScore`. Each dimension's `score` is "
+    "recomputed from its components by the rule on `score`; `storedScore` is the score on the record."
+)
 
 _PREFLIGHT_HEADERS = {**_CORS_HEADERS, "Access-Control-Max-Age": "3600"}
 
@@ -548,6 +663,18 @@ def get_senator_history(
     return _history(db, "senator", Senator, senator_id, request)
 
 
+@router.get("/senators/{senator_id}/breakdown", response_model=PublicScoreBreakdownSchema, responses=_NOT_FOUND,
+            tags=["Senators"], summary="How a senator's score is computed", description=_BREAKDOWN_DOC)
+def get_senator_breakdown(
+    _rl: PublicReadLimit,
+    request: Request,
+    senator_id: str = Path(description="The senator's id." + _RENAMED_ID),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    return _breakdown(db, Senator, "senator", senator_id, request)
+
+
+
 # ---------------------------------------------------------------------------
 # Votes
 # ---------------------------------------------------------------------------
@@ -658,6 +785,19 @@ def get_representative_history(
 ) -> JSONResponse:
     """One snapshot per scoring run, oldest first."""
     return _history(db, "representative", Representative, rep_id, request)
+
+
+@router.get("/representatives/{rep_id}/breakdown", response_model=PublicScoreBreakdownSchema, responses=_NOT_FOUND,
+            tags=["Representatives"], summary="How a representative's score is computed",
+            description=_BREAKDOWN_DOC)
+def get_representative_breakdown(
+    _rl: PublicReadLimit,
+    request: Request,
+    rep_id: str = Path(description="The representative's id." + _RENAMED_ID),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    return _breakdown(db, Representative, "representative", rep_id, request)
+
 
 
 @router.get("/representatives/{rep_id}/votes", response_model=PublicMemberVotesSchema, responses=_NOT_FOUND,

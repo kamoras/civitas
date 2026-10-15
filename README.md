@@ -1550,10 +1550,12 @@ schemas forbid extra fields), so the two cannot drift apart.
 GET /api/public/v1/senators                      Serving senators, ranked by score
 GET /api/public/v1/senators/{id}                 One senator's full record
 GET /api/public/v1/senators/{id}/history         A senator's scores over time
+GET /api/public/v1/senators/{id}/breakdown       How a senator's score is computed
 GET /api/public/v1/senators/{id}/votes           A senator's votes, each with its roll call
 GET /api/public/v1/representatives               Serving representatives, ranked by score
 GET /api/public/v1/representatives/{id}          One representative's full record
 GET /api/public/v1/representatives/{id}/history  A representative's scores over time
+GET /api/public/v1/representatives/{id}/breakdown How a representative's score is computed
 GET /api/public/v1/representatives/{id}/votes    A representative's votes, each with its roll call
 GET /api/public/v1/bills/{id}/votes              The roll calls on a bill, with each party's split
 GET /api/public/v1/search                        Floor speeches, presidential actions,
@@ -1570,6 +1572,23 @@ Conventions: lists are pages (`entries`, `total`, `page`, `perPage`,
 the filters; an unknown id is a 404 (history included); every record has a
 `siteUrl`; filter values (party, chamber, document type) are enumerated in
 the spec and a value outside them is a 422.
+
+A score can be reproduced from the API alone. `/breakdown` serves, for each
+dimension, the stored score, the score recomputed from the member's stored
+records with the scorer's own functions (the profile's "show the math",
+below), and every component with its weight, score, how it combines
+(`mean`: part of the weighted mean; `points`: adds weight × (score − 50),
+as Constituent approval does) and the scorer's sentence on how it was
+measured; beside them the three weights, the scoring version and date, and
+the reference values the last run measured and compared against: the
+chamber's funding, Constituent Alignment and Legislative Effectiveness
+references (`/data/*_reference.json`, `population_reference`), the
+ideal-point fit and this member's position, and the seat's Cook PVI and
+district lines. `tests/test_public_score_breakdown.py` stores fixture
+members' scores with the pipeline's `calculate_scores` and recomputes every
+dimension and the overall from the response: the overall exactly, each
+dimension to within the one-decimal rounding of its components (on the
+2026-10-14 production copy, 533 of 533 overalls exactly).
 
 A member's id is their `first-last` name (see Phase 2 — TRANSFORM), and an id a member had
 before a rename still works: the record comes back under the current id
