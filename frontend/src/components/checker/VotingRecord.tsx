@@ -51,7 +51,11 @@ function VoteBadge({ vote }: { vote: string }) {
  *  date, the member's vote, and whether it went against the party. It used
  *  to expand into the pipeline's own working — content-lean badges, policy
  *  areas, "stance", the internal vote id — which meant nothing to a reader. */
-function VoteRow({ vote }: { vote: KeyVote }) {
+export function VoteRow({
+  vote,
+}: {
+  vote: Pick<KeyVote, "billName" | "billId" | "date" | "vote" | "votedWithParty" | "rollCall">;
+}) {
   const rc = vote.rollCall;
   const title = voteTitle(rc?.title, rc?.billLabel, vote.billName);
   // The roll call's bill, or, for a vote stored before its roll call was
