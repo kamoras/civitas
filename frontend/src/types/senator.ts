@@ -349,6 +349,9 @@ export interface ScoreSpread {
   p75: number | null;
   /** Serving members per party, for the party filter's counts. */
   parties: { D: number; R: number; I: number };
+  /** The chamber's latest scoring run, YYYY-MM-DD; optional for an older
+   *  backend. */
+  asOf?: string | null;
 }
 
 /** One asset from a member's latest annual financial disclosure. Values are

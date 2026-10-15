@@ -35,7 +35,7 @@ from app.schemas import (
     RelatedIssueSchema,
 )
 from app.shared_state import PolledRow, decode_json_dict
-from app.time_utils import utcnow
+from app.time_utils import eastern_date, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -337,7 +337,7 @@ def _issues_mentioning(db: Session, bill_id: str) -> list[RelatedIssueSchema]:
             continue
         if any(isinstance(e, dict) and e.get("id") == bill_id for e in entries):
             result.append(RelatedIssueSchema(
-                id=issue_id, date=date, first_surfaced=created_at.strftime("%Y-%m-%d"), title=title,
+                id=issue_id, date=date, first_surfaced=eastern_date(created_at).isoformat(), title=title,
                 public_id=to_public_id(issue_id),
             ))
     return result

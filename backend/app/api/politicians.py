@@ -46,6 +46,7 @@ from app.pipeline.analyze.president_scorer import compute_president_overall_scor
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.score_display import displayed_rank, displayed_score
 from app.services.senator_service import STATE_NAMES
+from app.time_utils import eastern_date
 
 logger = logging.getLogger(__name__)
 
@@ -468,7 +469,7 @@ def _get_active_issues(politician_id: str, db: Session) -> list[dict]:
                 "summary": issue.summary,
                 "rank": issue.rank,
                 "date": issue.date,
-                "firstSurfaced": issue.created_at.strftime("%Y-%m-%d"),
+                "firstSurfaced": eastern_date(issue.created_at).isoformat(),
                 "policyAreas": json.loads(issue.policy_areas or "[]"),
             })
     return result

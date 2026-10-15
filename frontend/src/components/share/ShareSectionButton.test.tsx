@@ -16,6 +16,9 @@ const subject: ShareSubject = {
   title: "Jordan Hale",
   subtitle: "Representative · TN-2 · Republican",
   url: "https://civitas-research.org/politicians/jordan-hale",
+  source: "FEC filings",
+  asOf: "2026-10-14",
+  scaleMax: 100,
 };
 
 function Section({ children }: { children: React.ReactNode }) {

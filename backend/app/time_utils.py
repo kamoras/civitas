@@ -17,7 +17,7 @@ column's declared `tzinfo`, so an aware clock would break the very comparisons
 this preserves.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 
@@ -68,3 +68,21 @@ def congress_in_session(now: datetime | None = None) -> int:
     if local.year % 2 == 1 and (local.month, local.day, local.hour) < (1, 3, 12):
         congress -= 1
     return congress
+
+
+# The site's calendar day is Eastern: the Action Center files each issue
+# under the Eastern date of its refresh, election night and the Congress
+# reports are Eastern. A stored timestamp is naive UTC, so its date taken
+# directly is the next day for anything after 8 PM EDT (7 PM EST) — and
+# an issue then "first surfaced" the day after it was "updated" (46 of 551
+# issues on 2026-10-15).
+EASTERN = ZoneInfo("America/New_York")
+
+
+def eastern_date(stamp: datetime) -> date:
+    """The Eastern calendar date of a stored (naive UTC) timestamp: a count
+    that last moved at 9 PM ET on the 16th is stored as the 17th. Show a
+    stored timestamp as a date only through this."""
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(EASTERN).date()

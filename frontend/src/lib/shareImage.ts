@@ -7,9 +7,12 @@
  * Tailwind's colours, the self-hosted fonts, the SVG charts — rather than a
  * re-implementation of it). A cropped section rarely says whose it is or
  * where it came from, so the capture is then framed on a canvas: a strip
- * naming the page's subject above it, and the page's link and the capture
- * date below. The date matters because the numbers change nightly; the link
- * is how the friend who receives the picture gets to the rest of it.
+ * naming the page's subject above it, and below it where the figures come
+ * from, the page's link, the date the figures are as of, the scale any
+ * score is on, and the capture date. A picture travels without its page:
+ * the source and the as-of date are what let it be checked, the scale what
+ * makes "72" mean something, and the link how the friend who receives it
+ * gets to the rest.
  *
  * Nothing leaves the browser, and a capture requests nothing from any host
  * but this site: every photo the site shows is already same-origin
@@ -19,8 +22,16 @@
  * which is safe while those stay self-hosted (app/fonts.ts, compiled CSS).
  */
 
+import type { ActionIssue } from "@/types/action";
+
 export const SHARE_EXCLUDE_ATTR = "data-share-exclude";
 export const SHARE_SECTION_ATTR = "data-share-section";
+/** A section's own source, as-of date and score scale, where they differ
+ *  from the page's (a profile's holdings come from the annual disclosure,
+ *  not the scorecard's sources). See `shareMetaAttrs`. */
+const SOURCE_ATTR = "data-share-source";
+const AS_OF_ATTR = "data-share-as-of";
+const SCALE_ATTR = "data-share-scale";
 /** Set on a section only while it is measured and cloned; see globals.css. */
 const CAPTURING_ATTR = "data-share-capturing";
 
@@ -37,6 +48,93 @@ export interface ShareSubject {
   badge?: { label: string; value: string; colorClass?: string };
   /** Absolute URL of the page (a section anchor is appended per section). */
   url: string;
+  /** Where the figures come from, printed under the picture ("FEC; Senate
+   *  and House roll calls"). Required: a picture with no source can't be
+   *  checked by whoever receives it. */
+  source: string;
+  /** YYYY-MM-DD (or an ISO time) the figures are as of, from the backend;
+   *  null where the page reads them live, so the capture's day is theirs. */
+  asOf: string | null;
+  /** The top of the scale the page's scores are on (100): printed beside
+   *  the badge ("72/100") and in the footer. Omitted where nothing is a
+   *  score. */
+  scaleMax?: number;
+}
+
+/** What one picture's footer states: the page's, or the section's own. */
+export interface ShareMeta {
+  source: string;
+  asOf: string | null;
+  scaleMax?: number;
+}
+
+/** A section's own source, as-of date and scale, as attributes to spread
+ *  on the element that carries `data-share-section`. `scaleMax: null`
+ *  says the section shows no score even on a page whose subject has one. */
+export function shareMetaAttrs(meta: {
+  source: string;
+  asOf: string | null;
+  scaleMax?: number | null;
+}): Record<string, string> {
+  return {
+    [SOURCE_ATTR]: meta.source,
+    [AS_OF_ATTR]: meta.asOf ?? "",
+    ...(meta.scaleMax !== undefined ? { [SCALE_ATTR]: String(meta.scaleMax ?? "") } : {}),
+  };
+}
+
+/** The footer's facts for a section: its own attributes where it has
+ *  them, else the page subject's. */
+export function sectionMeta(section: Element, subject: ShareSubject): ShareMeta {
+  const scale = section.getAttribute(SCALE_ATTR);
+  return {
+    source: section.getAttribute(SOURCE_ATTR) || subject.source,
+    asOf: section.hasAttribute(AS_OF_ATTR)
+      ? section.getAttribute(AS_OF_ATTR) || null
+      : subject.asOf,
+    scaleMax: scale === null ? subject.scaleMax : Number(scale) || undefined,
+  };
+}
+
+const MONTH_ABBR = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/** "2026-10-14" or "2026-10-14T06:47:00" -> "Oct 14, 2026"; read by hand,
+ *  since `new Date("2026-10-14")` is the day before west of Greenwich. */
+function shortIsoDate(iso: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m && MONTH_ABBR[Number(m[2]) - 1]
+    ? `${MONTH_ABBR[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`
+    : null;
+}
+
+/** The footer's two lines of facts: the source, and the dates with the
+ *  scale between them. */
+export function footerFacts(meta: ShareMeta, today: Date): { source: string; dates: string } {
+  const captured = captureDate(today);
+  const asOf = meta.asOf ? shortIsoDate(meta.asOf) : null;
+  return {
+    source: `Source: ${meta.source}`,
+    dates: [
+      asOf ? `Data as of ${asOf}` : `Data as of ${captured}`,
+      meta.scaleMax ? `scores out of ${meta.scaleMax}` : null,
+      asOf ? `captured ${captured}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  };
 }
 
 /** A 1x1 transparent PNG: what a third-party image becomes in a capture. */
@@ -228,9 +326,12 @@ export async function captureSection(
   const badgeValueFont = `800 ${34 * scale}px ${sans}`;
   const smallMono = (px: number) => `${px * scale}px ${mono}`;
   let badgeW = 0;
+  const badgeValue = subject.badge
+    ? `${subject.badge.value}${subject.scaleMax ? `/${subject.scaleMax}` : ""}`
+    : "";
   if (subject.badge) {
     ctx.font = badgeValueFont;
-    const valueW = ctx.measureText(subject.badge.value).width;
+    const valueW = ctx.measureText(badgeValue).width;
     ctx.font = smallMono(11);
     badgeW = Math.max(valueW, ctx.measureText(subject.badge.label.toUpperCase()).width);
   }
@@ -254,20 +355,18 @@ export async function captureSection(
     : subtitleBaseline - 22 * scale;
   const stripH = withStrip ? Math.max(68 * scale, stripBottom + 18 * scale) : 0;
 
-  // The footer's link is how the picture's recipient gets to the page, so
-  // it is never cut short: it wraps, and when it and the date don't fit on
-  // one line, the date drops below it. Measured before sizing the
-  // canvas (resizing a canvas resets its context).
+  // The footer: the source, the link, then the dates and the scale. The
+  // link is how the picture's recipient gets to the page, so it is never
+  // cut short: it wraps like the rest. Measured before sizing the canvas
+  // (resizing a canvas resets its context).
   const footFont = `${12 * scale}px ${mono}`;
-  const linkText = displayUrl(link);
-  const date = `Captured ${captureDate(new Date())}`;
+  const facts = footerFacts(sectionMeta(section, subject), new Date());
   ctx.font = footFont;
-  const linkLines = wrapLink(ctx, linkText, innerW);
-  const oneLine =
-    linkLines.length === 1 &&
-    ctx.measureText(linkText).width + ctx.measureText(date).width + 24 * scale <= innerW;
+  const sourceLines = wrapWords(ctx, facts.source, innerW, 3);
+  const linkLines = wrapLink(ctx, displayUrl(link), innerW);
+  const dateLines = wrapWords(ctx, facts.dates, innerW, 2);
   const lineH = 20 * scale;
-  const footH = 44 * scale + (oneLine ? 0 : linkLines.length * lineH);
+  const footH = 24 * scale + (sourceLines.length + linkLines.length + dateLines.length) * lineH;
 
   out.width = innerW + pad * 2;
   out.height = stripH + shot.height + footH + pad * 2;
@@ -287,7 +386,7 @@ export async function captureSection(
       ctx.fillText(subject.badge.label.toUpperCase(), right, y + 14 * scale);
       ctx.font = badgeValueFont;
       ctx.fillStyle = resolveClassStyle(subject.badge.colorClass, "color", inkHi);
-      ctx.fillText(subject.badge.value, right, y + 50 * scale);
+      ctx.fillText(badgeValue, right, y + 50 * scale);
       ctx.textAlign = "left";
     }
     ctx.font = titleFont;
@@ -313,13 +412,17 @@ export async function captureSection(
   ctx.globalAlpha = 1;
   let baseline = y + 34 * scale;
   ctx.font = footFont;
-  ctx.fillStyle = inkLo;
-  linkLines.forEach((line, i) => ctx.fillText(line, pad, baseline + i * lineH));
-  if (!oneLine) baseline += linkLines.length * lineH;
-  ctx.textAlign = oneLine ? "right" : "left";
-  ctx.fillStyle = inkMin;
-  ctx.fillText(date, oneLine ? pad + innerW : pad, baseline);
-  ctx.textAlign = "left";
+  for (const [lines, color] of [
+    [sourceLines, inkLo],
+    [linkLines, inkLo],
+    [dateLines, inkMin],
+  ] as const) {
+    ctx.fillStyle = color;
+    for (const line of lines) {
+      ctx.fillText(line, pad, baseline);
+      baseline += lineH;
+    }
+  }
 
   return new Promise((resolve, reject) =>
     out.toBlob((b) => (b ? resolve(b) : reject(new Error("PNG encoding failed"))), "image/png")
@@ -328,11 +431,12 @@ export async function captureSection(
 
 // iOS Safari won't allocate a canvas over 16,777,216 pixels (toBlob then
 // returns null), and a few browsers cap either side near 16k–32k. The frame
-// adds padding, the title strip and the footer around the section: at most
-// about 250 CSS px of height, 40 of width.
+// adds padding, the title strip and the footer (source, link and dates, up
+// to seven lines) around the section: at most about 330 CSS px of height,
+// 40 of width.
 const MAX_CANVAS_AREA = 16_000_000;
 const MAX_CANVAS_SIDE = 16_000;
-const FRAME_CSS = { width: 40, height: 260 };
+const FRAME_CSS = { width: 40, height: 330 };
 
 /**
  * The pixel ratio to capture a `width` x `height` (CSS px) section at: at
@@ -367,4 +471,19 @@ export function canShareImage(): boolean {
   } catch {
     return false;
   }
+}
+
+/** What a shared image of an issue says it is from: the outlets its facts
+ *  quote (or the official record a developing issue was drafted from), and
+ *  the day the issue's facts are of (a seat-flip count's own read time). */
+export function issueShareMeta(issue: ActionIssue): { source: string; asOf: string | null } {
+  const outlets = Array.from(new Set(issue.sourceNames ?? [])).filter(Boolean);
+  return {
+    source: outlets.length
+      ? outlets.length > 4
+        ? `${outlets.slice(0, 4).join("; ")} and ${outlets.length - 4} more, quoted`
+        : `${outlets.join("; ")}, quoted`
+      : "the official record linked on the issue's page",
+    asOf: issue.countAsOf ?? issue.date,
+  };
 }
