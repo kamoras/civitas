@@ -43,6 +43,7 @@ from app.models import (
 from app.pipeline.analyze.bill_stage import became_law_action, classify_bill_stage_from_actions, is_enacted
 from app.pipeline.analyze.party_line_record import party_line_records
 from app.pipeline.fetch.congress import (
+    CongressUnavailable,
     extract_official_title,
     fetch_bill,
     fetch_bill_actions,
@@ -79,7 +80,12 @@ from app.pipeline.member_lifecycle import (
     purge_departed_members,
     reconcile_roster,
 )
-from app.pipeline.run_checks import alert_member_failures, persist_ground_truth_failures, run_calibration_check
+from app.pipeline.run_checks import (
+    alert_member_failures,
+    alert_unread_sponsorship,
+    persist_ground_truth_failures,
+    run_calibration_check,
+)
 from app.pipeline.bill_refresh import keep_newer_latest_actions
 from app.pipeline.progress_tracker import ProgressTracker
 # Transform modules
@@ -130,10 +136,11 @@ from app.pipeline.analyze.score_calculator import calculate_confidence, calculat
 from app.pipeline.live_references import (
     live_constituent_reference_measured,
     live_funding_reference,
+    bills_read_this_run,
     live_les_reference,
 )
 from app.pipeline.partisan_depth_store import finalize_stored_partisan_depth
-from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores
+from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores, carry_forward_sponsored_bills
 
 # Assemble modules
 from app.pipeline.assemble.senator_builder import build_senator
@@ -893,7 +900,7 @@ async def _sponsored_bill_actions(client, db: Session, sp: dict) -> list[dict]:
 _PROGRESS_EVERY = 50
 
 
-async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], progress=None) -> None:
+async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], progress=None) -> list[str]:
     """Every sponsored bill's stage — and, with its action history to hand,
     its is_law as every writer reads it (is_enacted), agreeing with the
     stage — before anything reads either. Legislative Effectiveness credits
@@ -905,11 +912,13 @@ async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], 
     that passed the Senate once its latest action is a House referral —
     while the House (house_pipeline phase 4b) classified first. One
     action-history read per bill (cached by fetch_bill_actions): its own
-    progress step, as it can run a while on a cold cache."""
+    progress step, as it can run a while on a cold cache. Returns the bills
+    whose actions couldn't be read, for the run's alert."""
     bills = [sp for prepared in senator_prepared for sp in prepared.get("sponsoredBills", [])]
     if progress is not None:
         progress.begin("classify_sponsored_stages", total=len(bills))
     stage_failures = 0
+    unread: list[str] = []
     async with make_async_client() as client:
         for done, sp in enumerate(bills, 1):
             try:
@@ -921,6 +930,7 @@ async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], 
                 # isLaw/latestAction for this bill. One unreachable
                 # bill must not abort every senator's scoring.
                 stage_failures += 1
+                unread.append(f"{sp.get('billId') or '?'} ({sp.get('congress') or '?'})")
             # Every _PROGRESS_EVERY bills, not each: an update commits the
             # run row, and a warm cache makes each bill a fast cache hit.
             if progress is not None and (done % _PROGRESS_EVERY == 0 or done == len(bills)):
@@ -934,6 +944,7 @@ async def _classify_sponsored_stages(db: Session, senator_prepared: list[dict], 
         progress.complete(
             "classify_sponsored_stages", detail=f"{len(bills) - stage_failures} classified, {stage_failures} failed",
         )
+    return unread
 
 
 def _recent_not_covered_by_key_bills(
@@ -1223,6 +1234,9 @@ async def run_senate_pipeline(
             # Fetch detailed data for each discovered bill
             progress.begin("fetch_bill_details", total=len(discovered_bills))
             bills_data: list[dict] = []
+            # Bills whose actions Congress.gov couldn't give this run, named
+            # in one alert after scoring (alert_unread_sponsorship).
+            unread_bills: list[str] = []
             for bill_idx, bill_ref in enumerate(discovered_bills):
                 bill = await fetch_bill(
                     client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
@@ -1230,9 +1244,16 @@ async def run_senate_pipeline(
                 summaries = await fetch_bill_summaries(
                     client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
                 )
-                actions = await fetch_bill_actions(
-                    client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
-                )
+                try:
+                    actions = await fetch_bill_actions(
+                        client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
+                    )
+                except CongressUnavailable:
+                    # This bill alone goes without its history: is_law from
+                    # the latest action its detail record carries. One
+                    # failed request must not stop the run.
+                    actions = []
+                    unread_bills.append(f"{bill_ref['type'].upper()}.{bill_ref['number']} ({bill_ref['congress']})")
                 titles = await fetch_bill_titles(
                     client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
                 )
@@ -1258,7 +1279,10 @@ async def run_senate_pipeline(
                     # bill's cosponsorship-edge weight (sponsorship_analysis.
                     # _cosponsorship_edge_weight) reflects the same notion
                     # of "advanced" everywhere in the pipeline.
-                    latest_action_text = (actions or [{}])[0].get("text", "") if actions else ""
+                    latest_action_text = (
+                        (actions or [{}])[0].get("text", "") if actions
+                        else (bill.get("latestAction") or {}).get("text", "")
+                    )
                     is_law = is_enacted(latest_action_text, actions)
 
                     bills_data.append(
@@ -1851,6 +1875,8 @@ async def run_senate_pipeline(
                         "funding": funding,
                         "votingRecord": voting_record,
                         "sponsoredBills": senator_sponsored,
+                        "bioguideId": bio_id,
+                        "sponsoredBillsUnavailable": bio_id in sponsored_unavailable,
                     }
                 )
                 progress.update("prepare_senators", done=prep_idx + 1)
@@ -1864,10 +1890,13 @@ async def run_senate_pipeline(
                 progress.update("prepare_senators", done=prep_idx + 1)
 
         progress.complete("prepare_senators", detail=f"{len(senator_prepared)} ready, {fail_count} failed")
+        # A senator whose sponsored legislation couldn't be read this run is
+        # scored on the bills an earlier run stored, never as having none.
+        carried_senators = carry_forward_sponsored_bills(db, Senator, senator_prepared)
 
         # Every sponsored bill's is_law and stage, before anything reads
         # them: the cosponsorship graph below (edge weights), then scoring.
-        await _classify_sponsored_stages(db, senator_prepared, progress)
+        unread_bills += await _classify_sponsored_stages(db, senator_prepared, progress)
 
         # 3f. Enrich cosponsorship data with senators' own sponsored bills
         # The significant-bills cosponsorship matrix (33 bills) is too sparse
@@ -2049,6 +2078,7 @@ async def run_senate_pipeline(
                 (
                     p.get("sponsoredBills", []),
                     p["votingRecord"].get("effectiveParty") or p["senator"].get("party"),
+                    bills_read_this_run(p),
                 )
                 for p in senator_prepared
             ],
@@ -2123,7 +2153,8 @@ async def run_senate_pipeline(
                     "bipartisanshipScore": bipartisanship_scores.get(bio_id_for_score),
                     "attractedBipartisanshipScore": attracted_bipartisanship_scores.get(bio_id_for_score),
                     "sponsoredBills": prepared.get("sponsoredBills", []),
-                    "sponsoredBillsUnavailable": bio_id_for_score in sponsored_unavailable,
+                    "sponsoredBillsUnavailable": prepared.get("sponsoredBillsUnavailable", False),
+                    "sponsoredBillsCarriedFrom": prepared.get("sponsoredBillsCarriedFrom"),
                     "ideologyScore": ideology_scores.get(bio_id_for_score),
                     "lesReference": les_reference,
                     "fundingReference": funding_reference,
@@ -2223,7 +2254,7 @@ async def run_senate_pipeline(
                                 sp["policyArea"] = areas[0]["area"]
                     classified_sponsored.append(sp)
                 result["sponsoredBills"] = classified_sponsored
-                result["sponsoredBillsUnavailable"] = bio_id_for_score in sponsored_unavailable
+                result["sponsoredBillsUnavailable"] = prepared.get("sponsoredBillsUnavailable", False)
                 if classified_sponsored:
                     logger.info(
                         "    sponsored bills: %d (%d became law)",
@@ -2287,6 +2318,11 @@ async def run_senate_pipeline(
 
         alert_if_lda_down(lda_totals, "senate")
         alert_member_failures("senate", member_failures, close_when_clean=not senator_filter)
+        alert_unread_sponsorship(
+            "senate", unread_bills, carried_senators,
+            [p.get("bioguideId") or "?" for p in senator_prepared if p.get("sponsoredBillsUnavailable")],
+            close_when_clean=not senator_filter,
+        )
 
         progress.complete(
             "analyze_senators",

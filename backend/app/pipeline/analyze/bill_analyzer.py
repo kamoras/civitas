@@ -653,93 +653,101 @@ async def classify_all_bills(
     classified = []
     procedural_count = 0
     multi_area_count = 0
+    failed = 0
 
     for b in bills:
-        bill_name = b["billName"]
-        bill_id = b["billId"]
-        bill_text = _build_classification_text(b)
-        bill_date = _extract_bill_date(b.get("actions", []))
-        summary = b.get("summary", "")
+        try:
+            bill_name = b["billName"]
+            bill_id = b["billId"]
+            bill_text = _build_classification_text(b)
+            bill_date = _extract_bill_date(b.get("actions", []))
+            summary = b.get("summary", "")
 
-        areas = classify_policy_areas_multi(
-            bill_text, bill_id=bill_id, db_session=db_session,
-        )
-        policy_area = areas[0]["area"]
-        confidence = areas[0]["confidence"]
-
-        # 2026-07: PROCEDURAL only ever reaches here two ways — the
-        # seed match (real score, always >= 0.74; see
-        # _is_procedural_seed_match) or the low-confidence tier-2/3
-        # fallback (score always < EMBEDDING_CONFIDENCE_THRESHOLD=0.70 by
-        # construction, since that's the branch that triggers it). These
-        # checks used to compare against a hardcoded 1.0/0.9 that only
-        # ever matched the seed match (which used to always return exactly
-        # 1.0); now that it returns its real score, EMBEDDING_CONFIDENCE_
-        # THRESHOLD is the actual dividing line between the two cases.
-        if policy_area == "PROCEDURAL" and confidence < EMBEDDING_CONFIDENCE_THRESHOLD:
-            name_areas = classify_policy_areas_multi(bill_name)
-            if name_areas[0]["area"] != "PROCEDURAL":
-                areas = name_areas
-                policy_area = areas[0]["area"]
-                confidence = 0.5
-
-        if policy_area == "PROCEDURAL" and confidence >= EMBEDDING_CONFIDENCE_THRESHOLD:
-            proc = _make_procedural(b)
-            proc["date"] = bill_date
-            proc["policyAreas"] = [{"area": "PROCEDURAL", "confidence": confidence, "party": "bipartisan"}]
-            proc["partyAlignmentWeight"] = 0.0
-            classified.append(proc)
-            procedural_count += 1
-        else:
-            if policy_area == "PROCEDURAL":
-                policy_area = _augmented_embedding_classify(bill_text)
-                areas = [{"area": policy_area, "confidence": confidence}]
-            _stance_text, stance_direction = derive_stance(b["billName"], summary, policy_area)
-
-            description = _clean_summary(summary, b["billName"], b.get("officialTitle", ""))
-
-            multi_alignment = classify_party_alignment_multi(
-                bill_text, areas, stance_direction,
+            areas = classify_policy_areas_multi(
+                bill_text, bill_id=bill_id, db_session=db_session,
             )
+            policy_area = areas[0]["area"]
+            confidence = areas[0]["confidence"]
 
-            content_alignment = multi_alignment["overall"]
-            alignment_weight = multi_alignment["weight"]
+            # 2026-07: PROCEDURAL only ever reaches here two ways — the
+            # seed match (real score, always >= 0.74; see
+            # _is_procedural_seed_match) or the low-confidence tier-2/3
+            # fallback (score always < EMBEDDING_CONFIDENCE_THRESHOLD=0.70 by
+            # construction, since that's the branch that triggers it). These
+            # checks used to compare against a hardcoded 1.0/0.9 that only
+            # ever matched the seed match (which used to always return exactly
+            # 1.0); now that it returns its real score, EMBEDDING_CONFIDENCE_
+            # THRESHOLD is the actual dividing line between the two cases.
+            if policy_area == "PROCEDURAL" and confidence < EMBEDDING_CONFIDENCE_THRESHOLD:
+                name_areas = classify_policy_areas_multi(bill_name)
+                if name_areas[0]["area"] != "PROCEDURAL":
+                    areas = name_areas
+                    policy_area = areas[0]["area"]
+                    confidence = 0.5
 
-            area_parties = {
-                a["area"]: a["party"] for a in multi_alignment["areas"]
-            }
-            policy_areas_enriched = [
-                {
-                    "area": a["area"],
-                    "confidence": a["confidence"],
-                    "party": area_parties.get(a["area"], "bipartisan"),
+            if policy_area == "PROCEDURAL" and confidence >= EMBEDDING_CONFIDENCE_THRESHOLD:
+                proc = _make_procedural(b)
+                proc["date"] = bill_date
+                proc["policyAreas"] = [{"area": "PROCEDURAL", "confidence": confidence, "party": "bipartisan"}]
+                proc["partyAlignmentWeight"] = 0.0
+                classified.append(proc)
+                procedural_count += 1
+            else:
+                if policy_area == "PROCEDURAL":
+                    policy_area = _augmented_embedding_classify(bill_text)
+                    areas = [{"area": policy_area, "confidence": confidence}]
+                _stance_text, stance_direction = derive_stance(b["billName"], summary, policy_area)
+
+                description = _clean_summary(summary, b["billName"], b.get("officialTitle", ""))
+
+                multi_alignment = classify_party_alignment_multi(
+                    bill_text, areas, stance_direction,
+                )
+
+                content_alignment = multi_alignment["overall"]
+                alignment_weight = multi_alignment["weight"]
+
+                area_parties = {
+                    a["area"]: a["party"] for a in multi_alignment["areas"]
                 }
-                for a in areas
-            ]
+                policy_areas_enriched = [
+                    {
+                        "area": a["area"],
+                        "confidence": a["confidence"],
+                        "party": area_parties.get(a["area"], "bipartisan"),
+                    }
+                    for a in areas
+                ]
 
-            if len(areas) > 1:
-                multi_area_count += 1
+                if len(areas) > 1:
+                    multi_area_count += 1
 
-            classified.append({
-                "billId": bill_id,
-                "billName": bill_name,
-                "congress": b["congress"],
-                "date": bill_date,
-                "description": description,
-                "policyArea": policy_area,
-                "policyAreas": policy_areas_enriched,
-                "stance": stance_direction,
-                "partyLeaning": content_alignment,
-                "partyAlignmentWeight": alignment_weight,
-            })
+                classified.append({
+                    "billId": bill_id,
+                    "billName": bill_name,
+                    "congress": b["congress"],
+                    "date": bill_date,
+                    "description": description,
+                    "policyArea": policy_area,
+                    "policyAreas": policy_areas_enriched,
+                    "stance": stance_direction,
+                    "partyLeaning": content_alignment,
+                    "partyAlignmentWeight": alignment_weight,
+                })
 
-        _record_if_possible(db_session, bill_id, bill_text, policy_area, confidence)
+            _record_if_possible(db_session, bill_id, bill_text, policy_area, confidence)
+        except Exception:
+            # One bill that can't be classified is left out of this run
+            # (its roll calls with it); it must not empty the whole list,
+            # which the pipelines used to fall back to on any failure.
+            failed += 1
+            logger.exception("Classifying bill %s failed — left out of this run", b.get("billId", "?"))
 
     _validate_classifications(classified)
     substantive = len(classified) - procedural_count
     logger.info(
-        "Classified %d/%d bills (%d substantive, %d procedural, %d multi-area)",
-        len(classified), len(bills), substantive, procedural_count, multi_area_count,
+        "Classified %d/%d bills (%d substantive, %d procedural, %d multi-area, %d failed)",
+        len(classified), len(bills), substantive, procedural_count, multi_area_count, failed,
     )
     return classified
 

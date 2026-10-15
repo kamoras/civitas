@@ -50,7 +50,12 @@ def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
     current scale. Returns the chambers rescored. Never raises."""
     from app.models import HousePipelineRun, PipelineRun, Representative, Senator
     from app.pipeline.analyze.population_reference import LES_REFERENCE
-    from app.pipeline.analyze.score_calculator import _calc_legislative_effectiveness, derive_chamber_majority
+    from app.pipeline.analyze.score_calculator import (
+        _calc_legislative_effectiveness,
+        bills_inputs_from_status,
+        derive_chamber_majority,
+        stored_bills_status,
+    )
     from app.pipeline.live_references import measure_les_reference, sitting_president_party
     from app.pipeline.run_tracker import run_in_progress
 
@@ -71,13 +76,21 @@ def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
                 .all()
             )
             members = [(_bills(r), r.caucus_party or r.party) for r in rows]
+            # Each stored score's bills as the run that stored it treated
+            # them: a member none of whose bills were ever read is neither
+            # measured into the reference nor scored on a bill part.
+            inputs = [bills_inputs_from_status(stored_bills_status(r)) for r in rows]
             majority = derive_chamber_majority([p for _, p in members], chamber, sitting_president_party(db))
-            ref = measure_les_reference(chamber, members, majority)
+            ref = measure_les_reference(
+                chamber,
+                [m for m, i in zip(members, inputs) if not i.get("sponsoredBillsUnavailable")],
+                majority,
+            )
             if ref is None:
                 logger.warning("LES rescore (%s): too few members with bills to measure a reference", chamber)
                 continue
             reference = {**LES_REFERENCE.load(), chamber: ref}
-            for row, (bills, party) in zip(rows, members):
+            for row, (bills, party), known in zip(rows, members, inputs):
                 row.score_legislative_effectiveness = _calc_legislative_effectiveness(
                     bills,
                     row.leadership_score,
@@ -87,6 +100,8 @@ def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
                     les_reference=reference,
                     chamber=chamber,
                     sworn_date=getattr(row, "sworn_date", None),
+                    bills_known=not known.get("sponsoredBillsUnavailable"),
+                    carried_from=known.get("sponsoredBillsCarriedFrom"),
                 )
             db.commit()
             # Persisted only once the scores it describes are committed: a
