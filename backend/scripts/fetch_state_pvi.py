@@ -36,24 +36,31 @@ feature made this number public: presenting a 2016+2020 lean on a page
 titled "2026 midterm elections" was two cycles stale, and inconsistent
 with district_pvi.json's 2020+2024-window figures shown beside it.
 
-Data sources (network required to regenerate), both MIT Election Data &
-Science Lab (MEDSL) state-level returns transcribed from each state's
-certified canvass:
+Data sources (network required to regenerate):
 
-  2020: "U.S. President 1976-2020", version 20210113 (Harvard Dataverse
-    doi:10.7910/DVN/42MVDX). The Dataverse download API is frequently
-    blocked by outbound proxies, so we fetch a byte-identical mirror of
-    the same file pinned to an immutable commit hash.
+  2020: the Federal Election Commission's "Federal Elections 2020"
+    (Table 2, 2020 presidential electoral and popular vote, by state),
+    compiled from each state's certified results; a U.S. government work,
+    public domain. Until 2026-10 the 2020 half came from MEDSL's
+    "U.S. President 1976-2020" file (v20210113), which predates some
+    states' final certified counts (New York 13,901 Biden and 7,199 Trump
+    votes short; California, Indiana, North Dakota, New Hampshire, New
+    Jersey and North Carolina by fewer); no state's figure changed with the
+    switch. The workbook is not at an
+    immutable URL, so it is gated: its states must sum to its own national
+    total row, and to the national totals recorded below.
 
   2024: 2024-president-state.csv from MEDSL's GitHub repository
     MEDSL/2024-elections-official (released 2025-11, CC0 on Dataverse),
-    pinned to an immutable commit. Until 2026-10 the 2024 half came from
-    the tonmcg county dataset, whose 2024 file is a scrape of a news
-    site's results pages, not an official tabulation; MEDSL's official
-    state file reproduces all 51 figures unchanged.
+    transcribed from each state's certified canvass and pinned to an
+    immutable commit (the FEC has not published its 2024 compilation).
+    Until 2026-10 the 2024 half came from the tonmcg county dataset, whose
+    2024 file is a scrape of a news site's results pages, not an official
+    tabulation; MEDSL's official state file reproduces all 51 figures
+    unchanged.
 
-A candidate's votes are its party-simplified DEMOCRAT / REPUBLICAN rows,
-fusion lines included (MEDSL's New York row already sums Harris's
+A 2024 candidate's votes are its party-simplified DEMOCRAT / REPUBLICAN
+rows, fusion lines included (MEDSL's New York row already sums Harris's
 Democratic and Working Families lines). The per-state
 two-party counts are written beside the PVIs ("inputs"), so the figures
 can be recomputed from the file alone (tests/test_score_calculator.py
@@ -75,22 +82,24 @@ import csv
 import io
 import json
 import pathlib
+import re
 import sys
 import urllib.request
+import xml.etree.ElementTree as ET
+import zipfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from app.contact import CONTACT_EMAIL  # noqa: E402
 
-# MEDSL 1976-2020 president state-level returns (version 20210113), pinned
-# to an immutable commit so a regeneration years from now fetches the exact
-# same file. Byte-identical to the Harvard Dataverse original
-# (doi:10.7910/DVN/42MVDX); see module docstring.
-MEDSL_2020_URL = (
-    "https://raw.githubusercontent.com/highcharts/highcharts/"
-    "90063e89a89d1a7ee84651170d1e976cf4489616/samples/data/"
-    "us-2008-2020-president.csv"
-)
+# FEC, Federal Elections 2020 (public domain). Table 2 is the workbook's
+# third sheet; its columns are state, electoral votes (two), Biden, Trump,
+# all others, total.
+FEC_2020_URL = "https://www.fec.gov/resources/cms-content/documents/federalelections2020.xlsx"
+FEC_2020_SHEET = "xl/worksheets/sheet3.xml"
+# The FEC's published 2020 national totals for Biden and Trump (Table 2's
+# "Total:" row), a citable fact: the gate that the sheet read is that table.
+FEC_2020_NATIONAL = {"D": 81_283_501, "R": 74_223_975}
 
 # MEDSL's official 2024 state-level presidential returns, pinned to the
 # commit that last changed the file ("Fixed issue with VT state-level
@@ -101,8 +110,8 @@ MEDSL_2024_URL = (
 )
 
 SOURCE_DESC = (
-    "2020: MIT Election Data & Science Lab (MEDSL) U.S. President state-level "
-    "returns v20210113 (doi:10.7910/DVN/42MVDX). 2024: MEDSL 2024 official "
+    "2020: Federal Election Commission, Federal Elections 2020, Table 2 (state "
+    "presidential popular vote, from certified results; public domain). 2024: MEDSL 2024 official "
     "state-level presidential returns (github.com/MEDSL/2024-elections-official, "
     "2024-president-state.csv, CC0). Two-party vote shares, Cook PVI formula."
 )
@@ -130,17 +139,57 @@ UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (state PVI ingestion; contact: {C
 
 DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_pvi.json"
 
-def _get(url: str) -> str:
+_XL = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+
+
+def _fec_2020(raw: bytes) -> dict[str, dict[str, int]]:
+    """{"ST": {"D": Biden, "R": Trump}} from the FEC's Table 2 sheet. Raises
+    unless the 51 states sum to the sheet's own "Total:" row and that row
+    is the FEC's published national total."""
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        shared = [
+            "".join(t.text or "" for t in si.iter(f"{_XL}t"))
+            for si in ET.fromstring(zf.read("xl/sharedStrings.xml"))
+        ]
+        sheet = ET.fromstring(zf.read(FEC_2020_SHEET))
+    counts, total = {}, None
+    for row in sheet.iter(f"{_XL}row"):
+        cells = {}
+        for c in row.iter(f"{_XL}c"):
+            v = c.find(f"{_XL}v")
+            if v is not None and v.text is not None:
+                col = re.match(r"[A-Z]+", c.get("r")).group(0)
+                cells[col] = shared[int(v.text)] if c.get("t") == "s" else v.text
+        label = cells.get("A", "").strip().rstrip("*")  # "ME*", "NE*": split electoral votes
+        try:
+            d, r = int(float(cells["D"])), int(float(cells["E"]))
+        except (KeyError, ValueError):
+            continue
+        if re.fullmatch(r"[A-Z]{2}", label):
+            counts[label] = {"D": d, "R": r}
+        elif label.startswith("Total"):
+            total = {"D": d, "R": r}
+    summed = {p: sum(v[p] for v in counts.values()) for p in ("D", "R")}
+    if len(counts) != 51 or total != summed or total != FEC_2020_NATIONAL:
+        raise SystemExit(f"FEC 2020 table: {len(counts)} states summing to {summed}, total row {total}, "
+                         f"published {FEC_2020_NATIONAL}")
+    return counts
+
+
+def _get_bytes(url: str) -> bytes:
     req = urllib.request.Request(url, headers=UA)
     with urllib.request.urlopen(req, timeout=90) as r:
-        return r.read().decode("utf-8")
+        return r.read()
+
+
+def _get(url: str) -> str:
+    return _get_bytes(url).decode("utf-8")
 
 
 def _medsl_two_party(text: str, year: str) -> dict[str, dict[str, int]]:
-    """{"ST": {"D": votes, "R": votes}} from a MEDSL state-level returns CSV
-    (the columns the two releases share). The writein flag is not read:
-    the 2020 release marks DC's Biden and Trump rows as write-ins, and the
-    2024 release has no Democratic or Republican write-in rows."""
+    """{"ST": {"D": votes, "R": votes}} from MEDSL's state-level returns CSV.
+    The writein flag is not read: the 2024 release has no Democratic or
+    Republican write-in rows."""
     counts: dict[str, dict[str, int]] = {}
     for row in csv.DictReader(io.StringIO(text)):
         if row["year"].strip() != year:
@@ -150,9 +199,8 @@ def _medsl_two_party(text: str, year: str) -> dict[str, dict[str, int]]:
         if key is None:
             continue
         st = row["state_po"].strip().upper()
-        votes_col = "candidatevotes" if "candidatevotes" in row else "votes"
         try:
-            votes = int(row[votes_col])
+            votes = int(row["votes"])
         except (ValueError, KeyError):
             continue
         counts.setdefault(st, {"D": 0, "R": 0})[key] += votes
@@ -244,7 +292,7 @@ def main() -> int:
             previous = None
 
     by_cycle = {
-        "2020": _medsl_two_party(_get(MEDSL_2020_URL), "2020"),
+        "2020": _fec_2020(_get_bytes(FEC_2020_URL)),
         "2024": _medsl_two_party(_get(MEDSL_2024_URL), "2024"),
     }
     pvi = compute_pvi(by_cycle)

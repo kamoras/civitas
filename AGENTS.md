@@ -507,7 +507,7 @@ fact with a clear citable source that doesn't drift from run to run
 (e.g. a physical/legal constant like an FEC contribution limit). The
 state PVIs were once the example here, hand-typed from Cook; they are
 now computed (`scripts/fetch_state_pvi.py` → `app/data/state_pvi.json`,
-from MEDSL's official 2020 and 2024 state returns, with the per-state
+from the FEC's certified 2020 state totals and MEDSL's 2024 state file, with the per-state
 counts stored beside the figures so a test recomputes every one). The
 bar is specifically about **calculated** values — anything a regression, an average, or a percentile produced —
 which must trace back to a generating script and a data file, not a

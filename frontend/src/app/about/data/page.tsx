@@ -121,8 +121,8 @@ export default function DataChapter() {
             </Fact>
             <Fact label="Partisan lean">
               State and district Cook PVI. A state&apos;s is computed from its certified
-              presidential returns as the MIT Election Lab publishes them; a district&apos;s is
-              Cook&apos;s published figure.
+              presidential returns (the FEC&apos;s 2020 compilation, the MIT Election Lab&apos;s for
+              2024); a district&apos;s is Cook&apos;s published figure.
             </Fact>
           </Facts>
         </Sub>

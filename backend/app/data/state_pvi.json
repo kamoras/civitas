@@ -3,7 +3,7 @@
  "_method": "STATE_PVI(st) = -round(100 * (0.25 * d2020 + 0.75 * d2024)), d = state two-party D share - national two-party D share; positive = R lean. Cook Political Report's formula and window for its current (2025) published PVIs, all 51 of which it reproduces.",
  "_regenerate": "backend/scripts/fetch_state_pvi.py",
  "_sign": "positive = R lean, negative = D lean (matches district_pvi.json)",
- "_source": "2020: MIT Election Data & Science Lab (MEDSL) U.S. President state-level returns v20210113 (doi:10.7910/DVN/42MVDX). 2024: MEDSL 2024 official state-level presidential returns (github.com/MEDSL/2024-elections-official, 2024-president-state.csv, CC0). Two-party vote shares, Cook PVI formula.",
+ "_source": "2020: Federal Election Commission, Federal Elections 2020, Table 2 (state presidential popular vote, from certified results; public domain). 2024: MEDSL 2024 official state-level presidential returns (github.com/MEDSL/2024-elections-official, 2024-president-state.csv, CC0). Two-party vote shares, Cook PVI formula.",
  "_window": "2020+2024",
  "inputs": {
   "2020": {
@@ -24,8 +24,8 @@
     "R": 1661686
    },
    "CA": {
-    "D": 11110250,
-    "R": 6006429
+    "D": 11110639,
+    "R": 6006518
    },
    "CO": {
     "D": 1804352,
@@ -68,8 +68,8 @@
     "R": 2446891
    },
    "IN": {
-    "D": 1242416,
-    "R": 1729519
+    "D": 1242498,
+    "R": 1729857
    },
    "KS": {
     "D": 570323,
@@ -117,23 +117,23 @@
    },
    "NC": {
     "D": 2684292,
-    "R": 2758773
+    "R": 2758775
    },
    "ND": {
-    "D": 114902,
-    "R": 235595
+    "D": 115042,
+    "R": 235751
    },
    "NE": {
     "D": 374583,
     "R": 556846
    },
    "NH": {
-    "D": 424921,
-    "R": 365654
+    "D": 424937,
+    "R": 365660
    },
    "NJ": {
-    "D": 2608335,
-    "R": 1883274
+    "D": 2608400,
+    "R": 1883313
    },
    "NM": {
     "D": 501614,
@@ -144,8 +144,8 @@
     "R": 669890
    },
    "NY": {
-    "D": 5230985,
-    "R": 3244798
+    "D": 5244886,
+    "R": 3251997
    },
    "OH": {
     "D": 2679165,
