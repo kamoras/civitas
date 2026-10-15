@@ -36,7 +36,7 @@ export default async function CongressPage() {
       <PeriodReportView
         report={week}
         kind="week"
-        strip={<ThisWeekStrip variant="compact" />}
+        strip={<ThisWeekStrip variant="compact" pageDate={report.date} />}
         lead={{
           title: report.recess.headline,
           body: (
@@ -55,7 +55,13 @@ export default async function CongressPage() {
       />
     );
   }
-  if (report) return <DayReportView report={report} strip={<ThisWeekStrip variant="compact" />} />;
+  if (report)
+    return (
+      <DayReportView
+        report={report}
+        strip={<ThisWeekStrip variant="compact" pageDate={report.date} />}
+      />
+    );
   return (
     <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
       <Navbar />
