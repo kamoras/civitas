@@ -130,9 +130,3 @@ def diff_snapshots(
             out[name] = (req_delta, round(blocked_delta, 3))
     return out
 
-
-def reset_registry() -> None:
-    """Drop every registered limiter. Tests only — production limiters are
-    module-level singletons created at import and never torn down."""
-    with _REGISTRY_LOCK:
-        _REGISTRY.clear()
