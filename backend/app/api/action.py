@@ -429,6 +429,21 @@ def _build_issue_response(
 
     raw_actions = _parse_json_field(issue.actions)
     action_items: list[dict] = []
+    # A roll-call issue's vote, on its own page here: every member's
+    # position by party, linked, with the chamber's record linked from it.
+    # The issue's source is that record (the Clerk's XML, Senate.gov's),
+    # which a reader can't use to see how their members voted.
+    # Looked up directly, not among issue_roll_calls' newest ten on the bill,
+    # which later votes on it can push the issue's own vote out of.
+    rc = issue.primary_source_url and db.query(RollCall).filter(
+        RollCall.source_url == issue.primary_source_url,
+    ).first()
+    if rc:
+        action_items.append(ActionItemSchema(
+            text="How each member voted",
+            type="roll_call",
+            url=f"/congress/votes/{rc.chamber}/{rc.congress}/{rc.session}/{rc.number}",
+        ).model_dump(by_alias=True))
     committee_names = {
         a["committee"]["name"] for a in raw_actions
         if isinstance(a, dict) and a.get("type") == "contact_committee" and isinstance(a.get("committee"), dict)
