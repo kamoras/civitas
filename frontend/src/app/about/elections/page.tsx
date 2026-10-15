@@ -454,6 +454,10 @@ export default async function ElectionsChapter() {
               own election office.
             </Item>
             <Item>
+              While results are up, the homepage opens with each state&apos;s count, one tap from
+              its page.
+            </Item>
+            <Item>
               The count is checked every five minutes while it is moving. Some states don&apos;t
               publish a count we can read. Their pages say so and link to the office that does.
             </Item>
