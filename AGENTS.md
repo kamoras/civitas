@@ -506,10 +506,12 @@ value into a JSON file the code reads, exactly like population/PVI data.
 
 A plain hardcoded constant is still fine for a genuine, non-calculated
 fact with a clear citable source that doesn't drift from run to run
-(e.g. `STATE_PVI`'s Cook Political Report values, updated by hand "per
-election cycle" per its own comment, or a physical/legal constant like
-an FEC contribution limit). The bar is specifically about **calculated**
-values — anything a regression, an average, or a percentile produced —
+(e.g. a physical/legal constant like an FEC contribution limit). The
+state PVIs were once the example here, hand-typed from Cook; they are
+now computed (`scripts/fetch_state_pvi.py` → `app/data/state_pvi.json`,
+from the FEC's certified 2020 state totals and MEDSL's 2024 state file, with the per-state
+counts stored beside the figures so a test recomputes every one). The
+bar is specifically about **calculated** values — anything a regression, an average, or a percentile produced —
 which must trace back to a generating script and a data file, not a
 comment asserting "trust me, I ran a script once."
 
