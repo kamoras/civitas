@@ -9,6 +9,7 @@ slowdown). These tests run the spawned thread synchronously (patching
 threading.Thread) so the guard's decision can be asserted directly.
 """
 
+import asyncio
 from datetime import timedelta
 from app.time_utils import utcnow
 from contextlib import contextmanager
@@ -652,9 +653,33 @@ def test_the_bill_refresh_waits_for_a_senate_run_only_while_it_may_be_live(db_se
          patch("app.database.SessionLocal", lambda: _Session()), \
          patch("app.scheduler.is_house_pipeline_running", return_value=False), \
          patch("app.pipeline.lease.job", granted), \
-         patch("app.pipeline.bill_refresh.refresh_bill_statuses", refresh):
+         patch("app.pipeline.bill_refresh.refresh_bill_statuses", refresh), \
+         patch("app.pipeline.fetch.bill_display_titles.refresh_display_titles", AsyncMock(return_value={"fetched": 0})):
         scheduler._hourly_bill_status_refresh()
     assert refresh.called is not waits
+
+
+def test_the_bill_pass_fetches_display_titles_after_the_statuses():
+    """The hourly pass reads the statuses, then the titles lists of bills
+    that moved (fetch/bill_display_titles), and refreshes the bill list's
+    cache when it fetched any."""
+    order = []
+
+    async def statuses():
+        order.append("statuses")
+        return {"changed": 0}
+
+    async def titles():
+        order.append("titles")
+        return {"fetched": 2, "failed": 0, "pending": 0}
+
+    with patch("app.pipeline.bill_refresh.refresh_bill_statuses", statuses), \
+         patch("app.pipeline.fetch.bill_display_titles.refresh_display_titles", titles), \
+         patch("app.scheduler.warm_bill_collection_cache") as warm:
+        summary = asyncio.run(scheduler_module._bill_refresh_pass())
+    assert order == ["statuses", "titles"]
+    assert summary["display_titles"]["fetched"] == 2
+    warm.assert_called_once()
 
 
 class TestElectionResultsSync:

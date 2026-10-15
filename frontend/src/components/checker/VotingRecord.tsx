@@ -53,7 +53,10 @@ function VoteBadge({ vote }: { vote: string }) {
  *  areas, "stance", the internal vote id — which meant nothing to a reader. */
 function VoteRow({ vote }: { vote: KeyVote }) {
   const rc = vote.rollCall;
-  const title = voteTitle(rc?.title, rc?.billLabel, vote.billName);
+  // The bill's short title from Congress.gov when the chamber titled the vote
+  // by its official one; the chamber's title stays on hover and on the roll
+  // call's page.
+  const title = rc?.billShortTitle || voteTitle(rc?.title, rc?.billLabel, vote.billName);
   // The roll call's bill, or, for a vote stored before its roll call was
   // recorded, the vote's own bill id. A nomination has no bill page.
   const href = rc ? billPageHref(rc.billId, rc.congress) : billPageHref(vote.billId);

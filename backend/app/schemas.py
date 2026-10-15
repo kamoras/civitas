@@ -447,7 +447,17 @@ class SponsoredBillSchema(CamelModel):
 
 class BillInFlightSchema(CamelModel):
     bill_id: str
+    # The title the sponsor's listing gives (the official one for a bill
+    # introduced without a short title).
     title: str
+    # The bill's short or popular title, verbatim from Congress.gov's titles
+    # list, when it has one the listing title isn't, with its title type as
+    # Congress.gov names it ("Short Title(s) as Passed House", "Popular
+    # Titles"); fetch/bill_display_titles.display_title.
+    short_title: str | None = None
+    short_title_type: str | None = None
+    # The official title from that list, shown under the short title.
+    official_title: str | None = None
     chamber: Literal["senate", "house"]
     sponsor_id: str
     sponsor_name: str
