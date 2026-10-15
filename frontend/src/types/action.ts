@@ -181,5 +181,8 @@ export interface ActionIssuesResponse {
   date: string | null;
   issues: ActionIssue[];
   availableDates?: string[];
+  /** The newest run that published or re-matched an issue. */
   generatedAt?: string;
+  /** The newest run that read the news, whether or not it changed anything. */
+  checkedAt?: string;
 }

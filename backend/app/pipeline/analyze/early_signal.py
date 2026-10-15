@@ -26,7 +26,7 @@ import asyncio
 import json
 import logging
 import re
-from datetime import timedelta
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -57,6 +57,25 @@ logger = logging.getLogger(__name__)
 # the other (same measure-before-enforcing discipline as every other
 # threshold in this pipeline).
 CONFIRMATION_WINDOW_HOURS = 48
+
+
+def _vote_is_stale(vote_day: str | None, today: str) -> bool:
+    """True when a roll call is older than a draft's confirmation window, or
+    has no date to tell: too old to be "before the news covers it".
+
+    The poll takes each chamber's latest votes whenever they were cast, so a
+    recess, a parse fix or a deploy republished the last votes as new: on
+    2026-10-15 the House's rolls of 2026-09-16 went up as that day's
+    developing news, the House having held no roll call since (#987 made the
+    Clerk's list parse). A draft says news coverage "has not appeared yet",
+    which is only worth saying inside the window the draft waits for that
+    coverage (CONFIRMATION_WINDOW_HOURS). Days, since a vote's date is a
+    day: a vote two days back still drafts, three does not. The rule poll's
+    lookback (SIGNIFICANT_RULE_LOOKBACK_DAYS) is the same bar for rules."""
+    if not vote_day:
+        return True
+    window_days = CONFIRMATION_WINDOW_HOURS // 24
+    return date.fromisoformat(vote_day) < date.fromisoformat(today) - timedelta(days=window_days)
 
 # Cache TTL for the near-real-time roll-call poll — see fetch_recent_roll_
 # calls'/fetch_roll_call_vote's docstrings. Short enough that a vote is
@@ -290,18 +309,24 @@ def check_roll_call_signals(db: Session, today: str | None = None) -> int:
             action_metrics.increment("early_signal_gate_not_final_passage")
             continue
 
+        if _vote_is_stale(vote_date_iso(vote.get("voteDate")), today):
+            action_metrics.increment("early_signal_gate_stale")
+            continue
+
         action_metrics.increment("early_signal_gate_candidate")
 
         vote_url = _vote_url(vote)
+        bill_id = bill_id_from_number(vote.get("documentName"))
         already_exists = (
             db.query(ActionIssue)
             .filter(ActionIssue.primary_source_url == vote_url)
             .first()
         )
         if already_exists:
+            _refresh_draft(already_exists, *_compose_developing_issue(vote),
+                           related_bill_ids=json.dumps(_vote_bill_entries(vote, bill_id)))
             continue
 
-        bill_id = bill_id_from_number(vote.get("documentName"))
         if bill_id and _covering_issue(db, bill_id, _bill_names(db, bill_id)) is not None:
             action_metrics.increment("early_signal_gate_already_covered")
             continue
@@ -335,6 +360,37 @@ def check_roll_call_signals(db: Session, today: str | None = None) -> int:
     if created:
         db.flush()
     return created
+
+
+def _refresh_draft(row: ActionIssue, title: str, summary: str, facts: list[str], **fields) -> None:
+    """Re-word a current draft from its record by today's template, as a
+    new draft would be. The template has changed under live drafts before
+    ("S 2403" for "S. 2403", a rule titled by its five agencies), and a
+    draft kept its first wording until it expired. Promoted and retired
+    rows are left as they were published."""
+    if not row.is_current or row.status != ActionIssueStatus.DEVELOPING:
+        return
+    row.title, row.summary, row.facts = title[:500], summary, json.dumps(facts)
+    for name, value in fields.items():
+        setattr(row, name, value)
+
+
+def retire_stale_vote_drafts(db: Session, today: str) -> int:
+    """Retire a current vote draft whose vote is older than the window a new
+    one must be inside (_vote_is_stale): a draft made before that gate, or
+    left current past it. primary_article_date is the vote's day."""
+    retired = 0
+    for row in db.query(ActionIssue).filter(
+        ActionIssue.status == ActionIssueStatus.DEVELOPING,
+        ActionIssue.is_current == True,  # noqa: E712
+        ActionIssue.source_type.in_(ROLL_CALL_SOURCES),
+    ):
+        if _vote_is_stale(row.primary_article_date, today):
+            row.is_current = False
+            retired += 1
+            action_metrics.increment("early_signal_retired_stale")
+            logger.info("Retired developing issue %d: its vote (%s) is past the window", row.id, row.primary_article_date)
+    return retired
 
 
 def expire_stale_developing_issues(db: Session, now) -> int:
@@ -520,6 +576,7 @@ def check_federal_register_signals(db: Session, today: str | None = None) -> int
             .first()
         )
         if already_exists:
+            _refresh_draft(already_exists, *_compose_developing_rule_issue(rule))
             continue
 
         title, summary, facts = _compose_developing_rule_issue(rule)

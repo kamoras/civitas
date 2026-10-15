@@ -108,6 +108,43 @@ def _is_verbatim(span: str, source: str) -> bool:
     return bool(span) and _normalise(span) in _normalise(source)
 
 
+_QUOTE_MARK = re.compile(r"""(['"])""")
+
+
+def _source_spelling(span: str, source: str) -> str:
+    """SPAN as the source spells it, where the two differ only in quotation
+    marks; otherwise SPAN unchanged.
+
+    The model answers in JSON, where a double quotation mark has to be
+    escaped, so it copies a quoted phrase with single ones — and drops the
+    period or comma American style puts inside the closing mark. The source's
+    'called the committee “demonstrably biased.”' came back as "called the
+    committee 'demonstrably biased'" and failed the verbatim check, though
+    the model had found exactly the right words: 6 of 160 rejected claims in
+    a live sample (2026-10-11..15). Only the marks are matched loosely; every
+    other character must still be the source's.
+
+    What is returned is the SOURCE's text, so everything after this checks
+    and renders a span of the source, as before. A closing mark at the end
+    of the span is left out of it, with the punctuation before it, and the
+    sentence is closed from the source by _close_quotation — the path a
+    span ending inside a quotation always takes.
+    """
+    if not span or _is_verbatim(span, source):
+        return span
+    pieces = _QUOTE_MARK.split(_flatten(span))
+    pattern = ""
+    for i, piece in enumerate(pieces):
+        if i % 2 == 0:
+            pattern += re.escape(piece)
+        elif i == len(pieces) - 2 and not pieces[-1]:
+            pattern += r"""(?=[.,!?]?['"])"""
+        else:
+            pattern += r"""[.,!?]?['"]"""
+    match = re.search(pattern, _flatten(source), re.IGNORECASE)
+    return match.group(0) if match else span
+
+
 # How many words may sit between the actor and its predicate in the
 # source and still count as the same assertion. Covers the reporting
 # verb a lede normally puts there ("A jury FOUND the defendant liable")
@@ -171,8 +208,13 @@ def _locate_assertion(actor: str, predicate: str, source: str) -> tuple[str, re.
         if len(gap.split()) > _MAX_GAP_WORDS:
             continue
         # A period inside the gap means the predicate belongs to the
-        # NEXT sentence, whose subject is somebody else.
-        if "." in gap:
+        # NEXT sentence, whose subject is somebody else. One inside a
+        # parenthetical doesn't end anything: "Sen. Jane Roe (D-Conn.)
+        # said" and "Sen. Elizabeth Warren (Mass.) on Wednesday blasted"
+        # are one sentence each, and the house style of the outlets most
+        # of this coverage comes from. 20 of 160 rejected claims in a live
+        # sample (2026-10-11..15) were lost to that dot alone.
+        if "." in _PARENTHETICAL.sub("", gap):
             continue
         # A relative pronoun in the gap means the predicate is a relative
         # clause hung on the actor, not the source's main assertion, and
@@ -190,6 +232,10 @@ def _locate_assertion(actor: str, predicate: str, source: str) -> tuple[str, re.
             continue
         return tail, hit
     return None
+
+
+# A bracketed aside with no bracket inside it: "(D-Conn.)", "(Mass.)".
+_PARENTHETICAL = re.compile(r"\([^()]*\)")
 
 
 # Grammatical function words, not a classification: what they mark is
@@ -372,6 +418,8 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
 
     if len(actor) < MIN_ACTOR_CHARS or not predicate:
         return None
+    actor = _source_spelling(actor, source)
+    predicate = _source_spelling(predicate, source)
     if not _looks_like_an_actor(actor):
         return None
     if not _is_verbatim(actor, source) or not _is_verbatim(predicate, source):

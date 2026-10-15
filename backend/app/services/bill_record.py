@@ -263,6 +263,16 @@ def _fold(text: str) -> str:
     return unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower().strip()
 
 
+def _surname_in(name: str, last: str) -> bool:
+    """Whether a roll call's surname is whole words of a folded full name.
+    A suffix test missed "pat q. smith jr." for "smith": every Senate vote
+    of a senator with a generational suffix went unlinked, and the pages
+    that count votes by this lookup (compare, votes with the president)
+    found none of them (live, 2026-10-15)."""
+    words, key = re.findall(r"[a-z]+", name), re.findall(r"[a-z]+", last)
+    return bool(key) and any(words[i:i + len(key)] == key for i in range(len(words) - len(key) + 1))
+
+
 class MemberLinks:
     """Civitas page ids for members named by bioguide id (House votes,
     sponsors) or by last name and state (Senate votes carry a LIS id)."""
@@ -298,7 +308,7 @@ class MemberLinks:
         members = []
         for state, senators in self.senators_by_state.items():
             for name, sid in senators:
-                last = max((p["lastName"] for p in seen if p["state"] == state and name.endswith(_fold(p["lastName"]))),
+                last = max((p["lastName"] for p in seen if p["state"] == state and _surname_in(name, _fold(p["lastName"]))),
                            key=len, default="")
                 if last:
                     members.append({"id": sid, "name": name, "lastNameForVoteMatch": last, "state": state})
@@ -312,10 +322,16 @@ class MemberLinks:
         found = self.by_bioguide.get(bioguide or "")
         if found is None and last_name and state:
             last = _fold(last_name)
-            matches = [sid for name, sid in self.senators_by_state.get(state, []) if name.endswith(last)]
+            matches = [sid for name, sid in self.senators_by_state.get(state, []) if _surname_in(name, last)]
+            if lis_id is not None:
+                # Two senators of one surname and state (a seat passed
+                # between them, both on file through the grace period) are
+                # told apart by the LIS id each was given; one given another
+                # id is someone else. Checking the id only after requiring a
+                # single surname match left both senators' votes unlinked.
+                mine = [sid for sid in matches if self.senate_lis.get(sid) == lis_id]
+                matches = mine or [sid for sid in matches if sid not in self.senate_lis]
             found = matches[0] if len(matches) == 1 else None
-            if found in self.senate_lis and lis_id is not None and self.senate_lis[found] != lis_id:
-                found = None
         return f"/politicians/{found}" if found else None
 
 
