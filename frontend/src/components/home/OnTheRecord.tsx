@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import type { Notable, NotableEntry } from "@/types/notable";
-import { dayHref, shortDate, weekHref } from "@/lib/congress";
-import { voteHref } from "@/components/congress/ReportParts";
+import { rollCallHref, shortDate, weekHref } from "@/lib/congress";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -77,7 +76,7 @@ function Entry({ entry }: { entry: NotableEntry }) {
         </p>
       </div>
       <p className="flex flex-wrap gap-x-4 md:flex-col md:items-end md:gap-0">
-        <Link href={voteHref(v) ?? dayHref(v.date)} className={COMMAND}>
+        <Link href={rollCallHref(v)} className={COMMAND}>
           [ ROLL CALL ]
         </Link>
         {entry.kind === "loneBreak" && entry.memberId && (

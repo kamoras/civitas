@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { CongressEvent, RollCallSummary } from "@/types/congress";
-import { billHref, resultTone } from "@/lib/congress";
+import { billHref, resultTone, rollCallHref } from "@/lib/congress";
 
 export function Figure({
   value,
@@ -82,20 +82,7 @@ function TallyBar({ yeas, nays }: { yeas: number; nays: number }) {
   );
 }
 
-export function voteHref(v: {
-  chamber: string;
-  congress: number;
-  session: number;
-  number: number;
-  billId: string | null;
-}) {
-  return v.billId
-    ? `${billHref(v.billId, v.congress)}#vote-${v.chamber}-${v.session}-${v.number}`
-    : null;
-}
-
 export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; showDate?: boolean }) {
-  const href = voteHref(vote);
   return (
     <li className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 border-b border-white/[0.09] py-3 sm:grid-cols-[4.5rem_minmax(0,1fr)_9.5rem]">
       <div className="flex flex-col gap-1 font-mono text-xs uppercase tracking-[0.1em] text-ink-lo">
@@ -103,13 +90,20 @@ export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; sho
         {showDate && <span className="text-ink-min">{vote.date.slice(5)}</span>}
       </div>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <p className="text-[15px] leading-snug text-ink">{vote.question}</p>
+        <p className="text-[15px] leading-snug text-ink">
+          <Link
+            href={rollCallHref(vote)}
+            className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+          >
+            {vote.question}
+          </Link>
+        </p>
         {vote.title && vote.title !== vote.question && (
           <p className="text-sm leading-snug text-ink-lo">{vote.title}</p>
         )}
-        {href && vote.billLabel && (
+        {vote.billId && vote.billLabel && (
           <Link
-            href={href}
+            href={billHref(vote.billId, vote.congress)}
             className="w-fit font-mono text-sm text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
           >
             {vote.billLabel}
