@@ -73,6 +73,18 @@ export function billHref(billId: string, congress?: number | null): string {
   return congress ? `${path}?congress=${congress}` : path;
 }
 
+/** The site's page for one roll call: the question, the result, each
+ * party's split and every member's position. Every roll call has one,
+ * whether or not it was on a bill (a nomination, a procedural motion). */
+export function rollCallHref(v: {
+  chamber: string;
+  congress: number;
+  session: number;
+  number: number;
+}): string {
+  return `/congress/votes/${v.chamber}/${v.congress}/${v.session}/${v.number}`;
+}
+
 /** The Congress in session now, from the calendar (a new one convenes
  * January 3 of each odd year): the one a bill URL without ?congress= means. */
 export function currentCongress(now: Date = new Date()): number {

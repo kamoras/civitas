@@ -282,6 +282,10 @@ export default function MethodsLedger({
               {[
                 [api, "Full record: scores, data grades, funding, voting totals (JSON)"],
                 [
+                  `${api}/breakdown`,
+                  "Reproduce every score: components, weights and the reference values used (JSON)",
+                ],
+                [
                   `${api}/votes?per_page=100`,
                   "Every vote this Congress, with its roll call (JSON)",
                 ],

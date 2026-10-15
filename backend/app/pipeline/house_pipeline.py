@@ -42,13 +42,14 @@ from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT,
 from app.services.representative_service import upsert_representative
 
 from app.pipeline.fetch.congress import (
+    CongressUnavailable,
     congress_first_year,
     extract_official_title,
     fetch_bill,
     fetch_bill_actions,
     fetch_bill_cosponsors,
     fetch_bill_summaries,
-    fetch_bill_titles,
+    fetch_bill_titles_or_none,
     fetch_house_roll_call_vote,
     fetch_member_detail,
     fetch_member_sponsored,
@@ -74,7 +75,12 @@ from app.pipeline.fetch.fec import (
 from app.pipeline.fetch.floor_logs import bill_id_from_number
 from app.pipeline.analyze.bill_learning import stamp_motion_type
 from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
-from app.pipeline.run_checks import alert_member_failures, persist_ground_truth_failures, run_calibration_check
+from app.pipeline.run_checks import (
+    alert_member_failures,
+    alert_unread_sponsorship,
+    persist_ground_truth_failures,
+    run_calibration_check,
+)
 from app.pipeline.transform.normalize_finance import normalize_finance
 from app.pipeline.transform.normalize_members import normalize_house_members
 from app.pipeline.transform.committee_data import load_leadership_tenures
@@ -111,8 +117,13 @@ from app.pipeline.analyze.sponsorship_analysis import (
 from app.pipeline.analyze.bill_stage import classify_bill_stage_from_actions
 from app.pipeline.fetch.voteview import refresh_member_ideal_points
 from app.pipeline.analyze.commemorative import mark_commemorative
-from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores
-from app.pipeline.live_references import live_constituent_reference_measured, live_funding_reference, live_les_reference
+from app.pipeline.sponsorship_backfill import backfill_withheld_sponsorship_scores, carry_forward_sponsored_bills
+from app.pipeline.live_references import (
+    bills_read_this_run,
+    live_constituent_reference_measured,
+    live_funding_reference,
+    live_les_reference,
+)
 from app.pipeline.analyze.ground_truth import check_ground_truth, check_score_distribution
 from app.pipeline.analyze.signal_overlap import record_signal_overlap
 from app.pipeline.partisan_depth_store import finalize_stored_partisan_depth
@@ -301,6 +312,14 @@ async def run_house_pipeline() -> dict:
             # The caucus the Clerk records, which decides an independent's
             # party-line reading (normalize_votes' declared_caucus).
             caucuses = await fetch_house_caucuses(client, db)
+            if caucuses is None:
+                # The Clerk's list couldn't be read and none is cached: each
+                # member's stored caucus, not "none recorded".
+                caucuses = dict(
+                    db.query(Representative.bioguide_id, Representative.caucus_party)
+                    .filter(Representative.caucus_party.isnot(None))
+                    .all()
+                )
             for r in reps:
                 r["declaredCaucus"] = caucuses.get(r.get("bioguideId", ""))
 
@@ -322,12 +341,26 @@ async def run_house_pipeline() -> dict:
             bill_details_map: dict[str, dict] = {}
             bill_actions_map: dict[str, list] = {}
 
+            # Bills whose actions Congress.gov couldn't give this run: each
+            # degrades only itself (one alert after the scoring pass names
+            # them), never the run — one failed request used to stop the
+            # whole step it sat in.
+            unread_bills: list[str] = []
             for b in bills_data:
                 bill_key = f"{b['type'].upper()}.{b['number']}"
                 detail = await fetch_bill(client, db, b["congress"], b["type"], b["number"])
                 if detail:
                     bill_details_map[bill_key] = detail
-                actions = await fetch_bill_actions(client, db, b["congress"], b["type"], b["number"])
+                else:
+                    # Unread (no earlier read either): classified without
+                    # its detail record this run, and named in the alert.
+                    unread_bills.append(f"{bill_key} ({b['congress']}) detail")
+                try:
+                    actions = await fetch_bill_actions(client, db, b["congress"], b["type"], b["number"])
+                except CongressUnavailable:
+                    # No roll call is discovered from this bill this run.
+                    unread_bills.append(f"{bill_key} ({b['congress']}) actions")
+                    continue
                 if actions:
                     bill_actions_map[bill_key] = actions
 
@@ -401,11 +434,16 @@ async def run_house_pipeline() -> dict:
                 bill_key = f"{b['type'].upper()}.{b['number']}"
                 detail = bill_details_map.get(bill_key, {})
                 summaries = await fetch_bill_summaries(client, db, b["congress"], b["type"], b["number"])
+                if summaries is None:
+                    # Classified from its title this run; named in the alert.
+                    unread_bills.append(f"{bill_key} ({b['congress']}) summary")
                 summary_text = ""
                 if summaries:
                     summary_text = summaries[0].get("text", "")
 
-                titles = await fetch_bill_titles(client, db, b["congress"], b["type"], b["number"])
+                titles = await fetch_bill_titles_or_none(client, db, b["congress"], b["type"], b["number"])
+                if titles is None:
+                    unread_bills.append(f"{bill_key} ({b['congress']}) titles")
                 official_title = extract_official_title(titles or [])
 
                 bills_for_classification.append({
@@ -502,6 +540,12 @@ async def run_house_pipeline() -> dict:
                     cosponsors = await fetch_bill_cosponsors(
                         client, db, b["congress"], b["type"], b["number"],
                     )
+                    if cosponsors is None:
+                        # Unread, and no earlier read to stand in: the bill
+                        # is left out of the cosponsorship graphs rather
+                        # than read as having no cosponsors.
+                        unread_bills.append(f"{bill_key} ({b['congress']}) cosponsors")
+                        continue
                     if cosponsors:
                         cosponsors_map[bill_key] = cosponsors
                     all_bills_for_analysis.append({
@@ -537,9 +581,17 @@ async def run_house_pipeline() -> dict:
                             sp_title = sp.get("title", "")
                             latest_action_text = (sp.get("latestAction") or {}).get("text", "")
                             sp_congress = sp.get("congress", 0)
-                            bill_actions = await fetch_bill_actions(
-                                client, db, sp_congress, sp_type.lower(), int(sp_num),
-                            )
+                            try:
+                                bill_actions = await fetch_bill_actions(
+                                    client, db, sp_congress, sp_type.lower(), int(sp_num),
+                                )
+                            except CongressUnavailable:
+                                # This bill alone goes without its history:
+                                # is_law from its latest action, and no stage
+                                # (Legislative Effectiveness reads the latest
+                                # action instead, _les_bill_stage).
+                                bill_actions = None
+                                unread_bills.append(f"{sp_key} ({sp_congress}) actions")
                             is_law = is_enacted(latest_action_text, bill_actions)
                             # Sponsored bills previously got no policy/party
                             # classification at all here (always None/[]) —
@@ -599,7 +651,10 @@ async def run_house_pipeline() -> dict:
                                 "congress": sp_congress,
                                 "billType": sp.get("type", ""),
                                 "isLaw": is_law,
-                                "stage": classify_bill_stage_from_actions(bill_actions, is_law, sp.get("type")),
+                                "stage": (
+                                    classify_bill_stage_from_actions(bill_actions, is_law, sp.get("type"))
+                                    if bill_actions is not None else None
+                                ),
                             })
                     # sp_list is already bounded to the current + previous
                     # congress (min_congress filter above), so this is a
@@ -631,6 +686,10 @@ async def run_house_pipeline() -> dict:
                                 parts[0].lower(),
                                 int(parts[1]),
                             )
+                            if cosponsors is None:
+                                # Left out of the graphs, not read as none.
+                                unread_bills.append(f"{sp_bill_id} ({sp_data.get('congress')}) cosponsors")
+                                continue
                             if cosponsors:
                                 cosponsors_map[sp_bill_id] = cosponsors
                         sponsored_for_cosponsor.append({
@@ -701,6 +760,13 @@ async def run_house_pipeline() -> dict:
                 )
                 progress.fail("sponsorship", detail="failed — continuing with empty scores")
 
+            # A member whose sponsored legislation wasn't read this run (the
+            # request failed, or the step above stopped before reaching
+            # them) is scored on the bills an earlier run stored, never as
+            # having none; one stored by no run leaves the bill part
+            # unmeasured.
+            carried_members = carry_forward_sponsored_bills(db, Representative, reps)
+
             # Commemorative bills (V&W's 1x tier) — before the LES reference
             # is measured, since its stage totals are significance-weighted.
             mark_commemorative([sp for r in reps for sp in r.get("sponsoredBills") or []])
@@ -736,7 +802,7 @@ async def run_house_pipeline() -> dict:
             # anyone is scored. See live_references.live_les_reference.
             les_reference = live_les_reference(
                 "house",
-                [(r.get("sponsoredBills") or [], r.get("party")) for r in reps],
+                [(r.get("sponsoredBills") or [], r.get("party"), bills_read_this_run(r)) for r in reps],
                 db,
             )
 
@@ -865,6 +931,9 @@ async def run_house_pipeline() -> dict:
                         pac_committee_ids = {
                             cid for r in raw_pac_receipts if (cid := committee_id_of(r))
                         }
+                        # A giver whose registration couldn't be read raises
+                        # (FecUnavailable): this member keeps the stored
+                        # record, as for any unreadable FEC read.
                         committee_meta_map = await resolve_committee_meta(
                             client, db, pac_committee_ids, committee_master,
                         )
@@ -1011,6 +1080,10 @@ async def run_house_pipeline() -> dict:
 
             progress.complete("fec_scoring", detail=f"{success_count} OK, {fail_count} failed")
             alert_member_failures("house", member_failures)
+            alert_unread_sponsorship(
+                "house", unread_bills, carried_members,
+                [r.get("bioguideId") or r.get("name", "?") for r in reps if r.get("sponsoredBillsUnavailable")],
+            )
 
             # ── PHASE 6: SNAPSHOTS ──
             logger.info("--- House Phase 6: SNAPSHOTS ---")

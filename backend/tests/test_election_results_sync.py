@@ -131,7 +131,7 @@ class TestFlip:
         [issue] = _issues(db_session)
         assert issue.status == ActionIssueStatus.DEVELOPING
         assert issue.is_current and issue.rank == 999
-        assert issue.title == "Republican leads Georgia's 2nd Congressional District count in a seat Democrats hold"
+        assert issue.title == "Not final: Republican leads Georgia's 2nd Congressional District count in a seat Democrats hold"
         facts = json.loads(issue.facts)
         assert facts[0] == "Ray Jones (R): 1,000 votes, 52.6%"
         assert "60 of 100 precincts fully reported (60%)" in facts
@@ -191,6 +191,7 @@ class TestFlip:
         text = " ".join([issue.title, issue.summary, *json.loads(issue.facts)]).lower()
         assert " wins" not in text and " won " not in text and "winner" not in text
         assert "does not call races" in issue.summary
+        assert "not final" not in issue.title.lower()
 
     def test_no_known_holder_is_no_flip(self, db_session):
         race = _setup(db_session)
@@ -501,7 +502,7 @@ class TestIssueLifecycle:
         [issue] = _issues(db_session)
         _apply(db_session, race, _contest(1300, 1100, 80))
         assert issue.is_current is False
-        assert issue.title == "Georgia's 2nd Congressional District count no longer shows a change of party"
+        assert issue.title == "Not final: Georgia's 2nd Congressional District count no longer shows a change of party"
         assert "latest count shows Dana Smith (D) ahead" in issue.summary
         assert "leads" not in issue.title
         # Tied: nobody named as ahead.
@@ -897,7 +898,7 @@ def test_a_party_code_without_words_is_not_printed_raw(db_session, _on_election_
                            reporting_units=60, total_units=100)
     _apply(db_session, race, contest)
     [issue] = _issues(db_session)
-    assert issue.title.startswith("A candidate from another party leads Georgia's 2nd Congressional District")
+    assert issue.title.startswith("Not final: a candidate from another party leads Georgia's 2nd Congressional District")
     assert "UC" not in issue.title
     # Nor beside the name, in the facts or the summary.
     facts = json.loads(issue.facts)

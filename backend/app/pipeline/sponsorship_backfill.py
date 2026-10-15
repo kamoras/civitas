@@ -1,4 +1,5 @@
-"""Keep last run's sponsorship scores when this run withholds them.
+"""Keep last run's sponsorship scores and sponsored bills when this run
+can't produce them.
 
 compute_leadership_scores / compute_ideology_scores / compute_bipartisanship_
 scores each withhold (return {}) under whole-cohort data-quality gates —
@@ -12,9 +13,12 @@ The Senate pipeline backfilled from the stored values; the House pipeline
 did not. Shared here so both chambers keep what they had.
 """
 
+import json
 import logging
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
+
+from app.pipeline.analyze.score_calculator import carried_date, stored_bills_status
 
 logger = logging.getLogger(__name__)
 
@@ -65,3 +69,72 @@ def backfill_withheld_sponsorship_scores(
             "Sponsorship analysis (%s): %d score(s) withheld this run, backfilled from last stored value",
             model.__tablename__, backfilled,
         )
+
+
+def stored_sponsored_bill(row) -> dict:
+    """A stored SponsoredBill / RepSponsoredBill row in the shape the
+    pipeline scores and saves (the fields its writer reads back)."""
+    try:
+        areas = json.loads(row.policy_areas or "[]")
+    except ValueError:
+        areas = []
+    return {
+        "billId": row.bill_id,
+        "title": row.title,
+        "introducedDate": row.introduced_date,
+        "latestAction": row.latest_action,
+        "latestActionDate": row.latest_action_date,
+        "policyArea": row.policy_area,
+        "policyAreas": areas,
+        "partyLeaning": row.party_leaning,
+        "congress": row.congress,
+        "billType": row.bill_type,
+        "isLaw": row.is_law,
+        "stage": row.stage,
+        "commemorative": row.commemorative,
+    }
+
+
+def carry_forward_sponsored_bills(db: Session, model, members: list[dict]) -> list[str]:
+    """For each member dict whose sponsored legislation this run couldn't
+    read (`sponsoredBillsUnavailable`, or no `sponsoredBills` at all because
+    the step that reads them stopped before reaching the member), score the
+    bills an earlier run stored: an outage is not a record of no bills, and
+    a neutral score reads it as an average one. Sets `sponsoredBills` to
+    them and `sponsoredBillsCarriedFrom` to the date those bills were read
+    (from the stored score's LES_BILLS_STATUS; "" when no run recorded one),
+    and clears `sponsoredBillsUnavailable`, so the save writes the same
+    bills back. A member the database has never stored stays unavailable
+    (Legislative Effectiveness then leaves the bill part unmeasured).
+    Members are matched by `bioguideId`. Returns the bioguide ids carried,
+    in place. `model` is Senator or Representative."""
+    pending = {
+        m["bioguideId"]: m for m in members
+        if m.get("bioguideId") and (m.get("sponsoredBillsUnavailable") or "sponsoredBills" not in m)
+    }
+    if not pending:
+        return []
+    rows = (
+        db.query(model)
+        .options(selectinload(model.sponsored_bills))
+        .filter(model.bioguide_id.in_(pending))
+        .all()
+    )
+    carried = []
+    for row in rows:
+        member = pending.pop(row.bioguide_id)
+        status = stored_bills_status(row)
+        member["sponsoredBills"] = [stored_sponsored_bill(b) for b in row.sponsored_bills]
+        member["sponsoredBillsCarriedFrom"] = carried_date(status)
+        member["sponsoredBillsUnavailable"] = False
+        carried.append(row.bioguide_id)
+    for member in pending.values():
+        member.setdefault("sponsoredBills", [])
+        member["sponsoredBillsUnavailable"] = True
+    if carried or pending:
+        logger.warning(
+            "Sponsored legislation (%s): %d member(s) unreadable this run scored on their stored bills, "
+            "%d with none stored left unmeasured",
+            model.__tablename__, len(carried), len(pending),
+        )
+    return carried

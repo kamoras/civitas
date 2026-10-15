@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { STATE_CODES } from "@/lib/stateCodes";
 import { SITE_URL } from "@/lib/site";
 import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
+import { rollCallHref } from "@/lib/congress";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -28,8 +29,19 @@ interface SitemapIndex {
   /** Days either chamber met. Optional only for a backend image older than
    * this field; the Explore documents are listed by /sitemap-index.xml. */
   congressDays?: string[];
+  /** Every stored roll call (/congress/votes/...). Optional only for a
+   * backend image older than this field. */
+  rollCalls?: RollCallEntry[];
   /** States with a redistricting page (/elections/redistricting/{ST}). */
   redistricting?: string[];
+}
+
+interface RollCallEntry {
+  chamber: string;
+  congress: number;
+  session: number;
+  number: number;
+  lastmod: string | null;
 }
 
 async function fetchIndex(): Promise<SitemapIndex | null> {
@@ -113,6 +125,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...entries(index.bills, (id) => `/congress/bills/${id}`, "weekly", 0.5),
     ...entries(index.issues, (id) => `/issue/${id}`, "weekly", 0.5),
     ...congressReports(index.congressDays ?? []),
+    ...(index.rollCalls ?? []).map((v) => ({
+      url: `${SITE_URL}${rollCallHref(v)}`,
+      ...(v.lastmod ? { lastModified: v.lastmod } : {}),
+      changeFrequency: "yearly" as const,
+      priority: 0.4,
+    })),
     ...(index.redistricting ?? []).map((code) => ({
       url: `${SITE_URL}/elections/redistricting/${code}`,
       changeFrequency: "monthly" as const,
