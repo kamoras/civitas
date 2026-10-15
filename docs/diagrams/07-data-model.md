@@ -390,3 +390,14 @@ the bridge, idempotence, and a single head.
 ## Source map
 
 All models: `backend/app/models.py`. Response shapes: `backend/app/schemas.py`.
+
+## Nominations
+
+`nominations` (migration 0050) holds one row per Congress.gov citation
+(`congress`, `citation` unique): the description, organization and first
+position title verbatim, every position's nominees as published (JSON),
+every action verbatim (JSON), the status read from the action codes and its
+date, the referral committee's system code, the hearings (JSON) and, for a
+confirmed Article III judgeship, the FJC judge id. It joins `roll_calls`
+by the citations the vote question states, on request; nothing stores the
+link.

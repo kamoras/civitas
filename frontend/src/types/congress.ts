@@ -1,3 +1,4 @@
+import type { RollCallNomination } from "@/types/nomination";
 /** The Congress reports (backend/app/services/congress_service.py) and a
  * bill's record (backend/app/services/bill_record.py). Every count and
  * sentence here is computed by the backend. */
@@ -193,6 +194,10 @@ export interface VoteMember {
 export interface VoteDetail extends RollCallSummary {
   /** The bill's short or popular title from Congress.gov, when the chamber's title isn't it. */
   billShortTitle?: string | null;
+  /** The stored nominations the question names, in its order (several on
+   *  an en bloc vote); empty for any other vote. Optional for a backend
+   *  image older than this field. */
+  nominations?: RollCallNomination[];
   parties: PartySplit[];
   members: VoteMember[];
 }

@@ -53,6 +53,7 @@ BILL_REFRESH = "bill-refresh-lock"
 BALLOT_SYNC = "ballot-sync-lock"
 COVERAGE_REFRESH = "coverage-refresh-lock"
 CONGRESS_SYNC = "congress-sync-lock"
+NOMINATIONS_SYNC = "nominations-sync-lock"
 RESULTS_SYNC = "results-sync-lock"
 # The weekly agency list and budget sync (fetch/agencies.py).
 AGENCY_SYNC = "agency-sync-lock"
@@ -75,6 +76,7 @@ TIERS = {
     BALLOT_SYNC: "Ballot sync",
     COVERAGE_REFRESH: "Election coverage refresh",
     CONGRESS_SYNC: "Congress record sync",
+    NOMINATIONS_SYNC: "Nominations sync",
     RESULTS_SYNC: "Live results sync",
     AGENCY_SYNC: "Agency sync",
     DISTRICT_LINES: "House run or district PVI refresh",
@@ -134,6 +136,9 @@ HUNG_AFTER = {
     BALLOT_SYNC: timedelta(hours=2),
     COVERAGE_REFRESH: timedelta(hours=2),
     CONGRESS_SYNC: timedelta(hours=2),
+    # A backfill pass reads up to fetch/nominations.MAX_PER_RUN nominations at
+    # half a request a second plus Congress.gov's latency: up to about two hours.
+    NOMINATIONS_SYNC: timedelta(hours=3),
     # A pass is a few requests per covered state; one still going after
     # half an hour has hung, and the next five-minute tick should proceed.
     RESULTS_SYNC: timedelta(minutes=30),

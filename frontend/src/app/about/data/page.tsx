@@ -61,7 +61,11 @@ export default function DataChapter() {
           <Facts>
             <Fact label="Congress.gov">
               Members, bills, sponsors and cosponsors, votes, and each bill&apos;s summary, action
-              history and text.
+              history and text. And every presidential nomination this Congress, read daily: its
+              description, nominees, committee, hearings and every action in Congress.gov&apos;s own
+              words, on <A href="/congress/nominations">the nominations pages</A>. Its status
+              (pending, confirmed, returned, withdrawn) is read from Congress.gov&apos;s action
+              codes, and each roll call that names a nomination links to it.
             </Fact>
             <Fact label="FEC (fec.gov)">
               Campaign finance: individual and PAC contributions, committee filings and types,
@@ -159,7 +163,10 @@ export default function DataChapter() {
             <Fact label="Supreme Court Database · Federal Judicial Center · Martin-Quinn">
               Every justice&apos;s votes in orally argued cases (the voting record, and the cases
               the federal government argued for the score, with Epstein and Posner&apos;s coding
-              through 2014); nomination dates; each justice&apos;s position per term.
+              through 2014); nomination dates; each justice&apos;s position per term. A confirmed
+              federal judge&apos;s nomination page links the Federal Judicial Center&apos;s
+              biography where its directory has exactly one judge with the same court, nomination
+              date and surname.
             </Fact>
             <Fact label="Federal Register · USAspending.gov">
               Every federal agency the Register lists, with its description, parent and
