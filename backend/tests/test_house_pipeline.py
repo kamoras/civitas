@@ -165,3 +165,23 @@ def test_a_house_run_invalidates_stale_analysis_like_a_senate_one(db_session):
                side_effect=lambda *a: order.append("fetch") or (_ for _ in ()).throw(RuntimeError("off"))):
         asyncio.run(house_pipeline.run_house_pipeline())
     assert order == ["invalidate", "fetch"]
+
+
+def test_a_failed_run_keeps_its_exception_on_the_run_row(db_session):
+    """The cause outlives the container's log: step, type, message and a
+    bounded traceback on the row (admin only), redacted, and the same
+    summary line in what the chain's failure alert reads."""
+    import asyncio
+
+    error = RuntimeError("503 from https://api.congress.gov/v3/member?api_key=SECRET")
+    with patch("app.pipeline.house_pipeline.SessionLocal", return_value=db_session), \
+         patch("app.pipeline.house_pipeline.initialize_platform_embeddings"), \
+         patch("app.pipeline.house_pipeline.fetch_representatives", side_effect=error):
+        result = asyncio.run(house_pipeline.run_house_pipeline())
+
+    run = db_session.query(HousePipelineRun).one()
+    assert run.status == PipelineStatus.FAILED
+    assert run.error_detail.startswith("fetch_members: RuntimeError: 503 from https://api.congress.gov/v3/member?api_key=***")
+    assert "Traceback (most recent call last)" in run.error_detail and "SECRET" not in run.error_detail
+    assert "SECRET" not in run.error_message
+    assert result == {"status": PipelineStatus.FAILED, "error": run.error_detail.split("\n", 1)[0]}

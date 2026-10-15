@@ -34,6 +34,7 @@ from app.pipeline.lexical_index import ensure_lexical_index
 from app.schemas import (
     PublicApiIndexSchema,
     PublicBillVotesSchema,
+    PublicDistrictLeanSchema,
     PublicHistorySchema,
     PublicMemberVotesSchema,
     PublicPresidentialSupportSchema,
@@ -127,6 +128,7 @@ def _body(client, path, **params):
     ("/bills/HR.1/votes", {}, PublicBillVotesSchema),
     ("/search", {"q": "wildfire"}, PublicSearchResponseSchema),
     ("/presidential-support/senate", {}, PublicPresidentialSupportSchema),
+    ("/district-lean", {}, PublicDistrictLeanSchema),
 ])
 def test_every_response_matches_its_documented_schema(client, path, params, schema):
     body = _body(client, path, **params)

@@ -1002,7 +1002,7 @@ async def run_holdings_phases(
         except Exception:
             logger.exception("%s ingestion failed", label)
             db.rollback()
-            errors.append(f"{label}: failed — see server logs")
+            errors.append(f"{label}: failed — see the run's error detail")
             progress.fail(step)
             # Every failed phase alerts: the holdings phases don't decide
             # the run's status, so the run row alone would let one chamber's
@@ -1012,7 +1012,7 @@ async def run_holdings_phases(
                 f"The {label} phase of tonight's stock-trades run failed. Reports it stored "
                 "before failing are kept (each member is committed as it's done); every "
                 "other member's stored holdings stay as they were and will age until a "
-                "run succeeds — see the server logs for the cause.",
+                "run succeeds. The cause and its traceback are on the run row (admin, Pipelines).",
                 dedupe_key=f"{step}-failed-{utcnow():%Y-%m-%d}",
                 condition=f"holdings-failed-{step}",
             )

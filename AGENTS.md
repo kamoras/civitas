@@ -2007,6 +2007,11 @@ the pending list).
   are fetched as-is, which is fine only while they stay self-hosted.
   Every photo the site shows is already same-origin (§8's `/photo/<kind>/<id>`),
   so a capture draws them as-is.
+  Every share point must supply `source` and `asOf` (required by the
+  `ShareSubject` type; a section whose figures come from elsewhere sets its
+  own with `shareMetaAttrs`), and the captured image carries the source
+  line, the as-of date and the score scale under the picture, since a
+  picture travels without its page.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
   Activating a tab must focus **the incoming tab**, not its panel — the
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving

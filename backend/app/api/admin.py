@@ -142,6 +142,7 @@ def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
         "status": run.status,
         "elapsedSeconds": run.elapsed_seconds,
         "errorMessage": run.error_message,
+        "errorDetail": run.error_detail,
         **extra,
     }
 
@@ -930,6 +931,7 @@ async def admin_dashboard(request: Request, db: Session = Depends(get_db)):
             "cacheMisses": last_run.cache_misses,
             "elapsedSeconds": last_run.elapsed_seconds,
             "errorMessage": last_run.error_message,
+            "errorDetail": last_run.error_detail,
             "progressSteps": dash_progress_steps,
             # Reference-senator score checks from the end of the run —
             # non-empty means scores shifted outside externally-verifiable
@@ -1085,6 +1087,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "presidentsUpdated": last_supplementary_run.presidents_updated,
             "elapsedSeconds": _live_elapsed(last_supplementary_run),
             "errorMessage": last_supplementary_run.error_message,
+            "errorDetail": last_supplementary_run.error_detail,
             "progressSteps": _parse_progress_steps(last_supplementary_run),
         }
 
@@ -1100,6 +1103,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "coverageItemsIngested": last_election_run.coverage_items_ingested,
             "elapsedSeconds": _live_elapsed(last_election_run),
             "errorMessage": last_election_run.error_message,
+            "errorDetail": last_election_run.error_detail,
             "progressSteps": _parse_progress_steps(last_election_run),
         }
 
@@ -1114,6 +1118,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "presidentTradesIngested": last_stock_run.president_trades_ingested,
             "elapsedSeconds": _live_elapsed(last_stock_run),
             "errorMessage": last_stock_run.error_message,
+            "errorDetail": last_stock_run.error_detail,
             "progressSteps": _parse_progress_steps(last_stock_run),
         }
 
@@ -1128,6 +1133,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "repsFailed": last_house_run.reps_failed,
             "elapsedSeconds": _live_elapsed(last_house_run),
             "errorMessage": last_house_run.error_message,
+            "errorDetail": last_house_run.error_detail,
             "groundTruthFailures": json.loads(last_house_run.ground_truth_failures)
             if getattr(last_house_run, "ground_truth_failures", None)
             else [],
@@ -1150,6 +1156,7 @@ async def admin_pipeline_status(db: Session = Depends(get_db)):
             "cacheMisses": last_run.cache_misses,
             "elapsedSeconds": _live_elapsed(last_run),
             "errorMessage": last_run.error_message,
+            "errorDetail": last_run.error_detail,
             "progressSteps": _parse_progress_steps(last_run),
         }
 

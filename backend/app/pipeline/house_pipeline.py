@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.error_utils import record_exception
 from app.http_client import make_async_client
 from app.models import HousePipelineRun, PipelineStatus, Representative, ScoreSnapshot
 from app.pipeline.analyze.bill_stage import is_enacted
@@ -1160,6 +1161,7 @@ async def run_house_pipeline() -> dict:
 
     except Exception as e:
         logger.exception("House pipeline failed: %s", e)
+        cause = "House pipeline failed"
         try:
             # Roll back the poisoned session before writing the FAILED status
             # (mirrors senate_pipeline.py). Without it, if the failure came
@@ -1172,11 +1174,12 @@ async def run_house_pipeline() -> dict:
             house_run.status = PipelineStatus.FAILED
             house_run.completed_at = utcnow()
             house_run.elapsed_seconds = round(time.time() - start_time, 1)
-            house_run.error_message = "House pipeline failed — see server logs"
+            house_run.error_message = "House pipeline failed — see the run's error detail"
+            cause = record_exception(house_run, e, progress.active_step())
             db.commit()
         except Exception:
             logger.exception("Failed to record house pipeline failure")
-        return {"status": PipelineStatus.FAILED, "error": str(e)[:500]}
+        return {"status": PipelineStatus.FAILED, "error": cause}
     finally:
         _tracker.stop(_run_token)
         db.close()

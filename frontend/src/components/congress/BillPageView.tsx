@@ -132,6 +132,10 @@ export default function BillPageView({
       .filter(Boolean)
       .join(" · "),
     url: absoluteUrl(canonicalPath),
+    source:
+      "Congress.gov; Congressional Research Service; Senate.gov and House Clerk roll calls; Congressional Record Daily Digest",
+    // Read when the page loads.
+    asOf: null,
   };
 
   return (

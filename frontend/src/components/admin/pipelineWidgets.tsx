@@ -456,7 +456,10 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] | nul
                 <td className="py-1.5 pr-3">
                   <span className={statusColor}>{r.status.toUpperCase()}</span>
                   {r.errorMessage && (
-                    <span className="ml-2 text-ink-lo text-xs" title={r.errorMessage}>
+                    <span
+                      className="ml-2 text-ink-lo text-xs"
+                      title={r.errorDetail?.split("\n", 1)[0] ?? r.errorMessage}
+                    >
                       ⚠
                     </span>
                   )}
@@ -578,6 +581,7 @@ export function PipelineRunDetailCard({
         completedAt: string | null;
         elapsedSeconds: number | null;
         errorMessage: string | null;
+        errorDetail?: string | null;
         progressSteps?: PipelineStepInfo[] | null;
       }
     | null
@@ -619,9 +623,27 @@ export function PipelineRunDetailCard({
             <span className="text-signal-magenta text-xs font-mono">ERROR: {run.errorMessage}</span>
           </div>
         )}
+        <ErrorDetail detail={run.errorDetail} />
         <LastRunSteps steps={run.progressSteps} />
       </div>
     </div>
+  );
+}
+
+/** The exception(s) a failed run or step kept on its run row: each one's
+ * summary line (where, type, message, the frame it raised in), then its
+ * traceback, collapsed. */
+function ErrorDetail({ detail }: { detail?: string | null }) {
+  if (!detail) return null;
+  return (
+    <details className="mt-2 text-xs font-mono">
+      <summary className="cursor-pointer text-signal-magenta">
+        CAUSE: {detail.split("\n", 1)[0]}
+      </summary>
+      <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words p-2 border border-white/[0.1] text-ink-lo">
+        {detail}
+      </pre>
+    </details>
   );
 }
 
