@@ -610,7 +610,7 @@ function ExplorePageInner() {
 
           {!loading && searched && committeeQuery && (committee.data ?? 0) > 0 && (
             <Link
-              href={`/congress/committees?q=${encodeURIComponent(committeeQuery)}`}
+              href={`/congress/committees?q=${encodeURIComponent(committeeQuery)}#committee-results`}
               className="mb-4 block border border-white/15 px-4 py-3 text-sm text-ink-hi hover:border-phos/40"
             >
               <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">

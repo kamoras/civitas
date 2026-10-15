@@ -17,6 +17,9 @@ export const metadata = pageMetadata({
 });
 
 const PER_PAGE = 20;
+// Where a search lands: on a phone the masthead and the form fill the first
+// screen, and the first result sat below it (1.14 screens down, 2026-10-14).
+const RESULTS = "#committee-results";
 
 type Search = { committee?: string; q?: string; kind?: string; page?: string };
 
@@ -35,7 +38,7 @@ function href(search: Search, page: number): string {
   for (const k of ["committee", "q", "kind"] as const) if (search[k]) q.set(k, search[k]!);
   if (page > 1) q.set("page", String(page));
   const s = q.toString();
-  return s ? `/congress/committees?${s}` : "/congress/committees";
+  return s ? `/congress/committees?${s}${RESULTS}` : "/congress/committees";
 }
 
 const FIELD =
@@ -99,7 +102,7 @@ export default async function CommitteesPage({
 
           <form
             method="get"
-            action="/congress/committees"
+            action={`/congress/committees${RESULTS}`}
             className="mb-8 grid gap-4 sm:grid-cols-2"
           >
             <label className="flex flex-col gap-1 sm:col-span-2">
@@ -156,7 +159,7 @@ export default async function CommitteesPage({
           <section aria-labelledby="committee-results" className="flex flex-col gap-3">
             <h2
               id="committee-results"
-              className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+              className="scroll-mt-[var(--header-clearance)] flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
             >
               <span>
                 {total.toLocaleString("en-US")} {total === 1 ? "entry" : "entries"}

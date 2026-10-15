@@ -135,7 +135,7 @@ describe("ExplorePage", () => {
     api.fetchCommitteeRecordTotal.mockResolvedValue(12);
     open("q=veterans");
     const link = await screen.findByRole("link", { name: /12 committee meetings and reports/ });
-    expect(link).toHaveAttribute("href", "/congress/committees?q=veterans");
+    expect(link).toHaveAttribute("href", "/congress/committees?q=veterans#committee-results");
     expect(api.fetchCommitteeRecordTotal).toHaveBeenCalledWith("veterans");
     api.fetchCommitteeRecordTotal.mockReset();
   });
