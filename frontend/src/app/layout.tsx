@@ -3,7 +3,14 @@ import ConfigProvider from "@/components/providers/ConfigProvider";
 import LoadTimingBeacon from "@/components/LoadTimingBeacon";
 import NavigationBeacon from "@/components/NavigationBeacon";
 import ForgetLegacyStorage from "@/components/ForgetLegacyStorage";
-import { FEED_ALTERNATES, HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
+import {
+  FEED_ALTERNATES,
+  HOME_DESCRIPTION,
+  HOME_TITLE,
+  SITE_NAME,
+  SITE_URL,
+  TITLE_TEMPLATE,
+} from "@/lib/site";
 import { fontVariables } from "./fonts";
 import "./fonts/fallback.css";
 import "./globals.css";
@@ -20,7 +27,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: HOME_TITLE,
-    template: `%s | ${SITE_NAME}`,
+    template: TITLE_TEMPLATE,
   },
   description: HOME_DESCRIPTION,
   applicationName: SITE_NAME,

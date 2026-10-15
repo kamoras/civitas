@@ -1945,8 +1945,17 @@ the pending list).
   record route.
 - Titles lead with what people type into a search box (member name +
   party-state, bill number, full state name); the root template appends
-  " | Civitas" (no em dashes in site prose, 2026-10). Search-facing wording lives in `src/lib/seo.ts`, not in
+  " | Civitas Research" (no em dashes in site prose, 2026-10). Search-facing wording lives in `src/lib/seo.ts`, not in
   `page.tsx` (Next rejects extra exports there).
+- **The site's name is "Civitas Research"** (`SITE_NAME`) wherever a
+  search engine reads a name: the title template, og:site_name,
+  application-name, the manifest, the homepage's `WebSite` and
+  `Organization` JSON-LD (`siteJsonLd` in `src/lib/seo.ts`, with "Civitas"
+  as an `alternateName`), and citations. "Civitas" alone is shared by a UK
+  think tank, a U.S. university institute, an oil company and more, and
+  Google's site-name system wants the WebSite data, the title and
+  og:site_name to agree. The on-page mark stays "CIVITAS".
+  `www.civitas-research.org` 301s to the apex in `nginx/civitas.conf`.
 - A missing record is a real 404 via `notFound()` plus `noindex`, never a
   200 page that says "not found". The converse holds too: an unreachable
   backend or a 5xx is an error page (`app/error.tsx`), never a 404 — fetch

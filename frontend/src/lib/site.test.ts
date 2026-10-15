@@ -5,6 +5,9 @@ import {
   TOPIC_FEEDS,
   absoluteUrl,
   metaDescription,
+  HOME_DESCRIPTION,
+  HOME_TITLE,
+  TITLE_TEMPLATE,
   pageMetadata,
   stateFeed,
 } from "./site";
@@ -27,8 +30,8 @@ describe("pageMetadata", () => {
     expect(m.alternates?.canonical).toBe("/bills");
     expect(m.openGraph).toMatchObject({
       url: "/bills",
-      siteName: "Civitas",
-      title: "Bills | Civitas",
+      siteName: "Civitas Research",
+      title: "Bills | Civitas Research",
     });
     expect(m.title).toBe("Bills");
     expect(m.robots).toBeUndefined();
@@ -87,4 +90,23 @@ describe("pageMetadata", () => {
 it("absoluteUrl joins with or without a leading slash", () => {
   expect(absoluteUrl("/a")).toBe("https://civitas-research.org/a");
   expect(absoluteUrl("a")).toBe("https://civitas-research.org/a");
+});
+
+describe("the site name in titles", () => {
+  it("appends the full name to every page title but the homepage's", () => {
+    expect(TITLE_TEMPLATE).toBe("%s | Civitas Research");
+  });
+
+  it("leads the homepage title and description with the full name", () => {
+    expect(HOME_TITLE.startsWith("Civitas Research")).toBe(true);
+    expect(HOME_DESCRIPTION.startsWith("Civitas Research")).toBe(true);
+    expect(HOME_TITLE.length).toBeLessThanOrEqual(65);
+    expect(metaDescription(HOME_DESCRIPTION)).toBe(HOME_DESCRIPTION);
+  });
+
+  it("keeps a page title whole, whatever characters it holds", () => {
+    expect(pageMetadata({ title: "A $& B", description: "d", path: "/x" }).openGraph?.title).toBe(
+      "A $& B | Civitas Research"
+    );
+  });
 });

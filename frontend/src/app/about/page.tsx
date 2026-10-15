@@ -1,16 +1,23 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { pageMetadata, GITHUB_REPO_URL } from "@/lib/site";
+import { aboutPageJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/seo/JsonLd";
 import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
 import { AboutPage, Section, P, A } from "@/components/about/AboutPage";
 import ScoreWeightBar from "@/components/about/ScoreWeightBar";
 import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
 
+const ABOUT_DESCRIPTION =
+  "What Civitas Research is, how it scores senators, representatives and presidents from public records (and why not justices), and the rules it holds itself to.";
+
+// Absolute: the page names the site itself, so the template's
+// " | Civitas Research" would say it twice.
 export const metadata = pageMetadata({
-  title: "About Civitas: How Members of Congress Are Scored",
-  description:
-    "What Civitas is, how it scores senators, representatives and presidents from public records (and why not justices), and the rules it holds itself to: in five minutes.",
+  title: "About Civitas Research: How Members of Congress Are Scored",
+  absoluteTitle: true,
+  description: ABOUT_DESCRIPTION,
   path: "/about",
 });
 
@@ -130,6 +137,7 @@ export default function AboutOverview() {
         </p>
       }
     >
+      <JsonLd data={aboutPageJsonLd(ABOUT_DESCRIPTION)} />
       <LegacyAboutAnchor />
 
       <Section id="principles" title="What we hold ourselves to">
@@ -266,6 +274,11 @@ export default function AboutOverview() {
           candidates or PACs and sells nothing. It exists partly to show that a civic accountability
           tool doesn&apos;t need venture capital or a data center: the whole thing uses about as
           much electricity in a year as a refrigerator does in six weeks.
+        </P>
+        <P>
+          Civitas Research (civitas-research.org) is an independent, open-source political
+          transparency project covering the U.S. federal government. It is not affiliated with any
+          other organization named Civitas, such as think tanks, university institutes or companies.
         </P>
         <div className="flex flex-wrap gap-2">
           <PillLink href={GITHUB_REPO_URL} external>
