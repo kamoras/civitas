@@ -7,12 +7,15 @@ import {
   candidateName,
   formatComputedLean,
   formatPvi,
+  houseSeatLabel,
   incumbencyLabel,
   isActiveCandidate,
   isRedrawnSeat,
 } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
 import type { LeanContext, RaceWithCandidates } from "@/types/election";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 
 /** The seat's lean in words: what R+5 means, for a reader who has never
  * seen a PVI. "The last two presidential elections" is the PVI's own
@@ -98,40 +101,59 @@ export default function RaceContext({
   );
   const redrawn = isRedrawnSeat(race, newLines);
   const stateName = STATE_NAMES[race.state] ?? race.state;
+  // Named in the heading so a shared picture of this section says which
+  // race it is; the drawer's own header isn't in the picture.
+  const seatName =
+    race.district != null ? houseSeatLabel(race.state, race.district) : `${stateName} U.S. Senate`;
 
   return (
-    <section aria-labelledby={`context-${race.id}`} className="mb-5">
+    <section
+      aria-labelledby={`context-${race.id}`}
+      className="mb-5 bg-surface-base"
+      {...{ [SHARE_SECTION_ATTR]: `context-${race.id}` }}
+      {...shareMetaAttrs({
+        source:
+          "Cook PVI; Civitas-computed lean from open 2020 and 2024 precinct returns; Civitas representation scores",
+        // Read when the page loads.
+        asOf: null,
+        scaleMax: incumbent?.incumbentRecord ? 100 : null,
+      })}
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-white/[0.09] pb-1">
         <h3
           id={`context-${race.id}`}
           className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
         >
-          What shapes this race
+          What shapes this race · {seatName}
         </h3>
-        {/* The figures below as data, and how they are made. */}
-        <span className="flex gap-x-2 font-mono text-[11px] uppercase tracking-[0.1em]">
-          <a
-            href={`/api/elections/states/${race.state}/races.csv`}
-            download
-            aria-label={`CSV: every federal candidate in ${stateName}`}
-            className="inline-flex min-h-[24px] items-center text-signal-cyan hover:text-phos"
-          >
-            [ CSV ]
-          </a>
-          <a
-            href={`/api/elections/races/${race.id}`}
-            aria-label="JSON: this race"
-            className="inline-flex min-h-[24px] items-center text-signal-cyan hover:text-phos"
-          >
-            [ JSON ]
-          </a>
-          <Link
-            href="/about/elections#race-context"
-            aria-label="Method: how these figures are made"
-            className="inline-flex min-h-[24px] items-center text-signal-cyan hover:text-phos"
-          >
-            [ METHOD ]
-          </Link>
+        {/* The figures below as data, and how they are made: links, so
+            left out of a picture of the section. */}
+        <span className="flex items-center gap-x-2 font-mono text-[11px] uppercase tracking-[0.1em]">
+          <ShareSectionButton label={`What shapes this race: ${seatName}`} anchor={null} />
+          <span className="flex gap-x-2" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+            <a
+              href={`/api/elections/states/${race.state}/races.csv`}
+              download
+              aria-label={`CSV: every federal candidate in ${stateName}`}
+              className="inline-flex min-h-[24px] items-center text-signal-cyan hover:text-phos"
+            >
+              [ CSV ]
+            </a>
+            <a
+              href={`/api/elections/races/${race.id}`}
+              aria-label="JSON: this race"
+              className="inline-flex min-h-[24px] items-center text-signal-cyan hover:text-phos"
+            >
+              [ JSON ]
+            </a>
+            <Link
+              href="/about/elections#race-context"
+              aria-label="Method: how these figures are made"
+              className="inline-flex min-h-[24px] items-center text-signal-cyan hover:text-phos"
+            >
+              [ METHOD ]
+            </Link>
+          </span>
         </span>
       </div>
       <p className="mt-2 text-[13px] text-ink-lo">

@@ -62,138 +62,145 @@
    "county": "18141",
    "county_name": "St. Joseph",
    "action": "county_total",
-   "why": "Every precinct is listed twice, once by its numeric code and once by its township name, so the county counts double. The county is one district on both maps, so its official total is exact.",
-   "official": "in_enr"
+   "official": "in_enr",
+   "why": "Every precinct is listed twice, once by its numeric code and once by its township name, so the county counts double. The county is one district on both maps, so its official total is exact."
   },
   {
    "state": "IN",
    "county": "18063",
    "county_name": "Hendricks",
    "action": "county_total",
-   "why": "The row for precinct Washington 29 holds the county's total instead of the precinct's, so the county counts double and that precinct is missing. The county is one district on both maps, so its official total is exact.",
-   "official": "in_enr"
+   "official": "in_enr",
+   "why": "The row for precinct Washington 29 holds the county's total instead of the precinct's, so the county counts double and that precinct is missing. The county is one district on both maps, so its official total is exact."
   },
   {
    "state": "IN",
    "county": "18105",
    "county_name": "Monroe",
    "action": "county_total",
-   "why": "Only 26 precincts, about 30% of the county's vote, are present. The county is one district on both maps, so its official total is exact.",
-   "official": "in_enr"
+   "official": "in_enr",
+   "why": "Only 26 precincts, about 30% of the county's vote, are present. The county is one district on both maps, so its official total is exact."
   },
   {
    "state": "IN",
    "county": "18091",
    "county_name": "LaPorte",
    "action": "verify",
-   "why": "MEDSL's precincts are 70 Democratic votes above the Indiana Election Division's certified county figure (20,007), but equal the county election board's own official summary (20,077 D / 26,726 R). The county's canvass is the one the precincts come from, so it is the one gated; no change.",
-   "official": "county_canvass"
+   "official": "county_canvass",
+   "official_url": "https://laporteco.in.gov/Elections/ElectionResults/2024General/Laporte_ElecSumm_All.htm",
+   "official_totals": [
+    20077,
+    26726
+   ],
+   "why": "MEDSL's precincts are 70 Democratic votes above the Indiana Election Division's certified county figure (20,007), but equal the county election board's own official summary (20,077 D / 26,726 R). The county's canvass is the one the precincts come from, so it is the one gated; no change."
   },
   {
    "state": "IN",
    "county": "18161",
    "county_name": "Union",
    "action": "county_total",
-   "why": "MEDSL's precincts differ from the certified county total by -2 D (0.27%), found by the county gate. The county is one district on both maps, so its official total is exact.",
-   "official": "in_enr"
+   "official": "in_enr",
+   "why": "MEDSL's precincts differ from the certified county total by -2 D (0.27%), found by the county gate. The county is one district on both maps, so its official total is exact."
   },
   {
    "state": "IN",
    "county": "18173",
    "county_name": "Warrick",
    "action": "county_total",
-   "why": "MEDSL's precincts differ from the certified county total by -79 D / +108 R (0.7% / 0.5%), found by the county gate. The county is one district on both maps, so its official total is exact.",
-   "official": "in_enr"
+   "official": "in_enr",
+   "why": "MEDSL's precincts differ from the certified county total by -79 D / +108 R (0.7% / 0.5%), found by the county gate. The county is one district on both maps, so its official total is exact."
   },
   {
    "state": "NJ",
    "county": "34003",
    "county_name": "Bergen",
    "action": "drop_rows",
-   "why": "Each municipality appears again as a single summary row beside its own districts, so the county counts double. The summary rows are dropped; the districts remain.",
-   "official": "nj_dos"
+   "precinct_regex": "^(?!.*Provisional)[^0-9]*$",
+   "official": "nj_dos",
+   "why": "Each municipality appears again as a single summary row beside its own districts, so the county counts double. The summary rows are dropped; the districts remain."
   },
   {
    "state": "NJ",
    "county": "34015",
    "county_name": "Gloucester",
    "action": "drop_rows",
-   "why": "A 'COUNTY TOTAL' row sits beside the municipalities it sums, so the county counts double. It is dropped.",
-   "official": "nj_dos"
+   "precinct_regex": "^COUNTY TOTAL$",
+   "official": "nj_dos",
+   "why": "A 'COUNTY TOTAL' row sits beside the municipalities it sums, so the county counts double. It is dropped."
   },
   {
    "state": "NJ",
    "county": "34021",
    "county_name": "Mercer",
    "action": "municipal_totals",
-   "why": "About a quarter of the county's vote is missing from the precincts. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total, and the county-wide overseas ballots are spread over the county's districts.",
-   "official": "nj_dos"
+   "official": "nj_dos",
+   "why": "About a quarter of the county's vote is missing from the precincts. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total, and the county-wide overseas ballots are spread over the county's districts."
   },
   {
    "state": "NJ",
    "county": "34001",
    "county_name": "Atlantic",
    "action": "municipal_totals",
-   "why": "MEDSL's precincts are 441 D / 206 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total.",
-   "official": "nj_dos"
+   "official": "nj_dos",
+   "why": "MEDSL's precincts are 441 D / 206 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total."
   },
   {
    "state": "NJ",
    "county": "34013",
    "county_name": "Essex",
    "action": "municipal_totals",
-   "why": "MEDSL's precincts are 1,054 D / 3,045 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total.",
-   "official": "nj_dos"
+   "official": "nj_dos",
+   "why": "MEDSL's precincts are 1,054 D / 3,045 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total."
   },
   {
    "state": "NJ",
    "county": "34039",
    "county_name": "Union",
    "action": "municipal_totals",
-   "why": "MEDSL's precincts are 4,550 D / 2,574 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total.",
-   "official": "nj_dos"
+   "official": "nj_dos",
+   "why": "MEDSL's precincts are 4,550 D / 2,574 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total."
   },
   {
    "state": "NJ",
    "county": "34041",
    "county_name": "Warren",
    "action": "municipal_totals",
-   "why": "MEDSL's precincts are 593 D / 1,215 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total.",
-   "official": "nj_dos"
+   "official": "nj_dos",
+   "why": "MEDSL's precincts are 593 D / 1,215 R short of the official county total, found by the county gate. Each municipality's precincts are scaled, candidate by candidate, to the municipality's official total."
   },
   {
    "state": "NJ",
    "county": "34031",
    "county_name": "Passaic",
    "action": "verify",
-   "why": "Reported as partial; checked against the official county total, which MEDSL's precincts match exactly (95,156 D / 100,954 R). No change; the county stays gated.",
-   "official": "nj_dos"
+   "official": "nj_dos",
+   "why": "Reported as partial; checked against the official county total, which MEDSL's precincts match exactly (95,156 D / 100,954 R). No change; the county stays gated."
   },
   {
    "state": "LA",
    "action": "county_residual",
-   "why": "Louisiana reports early and provisional votes only for a whole parish, and MEDSL's precincts carry election-day votes alone. Each parish's remainder (official total minus its precincts) is spread over the parish's districts in proportion to each district's election-day vote, party by party.",
-   "official": "la_sos"
+   "official": "la_sos",
+   "why": "Louisiana reports early and provisional votes only for a whole parish, and MEDSL's precincts carry election-day votes alone. Each parish's remainder (official total minus its precincts) is spread over the parish's districts in proportion to each district's election-day vote, party by party."
   },
   {
    "state": "WA",
    "county": "53033",
    "county_name": "King",
    "action": "replace_precincts",
-   "why": "MEDSL holds King County as one county-wide row. It is replaced by the county's own precinct results, each precinct labelled with its congressional district.",
-   "official": "king_county"
+   "official": "king_county",
+   "why": "MEDSL holds King County as one county-wide row. It is replaced by the county's own precinct results, each precinct labelled with its congressional district."
   },
   {
    "state": "CA",
    "action": "district_cells",
-   "why": "California counties suppress the counts of small precincts (MEDSL writes '*', 9,368 Harris or Trump cells), so some districts come up short by a few hundred votes (CA-13 by 512 D / 1,122 R). The Secretary of State's own count of every county x district cell replaces the precinct sums; within a cell the precincts still place each block for the 120th lines.",
-   "official": "ca_sos"
+   "official": "ca_sos",
+   "why": "California counties suppress the counts of small precincts (MEDSL writes '*', 9,368 Harris or Trump cells), so some districts come up short by a few hundred votes (CA-13 by 512 D / 1,122 R). The Secretary of State's own count of every county x district cell replaces the precinct sums; within a cell the precincts still place each block for the 120th lines."
   },
   {
    "state": "ME",
    "action": "district_totals",
-   "why": "MEDSL's Maine precincts fall 1.2% short of the state's Democratic total (430,342 against 435,652), found by the state-total gate. Maine publishes its own count for each of its two districts (each town is wholly in one), which replaces the precinct sums.",
-   "official": "me_sos"
+   "official": "me_sos",
+   "why": "MEDSL's Maine precincts fall 1.2% short of the state's Democratic total (430,342 against 435,652), found by the state-total gate. Maine publishes its own count for each of its two districts (each town is wholly in one), which replaces the precinct sums."
   }
  ],
  "correctionSources": {

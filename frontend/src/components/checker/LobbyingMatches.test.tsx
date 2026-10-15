@@ -111,4 +111,54 @@ describe("LobbyingMatches", () => {
     render(<LobbyingMatches matches={[match([lobbied({})])]} />);
     expect(screen.queryByText(/TOPICALLY RELATED BILLS/)).toBeNull();
   });
+
+  it("lists the member's own vote on each related bill, linked to its roll call", () => {
+    const rollCall = {
+      chamber: "house" as const,
+      congress: 119,
+      session: 2,
+      number: 312,
+      date: "2026-09-16",
+      question: "On Motion to Suspend the Rules and Pass, as Amended",
+      title: "Ratepayer Protection Act",
+      result: "Passed",
+      billId: "HR.9340",
+      billLabel: "H.R. 9340",
+      sourceUrl: "https://clerk.house.gov/evs/2026/roll312.xml",
+      parties: [],
+    };
+    render(
+      <LobbyingMatches
+        matches={[
+          {
+            ...match([], ["HouseRC-2026-312"]),
+            relatedVotes: [
+              {
+                billId: "HR.9340",
+                label: "H.R. 9340",
+                title: "Ratepayer Protection Act",
+                vote: "Nay",
+                date: "2026-09-16",
+                rollCall,
+              },
+            ],
+          },
+        ]}
+      />
+    );
+    expect(screen.getByText("NAY")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Ratepayer Protection Act" }).getAttribute("href")
+    ).toMatch(/^\/congress\/bills\/HR\.9340/);
+    expect(screen.getByRole("link", { name: /On Motion to Suspend/ }).getAttribute("href")).toBe(
+      "/congress/votes/house/119/2/312"
+    );
+    // The bare id list is what the votes replace.
+    expect(screen.queryByText("TOPICALLY RELATED BILLS:")).toBeNull();
+  });
+
+  it("falls back to the bare related-bill list for a response without votes", () => {
+    render(<LobbyingMatches matches={[match([], ["S.1"])]} />);
+    expect(screen.getByText("TOPICALLY RELATED BILLS:")).toBeTruthy();
+  });
 });

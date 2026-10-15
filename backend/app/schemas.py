@@ -381,12 +381,28 @@ class LobbyingClientSchema(CamelModel):
     complete: bool = True
 
 
+class RelatedVoteSchema(CamelModel):
+    """The member's vote on one of a match's related bills
+    (_scorecard_common.related_votes)."""
+    bill_id: str | None = Field(description="The bill, in the site's spelling (\"SJRES.196\"); null when the "
+                                            "record names none")
+    label: str | None = Field(description="The bill as the Record prints it (\"S.J.Res. 196\")")
+    title: str = Field(description="The roll call's title as the chamber recorded it, else the bill's")
+    vote: Literal["Yea", "Nay"]
+    date: str = Field(description="YYYY-MM-DD")
+    roll_call: dict | None = Field(None, description="The roll call it was cast in (date, question, result, "
+                                                     "each party's tally); null for a vote stored before "
+                                                     "its roll call was recorded")
+
+
 class LobbyingMatchSchema(CamelModel):
     lobbyist_org: str
     industry: str
     lobbying_spend: float
     donation_to_senator: float
     bills_influenced: list[str]
+    # The member's own vote on each of bills_influenced, with its roll call.
+    related_votes: list[RelatedVoteSchema] = []
     senator_vote_aligned: bool | None = None
     description: str
     lobbied_bills: list[LobbiedBillSchema] = []
@@ -720,6 +736,74 @@ class PublicStateSchema(_PublicModel):
     name: str
     senator_count: int = Field(description="Serving senators")
     representative_count: int = Field(description="Serving representatives (delegates aren't scored)")
+
+
+class PublicLeanInputSchema(_PublicModel):
+    name: str
+    url: str = Field(description="Where it is published (a DOI, a pinned commit, or a file in this repository)")
+    version: str = Field(description="The version read")
+    license: str
+    use: str = Field(description="What the computation takes from it")
+
+
+class PublicLeanCorrectionSchema(_PublicModel):
+    state: str
+    county: str | None = Field(description="The county's FIPS code; null for a correction that isn't one county's")
+    county_name: str | None
+    action: str = Field(description="What was done (county_total, municipal_totals, drop_rows, verify ...)")
+    why: str = Field(description="The error in the precinct file, and why the replacement is exact")
+    official_source: str = Field(description="The certified canvass the correction is taken from")
+    official_url: str
+
+
+class PublicLeanValidationSchema(_PublicModel):
+    congress: int = Field(description="The Congress whose district lines were compared")
+    districts: int = Field(description="Districts compared")
+    r: float = Field(description="Pearson correlation with Cook's published PVI")
+    mean_abs_diff: float = Field(description="Mean absolute difference from Cook's, in points")
+    rounded_equal: int = Field(description="Districts whose figure rounds to Cook's whole number")
+    within_one: int = Field(description="Districts within one point of Cook's")
+    max_abs_diff: float = Field(description="Largest difference from Cook's, in points")
+
+
+class PublicLeanUnavailableSchema(_PublicModel):
+    congress: int
+    district: str
+    reason: str
+
+
+class PublicLeanDistrictSchema(_PublicModel):
+    district: str = Field(description='"ST-N"; N is 0 for an at-large seat')
+    state: str
+    number: int
+    computed_lean: float = Field(description="Civitas's figure, one decimal; positive = Republican lean")
+    cook_pvi: int | None = Field(description="Cook's published PVI for the same lines (whole points, positive = "
+                                             "Republican); null where none is on file for those lines")
+
+
+class PublicLeanCongressSchema(_PublicModel):
+    congress: int = Field(description="The Congress elected on these district lines (119: elected 2024; "
+                                      "120: elected 2026, nine states redrawn)")
+    districts: list[PublicLeanDistrictSchema]
+
+
+class PublicDistrictLeanSchema(_PublicModel):
+    source: str = Field(description="Where the figures come from, as a citation")
+    method: str = Field(description="The formula and how votes were placed in districts")
+    sign: str
+    window: str = Field(description="The elections the figure is computed from")
+    as_of: str = Field(description="When the table was built, YYYY-MM-DD")
+    sha256: str | None = Field(description="SHA-256 of the data file served: names the exact version cited")
+    regenerate: str = Field(description="The script in this repository that rebuilds the table")
+    inputs: list[PublicLeanInputSchema] = Field(description="Every input, with its version and license")
+    corrections: list[PublicLeanCorrectionSchema] = Field(
+        description="Each error in the precinct files replaced from a certified canvass")
+    against_cook: list[PublicLeanValidationSchema] = Field(description="Agreement with Cook's PVI, per map")
+    unavailable: list[PublicLeanUnavailableSchema] = Field(
+        description="Districts left without a figure, and why (none is filled in from elsewhere)")
+    congresses: list[PublicLeanCongressSchema] = Field(description="Every district on each map, in state order")
+    csv_url: str = Field(description="The same districts as CSV")
+    site_url: str = _SITE_URL
 
 
 class PublicSenatorRowSchema(LeaderboardEntrySchema):

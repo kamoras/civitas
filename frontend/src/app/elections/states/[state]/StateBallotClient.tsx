@@ -1870,6 +1870,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     title: `${stateName} statewide ballot`,
     subtitle: `${ballot.cycleYear} general election · ${calendarDate(ballot.electionDate)}`,
     url: absoluteUrl(stateBallotHref(ballot.state)),
+    source: `${stateName}'s election office (candidates, measures and results, quoted); FEC filings; Cook PVI`,
+    // Read when the page loads.
+    asOf: null,
   };
 
   return (

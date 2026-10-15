@@ -10,7 +10,7 @@ import MetricTooltip from "./MetricTooltip";
 import { asOfPhrase, formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
-import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 
 const HOLDINGS_PER_PAGE = 15;
 // The scorecard's panel sets the list beside the pie: a page about as tall
@@ -490,6 +490,11 @@ export default function Holdings({
       <section
         id="holdings"
         {...{ [SHARE_SECTION_ATTR]: "holdings" }}
+        {...shareMetaAttrs({
+          source: `${data.reportLabel || "Latest annual report"}, financial disclosure (${SOURCE_LABEL[filer]})`,
+          asOf: data.asOfDate ?? data.filedDate,
+          scaleMax: null,
+        })}
         className="scroll-mt-[var(--header-clearance)] border border-white/25 bg-surface font-sans"
       >
         <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">

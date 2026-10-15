@@ -1697,6 +1697,10 @@ class PipelineRun(Base):
     cache_misses: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The exception(s) behind a failure: head line + bounded traceback
+    # (error_utils.record_exception). Admin API only — error_message is
+    # the public, static summary.
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     # JSON list of ground-truth reference-check failures from this run
     # (see analyze/ground_truth.py). Empty/"[]" = all checks passed.
@@ -1716,6 +1720,10 @@ class HousePipelineRun(Base):
     reps_failed: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The exception(s) behind a failure: head line + bounded traceback
+    # (error_utils.record_exception). Admin API only — error_message is
+    # the public, static summary.
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     ground_truth_failures: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -1748,6 +1756,10 @@ class SupplementaryPipelineRun(Base):
     presidents_updated: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The exception(s) behind a failure: head line + bounded traceback
+    # (error_utils.record_exception). Admin API only — error_message is
+    # the public, static summary.
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
@@ -1764,6 +1776,10 @@ class StockTradesPipelineRun(Base):
     president_trades_ingested: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The exception(s) behind a failure: head line + bounded traceback
+    # (error_utils.record_exception). Admin API only — error_message is
+    # the public, static summary.
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
@@ -1786,6 +1802,10 @@ class ElectionPipelineRun(Base):
     coverage_items_ingested: Mapped[int] = mapped_column(Integer, default=0)
     elapsed_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The exception(s) behind a failure: head line + bounded traceback
+    # (error_utils.record_exception). Admin API only — error_message is
+    # the public, static summary.
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 

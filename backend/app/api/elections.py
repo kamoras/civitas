@@ -15,8 +15,9 @@ from sqlalchemy import and_, not_
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
-from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json, retry_soon_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, CACHE_TTL_REFERENCE_S, cached_json, retry_soon_json
 from app.database import get_db
+from app import district_lean
 from app.district_lean import lean_for as computed_lean_for
 from app.district_places import places_on_lines_of
 from app.office_terms import term_years
@@ -1307,6 +1308,24 @@ def _judicial_section(
                 "termYears": term_years("judicial", state, court),
             })
     return out, coverage
+
+
+@router.get("/district-lean.csv")
+def district_lean_csv():
+    """Every House district's computed lean on each map the file has, with
+    Cook's PVI for the same lines: district_lean.csv_text. Its provenance,
+    inputs, licenses and corrections are the public API's
+    /district-lean."""
+    if not district_lean.published():
+        raise HTTPException(status_code=503, detail="The district lean table is unavailable")
+    return Response(
+        content=district_lean.csv_text(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Cache-Control": f"public, max-age={CACHE_TTL_REFERENCE_S}, stale-while-revalidate={CACHE_TTL_REFERENCE_S}",
+            "Content-Disposition": 'attachment; filename="civitas-district-lean.csv"',
+        },
+    )
 
 
 @router.get("/states/{state}/races.csv")

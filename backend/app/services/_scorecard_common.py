@@ -29,7 +29,7 @@ from app.pipeline.analyze.score_calculator import (
 )
 from app.pipeline.fetch.district_pvi import lines_congress, lines_of
 from app.pipeline.transform.normalize_votes import stored_vote
-from app.services.bill_record import roll_call_summaries, typed_bill_number
+from app.services.bill_record import bill_label, canonical_bill_id, roll_call_summaries, typed_bill_number
 from app.services.score_findings import add_findings
 from app.services.word_search import matching_keys
 from app.time_utils import CONGRESS_TZ, utcnow
@@ -206,6 +206,49 @@ def build_score_breakdown_entity(entity: Any, *, lobbying_donation_attr: str) ->
         **bills_inputs_from_status(stored_bills_status(entity)),
     }
 
+
+
+def related_votes(db: Session, bill_ids: list[str], key_votes: list) -> list[dict]:
+    """A donor-vote match's related bills with the member's own vote on
+    each: the member's Yea or Nay, read from their stored vote rows, and the
+    roll call it was cast in as the chamber recorded it (its question, so a
+    cloture vote never reads as passage). One entry per roll call, in the
+    match's bill order. The panel had only the bill ids and a cut sentence
+    ("Voted Yea on A joint resolution providing for … chapter 8 of…") for
+    all 129 matches on 2026-10-15.
+
+    `billId` is the bill in the site's spelling (a House roll call's
+    synthetic "HouseRC-…" id is replaced by the roll call's bill, else
+    null); `rollCall` is null for a row stored before its roll call was
+    recorded."""
+    order = {b: i for i, b in enumerate(bill_ids)}
+    rows = sorted(
+        (v for v in key_votes if v.bill_id in order and v.vote in ("Yea", "Nay")),
+        key=lambda v: (order[v.bill_id], v.date or "", v.roll_call or ""),
+    )
+    summaries = roll_call_summaries(db, [v.roll_call for v in rows])
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for v in rows:
+        # A vote is stored once per category it is listed in ("key" and
+        # "recent"): the same roll call counts once.
+        key = (v.bill_id, v.roll_call or v.date, v.vote)
+        if key in seen:
+            continue
+        seen.add(key)
+        rc = summaries.get(v.roll_call)
+        # The site's spelling ("SJRES.196"), whichever one the vote row or
+        # the roll call stored; a House roll call's synthetic id is none.
+        bill_id = canonical_bill_id((rc or {}).get("billId") or v.bill_id)
+        out.append({
+            "billId": bill_id,
+            "label": bill_label(bill_id) if bill_id else None,
+            "title": (rc or {}).get("title") or v.bill_name or "",
+            "vote": v.vote,
+            "date": v.date,
+            "rollCall": rc,
+        })
+    return out
 
 
 def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) -> dict:

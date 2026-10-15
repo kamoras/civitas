@@ -9,6 +9,7 @@ import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import CopyText from "@/components/CopyText";
 import CiteThis from "@/components/shared/CiteThis";
+import { billCanonicalPath } from "@/lib/congress";
 import {
   streamExploreDocumentSummary,
   parseExploreSummaryText,
@@ -722,6 +723,25 @@ export default function ExploreDocumentView({
                 [CITE]
               </a>
             </div>
+
+            {/* The bill the Record heading names: the speech's own
+                stated subject, linked to the bill's page. */}
+            {(doc.bills ?? []).length > 0 && (
+              <p className="mt-3 font-mono text-xs text-ink-lo">
+                {(doc.bills ?? []).length > 1 ? "BILLS: " : "BILL: "}
+                {(doc.bills ?? []).map((b, i) => (
+                  <span key={b.billId}>
+                    {i > 0 && " · "}
+                    <Link
+                      href={billCanonicalPath(b.billId, b.congress)}
+                      className="text-signal-cyan underline underline-offset-2 hover:text-phos transition-colors"
+                    >
+                      {b.label ?? b.billId}
+                    </Link>
+                  </span>
+                ))}
+              </p>
+            )}
           </div>
 
           {/* AI Analysis section */}
