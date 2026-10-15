@@ -40,6 +40,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import execute_retrying_lock
 from app.models import AnalysisCache, ApiCache
 from app.time_utils import utcnow
 
@@ -144,6 +145,7 @@ _EMPTY_JSON = ("null", "[]", "{}", '""', "0", "false", "0.0")
 
 def api_cache_set(
     db: Session, tier: str, key: str, data, *, normal_ttl_hours: int | None = None, commit: bool = True,
+    retry_locked: bool = True,
 ) -> None:
     """Store API response in cache (upsert).
 
@@ -163,6 +165,12 @@ def api_cache_set(
     parse failure (a PDF that failed to parse once, e.g. under CPU
     contention) stuck that filing's cache empty for a month instead of
     retrying within EMPTY_RESPONSE_TTL_HOURS.
+
+    A "database is locked" is retried (database.execute_retrying_lock): a
+    pipeline step caching what it fetched must not die on one refused write
+    (the House sponsorship step, 2026-10-15). `retry_locked=False` for a
+    reader's best-effort write, which shouldn't keep its request waiting
+    through the retries.
     """
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -180,11 +188,15 @@ def api_cache_set(
     upsert = sqlite_insert(ApiCache).values(
         tier=tier, cache_key=key, data_json=json.dumps(data, default=str), cached_at=cached_at,
     )
-    db.execute(upsert.on_conflict_do_update(
+    statement = upsert.on_conflict_do_update(
         index_elements=["tier", "cache_key"],
         set_={"data_json": upsert.excluded.data_json, "cached_at": upsert.excluded.cached_at},
         where=ApiCache.data_json.in_(_EMPTY_JSON) if is_empty else None,
-    ))
+    )
+    if retry_locked:
+        execute_retrying_lock(db, statement)
+    else:
+        db.execute(statement)
     if commit:
         db.commit()
 
@@ -197,7 +209,7 @@ async def api_cache_set_many_async(db: Session, tier: str, items: dict, **kwargs
 
     def write(session):
         for key, data in items.items():
-            api_cache_set(session, tier, key, data, commit=False, **kwargs)
+            api_cache_set(session, tier, key, data, commit=False, retry_locked=False, **kwargs)
         session.commit()
 
     if not items:
@@ -216,7 +228,7 @@ async def api_cache_set_async(db: Session, tier: str, key: str, data, **kwargs) 
     from app.database import off_loop
 
     try:
-        await off_loop(db, lambda session: api_cache_set(session, tier, key, data, **kwargs))
+        await off_loop(db, lambda session: api_cache_set(session, tier, key, data, retry_locked=False, **kwargs))
     except Exception:
         logger.warning("Cache write %s/%s failed — not cached", tier, key, exc_info=True)
 

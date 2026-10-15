@@ -46,6 +46,7 @@ from contextlib import contextmanager
 import numpy as np
 from sqlalchemy.orm import Session
 
+from app.database import execute_retrying_lock
 from app.models import LearnedClassification
 from app.time_utils import utcnow
 
@@ -530,35 +531,26 @@ def _store_classification(
     source: str,
     match_metadata: dict | None = None,
 ) -> None:
-    """Upsert a classification into the learning store with provenance."""
+    """Upsert a classification into the learning store with provenance.
+
+    One INSERT ... ON CONFLICT statement, as the donor and bill stores
+    write theirs, so a "database is locked" is retried
+    (execute_retrying_lock) rather than failing the run: an ORM add whose
+    flush is refused rolls the whole session back."""
     import json
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
     from app.pipeline.vector_store import get_model_version
 
-    meta_json = json.dumps(match_metadata) if match_metadata else None
-
-    existing = (
-        db_session.query(LearnedClassification)
-        .filter(
-            LearnedClassification.entity_name == entity_name,
-            LearnedClassification.entity_type == entity_type,
-        )
-        .first()
-    )
-    if existing:
-        existing.value = value
-        existing.confidence = confidence
-        existing.source = source
-        existing.model_version = get_model_version() if source in ("embedding", "nn") else None
-        existing.match_metadata = meta_json
-        existing.learned_at = utcnow()
-    else:
-        db_session.add(LearnedClassification(
-            entity_name=entity_name,
-            entity_type=entity_type,
-            value=value,
-            confidence=confidence,
-            source=source,
-            model_version=get_model_version() if source in ("embedding", "nn") else None,
-            match_metadata=meta_json,
-        ))
+    fields = {
+        "value": value,
+        "confidence": confidence,
+        "source": source,
+        "model_version": get_model_version() if source in ("embedding", "nn") else None,
+        "match_metadata": json.dumps(match_metadata) if match_metadata else None,
+        "learned_at": utcnow(),
+    }
+    stmt = sqlite_insert(LearnedClassification).values(
+        entity_name=entity_name, entity_type=entity_type, **fields,
+    ).on_conflict_do_update(index_elements=["entity_name", "entity_type"], set_=fields)
+    execute_retrying_lock(db_session, stmt)
     db_session.commit()

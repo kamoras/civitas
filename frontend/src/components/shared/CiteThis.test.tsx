@@ -6,13 +6,13 @@ describe("citation", () => {
     expect(
       citation("A record", "2026-10-13", "/politicians/jordan-hale", new Date(2026, 9, 14))
     ).toBe(
-      "Civitas. (2026, October 13). A record [Data set]. Retrieved October 14, 2026, from https://civitas-research.org/politicians/jordan-hale"
+      "Civitas Research. (2026, October 13). A record [Data set]. Retrieved October 14, 2026, from https://civitas-research.org/politicians/jordan-hale"
     );
   });
 
   it("says n.d. for a record without a date of its own", () => {
     expect(citation("A bill", null, "/congress/bills/HR.1", new Date(2026, 0, 2))).toMatch(
-      /^Civitas\. \(n\.d\.\)\. A bill \[Data set\]\. Retrieved January 2, 2026, from /
+      /^Civitas Research\. \(n\.d\.\)\. A bill \[Data set\]\. Retrieved January 2, 2026, from /
     );
   });
 

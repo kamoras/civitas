@@ -138,6 +138,19 @@ def test_redirects_nginx_makes_are_relative():
         assert "absolute_redirect off" in server.directives
 
 
+def test_www_redirects_to_the_one_canonical_host():
+    # www answered 200 with the whole site: a duplicate of every page for
+    # search engines. It must 301 to the apex, path and query kept.
+    public = [
+        s
+        for s in _walk(_parse(CONF.read_text()))
+        if s.head == "server" and not any(d.startswith("listen 127.0.0.1:") for d in s.directives)
+    ]
+    (server,) = public
+    (block,) = [b for b in server.children if b.head == "if ($host = www.civitas-research.org)"]
+    assert block.directives == ["return 301 https://civitas-research.org$request_uri"]
+
+
 def test_security_headers_live_only_in_the_snippet():
     """One copy: a header set in civitas.conf directly would be the start of
     a second list that drifts from the first."""

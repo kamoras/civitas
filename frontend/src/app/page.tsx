@@ -7,15 +7,8 @@ import OnTheRecord from "@/components/home/OnTheRecord";
 import ElectionNight from "@/components/home/ElectionNight";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import JsonLd from "@/components/seo/JsonLd";
-import {
-  BSKY_PROFILE_URL,
-  GITHUB_REPO_URL,
-  HOME_DESCRIPTION,
-  HOME_TITLE,
-  SITE_NAME,
-  SITE_URL,
-  pageMetadata,
-} from "@/lib/site";
+import { HOME_DESCRIPTION, HOME_TITLE, pageMetadata } from "@/lib/site";
+import { siteJsonLd } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: HOME_TITLE,
@@ -24,27 +17,9 @@ export const metadata = pageMetadata({
   path: "/",
 });
 
-// Names the site as an entity, so a search for "Civitas" can resolve to
-// this domain rather than to the dictionary word or any other project.
-const SITE_JSON_LD = [
-  {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: SITE_NAME,
-    alternateName: "Civitas Research",
-    url: SITE_URL,
-    description: HOME_DESCRIPTION,
-    inLanguage: "en-US",
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    name: SITE_NAME,
-    url: SITE_URL,
-    logo: `${SITE_URL}/icon.svg`,
-    sameAs: [BSKY_PROFILE_URL, GITHUB_REPO_URL],
-  },
-];
+// Names the site as an entity, so a search for "Civitas Research" resolves
+// to this domain rather than to any other Civitas (lib/seo.ts).
+const SITE_JSON_LD = siteJsonLd();
 
 /*
   The full-screen canvas animation that used to sit behind this page is gone,

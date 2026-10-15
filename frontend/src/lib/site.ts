@@ -18,7 +18,22 @@ import type { Metadata } from "next";
  * and state as the directory.
  */
 export const SITE_URL = "https://civitas-research.org";
-export const SITE_NAME = "Civitas";
+/**
+ * The site's name everywhere a search engine reads one: the title template,
+ * og:site_name, application-name, the manifest, the WebSite and
+ * Organization JSON-LD. "Civitas" alone is shared by a UK think tank, a
+ * U.S. university institute, an oil company, a dictionary word and more,
+ * so the name search engines are given is the full one, matching the
+ * domain. Google picks the site name it shows from the WebSite structured
+ * data, the title and og:site_name, and wants them to agree
+ * (developers.google.com/search/docs/appearance/site-names). The on-page
+ * mark stays "CIVITAS"; this is the name, not the logo.
+ */
+export const SITE_NAME = "Civitas Research";
+/** The root layout's title template: every page but the homepage. */
+export const TITLE_TEMPLATE = `%s | ${SITE_NAME}`;
+/** Other names the site goes by, for WebSite/Organization `alternateName`. */
+export const SITE_ALTERNATE_NAMES = ["Civitas", "civitas-research.org"];
 export const BSKY_PROFILE_URL = "https://bsky.app/profile/civitas-research.org";
 export const GITHUB_REPO_URL = "https://github.com/kamoras/civitas";
 
@@ -91,7 +106,7 @@ export const DEFAULT_OG_IMAGE: OgImage = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: "Civitas: public-record scorecards for Congress",
+  alt: "Civitas Research: public-record scorecards for Congress",
 };
 
 /**
@@ -103,7 +118,7 @@ export const DEFAULT_OG_IMAGE: OgImage = {
  * builds the complete set every time instead.
  *
  * `title` is the page's own title; the root layout's template appends
- * " | Civitas". Pass `absoluteTitle` to opt out (the homepage).
+ * " | Civitas Research". Pass `absoluteTitle` to opt out (the homepage).
  *
  * `images` defaults to the site card. It has to be explicit: the root
  * `opengraph-image` file is NOT inherited by a route that sets `openGraph`
@@ -131,7 +146,7 @@ export function pageMetadata({
    *  the everything feed. */
   feed?: Feed;
 }): Metadata {
-  const fullTitle = absoluteTitle ? title : `${title} | ${SITE_NAME}`;
+  const fullTitle = absoluteTitle ? title : TITLE_TEMPLATE.replace("%s", () => title);
   const desc = metaDescription(description);
   return {
     title: absoluteTitle ? { absolute: title } : title,
@@ -173,9 +188,12 @@ export function notFoundMetadata(title: string, description: string): Metadata {
 
 /**
  * The homepage's title and description, which are also the site-wide
- * fallbacks. They lead with what people type into a search box — the old
- * title, "CIVITAS // PUBLIC RECORD", matched no query anyone makes.
+ * fallbacks. They lead with the full name (a search for the brand has to
+ * find it among every other "Civitas") and then say what the site is, in
+ * the words people search with — the old title, "CIVITAS // PUBLIC
+ * RECORD", matched no query anyone makes. Both are kept under what a
+ * result page shows (~60 and 160 characters).
  */
-export const HOME_TITLE = "Civitas: Congress Scorecards, Voting Records & Campaign Finance";
+export const HOME_TITLE = "Civitas Research: Congress Scorecards & Political Transparency";
 export const HOME_DESCRIPTION =
-  "Nonpartisan scorecards for every senator, representative, president, and Supreme Court justice: voting records, donors, PAC money, and bills from public data.";
+  "Civitas Research is a nonpartisan public record of the U.S. government: scorecards for every member of Congress, president and justice, from votes and donors.";

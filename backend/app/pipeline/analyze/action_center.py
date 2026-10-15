@@ -3466,7 +3466,14 @@ def _update_national_monitors(today: str, db: Session) -> None:
         normalize_embeddings=True,
     )
 
+    # Committed even when it swept nothing: its DELETE opens the write
+    # transaction whatever it matches, and the rename below asks the model.
+    # Left open, that held SQLite's write lock through the LLM call on every
+    # refresh while a monitor was still named after a headline, and the
+    # nightly Senate run and House sponsorship step it ran beside each died
+    # on "database is locked" (2026-10-15, 05:26 and 07:23 UTC).
     _sweep_orphan_updates(db)
+    db.commit()
     if _prune_off_topic_updates(db):
         db.commit()
 
@@ -4914,6 +4921,18 @@ def _bluesky_eligible_issues(db: Session, today: str) -> list[ActionIssue]:
     )
 
 
+def _commit_stage(db: Session, stage: str) -> None:
+    """Commit a refresh stage's writes, whether or not the stage raised
+    partway (what it wrote before the raise is kept, as it always was), so
+    no stage leaves the write transaction open into the next one's slow
+    work. A failed commit is rolled back and the refresh goes on."""
+    try:
+        db.commit()
+    except Exception:
+        logger.exception("Commit after the %s stage failed (non-fatal)", stage)
+        db.rollback()
+
+
 def _run_refresh(db: Session) -> int:
     t0 = time.perf_counter()
     today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
@@ -4937,14 +4956,21 @@ def _run_refresh(db: Session) -> int:
     # and vice versa), so it runs first and each source is wrapped non-
     # fatally: a bug in one must never take down the whole hourly refresh
     # or block the other source.
+    #
+    # Each stage commits what it wrote before the next one's fetch: a draft
+    # flushed by the roll-call check and left uncommitted held SQLite's
+    # write lock through the Federal Register and reader-count requests
+    # after it, and the nightly chain runs beside this refresh.
     try:
         check_roll_call_signals(db, today)
     except Exception:
         logger.exception("check_roll_call_signals failed (non-fatal)")
+    _commit_stage(db, "roll-call signals")
     try:
         check_federal_register_signals(db, today)
     except Exception:
         logger.exception("check_federal_register_signals failed (non-fatal)")
+    _commit_stage(db, "Federal Register signals")
     try:
         _refresh_open_comment_views(db)
     except Exception:
@@ -4959,17 +4985,10 @@ def _run_refresh(db: Session) -> int:
         retire_covered_developing_issues(db)
     except Exception:
         logger.exception("expire_stale_developing_issues failed (non-fatal)")
-    # Own try/except so this always fires regardless of which call above
-    # raised — otherwise a raise between check_roll_call_signals'
-    # db.add()/flush() and this commit silently dropped the flushed-but-
-    # uncommitted new row on the two early-abort paths below (neither
-    # commits on its own; refresh_action_issues' finally: db.close() would
-    # discard it). Self-healing either way (the next hourly poll re-drafts
-    # the same vote), but wasting a full LLM draft + grounding pass isn't.
-    try:
-        db.commit()
-    except Exception:
-        logger.exception("Commit after roll-call-signal stage failed (non-fatal)")
+    # Committed whichever call above raised: the two early-abort paths
+    # below commit nothing of their own, and refresh_action_issues'
+    # finally: db.close() would discard it.
+    _commit_stage(db, "developing-issue expiry")
 
     # 1. Fetch articles
     _set_refresh_state(stage="fetch")
@@ -5730,8 +5749,10 @@ def _cleanup_old_unposted_issues(db: Session) -> int:
         )
         .delete()
     )
+    # Committed even with nothing matched: the statement opened the write
+    # transaction either way (database.WRITE_HOLD_WARN_S).
+    db.commit()
     if deleted:
-        db.commit()
         logger.info("Cleaned up %d old unposted action issues", deleted)
     return deleted
 
@@ -5748,7 +5769,9 @@ def _prune_stale_api_cache(db: Session) -> int:
         .filter(ApiCache.cached_at < cache_cutoff)
         .delete()
     )
+    # Committed even with nothing matched: the statement opened the write
+    # transaction either way (database.WRITE_HOLD_WARN_S).
+    db.commit()
     if cache_deleted:
-        db.commit()
         logger.info("Pruned %d stale api_cache entries", cache_deleted)
     return cache_deleted

@@ -7,7 +7,15 @@ import type { ActionIssue } from "@/types/action";
 import type { BillDetail } from "@/types/bill";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { VoteDetail } from "@/types/congress";
-import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
+import {
+  BSKY_PROFILE_URL,
+  GITHUB_REPO_URL,
+  HOME_DESCRIPTION,
+  SITE_ALTERNATE_NAMES,
+  SITE_NAME,
+  SITE_URL,
+  absoluteUrl,
+} from "@/lib/site";
 import { billCanonicalPath, calendarDate } from "./congress";
 
 const PARTY_ADJECTIVES: Record<string, string> = {
@@ -153,6 +161,73 @@ export function legislationJsonLd(bill: BillDetail) {
   };
 }
 
+// Node ids, so every other page's data can name the publisher by
+// reference rather than repeat it (schema.org @id; Google joins the nodes).
+export const ORGANIZATION_ID = `${SITE_URL}/#organization`;
+export const WEBSITE_ID = `${SITE_URL}/#website`;
+
+/**
+ * The site as an entity, on the homepage: the WebSite node is what Google's
+ * site-name system reads first (name, alternateName, url — "Provide a site
+ * name to Google Search"), and the Organization node is the publisher with
+ * its logo and its profiles elsewhere (sameAs). Both carry the full name,
+ * since "Civitas" alone names many other organizations.
+ *
+ * The SearchAction is schema.org's description of /explore's search. Google
+ * retired the sitelinks search box it once drew from this (2024); it is
+ * kept because it states a true fact about the site to any reader of it.
+ */
+export function siteJsonLd() {
+  return [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "@id": WEBSITE_ID,
+      name: SITE_NAME,
+      alternateName: SITE_ALTERNATE_NAMES,
+      url: `${SITE_URL}/`,
+      description: HOME_DESCRIPTION,
+      inLanguage: "en-US",
+      publisher: { "@id": ORGANIZATION_ID },
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate: `${SITE_URL}/explore?q={search_term_string}`,
+        },
+        "query-input": "required name=search_term_string",
+      },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "@id": ORGANIZATION_ID,
+      name: SITE_NAME,
+      alternateName: SITE_ALTERNATE_NAMES,
+      url: `${SITE_URL}/`,
+      // A raster logo at least 112px square (Google's Organization logo
+      // guidelines): the 192px app icon, not the 32-unit SVG favicon.
+      logo: absoluteUrl("/apple-icon.png"),
+      description:
+        "An independent, open-source political transparency project that scores U.S. members of Congress and presidents from public records.",
+      sameAs: [BSKY_PROFILE_URL, GITHUB_REPO_URL],
+    },
+  ];
+}
+
+/** /about, as the page describing the organization (schema.org AboutPage). */
+export function aboutPageJsonLd(description: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    name: `About ${SITE_NAME}`,
+    url: absoluteUrl("/about"),
+    description,
+    isPartOf: { "@id": WEBSITE_ID },
+    about: { "@id": ORGANIZATION_ID },
+  };
+}
+
 /** An Action Center issue as a news-style Article. */
 export function articleJsonLd(issue: ActionIssue) {
   const url = absoluteUrl(`/issue/${issue.publicId}`);
@@ -166,7 +241,9 @@ export function articleJsonLd(issue: ActionIssue) {
     image: absoluteUrl(`/api/og?issue=${issue.publicId}`),
     datePublished: issue.firstSurfaced || issue.date,
     dateModified: issue.date,
-    publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
+    // Named in full as well as by @id: the Organization node itself is
+    // only on the homepage, and Google reads each page on its own.
+    publisher: { "@type": "Organization", "@id": ORGANIZATION_ID, name: SITE_NAME, url: SITE_URL },
   };
 }
 
