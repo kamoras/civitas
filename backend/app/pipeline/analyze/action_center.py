@@ -90,6 +90,7 @@ from app.pipeline.fetch.news_feeds import (
     fetch_news_articles,
 )
 from app.pipeline.fetch.trending import TrendingTopic, fetch_trending_topics
+from app.fact_diff import stored_new_facts
 from app.pipeline.vector_store import (
     get_embedding_model,
     get_similarity_model,
@@ -613,7 +614,8 @@ def _apply_matched_issue_update(
     # LLM does not promise a stable order between runs, and this cares
     # about content, not sequence (app/fact_diff.py's new_facts_since
     # feels the same way about the read side).
-    if set(json.loads(match.facts or "[]")) != set(json.loads(new_values["facts"] or "[]")):
+    facts_changed = set(json.loads(match.facts or "[]")) != set(json.loads(new_values["facts"] or "[]"))
+    if facts_changed:
         match.previous_facts = match.facts
 
     match.rank = rank
@@ -621,6 +623,8 @@ def _apply_matched_issue_update(
     match.is_current = True
     for attr in _ISSUE_UPDATE_ATTRS:
         setattr(match, attr, new_values[attr])
+    if facts_changed or match.new_facts is None:
+        match.new_facts = stored_new_facts(match.facts, match.previous_facts)
     if invalidate_story:
         match.full_story = None
 
@@ -905,6 +909,28 @@ def dedupe_near_identical_issues(issues: list["ActionIssue"]) -> list["ActionIss
         return list(issues)
     representative = _near_identical_clusters(issues)
     return [issue for idx, issue in enumerate(issues) if representative[idx] == idx]
+
+
+# Rows filled per refresh: the first refreshes after the column was added
+# work through the older rows a batch at a time instead of stalling one run.
+_NEW_FACTS_BACKFILL_BATCH = 200
+
+
+def backfill_new_facts(db: "Session") -> int:
+    """Fill ActionIssue.new_facts for rows written before the column
+    existed, newest first, so the API can read it instead of running the
+    embedding model per request. Rows with no previous facts get "[]"
+    without touching the model."""
+    rows = (
+        db.query(ActionIssue)
+        .filter(ActionIssue.new_facts.is_(None))
+        .order_by(ActionIssue.date.desc(), ActionIssue.id.desc())
+        .limit(_NEW_FACTS_BACKFILL_BATCH)
+        .all()
+    )
+    for row in rows:
+        row.new_facts = stored_new_facts(row.facts, row.previous_facts)
+    return len(rows)
 
 
 def mark_recent_duplicates(db: "Session") -> int:
@@ -5561,6 +5587,15 @@ def _run_refresh(db: Session) -> int:
         mark_recent_duplicates(db)
     except Exception:
         logger.exception("Marking the recent feed's duplicates failed")
+        db.rollback()
+
+    # Rows written before ActionIssue.new_facts existed get it here, where
+    # the model is loaded; the API reads the stored value and never diffs.
+    try:
+        backfill_new_facts(db)
+        db.commit()
+    except Exception:
+        logger.exception("Backfilling issues' new facts failed")
         db.rollback()
 
     # Stage 4: Post new/surging issues to Bluesky.
