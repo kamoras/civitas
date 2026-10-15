@@ -25,6 +25,7 @@ from app.models import ExploreDocument
 from app.pipeline.analyze.document_authority import declared_identifiers
 from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
 from app.services.explore_search import browse_documents, hybrid_search
+from app.services.bill_record import SPEECH_DOC_TYPES, speech_bills
 from app.time_utils import comment_period_today
 
 logger = logging.getLogger(__name__)
@@ -266,6 +267,8 @@ async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
             "agencyName": doc.agency_name or "",
             "commentUrl": doc.comment_url or "",
             "commentsCloseOn": doc.comments_close_on or "",
+            # A floor speech's bill, from the Record heading it was given under.
+            "bills": speech_bills(doc.title, doc.date) if doc.doc_type in SPEECH_DOC_TYPES else [],
             **fr_reference(doc),
         },
         headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=300"},

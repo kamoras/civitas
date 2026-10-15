@@ -1,6 +1,7 @@
 """A bill's public record for its detail page (any bill), and one roll
 call with every member's position."""
 
+import json
 import asyncio
 
 import pytest
@@ -500,3 +501,62 @@ def test_party_counts_read_positions_as_the_tally_does():
     # nay in the stored tally; the party breakdown read them as not voting.
     positions = [RollCallPosition(party="R", position=p) for p in ("Guilty", "Not Guilty", "Present", "Not Voting")]
     assert br.party_breakdown(positions) == [{"party": "R", "yea": 1, "nay": 1, "present": 1, "notVoting": 1}]
+
+
+# ── Floor speeches and their bills, from the Record heading ──────────
+
+def _speech(db, title, date="2026-09-16", chamber="House", name="Doe", pid=None):
+    from app.models import ExploreDocument
+    doc = ExploreDocument(doc_type=f"{chamber} Floor Speech", source="Congressional Record (GovInfo)",
+                          title=title, body="text", date=date, chamber=chamber, politician_name=name,
+                          politician_id=pid)
+    db.add(doc)
+    db.commit()
+    return doc
+
+
+def test_a_record_heading_names_its_bills_in_capitals_or_not():
+    from app.pipeline.fetch.daily_digest import heading_bill_ids
+
+    assert heading_bill_ids("S.J. RES. 188") == ["SJRES.188"]
+    assert heading_bill_ids("UNANIMOUS CONSENT REQUEST--S. RES. 784") == ["SRES.784"]
+    assert heading_bill_ids("PROVIDING FOR CONSIDERATION OF H.R. 9576, AN ACT; AND H.R. 10326") == [
+        "HR.9576", "HR.10326"]
+    # A possessive before a year is no bill (the looser trend pattern read
+    # "COUNTY'S 2026" as S. 2026), nor is "U.S." before a number.
+    assert heading_bill_ids("MEEKER COUNTY'S 2026 FARM FAMILY OF THE YEAR") == []
+    assert heading_bill_ids("U.S. 2 CODE") == []
+
+
+def test_a_speech_names_its_bill_in_the_congress_it_was_given():
+    assert br.speech_bills("Remarks on S. 2403", "2026-09-16") == [
+        {"billId": "S.2403", "label": "S. 2403", "congress": 119}]
+    assert br.speech_bills("TRIBUTE TO A TEACHER", "2026-09-16") == []
+
+
+def test_the_bill_page_lists_its_floor_debate_grouped_by_heading(db_session):
+    rule = "PROVIDING FOR CONSIDERATION OF H.R. 9576, AN ACT; AND H.R. 10326"
+    _speech(db_session, rule, name="Doe", pid="jane-doe")
+    _speech(db_session, f"Remarks on {rule}", name="Roe")
+    _speech(db_session, f"Remarks on {rule}", name="Doe", pid="jane-doe")   # Doe's second turn
+    _speech(db_session, "Remarks on S. 9576", chamber="Senate")       # another bill with the same number
+    _speech(db_session, "H.R. 9576", date="2024-05-01")                # the 118th Congress's H.R. 9576
+    _speech(db_session, "H.R. 95760")                                  # a longer number
+    _speech(db_session, "H.R. 9576", date="2026-09-20", chamber="Senate", name="Poe")
+    debate = br.floor_debate(db_session, 119, "HR.9576")
+    assert [(d["date"], d["chamber"], d["heading"]) for d in debate] == [
+        ("2026-09-20", "senate", "H.R. 9576"),
+        ("2026-09-16", "house", rule),
+    ]
+    assert [(s["speaker"], s["politicianId"], s["speeches"]) for s in debate[1]["speakers"]] == [
+        ("Doe", "jane-doe", 2), ("Roe", None, 1)]
+    shaped = br.shape_record(db_session, 119, "HR.9576", {})
+    assert shaped["floorDebate"] == debate and shaped["floorSpeechCount"] == 4
+
+
+def test_an_explore_speech_links_its_bill(db_session):
+    from app.api.explore import get_explore_document
+
+    speech = _speech(db_session, "Remarks on S.J. RES. 188")
+    body = json.loads(asyncio.run(get_explore_document(speech.id, db_session)).body)
+    assert body["bills"] == [{"billId": "SJRES.188", "label": "S.J. Res. 188", "congress": 119}]

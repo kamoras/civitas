@@ -224,6 +224,16 @@ export interface BillRecordVote {
   parties: PartySplit[];
 }
 
+/** One Record heading's speeches on a day (bill_record.floor_debate). */
+export interface FloorDebate {
+  date: string;
+  chamber: Chamber;
+  /** The Record's heading, verbatim. */
+  heading: string;
+  /** Each member once, at their first turn; `speeches` counts their turns. */
+  speakers: { speaker: string; politicianId: string | null; speechId: number; speeches: number }[];
+}
+
 export interface BillRecord {
   billId: string;
   billLabel: string | null;
@@ -245,6 +255,12 @@ export interface BillRecord {
   }[];
   textVersions: { type: string; date: string; formats: Record<string, string> }[];
   votes: BillRecordVote[];
+  /** Floor speeches whose Record heading names this bill, grouped by day,
+   *  chamber and heading, newest first. Optional only for a backend older
+   *  than the field. */
+  floorDebate?: FloorDebate[];
+  /** Speeches across floorDebate. */
+  floorSpeechCount?: number;
   days: {
     date: string;
     chamber: Chamber;
