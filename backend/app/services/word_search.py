@@ -50,6 +50,22 @@ def search(conn: sqlite3.Connection, q: str) -> set[str]:
     return {k for (k,) in conn.execute("SELECT k FROM docs WHERE docs MATCH ?", (expression,))}
 
 
+def ranked(conn: sqlite3.Connection, q: str, weights: tuple[float, ...],
+           columns: tuple[int, ...] | None = None) -> list[str]:
+    """`search`'s keys, best first by BM25 (Robertson & Zaragoza 2009) with
+    one weight per text column (FTS5's bm25(), which is lower for better).
+    `columns` (0-based text columns) limits where the words may match."""
+    expression = match_expression(q)
+    if expression is None:
+        return []
+    if columns is not None:
+        expression = "{" + " ".join(f"t{i}" for i in columns) + "} : (" + expression + ")"
+    args = ", ".join(str(w) for w in (0.0, *weights))
+    return [k for (k,) in conn.execute(
+        f"SELECT k FROM docs WHERE docs MATCH ? ORDER BY bm25(docs, {args})", (expression,),
+    )]
+
+
 def matching_keys(rows: Iterable[tuple[str, ...]], n_texts: int, q: str) -> set[str]:
     """`search` over a throwaway index of `rows`: for a few hundred rows (a
     member's votes) building one costs about a millisecond."""

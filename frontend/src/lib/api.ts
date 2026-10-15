@@ -889,6 +889,39 @@ export interface ExploreResponse {
   indexEmpty?: boolean;
 }
 
+/** A sitting member a search names (GET /api/explore/matches). */
+export interface ExploreMemberMatch {
+  id: string;
+  name: string;
+  party: "D" | "R" | "I";
+  state: string;
+  chamber: "senate" | "house";
+  district: number | null;
+  thumbnailUrl: string | null;
+}
+
+/** A bill a search names: by its number, or by the words of its titles. */
+export interface ExploreBillMatch {
+  billId: string;
+  /** Null for a bill number no sitting member sponsored (its page is Congress.gov's record). */
+  congress: number | null;
+  label: string;
+  title: string | null;
+  shortTitle: string | null;
+  stage: string | null;
+}
+
+/** Explore's typed match groups, beside the document results and never fused into them. */
+export interface ExploreMatches {
+  members: { total: number; items: ExploreMemberMatch[] };
+  bills: { total: number; items: ExploreBillMatch[] };
+}
+
+export async function fetchExploreMatches(q: string): Promise<ExploreMatches> {
+  const url = `${API_BASE}/explore/matches?q=${encodeURIComponent(q)}`;
+  return cachedFetch<ExploreMatches>(url, TTL.SHORT);
+}
+
 export interface ExploreStats {
   totalDocuments: number;
   byType: Record<string, number>;

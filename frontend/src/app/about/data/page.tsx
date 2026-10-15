@@ -417,6 +417,12 @@ export default function DataChapter() {
           moved down, never dropped. Ranking weights are changed only when a measurement of search
           quality says to, never because one set of results looks better.
         </P>
+        <P>
+          Above the documents, a search also lists the sitting members whose names (or states) hold
+          its words, and the bills it names: by number, or by the words of their titles. These are
+          separate lists, not mixed into the document ranking, and they match names and titles as
+          written, with no model.
+        </P>
       </Section>
 
       <Section id="privacy" title="What we record about you">
