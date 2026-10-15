@@ -46,6 +46,19 @@ body {
   overflow-x: hidden;
 }
 
+/* ===== LAYOUT STABILITY: THE FOOTER STARTS BELOW THE FIRST SCREEN =====
+   Most pages fetch their content in the browser, and until it arrives their
+   <main> is a loading line a few hundred pixels tall, so the footer painted
+   inside the first screen and was thrown off it when the content landed. That
+   one jump was most of the layout shift on /action, /elections, /leaderboard,
+   /politicians and every Explore document (CLS 0.58-0.80 on a throttled phone,
+   measured 2026-10-14; "good" is under 0.1). Reserving the first screen for
+   <main> keeps the footer out of view until there is something above it.
+   Every page's <main> carries this id (layoutStability.test.ts). */
+#main-content {
+  min-height: 100vh;
+}
+
 /* ===== READING: LINE HEIGHT ON PROSE =====
    Prose had no line-height of its own, so it inherited the browser default of
    roughly 1.2 — and the body face's short x-height made lines look tighter
