@@ -9,6 +9,7 @@ Representative/President/Justice into one directory.
 import json
 import logging
 import re
+import sqlite3
 import threading
 import time
 from collections import Counter
@@ -24,6 +25,7 @@ from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, S
 from app.photos import bioguide_photo
 from app.pipeline.congress_activity import eastern_today
 from app.services.bill_record import bill_number_matches, canonical_bill_id, typed_bill_number
+from app.services.word_search import build_index, search
 from app.schemas import (
     BillDetailSchema,
     BillInFlightSchema,
@@ -405,6 +407,38 @@ def clear_bill_collection_cache() -> None:
     _changes.reset()
 
 
+# The word index over the cached snapshot's titles and sponsors
+# (word_search), built the first time a search reads a new snapshot (keyed
+# by its build time) and shared by every search until the next. One per API
+# process, like the snapshot.
+_word_index_lock = threading.Lock()
+_word_index: tuple[float, sqlite3.Connection] | None = None
+
+
+def _row_key(bill_id: str, congress: int | None) -> str:
+    return f"{bill_id}|{congress}"
+
+
+def _word_matches(q: str) -> set[str]:
+    """The _row_key of every cached bill whose title or sponsor holds each
+    of the query's words (word_search: stemmed, as word starts, in any
+    order) — "flag burning" finds "Flag Burners Act"."""
+    global _word_index
+    cached = _collect_cache
+    if cached is None:
+        return set()
+    built, _, rows = cached
+    with _word_index_lock:
+        if _word_index is None or _word_index[0] != built:
+            if _word_index is not None:
+                _word_index[1].close()
+            _word_index = (built, build_index(
+                ((_row_key(r.bill.bill_id, r.bill.congress), r.bill.title, r.bill.sponsor_name) for r in rows),
+                n_texts=2,
+            ))
+        return search(_word_index[1], q)
+
+
 def get_bills_in_flight(
     db: Session,
     stage: str | None = None,
@@ -423,17 +457,17 @@ def get_bills_in_flight(
     if party:
         filtered = [r for r in filtered if r.bill.sponsor_party == party]
     if q:
-        q_lower = q.lower()
         # A bill number in any spelling: a whole one ("S. 2398" as the hub
         # prints it, "HR 997") is that bill, not every number it begins
         # (H.R. 9977); anything else with a digit (the number alone, "997")
-        # matches as a prefix. Title and sponsor as typed.
+        # matches as a prefix. Title and sponsor by their words
+        # (_word_matches).
         whole = canonical_bill_id(q.strip())
         number = None if whole else typed_bill_number(q)
+        words = _word_matches(q)
         filtered = [
             r for r in filtered
-            if q_lower in r.bill.title.lower()
-            or q_lower in r.bill.sponsor_name.lower()
+            if _row_key(r.bill.bill_id, r.bill.congress) in words
             or (whole and r.bill.bill_id.upper() == whole)
             or (number and bill_number_matches(r.bill.bill_id, number))
         ]
