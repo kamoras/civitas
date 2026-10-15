@@ -982,7 +982,7 @@ every district of both maps is present once, and the Texas and California
 official per-district tables agree; districts more than 1.5 points from
 Cook are listed as alerts. Against Cook: 119th lines r 0.9998, mean
 absolute difference 0.27, 423 of 435 equal when rounded, all within one;
-120th lines r 0.9997, 0.28, 402 equal, 432 within one. It moves no score:
+120th lines r 0.9997, 0.28, 403 equal, 432 within one. Texas's Red-206 tables are the independent cross-check; California's is also its correction source, so agreement there only confirms the correction was applied. It moves no score:
 Constituent Alignment still reads Cook's figure.
 The same list tells the election-night sync that a redrawn seat has no
 holder to measure a flip against, and lets an incumbent running under a new

@@ -16,10 +16,10 @@
    "use": "2024 presidential votes by precinct, with each precinct's U.S. House district"
   },
   {
-   "name": "MEDSL state-level presidential returns, 2020 and 2024",
+   "name": "Official state-level presidential returns: FEC Federal Elections 2020 (2020), MEDSL 2024 state file (2024)",
    "url": "backend/app/data/state_pvi.json",
    "version": "the state PVI file's stored inputs",
-   "license": "CC0 1.0",
+   "license": "public domain (FEC); CC0 1.0 (MEDSL)",
    "use": "national two-party shares and the state-total gate"
   },
   {
@@ -84,12 +84,6 @@
    "title": "Maine Secretary of State, November 5, 2024 general election: President and Vice President by Congressional District",
    "url": "https://www.maine.gov/sos/sites/maine.gov.sos/files/inline-files/President%20and%20Vice%20President%20by%20Congressional%20District%202024.xlsx",
    "page": "https://www.maine.gov/sos/elections-voting/election-results-data/election-results-2024"
-  },
-  "fec_2020": {
-   "title": "Federal Election Commission, Federal Elections 2020, Table 2: 2020 presidential electoral and popular vote (the 2020 state-total gate)",
-   "url": "https://www.fec.gov/resources/cms-content/documents/federalelections2020.xlsx",
-   "sheet": "sheet3",
-   "page": "https://www.fec.gov/introduction-campaign-finance/election-results-and-voting-information/federal-elections-2020/"
   }
  },
  "fixes": [

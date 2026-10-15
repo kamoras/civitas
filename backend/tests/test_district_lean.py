@@ -175,3 +175,10 @@ def test_loader_serves_each_congress_and_nothing_for_an_unbuilt_one():
     assert district_lean.computed_lean(None) == {}
     assert district_lean.lean_for("WY", 0, 120) == DATA["congresses"]["120"]["districts"]["WY-0"]
     assert district_lean.meta()["href"] == "/about/data#computed-lean"
+
+
+def test_texas_is_the_independent_cross_check_and_california_is_labelled_not():
+    checks = DATA["validation"]["crossChecks"]
+    assert all(v["independent"] for k, v in checks.items() if k.startswith("TX-"))
+    assert checks["CA-119-2024"]["independent"] is False  # also CA's correction source
+    assert checks["TX-119-2024"]["maxAbsDiffPts"] <= 0.1

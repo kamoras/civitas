@@ -70,8 +70,8 @@ County), or take a state's official county x district or district counts
 GATES (any failure: the script prints every failure and writes nothing):
 
   * each state's two-party totals within 0.2% of the official state
-    figures: the FEC's for 2020, MEDSL's state file (state_pvi.json inputs)
-    for 2024;
+    figures state_pvi.json stores as its inputs (the FEC's for 2020,
+    MEDSL's state file for 2024);
   * every county whose official canvass was fetched (all of Indiana's, New
     Jersey's and Louisiana's, and each corrected county) within 0.2% of it;
   * every district's 2024/2020 two-party vote ratio between 0.85 and 1.15,
@@ -800,23 +800,6 @@ class Official:
             raise SystemExit(f"CA SSOV: read {district - 1} districts, expected 52")
         return out
 
-    # The FEC's official 2020 results by state (Federal Elections 2020,
-    # Table 2): the 2020 state-total reference. MEDSL's 1976-2020 file
-    # predates New York's certified count (13,901 Biden and 7,199 Trump
-    # votes short), which VEST and the FEC both have.
-    def fec_2020_states(self) -> dict[str, tuple[float, float]]:
-        raw = self._get("fec", self.sources["fec_2020"]["url"], "fec_federalelections2020.xlsx").read_bytes()
-        rows = _xlsx_rows(_as_first_sheet(raw, self.sources["fec_2020"]["sheet"]), skip=3)
-        table = [list(rows[0])] + [list(r.values()) for r in rows]
-        out = {}
-        for v in table:
-            st = (v[0] or "").rstrip("*")  # "ME*", "NE*": electoral votes split by district
-            if len(v) > 4 and re.fullmatch(r"[A-Z]{2}", st) and v[3].isdigit():
-                out[st] = (float(v[3]), float(v[4]))
-        if len(out) != 51:
-            raise SystemExit(f"FEC 2020 table: read {len(out)} jurisdictions, expected 51")
-        return out
-
     # Maine: the Secretary of State's results by congressional district,
     # one sheet per district, each closed by a "CGn Total" row.
     def maine_districts(self) -> dict[str, list[float]]:
@@ -1118,6 +1101,9 @@ def cross_checks(results: dict, cache: Path) -> tuple[dict, list[str]]:
         worst = max(diffs, key=lambda d: abs(diffs[d]))
         report[f"{st}-{cong}-{year}"] = {
             "source": url, "districts": len(diffs), "kind": kind,
+            # California's table is also its correction source (district_cells),
+            # so agreement there only confirms the correction was applied.
+            "independent": st != "CA",
             "meanAbsDiffPts": round(statistics.mean(abs(v) for v in diffs.values()), 3),
             "maxAbsDiffPts": round(abs(diffs[worst]), 3), "worst": f"{st}-{worst}",
         }
@@ -1132,9 +1118,8 @@ def gates(results: dict, inputs: dict, official: Official, fixes: list[dict],
     failures = []
     excused = {(str(e["congress"]), e["district"]): e["ratio"] for e in turnout_exceptions}
     cook = json.loads(DISTRICT_PVI.read_text())["congresses"]
-    fec20 = official.fec_2020_states()
     for st, r in results.items():
-        refs = (("2020", r["total20"], fec20[st], "FEC official"),
+        refs = (("2020", r["total20"], (inputs["2020"][st]["D"], inputs["2020"][st]["R"]), "FEC official"),
                 ("2024", r["total24"], (inputs["2024"][st]["D"], inputs["2024"][st]["R"]), "MEDSL state file"))
         for year, got, ref, label in refs:
             for k, p in ((0, "D"), (1, "R")):

@@ -370,7 +370,7 @@ export default function DataChapter() {
         <P>
           Against Cook&apos;s published figures the result differs by 0.27 points on average on the
           119th Congress&apos;s lines (423 of 435 districts round to the same number, all within one
-          point) and by 0.28 on the 2026 lines (402 the same, 432 within one). The Texas Legislative
+          point) and by 0.28 on the 2026 lines (403 the same, 432 within one). The Texas Legislative
           Council&apos;s official per-district tables match the 2024 counts on the lines they were
           cast on to within 0.01 point, and the 2020 allocation on both maps to within about a
           tenth; California&apos;s 2024 counts are taken from its own per-district table. Cook
