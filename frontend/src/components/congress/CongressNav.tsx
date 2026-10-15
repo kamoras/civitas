@@ -2,9 +2,13 @@ import Link from "next/link";
 import { TAB_CONTROL, BOXED_CONTROL } from "@/lib/controlStyles";
 import { presidentSupportHref } from "@/lib/presidentialSupport";
 
-/** Reports | Bills | With the president: each a page of its own, so each is
- * linkable and renders on the server. */
-export function CongressTabs({ active }: { active: "reports" | "bills" | "president" }) {
+/** Reports | Bills | Committees | With the president: each a page of its
+ * own, so each is linkable and renders on the server. */
+export function CongressTabs({
+  active,
+}: {
+  active: "reports" | "bills" | "committees" | "president";
+}) {
   const tab = (label: string, href: string, on: boolean) => (
     <Link
       href={href}
@@ -26,6 +30,7 @@ export function CongressTabs({ active }: { active: "reports" | "bills" | "presid
       </span>
       {tab("Reports", "/congress", active === "reports")}
       {tab("Bills", "/congress/bills", active === "bills")}
+      {tab("Committees", "/congress/committees", active === "committees")}
       {tab("With the president", presidentSupportHref("house"), active === "president")}
     </nav>
   );

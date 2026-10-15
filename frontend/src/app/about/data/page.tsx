@@ -78,7 +78,10 @@ export default function DataChapter() {
               senate.gov&apos;s committee rosters.
             </Fact>
             <Fact label="GovInfo">
-              The Congressional Record, read in full each day, and its Daily Digest.
+              The Congressional Record, read in full each day, and its Daily Digest: every committee
+              meeting and report it prints is searchable by committee, word or bill on{" "}
+              <A href="/congress/committees">the committee record</A> and listed on each bill&apos;s
+              page.
             </Fact>
             <Fact label="Party leadership and caucus">
               House leadership posts come from the House Clerk&apos;s member list: Speaker, both

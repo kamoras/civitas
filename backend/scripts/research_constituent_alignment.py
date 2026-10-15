@@ -607,7 +607,9 @@ def v615_expectation(M):
         g = full[full.party == party]
         if len(g) < score_calculator._MIN_CONSTITUENT_REFERENCE_PARTY:
             return None
-        kinked = int((g.alignment < 0).sum()) >= score_calculator._MIN_OPPOSED_SEATS_FOR_KINK
+        # v6.15's own rule (kept through v6.34): kink with five or more
+        # opposed seats. Reproduced as it was, not the current selection.
+        kinked = int((g.alignment < 0).sum()) >= 5
         cols = [np.ones(len(g)), g.alignment.values] + ([np.minimum(g.alignment.values, 0)] if kinked else [])
         coef, *_ = np.linalg.lstsq(np.column_stack(cols), g.brk.values, rcond=None)
         fits[party] = {"a": coef[0], "b": coef[1], "b_opposed": coef[2] if kinked else 0.0}

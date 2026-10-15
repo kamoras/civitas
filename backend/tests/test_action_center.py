@@ -61,6 +61,14 @@ from app.pipeline.analyze.action_center import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _fact_diff_without_the_model(monkeypatch):
+    """The "new facts" diff (app/fact_diff.py) runs wherever an issue's
+    facts change. None of these tests is about rewording detection, so each
+    text gets its own axis: every changed fact reads as new, with no model."""
+    monkeypatch.setattr("app.fact_diff._embed", lambda texts: np.eye(len(texts)))
+
+
 def _make_article(title: str, source: str = "AP News", url: str = "") -> NewsArticle:
     return NewsArticle(
         title=title,
@@ -1794,6 +1802,20 @@ class TestApplyMatchedIssueUpdate:
         assert match.rank == 1
         assert match.date == "2026-07-20"
         assert match.is_current is True
+
+    def test_stores_the_facts_new_since_the_outgoing_ones(self):
+        """Stored here, where the facts change, so the API reads it rather
+        than loading the embedding model per request."""
+        match = ActionIssue(
+            id=1, date="2026-07-19", rank=1, title="Story",
+            facts=json.dumps(["Kept fact."]), previous_facts="[]",
+        )
+        facts = ["Kept fact.", "Added fact."]
+        new_values = _new_values_for("Story", facts, "2026-07-20")
+
+        _apply_matched_issue_update(match, new_values, 1, "2026-07-20", "2026-07-20", facts, "Story")
+
+        assert json.loads(match.new_facts) == ["Added fact."]
 
     def test_previous_facts_snapshots_the_outgoing_facts_when_they_change(self):
         match = ActionIssue(

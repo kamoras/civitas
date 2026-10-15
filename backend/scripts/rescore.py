@@ -309,7 +309,9 @@ def main() -> int:
             "raised": payload["funding"]["totalRaised"] or 0,
             "old": {
                 "fi": s["score_funding_independence"], "pp": s["score_promise_persistence"],
-                "iv": s["score_constituent_alignment"], "fd": s["score_funding_diversity"],
+                # Raw SQL reads the column, which keeps its pre-rename name
+                # (models.Senator.score_constituent_alignment).
+                "iv": s["score_independent_voting"], "fd": s["score_funding_diversity"],
                 "le": s["score_legislative_effectiveness"],
             },
             "new": {
