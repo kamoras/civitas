@@ -35,12 +35,14 @@ export default function CommitteeEntries({ entries }: { entries: CommitteeEntry[
             )}
             <p className="text-sm leading-relaxed text-ink-lo">{e.text}</p>
             {e.bills.length > 0 && (
-              <p className="mt-1 flex flex-wrap gap-x-3 font-mono text-xs">
+              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs">
                 {e.bills.map((b) => (
                   <Link
                     key={b.billId}
                     href={billHref(b.billId, e.congress)}
-                    className="text-phos-mid underline decoration-white/30 underline-offset-4 hover:text-phos"
+                    // 24px tall, so the row of bill numbers meets WCAG 2.2's
+                    // target size on a phone.
+                    className="inline-flex min-h-6 items-center text-phos-mid underline decoration-white/30 underline-offset-4 hover:text-phos"
                   >
                     {b.billLabel}
                   </Link>
