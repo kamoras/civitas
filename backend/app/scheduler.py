@@ -28,6 +28,9 @@ from app.background import WritesHeld, start_writer
 from app.broadcast import deliver_pending, refresh_engagement
 from app.pipeline.analyze.trend_poster import run_trend_posts
 from app.pipeline import lease
+from app.pipeline import bill_refresh
+from app.pipeline.fetch import bill_display_titles
+from app.services.bill_service import warm_bill_collection_cache
 
 if TYPE_CHECKING:
     from app.pipeline_chain import Link
@@ -373,6 +376,21 @@ def _post_trends() -> None:
         db.close()
 
 
+async def _bill_refresh_pass() -> dict:
+    """One hourly bill pass: the statuses (pipeline/bill_refresh.py), then
+    the titles lists of bills moved past committee whose cached copy is
+    missing or went stale as they moved (fetch/bill_display_titles.py), for
+    the short title the bill list and page show. Here rather than in
+    bill_refresh so the display titles stay outside the analysis-code
+    fingerprint."""
+    summary = await bill_refresh.refresh_bill_statuses()
+    titles = await bill_display_titles.refresh_display_titles()
+    summary["display_titles"] = titles
+    if titles["fetched"]:
+        warm_bill_collection_cache()
+    return summary
+
+
 def _hourly_bill_status_refresh() -> None:
     """Incremental Congress.gov bill-status sync (pipeline/bill_refresh.py)
     in a background thread.
@@ -386,7 +404,7 @@ def _hourly_bill_status_refresh() -> None:
     """
     def _run():
         try:
-            from app.pipeline.bill_refresh import bill_tracker, refresh_bill_statuses
+            from app.pipeline.bill_refresh import bill_tracker
 
             from app.database import SessionLocal
             from app.models import PipelineRun
@@ -410,7 +428,7 @@ def _hourly_bill_status_refresh() -> None:
             # beside the next: two passes at once would let the older one's
             # snapshot overwrite the newer one's rows.
             summary = lease.run_tracked(
-                lease.BILL_REFRESH, bill_tracker(), refresh_bill_statuses, who="Bill status refresh",
+                lease.BILL_REFRESH, bill_tracker(), _bill_refresh_pass, who="Bill status refresh",
             )
             if summary is not None:
                 logger.info("Bill status refresh: %s", summary)

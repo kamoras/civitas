@@ -191,6 +191,29 @@ class TestFiltering:
         assert result.total == 1
         assert result.bills[0].bill_id == "S.1"
 
+    def test_search_matches_words_not_one_substring(self, db_session):
+        # Until 2026-10 the query had to appear in the title unbroken, so
+        # "flag burning" found nothing and "flag burn" found the bill.
+        senator = _make_senator(db_session)
+        _make_sponsored_bill(db_session, senator.id, "S.1", "INTRODUCED", title="Flag Burners Act")
+        _make_sponsored_bill(db_session, senator.id, "S.2", "INTRODUCED",
+                             title="Student Loan Forgiveness Act")
+        _make_sponsored_bill(db_session, senator.id, "S.3", "INTRODUCED",
+                             title="A bill to lower energy costs")
+        _make_sponsored_bill(db_session, senator.id, "S.4", "INTRODUCED", title="Flag Code Act")
+
+        for q, want in (("flag burning", ["S.1"]),  # stemmed: burning ~ Burners
+                        ("burning flags", ["S.1"]),  # any order, plural
+                        ("student loans", ["S.2"]),
+                        ("forgiv", ["S.2"]),  # half typed
+                        ("energy", ["S.3"]),  # Porter's y -> i, on both sides
+                        ("flag", ["S.1", "S.4"]),
+                        ("lag", []),  # a word's start, not anywhere inside it
+                        ("flag tax", []),  # every word is required
+                        ("--", [])):
+            result = get_bills_in_flight(db_session, q=q)
+            assert sorted(b.bill_id for b in result.bills) == want, q
+
     def test_search_matches_sponsor_name(self, db_session):
         fairley = _make_senator(db_session, id="s1", name="Sen. Joan Fairley")
         other = _make_senator(db_session, id="s2", name="Sen. Someone Else")

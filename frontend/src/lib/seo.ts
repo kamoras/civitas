@@ -123,7 +123,9 @@ export function describeBill(
       ? `Latest action: ${bill.latestAction}`
       : "";
   return {
-    title: `${label}: ${bill.title}`,
+    // The short title when Congress.gov has one the listing lacks: it is the
+    // name people search for ("One Big Beautiful Bill Act").
+    title: `${label}: ${bill.shortTitle || bill.title}`,
     description:
       `${label} (${ordinal(bill.congress)} Congress, ${CHAMBER_NAMES[bill.chamber] ?? bill.chamber}), sponsored by ${sponsor}. ${status}`.trim(),
   };
@@ -148,7 +150,8 @@ export function legislationJsonLd(bill: BillDetail) {
   return {
     "@context": "https://schema.org",
     "@type": "Legislation",
-    name: bill.title,
+    name: bill.shortTitle || bill.title,
+    ...(bill.shortTitle ? { alternateName: bill.officialTitle || bill.title } : {}),
     legislationIdentifier: bill.billId,
     url: absoluteUrl(billCanonicalPath(bill.billId, bill.congress)),
     ...(bill.introducedDate ? { legislationDate: bill.introducedDate } : {}),

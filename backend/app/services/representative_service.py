@@ -681,7 +681,7 @@ def get_rep_votes(
         base_q = base_q.filter(RepKeyVote.vote_category == category)
     # A reader's search narrows the list and its counts alike.
     if q and q.strip():
-        base_q = base_q.filter(vote_search(RepKeyVote, q))
+        base_q = base_q.filter(vote_search(base_q, RepKeyVote, q))
     # So does a date range; dates are stored YYYY-MM-DD, so they compare as strings.
     since = vote_period_start(period)
     if since is not None:

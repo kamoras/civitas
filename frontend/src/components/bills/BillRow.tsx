@@ -51,7 +51,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
             // padding that would space the list out.
             className="min-w-0 flex-1 min-h-6 flex items-center text-sm text-ink-hi hover:text-phos hover:underline leading-snug truncate"
           >
-            {bill.title || bill.billId}
+            {bill.shortTitle || bill.title || bill.billId}
           </Link>
           {bill.mentionCount > 0 && (
             <span
@@ -62,6 +62,13 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
             </span>
           )}
         </div>
+        {/* The official title stays visible under a short one: the short
+            title names the bill, the official one says what it does. */}
+        {bill.shortTitle && (bill.officialTitle || bill.title) && (
+          <p className="truncate text-xs text-ink-lo" title={bill.officialTitle || bill.title}>
+            {bill.officialTitle || bill.title}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-ink-lo">
           <Link
             href={`/politicians/${bill.sponsorId}`}
