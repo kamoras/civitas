@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type { PartySplit, VoteMember } from "@/types/congress";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { houseSeatLabel } from "@/lib/elections";
@@ -39,9 +39,24 @@ export function PartyBar({ split }: { split: PartySplit }) {
 
 /** Every member's position on one roll call, grouped as the chamber
  * recorded them, each name linked to the member's page where the site has
- * one. Filterable to a state: a drill-down over the list, never an address. */
-export default function VoteMembers({ members }: { members: VoteMember[] }) {
+ * one. Filterable to a state: a drill-down over the list, never an address.
+ *
+ * `collapsible` (a bill page, where the roll call is one section of many):
+ * the names wait behind a state pick or "Show all", with each group's count
+ * still shown. S. 2403's page listed all 433 House members inline, 16
+ * screens and 519 tab stops before its history; the roll call's own page
+ * keeps the full list. */
+export default function VoteMembers({
+  members,
+  collapsible = false,
+}: {
+  members: VoteMember[];
+  collapsible?: boolean;
+}) {
   const [state, setState] = useState("");
+  const [showAll, setShowAll] = useState(!collapsible);
+  const listId = useId();
+  const named = showAll || state !== "";
   const states = useMemo(() => [...new Set(members.map((m) => m.state))].sort(), [members]);
   // One state's House members in district order, so a reader who knows
   // their district finds their member without reading every name.
@@ -68,7 +83,18 @@ export default function VoteMembers({ members }: { members: VoteMember[] }) {
           </select>
         </label>
       )}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {collapsible && !state && (
+        <button
+          type="button"
+          aria-expanded={showAll}
+          aria-controls={listId}
+          onClick={() => setShowAll((v) => !v)}
+          className="min-h-11 w-fit font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+        >
+          {showAll ? "Hide the names" : `Show all ${members.length} members' votes`}
+        </button>
+      )}
+      <div id={listId} className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {BUCKETS.map(({ key, label, tone }) => {
           const group = shown.filter((m) => m.bucket === key);
           if (!group.length) return null;
@@ -77,32 +103,34 @@ export default function VoteMembers({ members }: { members: VoteMember[] }) {
               <span className={`font-mono text-xs uppercase tracking-[0.12em] ${tone}`}>
                 {label} · {group.length}
               </span>
-              <ul className="flex flex-col gap-1 text-sm">
-                {group.map((m) => {
-                  const name =
-                    m.name ?? (m.firstName ? `${m.firstName} ${m.lastName}` : m.lastName);
-                  return (
-                    <li
-                      key={`${m.lastName}-${m.state}-${m.firstName}`}
-                      className="flex items-baseline gap-2"
-                    >
-                      {m.page ? (
-                        <Link href={m.page} className="text-ink hover:text-phos">
-                          {name}
-                        </Link>
-                      ) : (
-                        <span className="text-ink">{name}</span>
-                      )}
-                      <span
-                        className={`whitespace-nowrap font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}
+              {named && (
+                <ul className="flex flex-col gap-1 text-sm">
+                  {group.map((m) => {
+                    const name =
+                      m.name ?? (m.firstName ? `${m.firstName} ${m.lastName}` : m.lastName);
+                    return (
+                      <li
+                        key={`${m.lastName}-${m.state}-${m.firstName}`}
+                        className="flex items-baseline gap-2"
                       >
-                        {m.party}-
-                        {m.district != null ? houseSeatLabel(m.state, m.district) : m.state}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+                        {m.page ? (
+                          <Link href={m.page} className="text-ink hover:text-phos">
+                            {name}
+                          </Link>
+                        ) : (
+                          <span className="text-ink">{name}</span>
+                        )}
+                        <span
+                          className={`whitespace-nowrap font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}
+                        >
+                          {m.party}-
+                          {m.district != null ? houseSeatLabel(m.state, m.district) : m.state}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           );
         })}

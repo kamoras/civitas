@@ -3,9 +3,15 @@ import {
   captureImageData,
   captureScale,
   displayUrl,
+  footerFacts,
+  issueShareMeta,
+  sectionMeta,
   sectionUrl,
   shareFileName,
+  shareMetaAttrs,
+  type ShareSubject,
 } from "./shareImage";
+import type { ActionIssue } from "@/types/action";
 
 describe("sectionUrl / displayUrl", () => {
   it("appends the section anchor, replacing any existing one", () => {
@@ -83,5 +89,64 @@ describe("captureImageData", () => {
     const data = await captureImageData("https://images.example-news.com/photo.jpg");
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(data).toMatch(/^data:image\/png;base64,/);
+  });
+});
+
+// A picture travels without its page: every capture states where its
+// figures come from, when they are as of, and the scale a score is on.
+describe("footer facts", () => {
+  const subject: ShareSubject = {
+    title: "Jordan Hale",
+    url: "https://civitas-research.org/politicians/jordan-hale",
+    source: "FEC filings; House Clerk roll calls",
+    asOf: "2026-10-14",
+    scaleMax: 100,
+  };
+  const today = new Date(2026, 9, 15);
+
+  it("states the source, the as-of date, the scale and the capture date", () => {
+    const section = document.createElement("section");
+    expect(footerFacts(sectionMeta(section, subject), today)).toEqual({
+      source: "Source: FEC filings; House Clerk roll calls",
+      dates: "Data as of Oct 14, 2026 · scores out of 100 · captured Oct 15, 2026",
+    });
+  });
+
+  it("lets a section name its own source and date, and drop the scale", () => {
+    const section = document.createElement("section");
+    for (const [k, v] of Object.entries(
+      shareMetaAttrs({
+        source: "Annual financial disclosure",
+        asOf: "2025-12-31T00:00:00",
+        scaleMax: null,
+      })
+    ))
+      section.setAttribute(k, v);
+    expect(footerFacts(sectionMeta(section, subject), today)).toEqual({
+      source: "Source: Annual financial disclosure",
+      dates: "Data as of Dec 31, 2025 · captured Oct 15, 2026",
+    });
+  });
+
+  it("dates figures read live by the capture day", () => {
+    const section = document.createElement("section");
+    expect(
+      footerFacts(sectionMeta(section, { ...subject, asOf: null, scaleMax: undefined }), today)
+    ).toEqual({
+      source: "Source: FEC filings; House Clerk roll calls",
+      dates: "Data as of Oct 15, 2026",
+    });
+  });
+
+  it("credits an issue to the outlets it quotes, or to the official record", () => {
+    const issue = {
+      sourceNames: ["AP", "NPR", "AP"],
+      date: "2026-10-14",
+      countAsOf: null,
+    } as unknown as ActionIssue;
+    expect(issueShareMeta(issue)).toEqual({ source: "AP; NPR, quoted", asOf: "2026-10-14" });
+    expect(issueShareMeta({ ...issue, sourceNames: [] }).source).toBe(
+      "the official record linked on the issue's page"
+    );
   });
 });

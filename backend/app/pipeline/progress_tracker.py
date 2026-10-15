@@ -16,11 +16,13 @@ the history, and they are what makes "which step got slower" answerable.
 
 import json
 import logging
+import sys
 import time
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.error_utils import record_exception
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline import rate_limiter
 from app.time_utils import utcnow
@@ -118,6 +120,11 @@ class ProgressTracker:
         step["completedAt"] = _now_iso()
         if detail:
             step["detail"] = detail
+        # Every caller fails a step from inside its except block: the
+        # exception being handled is the step's, kept on the run row so it
+        # outlives the container's log.
+        error = sys.exception()
+        cause = record_exception(self._run, error, key) if error is not None else None
         self._flush()
         self._record_timing(step)
         # Every caller logs the exception and carries on, and the run still
@@ -129,9 +136,17 @@ class ProgressTracker:
         send_ops_alert(
             f"{pipeline}: step {key} failed",
             f"{pipeline} step '{key}' failed and the run continued without it"
-            + (f": {detail}" if detail else "") + ". The traceback is in that run's logs.",
+            + (f": {detail}" if detail else "") + "."
+            + (f" Cause: {cause}. The traceback is on the run row (admin, Pipelines)." if cause else ""),
             dedupe_key=f"step-failed-{pipeline}-{key}-{utcnow():%Y-%m-%d}",
             condition=self._failed_condition(key),
+        )
+
+    def active_step(self) -> str | None:
+        """The step a run that raised was in: the last one begun and not
+        ended."""
+        return next(
+            (key for key, _, _ in reversed(self._steps_def) if self._steps[key]["status"] == "active"), None
         )
 
     def _failed_condition(self, key: str) -> str:

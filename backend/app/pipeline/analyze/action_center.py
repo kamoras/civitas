@@ -98,7 +98,7 @@ from app.pipeline.vector_store import (
 )
 from app.pipeline.analyze.lobbying_records import bill_mentions, names_bill
 from app.services.bill_service import bill_title_lists, names_phrase, short_title_index
-from app.time_utils import comment_period_today, utcnow
+from app.time_utils import comment_period_today, eastern_date, utcnow
 from app.timeline_entries import without_repeat_leads
 
 _US_EAST = ZoneInfo("America/New_York")
@@ -3782,7 +3782,7 @@ def _cleanup_monitor_lifecycle(today: str, db: Session) -> None:
     
     for m in all_monitors:
         # Use created_at if last_article_date is missing (e.g. newly created)
-        last_date = m.last_article_date or m.created_at.strftime("%Y-%m-%d")
+        last_date = m.last_article_date or eastern_date(m.created_at).isoformat()
         update_count = len(m.updates or [])
 
         # 1. Close monitors inactive for >30 days
@@ -5788,7 +5788,8 @@ def _cleanup_old_unposted_issues(db: Session) -> int:
     the archive two weeks on. A developing issue that was never confirmed
     or published is noindex and in no sitemap, so it can go.
     """
-    cutoff = (utcnow() - timedelta(days=14)).strftime("%Y-%m-%d")
+    # Against `date`, an Eastern day (time_utils.eastern_date).
+    cutoff = (eastern_date(utcnow()) - timedelta(days=14)).isoformat()
     deleted = (
         db.query(ActionIssue)
         .filter(

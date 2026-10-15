@@ -178,6 +178,7 @@ export default function PoliticianProfileClient({
                   president={scorecard as unknown as President}
                   breakdown={breakdown as unknown as PresidentScoreBreakdown | null}
                   rank={profile.chamberRank}
+                  scoredOn={profile.scoredOn}
                   titleAs="h1"
                 />
               )}

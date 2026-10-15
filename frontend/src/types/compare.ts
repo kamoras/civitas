@@ -28,6 +28,9 @@ export interface Agreement {
   /** Whole percent; null when they share no vote. */
   agreementPct: number | null;
   sentence: string;
+  /** The latest roll call read for either member, YYYY-MM-DD; null with none. Optional
+   *  for an older backend. */
+  asOf?: string | null;
   /** The latest votes they split on, newest first. */
   recentSplits: AgreementSplit[];
 }
