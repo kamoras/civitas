@@ -296,13 +296,24 @@ def _nightly_pipeline() -> None:
 def _hourly_action_refresh() -> None:
     """Refresh the action center in a background thread.
 
-    Skipped when the nightly pipeline is running to avoid competing for
-    memory during the most intensive part of the pipeline, or when the
-    previous hourly refresh is still running — a slow/degraded local LLM
-    can make one cycle run long enough to still be active when the next
-    cron tick fires, and without this guard that spawns a second thread
-    competing for the same LLM, compounding the slowdown rather than
-    just running a bit late.
+    Skipped only when the previous hourly refresh is still running — a
+    slow/degraded local LLM can make one cycle run long enough to still be
+    active when the next cron tick fires, and without this guard that spawns
+    a second thread competing for the same LLM, compounding the slowdown
+    rather than just running a bit late.
+
+    It runs alongside the nightly chain. Until 2026-10 it stood down for the
+    Senate, Supplementary, House and Stock trades links, a rule from 2026-07
+    ("competing for memory"), and the Action Center went as stale as the
+    chain was long: 13 hours on 2026-10-14. Measured then, it doesn't
+    compete: a refresh takes 2-6 minutes; the pipeline process peaked at
+    3.5 GB over a day that held both refreshes and the chain, so the two
+    together stay under 7 GB, with the llama-server, API and frontend
+    processes 5.7 GB more, on a 16 GB Pi; most of the chain waits on
+    upstream rate limits; and it already ran beside the Election link,
+    the Congress sync and the election syncs, all writers, with no
+    "database is locked" in the logs. Overruns are the pipeline watchdog's
+    to report (ops_alerts.check_pipeline_overrun covers all four links).
     """
     def _run():
         try:
@@ -327,101 +338,6 @@ def _hourly_action_refresh() -> None:
                         "Action center refresh skipped — previous refresh still running (age %s)",
                         age,
                     )
-                    return
-            # A run "running" for >8h almost certainly crashed without
-            # updating its status, and one whose lease no live run holds
-            # did (run_tracker.live_run): proceed past either rather than
-            # blocking the action center indefinitely.
-            from app.database import SessionLocal
-            from app.models import PipelineRun
-            from app.pipeline.run_tracker import live_run
-            db = SessionLocal()
-            try:
-                running = live_run(db, PipelineRun, timedelta(hours=8))
-            finally:
-                db.close()
-            if running is not None:
-                logger.info(
-                    "Action center refresh skipped — nightly pipeline is running (run #%d, age %s)",
-                    running.id, utcnow() - running.started_at,
-                )
-                return
-            if is_house_pipeline_running():
-                house_age = house_pipeline_age()
-                if _is_stale(house_age, timedelta(hours=8)):
-                    # Same reasoning as the stale PipelineRun check above: a
-                    # House run this old is wedged, not just slow (normal
-                    # runs are 1-2h) — left unchecked, a hung run would
-                    # silently starve the action center of fresh data all day.
-                    from app.ops_alerts import overrun_condition, send_ops_alert
-                    logger.warning(
-                        "House pipeline has been running for %s — treating as "
-                        "hung and proceeding with action center refresh",
-                        house_age,
-                    )
-                    send_ops_alert(
-                        "House pipeline overrun",
-                        f"The House pipeline has been running for {house_age} "
-                        "(normal is 1-2h) and is likely hung. The action center "
-                        "is no longer waiting for it; the run may need "
-                        "clear-stuck-house and a container restart.",
-                        dedupe_key=f"house-overrun-{utcnow():%Y-%m-%d}",
-                        condition=overrun_condition("House"),
-                    )
-                else:
-                    logger.info("Action center refresh skipped — house pipeline is running")
-                    return
-            if is_supplementary_pipeline_running():
-                supp_age = supplementary_pipeline_age()
-                # 8h, not stock's shorter stock_trades_overrun_budget(): on
-                # its weekly SCOTUS-refresh day this pipeline includes the
-                # uncached per-case Oyez crawl, which can run 5h+ — a tight threshold would misfire as "hung"
-                # on a run that's just legitimately slow that day.
-                if _is_stale(supp_age, timedelta(hours=8)):
-                    from app.ops_alerts import overrun_condition, send_ops_alert
-                    logger.warning(
-                        "Supplementary pipeline has been running for %s — "
-                        "treating as hung and proceeding with action center refresh",
-                        supp_age,
-                    )
-                    send_ops_alert(
-                        "Supplementary pipeline overrun",
-                        f"The supplementary (explore/SCOTUS/presidents) pipeline "
-                        f"has been running for {supp_age} and is likely hung. "
-                        "The action center is no longer waiting for it.",
-                        dedupe_key=f"supplementary-overrun-{utcnow():%Y-%m-%d}",
-                        condition=overrun_condition("Supplementary"),
-                    )
-                else:
-                    logger.info("Action center refresh skipped — supplementary pipeline is running")
-                    return
-            if is_stock_pipeline_running():
-                stock_age = stock_pipeline_age()
-                # Shorter overrun threshold than House's 8h: stock trades is
-                # PDF/OCR parsing over a bounded PTR filing set, not a
-                # 431-member scoring pass. The budget (2h for the trade
-                # phases, which normally finish in under 90 minutes, plus
-                # the annual-holdings phases' own ceiling) is shared with
-                # ops_alerts.check_pipeline_overrun.
-                from app.ops_alerts import stock_trades_overrun_budget
-
-                if _is_stale(stock_age, stock_trades_overrun_budget()):
-                    from app.ops_alerts import overrun_condition, send_ops_alert
-                    logger.warning(
-                        "Stock trades pipeline has been running for %s — "
-                        "treating as hung and proceeding with action center refresh",
-                        stock_age,
-                    )
-                    send_ops_alert(
-                        "Stock trades pipeline overrun",
-                        f"The stock trades pipeline has been running for {stock_age}, past its "
-                        f"{stock_trades_overrun_budget()} budget, and is likely hung. The action center "
-                        "is no longer waiting for it.",
-                        dedupe_key=f"stock-overrun-{utcnow():%Y-%m-%d}",
-                        condition=overrun_condition("Stock trades"),
-                    )
-                else:
-                    logger.info("Action center refresh skipped — stock trades pipeline is running")
                     return
             count = refresh_action_issues()
             logger.info("Action center hourly refresh: %d issues", count)
@@ -727,10 +643,9 @@ def _congress_activity_sync() -> None:
                 logger.exception("Congress Bluesky post failed")
                 db.rollback()
             # Posts held for the posting window go out when it opens
-            # (broadcast.deliver_pending): from here as well as the hourly
-            # Action Center run, which stands down while the nightly
-            # pipeline runs. This sync doesn't, so the window's opening
-            # never waits on a long night.
+            # (broadcast.deliver_pending): from here every half hour as well
+            # as from the hourly Action Center run, so the window's opening
+            # waits on neither.
             try:
                 sent = deliver_pending(db)
                 if sent:

@@ -159,7 +159,10 @@ describe("VotingRecord", () => {
       name: /War Powers Resolution to remove United States Armed Forces from Lebanon/,
     });
     expect(link).toHaveAttribute("href", "/congress/bills/HCONRES.38?congress=119");
-    expect(screen.getByText("On Agreeing to the Resolution · Jun 4, 2026")).toBeInTheDocument();
+    // The question opens the roll call's own page: every member's position.
+    expect(
+      screen.getByRole("link", { name: "On Agreeing to the Resolution · Jun 4, 2026" })
+    ).toHaveAttribute("href", "/congress/votes/house/119/2/201");
     expect(
       within(link.closest("li") as HTMLElement).getByText("AGAINST PARTY")
     ).toBeInTheDocument();

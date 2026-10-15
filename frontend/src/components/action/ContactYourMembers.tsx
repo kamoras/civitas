@@ -16,7 +16,7 @@ import { formatUtcDate, safeHref } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { boxedControl } from "@/lib/controlStyles";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
-import { voteHref } from "@/components/congress/ReportParts";
+import { rollCallHref } from "@/lib/congress";
 import type { ActionIssue, IssueMember, IssueVote } from "@/types/action";
 
 /**
@@ -229,7 +229,6 @@ function MemberRow({
         </span>
       </div>
       {record.map(({ v, position }) => {
-        const href = voteHref({ ...v, billId: v.billId ?? null });
         const what = [v.billLabel, v.question].filter(Boolean).join(" · ");
         return (
           <p key={v.number + v.chamber} className="mt-0.5 text-[13px] text-ink-lo">
@@ -237,13 +236,12 @@ function MemberRow({
               {position}
             </span>{" "}
             on{" "}
-            {href ? (
-              <Link href={href} className="underline decoration-white/20 underline-offset-4">
-                {what}
-              </Link>
-            ) : (
-              what
-            )}{" "}
+            <Link
+              href={rollCallHref(v)}
+              className="underline decoration-white/20 underline-offset-4"
+            >
+              {what}
+            </Link>{" "}
             · {formatUtcDate(v.date, { month: "short", day: "numeric", year: "numeric" })} ·{" "}
             {v.result}
           </p>
