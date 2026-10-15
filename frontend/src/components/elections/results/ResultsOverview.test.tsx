@@ -326,7 +326,7 @@ describe("a state electing both senators, one counted", () => {
   it("names both races in the map's label", () => {
     render(<ResultsOverview now={NOW} results={twoSeats()} states={["GA"]} />);
     expect(mapProps.current!.getStateLabel("GA")).toBe(
-      "GA Senate: regular race Democrat leads, 80% in; special race no count shown here"
+      "GA Senate: regular race Democrat leads, 80% in, not final; special race no count shown here"
     );
   });
 

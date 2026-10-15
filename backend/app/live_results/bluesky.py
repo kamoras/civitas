@@ -81,6 +81,11 @@ def _title(kind: str, race: Race, d: dict) -> str:
     """The feed title, following the same official branch as compose()."""
     if kind == er.FLIP and d.get("official"):
         return f"{race_label(race)}: another party leads in the count listed as official"
+    # A lead that changed, or a change of party undone, in a count the state
+    # hasn't listed as official: the title says not final itself, as the
+    # flip's does, since a feed reader shows the title alone.
+    if kind in (er.LEAD_CHANGE, CORRECTION) and not d.get("official"):
+        return f"{race_label(race)}: {_TITLES[kind]}, not final"
     return f"{race_label(race)}: {_TITLES[kind]}"
 
 
@@ -142,7 +147,10 @@ def compose(kind: str, race: Race, d: dict, budget: int = MAX_POST_CHARS) -> str
             head = f"Update on {label}: the count is now tied, so the seat no longer shows a change of party"
         else:
             return None
-        return _fit([head, reporting], [head], budget=budget)
+        # A count the state hasn't listed as official says so, as every
+        # other post about a lead does; never dropped to fit.
+        final = None if d.get("official") else "Not final"
+        return _fit([head, reporting, final], [head, final], budget=budget)
     if not leader:
         return None
     holders = holders_word(d.get("heldBy"))
