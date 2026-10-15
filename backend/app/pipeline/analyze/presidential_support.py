@@ -30,9 +30,10 @@ votes members cast with the president's position against their seat's
 party-signed lean (score_calculator._signed_state_alignment, the measure
 Constituent Alignment uses): a fractional-response logit (Papke &
 Wooldridge 1996), each member weighted by their number of counted votes,
-kinked at a swing seat when enough members of the party hold seats leaning
-the other way. The members being described are the population (AGENTS.md
-§3a, "measure it in the run"). A member's expected rate is their party's fit
+kinked at a swing seat only where the kink predicts the party's members
+better out of sample (score_calculator.select_opposed_kink). The members
+being described are the population (AGENTS.md §3a, "measure it in the
+run"). A member's expected rate is their party's fit
 at their seat's lean. No shrinkage is applied to either rate.
 """
 
@@ -57,10 +58,9 @@ from app.pipeline.analyze import sap_position
 from app.pipeline.analyze.population_reference import ChamberReference
 from app.pipeline.analyze.score_calculator import (
     _MIN_CONSTITUENT_REFERENCE_PARTY,
-    _MIN_OPPOSED_SEATS_FOR_KINK,
-    _fractional_logit,
     _seat_pvi,
     _signed_state_alignment,
+    select_opposed_kink,
 )
 from app.pipeline.fetch import omb_statements
 from app.pipeline.fetch.congress import congress_first_year
@@ -316,18 +316,14 @@ def fit_expectation(rows: list[tuple[str, float, int, int]]) -> dict[str, dict]:
         al = np.array([r[0] for r in mine])
         y = np.array([r[1] for r in mine])
         n = np.array([r[2] for r in mine], dtype=float)
-        bends = (True, False) if int((al < 0).sum()) >= _MIN_OPPOSED_SEATS_FOR_KINK else (False,)
-        for bend in bends:
-            cols = [np.ones_like(al), al] + ([np.minimum(al, 0.0)] if bend else [])
-            coef = _fractional_logit(np.column_stack(cols), y, n)
-            if coef is not None:
-                fits[party] = {
-                    "a": round(float(coef[0]), 5), "b": round(float(coef[1]), 5),
-                    "b_opposed": round(float(coef[2]), 5) if bend else 0.0,
-                    "members": len(mine), "votes": int(n.sum()),
-                    **({"leans": [min(leans), max(leans)]} if leans else {}),
-                }
-                break
+        coef, bend, kink = select_opposed_kink(al, y, n)
+        if coef is not None:
+            fits[party] = {
+                "a": round(float(coef[0]), 5), "b": round(float(coef[1]), 5),
+                "b_opposed": round(float(coef[2]), 5) if bend else 0.0,
+                "members": len(mine), "votes": int(n.sum()), "kink": kink,
+                **({"leans": [min(leans), max(leans)]} if leans else {}),
+            }
     return fits
 
 

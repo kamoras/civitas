@@ -920,8 +920,9 @@ class PublicScoreReferencesSchema(_PublicModel):
                     "concentration deciles; computed_at UTC)")
     constituent: dict[str, Any] | None = Field(
         description="Constituent Alignment's chamber reference: per party, the fitted expected break rate by "
-                    "seat lean (logit a + b x lean, b_opposed for seats leaning to the other party), its scale "
-                    "and the party's typical score")
+                    "seat lean (logit a + b x lean, b_opposed for seats leaning to the other party, fitted only "
+                    "when it predicts better out of sample: kink records the comparison), its scale and the "
+                    "party's typical score")
     legislative: dict[str, Any] | None = Field(
         description="Legislative Effectiveness's chamber reference: bill totals per stage, median credit by "
                     "majority/minority status, advancement rates and the majority party")

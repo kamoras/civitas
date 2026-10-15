@@ -1358,6 +1358,24 @@ the breakdown: it gave two positions and a 0 or 100 with no scale. Since
 this audit it names the seat lean read, the distance, where 0 and 100 sit
 and why, and says when a position is past the end.
 
+### 16. The swing-seat bend: kept on held-out evidence only (v6.35, tested 2026-10)
+
+The expectation's extra slope for seats leaning to the other party
+(section 4, measured on the 108th House's 29 opposed seats) was fitted from
+v6.13 whenever a party held five such seats. In the 119th Congress
+Democrats held seven in each chamber, and leaving each member out in turn,
+the bent line predicted the left-out member's break rate no better than a
+straight one (House -0.018, standard error 0.193; Senate -0.014, 0.024).
+The House bend's bootstrap 95% interval ran from -12.1 to +0.3. It doubled
+those members' slope and, with it, how far a one-point change in their
+seat's lean moved their score (up to 39 points).
+
+**Changed (v6.35):** the bend is kept only when its leave-one-out
+quasi-log-likelihood beats the straight line's by more than one standard
+error (`select_opposed_kink`). A 108th-House-like population keeps it; the
+119th's drops it in both chambers. Measurements:
+`docs/methodology/member-score/v6.35.md`.
+
 ## What the evidence does not settle
 
 - **The association fades over time.** Per election, the position coefficient
