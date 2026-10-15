@@ -438,6 +438,41 @@ def test_a_successor_of_the_same_surname_is_not_linked_to_the_predecessors_votes
     assert pages == {624: None, 254: "/politicians/darline-graham"}
 
 
+def test_both_holders_of_a_shared_surname_are_linked_while_both_are_on_file(db_session):
+    """The predecessor keeps his page through the grace period; requiring a
+    single surname match before reading the LIS id left both senators'
+    votes unlinked (live, 2026-10-15)."""
+    db_session.add_all([
+        Senator(id="lee-marsh", bioguide_id="M000901", name="Lee Marsh", state="SC", party="R",
+                is_current=False),
+        Senator(id="dana-marsh", bioguide_id="M000902", name="Dana Marsh", state="SC", party="R"),
+    ])
+    for number, first, lis in ((624, "Lee", "S293"), (254, "Dana", "S441")):
+        rc = RollCall(chamber="senate", congress=119, session=1, number=number, date="2026-01-01", question="Q")
+        db_session.add(rc)
+        db_session.flush()
+        db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=lis, last_name="Marsh", first_name=first,
+                                        party="R", state="SC", position="Yea"))
+    db_session.commit()
+    pages = {rc.number: br.vote_detail(db_session, rc)["members"][0]["page"] for rc in db_session.query(RollCall)}
+    assert pages == {624: "/politicians/lee-marsh", 254: "/politicians/dana-marsh"}
+
+
+def test_a_senator_with_a_generational_suffix_is_linked(db_session):
+    """A full name ending "Jr." does not end with the roll call's surname."""
+    db_session.add(Senator(id="pat-smith", bioguide_id="S000901", name="Pat Q. Smith Jr.", state="VT", party="I"))
+    rc = RollCall(chamber="senate", congress=119, session=1, number=7, date="2026-01-01", question="Q")
+    db_session.add(rc)
+    db_session.flush()
+    db_session.add(RollCallPosition(roll_call_id=rc.id, member_id="S363", last_name="Smith", first_name="Pat",
+                                    party="I", state="VT", position="Yea"))
+    db_session.commit()
+    assert br.vote_detail(db_session, rc)["members"][0]["page"] == "/politicians/pat-smith"
+    assert br.MemberLinks(db_session).page(last_name="Smith", state="VT") == "/politicians/pat-smith"
+    # Whole words only: a surname inside another word is not a match.
+    assert br.MemberLinks(db_session).page(last_name="Smit", state="VT") is None
+
+
 def test_a_house_vote_names_each_member_in_full_with_their_district(db_session):
     """The Clerk prints "Joyce (PA)", with no first name or district; a
     reader looking for their own representative needs both."""
