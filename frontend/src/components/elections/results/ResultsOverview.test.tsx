@@ -185,7 +185,9 @@ describe("a flip announced earlier that the latest count doesn't show", () => {
     );
     expect(within(flipsCard()).getByText("0")).toBeInTheDocument();
     expect(
-      screen.getByText("Senate: Dana Smith (D) leads · flip announced, not in latest count")
+      screen.getByText(
+        "Senate: Dana Smith (D) leads · not final · flip announced, not in latest count"
+      )
     ).toBeInTheDocument();
     expect(screen.queryByText(/· flip$/)).not.toBeInTheDocument();
     const label = mapProps.current!.getStateLabel("GA");
@@ -214,7 +216,7 @@ describe("a held Senate flip that the counter lists as not counted", () => {
       />
     );
     expect(
-      screen.getByText("Senate: tied · flip announced, not in latest count")
+      screen.getByText("Senate: tied · not final · flip announced, not in latest count")
     ).toBeInTheDocument();
   });
 
@@ -324,7 +326,7 @@ describe("a state electing both senators, one counted", () => {
   it("names both races in the map's label", () => {
     render(<ResultsOverview now={NOW} results={twoSeats()} states={["GA"]} />);
     expect(mapProps.current!.getStateLabel("GA")).toBe(
-      "GA Senate: regular race Democrat leads, 80% in; special race no count shown here"
+      "GA Senate: regular race Democrat leads, 80% in, not final; special race no count shown here"
     );
   });
 

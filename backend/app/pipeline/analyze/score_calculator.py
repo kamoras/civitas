@@ -759,6 +759,7 @@ def calculate_scores(senator: dict) -> dict:
             chamber="house" if senator.get("district") is not None else "senate",
             bills_known=not senator.get("sponsoredBillsUnavailable"),
             sworn_date=senator.get("swornDate"),
+            carried_from=senator.get("sponsoredBillsCarriedFrom"),
         ),
     }
 
@@ -813,6 +814,7 @@ def explain_scores(senator: dict) -> dict:
             chamber="house" if senator.get("district") is not None else "senate",
             bills_known=not senator.get("sponsoredBillsUnavailable"),
             sworn_date=senator.get("swornDate"),
+            carried_from=senator.get("sponsoredBillsCarriedFrom"),
         ),
     }
 
@@ -845,6 +847,7 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
             return "medium"
         return "low"
 
+    bills_status = sponsored_bills_status(senator)
     has_funding = funding_share_base(funding) > 0
     n_donors = len(funding.get("topDonors") or [])
     n_industries = len(funding.get("industryBreakdown") or [])
@@ -869,9 +872,59 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
         "promisePersistence": grade(n_evaluable, 3, 8),
         "constituentAlignment": grade(n_party_votes, 5, CONSTITUENT_FULL_CONFIDENCE_VOTES),
         "fundingDiversity": grade(n_industries, 3, 6) if has_funding else "low",
-        "legislativeEffectiveness": grade(len(bills), 2, 5),
+        "legislativeEffectiveness": grade(len(bills), 2, 5) if bills_status != "unavailable" else "low",
         "constituentAlignmentVotePart": _constituent_vote_part_status(senator),
+        LES_BILLS_STATUS: bills_status,
     }
+
+
+# The stored confidence key that says where Legislative Effectiveness's
+# bills came from: "fetched:<date>" (read from Congress.gov that day),
+# "carried:<date>" (this run couldn't read them, so the bills stored by the
+# run of that date — "carried" alone when no earlier run recorded a date) or
+# "unavailable" (neither: the bill part is not measured). Stored with the
+# score so the breakdown (services/_scorecard_common) and the startup
+# rescore (les_rescore) score the stored bills exactly as the pipeline did.
+LES_BILLS_STATUS = "legislativeEffectivenessBills"
+
+
+def sponsored_bills_status(senator: dict) -> str:
+    """LES_BILLS_STATUS's value for a member dict as the pipeline scores it."""
+    if senator.get("sponsoredBillsUnavailable"):
+        return "unavailable"
+    carried = senator.get("sponsoredBillsCarriedFrom")
+    if carried is not None:
+        return f"carried:{carried}" if carried else "carried"
+    return f"fetched:{utcnow().date().isoformat()}"
+
+
+def bills_inputs_from_status(status: str | None) -> dict:
+    """The member-dict keys (sponsoredBillsUnavailable /
+    sponsoredBillsCarriedFrom) that reproduce how a stored score treated its
+    bills, from its stored LES_BILLS_STATUS. A score stored before the key
+    existed was scored on its bills as fetched."""
+    status = status or ""
+    if status == "unavailable":
+        return {"sponsoredBillsUnavailable": True}
+    if status.startswith("carried"):
+        return {"sponsoredBillsCarriedFrom": status.partition(":")[2]}
+    return {}
+
+
+def stored_bills_status(entity) -> str | None:
+    """A stored Senator/Representative score's LES_BILLS_STATUS, None when
+    the score predates it or its confidence can't be read."""
+    try:
+        return (json.loads(entity.score_confidence or "{}") or {}).get(LES_BILLS_STATUS)
+    except (ValueError, AttributeError):
+        return None
+
+
+def carried_date(status: str | None) -> str:
+    """The date the bills a stored status describes were read ("" unknown):
+    what a later run that has to carry them forward names."""
+    kind, _, date = (status or "").partition(":")
+    return date if kind in ("fetched", "carried") else ""
 
 
 def _constituent_vote_part_status(senator: dict) -> str:
@@ -3348,7 +3401,6 @@ def _les_component_score(
     years_in_office: float | None,
     reference: dict | None = None,
     chamber: str | None = None,
-    bills_known: bool = True,
     sworn_date: str | None = None,
 ) -> tuple[float, str]:
     """The V&W-based component: stage-normalized credit per congress
@@ -3357,8 +3409,9 @@ def _les_component_score(
 
     No substantive bills scores neutral below _MIN_TENURE_FOR_ZERO_SIGNAL_
     YEARS or when the chamber is unknown, and otherwise as a credit of 0 —
-    so inaction never beats an attempt. `bills_known=False` (the fetch
-    failed) is neutral: an empty list there is not a record.
+    so inaction never beats an attempt. Only called when the bills are
+    known (_legislative_effectiveness_core leaves the part unmeasured
+    otherwise): an empty list here is a record of no bills.
 
     `sworn_date` (ISO date) is when a member who arrived mid-Congress took
     the seat: the bar is prorated by the share of the Congress so far they
@@ -3368,10 +3421,6 @@ def _les_component_score(
     `reference` is {"senate": {...}, "house": {...}} (compute_les_reference
     per chamber); None reads load_les_reference(). See the LES population
     reference comment above for where each number comes from."""
-    if not bills_known:
-        # The member's sponsored legislation could not be fetched this run.
-        # An empty list here is a failed request, not a record of zero bills.
-        return 50.0, "sponsored legislation could not be fetched this run, so a neutral 50"
     inputs = _les_member_inputs(sponsored_bills, party)
     if inputs is None:
         if (years_in_office or 0) < _MIN_TENURE_FOR_ZERO_SIGNAL_YEARS:
@@ -3518,6 +3567,7 @@ def _calc_legislative_effectiveness(
     chamber: str | None = None,
     bills_known: bool = True,
     sworn_date: str | None = None,
+    carried_from: str | None = None,
 ) -> int:
     """
     Legislative Effectiveness Score (0-100, higher = better).
@@ -3569,11 +3619,15 @@ def _calc_legislative_effectiveness(
     V&W-based component is not shrunk by bill count (v6.14, see
     _les_component_score); a member with no substantive bills after real
     tenure scores a credit of 0 on the same scale when `chamber` is known,
-    and neutral when their bills could not be fetched (`bills_known`).
+    and leaves the part unmeasured (the others carry its weight) when their
+    bills could not be fetched and no earlier run stored any (`bills_known`).
+    A member whose bills could not be fetched this run but were stored by
+    an earlier one is scored on the stored bills (`carried_from` names the
+    date, for the breakdown's sentence).
     """
     return _legislative_effectiveness_core(
         sponsored_bills, leadership_score, party, years_in_office,
-        attracted_bipartisanship, les_reference, chamber, bills_known, sworn_date,
+        attracted_bipartisanship, les_reference, chamber, bills_known, sworn_date, carried_from,
     )["score"]
 
 
@@ -3611,14 +3665,32 @@ def _legislative_effectiveness_core(
     chamber: str | None = None,
     bills_known: bool = True,
     sworn_date: str | None = None,
+    carried_from: str | None = None,
 ) -> dict:
     """Same math as _calc_legislative_effectiveness, returning every
     intermediate value alongside the final score. Single implementation,
     same reuse contract as _funding_independence_core above."""
-    les_score, les_detail = _les_component_score(
-        sponsored_bills or [], party, years_in_office, les_reference,
-        chamber=chamber, bills_known=bills_known, sworn_date=sworn_date,
-    )
+    if bills_known:
+        les_score, les_detail = _les_component_score(
+            sponsored_bills or [], party, years_in_office, les_reference,
+            chamber=chamber, sworn_date=sworn_date,
+        )
+        if carried_from is not None:
+            les_detail += (
+                "; Congress.gov couldn't be read for this member this run, so these are the bills "
+                + (f"stored on {carried_from}" if carried_from else "stored by an earlier run")
+            )
+    else:
+        # Nothing is known about the member's bills: the fetch failed and no
+        # earlier run stored any. Not measured, so the other components
+        # carry its weight — the convention this dimension already follows
+        # for coalition attraction, and Funding Independence for its parts.
+        # A neutral 50 here read an outage as an average record.
+        les_score = None
+        les_detail = (
+            "sponsored legislation couldn't be fetched this run and no earlier run stored any: "
+            f"{_NOT_MEASURED}"
+        )
 
     # Component: leadership score from cosponsorship PageRank
     #
@@ -3665,7 +3737,7 @@ def _legislative_effectiveness_core(
         not sponsored_bills
         and leadership_score is None
         and attracted_bipartisanship is None
-        and les_score == 50.0
+        and les_score in (50.0, None)
     ):
         return {"score": 50, "components": [], "note": "No sponsored-bill or leadership data, so a neutral 50."}
 
@@ -3684,22 +3756,27 @@ def _legislative_effectiveness_core(
     else:
         coalition_pct = 0.0
         les_weight, leadership_weight, coalition_weight = 0.70, 0.30, 0.0
+    if les_score is None:
+        # The bill part is not measured: the others carry its weight in
+        # their own proportion.
+        rest = leadership_weight + coalition_weight
+        les_weight, leadership_weight, coalition_weight = 0.0, leadership_weight / rest, coalition_weight / rest
 
     score = clamp(
-        les_score * les_weight
+        (les_score or 0.0) * les_weight
         + leadership_pct * leadership_weight
         + coalition_pct * coalition_weight
     )
     components = [
-        {"label": "Bill significance & advancement (V&W-based)", "weight": les_weight,
-         "score": round(les_score, 1), "detail": les_detail},
-        {"label": "Legislative leadership", "weight": leadership_weight,
+        {"label": "Bill significance & advancement (V&W-based)", "weight": round(les_weight, 4),
+         "score": None if les_score is None else round(les_score, 1), "detail": les_detail},
+        {"label": "Legislative leadership", "weight": round(leadership_weight, 4),
          "score": round(leadership_pct, 1), "detail": leadership_detail},
     ]
     if coalition_weight > 0:
         components.append({
             "label": "Bipartisan coalition attraction",
-            "weight": coalition_weight,
+            "weight": round(coalition_weight, 4),
             "score": round(coalition_pct, 1),
             "detail": (
                 "cross-party share of cosponsors attracted to own bills, "

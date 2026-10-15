@@ -248,6 +248,15 @@ def test_parse_bill_id(bill_id, parsed):
     assert br.parse_bill_id(bill_id) == parsed
 
 
+@pytest.mark.parametrize("raw,canonical", [
+    ("S.2398", "S.2398"), ("S. 2398", "S.2398"), ("s2398", "S.2398"),
+    ("H.R. 997", "HR.997"), ("HR 997", "HR.997"), ("H. J. Res. 7", "HJRES.7"),
+    ("PN11-19", None), ("S.", None), ("", None), (None, None),
+])
+def test_canonical_bill_id(raw, canonical):
+    assert br.canonical_bill_id(raw) == canonical
+
+
 class TestRoutes:
     @pytest.fixture
     def client(self, senate, monkeypatch):
@@ -261,6 +270,11 @@ class TestRoutes:
         r = client.get("/api/bills/S.4668/record?congress=119")
         assert r.status_code == 200 and r.json()["votes"][0]["number"] == 243
         assert r.headers["Cache-Control"].startswith("public, max-age=")
+
+    def test_a_printed_bill_number_is_the_same_record(self, client):
+        # "S. 4668" is how the site prints it; the record is the same bill's.
+        r = client.get("/api/bills/S.%204668/record?congress=119")
+        assert r.status_code == 200 and r.json()["votes"][0]["number"] == 243
 
     def test_a_spent_budget_is_a_partial_record_not_an_error(self, client, senate, monkeypatch):
         """A spent hourly budget answered 503, and the bill's page with it 500

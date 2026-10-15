@@ -170,7 +170,7 @@ function HeroIssue({
       <h2 className="mb-4 mt-3 text-balance font-display text-2xl font-bold leading-tight text-ink-hi sm:text-[28px]">
         {issue.title}
       </h2>
-      <IssueImage issue={issue} />
+      <IssueImage issue={issue} priority />
       <IssueBody issue={issue} today={today} headingLevel="h3" onMonitor={onMonitor} />
     </article>
   );

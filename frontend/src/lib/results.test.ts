@@ -299,7 +299,7 @@ describe("stateFill", () => {
     expect(split.fill).toBe(TIED_FILL);
     // Each race is named, so the change of party in the regular one shows.
     expect(split.label).toBe(
-      "GA Senate: regular race Republican leads, 80% in, seat changing party; special race Democrat leads, 80% in"
+      "GA Senate: regular race Republican leads, 80% in, not final, seat changing party; special race Democrat leads, 80% in, not final"
     );
     // The same party ahead in both: that party.
     expect(
@@ -323,12 +323,12 @@ describe("stateFill", () => {
     // Drawn as the counted race; both named, the special as uncounted.
     expect(shade.fill).toBe(resultFill(regular, true));
     expect(shade.label).toBe(
-      "GA Senate: regular race Republican leads, 80% in; special race no count shown here"
+      "GA Senate: regular race Republican leads, 80% in, not final; special race no count shown here"
     );
     // Only the special counted: still the regular named first.
     const special = race({ raceId: "2026-SEN-GA-SPECIAL", isSpecial: true, flip: false });
     expect(stateShade("GA", [special], "S", true, true, false, false, listed).label).toBe(
-      "GA Senate: regular race no count shown here; special race Republican leads, 80% in"
+      "GA Senate: regular race no count shown here; special race Republican leads, 80% in, not final"
     );
     // Both counted, or only one listed: as before.
     expect(stateShade("GA", [regular, special], "S", true, true, false, false, listed).label).toBe(
@@ -393,7 +393,7 @@ describe("stateFill", () => {
     expect(stateShade("GA", [], "S", false, true).label).toBe("GA: no live count here");
     expect(stateShade("GA", [], "S", true, false).label).toBe("GA: no Senate race this year");
     expect(stateShade("GA", [race({ reportingUnits: 25 })], "S", true, true).label).toBe(
-      "GA Senate: Republican leads, 25% in, early, seat changing party"
+      "GA Senate: Republican leads, 25% in, early, not final, seat changing party"
     );
     const house = [
       race({ office: "H", district: 1, leaderParty: "REP", flip: false }),
@@ -422,7 +422,7 @@ describe("stateFill", () => {
       "GA House: no votes yet"
     );
     expect(stateShade("GA", [heldFlip()], "S", true, true).label).toBe(
-      "GA Senate: Democrat leads, 80% in, change of party announced earlier, holder's party ahead in the latest count"
+      "GA Senate: Democrat leads, 80% in, not final, change of party announced earlier, holder's party ahead in the latest count"
     );
   });
 
@@ -627,6 +627,15 @@ describe("describeUpdate", () => {
     ).toMatch(/^Dana Smith \(D\) is ahead again, so the seat no longer shows a change of party\./);
     expect(describeUpdate(event("first_returns")).text).toMatch(/^First returns\./);
   });
+
+  // Every update about a count the state hasn't listed as official says so
+  // itself, as the backend's posts do; an official one never does.
+  it("ends every update on an unofficial count with Not final", () => {
+    for (const kind of ["first_returns", "lead_change", "flip", "flip_reversed"]) {
+      expect(describeUpdate(event(kind)).text).toMatch(/Not final\.$/);
+      expect(describeUpdate(event(kind, { official: true })).text).not.toMatch(/Not final/);
+    }
+  });
 });
 
 describe("raceStatusText", () => {
@@ -638,10 +647,10 @@ describe("raceStatusText", () => {
     // A party the vocabulary doesn't name is another party; no party given
     // is said as that, never "another party".
     expect(raceStatusText(race({ totalUnits: null, flip: false, leaderParty: "WFP" }))).toBe(
-      "another party leads"
+      "another party leads, not final"
     );
     expect(raceStatusText(race({ totalUnits: null, flip: false, leaderParty: null }))).toBe(
-      "leader's party not given"
+      "leader's party not given, not final"
     );
   });
 
@@ -658,7 +667,7 @@ describe("raceStatusText", () => {
         { name: "Ray Jones", party: "REP", votes: 950, pct: 50, candidateId: null },
       ],
     });
-    expect(raceStatusText(tied)).toBe("tied, 80% in, change of party announced earlier");
+    expect(raceStatusText(tied)).toBe("tied, 80% in, not final, change of party announced earlier");
     // A leader whose party isn't given: said once, as what is unknown.
     const noParty = heldFlip({
       leaderParty: null,
@@ -668,16 +677,16 @@ describe("raceStatusText", () => {
       ],
     });
     expect(raceStatusText(noParty)).toBe(
-      "leader's party not given, 80% in, change of party announced earlier"
+      "leader's party not given, 80% in, not final, change of party announced earlier"
     );
   });
 
   it("never says 'changing party' for a flip the count no longer shows", () => {
     // A held poll: the flip stands (announced), the figures show the holder ahead.
     expect(raceStatusText(heldFlip())).toBe(
-      "Democrat leads, 80% in, change of party announced earlier, holder's party ahead in the latest count"
+      "Democrat leads, 80% in, not final, change of party announced earlier, holder's party ahead in the latest count"
     );
-    expect(raceStatusText(race())).toBe("Republican leads, 80% in, seat changing party");
+    expect(raceStatusText(race())).toBe("Republican leads, 80% in, not final, seat changing party");
   });
 });
 
