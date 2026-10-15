@@ -501,6 +501,33 @@ class TestFirstSurfacedDate:
         assert resp["firstSurfaced"] == "2026-08-15"
         assert resp["date"] == "2026-08-20"
 
+    async def test_an_evening_issue_first_surfaces_on_its_eastern_day(self, db_session):
+        """Filed at 9:30 PM EDT on the 14th (01:30 UTC on the 15th) under the
+        refresh's Eastern date: it read "2026-10-15 · updated 2026-10-14"
+        (46 of 551 issues on 2026-10-15). Every surface showing the date
+        agrees: the issue, a member's issues, a bill's issues."""
+        from datetime import datetime
+
+        from fastapi import Response
+
+        from app.api.action import get_action_issue
+        from app.api.politicians import _get_active_issues
+        from app.services.bill_service import _issues_mentioning
+
+        issue = ActionIssue(
+            date="2026-10-14", rank=4, title="House vote", summary="s",
+            created_at=datetime(2026, 10, 15, 1, 30),
+            related_senators='[{"id": "S000001", "name": "A Senator", "state": "VT", "party": "D", "overallScore": 50}]',
+            related_bill_ids='[{"id": "S.2403"}]',
+        )
+        db_session.add(issue)
+        db_session.commit()
+
+        resp = await get_action_issue(to_public_id(issue.id), Response(), db=db_session)
+        assert resp["firstSurfaced"] == "2026-10-14" == resp["date"]
+        assert [i["firstSurfaced"] for i in _get_active_issues("S000001", db_session)] == ["2026-10-14"]
+        assert [i.first_surfaced for i in _issues_mentioning(db_session, "S.2403")] == ["2026-10-14"]
+
 
 class TestTrendingFlag:
     """is_trending (app/trending.py) needs the whole day's view-count
@@ -1167,9 +1194,9 @@ def test_ongoing_lists_monitors_closed_in_the_last_sixty_days(db_session, freeze
     recently, with the day each closed."""
     freeze_utcnow(datetime(2026, 10, 10, 12))
     for slug, status, updated in (
-        ("watching-one", MonitorStatus.WATCHING, datetime(2026, 10, 8)),
-        ("closed-recently", MonitorStatus.CLOSED, datetime(2026, 9, 1)),
-        ("closed-long-ago", MonitorStatus.CLOSED, datetime(2026, 7, 1)),
+        ("watching-one", MonitorStatus.WATCHING, datetime(2026, 10, 8, 16)),
+        ("closed-recently", MonitorStatus.CLOSED, datetime(2026, 9, 1, 16)),
+        ("closed-long-ago", MonitorStatus.CLOSED, datetime(2026, 7, 1, 16)),
     ):
         db_session.add(NationalMonitor(slug=slug, title=slug, status=status, created_at=datetime(2026, 5, 1),
                                        updated_at=updated, last_article_date="2026-08-01"))

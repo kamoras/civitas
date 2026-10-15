@@ -115,6 +115,10 @@ export default function MemberScorecard({
       colorClass: getScoreColor(overall),
     },
     url: absoluteUrl(`/politicians/${encodeURIComponent(member.id)}`),
+    // Every part's source, as the methods section lists them (MethodsLedger).
+    source: `FEC filings; roll calls as ${chamber === "senate" ? "Senate.gov" : "the House Clerk"} records them; Voteview; Cook PVI; Congress.gov bill status`,
+    asOf: scoredOn?.date ?? null,
+    scaleMax: 100,
   };
 
   const drawerBody: Record<DrawerView, () => ReactNode> = {

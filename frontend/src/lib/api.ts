@@ -602,6 +602,7 @@ export interface PipelineRunInfo {
   cacheMisses: number;
   elapsedSeconds: number | null;
   errorMessage: string | null;
+  errorDetail?: string | null;
   progressSteps?: PipelineStepInfo[] | null;
   // House-only fields
   repsProcessed?: number;
@@ -657,6 +658,7 @@ export interface HouseRunInfo {
   repsFailed: number;
   elapsedSeconds: number | null;
   errorMessage: string | null;
+  errorDetail?: string | null;
   progressSteps?: PipelineStepInfo[] | null;
 }
 
@@ -670,6 +672,7 @@ export interface StockTradesRunInfo {
   presidentTradesIngested: number;
   elapsedSeconds: number | null;
   errorMessage: string | null;
+  errorDetail?: string | null;
   progressSteps?: PipelineStepInfo[] | null;
 }
 
@@ -685,6 +688,7 @@ export interface SupplementaryRunInfo {
   presidentsUpdated: number;
   elapsedSeconds: number | null;
   errorMessage: string | null;
+  errorDetail?: string | null;
   progressSteps?: PipelineStepInfo[] | null;
 }
 

@@ -40,6 +40,7 @@ from sqlalchemy.orm import Session
 from app import ops_alerts
 from app.config import settings
 from app.database import SessionLocal
+from app.error_utils import record_exception
 from app.election_calendar import (
     federal_states,
     seats_up_for_year,
@@ -1804,17 +1805,18 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
         }
     except Exception as e:
         logger.exception("Election pipeline failed: %s", e)
-        summary = "election pipeline failed — see server logs"
+        cause = "election pipeline failed"
         try:
             db.rollback()
             run.status = PipelineStatus.FAILED
             run.completed_at = utcnow()
             run.elapsed_seconds = round(time.time() - start_time, 1)
-            run.error_message = summary
+            run.error_message = "election pipeline failed — see the run's error detail"
+            cause = record_exception(run, e, progress.active_step() or run.current_phase)
             db.commit()
         except Exception:
             logger.exception("Failed to record election pipeline failure")
-        return {"status": PipelineStatus.FAILED, "error": summary}
+        return {"status": PipelineStatus.FAILED, "error": cause}
     finally:
         _tracker.stop(_run_token)
         db.close()
