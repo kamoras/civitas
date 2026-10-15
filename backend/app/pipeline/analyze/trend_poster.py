@@ -213,6 +213,13 @@ def _draft(db: Session, trend: BlueskyTrend, ev: Evidence) -> tuple[Draft | None
             return None, "record card fails the neutrality check"
         sentences = record_sentences(card)
     text = compose_text(trend.display_name, sentences, record.url)
+    if text is None and show_title and record.kind == "vote":
+        # A long measure title: the bill number stands in for it, in the
+        # post and the image alike (never a cut title).
+        short = card_for_key(db, record.key, show_title=False)
+        if short is not None:
+            card, show_title = short, False
+            text = compose_text(trend.display_name, record_sentences(card), record.url)
     if text is None:
         return None, "too long for a post"
     return Draft(ev, text, f"On the record: {trend.display_name}", card, show_title), ""
@@ -357,7 +364,7 @@ def run_trend_posts(db: Session, now: datetime | None = None) -> dict:
             index = index or RecordIndex(db, now)
             emb = _embed_texts_sim([trend_text(trend.display_name, trend.description)])[0]
             evidence, named = find_evidence(index, trend.display_name, trend.description,
-                                            trend.started_at or now, emb)
+                                            trend.started_at or now, emb, about_appointment=sc.about_appointment)
         decision, reason, ev, draft = evaluate(db, trend, sc, evidence, now)
         _set_match(row, ev, [m["party"] for m in named if m.get("party")],
                    selection_score(trend.rank, ev.strength) if draft else None)

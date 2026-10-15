@@ -18,15 +18,32 @@ reader can check by eye, so a trend posts only on one of four matches:
 
 | Match | Rule |
 |---|---|
-| issue | an Action Center issue headline at cosine >= 0.5 to the trend (all-MiniLM-L6-v2); the post shows the official record the issue already links (a vote on its bill, a Federal Register document, the bill) when it has one |
-| act | a statute's short title in the trend ("... Act"), found in a record's own title |
-| nominee | a nominee a roll call names, named in full in the trend |
-| member | a member named in the trend (in full, or by a surname under the Action Center's collision safeguards), and a bill that member sponsored at cosine >= 0.5 to the trend |
+| issue | an Action Center issue (headline and lede) at cosine >= 0.5 to the trend, that names a distinctive entity from the trend's own name (an entity in few stored issues, the national monitors' test), for a trend Bluesky describes. The post shows the official record the issue already links (a vote on its bill, a Federal Register document, the bill) when it has a recent one |
+| act | the trend names a statute's full title: the whole capitalised run before "Act" is a record's title (a trailing "of <year>" aside), or the trend also gives the record's bill number |
+| nominee | a nominee a roll call names, named in full, by a trend the appointment vote finds is about the nomination itself |
+| member | a member named in the trend (in full, or by a surname under the Action Center's collision safeguards), and a recent bill that member sponsored at cosine >= 0.5, for a described trend |
 
-A named member with no record of their own on the topic is not a match:
-a post about a person is not a post about a record. Every record has to be
-dated no later than two days after the trend began, and fall within the
-sitting Congress.
+Every record has to be dated no later than two days after the trend began,
+and fall within the sitting Congress. A record more than 30 days older
+than the trend counts only when the trend's own name names it (an act's
+title or bill number). A vote with no measure title and no bill is never a
+record. A person named with no record of their own on the topic is not a
+match.
+
+### What the first version got wrong, and the rules that fixed it
+
+The first backtest posted 11 trends; read by hand, 1 to 3 attached the
+right record (labelled by the reviewer). Each rule above answers one
+failure, and none of them is a threshold change:
+
+| First-version failure (count of 11 posts) | What went wrong | Rule |
+|---|---|---|
+| a short act name matched a longer title of another act (1) | a short name inside a longer title is another act | full-title equality, or the bill number |
+| a foreign law's name matched a U.S. act of the same short name (1) | a jurisdiction in front of the title names another law | the whole capitalised run, never a tail of it |
+| trends about an official's actions anchored on that official's confirmation vote (5) | a person named in a story anchored their confirmation; several were 2025 votes attached to 2026 stories | nominee only when the trend is about the appointment (appointment kNN), and 30-day recency unless the trend's name names the record |
+| a slogan trend matched an untitled "On Passage" vote (1) | a vote with nothing to show what was voted on | no record without a measure title or a bill; a hidden title is replaced by the bill number, never left blank |
+| a polls-across-races trend matched one race's story (1) | cosine matched a story to its theme | issue matches need a description and a distinctive entity from the trend's name |
+| (intermediate run) a trend about agency data matched the 2025 passage vote of the act it mentioned | the act was the story's object, named in passing | an old record counts only when the trend's name names it |
 
 ## The gates and their calibration
 
@@ -43,6 +60,7 @@ with near-duplicates (cosine > 0.95) excluded and 95% bootstrap intervals.
 | tragedy | 501 (143) | 25 | 0.5 (90% recall) | 0.97 [0.96, 0.99] | 0.84 | 0.90 |
 | political violence (among tragedies) | 143 (45) | 5 | 0.8 (90% precision) | 0.91 [0.85, 0.96] | 0.93 [0.80, 1.00] | 0.56 [0.40, 0.70] |
 | loaded language (trend name) | 759 (145) | 25 | 0.3 (best F2) | 0.89 [0.86, 0.92] | 0.54 [0.47, 0.60] | 0.79 [0.72, 0.86] |
+| appointment (nominee anchor) | 549 (31) | 15 | 0.55 (90% precision) | 0.99 [0.98, 0.99] | 0.91 [0.77, 1.00] | 0.61 [0.44, 0.79] |
 
 On its own the relevance vote only keeps out off-topic trends. The pinned
 match is what makes a post. The loaded-language vote reads topic as much as
@@ -102,9 +120,41 @@ Over the 3,076 English Bluesky trend topics from 2026-09-14 to 2026-10-15
 | political tragedy (needs an official record) | 35 |
 | passes every gate, so goes to record matching | 331 |
 
-Matching those to records, then applying the caps and the party audit,
-needs the records database. That part is reported in the pull request that
-added this, not here.
+Those that pass go to record matching, against a read-only snapshot of
+the production database, with the caps applied, posting at the first
+window hour after each trend began (the replay is a scratch script, not
+committed).
+
+### Precision
+
+Rubric: a post (or eligible candidate) is **correct** when its record is
+the measure, nomination, rule or event the trend is about: what a reader
+who saw the trend would recognise as its record. A related record about
+something else (the official's confirmation for a story about what they
+did since; a law the story mentions in passing) is **incorrect**, as is a
+record of another act or jurisdiction.
+
+Final rules, 366 trends that passed the gates (2026-09-14 to 10-15):
+3 eligible, 3 posted, on 3 days. Party lean of the posted: D 1, none 2.
+
+| Trend (as Bluesky named it) | Match | Record | Label |
+|---|---|---|---|
+| an act's short title | act | the House passage vote on that act (2025), by its bill number | correct: the act the trend names. The trend's own news, a later Senate vote, wasn't in the snapshot; the post states the House vote and its date |
+| a senator's resolution | member | that senator's resolution's Senate discharge vote (2026-09-29) | correct |
+| a court case about agency records | issue | the Action Center issue on the Supreme Court's order in that case | correct |
+
+Posted precision 3/3, eligible precision 3/3. The volume is under one a
+week on this sample, which the standing rule (quality over quantity)
+accepts; the history topics' names are cut at 24 characters and many
+have no description, so live trends should match somewhat more often.
+The first version, for comparison: 16 eligible, 11 posted, 1 to 3
+correct. Of its 11, the new rules drop all 8 wrong ones and the one the
+reviewer called plausible (it named its act only in its description, and
+the act's bill was dated eight months earlier); they keep the act and
+court-case trends (the act now matched to its own record, not another
+act's) and add the resolution (the first version found it but couldn't
+fit the vote's long title in a post; the bill number now stands in for
+it). The trends and records by name are in the pull request.
 
 ## How long trends stay listed
 

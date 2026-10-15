@@ -72,7 +72,7 @@ def world(db_session, monkeypatch, freeze_utcnow):
                          latest_action_date="2026-10-01"))
     db.add(SponsoredBill(senator_id="S2", bill_id="S.200", title="Harbor Dredging Act", congress=119,
                          introduced_date="2026-09-02", latest_action="Referred to committee.",
-                         latest_action_date="2026-09-03"))
+                         latest_action_date="2026-10-03"))
     rc = RollCall(chamber="senate", congress=119, session=2, number=301, date="2026-10-13",
                   question="On Passage of the Bill", title="Example Tariff Relief Act",
                   result="Bill Passed", yeas=2, nays=1, bill_id="S.100", fetched_at=NOW)
@@ -145,7 +145,7 @@ def test_every_word_is_template_a_record_field_or_the_quoted_trend_name(world, b
 
 
 def test_an_issue_match_needs_cosine_of_at_least_half_and_links_the_issue(world, bluesky_configured):
-    world["trends"] = [trend("Canal tolls")]
+    world["trends"] = [trend("Canal tolls", description="The canal toll plan advances in the state legislature.")]
     run(world)
     (post,) = posts(world["db"])
     assert post.text.startswith("Trending on Bluesky: “Canal tolls”. On the record: Civitas Action Center")
@@ -162,7 +162,7 @@ def test_a_member_named_alone_is_not_a_match(world):
 
 
 def test_a_named_member_with_their_own_bill_on_the_topic_matches(world):
-    world["trends"] = [trend("Lee Marsh harbor push")]
+    world["trends"] = [trend("Lee Marsh harbor push", description="Lee Marsh presses his harbor dredging bill.")]
     run(world)
     row = world["db"].query(TrendCandidate).one()
     assert (row.match_type, row.record_key) == ("member", "bill:119/S.200")
@@ -216,7 +216,7 @@ def test_a_loaded_bill_title_is_left_out_of_the_post_and_the_image(world, monkey
     world["trends"] = [trend("Example Tariff Relief Act")]
     run(world)
     (post,) = posts(world["db"])
-    assert "On Passage of the Bill." in post.text
+    assert "On Passage of the Bill: S. 100." in post.text
     assert post.text.count("Example Tariff Relief Act") == 1  # the quoted trend name only
     assert post.image_url.endswith("&title=0")
     assert "Example Tariff Relief Act" not in post.alt_text
@@ -241,7 +241,7 @@ def test_a_tragedy_without_a_political_reading_is_skipped_even_with_a_record(wor
 
 
 def test_a_political_tragedy_needs_an_official_record_not_an_issue(world):
-    world["trends"] = [trend("Canal tolls")]
+    world["trends"] = [trend("Canal tolls", description="The canal toll plan advances in the state legislature.")]
     world["scores"]["Canal tolls"] = TrendScores(0.9, tragedy=0.95, political_violence=0.95, loaded=0)
     run(world)
     row = world["db"].query(TrendCandidate).one()
@@ -260,8 +260,8 @@ def test_a_political_tragedy_with_an_official_record_posts_only_the_record(world
 
 def test_one_post_a_run_two_a_day_four_hours_apart(world, freeze_utcnow):
     db = world["db"]
-    world["trends"] = [trend("Example Tariff Relief Act", "a"), trend("Lee Marsh harbor push", "b", rank=1),
-                       trend("Canal tolls", "c", rank=2)]
+    world["trends"] = [trend("Example Tariff Relief Act", "a"), trend("Lee Marsh harbor push", "b", rank=1, description="Lee Marsh presses his harbor dredging bill."),
+                       trend("Canal tolls", "c", rank=2, description="The canal toll plan advances in the state legislature.")]
     run(world)
     assert len(posts(db)) == 1
     freeze_utcnow(NOW + timedelta(hours=1))
@@ -307,13 +307,13 @@ def test_outside_the_window_a_trend_is_held_then_dropped_once_it_leaves_the_list
     night = datetime(2026, 10, 15, 8, 0)  # 04:00 Eastern
     with patch.object(broadcast, "_windows_cache", [(10, 1)]):
         freeze_utcnow(night)
-        world["trends"] = [trend("Example Tariff Relief Act", "a"), trend("Canal tolls", "c", rank=1)]
+        world["trends"] = [trend("Example Tariff Relief Act", "a"), trend("Canal tolls", "c", rank=1, description="The canal toll plan advances in the state legislature.")]
         run(world, night)
         assert {r.topic: r.decision for r in db.query(TrendCandidate)} == {"a": "held", "c": "held"}
         assert posts(db) == []
         morning = datetime(2026, 10, 15, 14, 0)  # 10:00 Eastern
         freeze_utcnow(morning)
-        world["trends"] = [trend("Canal tolls", "c", rank=0)]
+        world["trends"] = [trend("Canal tolls", "c", rank=0, description="The canal toll plan advances in the state legislature.")]
         run(world, morning)
     rows = {r.topic: r for r in db.query(TrendCandidate)}
     assert rows["a"].decision == "dropped" and "no longer trending" in rows["a"].reason
@@ -332,7 +332,7 @@ def test_an_outage_of_the_trends_endpoint_is_not_no_trends(world, monkeypatch):
 
 
 def test_observations_are_kept_per_listing(world):
-    world["trends"] = [trend("Example Tariff Relief Act", "a"), trend("Canal tolls", "c", rank=1)]
+    world["trends"] = [trend("Example Tariff Relief Act", "a"), trend("Canal tolls", "c", rank=1, description="The canal toll plan advances in the state legislature.")]
     run(world)
     assert sorted((o.topic, o.rank) for o in world["db"].query(TrendObservation)) == [("a", 0), ("c", 1)]
 
@@ -356,8 +356,8 @@ def test_trend_selection_is_party_blind(world, relabel):
     db = world["db"]
     if relabel:
         _swap_parties(db)
-    world["trends"] = [trend("Lee Marsh harbor push", "b", rank=0), trend("Example Tariff Relief Act", "a", rank=3),
-                       trend("Canal tolls", "c", rank=1)]
+    world["trends"] = [trend("Lee Marsh harbor push", "b", rank=0, description="Lee Marsh presses his harbor dredging bill."), trend("Example Tariff Relief Act", "a", rank=3),
+                       trend("Canal tolls", "c", rank=1, description="The canal toll plan advances in the state legislature.")]
     run(world)
     chosen = db.query(TrendCandidate).filter_by(decision="posted").one()
     scores = {r.topic: r.selection_score for r in db.query(TrendCandidate)}
@@ -542,7 +542,7 @@ def test_the_cards_api_serves_the_card(world):
 
     resp = record_card("vote:senate/119/2/301", title=0, db=world["db"])
     body = json.loads(resp.body)
-    assert body["headline"] == "On Passage of the Bill" and body["alt"] and body["source"]
+    assert body["headline"] == "On Passage of the Bill: S. 100" and body["alt"] and body["source"]
 
 
 # -- the getTrends reader ---------------------------------------------------------
@@ -590,8 +590,92 @@ def test_every_labelled_set_documents_its_source_and_rubric():
         assert data["_source"] and data["_rubric"] and data["examples"]
 
 
-def test_act_phrases_offer_every_tail_and_stop_at_a_sentence():
+def test_act_phrases_take_the_whole_run_never_a_tail():
     assert trend_evidence.act_phrases("Abolish DHS. Illinois Democrat Jane Roe's Safe Streets Act") == [
-        ["illinois democrat jane roe's safe streets act", "democrat jane roe's safe streets act",
-         "jane roe's safe streets act", "roe's safe streets act", "safe streets act", "streets act"]]
+        "illinois democrat jane roe's safe streets act"]
     assert trend_evidence.act_phrases("The Act") == []
+
+
+def test_a_shorter_title_inside_a_longer_one_is_another_act(world):
+    world["trends"] = [trend("Relief Act", description="The relief bill.")]  # inside "Example Tariff Relief Act"
+    run(world)
+    assert world["db"].query(TrendCandidate).one().decision == "ineligible"
+
+
+def test_a_qualifier_in_front_of_a_title_is_another_jurisdictions_act(world):
+    world["trends"] = [trend("EU Example Tariff Relief Act", description="The EU adopted its own law.")]
+    run(world)
+    assert world["db"].query(TrendCandidate).one().decision == "ineligible"
+
+
+def test_a_short_title_matches_with_the_bill_number(world):
+    world["trends"] = [trend("Relief Act S. 100", description="Senators debate S. 100.")]
+    run(world)
+    assert world["db"].query(TrendCandidate).one().record_key == "vote:senate/119/2/301"
+
+
+def _nomination(db, date="2026-10-10"):
+    db.add(RollCall(chamber="senate", congress=119, session=2, number=302, date=date,
+                    question="On the Nomination PN9", title="Jordan Vale, of Ohio, to be Secretary of Canals",
+                    result="Nomination Confirmed", yeas=51, nays=48, fetched_at=NOW))
+    db.commit()
+
+
+def test_a_nominee_named_in_a_story_is_not_an_anchor(world):
+    _nomination(world["db"])
+    world["trends"] = [trend("Jordan Vale letter", description="Jordan Vale sent a letter about fees.")]
+    run(world)
+    assert world["db"].query(TrendCandidate).one().decision == "ineligible"
+
+
+def test_a_trend_about_the_nomination_anchors_on_the_vote(world):
+    _nomination(world["db"])
+    name = "Jordan Vale confirmation"
+    world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]
+    world["scores"][name] = TrendScores(0.9, 0, 0, 0, appointment=0.95)
+    run(world)
+    row = world["db"].query(TrendCandidate).one()
+    assert (row.match_type, row.record_key) == ("nominee", "vote:senate/119/2/302")
+
+
+def test_an_old_confirmation_is_not_a_record_of_new_news(world):
+    _nomination(world["db"], date="2026-03-01")
+    name = "Jordan Vale confirmation"
+    world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]
+    world["scores"][name] = TrendScores(0.9, 0, 0, 0, appointment=0.95)
+    run(world)
+    assert world["db"].query(TrendCandidate).one().decision == "ineligible"
+
+
+def test_an_old_act_record_counts_only_when_the_trend_name_names_it(world):
+    later = NOW + timedelta(days=60)
+    world["trends"] = [trend("IRS data delay", description="IRS holds back data on the Example Tariff Relief Act.",
+                             started=later)]
+    run(world, later)
+    assert world["db"].query(TrendCandidate).one().decision == "ineligible"
+    world["trends"] = [trend("Example Tariff Relief Act", "t2", started=later)]
+    run(world, later)
+    assert world["db"].query(TrendCandidate).filter_by(topic="t2").one().record_kind == "vote"
+
+
+def test_a_vote_with_no_title_and_no_bill_is_never_a_record(world):
+    db = world["db"]
+    db.add(RollCall(chamber="house", congress=119, session=2, number=9, date="2026-10-12", question="On Passage",
+                    title="", result="Passed", yeas=1, nays=0, fetched_at=NOW))
+    db.commit()
+    assert record_cards.card_for_key(db, "vote:house/119/2/9") is None
+    index = trend_evidence.RecordIndex(db, NOW)
+    assert all(rc.number != 9 for rc in index.votes)
+
+
+def test_an_issue_match_needs_a_description_and_the_trend_names_subject(world):
+    db = world["db"]
+    # Enough stored issues for a document frequency to mean something.
+    db.add_all([ActionIssue(date="2026-09-01", rank=1, title=f"Unrelated story {i}") for i in range(120)])
+    db.commit()
+    world["trends"] = [trend("Canal tolls", "a", description=""),
+                       trend("Fee politics", "b", description="Canal toll plan debated.")]
+    run(world)
+    rows = {r.topic: r for r in world["db"].query(TrendCandidate)}
+    assert rows["a"].decision == "ineligible"  # no description
+    assert rows["b"].decision == "ineligible"  # "canal" only in the description

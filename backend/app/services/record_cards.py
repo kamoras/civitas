@@ -129,8 +129,15 @@ def vote_card(db: Session, chamber: str, congress: int, session: int, number: in
         tally = [{"position": b, "label": lab, "total": t, "parties": []}
                  for (b, lab), t in zip(POSITIONS, (rc.yeas, rc.nays, rc.present, rc.not_voting))
                  if b != "present" or t]
-    title = (rc.title or "").strip() if show_title else ""
-    headline = rc.question.strip() + (f": {title}" if title else "") if rc.question else title
+    # What was voted on: the measure's title, or (when the caller leaves a
+    # title out) its bill number. A vote with neither shows nothing of what
+    # was voted on and has no card.
+    measure = ((rc.title or "").strip() if show_title else "") or (bill_label(rc.bill_id) or "")
+    if not measure:
+        return None
+    question = (rc.question or "").strip()
+    named = measure.replace(" ", "") in question.replace(" ", "")  # "On the Motion to Discharge S.Res. 852"
+    headline = question if question and named else f"{question}: {measure}" if question else measure
     return RecordCard(
         kind="vote", key=f"vote:{chamber}/{congress}/{session}/{number}",
         eyebrow=f"{CHAMBER_NAMES[chamber]} roll call {number}, {ordinal(congress)} Congress",

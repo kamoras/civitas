@@ -308,9 +308,13 @@ export default function NewsChapter() {
           a U.S. policy topic on it matches an official record, it may post that record: a vote, a
           bill, a rule or the day&apos;s Congressional Record. A match counts only if it is one of
           four pinned kinds: an Action Center issue whose wording is close to the trend&apos;s
-          (cosine similarity of 0.5 or more), an Act whose exact title the trend names, a nominee
-          named in a roll call, or a bill sponsored by a member the trend names. A member named on
-          their own is never enough; there has to be a record of theirs to show.
+          (cosine similarity of 0.5 or more) and that names the trend&apos;s own subject; an Act
+          whose full title the trend names (a shorter name inside a longer title, or a title with
+          another jurisdiction in front of it, is a different law); a nominee&apos;s confirmation
+          vote, only when the trend is about the nomination itself; or a recent bill sponsored by a
+          member the trend names. A person named in a story is never enough, and a record more than
+          30 days old counts only when the trend names it: an old vote attached to new news says
+          nothing about the news.
         </P>
         <P>
           Whether a trend is about U.S. policy is a vote among the most similar labelled Bluesky

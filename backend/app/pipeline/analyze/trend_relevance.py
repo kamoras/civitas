@@ -18,6 +18,11 @@ nearest (action_center.relevance_votes, all-MiniLM-L6-v2):
   - loaded: the trend's display name, the only words a post quotes from
     Bluesky, judges or mocks rather than names
     (app/data/loaded_language_examples.json).
+  - appointment: the trend is about a federal nomination or appointment
+    itself (app/data/appointment_examples.json). A nominee named in a roll
+    call anchors a trend only then (trend_evidence): a trend that merely
+    names an official is about what they did, not the vote that put them
+    in office.
 
 k and each threshold come from app/data/trend_gates_calibration.json,
 written by scripts/calibrate_trend_gates.py with its leave-one-out
@@ -51,6 +56,7 @@ _DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
 RELEVANCE_EXAMPLES_PATH = _DATA_DIR / "trend_relevance_examples.json"
 VIOLENCE_EXAMPLES_PATH = _DATA_DIR / "political_violence_examples.json"
 LOADED_EXAMPLES_PATH = _DATA_DIR / "loaded_language_examples.json"
+APPOINTMENT_EXAMPLES_PATH = _DATA_DIR / "appointment_examples.json"
 CALIBRATION_PATH = _DATA_DIR / "trend_gates_calibration.json"
 
 # gate name -> (examples file, label field, subset field or None). The
@@ -61,6 +67,7 @@ GATES: dict[str, tuple[pathlib.Path, str, str | None]] = {
     "tragedy": (VIOLENCE_EXAMPLES_PATH, "tragedy", None),
     "political_violence": (VIOLENCE_EXAMPLES_PATH, "political", "tragedy"),
     "loaded": (LOADED_EXAMPLES_PATH, "loaded", None),
+    "appointment": (APPOINTMENT_EXAMPLES_PATH, "appointment", None),
 }
 
 _examples_cache: dict[str, list[dict]] = {}
@@ -115,6 +122,7 @@ class TrendScores:
     tragedy: float
     political_violence: float
     loaded: float
+    appointment: float = 0.0
 
     @property
     def relevant(self) -> bool:
@@ -132,6 +140,10 @@ class TrendScores:
     def is_loaded(self) -> bool:
         return self.loaded >= threshold("loaded")
 
+    @property
+    def about_appointment(self) -> bool:
+        return self.appointment >= threshold("appointment")
+
 
 def trend_text(name: str, description: str | None) -> str:
     """What the topic gates embed: the shape of the labelled examples."""
@@ -145,9 +157,10 @@ def score_trends(trends: list[tuple[str, str | None]]) -> list[TrendScores]:
         return []
     topic = _embed_texts_sim([trend_text(n, d) for n, d in trends])
     names = _embed_texts_sim([n for n, _ in trends])
-    rel, trag, pol = (gate_votes(g, topic) for g in ("relevance", "tragedy", "political_violence"))
+    rel, trag, pol, appt = (gate_votes(g, topic) for g in ("relevance", "tragedy", "political_violence", "appointment"))
     loaded = gate_votes("loaded", names)
-    return [TrendScores(float(a), float(b), float(c), float(d)) for a, b, c, d in zip(rel, trag, pol, loaded)]
+    return [TrendScores(float(a), float(b), float(c), float(d), float(e))
+            for a, b, c, d, e in zip(rel, trag, pol, loaded, appt)]
 
 
 def neutrality_problems(quoted: str, context: str = "", loaded_vote: float | None = None) -> list[str]:
