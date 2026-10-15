@@ -169,6 +169,12 @@ def test_every_correction_cites_an_official_source():
         assert src["url"].startswith("https://")
 
 
+def test_the_built_file_publishes_every_correction_whole():
+    # A key whitelist in the builder once dropped official_url,
+    # official_totals and precinct_regex from the published file.
+    assert DATA["corrections"] == CORRECTIONS["fixes"]
+
+
 # --- the loader ---------------------------------------------------------------
 
 

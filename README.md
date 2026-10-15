@@ -1009,7 +1009,9 @@ MEDSL's known errors are corrected only from certified state or county
 canvasses, one entry each in `app/data/district_lean_corrections.json`
 (Indiana's ENR archive, New Jersey's municipal results, Louisiana's parish
 totals, King County's precinct file, California's Supplement to the
-Statement of Vote, Maine's district totals); a district whose correction
+Statement of Vote, Maine's district totals), each published whole in the
+built file's `corrections` (its source URL, totals and the rows it touched);
+a district whose correction
 could only come from behind a wall is written as unavailable. The build
 fails and writes nothing unless every state's totals are within 0.2% of
 the official state files (FEC for 2020, MEDSL's state file for 2024),
