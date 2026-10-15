@@ -211,6 +211,8 @@ export interface VoteRollCall {
   result: string;
   billId: string | null;
   billLabel: string | null;
+  /** The bill's short or popular title from Congress.gov, when the chamber's title isn't it. */
+  billShortTitle?: string | null;
   sourceUrl: string;
   parties: VoteRollCallParty[];
 }

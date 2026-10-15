@@ -352,3 +352,26 @@ class TestCallerMistakes:
         monkeypatch.setattr(public, "record_api_request", lambda *a, **k: recorded.append((a, k)))
         client.get("/api/public/v1/search", params={"q": "x"})
         assert recorded[-1] == (("search_documents", "http", 422), {"rejection": ("q", "string_too_short")})
+
+
+@pytest.mark.parametrize("chamber,member,entity", [("senators", "S000001", "senator"),
+                                                   ("representatives", "R000001", "representative")])
+def test_profiles_and_history_name_the_scoring_version(client, db_session, chamber, member, entity):
+    """A score is citable to its method: /breakdown named the version and
+    date, the profile and /history (what most clients read) named neither."""
+    db_session.add(ScoreSnapshot(entity_type=entity, entity_id=member, date="2026-10-01", overall_score=60,
+                                 score_1=60, score_2=50, score_3=55, score_4=40, score_5=70,
+                                 algorithm_version="v6.35"))
+    db_session.commit()
+    profile = _body(client, f"/{chamber}/{member}")
+    assert (profile["algorithmVersion"], profile["scoredOn"]) == ("v6.35", "2026-10-01")
+    breakdown = _body(client, f"/{chamber}/{member}/breakdown")
+    assert (breakdown["algorithmVersion"], breakdown["scoredOn"]) == ("v6.35", "2026-10-01")
+    old, new = _body(client, f"/{chamber}/{member}/history")["snapshots"]
+    assert (old["date"], old["algorithmVersion"]) == ("2026-09-01", None)
+    assert (new["date"], new["algorithmVersion"]) == ("2026-10-01", "v6.35")
+
+
+def test_a_profile_with_no_snapshot_names_no_version(client):
+    profile = _body(client, "/senators/S000002")
+    assert (profile["algorithmVersion"], profile["scoredOn"]) == (None, None)

@@ -11,6 +11,7 @@ import BackToTop from "@/components/BackToTop";
 import {
   searchExplore,
   fetchCommitteeRecordTotal,
+  fetchExploreMatches,
   fetchExploreStats,
   splitHighlights,
   type ExploreResult,
@@ -22,6 +23,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import { billPageHref } from "@/lib/congress";
+import MatchGroups from "@/components/explore/MatchGroups";
 
 type ChamberFilter = "all" | "Senate" | "House" | "Executive" | "Judicial" | "Regulatory";
 
@@ -328,6 +330,12 @@ function ExplorePageInner() {
   const committee = useAsyncData(
     `committee:${committeeQuery}`,
     committeeQuery ? () => fetchCommitteeRecordTotal(committeeQuery) : null
+  );
+  // Members and bills aren't documents either: the ones the search names,
+  // as their own groups above the results (never ranked among them).
+  const matches = useAsyncData(
+    `matches:${committeeQuery}`,
+    committeeQuery ? () => fetchExploreMatches(committeeQuery) : null
   );
   // Whose record the results are limited to. The name comes from the results
   // themselves; the filter is shown either way.
@@ -644,10 +652,16 @@ function ExplorePageInner() {
             </div>
           )}
 
-          {/* A bill number searched as text ranks documents that only share
-              its digits above the bill; its own page has the status,
-              sponsor and every member's vote. */}
-          {!loading && searched && billHref && (
+          {/* The members and bills the search names. A bill number is
+              among them: searched as text, it ranks documents that only
+              share its digits above the bill. */}
+          {!loading && searched && matches.data && (
+            <MatchGroups matches={matches.data} query={committeeQuery} />
+          )}
+
+          {/* Without the groups (their request failed), a bill number still
+              opens its page: it has the status, sponsor and every vote. */}
+          {!loading && searched && billHref && matches.error && (
             <Link
               href={billHref}
               className="mb-4 block border border-phos/40 bg-phos/5 px-4 py-3 text-sm text-ink-hi hover:border-phos"

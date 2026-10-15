@@ -463,7 +463,17 @@ class SponsoredBillSchema(CamelModel):
 
 class BillInFlightSchema(CamelModel):
     bill_id: str
+    # The title the sponsor's listing gives (the official one for a bill
+    # introduced without a short title).
     title: str
+    # The bill's short or popular title, verbatim from Congress.gov's titles
+    # list, when it has one the listing title isn't, with its title type as
+    # Congress.gov names it ("Short Title(s) as Passed House", "Popular
+    # Titles"); fetch/bill_display_titles.display_title.
+    short_title: str | None = None
+    short_title_type: str | None = None
+    # The official title from that list, shown under the short title.
+    official_title: str | None = None
     chamber: Literal["senate", "house"]
     sponsor_id: str
     sponsor_name: str
@@ -741,14 +751,25 @@ class PublicRepresentativeRowSchema(LeaderboardEntrySchema):
     site_url: str = _SITE_URL
 
 
+_ALGORITHM_VERSION = Field(description="The scoring version that stored the member's scores (the newest "
+                                        "history snapshot's), as the changelog names it; null when none is "
+                                        "recorded")
+_SCORED_ON = Field(description="When the member's stored scores were computed, YYYY-MM-DD (the newest "
+                               "history snapshot); null when none is recorded")
+
+
 class PublicSenatorProfileSchema(SenatorSchema):
     model_config = _PublicModel.model_config
     site_url: str = _SITE_URL
+    algorithm_version: str | None = _ALGORITHM_VERSION
+    scored_on: str | None = _SCORED_ON
 
 
 class PublicRepresentativeProfileSchema(RepresentativeSchema):
     model_config = _PublicModel.model_config
     site_url: str = _SITE_URL
+    algorithm_version: str | None = _ALGORITHM_VERSION
+    scored_on: str | None = _SCORED_ON
 
 
 class _PublicPage(_PublicModel):
@@ -835,6 +856,10 @@ class PublicScoreSnapshotSchema(_PublicModel):
     constituent_alignment: float
     funding_diversity: float
     legislative_effectiveness: float
+    algorithm_version: str | None = Field(description="The scoring version that computed this snapshot; a "
+                                                      "change between two snapshots is a method change, not "
+                                                      "only a change in the record. Null for snapshots taken "
+                                                      "before versions were recorded")
 
 
 class PublicHistorySchema(_PublicModel):
@@ -965,10 +990,8 @@ class PublicScoreBreakdownSchema(_PublicModel):
     chamber: Literal["senate", "house"]
     party: str
     site_url: str = _SITE_URL
-    algorithm_version: str | None = Field(description="The scoring version that stored these scores (the newest "
-                                                      "history snapshot's); null when none is recorded")
-    scored_on: str | None = Field(description="When the stored scores were computed, YYYY-MM-DD (the newest "
-                                              "history snapshot)")
+    algorithm_version: str | None = _ALGORITHM_VERSION
+    scored_on: str | None = _SCORED_ON
     recomputed_with: str = Field(description="The scoring version the breakdown was recomputed with now")
     overall: float = Field(description="representationScore.overall: sum(weights[k] x dimensions[k].storedScore), "
                                        "rounded to 2 decimals")
@@ -1074,10 +1097,32 @@ class PipelineRunSchema(CamelModel):
     error_message: str | None = None
 
 
+class PipelineLinkSchema(CamelModel):
+    """One link of the nightly chain, as its latest run left it.
+
+    `state` is the reader's word for the row, decided by the API:
+    "completed", "partial" (some members failed), "running" (a live run)
+    or "failed" (anything else: a failed or stale row, or a RUNNING row
+    whose run is dead)."""
+    pipeline: str
+    label: str
+    state: str
+    run_id: int
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
 class PipelineStatusSchema(CamelModel):
     last_run: PipelineRunSchema | None = None
     next_scheduled: str | None = None
     is_running: bool = False
+    # Each chain link's latest run, in the order the chain runs them. The
+    # records band reads these, not `last_run` (the Senate's alone), so one
+    # failed link is named as that link rather than as the whole site.
+    links: list[PipelineLinkSchema] = []
+    links_completed: int = 0
+    # The newest completion among the links that completed, or None.
+    filed_at: datetime | None = None
 
 
 class HealthSchema(CamelModel):

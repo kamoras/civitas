@@ -176,15 +176,19 @@ classifier, not a set of business suffixes. If you need to strip "PAC" from
 entity names, that should be margin-based decontextualization using an
 embedding-based PAC naming context detector.
 
-Three narrow, disclosed exceptions exist today (bill stance direction's
-tier-0 verb check, industry classification's hotel-brand tier, and donor
-classification's PAC-suffix/payment-processor tier — see README
-"Classification Strategy" for the full list and each one's empirical
-justification). Each earns its place by the same bar: a *specific,
-measured* embedding-model failure mode, documented in code at the point of
-definition, running only as a precision pre-filter ahead of a genuine
+Four narrow, disclosed exceptions exist today (bill stance direction's
+tier-0 verb check, industry classification's hotel-brand tier, donor
+classification's PAC-suffix/payment-processor tier, and the claim
+composer's capitalised-actor rule — see README "Classification Strategy"
+for the full list and each one's empirical justification). Each earns its
+place by the same bar: a *specific, measured* embedding-model failure mode,
+documented in code at the point of definition, running ahead of a genuine
 embedding classifier that still handles everything the pre-filter doesn't
-catch — never a replacement for one. That bar is deliberately high. "I
+catch — never a replacement for one. The first three are precision
+pre-filters; the actor rule admits named parties ahead of a kNN vote that
+decides every span it refuses, and stays only because the vote alone,
+measured against it on the same labelled set and the same replay, lost
+more real claims than it recovered (`post_composer.is_acting_party`). That bar is deliberately high. "I
 think this keyword would help" does not clear it; a comment citing a
 concrete before/after measurement does.
 
@@ -212,9 +216,9 @@ the residual.
 | Tier | Technique | Used For |
 |------|-----------|----------|
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
-| 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization |
+| 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing) |
+| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing); whether a claim's actor span is a party that can act, for spans the capitalised-actor rule refuses (against hand-labelled spans, `claim_actor_examples.json`) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
@@ -1220,7 +1224,12 @@ In addition to the main pipeline, the **Action Center pipeline** runs hourly to
 surface trending civic issues. It fetches RSS feeds from low-bias news sources,
 filters articles for U.S. policy relevance by a kNN vote against hand-labelled
 feed articles (`relevance_votes`; `docs/research/action-center-relevance.md`),
-clusters related articles, incorporates trending topics from Google Trends and Bluesky,
+clusters articles reporting the same event (complete linkage on headline plus
+description start, cut where no hand-judged different-event pair merges:
+`app/data/cluster_pair_judgments.json`, `scripts/calibrate_cluster_pairs.py`;
+a missed merge costs a story a source, a wrong one publishes a chimera, so
+the cut is precision-first and is never refitted from the pipeline's own
+label of shared names), incorporates trending topics from Google Trends and Bluesky,
 and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
@@ -1316,7 +1325,7 @@ among feeds of its kind that have a week stands in.
 Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
 outlet's recurring briefing ("Up First", "Morning news brief", "The week in
 politics") is a single RSS item covering three to five unrelated stories, and
-every stage downstream treats it as one story. Three mechanical signals:
+every stage downstream treats it as one story. Four mechanical signals:
 
 - **The outlet's newsletter section.** An item whose URL sits under a
   `newsletter`/`newsletters` path segment is the outlet's own newsletter, a
@@ -1338,6 +1347,14 @@ every stage downstream treats it as one story. Three mechanical signals:
   sentence break, and photo credits and a broadcast sign-off ("… reports.")
   are not items: before 2026-10 those made 16 single stories in 627 feed
   articles read as lists.
+- **A headline and body that tell the same unrelated stories**
+  (`_parallel_stories`) — the two-story briefing the body check can't see
+  ("<A>. And, <B>" over two teaser items): the headline's items name
+  disjoint entities, so do the body's, and each body item names exactly one
+  headline item's entities, every headline item named. The body half is
+  what makes it precise: on 1,473 stored articles, disjoint headline items
+  alone matched 12 single stories along with 16 briefings; with it, 5
+  briefings and no single story (`docs/research/action-center-relevance.md`).
 
 This has to happen here because once several stories share one article the
 boundary between them is not recoverable later — cluster coherence filtering
@@ -1763,6 +1780,7 @@ the pending list).
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
+| Claim composer (verbatim spans, actor check: capitalised rule + kNN vote over labelled spans) | `backend/app/pipeline/analyze/post_composer.py`, `backend/app/data/claim_actor_examples.json`, `backend/scripts/calibrate_claim_actor.py` |
 | Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
 | Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |

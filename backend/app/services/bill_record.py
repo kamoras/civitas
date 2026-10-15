@@ -22,12 +22,14 @@ from collections.abc import Awaitable, Callable
 import httpx
 from sqlalchemy.orm import Session
 
-from app.models import RepSponsoredBill, RollCall, RollCallPosition, Representative, Senator, SponsoredBill
+from app.models import ExploreDocument, RepSponsoredBill, RollCall, RollCallPosition, Representative, Senator, SponsoredBill
 from app.config import settings
 from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async, api_cache_set_many_async
-from app.pipeline.fetch.congress import CONGRESS_API_BASE, congress_gov_bill_url
+from app.pipeline.fetch.congress import CONGRESS_API_BASE, congress_gov_bill_url, congress_of_date
+from app.pipeline.fetch.daily_digest import heading_bill_ids
 from app.pipeline.fetch import floor_logs
+from app.pipeline.fetch.bill_display_titles import cached_display_titles, titles_key
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
@@ -381,14 +383,31 @@ def roll_call_summaries(db: Session, refs: list[str | None]) -> dict[str, dict]:
     positions: dict[int, list[RollCallPosition]] = {}
     for p in db.query(RollCallPosition).filter(RollCallPosition.roll_call_id.in_([rc.id for rc in rows])):
         positions.setdefault(p.roll_call_id, []).append(p)
+    short = roll_call_short_titles(db, rows)
     return {
         wanted[(rc.chamber, rc.congress, rc.session, rc.number)]: {
             "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
             "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
             "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
+            "billShortTitle": short.get(rc.id),
             "parties": party_breakdown(positions.get(rc.id, [])),
         }
         for rc in rows
+    }
+
+
+def roll_call_short_titles(db: Session, rows: list[RollCall]) -> dict[int, str]:
+    """{roll call id: its bill's short or popular title} for the roll calls
+    on a bill whose cached Congress.gov titles list names one their own
+    title isn't (fetch/bill_display_titles): a vote list then says "One Big
+    Beautiful Bill Act" where the Senate's record says "A bill to provide
+    for reconciliation pursuant to title II of H. Con. Res. 14." The
+    chamber's own title stays on the roll call's page and in `title`."""
+    on_bills = [rc for rc in rows if rc.bill_id]
+    found = cached_display_titles(db, [(rc.congress, rc.bill_id, rc.title or "") for rc in on_bills])
+    return {
+        rc.id: found[titles_key(rc.congress, rc.bill_id)].title
+        for rc in on_bills if titles_key(rc.congress, rc.bill_id) in found
     }
 
 
@@ -416,6 +435,7 @@ def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> 
         "rejected": rc.rejected, "majorityRequirement": rc.majority_requirement,
         "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
         "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
+        "billShortTitle": roll_call_short_titles(db, [rc]).get(rc.id),
         "parties": party_breakdown(positions), "members": members,
     }
 
@@ -471,17 +491,82 @@ def bill_votes(db: Session, congress: int, bill_id: str) -> list[dict]:
     } for rc in votes]
 
 
+# Explore's floor speeches (explore_pipeline._SPEECH_TYPES).
+SPEECH_DOC_TYPES = ("Senate Floor Speech", "House Floor Speech")
+# floor_speech.titled_speeches titles a turn "Remarks on <heading>": the
+# heading after it is the Record's own.
+_REMARKS_ON = re.compile(r"^Remarks on ")
+
+
+def speech_bills(title: str | None, date: str | None) -> list[dict]:
+    """The bills a floor speech's Record heading names ("S.J. RES. 188"),
+    each with the Congress of the day it was given: a bill number names a
+    different bill in each Congress. Stated identifiers only, never a guess
+    from the speech's words."""
+    congress = congress_of_date(date or "")
+    if congress is None:
+        return []
+    return [{"billId": b, "label": bill_label(b), "congress": congress} for b in heading_bill_ids(title or "")]
+
+
+def floor_debate(db: Session, congress: int, bill_id: str) -> list[dict]:
+    """The floor speeches whose Record heading names this bill, in the
+    bill's Congress, grouped by day, chamber and heading (a debate is one
+    heading with many speakers, each listed once at their first turn),
+    newest first. Read from the stored
+    headings when the page is served; the speech text is never searched."""
+    number = bill_id.split(".", 1)[-1]
+    rows = (
+        db.query(ExploreDocument.id, ExploreDocument.title, ExploreDocument.date, ExploreDocument.chamber,
+                 ExploreDocument.politician_name, ExploreDocument.politician_id)
+        .filter(ExploreDocument.doc_type.in_(SPEECH_DOC_TYPES), ExploreDocument.title.contains(number))
+        .order_by(ExploreDocument.date.desc(), ExploreDocument.id)
+        .all()
+    )
+    groups: dict[tuple, dict] = {}
+    for r in rows:
+        if congress_of_date(r.date or "") != congress or bill_id not in heading_bill_ids(r.title or ""):
+            continue
+        heading = _REMARKS_ON.sub("", r.title or "")
+        group = groups.setdefault((r.date, r.chamber, heading), {
+            "date": r.date, "chamber": (r.chamber or "").lower(), "heading": heading, "speakers": {},
+        })
+        # A debate is a back-and-forth: each member once, at their first
+        # turn, with how many turns they took (each turn is a speech).
+        key = r.politician_id or r.politician_name or r.id
+        speaker = group["speakers"].setdefault(key, {
+            "speaker": r.politician_name or "", "politicianId": r.politician_id, "speechId": r.id, "speeches": 0,
+        })
+        speaker["speeches"] += 1
+    return [{**g, "speakers": list(g["speakers"].values())} for g in groups.values()]
+
+
+def _floor(debate: list[dict]) -> dict:
+    count = sum(sp["speeches"] for d in debate for sp in d["speakers"])
+    return {"floorDebate": debate, "floorSpeechCount": count}
+
+
 def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
     links = MemberLinks(db)
     bill = raw.get("bill") or (_stored_bill(db, congress, bill_id) if "bill" in (raw.get("unavailable") or []) else {})
     summaries = sorted(raw.get("summaries") or [], key=lambda s: s.get("updateDate") or s.get("actionDate") or "")
     latest_summary = summaries[-1] if summaries else None
     vote_summaries = bill_votes(db, congress, bill_id)
+    # Its short or popular title from Congress.gov's titles list, as cached
+    # (fetch/bill_display_titles): the h1 when there is one, with `title`
+    # beside it. Read from the cache, never fetched here, so the page costs
+    # no extra request.
+    named = cached_display_titles(db, [(congress, bill_id, bill.get("title") or "")]).get(
+        titles_key(congress, bill_id),
+    )
     return {
         "billId": bill_id,
         "billLabel": bill_label(bill_id),
         "congress": congress,
         "title": bill.get("title"),
+        "shortTitle": named.title if named else None,
+        "shortTitleType": named.title_type if named else None,
+        "officialTitle": named.official if named else None,
         "introducedDate": bill.get("introducedDate"),
         "originChamber": bill.get("originChamber"),
         "policyArea": (bill.get("policyArea") or {}).get("name"),
@@ -509,6 +594,7 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
             for t in raw.get("text") or []
         ],
         "votes": vote_summaries,
+        **_floor(floor_debate(db, congress, bill_id)),
         "days": bill_days(db, bill_id, congress),
         "congressGovUrl": congress_gov_bill_url(
             congress, _CONGRESS_GOV_TYPE.get(parse_bill_id(bill_id)[0], "bill"), parse_bill_id(bill_id)[1],

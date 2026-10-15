@@ -1,7 +1,6 @@
 {
-  "_source": "The values action_center.py used before calibration existed, each measured by hand and documented at its old definition: cluster_title 0.40 (complete-linkage cut, #659 replay of the 2026-09-27 feed) and near_identical 0.92 (120 production issue pairs, 2026-07). cluster_title is the starting point action_thresholds.calibrate() replaces once it has MIN_PER_CLASS labelled pairs on each side; near_identical is not fitted (see action_thresholds' docstring). Regenerate this file from a calibration with scripts/calibrate_action_thresholds.py.",
+  "_source": "near_identical 0.92: the title similarity (similarity model) above which action_center._same_story calls two issues one story, measured by hand on 120 production issue pairs (2026-07). Not fitted: its only automatic label was the shared-names-and-numbers signature, which on 2026-10-08 called 65 issue pairs the same story when 16 were. The article-clustering cut that used to live here is calibrated against judged pairs now (cluster_pair_calibration.json).",
   "values": {
-    "cluster_title": 0.4,
     "near_identical": 0.92
   }
 }

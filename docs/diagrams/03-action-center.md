@@ -27,7 +27,7 @@ flowchart TB
     RELCHECK -->|no| DROP(["Discard — off topic"])
     RELCHECK -->|yes| CLUSTER
 
-    CLUSTER["<b>3. CLUSTER</b><br/>complete linkage on title embeddings<br/>every pair ≥ 0.40"]
+    CLUSTER["<b>3. CLUSTER</b><br/>complete linkage on headline + description start<br/>every pair ≥ the judged cut (0.71)"]
     CLUSTER --> RANK
 
     RANK["<b>4. RANK</b><br/>0.40 × civic actionability<br/>0.35 × source breadth<br/>0.25 × trending relevance"]
@@ -123,6 +123,17 @@ On 2026-10-01 78 of 300 clusters in three days were skipped as too few facts,
 and 7 of 10 sampled rejected claims were cut-short predicates; replaying the
 day's top six clusters, three passed the two-claim gate instead of none.
 
+**House style the model cannot copy is matched, not refused.** A period
+inside a parenthetical between actor and predicate ("Sen. Jane Roe (D-Conn.)
+on Sunday slammed") does not end the sentence, and a span that differs from
+its source only in quotation marks (the model answers in JSON, so it copies a
+phrase in double marks with single ones and drops the period or comma inside
+the closing mark) is re-read as the source spells it
+(`post_composer._source_spelling`). Every other character must still match,
+and what is checked and rendered is the source's own text. Replaying 264
+claim calls from 2026-10-11..15, verified claims went from 104 to 128, none
+lost.
+
 **Every quoted line names and links its article.** The summary is the first
 verified claim and the coverage list the rest, so the outlet whose line became
 the summary used to appear only among the sources, and an issue built from two
@@ -132,14 +143,18 @@ fact's article (`fact_source_urls`), and the page links them. Issues from before
 2026-10 have their facts linked where the outlet a fact names published exactly
 one of the issue's sources (migration 0030).
 
-**Complete linkage, not single.** Every pair of articles in a cluster must be
-at least 0.40 alike. Single linkage (each article like one other) plus a
+**Complete linkage, not single.** Every pair of articles in a cluster must
+clear the cut. Single linkage (each article like one other) plus a
 centroid merge from 0.20 chained stories that only share a theme: on
 2026-09-27 one issue carried a Bangkok-floods title, a Hawaii-hurricane lede
-and facts about a nor'easter and an HIV epidemic in Fiji. Title similarity
-cannot separate same-event from same-theme pairs (18 hand-labelled pairs from
-that feed: 0.16-0.82 vs 0.24-0.46, no better with summaries or the other
-model), so clustering errs toward splitting: a split story costs source
+and facts about a nor'easter and an HIV epidemic in Fiji. What is compared is
+the headline plus the first 200 characters of the description, day-centred,
+and the cut is the lowest at which none of the hand-judged different-event
+pairs in `app/data/cluster_pair_judgments.json` merges
+(`scripts/calibrate_cluster_pairs.py`, 0.71 on 530 pairs, merging 17 of 114
+same-event pairs; headlines alone merged 6 on the same rule, and the 0.57 a
+self-labelled daily fit had reached merged 22 different-event pairs). So
+clustering errs toward splitting: a split story costs source
 breadth (its second cluster is dropped as a duplicate in the same run, or
 matched to the same issue in a later one), a wrong merge publishes a chimera.
 The same-run duplicate check now drops, never merges: appending the duplicate
@@ -224,14 +239,13 @@ own history spans a week it has not shown a weekend, so the longest gap among
 feeds that have stands in — Roll Call, first checked on a Sunday, alerted on
 its first quiet weekend under the old rule.
 
-**Calibrated thresholds.** `cluster_title` (`action_thresholds.py`) is refitted
-daily from labelled pairs these rows carry (`thr_*` counters), labelled by
-signature overlap, plus one probe per run below the floor. `near_identical` and
-the monitor floors (`_MONITOR_ISSUE_SIM`, `_MONITOR_MERGE_TITLE_SIM`) are
-measured constants: their labels (the signature test, the LLM gates' verdicts)
-failed a check on 2026-10-08. A fit needs 30 pairs per class, otherwise the
-previous value stays. The bundled `app/data/action_thresholds.json` covers the
-time before the first fit.
+**Measured thresholds.** The clustering cut comes from judged pairs (above);
+the daily fit that used to move it, labelled by shared names and numbers, was
+removed on 2026-10-15 with its `thr_*` counters. `near_identical` and the
+monitor floors (`_MONITOR_ISSUE_SIM`, `_MONITOR_MERGE_TITLE_SIM`) are measured
+constants: their labels (the signature test, the LLM gates' verdicts) failed a
+check on 2026-10-08. `near_identical`'s 0.92 is bundled with its provenance in
+`app/data/action_thresholds.json`.
 
 ## Issues drafted before the press has them
 

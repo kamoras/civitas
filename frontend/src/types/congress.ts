@@ -191,6 +191,8 @@ export interface VoteMember {
 }
 
 export interface VoteDetail extends RollCallSummary {
+  /** The bill's short or popular title from Congress.gov, when the chamber's title isn't it. */
+  billShortTitle?: string | null;
   parties: PartySplit[];
   members: VoteMember[];
 }
@@ -224,11 +226,27 @@ export interface BillRecordVote {
   parties: PartySplit[];
 }
 
+/** One Record heading's speeches on a day (bill_record.floor_debate). */
+export interface FloorDebate {
+  date: string;
+  chamber: Chamber;
+  /** The Record's heading, verbatim. */
+  heading: string;
+  /** Each member once, at their first turn; `speeches` counts their turns. */
+  speakers: { speaker: string; politicianId: string | null; speechId: number; speeches: number }[];
+}
+
 export interface BillRecord {
   billId: string;
   billLabel: string | null;
   congress: number;
   title: string | null;
+  /** Congress.gov's short or popular title for the bill, verbatim, as cached; the h1 when present. */
+  shortTitle?: string | null;
+  /** Its title type as Congress.gov names it. */
+  shortTitleType?: string | null;
+  /** The official title from that same list. */
+  officialTitle?: string | null;
   introducedDate: string | null;
   originChamber: string | null;
   policyArea: string | null;
@@ -245,6 +263,12 @@ export interface BillRecord {
   }[];
   textVersions: { type: string; date: string; formats: Record<string, string> }[];
   votes: BillRecordVote[];
+  /** Floor speeches whose Record heading names this bill, grouped by day,
+   *  chamber and heading, newest first. Optional only for a backend older
+   *  than the field. */
+  floorDebate?: FloorDebate[];
+  /** Speeches across floorDebate. */
+  floorSpeechCount?: number;
   days: {
     date: string;
     chamber: Chamber;

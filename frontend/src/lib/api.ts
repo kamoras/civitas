@@ -688,10 +688,26 @@ export interface SupplementaryRunInfo {
   progressSteps?: PipelineStepInfo[] | null;
 }
 
+/** One link of the nightly chain, as its latest run left it (`/api/pipeline/status`). */
+export interface PipelineLink {
+  pipeline: string;
+  label: string;
+  /** Decided by the API: a dead RUNNING row is "failed", not "running". */
+  state: "completed" | "partial" | "running" | "failed";
+  runId: number;
+  startedAt: string;
+  completedAt: string | null;
+}
+
 export interface PipelineStatus {
   lastRun: PipelineRunInfo | null;
   nextScheduled: string | null;
   isRunning: boolean;
+  /** Each chain link's latest run, in chain order; links that never ran are absent. */
+  links: PipelineLink[];
+  linksCompleted: number;
+  /** The newest completion among the links that completed. */
+  filedAt: string | null;
 }
 
 export async function fetchPipelineStatus(): Promise<PipelineStatus | null> {
@@ -873,6 +889,39 @@ export interface ExploreResponse {
   indexEmpty?: boolean;
 }
 
+/** A sitting member a search names (GET /api/explore/matches). */
+export interface ExploreMemberMatch {
+  id: string;
+  name: string;
+  party: "D" | "R" | "I";
+  state: string;
+  chamber: "senate" | "house";
+  district: number | null;
+  thumbnailUrl: string | null;
+}
+
+/** A bill a search names: by its number, or by the words of its titles. */
+export interface ExploreBillMatch {
+  billId: string;
+  /** Null for a bill number no sitting member sponsored (its page is Congress.gov's record). */
+  congress: number | null;
+  label: string;
+  title: string | null;
+  shortTitle: string | null;
+  stage: string | null;
+}
+
+/** Explore's typed match groups, beside the document results and never fused into them. */
+export interface ExploreMatches {
+  members: { total: number; items: ExploreMemberMatch[] };
+  bills: { total: number; items: ExploreBillMatch[] };
+}
+
+export async function fetchExploreMatches(q: string): Promise<ExploreMatches> {
+  const url = `${API_BASE}/explore/matches?q=${encodeURIComponent(q)}`;
+  return cachedFetch<ExploreMatches>(url, TTL.SHORT);
+}
+
 export interface ExploreStats {
   totalDocuments: number;
   byType: Record<string, number>;
@@ -947,6 +996,10 @@ export interface ExploreDocumentDetail {
    * older than the fields. */
   frCitation?: string;
   frDocNumber?: string;
+  /** A floor speech's bills, named in the Record heading it was given
+   * under, each with the Congress of the day (api/explore.py). Optional only
+   * for a backend older than the field. */
+  bills?: { billId: string; label: string | null; congress: number }[];
 }
 
 export interface ExploreDocumentSummary {

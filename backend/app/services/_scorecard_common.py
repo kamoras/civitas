@@ -12,8 +12,8 @@ import string
 from datetime import date, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import ColumnElement, String, cast, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import ColumnElement, String, cast, func, or_
+from sqlalchemy.orm import Query, Session
 
 from app.config import settings
 from app.district_lean import lean_for as computed_lean_for
@@ -31,6 +31,7 @@ from app.pipeline.fetch.district_pvi import lines_congress, lines_of
 from app.pipeline.transform.normalize_votes import stored_vote
 from app.services.bill_record import bill_label, canonical_bill_id, roll_call_summaries, typed_bill_number
 from app.services.score_findings import add_findings
+from app.services.word_search import matching_keys
 from app.time_utils import CONGRESS_TZ, utcnow
 
 # The votes list's date ranges (`period` on the votes endpoints).
@@ -65,26 +66,36 @@ def vote_period_start(period: str) -> str | None:
     return None
 
 
-def vote_search(model: Any, q: str) -> ColumnElement[bool]:
+def vote_search(base_q: Query, model: Any, q: str) -> ColumnElement[bool]:
     """The condition for a member's stored votes (KeyVote / RepKeyVote)
     matching a reader's search: the bill number as typed in any spelling
     ("HR 123", "h.r.123", "hr12" while typing — matched as a prefix with
     the dots and spaces left out, so "S 1" doesn't find "S. Res. 15", and
-    only when it has a digit), or the
-    text anywhere in the bill's title, the vote's description or its roll
-    call's question and title. Applied after the member's own (indexed)
-    filter, so it reads that member's few hundred rows, and the roll calls
-    once, as a subquery."""
+    only when it has a digit), or every word of it in the bill's title, the
+    vote's description or its roll call's question and title, matched as
+    the bill list matches titles (word_search: stemmed, as word starts, in
+    any order), so "flag burning" finds a vote on the "Flag Burners Act".
+
+    `base_q` is the member's own (indexed) query: the words are matched
+    over its few hundred rows, and their roll calls once, in Python."""
     text = q.strip()
+    votes = base_q.with_entities(model.id, model.bill_name, model.description, model.roll_call).all()
     ref = (RollCall.chamber + "-" + cast(RollCall.congress, String) + "-" + cast(RollCall.session, String)
            + "-" + cast(RollCall.number, String))
-    asked = select(ref).where(or_(RollCall.question.contains(text, autoescape=True),
-                                  RollCall.title.contains(text, autoescape=True)))
-    conditions = [
-        model.bill_name.contains(text, autoescape=True),
-        model.description.contains(text, autoescape=True),
-        model.roll_call.in_(asked),
-    ]
+    refs = {v.roll_call for v in votes if v.roll_call}
+    asked = {
+        r: f"{question or ''} {title or ''}"
+        for r, question, title in (
+            base_q.session.query(ref, RollCall.question, RollCall.title).filter(ref.in_(refs)).all()
+            if refs else []
+        )
+    }
+    found = matching_keys(
+        ((str(v.id), v.bill_name or "", v.description or "", asked.get(v.roll_call, "")) for v in votes),
+        n_texts=3,
+        q=text,
+    )
+    conditions = [model.id.in_([int(k) for k in found])]
     number = typed_bill_number(text)
     if number:
         bare = func.replace(func.replace(func.upper(model.bill_id), ".", ""), " ", "")
