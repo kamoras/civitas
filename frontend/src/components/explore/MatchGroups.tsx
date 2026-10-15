@@ -11,7 +11,7 @@ import Photo from "@/components/Photo";
 /**
  * The members and bills a search names, as their own groups above Explore's
  * document results (GET /api/explore/matches). Explore searches documents,
- * so "Fetterman" listed thirty floor speeches and no link to the senator,
+ * so a senator's surname listed thirty floor speeches and no link to the senator,
  * and "flag burning" never offered the Flag Burners Act. Grouped, never
  * merged into the document ranking: each group is the backend's own list,
  * names and titles verbatim.

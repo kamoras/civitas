@@ -1,6 +1,6 @@
 """Explore's typed match groups: the members and bills a search names.
 
-Explore searches documents (speeches, rules, opinions), so "Fetterman" gave
+Explore searches documents (speeches, rules, opinions), so a senator's surname gave
 thirty floor speeches and no link to the senator's page, and "flag burning"
 never offered the Flag Burners Act. These groups sit beside the results,
 like the committee card: their own lists, never fused into the document

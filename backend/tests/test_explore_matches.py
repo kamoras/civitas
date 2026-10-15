@@ -1,4 +1,4 @@
-"""Explore's Members and Bills groups (GET /api/explore/matches): "Fetterman"
+"""Explore's Members and Bills groups (GET /api/explore/matches): a senator's surname
 gave thirty floor speeches and no link to the senator, and "flag burning"
 never offered the Flag Burners Act."""
 
