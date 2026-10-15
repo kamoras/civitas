@@ -25,6 +25,7 @@ from sqlalchemy import insert
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
+from app.database import is_locked
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -198,13 +199,6 @@ def acquire(
             raise
         logger.warning("The %s lease wasn't taken: the database is locked by another writer", tier)
         return None
-
-
-def is_locked(error: OperationalError) -> bool:
-    """SQLite's busy timeout ran out: another writer held the database.
-    Any other OperationalError (a missing table, a corrupt file) is not
-    'busy' and must not be treated as one."""
-    return "locked" in str(error.orig).lower()
 
 
 def _live_row(db: Session, tier: str):

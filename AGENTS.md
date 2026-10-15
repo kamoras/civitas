@@ -1183,6 +1183,26 @@ reasons are in `scheduler._hourly_action_refresh`); only an overlapping
 refresh of its own holds it back. The hourly bill refresh still stands down
 for the Senate and House runs, which rewrite the rows it updates.
 
+Running beside the chain makes it a second writer on SQLite's one write
+lock, so **no refresh stage holds a write transaction across slow work**
+(a model call, an embedding pass, a network fetch): each stage commits
+before the next one's fetch (`_commit_stage`), and a statement that opens a
+write and may match nothing (the monitor stage's orphan sweep, the cleanup
+deletes) is committed anyway, since its DELETE took the lock either way. On
+2026-10-15, the first night it ran beside the chain, the orphan sweep's
+open transaction lasted through the monitor stage's LLM call, about 40
+seconds every hour. The Senate run's learning-store upsert (05:25:43, failed
+at 05:26:13) and the House sponsorship step's cache write (failed at
+07:23:39) each waited out the 30 s busy timeout inside that window and died
+with "database is locked". `database.watch_write_holds` logs any write held
+past `WRITE_HOLD_WARN_S` (10 s) and names the line that opened it. As a second
+line of defence, the learning-store upserts and `api_cache_set` retry a
+locked statement (`database.execute_retrying_lock`, three attempts with
+backoff). This only works because a refused statement is always its
+transaction's first write, so retrying it loses nothing.
+`tests/test_write_lock_holds.py` makes a pipeline write at every slow call
+of the refresh's stages on a file-backed database.
+
 Each issue's actions are fixed templates around stored data:
 
 - **The committee with jurisdiction**, one per chamber or none

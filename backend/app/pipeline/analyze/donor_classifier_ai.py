@@ -65,6 +65,7 @@ import time
 import numpy as np
 from sqlalchemy.orm import Session
 
+from app.database import execute_retrying_lock
 from app.models import LearnedClassification
 from app.pipeline.analyze.nn_classifier import (
     classify_batch_nn,
@@ -987,7 +988,7 @@ def _store_donor_learning(
                 "learned_at": utcnow(),
             },
         )
-        db_session.execute(stmt)
+        execute_retrying_lock(db_session, stmt)
         _seen_this_run[key] = confidence
 
 
