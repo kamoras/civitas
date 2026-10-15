@@ -48,6 +48,7 @@ from app.broadcast import SITE_URL
 from app.config import settings
 from app.config_definitions import SCORE_WEIGHTS
 from app.database import get_db, off_loop
+from app import district_lean
 from app.district_lean import lean_for as computed_lean_for
 from app.member_ids import resolve_member_id
 from app.models import Justice, President, Representative, ScoreSnapshot, Senator
@@ -65,6 +66,7 @@ from app.score_display import displayed_rank
 from app.schemas import (
     PublicApiIndexSchema,
     PublicBillVotesSchema,
+    PublicDistrictLeanSchema,
     PublicHistorySchema,
     PublicMemberVotesSchema,
     PublicPresidentialSupportSchema,
@@ -514,6 +516,7 @@ def openapi_spec_dict() -> dict:
                 {"name": "Bills", "description": "The roll calls on a bill, with each party's split."},
                 {"name": "Votes with the president", "description": "How often each member voted with the president's stated position (OMB Statements of Administration Policy), beside what members of the same party in similar seats do. Informational: not part of any score."},
                 {"name": "Search", "description": "The government documents behind the records, searched the way the site's Explore page does."},
+                {"name": "Districts", "description": "Every House district's partisan lean as Civitas computes it from open precinct returns, on both maps, with Cook's beside it. Shown for comparison: no score uses it."},
                 {"name": "Reference", "description": "What the API offers, and the states it covers."},
             ],
             summary="Open, read-only access to Civitas's scores, member records and document search.",
@@ -592,6 +595,24 @@ def list_states(
         for code in sorted(senate.keys() | house.keys())
     ]
     return _pub_json(result, request, max_age=CACHE_TTL_REFERENCE_S)
+
+
+@router.get("/district-lean", response_model=PublicDistrictLeanSchema, tags=["Districts"],
+            summary="Every House district's computed lean, on both maps")
+def get_district_lean(_rl: PublicReadLimit, request: Request) -> JSONResponse:
+    """Civitas's partisan lean for all 435 districts on the 119th Congress's
+    lines and on the 2026 lines, with Cook's published PVI beside each,
+    the method, every input and its license, each correction with its
+    certified source, and the agreement with Cook. The same districts as
+    CSV: `csvUrl`."""
+    table = district_lean.published()
+    if table is None:
+        raise HTTPException(status_code=503, detail="The district lean table is unavailable")
+    return _pub_json(
+        {**table, "csvUrl": f"{SITE_URL}{district_lean.CSV_PATH}",
+         "siteUrl": f"{SITE_URL}{district_lean.METHOD_HREF}"},
+        request, max_age=CACHE_TTL_REFERENCE_S,
+    )
 
 
 # ---------------------------------------------------------------------------
