@@ -475,8 +475,9 @@ export default function BillPageView({
                     )}
                     <p className="text-xs text-ink-min">
                       Speeches are matched by the bill number printed in the Congressional
-                      Record&apos;s heading, never by their words. Each name opens that member&apos;s
-                      first speech under the heading; a number is how many times they spoke.
+                      Record&apos;s heading, never by their words. Each name opens that
+                      member&apos;s first speech under the heading; a number is how many times they
+                      spoke.
                     </p>
                   </section>
                 )}
