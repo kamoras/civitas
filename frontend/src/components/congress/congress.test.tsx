@@ -529,7 +529,7 @@ describe("roll call page", () => {
 });
 
 describe("bill page", () => {
-  it("shows the record, every member's vote, and filters by state", async () => {
+  it("shows the record, each party's split, and every member's vote a pick away", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
     render(
       <BillPageView
@@ -545,9 +545,20 @@ describe("bill page", () => {
     ).toBeTruthy();
     // A part Congress.gov did not return is said to be missing, not shown empty.
     expect(screen.getByText(/could not get the cosponsors from/)).toBeTruthy();
-    expect(await screen.findByRole("link", { name: "Rob Delgado" })).toBeTruthy();
+    // The names wait behind a state pick or "Show all"; the counts don't.
+    const showAll = await screen.findByRole("button", { name: /^Show all \d+ members' votes$/ });
+    expect(showAll).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: "Rob Delgado" })).toBeNull();
+    expect(screen.getByText(/^Yea · \d+$/)).toBeTruthy();
+    await userEvent.click(showAll);
+    expect(showAll).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Rob Delgado" })).toBeTruthy();
     expect(screen.getByText("Reed Paul")).toBeTruthy();
+    await userEvent.click(showAll);
+    expect(screen.queryByRole("link", { name: "Rob Delgado" })).toBeNull();
+    // A state pick shows that state's members without "Show all".
     await userEvent.selectOptions(screen.getByLabelText("State"), "KY");
+    expect(screen.getByText("Reed Paul")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Rob Delgado" })).toBeNull();
     expect(
       within(screen.getByRole("link", { name: /Thu, Sep 24, 2026/ })).getByText(/Sep 24/)
@@ -588,7 +599,7 @@ describe("bill page", () => {
         stageName={null}
       />
     );
-    await screen.findByRole("link", { name: "Rob Delgado" });
+    await screen.findByRole("button", { name: /^Show all \d+ members' votes$/ });
     expect(await violations()).toEqual([]);
   });
 
@@ -617,7 +628,7 @@ describe("bill page", () => {
       />
     );
     expect(screen.getByText(sentence)).toBeTruthy();
-    await screen.findByRole("link", { name: "Rob Delgado" });
+    await screen.findByRole("button", { name: /^Show all \d+ members' votes$/ });
   });
 });
 
@@ -667,7 +678,7 @@ describe("bill page layers", () => {
     expect(
       within(sources).getByRole("link", { name: /Every roll call on S\. 4668/ })
     ).toHaveAttribute("href", "/api/public/v1/bills/S.4668/votes?congress=119");
-    await screen.findByRole("link", { name: "Rob Delgado" });
+    await screen.findByRole("button", { name: /^Show all \d+ members' votes$/ });
   });
 });
 
@@ -736,7 +747,8 @@ describe("bill page: finding one's own members", () => {
         stageName={null}
       />
     );
-    expect(await screen.findByRole("link", { name: "Jo Adams" })).toBeTruthy();
+    await userEvent.click(await screen.findByRole("button", { name: "Show all 3 members' votes" }));
+    expect(screen.getByRole("link", { name: "Jo Adams" })).toBeTruthy();
     expect(screen.getByText("R-PA-9")).toBeTruthy();
     await userEvent.selectOptions(screen.getByLabelText("State"), "PA");
     const names = screen.getAllByRole("link", { name: /Adams|Baker/ }).map((a) => a.textContent);

@@ -1,4 +1,5 @@
 import { pageMetadata } from "@/lib/site";
+import ComputedLeanData from "@/components/about/ComputedLeanData";
 import {
   AboutPage,
   Summary,
@@ -379,6 +380,7 @@ export default function DataChapter() {
           tenth; California&apos;s 2024 counts are taken from its own per-district table. Cook
           publishes whole numbers; this figure keeps one decimal.
         </P>
+        <ComputedLeanData />
       </Section>
 
       <Section id="explore" title="How Explore search ranks results">

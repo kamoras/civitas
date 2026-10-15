@@ -29,3 +29,20 @@ describe("Masthead record request", () => {
     expect(push).toHaveBeenCalledWith("/explore?q=drug%20prices");
   });
 });
+
+describe("Masthead voter links", () => {
+  it("go to the pages that ask for a state until one is picked, then to that state's", () => {
+    render(<Masthead />);
+    const voters = screen.getByRole("navigation", { name: "For voters" });
+    const href = (name: string) =>
+      [...voters.querySelectorAll("a")].find((a) => a.textContent === name)!.getAttribute("href");
+    expect(href("YOUR MEMBERS")).toBe("/politicians");
+    expect(href("YOUR BALLOT")).toBe("/elections");
+    fireEvent.change(screen.getByLabelText("YOUR STATE:"), { target: { value: "OH" } });
+    expect(href("YOUR MEMBERS")).toBe("/politicians?state=OH");
+    expect(href("YOUR BALLOT")).toBe("/elections/states/OH");
+    expect(href("CONGRESS THIS WEEK")).toBe("/congress");
+    // A navigation choice only: nothing is pushed or stored.
+    expect(push).not.toHaveBeenCalled();
+  });
+});

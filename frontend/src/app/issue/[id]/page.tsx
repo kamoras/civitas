@@ -27,7 +27,7 @@ import { articleJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
-import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import { SHARE_SECTION_ATTR, issueShareMeta } from "@/lib/shareImage";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -149,7 +149,12 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
 
   return (
     <ShareSubjectProvider
-      subject={{ title: issue.title, subtitle: formatUtcDate(issue.date), url: shareUrl }}
+      subject={{
+        title: issue.title,
+        subtitle: formatUtcDate(issue.date),
+        url: shareUrl,
+        ...issueShareMeta(issue),
+      }}
     >
       {issue.status !== "developing" && <JsonLd data={articleJsonLd(issue)} />}
       <Navbar />

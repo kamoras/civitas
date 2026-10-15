@@ -4,6 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { billPageHref } from "@/lib/congress";
+import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
+
+// Listed by name, as a reader looks for their state ("Alabama, Alaska…"),
+// not by postal code ("AK, AL…").
+const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
+  (STATE_NAMES[a] ?? a).localeCompare(STATE_NAMES[b] ?? b)
+);
 
 const RESEARCH_LINKS: readonly { href: string; label: string }[] = [
   { href: "/about/scores", label: "METHODS" },
@@ -25,6 +32,9 @@ const RESEARCH_LINKS: readonly { href: string; label: string }[] = [
 export default function Masthead() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  // A navigation choice only, never kept (AGENTS.md §8): it fills in two
+  // links. Before a pick they go to the pages that ask for one.
+  const [state, setState] = useState("");
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,6 +97,52 @@ export default function Masthead() {
             Scored nightly from federal and state filings. Every number traces back to the document
             it came from. Nothing here is an estimate.
           </p>
+
+          {/* The voter's way in, in the first screen: who represents me,
+              what's on my ballot and what Congress is doing had one
+              labelled entry above the fold on a phone between them (the
+              state picker for ballots sat two screens down). A state picked
+              here only fills in the two links; nothing is asked or kept. */}
+          <nav
+            aria-label="For voters"
+            className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs tracking-[0.1em]"
+          >
+            <label className="inline-flex items-center gap-2 text-ink-min">
+              YOUR STATE:
+              <select
+                value={state}
+                // The code from our own list, never the field's text, into
+                // an href.
+                onChange={(e) => setState(STATES_BY_NAME.find((c) => c === e.target.value) ?? "")}
+                className="min-h-[28px] border border-white/20 bg-surface-base px-1 font-mono text-xs tracking-normal text-ink"
+              >
+                <option value="">Pick one</option>
+                {STATES_BY_NAME.map((code) => (
+                  <option key={code} value={code}>
+                    {STATE_NAMES[code] ?? code}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Link
+              href={state ? `/politicians?state=${state}` : "/politicians"}
+              className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
+            >
+              YOUR MEMBERS
+            </Link>
+            <Link
+              href={state ? `/elections/states/${state}` : "/elections"}
+              className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
+            >
+              YOUR BALLOT
+            </Link>
+            <Link
+              href="/congress"
+              className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
+            >
+              CONGRESS THIS WEEK
+            </Link>
+          </nav>
 
           {/* The researcher's way in, in the first screen: the methods, the
               source list, the API and the scoring changelog were reachable

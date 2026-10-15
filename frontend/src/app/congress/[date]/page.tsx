@@ -46,5 +46,7 @@ export default async function CongressDayPage({ params }: { params: Promise<{ da
   if (!ISO_DATE.test(date)) notFound();
   const report = await fetchDay(date);
   if (!report) notFound();
-  return <DayReportView report={report} strip={<ThisWeekStrip variant="compact" />} />;
+  return (
+    <DayReportView report={report} strip={<ThisWeekStrip variant="compact" pageDate={date} />} />
+  );
 }

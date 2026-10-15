@@ -97,6 +97,10 @@ def congress_week(db: Session, today: date | None = None) -> dict:
     votes = sorted((v for c in CHAMBERS for v in chambers[c].pop("_votes")),
                    key=lambda v: (v.date, v.number), reverse=True)
     return {
+        # The day "today" in the sentence is (Eastern): a page about another
+        # day labels the strip with it, so "meets today" isn't read as that
+        # page's day.
+        "today": today.isoformat(),
         "weekStart": monday.isoformat(),
         "sentence": sentence,
         "chambers": chambers,

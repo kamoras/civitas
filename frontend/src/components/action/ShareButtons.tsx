@@ -4,7 +4,7 @@ import { useState, type KeyboardEvent } from "react";
 import type { ActionIssue } from "@/types/action";
 import { CopyStatus, useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { absoluteUrl, BSKY_HANDLE } from "@/lib/site";
-import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
+import { SHARE_EXCLUDE_ATTR, issueShareMeta } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 
@@ -141,7 +141,9 @@ export default function ShareButtons({
           title strip. Labelled by the issue, so each card's button has
           its own name. */}
       {imageShare && (
-        <ShareSubjectProvider subject={{ title: issue.title, url: shareUrl }}>
+        <ShareSubjectProvider
+          subject={{ title: issue.title, url: shareUrl, ...issueShareMeta(issue) }}
+        >
           <ShareSectionButton
             label={issue.title}
             withStrip={false}

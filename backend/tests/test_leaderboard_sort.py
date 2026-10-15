@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import Representative, Senator
+from app.models import Representative, ScoreSnapshot, Senator
 from app.services.representative_service import get_rep_leaderboard
 from app.services.senator_service import get_leaderboard
 
@@ -200,6 +200,9 @@ def test_the_spread_endpoint_counts_serving_members_as_displayed(db_session):
     gone = _senator("S4", "D", 90)
     gone.is_current = False
     db_session.add(gone)
+    for entity, day in (("senator", "2026-10-14"), ("senator", "2026-10-01"), ("representative", "2026-10-15")):
+        db_session.add(ScoreSnapshot(entity_type=entity, entity_id="S1", date=day, overall_score=50,
+                                     score_1=50, score_2=50, score_3=50, score_4=50, score_5=50))
     db_session.commit()
     app.dependency_overrides[get_db] = lambda: db_session
     try:
@@ -213,3 +216,5 @@ def test_the_spread_endpoint_counts_serving_members_as_displayed(db_session):
     assert body["counts"] == [{"score": 50, "members": 1}, {"score": 60, "members": 2}]
     assert (body["p25"], body["median"], body["p75"]) == (55, 60, 60)
     assert body["parties"] == {"D": 3, "R": 0, "I": 0}
+    # The chamber's latest scoring run, not the other chamber's.
+    assert body["asOf"] == "2026-10-14"

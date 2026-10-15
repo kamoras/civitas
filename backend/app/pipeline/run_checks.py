@@ -17,6 +17,7 @@ import json
 import logging
 from typing import Any
 
+from app.error_utils import exception_summary
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 
 logger = logging.getLogger(__name__)
@@ -128,7 +129,7 @@ def alert_member_failures(
             return
         groups: dict[str, list[str]] = {}
         for member_id, exc in failures:
-            detail = f"{type(exc).__name__}: {exc}"
+            detail = exception_summary(exc)
             if len(detail) > _FAILURE_MESSAGE_CHARS:
                 detail = detail[: _FAILURE_MESSAGE_CHARS - 1] + "…"
             groups.setdefault(detail, []).append(member_id)

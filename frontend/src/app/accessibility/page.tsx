@@ -117,7 +117,8 @@ export default function AccessibilityPage() {
                 </Item>
                 <Item label="Touch">
                   The small score-explanation buttons are 24×24 pixels, WCAG 2.2&apos;s minimum
-                  target size.
+                  target size. On a phone the MENU button, the way to every section, is a 44×44
+                  target around the word.
                 </Item>
               </List>
               <More label="Typefaces, and why">

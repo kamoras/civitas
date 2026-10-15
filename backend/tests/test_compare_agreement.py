@@ -54,6 +54,9 @@ def test_senators_matched_by_their_roll_call_ids(db_session):
     # Newest split first, each member's own vote.
     assert [(s["number"], s["left"], s["right"]) for s in r["recentSplits"]] == [
         (rcs[3].number, "Nay", "Yea"), (rcs[2].number, "Yea", "Nay")]
+    # As of the latest roll call read (a shared picture's date), not the
+    # housekeeping motion or the last Congress's vote.
+    assert r["asOf"] == max(rc.date for rc in rcs)
 
 
 def test_house_members_by_bioguide_and_the_aye_no_spelling(db_session):
@@ -77,7 +80,7 @@ def test_no_shared_votes(db_session):
                         Senator(id="lee-baker", name="Lee Baker", state="AA", party="R")])
     db_session.commit()
     r = compare.agreement(db_session, "senate", "pat-able", "lee-baker")
-    assert r["agreementPct"] is None and r["recentSplits"] == []
+    assert r["agreementPct"] is None and r["recentSplits"] == [] and r["asOf"] is None
     assert r["sentence"] == "No roll call this Congress has a Yea or a Nay from both."
 
 

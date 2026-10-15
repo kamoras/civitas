@@ -1261,8 +1261,9 @@ def main(argv: list[str] | None = None) -> int:
         "_as_of": dt.date.today().isoformat(),
         "_regenerate": REGENERATE,
         "inputs": corrections["inputs"],
-        "corrections": [{k: f[k] for k in ("state", "county", "county_name", "action", "why", "official") if k in f}
-                        for f in corrections["fixes"]],
+        # Each fix whole: a key whitelist here once dropped LaPorte's
+        # official_url/official_totals and both precinct_regex fields.
+        "corrections": corrections["fixes"],
         "correctionSources": corrections["sources"],
         "turnoutExceptions": corrections.get("turnout_exceptions", []),
         "validation": {"againstCook": summary, "crossChecks": xcheck, "cookAlerts": alerts},

@@ -110,6 +110,9 @@ def agreement(db: Session, chamber: str, left: str, right: str, congress: int | 
         "split": n - agreed,
         "agreementPct": pct,
         "sentence": sentence,
+        # The latest roll call read for either member: what the figures
+        # are as of (a vote one of them missed still dates the record).
+        "asOf": max((e["rc"].date for e in by_vote.values()), default=None),
         "recentSplits": [
             {
                 "chamber": e["rc"].chamber, "congress": e["rc"].congress, "session": e["rc"].session,
