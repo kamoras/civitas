@@ -113,13 +113,19 @@ def cached_display_titles(db: Session, bills: list[tuple[int, str, str]]) -> dic
     from the cache only, by primary key, for the read path: a bill whose
     list was never fetched has none."""
     listed = {titles_key(congress, bill_id): title for congress, bill_id, title in bills}
-    keys = list(listed)
     found: dict[str, DisplayTitle] = {}
-    for i in range(0, len(keys), 500):  # under SQLite's bind-parameter limit
+    # One range scan of the primary key per Congress ("bill-titles-119-…"),
+    # not an IN list of every bill's key: the bill list asks for ~19,000,
+    # and 39 IN queries doubled its rebuild.
+    for congress in {congress for congress, _, _ in bills}:
+        prefix = f"bill-titles-{congress}-"
         for key, data in (
             db.query(ApiCache.cache_key, ApiCache.data_json)
-            .filter(ApiCache.tier == "congress", ApiCache.cache_key.in_(keys[i:i + 500]))
+            .filter(ApiCache.tier == "congress", ApiCache.cache_key >= prefix,
+                    ApiCache.cache_key < prefix[:-1] + ".")
         ):
+            if key not in listed:
+                continue
             try:
                 titles = json.loads(data)
             except (TypeError, ValueError):
