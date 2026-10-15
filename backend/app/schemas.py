@@ -381,12 +381,28 @@ class LobbyingClientSchema(CamelModel):
     complete: bool = True
 
 
+class RelatedVoteSchema(CamelModel):
+    """The member's vote on one of a match's related bills
+    (_scorecard_common.related_votes)."""
+    bill_id: str | None = Field(description="The bill, in the site's spelling (\"SJRES.196\"); null when the "
+                                            "record names none")
+    label: str | None = Field(description="The bill as the Record prints it (\"S.J.Res. 196\")")
+    title: str = Field(description="The roll call's title as the chamber recorded it, else the bill's")
+    vote: Literal["Yea", "Nay"]
+    date: str = Field(description="YYYY-MM-DD")
+    roll_call: dict | None = Field(None, description="The roll call it was cast in (date, question, result, "
+                                                     "each party's tally); null for a vote stored before "
+                                                     "its roll call was recorded")
+
+
 class LobbyingMatchSchema(CamelModel):
     lobbyist_org: str
     industry: str
     lobbying_spend: float
     donation_to_senator: float
     bills_influenced: list[str]
+    # The member's own vote on each of bills_influenced, with its roll call.
+    related_votes: list[RelatedVoteSchema] = []
     senator_vote_aligned: bool | None = None
     description: str
     lobbied_bills: list[LobbiedBillSchema] = []
@@ -803,14 +819,25 @@ class PublicRepresentativeRowSchema(LeaderboardEntrySchema):
     site_url: str = _SITE_URL
 
 
+_ALGORITHM_VERSION = Field(description="The scoring version that stored the member's scores (the newest "
+                                        "history snapshot's), as the changelog names it; null when none is "
+                                        "recorded")
+_SCORED_ON = Field(description="When the member's stored scores were computed, YYYY-MM-DD (the newest "
+                               "history snapshot); null when none is recorded")
+
+
 class PublicSenatorProfileSchema(SenatorSchema):
     model_config = _PublicModel.model_config
     site_url: str = _SITE_URL
+    algorithm_version: str | None = _ALGORITHM_VERSION
+    scored_on: str | None = _SCORED_ON
 
 
 class PublicRepresentativeProfileSchema(RepresentativeSchema):
     model_config = _PublicModel.model_config
     site_url: str = _SITE_URL
+    algorithm_version: str | None = _ALGORITHM_VERSION
+    scored_on: str | None = _SCORED_ON
 
 
 class _PublicPage(_PublicModel):
@@ -897,6 +924,10 @@ class PublicScoreSnapshotSchema(_PublicModel):
     constituent_alignment: float
     funding_diversity: float
     legislative_effectiveness: float
+    algorithm_version: str | None = Field(description="The scoring version that computed this snapshot; a "
+                                                      "change between two snapshots is a method change, not "
+                                                      "only a change in the record. Null for snapshots taken "
+                                                      "before versions were recorded")
 
 
 class PublicHistorySchema(_PublicModel):
@@ -1027,10 +1058,8 @@ class PublicScoreBreakdownSchema(_PublicModel):
     chamber: Literal["senate", "house"]
     party: str
     site_url: str = _SITE_URL
-    algorithm_version: str | None = Field(description="The scoring version that stored these scores (the newest "
-                                                      "history snapshot's); null when none is recorded")
-    scored_on: str | None = Field(description="When the stored scores were computed, YYYY-MM-DD (the newest "
-                                              "history snapshot)")
+    algorithm_version: str | None = _ALGORITHM_VERSION
+    scored_on: str | None = _SCORED_ON
     recomputed_with: str = Field(description="The scoring version the breakdown was recomputed with now")
     overall: float = Field(description="representationScore.overall: sum(weights[k] x dimensions[k].storedScore), "
                                        "rounded to 2 decimals")
