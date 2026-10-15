@@ -1471,6 +1471,18 @@ re-run it. Every probe is built from the document's own words, so the
 keyword channel leads by construction; compare the semantic channel with
 itself across a change, not with keyword.
 
+**The document page.** `/explore/{id}` is rendered on the server from
+`GET /api/explore/{id}`, so the text is in the first response: a reader arriving
+from a search engine sees it at once, Back returns to the place they left (a
+page that fetched its text after loading came back at 190 px of 1,651), a
+missing document is a 404 and an unreachable backend the error page, never a
+200 reading "Document not found: 500". Only the analysis and public comments
+load in the browser. The page says in one line what Civitas is, offers "Back to
+results" only to a reader who came from them (`?q=`), and closes with "Cite
+this": the document's own Federal Register citation and document number when
+it has them (`frCitation`, `frDocNumber`, read from the identifiers it is known
+by, `api/explore.py fr_reference`) and an APA-style reference to the page.
+
 Bill text itself is not indexed here; it's used separately, title-only, for
 the tier-3 kNN bill-classification step in the scoring pipeline (see Phase 3
 above).

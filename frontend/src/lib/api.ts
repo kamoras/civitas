@@ -940,6 +940,12 @@ export interface ExploreDocumentDetail {
   agencyName: string;
   commentUrl: string;
   commentsCloseOn: string;
+  /** The document's own Federal Register citation ("91 FR 48248") and
+   * document number ("2026-15603"); empty for a document the FR did not
+   * publish (api/explore.py fr_reference). Optional only for a backend
+   * older than the fields. */
+  frCitation?: string;
+  frDocNumber?: string;
 }
 
 export interface ExploreDocumentSummary {
@@ -979,10 +985,6 @@ function splitOnce(text: string, marker: string): [string, string?] {
   const i = text.indexOf(marker);
   if (i === -1) return [text, undefined];
   return [text.slice(0, i), text.slice(i + marker.length)];
-}
-
-export async function fetchExploreDocument(id: number): Promise<ExploreDocumentDetail> {
-  return requestJson(`${API_BASE}/explore/${id}`, "Document not found");
 }
 
 // How long a summary request keeps retrying a refusal: long enough to wait

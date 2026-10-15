@@ -189,7 +189,7 @@ function PaginatedVoteList({
   if (!data && loading) {
     return (
       <div className="panel p-4 text-center" role="status" aria-live="polite">
-        <span className="text-ink-lo text-sm animate-pulse">Loading votes...</span>
+        <span className="text-ink-lo text-sm pulse-subtle">Loading votes...</span>
       </div>
     );
   }

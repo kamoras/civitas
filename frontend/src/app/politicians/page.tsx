@@ -454,7 +454,7 @@ function PoliticiansPageContent() {
 
           {/* Results */}
           {loading ? (
-            <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest animate-pulse">
+            <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest pulse-subtle">
               LOADING...
             </div>
           ) : error ? (

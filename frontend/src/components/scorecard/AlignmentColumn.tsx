@@ -231,7 +231,7 @@ export default function AlignmentColumn({
         {total === 0 && <p className="text-sm text-ink-lo">None on record this Congress.</p>}
         {total > 0 && failed && <p className="text-sm text-ink-lo">Could not load the votes.</p>}
         {total > 0 && !failed && votes === null && (
-          <p className="animate-pulse font-mono text-xs text-ink-min">LOADING VOTES...</p>
+          <p className="pulse-subtle font-mono text-xs text-ink-min">LOADING VOTES...</p>
         )}
         {votes && votes.length > 0 && (
           <>
