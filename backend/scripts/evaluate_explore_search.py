@@ -19,17 +19,24 @@ broad topical query returns a *good* set. That question needs real
 labels, and a synthetic harness that pretended otherwise would be worse
 than no harness.
 
-Five query styles are probed, because the whole argument for a hybrid
+Seven query styles are probed, because the whole argument for a hybrid
 engine is that different query shapes fail on different channels:
 
   title       the document's title words in order — the easy case
   paraphrase  the body's eight most frequent content words, title words
               removed. Despite the name, a bag of the document's own words,
               not a rewording: an exact-term query, and BM25's home ground
-  identifier  serial numbers and citations lifted from the document
-              (executive order numbers, RINs, FR citations, docket ids) —
-              the case dense retrieval cannot do at all, and the reason
-              the keyword channel exists
+  identifier  serial numbers and citations lifted from the document's
+              text (executive order numbers, RINs, FR citations, docket
+              ids) — the case dense retrieval cannot do at all. Often a
+              citation *of another document*, so the target is one of
+              several right answers and R@1 understates success
+  frcite      the document's OWN Federal Register citation ("91 FR 48248"),
+  frdoc       and its own FR document number ("2026-15603"), from the
+              identifiers it is known by (document_authority.
+              declared_identifiers): what a researcher holding a reference
+              types, with exactly one right answer. Measured here only
+              (`build_own_identifier_probes`), like passage
   rare        the document's least common terms measured against the rest
               of the corpus — the long tail, where IDF earns its keep
   passage     one sentence of the body, verbatim, from anywhere in it —
@@ -62,6 +69,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from app.pipeline.analyze.document_authority import declared_identifiers  # noqa: E402
 from app.pipeline.lexical_index import search_lexical  # noqa: E402
 from app.pipeline.vector_store import search_explore_documents  # noqa: E402
 from app.services.explore_search import hybrid_search  # noqa: E402
@@ -169,6 +177,27 @@ def build_passage_probes(docs: list[dict]) -> list[dict]:
                 "style": "passage", "doc_id": doc["id"],
                 "query": sentences[len(sentences) // 2],
             })
+    return probes
+
+
+def build_own_identifier_probes(docs: list[dict]) -> list[dict]:
+    """The document's own FR citation and FR document number, typed the way
+    the Federal Register prints them. Only documents that are known by one
+    get a probe; the rest of the corpus (speeches, opinions) has none."""
+    probes: list[dict] = []
+    for doc in docs:
+        own = declared_identifiers(
+            doc.get("external_id"), doc.get("title"), doc.get("doc_type"),
+            doc.get("identifiers"))
+        for ident in sorted(own):
+            namespace, _, value = ident.partition(":")
+            if namespace == "fr":
+                volume, _, page = value.partition("-")
+                probes.append({"style": "frcite", "doc_id": doc["id"],
+                               "query": f"{volume} FR {page}"})
+            elif namespace == "frdoc":
+                probes.append({"style": "frdoc", "doc_id": doc["id"],
+                               "query": value})
     return probes
 
 
@@ -307,6 +336,8 @@ def main() -> int:
         random.seed(args.seed)
         rows = db.query(
             ExploreDocument.id, ExploreDocument.title, ExploreDocument.body,
+            ExploreDocument.external_id, ExploreDocument.doc_type,
+            ExploreDocument.identifiers,
         ).order_by(ExploreDocument.id).all()
         sample = random.sample(rows, min(args.samples, len(rows)))
 
@@ -318,8 +349,15 @@ def main() -> int:
             for term in set(_terms(f"{row.title} {(row.body or '')[:6000]}")):
                 corpus_df[term] += 1
 
-        docs = [{"id": r.id, "title": r.title, "body": r.body} for r in sample]
-        probes = build_probes(docs, corpus_df, len(sample)) + build_passage_probes(docs)
+        docs = [
+            {"id": r.id, "title": r.title, "body": r.body,
+             "external_id": r.external_id, "doc_type": r.doc_type,
+             "identifiers": r.identifiers}
+            for r in sample
+        ]
+        probes = (build_probes(docs, corpus_df, len(sample))
+                  + build_passage_probes(docs)
+                  + build_own_identifier_probes(docs))
         print(f"Corpus: {total} documents | sampled {len(sample)} | "
               f"{len(probes)} probes\n")
 
@@ -328,7 +366,8 @@ def main() -> int:
         header = f"{'style':<12}{'config':<10}{'n':>6}{'MRR':>8}{'R@1':>8}{'R@5':>8}{'R@20':>8}{'missed':>9}"
         print(header)
         print("-" * len(header))
-        for style in ("title", "paraphrase", "identifier", "rare", "passage", "ALL"):
+        for style in ("title", "paraphrase", "identifier", "frcite", "frdoc",
+                      "rare", "passage", "ALL"):
             if style not in by_style:
                 continue
             for config in CONFIGS:

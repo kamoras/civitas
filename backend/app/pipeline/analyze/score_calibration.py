@@ -21,6 +21,7 @@ import statistics
 
 from app.database import session_scope
 from app.models import ScoreSnapshot
+from app.pipeline.fetch.congress import congress_of_date
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,21 @@ logger = logging.getLogger(__name__)
 WARN_MEAN_SHIFT_PCT = 5.0    # mean shifted > 5% → warn
 ALERT_MEAN_SHIFT_PCT = 15.0  # mean shifted > 15% → alert
 WARN_STDEV_SHIFT_PCT = 20.0  # stdev changed > 20% → warn
+
+# A shift this large between two snapshot dates on the SAME scoring method
+# and the same Congress is an incident, not a finding: an ops alert, not a
+# log line. Measured on production snapshots (2026-07-12 to 2026-10-14):
+# across 130 consecutive same-method date pairs per dimension, Funding
+# Independence, Constituent Alignment and Legislative Effectiveness moved
+# their stdev by at most 10.3% and kept a rank correlation of at least 0.95
+# in 95% of pairs (two pairs dipped to 0.89 and 0.51); the one pair past
+# both bounds was 2026-10-14's House Legislative Effectiveness (stdev
+# 15.32 -> 10.26, -33%; rho 0.755), when one failed request stopped the
+# sponsorship read for 296 members. A method change (ALGORITHM_VERSION)
+# moved stdev up to 240% and rho down to 0.02 on purpose, and a new
+# Congress resets every member's window, so neither alerts here.
+SAME_METHOD_STDEV_SHIFT_PCT = 20.0
+SAME_METHOD_MIN_RHO = 0.80
 
 # Minimum population required to run meaningful statistics.
 MIN_COUNT_FOR_STATS = 5
@@ -199,12 +215,26 @@ def compute_distribution(entity_type: str, date: str | None = None) -> dict:
                     dim_values[dim].append(float(val))
                     entity_scores[dim][snap.entity_id] = float(val)
 
-        result: dict = {"date": date}
+        result: dict = {
+            "date": date,
+            "_versions": {snap.algorithm_version for snap in snapshots},
+            "_congress": congress_of_date(date),
+        }
         for dim, _ in DIMENSIONS:
             result[dim] = _dim_stats(dim_values[dim])
             result[dim]["_entity_scores"] = entity_scores[dim]
 
         return result
+
+
+def same_method(prev_dist: dict, curr_dist: dict) -> bool:
+    """Whether two distributions were scored on one method: every snapshot
+    on both dates carries the same ALGORITHM_VERSION, in the same Congress."""
+    versions = (prev_dist.get("_versions") or set()) | (curr_dist.get("_versions") or set())
+    return (
+        len(versions) == 1 and None not in versions
+        and prev_dist.get("_congress") == curr_dist.get("_congress")
+    )
 
 
 def detect_drift(prev_dist: dict, curr_dist: dict) -> list[dict]:
@@ -224,6 +254,7 @@ def detect_drift(prev_dist: dict, curr_dist: dict) -> list[dict]:
         List of drift event dicts (may be empty).
     """
     events: list[dict] = []
+    unchanged_method = same_method(prev_dist, curr_dist)
 
     for dim, _ in DIMENSIONS:
         prev = prev_dist.get(dim, {})
@@ -277,12 +308,25 @@ def detect_drift(prev_dist: dict, curr_dist: dict) -> list[dict]:
                 f"({prev_stdev:.2f} → {curr_stdev:.2f})"
             )
 
+        # On an unchanged method, a shift past what such dates have ever
+        # produced (SAME_METHOD_*) is an incident to look at.
+        incident = unchanged_method and (
+            (stdev_shift_pct is not None and stdev_shift_pct >= SAME_METHOD_STDEV_SHIFT_PCT)
+            or (spearman is not None and spearman < SAME_METHOD_MIN_RHO)
+        )
+        if incident:
+            severity = "alert"
+            if not reasons:
+                reasons.append(f"rank correlation rho={spearman:.3f}")
+
         if severity is None:
             continue  # no drift for this dimension
 
         message = "; ".join(reasons)
-        if spearman is not None and spearman < 0.90:
+        if spearman is not None and spearman < 0.90 and not message.startswith("rank correlation"):
             message += f"; rank correlation rho={spearman:.3f} (rank order shifted)"
+        if incident:
+            message += " — on an unchanged scoring method and Congress"
 
         events.append({
             "dimension": dim,
@@ -294,6 +338,7 @@ def detect_drift(prev_dist: dict, curr_dist: dict) -> list[dict]:
             "curr_stdev": round(curr_stdev, 4) if curr_stdev is not None else None,
             "spearman_shift": spearman,
             "message": message,
+            "same_method": incident,
         })
 
     return events
@@ -339,6 +384,8 @@ def generate_calibration_report(entity_type: str = "senator") -> dict | None:
     def _strip_internal(dist: dict) -> dict:
         cleaned: dict = {}
         for k, v in dist.items():
+            if k.startswith("_"):
+                continue
             if isinstance(v, dict):
                 cleaned[k] = {ik: iv for ik, iv in v.items() if not ik.startswith("_")}
             else:

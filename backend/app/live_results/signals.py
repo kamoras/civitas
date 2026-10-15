@@ -182,7 +182,9 @@ def _content(result: RaceResult) -> dict:
         lede = (f"{publisher(result.source_name)} lists its count as official. "
                 "Civitas does not call races.")
     else:
-        title = f"{noun[:1].upper()}{noun[1:]} leads {label} count in a seat {holders} hold"
+        # "Not final" leads the title: a card or a feed reader shows the
+        # title alone, and the lede saying so sits a line below it.
+        title = f"{NOT_FINAL_PREFIX}{noun} leads {label} count in a seat {holders} hold"
         lede = ("The count is not final and the lead can change. "
                 "Press coverage has not yet confirmed it.")
     against = f" ahead of {_person(runner)}" if runner else ""
@@ -250,7 +252,8 @@ def _reverted_content(result: RaceResult) -> dict:
         facts.append(reporting_line(d))
     race = result.race
     return {
-        "title": f"{label[:1].upper()}{label[1:]}{_REVERTED_TITLE_END}"[:500],
+        "title": f"{'' if result.official else NOT_FINAL_PREFIX}{label[:1].upper()}{label[1:]}"
+                 f"{_REVERTED_TITLE_END}"[:500],
         "summary": summary,
         "facts": facts,
         "actions": [{
@@ -310,6 +313,11 @@ def _create(db: Session, result: RaceResult) -> ActionIssue:
     result.developing_issue_id = issue.id
     return issue
 
+
+# Opens the title of every issue about a count the state hasn't listed as
+# official (a seat-flip issue, and its reverted form): the title is what a
+# card, the homepage record and a feed reader show without the summary.
+NOT_FINAL_PREFIX = "Not final: "
 
 # The fixed end of _reverted_content's title (the start is the race's
 # label, whose wording can change between deploys).

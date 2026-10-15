@@ -39,6 +39,7 @@ from app.schemas import (
     PublicPresidentialSupportSchema,
     PublicRepresentativePageSchema,
     PublicRepresentativeProfileSchema,
+    PublicScoreBreakdownSchema,
     PublicSearchResponseSchema,
     PublicSenatorPageSchema,
     PublicSenatorProfileSchema,
@@ -119,6 +120,8 @@ def _body(client, path, **params):
     ("/representatives", {"state": "GA"}, PublicRepresentativePageSchema),
     ("/representatives/R000001", {}, PublicRepresentativeProfileSchema),
     ("/representatives/R000001/history", {}, PublicHistorySchema),
+    ("/senators/S000001/breakdown", {}, PublicScoreBreakdownSchema),
+    ("/representatives/R000001/breakdown", {}, PublicScoreBreakdownSchema),
     ("/senators/S000001/votes", {}, PublicMemberVotesSchema),
     ("/representatives/R000001/votes", {}, PublicMemberVotesSchema),
     ("/bills/HR.1/votes", {}, PublicBillVotesSchema),
@@ -147,6 +150,7 @@ def test_a_vote_carries_its_roll_call_and_each_party_split(client):
     ("/senators/old-s/history", "S000001", PublicHistorySchema),
     ("/representatives/old-r", "R000001", PublicRepresentativeProfileSchema),
     ("/representatives/old-r/history", "R000001", PublicHistorySchema),
+    ("/senators/old-s/breakdown", "S000001", PublicScoreBreakdownSchema),
 ])
 def test_a_renamed_id_answers_under_the_current_one(client, db_session, path, member, schema):
     """As documented on the id parameter: an id a member had before a
@@ -242,6 +246,7 @@ def test_every_endpoint_answers_with_the_rate_limit_headers(client, monkeypatch)
 @pytest.mark.parametrize("path", ["/senators/nobody/history", "/representatives/nobody/history",
                                   "/senators/nobody", "/representatives/nobody",
                                   "/senators/nobody/votes", "/representatives/nobody/votes",
+                                  "/senators/nobody/breakdown", "/representatives/nobody/breakdown",
                                   "/bills/NOT-A-BILL/votes", "/presidential-support/house"])
 def test_unknown_member_is_404_not_an_empty_record(client, path):
     assert client.get(f"/api/public/v1{path}").status_code == 404

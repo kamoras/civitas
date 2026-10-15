@@ -8,6 +8,7 @@ from app.models import Senator
 from app.pipeline.analyze import score_calculator
 from app.pipeline.analyze.score_bounds import clamp
 from app.pipeline.analyze.score_calculator import (
+    LES_BILLS_STATUS,
     _advancement_baseline,
     _calc_constituent_alignment,
     _calc_funding_diversity,
@@ -600,14 +601,41 @@ class TestLegislativeEffectiveness:
                   for b in records]
         assert scores == sorted(scores)
 
-    def test_unfetched_bills_are_neutral_not_zero(self):
-        """A failed sponsored-legislation request is not a record of zero
-        bills: the V&W component stays neutral instead of scoring a
-        credit of 0."""
-        score, detail = _les_component_score([], "R", 6.0, None, chamber="senate", bills_known=False)
-        assert score == 50.0 and "could not be fetched" in detail
+    def test_unfetched_bills_are_unmeasured_not_zero_or_neutral(self):
+        """Sponsored legislation that couldn't be fetched, with none stored
+        by an earlier run, is neither a record of zero bills nor an average
+        one: the bill part is left unmeasured and leadership and coalition
+        attraction carry its weight in their own proportion (0.25 : 0.15)."""
+        core = _legislative_effectiveness_core(
+            [], 0.8, party="R", years_in_office=6.0, attracted_bipartisanship=0.4,
+            chamber="senate", bills_known=False,
+        )
+        bill = core["components"][0]
+        assert bill["score"] is None and bill["weight"] == 0.0
+        assert "couldn't be fetched" in bill["detail"]
+        assert core["score"] == round(80 * 0.625 + 40 * 0.375)
+        # With no coalition data, leadership alone.
+        assert _calc_legislative_effectiveness(
+            [], 0.8, party="R", years_in_office=6.0, chamber="senate", bills_known=False,
+        ) == 80
+        # Nothing at all: the dimension's own no-data note.
+        assert _calc_legislative_effectiveness([], None, chamber="senate", bills_known=False) == 50
+        # A known empty list after real tenure is a credit of 0.
         zero, _ = _les_component_score([], "R", 6.0, None, chamber="senate")
         assert zero < 50.0
+
+    def test_carried_bills_are_scored_and_dated(self):
+        """Bills an earlier run stored, carried forward because this run
+        couldn't read them, score exactly as if read, and the sentence
+        says where they came from."""
+        bills = [{"billType": "s", "congress": 119, "stage": "PASSED_CHAMBER"}] * 3
+        kw = dict(party="R", years_in_office=6.0, chamber="senate")
+        read = _legislative_effectiveness_core(bills, 0.5, **kw)
+        carried = _legislative_effectiveness_core(bills, 0.5, carried_from="2026-10-13", **kw)
+        assert carried["score"] == read["score"]
+        assert "stored on 2026-10-13" in carried["components"][0]["detail"]
+        undated = _legislative_effectiveness_core(bills, 0.5, carried_from="", **kw)
+        assert "stored by an earlier run" in undated["components"][0]["detail"]
 
     def test_freshman_zero_bills_stays_neutral(self):
         """Below the tenure floor, zero bills is indistinguishable from no
@@ -1078,6 +1106,7 @@ class TestCalculateConfidence:
         from app.pipeline.analyze.score_calculator import calculate_confidence
         conf = calculate_confidence({"party": "D"})
         status = conf.pop("constituentAlignmentVotePart")
+        assert conf.pop(LES_BILLS_STATUS).startswith("fetched:")
         assert set(conf.values()) == {"low"}
         assert status == "neutral:few-votes"
 
@@ -1104,6 +1133,7 @@ class TestCalculateConfidence:
         # The vote-part status rides along; this member has no party, so no
         # party line to score the vote part against.
         assert conf.pop("constituentAlignmentVotePart") == "neutral:no-party"
+        assert conf.pop(LES_BILLS_STATUS).startswith("fetched:")
         assert set(conf.values()) == {"high"}
 
     def test_unlabeled_votes_do_not_count(self):

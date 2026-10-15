@@ -156,6 +156,21 @@ class TestBudget:
         assert text.startswith("Update on Georgia's U.S. Senate: Ray Jones (D) is ahead again")
         assert url.endswith("/elections/states/GA#race-2026-SEN-GA")
 
+    def test_a_correction_says_not_final_in_its_post_and_its_feed_title(self, db_session):
+        _race(db_session, "2026-SEN-GA", flip=False)
+        _said(db_session, "2026-SEN-GA", er.FLIP)
+        _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))
+        [(text, _)] = _run(db_session)
+        assert text.endswith("Not final.")
+        post = db_session.query(BroadcastPost).filter(BroadcastPost.title != "t").one()
+        assert post.title == "Georgia's U.S. Senate: no longer shows a change of party, not final"
+
+    def test_titles_say_not_final_until_the_count_is_official(self):
+        race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
+        for kind in (er.FLIP, er.LEAD_CHANGE, rb.CORRECTION):
+            assert rb._title(kind, race, {"official": False}).endswith("not final")
+            assert "not final" not in rb._title(kind, race, {"official": True})
+
     def test_a_reversal_of_an_unposted_flip_is_not_a_correction(self, db_session):
         _race(db_session, "2026-SEN-GA", flip=False)
         _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))

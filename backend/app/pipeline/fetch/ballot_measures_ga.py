@@ -45,19 +45,22 @@ no initiative).
 
 Checks, each refusing the state (None): the cover must name the
 election ("NOVEMBER 3, 2026") and "Constitutional Amendments 1-N", and
-N must equal the amendments read, numbered 1..N; a cover that also names
-a statewide referendum question (2024's did) is refused — this reader
-does not read those; every amendment needs a caption, a resolution line,
+N must equal the amendments read, numbered 1..N; a booklet whose cover
+or a section title page names a statewide referendum or ballot question
+(2024's cover did) is refused — this reader does not read those; every amendment needs a caption, a resolution line,
 a question ending in "?" and a summary.
 
 Discovery: sos.ga.gov/page/proposed-georgia-constitution-amendments, the
 one PDF link naming `year` and "const" (the 2026 file is
 .../2026-09/2026 Constitutional Summaries booklet FINAL.pdf; 2024's was
 .../2024-09/Statewide_Const_Amendments_and_Ballot_Questions_Booklet.pdf,
-so no filename pattern is assumed). sos.ga.gov answers every request
-with a Cloudflare challenge (403) — from the production host too,
-checked 2026-10-01 — so the landing page's markup has never been seen. A
-challenge page, or a page that can't be fetched, is SourceBlocked, and
+so no filename pattern is assumed). sos.ga.gov answers nearly every
+request with a Cloudflare challenge (403) — from the production host
+too, checked 2026-10-01 — though it served the pipeline the real page on
+2026-10-14, labelling the 2026 booklet's link with a referendum or
+ballot question while the booklet holds Amendments 1-3 only. A challenge
+page, or a page that can't be fetched, is SourceBlocked — and so is a
+challenge on the booklet behind a page that answered — and
 ballot_measures_pdf then reads the Secretary's booklet from a county
 board's republication of it (fetch_republished; Augusta-Richmond's, in
 the registry's `republished_by`, the same 152,039-byte file), with every
@@ -77,6 +80,7 @@ from app.pipeline.fetch.ballot_measure_text import NotYetPublished, SourceBlocke
 from app.pipeline.fetch.ballot_measures_state_common import (
     election_day,
     get_bytes,
+    get_bytes_unless_walled,
     get_text,
     long_date,
     republished_candidates,
@@ -103,12 +107,15 @@ SUMMARY_AUTHORITY = "Georgia Attorney General, Secretary of State and Legislativ
 # REFERENDUM QUESTION", .../Statewide_Const_Amendments_and_Ballot_
 # Questions_Booklet.pdf), but that shape could not be fetched from the
 # development environment, so this reader cannot read referendum
-# questions. Any sign of them — on the booklet's cover, in its link, or
-# as another same-year document linked from the page — refuses the state
+# questions. Any sign of them — on the booklet's cover or a section title
+# page, or as
+# another same-year document linked from the page — refuses the state
 # (ingest_failed) rather than publishing the amendments as the whole list.
+# The booklet's own link label is not such a sign: what the booklet holds
+# is read from it (find_booklet_url).
 # Blind spot: a referendum question published only on county sample
-# ballots, named neither on the landing page nor on the booklet's cover,
-# is invisible here. 2026 was checked complete by hand (2026-09-28)
+# ballots, named neither on the landing page nor on the booklet's cover
+# or section titles, is invisible here. 2026 was checked complete by hand (2026-09-28)
 # against Augusta-Richmond County's composite sample ballot: Amendments
 # 1-3 and no statewide referendum question.
 REFERENDUM_WORDS = ("referend", "ballot question")
@@ -129,7 +136,14 @@ _COPY_ON_FILE = "A copy of this entire proposed"
 def find_booklet_url(page_html: str, year: int) -> tuple[str | None, bool]:
     """(url, page_ok): the year's one amendments booklet. page_ok False
     when there are two, or when the page links any other `year` PDF that
-    names a referendum or ballot question — see REFERENDUM_WORDS."""
+    names a referendum or ballot question — see REFERENDUM_WORDS.
+
+    The booklet's own link naming a referendum does not refuse it here:
+    what the booklet holds is read from the booklet, and parse_booklet
+    refuses one that names a referendum anywhere in its text. The real
+    page did label 2026's booklet that way (2026-10-14, the first time
+    sos.ga.gov answered the pipeline) while the booklet holds Amendments
+    1-3 and nothing else, and refusing on the label failed the state."""
     tree = lxml_html.fromstring(page_html)
     hrefs = set()
     others = set()
@@ -138,16 +152,19 @@ def find_booklet_url(page_html: str, year: int) -> tuple[str | None, bool]:
         haystack = unquote(f"{href} {' '.join(a.text_content().split())}").lower().replace("_", " ").replace("-", " ")
         if ".pdf" not in href.lower() or str(year) not in haystack or "primary" in haystack:
             continue
-        if "const" in haystack and not any(w in haystack for w in REFERENDUM_WORDS):
+        if "const" in haystack:
             hrefs.add(urljoin(LANDING_URL, href))
         elif any(w in haystack for w in REFERENDUM_WORDS):
             others.add(urljoin(LANDING_URL, href))
-    if len(hrefs) > 1 or others:
-        if others:
-            logger.warning(
-                "GA %d: a referendum / ballot-question document is linked (%s); this reader reads only the "
-                "amendments booklet — refusing rather than publishing the amendments alone", year, sorted(others),
-            )
+    others -= hrefs
+    if others:
+        logger.warning(
+            "GA %d: a referendum / ballot-question document is linked (%s); this reader reads only the "
+            "amendments booklet — refusing rather than publishing the amendments alone", year, sorted(others),
+        )
+        return None, False
+    if len(hrefs) > 1:
+        logger.warning("GA %d: the amendments page links more than one booklet (%s)", year, sorted(hrefs))
         return None, False
     return (hrefs.pop() if hrefs else None), True
 
@@ -206,8 +223,14 @@ def parse_booklet(pages: list[dict], year: int) -> list[dict] | None:
         logger.warning("GA booklet cover does not name the %d general election", year)
         return None
     m = re.search(r"Constitutional Amendments 1-(\d+)", cover)
-    if m is None or any(w in cover.lower() for w in REFERENDUM_WORDS):
-        logger.warning("GA booklet cover lists no amendment range, or a referendum this reader can't read")
+    # The cover and every section title page: a booklet that carries
+    # referendum questions names them there (2024's cover did). Not the
+    # amendments' full text, which may mention a local referendum.
+    headings = " ".join(
+        w["text"] for i, p in enumerate(pages) if i == 0 or len(p["words"]) < _TITLE_PAGE_MAX_WORDS for w in p["words"]
+    ).lower()
+    if m is None or any(w in headings for w in REFERENDUM_WORDS):
+        logger.warning("GA booklet cover lists no amendment range, or a section names a referendum this reader can't read")
         return None
     expected = int(m.group(1))
 
@@ -350,7 +373,6 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         logger.exception("GA amendments page was not parseable")
         return None
     if not page_ok:
-        logger.warning("GA amendments page links more than one %d booklet", year)
         return None
     if url is None:
         if "Constitution" not in page_html:
@@ -363,7 +385,9 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         raise NotYetPublished(
             f"the Georgia Secretary of State's {year} constitutional amendments booklet", deadline_applies=False,
         )
-    raw = await get_bytes(client, url, "GA constitutional amendments booklet")
+    # The page answering doesn't mean the booklet will: a challenge on
+    # the booklet is the wall again (SourceBlocked, the county copy).
+    raw = await get_bytes_unless_walled(client, url, "GA constitutional amendments booklet")
     if raw is None:
         return None
     try:

@@ -241,6 +241,8 @@ exemption list covers what cannot affect classification or scoring:
 `_NOT_ANALYSIS_PATHS` (the holdings and trade ingests, filer matching, the run-coordination
 modules, the election run's orchestration, the LDA bill-name matcher
 `analyze/lobbying_records.py`, the Explore summary prompt `analyze/prompts.py`,
+the votes-with-the-president rate (`analyze/presidential_support.py`,
+`analyze/sap_position.py`),
 the modules that word and publish posts, the Action Center's hourly run
 (`_ACTION_CENTER_PATHS`), which keeps no learned data) and
 `_DISPLAY_ONLY_NAMES` (display-only constants such as `HOLDING_CATEGORIES`),
@@ -1064,6 +1066,34 @@ with no successful completion in `PIPELINE_STALE_ALERT_DAYS`;
 `check_pipeline_overrun` watches the opposite case of a run that started
 and is taking too long.
 
+**What makes a night long is upstream fetching, not the analysis-code
+fingerprint** (measured 2026-10-14: the fingerprint changed on 19 of the 21
+nights before, and its slowest two nights were both unchanged-hash nights).
+Most steps wait on rate limits (Congress.gov 1.2/s, the FEC 0.25/s), so
+request count is run time. Two rules keep it from spiking (2026-10):
+
+- **A bill's own records** (`bill-`, `-actions-`, `-cosponsors-`,
+  `-summaries-`, `-titles-`) stay fresh until the bill changes. The hourly
+  bill refresh reads Congress.gov's list of bills updated since its last
+  pass, marks each listed bill's records stale
+  (`bill_refresh.mark_bill_records_stale`), and records since when its
+  passes have joined without a gap (`coveredSince` in its marker). A
+  current-Congress record written since then is kept up to
+  `BILL_RECORD_BACKSTOP_HOURS` (30 days) while the refresh has run within
+  `PIPELINE_CACHE_TTL_HOURS`; otherwise the plain TTL applies
+  (`congress._bill_record_get`). With one TTL for all of them, about 20,000
+  of these were refetched every third or fourth night.
+- **Per-entity fetches expire by key** (`api_cache_get(..., spread=True)`:
+  member and bill records, FEC candidates, committees and receipts, GovInfo
+  packages): each key expires at its own point in the last third of its
+  TTL, never later, so entries written in one run fall out of step instead
+  of all coming due on one night. A new high-volume per-entity fetch opts
+  in the same way.
+
+A bill's actions that can't be read fall back to the last history read
+(any age) before raising `CongressUnavailable`, which discards the run's
+whole stage and sponsorship step.
+
 Each member pipeline executes in 4 phases per chamber, defined in
 `senate_pipeline.py`/`house_pipeline.py`:
 
@@ -1127,7 +1157,14 @@ issue is served, a linked bill's stored stage names who acts next
 members, their phones and their votes on the issue's roll calls come from the
 state the reader picks on the page; the call script is a fixed template
 around the record (`callScript`). Results
-are stored in the `action_issues` table.
+are stored in the `action_issues` table. It runs through the nightly chain
+too: until 2026-10 it stood down for the Senate, Supplementary, House and
+Stock trades links, and the Action Center went as stale as the chain was
+long (13 hours on 2026-10-14). A refresh takes minutes, mostly waiting on
+feeds and the LLM, and measured beside the chain it fits in memory (the
+reasons are in `scheduler._hourly_action_refresh`); only an overlapping
+refresh of its own holds it back. The hourly bill refresh still stands down
+for the Senate and House runs, which rewrite the rows it updates.
 
 Each issue's actions are fixed templates around stored data:
 
@@ -1451,6 +1488,37 @@ third phase (`ingest_president_holdings`): it has no asset-type column, so a
 category comes only from what the form states, and every other security is
 `UNSTATED` ("Type not stated"), never typed from its name.
 
+**An outage in the sponsorship read is never a record of no bills** (2026-10-15).
+A bill whose actions Congress.gov can't give the run (`CongressUnavailable`)
+degrades only itself: no roll call is discovered from it, or it is staged from
+its latest action (`_les_bill_stage`). One such request used to stop the House
+sponsorship step for every member after it (296 of 433 on 2026-10-14). A member
+whose sponsored legislation wasn't read is scored on the bills an earlier run
+stored (`sponsorship_backfill.carry_forward_sponsored_bills`), and one with none
+stored has Legislative Effectiveness's bill part unmeasured, its weight carried
+by the other parts. Only members whose bills the run read are measured into the
+LES reference (`live_les_reference`): counting the others as members with no
+bills put that night's mean credit at 3.16 on a scale defined as 1.0. How a
+stored score treated its bills is kept in its confidence
+(`legislativeEffectivenessBills`: `fetched:<date>`, `carried:<date>`,
+`unavailable`), so the breakdown and the startup rescore score the stored bills
+the same way. The run raises one ops alert naming what went unread
+(`run_checks.alert_unread_sponsorship`), and a score-distribution shift on an
+unchanged `ALGORITHM_VERSION` and Congress past what such nights have produced
+raises another (`score_calibration.SAME_METHOD_*`). That one alerts rather than
+holding the previous scores: it is measured on the scores just saved, and a held
+score beside the run's stored inputs would disagree with its own breakdown.
+
+The same rule holds for every fetcher the member pipelines read: a failed
+request returns the last cached read, or says it failed (`None`, or raises
+`CongressUnavailable` / `FecUnavailable` / `GovinfoUnavailable`) — never an
+empty answer a caller would take for the source's. A bill whose cosponsor
+list wasn't read is left out of the cosponsorship graphs (leadership,
+coalition attraction) rather than read as one nobody cosponsored; a failed
+roster page stops the run rather than shrink the roster (which
+`member_lifecycle` reads as departures); an FEC committee registration that
+couldn't be read keeps that member's stored funding. New fetchers follow it.
+
 Each senator is processed independently. The pipeline uses `PipelineRun`
 records to track progress and supports resumption. A member (either
 chamber) whose prepare or score step raises keeps the scorecard of the
@@ -1639,7 +1707,7 @@ the pending list).
 | Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
 | Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/` |
-| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; detector process `face_detection.py`; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts`, `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
+| Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; detector process `face_detection.py`; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts` (and `[width]/route.ts`, the sized copies `Photo`'s srcset asks for), `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
 | Issue contact surface (state picker, phones, roll-call record, call script) + action-tap counter | `frontend/src/components/action/ContactYourMembers.tsx`, `backend/app/api/action.py` (`get_issue_members`, `issue_roll_calls`, `bill_decider`), `backend/app/api/visits.py` (`track_action`), `GET /api/admin/action-taps` |
 | Page-load timing beacon + histogram | `frontend/src/components/LoadTimingBeacon.tsx`, `backend/app/api/visits.py` (`track_timing`), `GET /api/admin/load-times` |
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
@@ -1848,7 +1916,15 @@ the pending list).
   inherited by every page and declare the whole site a duplicate of the
   homepage). A section layout's canonical is inherited the same way, so a
   dynamic child (`/politicians/[id]`, `/explore/[id]`…) must set its own,
-  taken from the record, not the request's spelling.
+  taken from the record, not the request's spelling. Its 404 can't (a
+  route's `notFound()` discards its page's metadata; the head comes from
+  the layouts above), so a section whose index page is a client component
+  keeps that page's metadata in a layout inside an `(index)` route group
+  (`politicians/(index)`, `congress/bills/(index)`, `elections/(index)`,
+  `explore/(index)`), and each record route has a layout setting only its
+  404's title; a not-found head has no canonical (`notFoundMetadata`).
+  `app/sectionMetadata.test.ts` fails on a layout with a canonical above a
+  record route.
 - Titles lead with what people type into a search box (member name +
   party-state, bill number, full state name); the root template appends
   " | Civitas" (no em dashes in site prose, 2026-10). Search-facing wording lives in `src/lib/seo.ts`, not in
@@ -1857,7 +1933,10 @@ the pending list).
   200 page that says "not found". The converse holds too: an unreachable
   backend or a 5xx is an error page (`app/error.tsx`), never a 404 — fetch
   detail records through `fetchRecord` (`src/lib/ssrPayload.ts`), which
-  returns null only for a 404.
+  returns null only for a 404. A record route's 404 offers the next step
+  for that kind of record from its segment's `not-found.tsx`
+  (`components/notFound/RecordNotFound.tsx`: a member's closest names, the
+  bills list, the Action Center, Explore search, a state's ballot), never only "back home".
 - `sitemap.xml` is rendered per request from `GET /api/sitemap` — never
   prerendered, since `next build` can't reach the backend. Add a new
   detail-page type there, or search engines have no way to find it.

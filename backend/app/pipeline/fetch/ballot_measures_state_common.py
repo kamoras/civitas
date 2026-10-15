@@ -32,8 +32,9 @@ import pdfplumber
 from lxml import html as lxml_html
 
 from app.election_calendar import next_election_day
+from app.http_client import is_bot_challenge
 from app.pipeline.fetch.ballot_measure_pdf_geometry import clean_text
-from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+from app.pipeline.fetch.ballot_measure_text import NotYetPublished, SourceBlocked
 from app.pipeline.fetch.http_utils import (
     BROWSER_HEADERS,
     fetch_bytes_with_retry,
@@ -130,6 +131,22 @@ async def get_bytes_unless_missing(
 
 async def get_bytes(client: httpx.AsyncClient, url: str, label: str, **kwargs) -> bytes | None:
     return await fetch_bytes_with_retry(client, _rate_limiter, url, label, **kwargs)
+
+
+async def get_bytes_unless_walled(client: httpx.AsyncClient, url: str, label: str) -> bytes | None:
+    """get_bytes, except that a bot wall's challenge raises SourceBlocked
+    instead of reading as a failed fetch: a state whose page answered but
+    whose document behind it is walled (sos.ga.gov's Cloudflare lets some
+    requests through, 2026-10-14) is a source that can't be read, not one
+    that was read and refused. Any other failure is still None."""
+    resp = await fetch_with_retry(
+        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS, bot_challenge_ok=True,
+    )
+    if resp is None:
+        return None
+    if is_bot_challenge(resp):
+        raise SourceBlocked(f"{label} answered with a bot challenge")
+    return resp.content
 
 
 async def get_json(client: httpx.AsyncClient, url: str, label: str) -> dict | list | None:

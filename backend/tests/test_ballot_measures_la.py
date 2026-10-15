@@ -15,9 +15,12 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from app.pipeline.fetch import ballot_measures_la as la
+from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
+from app.pipeline.fetch.ballot_measures_pdf import discover_pdf_url_checked
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures_la_2022_pages.json").read_text())
 
@@ -80,3 +83,31 @@ def test_a_numbered_amendment_with_no_text_refuses_the_document():
     pages = _fake_pages(["Proposed Amendment No. 1\nDo you support it?\nProposed Amendment No. 2\n"])
     with pytest.raises(ValueError):
         la.parse_document(pages)
+
+
+FIXTURE_2026 = json.loads((Path(__file__).parent / "fixtures_la_2026_pages.json").read_text())
+# The real Secretary of State "types of elections" page's constitutional-
+# amendment PDF links for 2022-2026, in page order (2026-10-15).
+LANDING_2026 = (Path(__file__).parent / "fixtures_la_types_of_elections_2026.html").read_text()
+
+
+def test_parses_all_ten_2026_amendments():
+    """The real November 3, 2026 guide (extract_text, both pages)."""
+    results = la.parse_document(_fake_pages(FIXTURE_2026))
+    assert [r["number"] for r in results] == [str(n) for n in range(1, 11)]
+    assert results[0]["official_summary"].startswith("Act 39 (2026 Regular Session) - Proposing to amend Article VII")
+    assert results[-1]["official_summary"].endswith("(Effective January 1, 2027) (Adds Article VII, Section 21(P))")
+
+
+async def test_registry_discovers_the_guide_not_the_summaries_linked_above_it():
+    """2026's statements document ("...2026-nov-summaries.pdf", a
+    three-column layout parse_document can't read) is linked before the
+    guide; the registry's exclude must skip it, or the state fails."""
+    source = source_for_state("LA")
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, text=LANDING_2026))
+    async with httpx.AsyncClient(transport=transport) as client:
+        url, complete = await discover_pdf_url_checked(
+            client, source["landing_page_url"], 2026, tuple(source["keyword"]), exclude=tuple(source["exclude"]),
+        )
+    assert url == "https://www.sos.la.gov/media/jo2die1s/proposed-constitutional-amendments-2026-nov.pdf"
+    assert complete

@@ -4,10 +4,10 @@ const nextConfig = {
   // Metadata goes in <head> for every request. Next 16 otherwise streams
   // generateMetadata into <body> for any user agent not on its built-in
   // bot list, and that list lacks the link-preview fetchers of places this
-  // site is shared (Bluesky's card fetcher, Mastodon, Telegram). Pages
-  // whose body renders on the client (/explore/[id]) then served their
-  // description and Open Graph tags after </head>, which the populated
-  // Lighthouse audit caught. The cost is the first byte waiting for the
+  // site is shared (Bluesky's card fetcher, Mastodon, Telegram). A page
+  // whose body rendered on the client (/explore/[id], until 2026-10) then
+  // served its description and Open Graph tags after </head>, which the
+  // populated Lighthouse audit caught. The cost is the first byte waiting for the
   // metadata fetch the page makes anyway (cached, revalidate 3600).
   htmlLimitedBots: /.*/,
   // Old paths that still have links out in the world — search results,

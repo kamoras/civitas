@@ -1,6 +1,8 @@
 import { pageMetadata } from "@/lib/site";
 
-// /explore/[id] sets its own canonical in its layout; see lib/site.ts.
+// The index page only: this layout sits in the (index) route group, so a
+// record page beneath (and its 404) never inherits this title or canonical.
+// The page is a client component, so its metadata lives here; see lib/site.ts.
 export const metadata = pageMetadata({
   title: "Search Congressional Records, Floor Speeches & Executive Orders",
   description:
