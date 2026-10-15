@@ -11,8 +11,11 @@ import struct
 
 import numpy as np
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from app import district_lean
+from app.api.router import api_router
 
 _BACKEND = pathlib.Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("build_district_lean", _BACKEND / "scripts" / "build_district_lean.py")
@@ -229,11 +232,6 @@ def test_the_csv_is_served_as_a_download(client_api):
 
 @pytest.fixture
 def client_api():
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from app.api.router import api_router
-
     app = FastAPI()
     app.include_router(api_router)
     return TestClient(app)
