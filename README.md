@@ -1674,7 +1674,11 @@ Conventions: lists are pages (`entries`, `total`, `page`, `perPage`,
 `totalPages`); a member's `rank` is their place in the whole chamber whatever
 the filters; an unknown id is a 404 (history included); every record has a
 `siteUrl`; filter values (party, chamber, document type) are enumerated in
-the spec and a value outside them is a 422.
+the spec and a value outside them is a 422. A score can be cited to its method: a
+profile carries `algorithmVersion` and `scoredOn` (the newest history
+snapshot's, the same two fields as `/breakdown`), and each `/history`
+snapshot its own `algorithmVersion`, so a jump between two snapshots can be
+read as a method change rather than a change in the record.
 
 A score can be reproduced from the API alone. `/breakdown` serves, for each
 dimension, the stored score, the score recomputed from the member's stored
