@@ -141,3 +141,22 @@ def test_bills_the_congress_reports_link_to_are_listed(db_session, monkeypatch):
     db_session.commit()
     bills = {b["id"]: b["lastmod"] for b in _body(db_session)["bills"]}
     assert bills == {"HR.275": "2026-10-01", "HR.1000": "2025-02-05"}
+
+
+def test_every_roll_call_is_listed_bill_or_not(db_session):
+    """Each roll call has a page; a nomination vote (no bill) is listed too,
+    since no bill page leads to it."""
+    db_session.add_all([
+        RollCall(chamber="senate", congress=119, session=2, number=256, date="2026-09-30",
+                 question="On the Nomination PN1", title="A nominee, to be an officer", result="Confirmed",
+                 yeas=51, nays=47, present=0, not_voting=2, bill_id=None,
+                 source_url="https://www.senate.gov/legislative/LIS/roll_call_votes/vote1192/vote_119_2_00256.xml"),
+        RollCall(chamber="house", congress=119, session=1, number=1, date="2025-02-05", question="On Passage",
+                 title="", result="Passed", yeas=1, nays=0, present=0, not_voting=0, bill_id="HR.1000",
+                 source_url="https://clerk.house.gov/evs/2025/roll001.xml"),
+    ])
+    db_session.commit()
+    assert _body(db_session)["rollCalls"] == [
+        {"chamber": "house", "congress": 119, "session": 1, "number": 1, "lastmod": "2025-02-05"},
+        {"chamber": "senate", "congress": 119, "session": 2, "number": 256, "lastmod": "2026-09-30"},
+    ]

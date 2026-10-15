@@ -23,6 +23,7 @@ from app.issue_ids import to_public_id
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.photos import bioguide_photo
 from app.pipeline.congress_activity import eastern_today
+from app.services.bill_record import bill_number_matches, canonical_bill_id, typed_bill_number
 from app.schemas import (
     BillDetailSchema,
     BillInFlightSchema,
@@ -345,7 +346,7 @@ def get_bill_detail(db: Session, bill_id: str, congress: int | None = None) -> B
     cheaper than scanning the ~17k-row cache, and this endpoint is hit far
     less often than the list view.
     """
-    bill_id = bill_id.upper()
+    bill_id = canonical_bill_id(bill_id) or bill_id.upper()
 
     candidates = []
     for chamber, model, member_model, fk in (
@@ -423,11 +424,18 @@ def get_bills_in_flight(
         filtered = [r for r in filtered if r.bill.sponsor_party == party]
     if q:
         q_lower = q.lower()
+        # A bill number in any spelling: a whole one ("S. 2398" as the hub
+        # prints it, "HR 997") is that bill, not every number it begins
+        # (H.R. 9977); anything else with a digit (the number alone, "997")
+        # matches as a prefix. Title and sponsor as typed.
+        whole = canonical_bill_id(q.strip())
+        number = None if whole else typed_bill_number(q)
         filtered = [
             r for r in filtered
             if q_lower in r.bill.title.lower()
             or q_lower in r.bill.sponsor_name.lower()
-            or q_lower in r.bill.bill_id.lower()
+            or (whole and r.bill.bill_id.upper() == whole)
+            or (number and bill_number_matches(r.bill.bill_id, number))
         ]
 
     # Per-stage counts with every filter EXCEPT stage applied: an unfiltered

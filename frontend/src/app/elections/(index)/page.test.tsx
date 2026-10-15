@@ -359,7 +359,7 @@ describe("ElectionsPage", () => {
     });
     expect(ga).toHaveTextContent("Senate: Dan Osgood (party not given) leads");
     expect(ga).not.toHaveTextContent("()");
-    expect(ga).toHaveTextContent("HOUSE D 0 · R 1 · I 1 LEADING");
+    expect(ga).toHaveTextContent("HOUSE D 0 · R 1 · I 1 LEADING · NOT FINAL");
     // The Senate map's key has the purple an independent's lead is drawn in.
     expect(screen.getByRole("button", { name: "SENATE" })).toHaveAttribute("aria-pressed", "true");
     expect(
@@ -501,7 +501,7 @@ describe("ElectionsPage", () => {
     const ga = within(await screen.findByRole("region", { name: /By state/ })).getByRole("link", {
       name: /^GA/,
     });
-    expect(ga).toHaveTextContent("Senate: Ray Jones (R) leads · early · flip");
+    expect(ga).toHaveTextContent("Senate: Ray Jones (R) leads · not final · early · flip");
     expect(ga).toHaveTextContent("Senate (special): Dana Smith (D) leads");
     expect(ga).not.toHaveTextContent("Dana Smith (D) leads · early");
     // Split between the parties: tied/split on the map, both races named.

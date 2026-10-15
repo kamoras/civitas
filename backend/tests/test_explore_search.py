@@ -135,6 +135,53 @@ class TestFusion:
         assert [r["id"] for r in outcome["results"]] == [doc.id]
 
 
+class TestOwnIdentifiers:
+    """A document is found by the identifiers it is known by — its own FR
+    citation and document number — which appear in no searchable text."""
+
+    def test_own_fr_citation_leads_over_documents_that_cite_it(
+        self, indexed_db, stub_semantic
+    ):
+        target = _add(indexed_db, title="Area navigation routes",
+                      identifiers='["frdoc:2026-15603", "fr:91-48248"]')
+        citing = _add(indexed_db, title="Later amendment",
+                      body="As amended at 91 FR 48248, the routes are revised.")
+        stub_semantic([citing.id])
+        for query in ("91 FR 48248", "91 fr 48248"):
+            outcome = hybrid_search(indexed_db, query, limit=10)
+            assert [r["id"] for r in outcome["results"]] == [target.id, citing.id]
+            assert outcome["results"][0]["matchedBy"] == ["identifier"]
+            assert outcome["channels"]["identifier"] == 1
+
+    def test_bare_document_number_matches_the_external_id(
+        self, indexed_db, stub_semantic
+    ):
+        # Rows stored before the identifiers column carry the number only in
+        # their external id.
+        target = _add(indexed_db, title="Air plan approval",
+                      external_id="fr-reg-2026-15603")
+        other = _add(indexed_db, title="Air plan approval 2026-15603 docket")
+        stub_semantic([other.id])
+        outcome = hybrid_search(indexed_db, "2026-15603", limit=10)
+        assert outcome["results"][0]["id"] == target.id
+
+    def test_filters_still_apply(self, indexed_db, stub_semantic):
+        _add(indexed_db, title="Rule", identifiers='["fr:91-48248"]')
+        stub_semantic([])
+        outcome = hybrid_search(indexed_db, "91 FR 48248", limit=10,
+                                doc_type="Notice")
+        assert outcome["results"] == []
+
+    def test_a_number_inside_another_identifier_is_not_a_match(
+        self, indexed_db, stub_semantic
+    ):
+        # The SQL prefilter is a substring; the match is the identifier.
+        _add(indexed_db, title="Rule", identifiers='["fr:91-482480"]')
+        stub_semantic([])
+        outcome = hybrid_search(indexed_db, "91 FR 48248", limit=10)
+        assert outcome["channels"]["identifier"] == 0
+
+
 class TestFreshnessPrior:
     # That a much newer document outranks a slightly more relevant one is
     # TestPriorScaling.test_recency_reaches_a_close_relevance_gap_either_way.

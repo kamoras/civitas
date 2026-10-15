@@ -22,6 +22,7 @@ from app.api.response_helpers import (
 from app.database import get_db, off_loop
 from app.member_ids import resolve_member_id
 from app.models import ExploreDocument
+from app.pipeline.analyze.document_authority import declared_identifiers
 from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
 from app.services.explore_search import browse_documents, hybrid_search
 from app.time_utils import comment_period_today
@@ -225,6 +226,22 @@ def body_extent(doc: ExploreDocument) -> str:
     return "full"
 
 
+def fr_reference(doc: ExploreDocument) -> dict:
+    """The document's own Federal Register citation ("91 FR 48248") and
+    document number ("2026-15603"), as the FR prints them, from the
+    identifiers it is known by (declared_identifiers, the names Explore
+    search finds it by); empty strings for a document the FR did not
+    publish. For "Cite this" on the document's page."""
+    own = declared_identifiers(doc.external_id, doc.title, doc.doc_type, doc.identifiers)
+    cites = sorted(i.split(":", 1)[1] for i in own if i.startswith("fr:"))
+    numbers = sorted(i.split(":", 1)[1] for i in own if i.startswith("frdoc:"))
+    volume, _, page = cites[0].partition("-") if cites else ("", "", "")
+    return {
+        "frCitation": f"{volume} FR {page}" if cites else "",
+        "frDocNumber": numbers[0] if numbers else "",
+    }
+
+
 @router.get("/{doc_id}")
 async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
     """Return full details for a single explore document."""
@@ -249,6 +266,7 @@ async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
             "agencyName": doc.agency_name or "",
             "commentUrl": doc.comment_url or "",
             "commentsCloseOn": doc.comments_close_on or "",
+            **fr_reference(doc),
         },
         headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=300"},
     )

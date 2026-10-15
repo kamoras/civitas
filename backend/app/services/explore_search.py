@@ -52,7 +52,11 @@ import re
 from sqlalchemy import text
 
 from app.models import ExploreDocument
-from app.pipeline.analyze.document_authority import is_identifier_query
+from app.pipeline.analyze.document_authority import (
+    declared_identifiers,
+    extract_citations,
+    is_identifier_query,
+)
 from app.pipeline.explore_ranking import (
     candidate_pool,
     fingerprint_shape,
@@ -67,6 +71,11 @@ from app.time_utils import comment_period_today
 logger = logging.getLogger(__name__)
 
 _NON_WORD_RE = re.compile(r"[^0-9a-z]+")
+
+# A query that is nothing but a Federal Register document number
+# ("2026-15603"), the form the FR prints at the head of every document.
+# Bare, it carries no "FR Doc." stamp for the citation parser to key on.
+_BARE_FR_DOC_RE = re.compile(r"\s*(\d{4}-\d{4,6})\s*")
 
 
 def _fingerprint(doc_id: int, title: str, body: str) -> str:
@@ -263,6 +272,68 @@ def _apply_diversity(ranked: list[dict], cap: int) -> list[dict]:
     return kept + demoted
 
 
+def _query_identifiers(query: str) -> set[str]:
+    """Canonical identifiers a query names ("91 FR 48248" -> fr:91-48248).
+
+    The citation parser is case-sensitive where the published format is
+    ("FR", "RIN"), so a document's prose "89 fr more" is no citation; a
+    query is typed in any case, and upper-casing it first reads "91 fr
+    48248" or "rin 2120-aa66" as the citation it can only be."""
+    found = extract_citations((query or "").upper())
+    bare = _BARE_FR_DOC_RE.fullmatch(query or "")
+    if bare:
+        found.add(f"frdoc:{bare.group(1)}")
+    return found
+
+
+def _identifier_matches(
+    db, query: str, *, limit: int, doc_type: str | None,
+    chamber: str | None, politician_id: str | None,
+) -> list[int]:
+    """Documents *known by* an identifier the query names — the document
+    whose own FR citation, FR document number, RIN or executive-order
+    number it is, not every document that cites it.
+
+    A partial ranker (AGENTS.md §3b): only documents that carry identifiers
+    can match, and a match is exact, so it says nothing about any other
+    document. Neither retrieval channel could make this lookup: the keyword
+    index holds title, summary and body, where a document's own citation
+    never appears (the FR prints it in the page header, not the text), and
+    the encoder has no meaning for a serial number. On a known-item probe
+    of 80 documents their fusion put the target first for 3% of FR
+    citations (2026-10).
+
+    The SQL is a coarse prefilter on the identifier's value; the match
+    itself is `declared_identifiers`, the same definition the citation
+    graph uses, so a document is found by exactly the names it is cited by.
+    """
+    wanted = _query_identifiers(query)
+    if not wanted:
+        return []
+    needles = sorted({ident.split(":", 1)[1] for ident in wanted})
+    clauses = " OR ".join(
+        f"identifiers LIKE :n{i} OR external_id LIKE :n{i} OR title LIKE :n{i}"
+        for i in range(len(needles)))
+    params: dict = {f"n{i}": f"%{needle}%" for i, needle in enumerate(needles)}
+    sql = (f"SELECT id, external_id, title, doc_type, identifiers "
+           f"FROM explore_documents WHERE ({clauses})")
+    if doc_type:
+        sql += " AND doc_type = :doc_type"
+        params["doc_type"] = doc_type
+    if chamber:
+        sql += " AND chamber = :chamber"
+        params["chamber"] = chamber
+    if politician_id:
+        sql += " AND politician_id = :politician_id"
+        params["politician_id"] = politician_id
+    rows = db.execute(text(sql + " ORDER BY id"), params).fetchall()
+    return [
+        int(row.id) for row in rows
+        if wanted & declared_identifiers(
+            row.external_id, row.title, row.doc_type, row.identifiers)
+    ][:limit]
+
+
 def browse_documents(
     db,
     politician_id: str | None,
@@ -312,7 +383,7 @@ def browse_documents(
         "count": len(results),
         "indexReady": True,
         "semanticUnavailable": False,
-        "channels": {"semantic": 0, "keyword": 0},
+        "channels": {"semantic": 0, "keyword": 0, "identifier": 0},
     }
 
 
@@ -382,6 +453,11 @@ def hybrid_search(
         db, query, limit=pool, doc_type=doc_type, chamber=effective_chamber,
         politician_id=politician_id, commentable_after=commentable_after,
     )
+    exact = _identifier_matches(
+        db, query, limit=pool, doc_type=doc_type, chamber=effective_chamber,
+        politician_id=politician_id,
+    )
+    exact_ids = set(exact)
 
     # None (not []) from the semantic channel means the vector index is
     # missing or mid-rebuild, which is different from "it found nothing".
@@ -390,11 +466,11 @@ def hybrid_search(
     # is the difference between honest degradation and quiet degradation.
     semantic_unavailable = semantic is None
 
-    if semantic_unavailable and not keyword:
+    if semantic_unavailable and not keyword and not exact:
         return {
             "results": [], "count": 0, "indexReady": False,
             "semanticUnavailable": True,
-            "channels": {"semantic": 0, "keyword": 0},
+            "channels": {"semantic": 0, "keyword": 0, "identifier": 0},
         }
 
     semantic = semantic or []
@@ -405,10 +481,10 @@ def hybrid_search(
         if hit["id"] not in seen_ids:
             seen_ids.add(hit["id"])
             candidate_ids.append(hit["id"])
-    for hit in keyword:
-        if hit["id"] not in seen_ids:
-            seen_ids.add(hit["id"])
-            candidate_ids.append(hit["id"])
+    for doc_id in [hit["id"] for hit in keyword] + exact:
+        if doc_id not in seen_ids:
+            seen_ids.add(doc_id)
+            candidate_ids.append(doc_id)
 
     hydrated = _hydrate(db, candidate_ids)
 
@@ -426,7 +502,8 @@ def hybrid_search(
         return {
             "results": [], "count": 0, "indexReady": True,
             "semanticUnavailable": semantic_unavailable,
-            "channels": {"semantic": len(semantic), "keyword": len(keyword)},
+            "channels": {"semantic": len(semantic), "keyword": len(keyword),
+                         "identifier": len(exact)},
         }
 
     live_ids = {doc["id"] for doc in candidates}
@@ -507,6 +584,8 @@ def hybrid_search(
             matched.append("semantic")
         if doc_id in keyword_rank:
             matched.append("keyword")
+        if doc_id in exact_ids:
+            matched.append("identifier")
         doc["matchedBy"] = matched
         doc["distance"] = semantic_distance.get(doc_id)
         # The keyword channel's snippet shows the query terms in context and
@@ -514,7 +593,12 @@ def hybrid_search(
         # so those results keep the document's own summary.
         doc["snippet"] = keyword_snippet.get(doc_id) or doc["summary"]
 
-    candidates.sort(key=lambda doc: (-doc["_score"], doc["id"]))
+    # A document the query names by its own identifier leads: the reader
+    # asked for that document, and no similarity or prior can outrank the
+    # answer to "91 FR 48248". Ties among several (one RIN names every
+    # document of a rulemaking) keep the fused order.
+    candidates.sort(key=lambda doc: (
+        doc["id"] not in exact_ids, -doc["_score"], doc["id"]))
 
     # Collapse duplicates *after* fusion so the survivor is the copy the
     # rankers liked best, not whichever row was inserted first.
@@ -528,8 +612,12 @@ def hybrid_search(
         representatives.sort(key=lambda doc: (doc["date"], doc["_score"]), reverse=True)
         results = representatives[:limit]
     else:
-        results = _apply_diversity(
-            representatives, source_diversity_cap())[:limit]
+        # Exact identifier matches are exempt from crowding control: every
+        # document of one rulemaking shares an agency, and they are what a
+        # RIN search asked for.
+        named = [doc for doc in representatives if doc["id"] in exact_ids]
+        rest = [doc for doc in representatives if doc["id"] not in exact_ids]
+        results = (named + _apply_diversity(rest, source_diversity_cap()))[:limit]
 
     for doc in results:
         doc.pop("_score", None)
@@ -539,5 +627,6 @@ def hybrid_search(
         "count": len(results),
         "indexReady": True,
         "semanticUnavailable": semantic_unavailable,
-        "channels": {"semantic": len(semantic), "keyword": len(keyword)},
+        "channels": {"semantic": len(semantic), "keyword": len(keyword),
+                     "identifier": len(exact)},
     }

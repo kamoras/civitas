@@ -298,7 +298,7 @@ export function OverviewDashboard({
                     <td className="py-1.5 pr-3 text-ink-lo">{formatTime(run?.startedAt)}</td>
                     <td className="py-1.5 pr-3">
                       {running ? (
-                        <span className="text-signal-cyan animate-pulse">RUNNING</span>
+                        <span className="text-signal-cyan pulse-subtle">RUNNING</span>
                       ) : run ? (
                         <span className={statusClass(run.status, stuck)}>
                           {stuck ? "STUCK" : run.status.toUpperCase()}

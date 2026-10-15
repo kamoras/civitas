@@ -2,7 +2,9 @@ import { connection } from "next/server";
 import { pageMetadata } from "@/lib/site";
 import { BillsInitialProvider, type BillsInitial } from "./BillsInitial";
 
-// /congress/bills/[id] sets its own canonical; see lib/site.ts.
+// The index page only: this layout sits in the (index) route group, so a
+// record page beneath (and its 404) never inherits this title or canonical.
+// The page is a client component, so its metadata lives here; see lib/site.ts.
 export const metadata = pageMetadata({
   title: "Bills in Congress: Status, Sponsors & What's Moving",
   description:

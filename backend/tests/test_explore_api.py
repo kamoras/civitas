@@ -18,7 +18,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.api.explore import body_extent, get_explore_document_summary
+from app.api.explore import body_extent, fr_reference, get_explore_document_summary
 from app.models import ExploreDocument
 from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
 from app.services import explore_summary
@@ -718,3 +718,17 @@ async def test_stats_count_every_group_in_one_pass(db_session):
 ])
 def test_body_extent_says_how_much_of_the_document_the_body_holds(db_session, fields, extent):
     assert body_extent(_make_doc(db_session, **fields)) == extent
+
+
+@pytest.mark.parametrize("fields,reference", [
+    ({"doc_type": "Final Rule", "external_id": "fr-reg-2026-15603",
+      "identifiers": '["frdoc:2026-15603", "fr:91-48248", "rin:2120-AA66"]'},
+     {"frCitation": "91 FR 48248", "frDocNumber": "2026-15603"}),
+    # Stored before the identifiers column: the number is in the external id.
+    ({"external_id": "fr-2025-01234", "identifiers": "[]"},
+     {"frCitation": "", "frDocNumber": "2025-01234"}),
+    ({"doc_type": "Senate Floor Speech", "external_id": "crec-v1-x", "identifiers": "[]"},
+     {"frCitation": "", "frDocNumber": ""}),
+])
+def test_fr_reference_is_the_documents_own(db_session, fields, reference):
+    assert fr_reference(_make_doc(db_session, **fields)) == reference

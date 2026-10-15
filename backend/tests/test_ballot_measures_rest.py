@@ -18,6 +18,7 @@ import json
 from datetime import date
 from pathlib import Path
 
+import httpx
 import pytest
 
 from app.pipeline.fetch import (
@@ -461,6 +462,53 @@ class TestGeorgiaReferendumsFailClosed:
         extra = "<a href='/files/2024-09/Statewide_Const_Amendments_and_Ballot_Questions_Booklet.pdf'>2024</a>"
         url, ok = ga.find_booklet_url(self._page(extra), 2026)
         assert ok and url.endswith("2026-09/2026%20Constitutional%20Summaries%20booklet%20FINAL.pdf")
+
+    def test_the_booklets_own_link_naming_a_ballot_question_does_not_refuse(self):
+        """sos.ga.gov's real page (2026-10-14) labelled the 2026 booklet's
+        link with a referendum or ballot question; the booklet itself holds
+        Amendments 1-3 only, so its contents decide, not its label."""
+        page = (f"<html><body>Constitution <a href='{self.booklet}'>2026 Proposed Constitutional "
+                "Amendments and Statewide Ballot Questions</a></body></html>")
+        url, ok = ga.find_booklet_url(page, 2026)
+        assert ok and url.endswith("2026%20Constitutional%20Summaries%20booklet%20FINAL.pdf")
+        # A second anchor to the same file, labelled only as a referendum.
+        url, ok = ga.find_booklet_url(self._page(f"<a href='{self.booklet}'>2026 Referendum</a>"), 2026)
+        assert ok and url.endswith("2026%20Constitutional%20Summaries%20booklet%20FINAL.pdf")
+
+    def test_a_section_title_page_naming_a_referendum_refuses(self):
+        pages = [_unpack(p, ("text", "x0", "x1", "top", "bold")) for p in _json("fixtures_ga_amendments_booklet_2026.json")["pages"]]
+        assert ga.parse_booklet(pages, 2026)
+        title = next(i for i, p in enumerate(pages) if i and len(p["words"]) < ga._TITLE_PAGE_MAX_WORDS)
+        pages[title]["words"][-1]["text"] = "Referendum"
+        assert ga.parse_booklet(pages, 2026) is None
+
+    @pytest.mark.asyncio
+    async def test_a_walled_booklet_behind_a_page_that_answered_is_a_blocked_source(self, monkeypatch):
+        async def page(client, u, label, **kw):
+            return self._page()
+
+        async def walled(client, u, label):
+            raise SourceBlocked(f"{label} answered with a bot challenge")
+
+        monkeypatch.setattr(ga, "get_text", page)
+        monkeypatch.setattr(ga, "get_bytes_unless_walled", walled)
+        with pytest.raises(SourceBlocked):
+            await ga.fetch_measures(None, 2026)
+
+    @pytest.mark.asyncio
+    async def test_get_bytes_unless_walled_tells_a_challenge_from_a_failure(self):
+        def answer(request):
+            if request.url.path == "/walled.pdf":
+                return httpx.Response(403, headers={"cf-mitigated": "challenge"}, text="Just a moment...")
+            if request.url.path == "/gone.pdf":
+                return httpx.Response(404)
+            return httpx.Response(200, content=b"%PDF-1.7")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as client:
+            assert await common.get_bytes_unless_walled(client, "https://x.test/ok.pdf", "ok") == b"%PDF-1.7"
+            assert await common.get_bytes_unless_walled(client, "https://x.test/gone.pdf", "gone") is None
+            with pytest.raises(SourceBlocked):
+                await common.get_bytes_unless_walled(client, "https://x.test/walled.pdf", "walled")
 
     def test_registry_description_states_the_fail_closed_rule_and_what_the_reader_cannot_see(self):
         from app.pipeline.fetch import ballot_measure_pdf_sources as sources

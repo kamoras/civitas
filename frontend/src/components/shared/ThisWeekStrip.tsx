@@ -2,10 +2,9 @@ import Link from "next/link";
 import { connection } from "next/server";
 import type { CommentDeadline, StateNextDeadline, ThisWeek } from "@/types/thisWeek";
 import { countdownText } from "@/components/elections/VoterCalendar";
-import { dayHref, shortDate, weekHref } from "@/lib/congress";
+import { rollCallHref, shortDate, weekHref } from "@/lib/congress";
 import { stateBallotHref } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
-import { voteHref } from "@/components/congress/ReportParts";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -203,10 +202,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
                   key={`${v.chamber}-${v.congress}-${v.session}-${v.number}`}
                   className="text-sm leading-snug"
                 >
-                  <Link
-                    href={voteHref(v) ?? dayHref(v.date)}
-                    className="text-ink-hi hover:underline"
-                  >
+                  <Link href={rollCallHref(v)} className="text-ink-hi hover:underline">
                     {v.billLabel ? `${v.billLabel}: ` : ""}
                     {v.title || v.question}
                   </Link>
