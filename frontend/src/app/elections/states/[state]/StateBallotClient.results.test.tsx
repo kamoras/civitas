@@ -180,7 +180,7 @@ describe("the state page in results mode", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ohio results");
     const house = await screen.findByRole("region", { name: "U.S. House" });
     expect(within(house).getByText("Eric Conway")).toBeInTheDocument();
-    expect(within(house).getByText("FLIP · LEADING")).toBeInTheDocument();
+    expect(within(house).getByText("FLIP · LEADING · NOT FINAL")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /BALLOT RESEARCH/ })).toBeInTheDocument();
     expect(fetchLiveResults).toHaveBeenCalledWith("OH");
   });
@@ -798,7 +798,7 @@ describe("the state page in results mode", () => {
     expect(rows[1]).toHaveTextContent("OH-2No count shown here");
     expect(rows[1]).not.toHaveTextContent(/no votes/i);
     // The tally counts the independent's lead too.
-    expect(house).toHaveTextContent("D 0 · R 1 · I 1 LEADING");
+    expect(house).toHaveTextContent("D 0 · R 1 · I 1 LEADING · NOT FINAL");
     const map = districtMapProps.find((p) => p.results?.size);
     expect(map?.feedAnswered).toBe(true);
     act(() => map!.onPick("2026-HOUSE-OH-2"));
