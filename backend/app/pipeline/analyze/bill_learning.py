@@ -57,6 +57,7 @@ from collections import Counter
 import numpy as np
 from sqlalchemy.orm import Session
 
+from app.database import execute_retrying_lock
 from app.models import LearnedClassification
 from app.time_utils import utcnow
 
@@ -264,7 +265,7 @@ def record_classification(
             "learned_at": utcnow(),
         },
     )
-    db.execute(stmt)
+    execute_retrying_lock(db, stmt)
 
 
 def invalidate_thin_classifications(db: Session, min_text_length: int = 40) -> int:
