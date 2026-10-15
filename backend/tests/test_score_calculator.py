@@ -1,6 +1,8 @@
 """Tests for the five representation sub-score calculations."""
 
-
+import importlib.util
+import json
+import pathlib
 
 import pytest
 
@@ -1358,13 +1360,8 @@ class TestStatePviData:
             assert st in pvi, f"{st} missing from state_pvi.json"
             assert pvi[st] == expected, f"{st}: shipped {pvi[st]:+d} vs Cook {expected:+d}"
 
-    def test_generator_compute_pvi_formula(self):
-        """The generator's compute_pvi implements Cook's formula: a state
-        that ran exactly at the national two-party split is EVEN; running
-        more Republican than the nation yields a positive (R) PVI."""
-        import importlib.util
-        import pathlib
-
+    @staticmethod
+    def _generator():
         script = (
             pathlib.Path(__file__).resolve().parent.parent
             / "scripts" / "fetch_state_pvi.py"
@@ -1372,6 +1369,25 @@ class TestStatePviData:
         spec = importlib.util.spec_from_file_location("fetch_state_pvi", script)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        return mod
+
+    def test_shipped_json_reproduces_from_its_inputs(self):
+        """Every figure is recomputed from the two-party counts the file
+        stores beside it (MEDSL's official 2020 and 2024 state returns), so
+        a hand edit of a figure, or of a count, fails here."""
+        mod = self._generator()
+        raw = json.loads(
+            (pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_pvi.json").read_text()
+        )
+        assert set(raw["inputs"]) == set(mod.CYCLES)
+        assert mod.compute_pvi(raw["inputs"]) == raw["states"]
+        assert "tonmcg" not in raw["_source"]
+
+    def test_generator_compute_pvi_formula(self):
+        """The generator's compute_pvi implements Cook's formula: a state
+        that ran exactly at the national two-party split is EVEN; running
+        more Republican than the nation yields a positive (R) PVI."""
+        mod = self._generator()
 
         # compute_pvi derives the national two-party split by summing the
         # states it is given (no separate "national" key since the 2026-07

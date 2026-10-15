@@ -6,8 +6,8 @@ analog of district_pvi.json / fetch_district_pvi.py (which covers House
 seats). Same "ST" -> signed int convention, positive = R lean, negative =
 D lean.
 
-Unlike fetch_district_pvi.py, which scrapes Cook's *published* PVI integer
-out of Wikipedia infoboxes, this script COMPUTES the PVI from underlying
+Unlike fetch/district_pvi.py, which reads Cook's *published* district
+figures from pinned Wikipedia revisions, this script COMPUTES the PVI from underlying
 election data, so the value traces back to real vote counts rather than a
 transcribed number:
 
@@ -36,29 +36,33 @@ feature made this number public: presenting a 2016+2020 lean on a page
 titled "2026 midterm elections" was two cycles stale, and inconsistent
 with district_pvi.json's 2020+2024-window figures shown beside it.
 
-Data sources (network required to regenerate):
+Data sources (network required to regenerate), both MIT Election Data &
+Science Lab (MEDSL) state-level returns transcribed from each state's
+certified canvass:
 
-  2020 (canonical): MIT Election Data & Science Lab (MEDSL),
-    "U.S. President 1976-2020" state-level returns, version 20210113
-    (Harvard Dataverse doi:10.7910/DVN/42MVDX). The Dataverse download API
-    is frequently blocked by outbound proxies, so we fetch a byte-identical
-    mirror of the same file pinned to an immutable commit hash.
+  2020: "U.S. President 1976-2020", version 20210113 (Harvard Dataverse
+    doi:10.7910/DVN/42MVDX). The Dataverse download API is frequently
+    blocked by outbound proxies, so we fetch a byte-identical mirror of
+    the same file pinned to an immutable commit hash.
 
-  2024: MEDSL has not published a state-level 2024 returns file in a
-    proxy-reachable location (their 2024 repo is precinct-level, the
-    Dataverse API is blocked), so 2024 comes from the tonmcg
-    county-level presidential results dataset (compiled from official
-    county canvasses; the de-facto standard public aggregation), summed
-    to state level. Its trustworthiness is not assumed — it is GATED:
-    this script also sums the same dataset's 2020 file and requires the
-    resulting two-party D share to agree with MEDSL's canonical 2020
-    figure within 0.3pp for every state before the 2024 numbers are
-    accepted (measured agreement at adoption: worst state 0.21pp).
+  2024: 2024-president-state.csv from MEDSL's GitHub repository
+    MEDSL/2024-elections-official (released 2025-11, CC0 on Dataverse),
+    pinned to an immutable commit. Until 2026-10 the 2024 half came from
+    the tonmcg county dataset, whose 2024 file is a scrape of a news
+    site's results pages, not an official tabulation; MEDSL's official
+    state file reproduces all 51 figures unchanged.
+
+A candidate's votes are its party-simplified DEMOCRAT / REPUBLICAN rows,
+fusion lines included (MEDSL's New York row already sums Harris's
+Democratic and Working Families lines). The per-state
+two-party counts are written beside the PVIs ("inputs"), so the figures
+can be recomputed from the file alone (tests/test_score_calculator.py
+does).
 
 Fidelity gates (all must pass or the script exits 1 without trusting the
-output): 51 jurisdictions, plausible range/lean-split, per-state
-cross-source 2020 agreement, and per-state continuity against the
-previously committed file (a swapped D/R column or sign flip moves nearly
+output): 51 jurisdictions each with a Democratic and a Republican row in
+both cycles, plausible range/lean-split, and per-state continuity against
+the previously committed file (a swapped D/R column or sign flip moves nearly
 every state by far more than one election cycle ever does).
 
 Run from the repo:
@@ -88,22 +92,19 @@ MEDSL_2020_URL = (
     "us-2008-2020-president.csv"
 )
 
-# tonmcg county-level presidential results (official county canvasses),
-# pinned to an immutable commit. 2024 is the scored input; 2020 exists
-# only to gate the dataset against MEDSL's canonical 2020 numbers.
-_TONMCG_BASE = (
-    "https://raw.githubusercontent.com/tonmcg/US_County_Level_Election_Results_08-24/"
-    "8cccc82f9235dced94a76d143c59a43f4a6bf979/"
+# MEDSL's official 2024 state-level presidential returns, pinned to the
+# commit that last changed the file ("Fixed issue with VT state-level
+# return party labels", 2025-11-20).
+MEDSL_2024_URL = (
+    "https://raw.githubusercontent.com/MEDSL/2024-elections-official/"
+    "f67c9de44cc31e0faa4b94986ba0a01afa3708b3/2024-president-state.csv"
 )
-COUNTY_2024_URL = _TONMCG_BASE + "2024_US_County_Level_Presidential_Results.csv"
-COUNTY_2020_URL = _TONMCG_BASE + "2020_US_County_Level_Presidential_Results.csv"
 
 SOURCE_DESC = (
     "2020: MIT Election Data & Science Lab (MEDSL) U.S. President state-level "
-    "returns v20210113 (doi:10.7910/DVN/42MVDX). 2024: tonmcg county-level "
-    "presidential results (official county canvasses) summed to state level, "
-    "cross-validated against MEDSL for 2020 (<=0.3pp per state, gated). "
-    "Two-party vote shares, Cook PVI formula."
+    "returns v20210113 (doi:10.7910/DVN/42MVDX). 2024: MEDSL 2024 official "
+    "state-level presidential returns (github.com/MEDSL/2024-elections-official, "
+    "2024-president-state.csv, CC0). Two-party vote shares, Cook PVI formula."
 )
 # For maintainers, kept out of _source: the site shows _source as the
 # figure's provenance (PviMethodologyNote), where a regenerate command
@@ -111,18 +112,13 @@ SOURCE_DESC = (
 REGENERATE = "backend/scripts/fetch_state_pvi.py"
 
 WINDOW = "2020+2024"
-AS_OF = "2026-10-08"  # last regenerated from the pinned sources above
+AS_OF = "2026-10-15"  # last regenerated from the pinned sources above
 
 CYCLES = ("2020", "2024")
 
 # Cook's weights for the two elections, most recent heaviest (module
 # docstring). A methodology fact, not a fitted value.
 CYCLE_WEIGHTS = {"2020": 0.25, "2024": 0.75}
-
-# Max per-state divergence (percentage points of two-party D share)
-# tolerated between MEDSL's and the county dataset's 2020 numbers before
-# the county dataset is rejected as a 2024 source.
-CROSS_SOURCE_TOLERANCE_PP = 0.3
 
 # Max per-state PVI movement tolerated vs. the previously committed file
 # (2016+2020 window -> 2020+2024 window). One shared election plus one new
@@ -134,65 +130,32 @@ UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (state PVI ingestion; contact: {C
 
 DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_pvi.json"
 
-STATE_PO = {
-    "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR",
-    "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE",
-    "District of Columbia": "DC", "Florida": "FL", "Georgia": "GA",
-    "Hawaii": "HI", "Idaho": "ID", "Illinois": "IL", "Indiana": "IN",
-    "Iowa": "IA", "Kansas": "KS", "Kentucky": "KY", "Louisiana": "LA",
-    "Maine": "ME", "Maryland": "MD", "Massachusetts": "MA", "Michigan": "MI",
-    "Minnesota": "MN", "Mississippi": "MS", "Missouri": "MO", "Montana": "MT",
-    "Nebraska": "NE", "Nevada": "NV", "New Hampshire": "NH", "New Jersey": "NJ",
-    "New Mexico": "NM", "New York": "NY", "North Carolina": "NC",
-    "North Dakota": "ND", "Ohio": "OH", "Oklahoma": "OK", "Oregon": "OR",
-    "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC",
-    "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT",
-    "Vermont": "VT", "Virginia": "VA", "Washington": "WA",
-    "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY",
-}
-
-
 def _get(url: str) -> str:
     req = urllib.request.Request(url, headers=UA)
     with urllib.request.urlopen(req, timeout=90) as r:
         return r.read().decode("utf-8")
 
 
-def fetch_medsl_2020() -> dict[str, dict[str, int]]:
-    """{"ST": {"D": votes, "R": votes}} for 2020 from the MEDSL file."""
+def _medsl_two_party(text: str, year: str) -> dict[str, dict[str, int]]:
+    """{"ST": {"D": votes, "R": votes}} from a MEDSL state-level returns CSV
+    (the columns the two releases share). The writein flag is not read:
+    the 2020 release marks DC's Biden and Trump rows as write-ins, and the
+    2024 release has no Democratic or Republican write-in rows."""
     counts: dict[str, dict[str, int]] = {}
-    for row in csv.DictReader(io.StringIO(_get(MEDSL_2020_URL))):
-        if row["year"].strip() != "2020":
+    for row in csv.DictReader(io.StringIO(text)):
+        if row["year"].strip() != year:
             continue
         party = row["party_simplified"].strip().upper()
         key = "D" if party == "DEMOCRAT" else "R" if party == "REPUBLICAN" else None
         if key is None:
             continue
         st = row["state_po"].strip().upper()
+        votes_col = "candidatevotes" if "candidatevotes" in row else "votes"
         try:
-            votes = int(row["candidatevotes"])
+            votes = int(row[votes_col])
         except (ValueError, KeyError):
             continue
         counts.setdefault(st, {"D": 0, "R": 0})[key] += votes
-    return counts
-
-
-def fetch_county_sums(url: str) -> dict[str, dict[str, int]]:
-    """{"ST": {"D": votes, "R": votes}} by summing a tonmcg county CSV."""
-    counts: dict[str, dict[str, int]] = {}
-    for row in csv.DictReader(io.StringIO(_get(url))):
-        st = STATE_PO.get(row["state_name"].strip())
-        if st is None:
-            # Unknown jurisdiction label — surface it; silently dropping a
-            # renamed state would corrupt the national baseline.
-            print(f"WARNING: unmapped state_name {row['state_name']!r} — skipped")
-            continue
-        bucket = counts.setdefault(st, {"D": 0, "R": 0})
-        try:
-            bucket["D"] += int(float(row["votes_dem"]))
-            bucket["R"] += int(float(row["votes_gop"]))
-        except (ValueError, KeyError):
-            continue
     return counts
 
 
@@ -234,33 +197,18 @@ def compute_pvi(by_cycle: dict[str, dict[str, dict[str, int]]]) -> dict[str, int
     return out
 
 
-def cross_source_gate(
-    medsl_2020: dict[str, dict[str, int]], county_2020: dict[str, dict[str, int]],
+def ingestion_gates(
+    pvi: dict[str, int], previous: dict[str, int] | None,
+    by_cycle: dict[str, dict[str, dict[str, int]]],
 ) -> list[str]:
-    """Reject the county dataset unless its 2020 two-party shares agree
-    with MEDSL's canonical 2020 figures for every state."""
-    failures = []
-    medsl_share = _two_party_d(medsl_2020)
-    county_share = _two_party_d(county_2020)
-    for st, canonical in sorted(medsl_share.items()):
-        if st not in county_share:
-            failures.append(f"cross-source: {st} missing from county 2020 data")
-            continue
-        diff_pp = abs(canonical - county_share[st]) * 100
-        if diff_pp > CROSS_SOURCE_TOLERANCE_PP:
-            failures.append(
-                f"cross-source: {st} 2020 two-party D share diverges "
-                f"{diff_pp:.2f}pp from MEDSL (> {CROSS_SOURCE_TOLERANCE_PP}pp) "
-                "— county dataset not trustworthy for 2024"
-            )
-    return failures
-
-
-def ingestion_gates(pvi: dict[str, int], previous: dict[str, int] | None) -> list[str]:
     """Structural + fidelity checks — guard the ingestion, not the scores:
     a sign flip or swapped column would silently invert every senator's
     seat expectation downstream."""
     failures = []
+    for y in CYCLES:
+        for st, dr in sorted(by_cycle[y].items()):
+            if not dr["D"] or not dr["R"]:
+                failures.append(f"{y}: {st} has no {'Democratic' if not dr['D'] else 'Republican'} votes")
     if len(pvi) != 51:
         failures.append(f"expected 51 jurisdictions (50 states + DC), got {len(pvi)}")
     if not all(-50 <= v <= 50 for v in pvi.values()):
@@ -295,12 +243,11 @@ def main() -> int:
         except (ValueError, OSError):
             previous = None
 
-    medsl_2020 = fetch_medsl_2020()
-    county_2020 = fetch_county_sums(COUNTY_2020_URL)
-    county_2024 = fetch_county_sums(COUNTY_2024_URL)
-
-    failures = cross_source_gate(medsl_2020, county_2020)
-    pvi = compute_pvi({"2020": medsl_2020, "2024": county_2024})
+    by_cycle = {
+        "2020": _medsl_two_party(_get(MEDSL_2020_URL), "2020"),
+        "2024": _medsl_two_party(_get(MEDSL_2024_URL), "2024"),
+    }
+    pvi = compute_pvi(by_cycle)
 
     vals = list(pvi.values())
     r_lean = sum(1 for v in vals if v > 0)
@@ -309,7 +256,7 @@ def main() -> int:
     print(f"computed {len(pvi)} jurisdictions: R-leaning {r_lean}, D-leaning "
           f"{d_lean}, EVEN {even}, min {min(vals)}, max {max(vals)}")
 
-    failures += ingestion_gates(pvi, previous)
+    failures = ingestion_gates(pvi, previous, by_cycle)
     for f in failures:
         print("GATE FAILED:", f)
     if failures:
@@ -330,6 +277,7 @@ def main() -> int:
             "_sign": "positive = R lean, negative = D lean (matches district_pvi.json)",
             "_window": WINDOW,
             "_as_of": AS_OF,
+            "inputs": {y: {st: by_cycle[y][st] for st in pvi} for y in CYCLES},
             "states": pvi,
         },
         open(output, "w"),

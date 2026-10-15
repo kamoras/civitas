@@ -120,8 +120,9 @@ export default function DataChapter() {
               latest filed, so an amendment replaces the report it amends.
             </Fact>
             <Fact label="Partisan lean">
-              State and district Cook PVI, computed from official presidential returns (MIT Election
-              Lab, county canvasses) and published district figures.
+              State and district Cook PVI. A state&apos;s is computed from its certified
+              presidential returns as the MIT Election Lab publishes them; a district&apos;s is
+              Cook&apos;s published figure.
             </Fact>
           </Facts>
         </Sub>
