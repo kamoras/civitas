@@ -523,6 +523,91 @@ def _no_district_lines_under_recheck(monkeypatch):
     monkeypatch.setattr(district_pvi, "_UNDER_RECHECK", {})
 
 
+# --- No model and no outside network in fast tests -------------------------
+#
+# The fast job promises no model and no network (AGENTS.md "Running backend
+# tests"), and nothing held it to that. A fast test whose code path reached
+# get_embedding_model() / get_similarity_model() downloaded the model from
+# the Hugging Face Hub on CI, where the network is up, and offline the Hub
+# client retried with backoff for over a minute before failing: 69 s per
+# test, 138 s for one that loaded it twice, and 69 s in one teardown while
+# the app's startup preload, still running in an executor thread, finished
+# failing. A fast test whose mocks missed a fetch reached the real source on
+# CI (Congress.gov, the FEC, Voteview, GitHub, state election sites) and
+# passed or failed on what that site said that minute, while offline it took
+# the failure path. Both now fail at once, on CI as offline.
+#
+# Installed for the whole session rather than per test, because the code
+# that trips them often runs in a thread that outlives the test that started
+# it (that preload); _SLOW_TEST_RUNNING says whether the test now running
+# may use them. A test that needs the real model is marked slow; one that
+# wants a stand-in patches the loader or vector_store.SentenceTransformer,
+# which replaces this for that test. Loopback stays reachable for tests
+# that serve something themselves.
+
+_SLOW_TEST_RUNNING = False
+_LOOPBACK_NAMES = {"localhost", "127.0.0.1", "::1", "", "0.0.0.0", "::"}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _fast_tests_offline():
+    import socket
+
+    from app.pipeline import vector_store
+
+    real_model, real_getaddrinfo = vector_store.SentenceTransformer, socket.getaddrinfo
+
+    def sentence_transformer(name, *args, **kwargs):
+        if not _SLOW_TEST_RUNNING:
+            raise OSError(f"fast tests load no embedding model ({name}): mark the test slow or patch the loader")
+        return real_model(name, *args, **kwargs)
+
+    def getaddrinfo(host, *args, **kwargs):
+        name = host.decode() if isinstance(host, bytes) else host
+        if not _SLOW_TEST_RUNNING and name is not None and name not in _LOOPBACK_NAMES:
+            raise socket.gaierror(socket.EAI_NONAME, f"fast tests reach no outside host ({name})")
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    vector_store.SentenceTransformer, socket.getaddrinfo = sentence_transformer, getaddrinfo
+    yield
+    vector_store.SentenceTransformer, socket.getaddrinfo = real_model, real_getaddrinfo
+
+
+@pytest.fixture(autouse=True)
+def _slow_test_running(request):
+    global _SLOW_TEST_RUNNING
+    _SLOW_TEST_RUNNING = request.node.get_closest_marker("slow") is not None
+    yield
+    _SLOW_TEST_RUNNING = False
+
+
+@pytest.fixture(autouse=True)
+def _fetches_do_not_wait(monkeypatch):
+    """The fetch modules' rate limiters and retry backoff don't sleep in
+    tests.
+
+    A fetch test drives a mocked source through the real fetch_with_retry,
+    so a page it makes fail was retried after 2 s and then 4 s of real
+    sleep, and every request first waited out its source's rate limit
+    (Congress.gov 1.2 rps, the FEC 0.25 rps, a state site 1 rps) — 6 to
+    12 s for a test whose subject is what the code does with the failure,
+    not how long it waits. Tests that are about the waiting pass their own
+    backoff_s or build their own RateLimiter, which this leaves alone: it
+    zeroes only the limiters already registered when the test starts (the
+    fetch modules' own) and only the retry functions' default backoff."""
+    from app.pipeline import rate_limiter
+    from app.pipeline.fetch import fec, govinfo, http_utils
+
+    for limiter in list(rate_limiter._REGISTRY.values()):
+        monkeypatch.setattr(limiter, "min_interval", 0.0)
+    # The default is bound into each function at definition, so it is
+    # changed where Python keeps it — every importer shares the function.
+    for fetch in (http_utils.fetch_with_retry, http_utils.fetch_with_retry_requests):
+        monkeypatch.setitem(fetch.__kwdefaults__, "backoff_s", 0.0)
+    for module in (fec, govinfo):  # pass their own constant
+        monkeypatch.setattr(module, "RETRY_BACKOFF_S", 0.0)
+
+
 @pytest.fixture(autouse=True)
 def _no_running_pipeline_chains(monkeypatch):
     """Every test starts with no pipeline chain recorded as running

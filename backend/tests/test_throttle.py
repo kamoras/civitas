@@ -193,7 +193,10 @@ class TestFailsOpen:
     every limited endpoint into an outage."""
 
     @pytest.fixture(autouse=True)
-    def _unusable(self, tmp_path):
+    def _unusable(self, tmp_path, monkeypatch):
+        # Opening a store that can't exist is retried for the busy timeout
+        # (2 s) before it gives up; what is tested is that it gives up open.
+        monkeypatch.setattr(throttle, "_BUSY_TIMEOUT_S", 0.01)
         previous = throttle._path
         throttle.use_path(str(tmp_path / "no-such-dir" / "throttle.db"))
         yield

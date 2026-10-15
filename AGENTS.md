@@ -1501,8 +1501,9 @@ cd backend && .venv/bin/python -m pytest tests/ -v
 # Via Docker
 docker compose run --rm --no-deps backend python -m pytest tests/ -v
 
-# Fast tests only (no embedding model; runs offline)
-docker compose run --rm --no-deps backend python -m pytest tests/ -v -m "not slow"
+# Fast tests only (no embedding model; runs offline). -n N runs N
+# pytest-xdist workers; CI uses -n auto
+docker compose run --rm --no-deps backend python -m pytest tests/ -v -m "not slow" -n 4
 ```
 
 Test configuration is in `backend/pytest.ini`. Async tests use
@@ -1511,6 +1512,18 @@ model `@pytest.mark.slow`** (~10s startup). The fast job runs `-m "not
 slow"` on every PR and must pass with no network access and no model; the
 Embedding Tests job runs `-m slow` on pushes to `main` and on any PR that
 touches `backend/requirements.txt` or `backend/app/pipeline/`.
+
+`conftest.py` holds the fast tests to that: in a test not marked slow,
+constructing a sentence-transformer raises at once and resolving any host
+but loopback fails at once, on CI as offline (`_fast_tests_offline`). Until
+2026-10 a fast test that reached the model downloaded it on CI and waited
+out the Hub client's retries offline (69 s a test), and one whose mocks
+missed a fetch read the live source on CI. The fetch modules' rate limiters
+and the retry functions' default backoff don't sleep in tests either
+(`_fetches_do_not_wait`); a test about the waiting builds its own
+`RateLimiter` or passes `backoff_s`. Every test must also pass under xdist,
+where each worker is its own process with its own share of the files: no
+test may rely on another having run first in the same process.
 
 ### Environment variables
 
@@ -1784,6 +1797,11 @@ the pending list).
 - The "this week" strip (`components/shared/ThisWeekStrip.tsx`) is an async
   server component; a client page gets it as a `strip` prop from its server
   `page.tsx`, never by fetching it on the client.
+- Every page's `<main>` is `id="main-content"`: the skip link targets it, and
+  `globals.css` gives it `min-height: 100vh` so the footer never paints in the
+  first screen while a client-fetched page loads and then jumps away (CLS
+  0.58-0.80 on /action, /elections and Explore documents before 2026-10-14).
+  `layoutStability.test.ts` fails on a `<main>` without the id.
 - Large tab components are code-split with `next/dynamic` to reduce initial
   bundle size (e.g., Action Center tabs load on demand). Use in-memory
   `cachedFetch` from `src/lib/api.ts` for API calls that benefit from
