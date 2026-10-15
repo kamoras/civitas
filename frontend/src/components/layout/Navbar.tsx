@@ -196,10 +196,13 @@ export default function Navbar() {
             </a>
           </div>
 
-          {/* Mobile hamburger */}
+          {/* Mobile hamburger. A 44x44 target (WCAG 2.5.8 asks 24, 2.5.5 44)
+              around the same 20 px word: the negative margins give the
+              padding back, so the bar's height and the word's place don't
+              move. It was the 36x20 word alone, in the hardest thumb zone. */}
           <button
             ref={toggleRef}
-            className="md:hidden text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
+            className="md:hidden -my-3 -mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
             onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
             aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={menuOpen}
