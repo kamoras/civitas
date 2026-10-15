@@ -29,7 +29,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # calls but not sharp's dlopen()'d libvips-cpp.so — verified live: sharp
 # 0.34.5's traced output happened to include it, 0.35.x's does not (empty
 # @img/sharp-libvips-linuxmusl-x64/lib/), so next/image silently breaks
-# at request time despite `docker build` succeeding. Copying @img
+# at request time despite `docker build` succeeding (and so would the
+# /photo/<kind>/<id>/<width> route, which resizes with sharp). Copying @img
 # straight from deps (the un-traced, un-pruned npm ci output) sidesteps
 # the tracer gap instead of depending on it staying lucky across sharp
 # releases.

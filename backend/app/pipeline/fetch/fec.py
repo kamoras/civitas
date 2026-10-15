@@ -72,7 +72,8 @@ async def _candidate_latest_election(
     client: httpx.AsyncClient, db: Session, candidate_id: str,
 ) -> int | None:
     """The latest election year on an FEC candidate id's profile (0 when the
-    profile lists none), or None when the id doesn't resolve at all.
+    profile lists none), or None when the id doesn't resolve at all; raises
+    FecUnavailable when the request failed.
 
     Checks the bare /candidate/{id}/ profile endpoint, not /totals/ — a
     real but financially inactive candidate can have zero totals rows,
@@ -84,12 +85,17 @@ async def _candidate_latest_election(
     member files for a new cycle.
     """
     cache_key = f"candidate-profile-{candidate_id}"
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         return int(cached.get("latest_election") or 0)
 
-    data = await _fetch_with_retry(client, f"{FEC_API_BASE}/candidate/{candidate_id}/")
-    results = (data or {}).get("results") or []
+    # A failed request raises (FecUnavailable): reading it as "this id
+    # doesn't resolve" let an older id win and be cached as the member's
+    # committee. The FEC answers an id it doesn't know with an empty result
+    # (200), the real "doesn't resolve" (production logs, 2026-10-14: the
+    # crosswalk ids that don't resolve log no client error).
+    data = await _fetch_or_raise(client, f"{FEC_API_BASE}/candidate/{candidate_id}/")
+    results = data.get("results") or []
     if not results:
         return None
     profile = results[0]
@@ -143,7 +149,7 @@ async def find_candidate(
     """
     district_suffix = f"-{district}" if district else ""
     cache_key = f"candidate-search-{re.sub(r'\\s+', '_', name)}-{state}-{office}{district_suffix}"
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         return cached
 
@@ -564,7 +570,7 @@ async def fetch_candidate_financials(
 ) -> list[dict]:
     """Fetch candidate financial totals, most recent election period first."""
     cache_key = financials_cache_key(candidate_id)
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         # Sort cached entries too — entries cached before 2026-07 were
         # stored in whatever order the API returned.
@@ -584,7 +590,7 @@ async def fetch_candidate_committees(
 ) -> list[dict]:
     """Fetch the candidate's principal campaign committee."""
     cache_key = f"candidate-committees-{candidate_id}"
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         return cached
 
@@ -637,7 +643,7 @@ async def with_seat_election(
         # Every cycle in one page: asked for a cycle it has no row for, the
         # endpoint answers 404, which can't be told from a dead link.
         cache_key = f"committee-totals-{cid}"
-        rows = api_cache_get(db, "fec", cache_key)
+        rows = api_cache_get(db, "fec", cache_key, spread=True)
         if rows is None:
             data = await _fetch_or_raise(client, f"{FEC_API_BASE}/committee/{cid}/totals/?per_page=100")
             rows = data.get("results") or []
@@ -706,7 +712,7 @@ async def fetch_committee_receipts(
             Omit to fetch unwindowed (career-lifetime) data.
     """
     cache_key = f"committee-receipts-indiv-v2-{committee_id}-{_cycle_tag(cycles)}"
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         return cached
 
@@ -728,7 +734,7 @@ async def fetch_pac_receipts(
     used for receipt totals.
     """
     cache_key = f"committee-receipts-pac-v2-{committee_id}-{_cycle_tag(cycles)}"
-    cached = api_cache_get(db, "fec", cache_key)
+    cached = api_cache_get(db, "fec", cache_key, spread=True)
     if cached is not None:
         return cached
 
@@ -904,9 +910,12 @@ async def fetch_contribution_detail(
     and by employer. A part whose source couldn't be read is None, so the
     sampled receipts stand in for it rather than it reading as zero."""
     pacs = candidate_committee_contributions(contributions, candidate_id, cycles)
+    unread: set[str] = set()
+    committees = await resolve_committee_meta(client, db, set(pacs or ()), master, unread)
     return {
         "pacs": pacs,
-        "committees": await resolve_committee_meta(client, db, set(pacs or ()), master),
+        # A giver whose registration couldn't be read makes the part unread.
+        "committees": None if unread else committees,
         "occupations": await _merged_totals(fetch_occupation_totals, client, db, committee_ids, cycles, "occupation"),
         "employers": await _merged_totals(fetch_employer_totals, client, db, committee_ids, cycles, "employer"),
     }
@@ -920,6 +929,9 @@ async def fetch_contribution_detail(
 # unique contributing PAC across ALL senators/reps, not per-candidate, and
 # re-fetching it every pipeline run would be pure waste.
 COMMITTEE_TYPE_CACHE_TTL_HOURS = 24 * 90
+# How old a cached committee registration may be and still stand in for a
+# failed request.
+_STALE_COMMITTEE_META_HOURS = 24 * 365 * 2
 
 
 async def fetch_committee_meta(
@@ -934,7 +946,8 @@ async def fetch_committee_meta(
     (is_political_committee). The connected organization is left None: the
     API's affiliated-committee field is not the sponsor field, and the
     lobbying lookup would rather search the donor's own name than a wrong one.
-    Returns None if the committee isn't found.
+    Returns None if the committee isn't found; raises FecUnavailable when
+    the request failed and no earlier answer is cached.
     """
     cache_key = f"committee-meta-v2-{committee_id}"
     cached = api_cache_get(db, "fec", cache_key, max_age_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS)
@@ -952,19 +965,25 @@ async def fetch_committee_meta(
     if legacy is not None and legacy.get("committee_type"):
         return {"type": legacy["committee_type"], "designation": None, "connectedOrg": None}
 
-    data = await _fetch_with_retry(client, f"{FEC_API_BASE}/committee/{committee_id}/")
-    results = (data or {}).get("results", [])
+    try:
+        data = await _fetch_or_raise(client, f"{FEC_API_BASE}/committee/{committee_id}/")
+    except FecUnavailable:
+        # A failed request is not "no such committee": an earlier answer,
+        # however old (a registration's type barely changes), stands in;
+        # with none, the caller is told (resolve_committee_meta's `unread`).
+        stale = api_cache_get(db, "fec", cache_key, max_age_hours=_STALE_COMMITTEE_META_HOURS)
+        if stale is not None:
+            return stale.get("meta")
+        raise
+    results = data.get("results", [])
     meta = {
         "type": results[0].get("committee_type"),
         "designation": results[0].get("designation"),
         "orgType": results[0].get("organization_type"),
         "connectedOrg": None,
     } if results else None
-    if data is not None:
-        # A failed fetch (None) is not cached: an outage mustn't mark a real
-        # committee as unknown for 90 days.
-        api_cache_set(db, "fec", cache_key, {"meta": meta},
-                      normal_ttl_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS)
+    api_cache_set(db, "fec", cache_key, {"meta": meta},
+                  normal_ttl_hours=COMMITTEE_TYPE_CACHE_TTL_HOURS)
     return meta
 
 
@@ -1177,6 +1196,7 @@ def committee_master_cycles(today: date | None = None) -> list[int]:
 
 async def resolve_committee_meta(
     client: httpx.AsyncClient, db: Session, committee_ids: set[str], master: dict[str, dict],
+    unread: set[str] | None = None,
 ) -> dict[str, dict]:
     """{committee_id: {"type", "designation", "connectedOrg"}} for the
     contributing PACs; a committee found nowhere is left out.
@@ -1186,10 +1206,22 @@ async def resolve_committee_meta(
     committee registered after the last weekly file, or every committee if
     the bulk files couldn't be downloaded. Either way the political-committee
     rule sees a type and designation.
+
+    A committee whose registration couldn't be read (FecUnavailable) is
+    added to `unread` and left out — not read as an unknown committee, which
+    would let a political committee's money count as an ordinary PAC's. The
+    caller decides what that member's funding can still say. Without an
+    `unread` set to report into, the first such committee raises.
     """
     metas: dict[str, dict] = {}
     for cid in committee_ids:
-        meta = master.get(cid) or await fetch_committee_meta(client, db, cid)
+        try:
+            meta = master.get(cid) or await fetch_committee_meta(client, db, cid)
+        except FecUnavailable:
+            if unread is None:
+                raise
+            unread.add(cid)
+            continue
         if meta:
             metas[cid] = dict(meta)
     await _add_sponsor_industries(client, db, metas)
