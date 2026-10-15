@@ -161,4 +161,6 @@ def test_the_endpoint(db_session, freeze_utcnow, monkeypatch):
     assert body["congress"]["sentence"] == (
         "The Senate's next meeting is not on record yet. The House's next meeting is not on record yet."
     )
+    # The day the sentence's "today" is, Eastern (noon ET on the 11th).
+    assert body["congress"]["today"] == "2026-10-11"
     assert "max-age=300" in r.headers["cache-control"]

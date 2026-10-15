@@ -1589,7 +1589,7 @@ The homepage, and in a one-line form the pages most readers arrive on (a member'
 - **Congress this week.** Whether each chamber is in session today, its record votes this week (the latest three listed, each linked to its bill), and the next meeting as the Record itself gives it (the newest notice on or before today, its date read from the Digest's or floor log's own wording). A week with no session reads "Congress is out until Tuesday, October 20"; a chamber with no notice on record says so.
 - **Comment deadlines.** The next three on federal rules: rules an Action Center issue from the last two weeks cites first, then rules other documents cite, then any other rule, soonest deadline first within each. Notices (with them every information-collection and meeting notice) are left out by type, and so is a templated series: a Regulation Identifier Number shared by three or more open rules, as every FAA airworthiness directive shares one (on 2026-10-11, 79 RINs covered one open rule, 2 covered two, then 4, 4, 11 and 54). A series also inflates the citation count, since every document under the RIN reads as citing the rest.
 
-Every sentence is a template around stored figures. When the backend can't answer, the strip is left out and the page renders as before.
+Every sentence is a template around stored figures. When the backend can't answer, the strip is left out and the page renders as before. On a Congress day page about another day (a past day's report, or `/congress` when the latest sitting wasn't today), the one-line strip is headed "Now · Thu, Oct 15" (the API's `congress.today`, Eastern) rather than "This week": a reader on September 16's page read "This week … The Senate meets today" as September 16.
 
 ## Source ledger
 

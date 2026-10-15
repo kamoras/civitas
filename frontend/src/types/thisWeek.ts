@@ -59,6 +59,8 @@ export interface ThisWeek {
     deadlines?: StateNextDeadline[];
   };
   congress: {
+    /** The day the sentence's "today" is (Eastern); absent from an older API. */
+    today?: string;
     weekStart: string;
     sentence: string;
     chambers: Record<"senate" | "house", ThisWeekChamber>;
