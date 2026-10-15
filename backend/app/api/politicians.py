@@ -23,7 +23,9 @@ whole grace period. Presidents are never removed by any of that.
 import json
 import logging
 import pathlib
+import re
 import statistics
+from difflib import SequenceMatcher
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -561,6 +563,47 @@ def house_districts_by_county(
         else []
     )
     return _cached_json({"state": st, "congress": congress, "available": lines is not None, "districts": districts})
+
+
+# How alike a mistyped address must be to a politician's id, or to one word
+# of it, for the 404 to offer them (difflib's ratio, Ratcliff & Obershelp
+# 1988). One wrong letter in a surname ("kelli" for a "kelly") is 0.8; a
+# different surname of the same length shares few letters in order and
+# falls well under. A few more names offered costs a reader one look; a
+# missing right one sends them back to the directory.
+SUGGEST_MIN_RATIO = 0.75
+SUGGEST_LIMIT = 5
+
+
+def _address_likeness(want: str, pid: str) -> float:
+    """How alike `want` is to the id, whole or any one of its words."""
+    words = [w for w in re.split(r"[-_]", pid) if w]
+    return max([SequenceMatcher(None, want, pid).ratio()] + [SequenceMatcher(None, want, w).ratio() for w in words])
+
+
+@router.get("/politicians/suggest")
+def suggest_politicians(
+    q: str = Query(..., min_length=2, max_length=80),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """The politicians whose page addresses are closest to `q`, a
+    /politicians/{id} that matched no one (a typo, a surname alone, an old
+    link): what that page's 404 offers, so the member is one tap away
+    rather than five. Best match first; empty when nothing is close."""
+    want = re.sub(r"[^a-z0-9]+", "-", q.lower()).strip("-")
+    rows: list[dict] = []
+    for model, role in ((Senator, "Senator"), (Representative, "Representative")):
+        for pid, name, party, state in db.query(model.id, model.name, model.party, model.state):
+            rows.append({"id": pid, "name": name, "role": role, "party": party, "state": state})
+    for pid, name, party in db.query(President.id, President.name, President.party):
+        rows.append({"id": pid, "name": name, "role": "President", "party": party, "state": None})
+    for pid, name in db.query(Justice.id, Justice.name):
+        rows.append({"id": pid, "name": name, "role": "Justice", "party": None, "state": None})
+    scored = sorted(((_address_likeness(want, r["id"]), r) for r in rows), key=lambda x: (-x[0], x[1]["name"]))
+    return _cached_json(
+        {"suggestions": [r for score, r in scored[:SUGGEST_LIMIT] if want and score >= SUGGEST_MIN_RATIO]},
+        max_age=CACHE_TTL_DETAIL_S,
+    )
 
 
 @router.get("/politicians/{politician_id}")

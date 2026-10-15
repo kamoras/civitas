@@ -67,8 +67,9 @@ export default function DataChapter() {
               spending, and declared candidates for every federal race.
             </Fact>
             <Fact label="Senate.gov & House Clerk">
-              Roll-call votes with every member&apos;s position, and each chamber&apos;s live floor
-              log.
+              Roll-call votes with every member&apos;s position, each shown on its own page
+              (nominations included) and linked to the chamber&apos;s record, and each
+              chamber&apos;s live floor log.
             </Fact>
             <Fact label="unitedstates/congress-legislators">
               Committee seats and party leadership titles, an open dataset refreshed weekly. It
