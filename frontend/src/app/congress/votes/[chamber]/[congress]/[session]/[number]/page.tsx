@@ -35,11 +35,24 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       path: `/congress/votes/${p.chamber}/${p.congress}/${p.session}/${p.number}`,
       noindex: true,
     });
+  const meta = describeRollCall(vote);
   return pageMetadata({
-    ...describeRollCall(vote),
+    ...meta,
     path: rollCallHref(vote),
     feed: TOPIC_FEEDS.congress,
     type: "article",
+    // The roll call's own card (tally by party, source, as-of), not the
+    // site card: a shared vote previews as the vote.
+    images: [
+      {
+        url: absoluteUrl(
+          `/api/og?vote=${vote.chamber}/${vote.congress}/${vote.session}/${vote.number}`
+        ),
+        width: 1200,
+        height: 630,
+        alt: meta.title,
+      },
+    ],
   });
 }
 

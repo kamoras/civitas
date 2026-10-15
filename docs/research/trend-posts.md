@@ -196,3 +196,9 @@ same card object and states every figure the image shows. The pipeline
 reads the PNG inside the stack (`FRONTEND_INTERNAL_URL`). A render failure,
 a non-PNG or anything over Bluesky's 1,000,000-byte limit falls back to the
 link card, and the post is never held for its picture.
+
+The link card on odd days is drawn from the linked page's own `og:image`.
+Until 2026-10-15 a roll call's, a bill's and an Explore document's page
+named the generic site image there, so link-card days before then pitted a
+generic thumbnail against the record's picture; since then each of those
+pages names its record card, and the two arms differ only in format.

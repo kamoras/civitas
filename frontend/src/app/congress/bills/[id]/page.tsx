@@ -82,10 +82,21 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   // index as two pages; an earlier Congress's bill keeps its ?congress=.
   const path = billCanonicalPath(billId, record?.congress ?? detail!.congress);
   if (detail) {
+    const meta = describeBill(detail, record?.billLabel ?? detail.billId);
     return pageMetadata({
-      ...describeBill(detail, record?.billLabel ?? detail.billId),
+      ...meta,
       path,
       type: "article",
+      // The bill's own card. Only a bill the site tracks has one (the card
+      // reads the stored record); any other bill keeps the site card.
+      images: [
+        {
+          url: absoluteUrl(`/api/og?bill=${detail.congress}/${detail.billId}`),
+          width: 1200,
+          height: 630,
+          alt: meta.title,
+        },
+      ],
     });
   }
   return pageMetadata({
