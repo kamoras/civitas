@@ -9,14 +9,19 @@ vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 vi.mock("@/components/BackToTop", () => ({ default: () => null }));
 vi.mock("@/components/bills/BillStageFlow", () => ({
   default: () => null,
-  ALL_STAGE_CODES: ["REPORTED"],
+  ALL_STAGE_CODES: ["REFERRED", "REPORTED"],
 }));
 vi.mock("@/components/bills/BillRow", () => ({
   default: ({ bill }: { bill: { billId: string } }) => <p>{bill.billId}</p>,
 }));
 vi.mock("@/lib/api", () => ({
-  fetchBillsInFlight: vi.fn(async (opts: { sort?: string }) => ({
-    bills: opts.sort === "hot" ? [{ billId: "S.12", chamber: "senate", sponsorId: "x" }] : [],
+  fetchBillsInFlight: vi.fn(async (opts: { sort?: string; stage?: string; q?: string }) => ({
+    bills:
+      opts.sort === "hot"
+        ? [{ billId: "S.12", chamber: "senate", sponsorId: "x" }]
+        : opts.q && opts.stage
+          ? [{ billId: `${opts.stage}-match`, chamber: "senate", sponsorId: "x" }]
+          : [],
     total: opts.sort === "hot" ? 1 : 0,
     page: 1,
     perPage: 50,
@@ -52,6 +57,16 @@ describe("bills page", () => {
       "true"
     );
     expect(screen.getByRole("button", { name: "D" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("opens every stage a search's matches sit at, not only a lone one", async () => {
+    render(<BillsPage />);
+    await screen.findByText("S.12");
+    fireEvent.change(screen.getByRole("textbox", { name: /bill number/ }), {
+      target: { value: "student loans" },
+    });
+    expect(await screen.findByText("REFERRED-match")).toBeInTheDocument();
+    expect(await screen.findByText("REPORTED-match")).toBeInTheDocument();
   });
 
   // Every toggle in a filter group says whether it is on (WCAG 4.1.2): the

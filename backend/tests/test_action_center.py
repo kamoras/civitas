@@ -2580,6 +2580,53 @@ class TestDigestFiltering:
         article.summary = body
         assert _digest_reason(article) is None
 
+    @pytest.mark.parametrize("title,body", [
+        # A two-story briefing names both stories in its headline, so the
+        # body check's headline condition passes it, and its body has two
+        # items, under that check's floor. Live, 2026-10-13: its two lines
+        # about the second story made a two-claim issue under a two-story
+        # headline.
+        ("Government spent millions on Varga ads. And, federal agents raid Dana Okafor's home",
+         "The government is using millions of taxpayers' dollars on pro-Varga ads, even after "
+         "officials said this would not happen. And, federal agents search Rep. Dana Okafor's "
+         "home. (Image credit: Lee Quillen)"),
+        ("Live updates: Judge scolds Interior over Brandt Park tree cutting; feds search Okafor's home",
+         "U.S. District Judge Ana Lindqvist scolded Interior lawyers over tree cutting in Brandt "
+         "Park. Agents searched the home of Rep. Dana Okafor (D-Minn.) on Monday."),
+    ])
+    def test_a_headline_and_body_telling_the_same_unrelated_stories_are_dropped(self, title, body):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        article = _make_article(title)
+        article.summary = body
+        assert _digest_reason(article) == "headline and body list the same unrelated stories"
+
+    @pytest.mark.parametrize("title,body", [
+        # One story in two headline sentences: its teaser names both
+        # halves in one item...
+        ("Varga claims he was an assembly line worker. The UAW said that is a stretch.",
+         "Varga told voters he worked the line, but the UAW said his time at the plant was a "
+         "summer job."),
+        # ...or adds an item naming neither (a photo caption first).
+        ("Lawmakers added $1 to Texans' car insurance. The money paid for Flock cameras.",
+         "Mayor Lee Quillen speaks at a news conference in Honolulu. Texas lawmakers added $1 "
+         "to every policy. Flock now runs the cameras."),
+        # Two candidates after one debate.
+        ("Rep. Moore says he puts policy over politics; Crosby calls himself a chance for change",
+         "Rep. Blake Moore and Peter Crosby met in a debate on Tuesday. Moore defended his record "
+         "and Crosby called for change."),
+        # A live blog whose teaser covers one of its stories is left to the
+        # checks downstream (precision first).
+        ("Live updates: Varga marks Columbus Day; Okafor rallies voters in Ohio",
+         "Varga set up a panel on Friday to investigate the Fed governor. Varga said more was to come."),
+    ])
+    def test_a_single_story_told_in_two_headline_sentences_is_kept(self, title, body):
+        from app.pipeline.analyze.action_center import _digest_reason
+
+        article = _make_article(title)
+        article.summary = body
+        assert _digest_reason(article) is None
+
     @pytest.mark.parametrize("title", [
         # A possessive-led headline is the most common shape there is, and
         # _issue_signature keeps "'s" inside the token — so "Varga's" shared

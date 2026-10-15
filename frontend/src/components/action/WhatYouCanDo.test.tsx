@@ -349,6 +349,30 @@ describe("WhatYouCanDo", () => {
   });
 });
 
+describe("a roll-call issue", () => {
+  it("leads with its vote on the roll-call page here, not the chamber's XML", () => {
+    render(
+      <WhatYouCanDo
+        issue={issue({
+          actions: [
+            {
+              text: "How each member voted",
+              type: "roll_call",
+              url: "/congress/votes/house/119/2/314",
+            },
+            { text: "Off-site", type: "roll_call", url: "https://clerk.house.gov/x.xml" },
+          ],
+        })}
+        today="2026-09-29"
+      />
+    );
+    const links = screen.getAllByRole("link", { name: "Roll call →" });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "/congress/votes/house/119/2/314");
+    expect(rows()[0]).toBe(links[0].closest("li"));
+  });
+});
+
 describe("IssueTags", () => {
   it("links a monitor to its row on the monitors tab", () => {
     render(

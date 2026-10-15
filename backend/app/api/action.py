@@ -429,6 +429,21 @@ def _build_issue_response(
 
     raw_actions = _parse_json_field(issue.actions)
     action_items: list[dict] = []
+    # A roll-call issue's vote, on its own page here: every member's
+    # position by party, linked, with the chamber's record linked from it.
+    # The issue's source is that record (the Clerk's XML, Senate.gov's),
+    # which a reader can't use to see how their members voted.
+    # Looked up directly, not among issue_roll_calls' newest ten on the bill,
+    # which later votes on it can push the issue's own vote out of.
+    rc = issue.primary_source_url and db.query(RollCall).filter(
+        RollCall.source_url == issue.primary_source_url,
+    ).first()
+    if rc:
+        action_items.append(ActionItemSchema(
+            text="How each member voted",
+            type="roll_call",
+            url=f"/congress/votes/{rc.chamber}/{rc.congress}/{rc.session}/{rc.number}",
+        ).model_dump(by_alias=True))
     committee_names = {
         a["committee"]["name"] for a in raw_actions
         if isinstance(a, dict) and a.get("type") == "contact_committee" and isinstance(a.get("committee"), dict)
@@ -629,9 +644,18 @@ def _trending_ids_for(issues: list[ActionIssue], db_visits: Session) -> set[str]
 _REFRESH_LOOKBACK_RUNS = 48
 
 
-def _last_refresh_with_issues(db: Session) -> str | None:
-    """ISO time (UTC, "Z") of the newest Action Center run that published or
-    re-matched at least one issue, or None if none did recently."""
+def _refresh_times(db: Session) -> tuple[str | None, str | None]:
+    """ISO times (UTC, "Z") of the newest Action Center run that read the
+    news, and of the newest one that published or re-matched an issue;
+    None for either when no run in the lookback did.
+
+    Both are shown, labelled for what they are. "Updated" used to be the
+    second alone, so on a day when every hourly run found nothing that
+    passed its checks the page read "Updated 4:17 AM" at 4 PM, as if the
+    refresh had stopped (2026-10-15). A run that fetched no articles (the
+    feeds down) read nothing, so it is not a check: counting it would say
+    "checked just now" through an outage.
+    """
     rows = (
         db.query(ApiCache.cached_at, ApiCache.data_json)
         .filter(ApiCache.tier == "action-metrics")
@@ -639,14 +663,20 @@ def _last_refresh_with_issues(db: Session) -> str | None:
         .limit(_REFRESH_LOOKBACK_RUNS)
         .all()
     )
+    checked = changed = None
     for cached_at, data_json in rows:
         try:
             counts = json.loads(data_json).get("counts", {})
         except (ValueError, TypeError, AttributeError):
             continue
-        if counts.get("issues_new_topic", 0) + counts.get("issues_matched_existing", 0) > 0:
-            return cached_at.isoformat() + "Z"
-    return None
+        stamp = cached_at.isoformat() + "Z"
+        if checked is None and counts.get("articles_fetched", 0) > 0:
+            checked = stamp
+        if changed is None and counts.get("issues_new_topic", 0) + counts.get("issues_matched_existing", 0) > 0:
+            changed = stamp
+        if checked and changed:
+            break
+    return checked, changed
 
 
 @router.get("/issues")
@@ -660,12 +690,12 @@ async def get_action_issues(
     response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
     issues = _latest_current_issues(db, for_date=date)
 
-    # When the live view was last refreshed: the newest run that wrote
-    # issues. Every run leaves an action-metrics row (action_metrics.py),
-    # aborted ones included, so the newest row alone would read "updated
-    # just now" over issues hours old exactly when the feeds are down.
-    # Only for the live view; a past day's page is not "updated".
-    generated_at = _last_refresh_with_issues(db) if date is None else None
+    # When the live view last read the news (checkedAt) and last changed
+    # (generatedAt: the newest run that wrote issues). Every run leaves an
+    # action-metrics row (action_metrics.py), aborted ones included, so the
+    # newest row alone would read "checked just now" exactly when the feeds
+    # are down. Only for the live view; a past day's page is not "updated".
+    checked_at, generated_at = _refresh_times(db) if date is None else (None, None)
 
     if not issues:
         # A day whose issues all moved on (a re-matched issue is restamped
@@ -675,6 +705,7 @@ async def get_action_issues(
             "date": date, "issues": [],
             "availableDates": _pager_dates(db) if date and _is_iso_day(date) else [],
             "generatedAt": generated_at,
+            "checkedAt": checked_at,
         }
 
     issue_date = date or _latest_issue_date(db) or issues[0].date
@@ -714,6 +745,7 @@ async def get_action_issues(
         ],
         "availableDates": available_dates,
         "generatedAt": generated_at,
+        "checkedAt": checked_at,
     }
 
 

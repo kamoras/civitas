@@ -123,6 +123,17 @@ On 2026-10-01 78 of 300 clusters in three days were skipped as too few facts,
 and 7 of 10 sampled rejected claims were cut-short predicates; replaying the
 day's top six clusters, three passed the two-claim gate instead of none.
 
+**House style the model cannot copy is matched, not refused.** A period
+inside a parenthetical between actor and predicate ("Sen. Jane Roe (D-Conn.)
+on Sunday slammed") does not end the sentence, and a span that differs from
+its source only in quotation marks (the model answers in JSON, so it copies a
+phrase in double marks with single ones and drops the period or comma inside
+the closing mark) is re-read as the source spells it
+(`post_composer._source_spelling`). Every other character must still match,
+and what is checked and rendered is the source's own text. Replaying 264
+claim calls from 2026-10-11..15, verified claims went from 104 to 128, none
+lost.
+
 **Every quoted line names and links its article.** The summary is the first
 verified claim and the coverage list the rest, so the outlet whose line became
 the summary used to appear only among the sources, and an issue built from two

@@ -1448,6 +1448,47 @@ def _multi_topic_body(summary: str, title: str, truncated: bool = False) -> bool
     return covered <= _DIGEST_MAX_TITLE_COVERED_ITEMS
 
 
+def _entity_items(text: str, truncated: bool = False) -> list[set[str]]:
+    """The entity set of each entity-bearing item of ``text``
+    (_split_body_items, _item_entities)."""
+    return [
+        entities
+        for entities in (_item_entities(item, forced) for item, forced in _split_body_items(text, truncated))
+        if any(not token[0].isdigit() for token in entities)
+    ]
+
+
+def _parallel_stories(title: str, summary: str, truncated: bool = False) -> bool:
+    """True if the headline strings unrelated stories together and the body
+    tells the same ones, one item each.
+
+    _multi_topic_body needs three items, since two disjoint sentences are
+    ordinary prose, and a briefing that names its stories in its headline
+    passes its second condition by construction. A two-story briefing has
+    both shapes at once ("<story A>. And, <story B>" over "<A at more
+    length>. And, <B at more length>"): the headline splits into items
+    naming disjoint entities, the body's items are disjoint too, and each
+    body item names exactly one headline item's entities, every headline
+    item being named. A single story told in two headline sentences fails
+    the last half: its teaser names both halves in one item, or adds an item
+    naming neither ("Lawmakers added $1 to car insurance. The money paid for
+    cameras." over a photo caption and the story). Measured 2026-10-15 on
+    1,473 stored articles with a headline and body (election coverage and
+    the Action Center's claim sources): 28 headlines have two or more
+    disjoint items, 5 have this shape, and all 5 are two-story briefings; of
+    the 23 left, 11 are multi-story live blogs it doesn't catch and 12 are
+    single stories (docs/research/action-center-relevance.md).
+    """
+    heads = _entity_items(title)
+    if len(heads) < 2 or any(a & b for i, a in enumerate(heads) for b in heads[i + 1:]):
+        return False
+    body = _entity_items(summary, truncated)
+    if any(a & b for i, a in enumerate(body) for b in body[i + 1:]):
+        return False
+    named = [[i for i, head in enumerate(heads) if item & head] for item in body]
+    return all(len(n) == 1 for n in named) and {n[0] for n in named} == set(range(len(heads)))
+
+
 # The outlet's own section for its newsletters. A newsletter is a
 # multi-section product ("The Big Story", then other news, with "Welcome to
 # ... newsletter" and photo-credit boilerplate in its feed description), so
@@ -1480,6 +1521,10 @@ def _digest_reason(article: NewsArticle) -> str | None:
         article.summary, article.title, article.truncated,
     ):
         return "body lists unrelated stories"
+    if len(article.summary) <= MAX_SUMMARY_CHARS and _parallel_stories(
+        article.title.translate(_APOSTROPHES), article.summary, article.truncated,
+    ):
+        return "headline and body list the same unrelated stories"
     return None
 
 
@@ -2920,9 +2965,9 @@ def _build_full_story(
     check and the same backstop as the issue's own text then apply, and a
     story failing either is not published (fail closed, like the issue)."""
     body_claims = claim_layer.extract_body_claims(filtered_cluster, locate)
-    claims = claim_layer.on_topic(
+    claims = claim_layer.distinct_claims(claim_layer.on_topic(
         claim_layer.dedupe_claims(headline_claims + body_claims), filtered_cluster,
-    )
+    ))
     story = claim_layer.build_story(claims, [summary, *facts])
     if story is None:
         return None
@@ -5230,6 +5275,10 @@ def _run_refresh(db: Session) -> int:
         kept = claim_layer.dedupe_claims(headline_claims + claim_layer.extract_body_claims(filtered_cluster, _locate))
         ordered = [c for c in headline_claims if c in kept] + [c for c in kept if c not in headline_claims]
         cluster_claims = claim_layer.on_topic(ordered, filtered_cluster)
+        # One fact told twice is one fact: a headline and its own lede, or
+        # two outlets' wordings, would otherwise pass the two-claim gate
+        # below and fill the facts with the summary again (distinct_claims).
+        cluster_claims = claim_layer.distinct_claims(cluster_claims)
         if not cluster_claims:
             # A cluster with no attributable fact produces NO ISSUE.
             # Measured on a live run, roughly one top cluster in four is
