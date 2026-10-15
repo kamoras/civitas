@@ -19,7 +19,10 @@ exclusion itself is in test_les_reference.py.
 import asyncio
 import json
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
+import pytest
 
 from app.models import ApiCache, Representative, RepSponsoredBill
 from app.pipeline import run_checks, senate_pipeline
@@ -31,7 +34,7 @@ from app.pipeline.analyze.score_calculator import (
     load_les_reference,
 )
 from app.pipeline.cache import api_cache_set
-from app.pipeline.fetch import congress
+from app.pipeline.fetch import congress, fec, govinfo, house_clerk
 from app.pipeline.fetch.congress import CongressUnavailable
 from app.pipeline.live_references import bills_read_this_run
 from app.pipeline.sponsorship_backfill import carry_forward_sponsored_bills
@@ -228,3 +231,73 @@ class TestSameMethodDrift:
             run_checks.run_calibration_check("representative")
         assert alert.call_args.kwargs["condition"] == "score-drift-representative"
         assert "legislative_effectiveness" in alert.call_args.args[1]
+
+
+class TestFetchersTellAFailureFromNothing:
+    """The rest of the class: each fetcher the member pipelines read either
+    stands the last read in for a failed request or says it failed — never
+    an empty answer a caller would take for the source's."""
+
+    def test_a_failed_roster_page_is_not_a_short_roster(self, db_session, monkeypatch):
+        pages = [{"members": [{"bioguideId": f"M{i}"} for i in range(250)]}, None]
+
+        async def paged(*args, **kwargs):
+            return pages.pop(0)
+
+        monkeypatch.setattr(congress, "_fetch_with_retry", paged)
+        with pytest.raises(CongressUnavailable):
+            asyncio.run(congress.fetch_representatives(None, db_session))
+        assert db_session.query(ApiCache).filter_by(cache_key="representatives-list").count() == 0
+
+    def test_a_failed_significant_bill_listing_uses_the_last_or_stops(self, db_session, monkeypatch):
+        async def failed(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(congress, "_fetch_with_retry", failed)
+        with pytest.raises(CongressUnavailable):
+            asyncio.run(congress.fetch_significant_bills(None, db_session, [119], max_bills=5))
+        listed = [{"congress": 119, "type": "hr", "number": 1, "name": "Act"}]
+        api_cache_set(db_session, "congress", "significant-bills-119-5", listed)
+        db_session.query(ApiCache).filter_by(cache_key="significant-bills-119-5").update(
+            {"cached_at": utcnow() - timedelta(days=30)},
+        )
+        db_session.commit()
+        assert asyncio.run(congress.fetch_significant_bills(None, db_session, [119], max_bills=5)) == listed
+
+    def test_the_clerk_caucus_list_falls_back_to_the_last_read_or_none(self, db_session, monkeypatch):
+        class Down:
+            async def get(self, *args, **kwargs):
+                raise httpx.ConnectError("down")
+
+        assert asyncio.run(house_clerk.fetch_house_caucuses(Down(), db_session)) is None
+        api_cache_set(db_session, "congress", house_clerk._CAUCUS_CACHE_KEY, {"Z000001": "R"})
+        db_session.query(ApiCache).filter_by(cache_key=house_clerk._CAUCUS_CACHE_KEY).update(
+            {"cached_at": utcnow() - timedelta(days=60)},
+        )
+        db_session.commit()
+        assert asyncio.run(house_clerk.fetch_house_caucuses(Down(), db_session)) == {"Z000001": "R"}
+
+    def test_an_fec_profile_that_fails_is_not_an_id_that_doesnt_resolve(self, db_session):
+        with patch.object(fec, "_fetch_with_retry", AsyncMock(return_value=None)):
+            with pytest.raises(fec.FecUnavailable):
+                asyncio.run(fec._candidate_latest_election(None, db_session, "H0XX00001"))
+        # The FEC's own "no such id": an empty result.
+        with patch.object(fec, "_fetch_with_retry", AsyncMock(return_value={"results": []})):
+            assert asyncio.run(fec._candidate_latest_election(None, db_session, "H0XX00001")) is None
+
+    def test_an_unread_committee_registration_is_reported_not_unknown(self, db_session):
+        with patch.object(fec, "_fetch_with_retry", AsyncMock(return_value=None)):
+            unread: set[str] = set()
+            metas = asyncio.run(fec.resolve_committee_meta(None, db_session, {"C09999999"}, {}, unread))
+            assert metas == {} and unread == {"C09999999"}
+            with pytest.raises(fec.FecUnavailable):
+                asyncio.run(fec.resolve_committee_meta(None, db_session, {"C09999999"}, {}))
+
+    def test_a_govinfo_failure_is_not_a_bill_with_no_text(self, db_session):
+        with patch.object(govinfo, "fetch_with_retry", AsyncMock(return_value=None)):
+            with pytest.raises(govinfo.GovinfoUnavailable):
+                asyncio.run(govinfo.fetch_bill_text(None, db_session, 119, "hr", 1))
+        # Nothing was cached as "no package".
+        assert db_session.query(ApiCache).filter_by(cache_key="bill-package-119-hr-1").count() == 0
+        with patch.object(govinfo, "fetch_with_retry", AsyncMock(return_value=MagicMock(status_code=404))):
+            assert asyncio.run(govinfo.fetch_bill_text(None, db_session, 119, "hr", 1)) is None

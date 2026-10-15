@@ -231,7 +231,16 @@ async def fetch_significant_bills(
                 f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}"
                 f"?sort=updateDate+desc&limit=250",
             )
-            if not data or not data.get("bills"):
+            if data is None:
+                # A failed listing is not a Congress with no significant
+                # bills (their votes are the key votes Constituent Alignment
+                # reads): the last list read stands in, and with none the
+                # run stops here rather than score on a partial one.
+                stale = _last_read(db, cache_key, f"significant-bill listing ({congress} {bill_type})")
+                if stale is not None:
+                    return stale
+                raise CongressUnavailable(f"the {bill_type.upper()} listing of the {congress}th Congress")
+            if not data.get("bills"):
                 continue
 
             for b in data["bills"]:
@@ -299,6 +308,26 @@ async def _fetch_with_retry(client: httpx.AsyncClient, url: str) -> dict | None:
     return resp.json() if resp is not None else None
 
 
+async def _current_members(client: httpx.AsyncClient) -> list[dict]:
+    """Every current member of Congress, all pages. A page that fails
+    raises CongressUnavailable: stopping there used to return (and cache)
+    the pages read so far as the whole roster, which member_lifecycle reads
+    as everyone missing having left office."""
+    members: list[dict] = []
+    offset = 0
+    limit = 250
+    while True:
+        url = f"{CONGRESS_API_BASE}/member?currentMember=true&limit={limit}&offset={offset}"
+        data = await _fetch_with_retry(client, url)
+        if data is None:
+            raise CongressUnavailable(f"the current-member list (offset {offset})")
+        page = data.get("members") or []
+        members.extend(page)
+        if len(page) < limit:
+            return members
+        offset += limit
+
+
 async def fetch_senators(
     client: httpx.AsyncClient, db: Session
 ) -> list[dict]:
@@ -308,23 +337,9 @@ async def fetch_senators(
         return cached
 
     logger.info("Fetching senators from Congress.gov...")
-    all_members: list[dict] = []
-    offset = 0
-    limit = 250
-
     # The Congress.gov API ignores the chamber= query param on /member, so we
     # fetch all currentMembers and filter client-side.
-    while True:
-        data = await _fetch_with_retry(
-            client,
-            f"{CONGRESS_API_BASE}/member?currentMember=true&limit={limit}&offset={offset}",
-        )
-        if not data or not data.get("members"):
-            break
-        all_members.extend(data["members"])
-        if len(data["members"]) < limit:
-            break
-        offset += limit
+    all_members = await _current_members(client)
 
     # Filter to senators only using the terms embedded in the member listing
     members = []
@@ -348,21 +363,7 @@ async def fetch_representatives(
         return cached
 
     logger.info("Fetching representatives from Congress.gov...")
-    all_members: list[dict] = []
-    offset = 0
-    limit = 250
-
-    while True:
-        data = await _fetch_with_retry(
-            client,
-            f"{CONGRESS_API_BASE}/member?currentMember=true&limit={limit}&offset={offset}",
-        )
-        if not data or not data.get("members"):
-            break
-        all_members.extend(data["members"])
-        if len(data["members"]) < limit:
-            break
-        offset += limit
+    all_members = await _current_members(client)
 
     members = []
     for m in all_members:
@@ -397,7 +398,11 @@ async def fetch_member_detail(
     data = await _fetch_with_retry(
         client, f"{CONGRESS_API_BASE}/member/{bioguide_id}"
     )
-    if data and data.get("member"):
+    if data is None:
+        # The last read stands in: without it the member's terms (years in
+        # office, which scoring reads) fall back to the shorter list record.
+        return _last_read(db, cache_key, f"member {bioguide_id}")
+    if data.get("member"):
         api_cache_set(db, "congress", cache_key, data["member"])
         return data["member"]
     return None
@@ -557,7 +562,11 @@ async def fetch_bill(
         client,
         f"{CONGRESS_API_BASE}/bill/{congress}/{bill_type}/{bill_number}",
     )
-    if data and data.get("bill"):
+    if data is None:
+        # The last read stands in for a failed request; None (with none) is
+        # an unread bill the caller names, not a bill that doesn't exist.
+        return _last_read(db, cache_key, f"{bill_type.upper()}.{bill_number} ({congress})")
+    if data.get("bill"):
         api_cache_set(db, "congress", cache_key, data["bill"])
         return data["bill"]
     return None

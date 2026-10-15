@@ -312,6 +312,14 @@ async def run_house_pipeline() -> dict:
             # The caucus the Clerk records, which decides an independent's
             # party-line reading (normalize_votes' declared_caucus).
             caucuses = await fetch_house_caucuses(client, db)
+            if caucuses is None:
+                # The Clerk's list couldn't be read and none is cached: each
+                # member's stored caucus, not "none recorded".
+                caucuses = dict(
+                    db.query(Representative.bioguide_id, Representative.caucus_party)
+                    .filter(Representative.caucus_party.isnot(None))
+                    .all()
+                )
             for r in reps:
                 r["declaredCaucus"] = caucuses.get(r.get("bioguideId", ""))
 
@@ -343,6 +351,10 @@ async def run_house_pipeline() -> dict:
                 detail = await fetch_bill(client, db, b["congress"], b["type"], b["number"])
                 if detail:
                     bill_details_map[bill_key] = detail
+                else:
+                    # Unread (no earlier read either): classified without
+                    # its detail record this run, and named in the alert.
+                    unread_bills.append(f"{bill_key} ({b['congress']}) detail")
                 try:
                     actions = await fetch_bill_actions(client, db, b["congress"], b["type"], b["number"])
                 except CongressUnavailable:
@@ -919,6 +931,9 @@ async def run_house_pipeline() -> dict:
                         pac_committee_ids = {
                             cid for r in raw_pac_receipts if (cid := committee_id_of(r))
                         }
+                        # A giver whose registration couldn't be read raises
+                        # (FecUnavailable): this member keeps the stored
+                        # record, as for any unreadable FEC read.
                         committee_meta_map = await resolve_committee_meta(
                             client, db, pac_committee_ids, committee_master,
                         )

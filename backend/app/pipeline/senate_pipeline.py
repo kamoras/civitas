@@ -72,7 +72,7 @@ from app.pipeline.fetch.fec import (
     find_candidate,
     resolve_committee_meta,
 )
-from app.pipeline.fetch.govinfo import fetch_bill_text
+from app.pipeline.fetch.govinfo import GovinfoUnavailable, fetch_bill_text
 from app.pipeline.fetch.lda import alert_if_lda_down, enrich_lobbying_matches_with_lda
 from app.member_ids import assign_member_ids
 from app.pipeline.member_lifecycle import (
@@ -1267,9 +1267,14 @@ async def run_senate_pipeline(
                     titles = []
 
                 # Fetch full bill text from GovInfo
-                full_text = await fetch_bill_text(
-                    client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
-                )
+                try:
+                    full_text = await fetch_bill_text(
+                        client, db, bill_ref["congress"], bill_ref["type"], bill_ref["number"]
+                    )
+                except GovinfoUnavailable:
+                    # Classified without its text this run; named in the alert.
+                    full_text = None
+                    unread_bills.append(f"{bill_label} text")
 
                 if bill:
                     sponsors = bill.get("sponsors", [])
@@ -1313,6 +1318,10 @@ async def run_senate_pipeline(
                             "latestAction": latest_action_text,
                         }
                     )
+                else:
+                    # Unread (no earlier read either): left out of this run's
+                    # key bills, and named in the alert.
+                    unread_bills.append(f"{bill_label} detail")
                 progress.update("fetch_bill_details", done=bill_idx + 1)
             logger.info(
                 "Fetched details for %d/%d discovered bills",
@@ -1591,6 +1600,8 @@ async def run_senate_pipeline(
             # that gives to 30 different senators is looked up exactly once,
             # not 30 times, on top of the committee master's weekly cache.
             pac_committee_ids: set[str] = set()
+            # Committees whose registration couldn't be read this run.
+            committee_meta_unread: set[str] = set()
             for fec in fec_data.values():
                 for r in fec.get("pacReceipts") or []:
                     if committee_id_of(r):
@@ -1600,8 +1611,13 @@ async def run_senate_pipeline(
             # designation and connected organization for nearly every PAC;
             # the per-committee API covers only what it lacks.
             committee_meta_map = await resolve_committee_meta(
-                client, db, pac_committee_ids, committee_master,
+                client, db, pac_committee_ids, committee_master, committee_meta_unread,
             )
+            if committee_meta_unread:
+                logger.warning(
+                    "%d contributing committees' FEC registrations couldn't be read — their "
+                    "recipients keep their stored funding this run", len(committee_meta_unread),
+                )
 
         if fetch_only:
             logger.info("=== FETCH COMPLETE (fetch-only mode) ===")
@@ -1761,6 +1777,14 @@ async def run_senate_pipeline(
                 fec = fec_data.get(senator["id"])
                 if fec and fec.get("unavailable"):
                     raise FecUnavailable(f"no FEC data read for {senator['name']}")
+                if fec and committee_meta_unread & {
+                    cid for r in fec.get("pacReceipts") or [] if (cid := committee_id_of(r))
+                }:
+                    # A giver's registration couldn't be read, so its money
+                    # can't be sorted into political and ordinary PAC money:
+                    # the senator keeps the stored funding, as for an
+                    # unreadable FEC record.
+                    raise FecUnavailable(f"a contributing committee's FEC registration for {senator['name']}")
                 if fec:
                     funding = normalize_finance(
                         # The chamber bounds the election window
