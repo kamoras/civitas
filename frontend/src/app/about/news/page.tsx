@@ -106,20 +106,22 @@ export default function NewsChapter() {
         </More>
         <More label="How stories are grouped, and why it errs toward keeping them apart">
           <P>
-            Headlines are compared after removing what every headline that day has in common, so
-            only the topic counts. Articles join a story only if every one resembles every other. An
-            earlier rule asked only that each resemble one other, so stories chained together by
-            theme: on 27 September 2026 an issue titled for floods in Bangkok led with a hurricane
-            near Hawaii and listed facts about a nor&apos;easter and an epidemic in Fiji. Headline
-            similarity can&apos;t reliably tell the same event from the same kind of event, so
-            grouping errs toward keeping stories apart: an issue may cite fewer sources, which is a
-            smaller error than one built from unrelated stories.
+            Each article&apos;s headline and the start of its description are compared after
+            removing what every article that day has in common, so only the topic counts. Articles
+            join a story only if every one resembles every other. An earlier rule asked only that
+            each resemble one other, so stories chained together by theme: on 27 September 2026 an
+            issue titled for floods in Bangkok led with a hurricane near Hawaii and listed facts
+            about a nor&apos;easter and an epidemic in Fiji. Headline similarity can&apos;t reliably
+            tell the same event from the same kind of event, so grouping errs toward keeping stories
+            apart: an issue may cite fewer sources, which is a smaller error than one built from
+            unrelated stories.
           </P>
           <P>
-            How alike two headlines must be to group them is learned from the pipeline&apos;s own
-            record: each run records pairs it compared with an independent verdict (do they name the
-            same people, places and numbers), and once a day the cut-off moves to where those
-            verdicts say it belongs, once there are enough to trust. A new issue is treated as an
+            How alike two articles must be to group them was set against 553 pairs of real articles,
+            each judged as one event or two. The bar is the lowest at which none of the pairs from
+            different events would be grouped. It groups fewer pairs of the same event than a looser
+            bar would, and that is the trade we chose. Headlines alone could group only 6 of the 115
+            same-event pairs on that rule; with the description, 16. A new issue is treated as an
             existing one only when they share a source article, say the same thing, or carry
             near-identical headlines: naming the same people turned out to be wrong three times in
             four, and merging two stories hides one. Multi-story briefings (&ldquo;Up First&rdquo;,
