@@ -241,6 +241,8 @@ exemption list covers what cannot affect classification or scoring:
 `_NOT_ANALYSIS_PATHS` (the holdings and trade ingests, filer matching, the run-coordination
 modules, the election run's orchestration, the LDA bill-name matcher
 `analyze/lobbying_records.py`, the Explore summary prompt `analyze/prompts.py`,
+the votes-with-the-president rate (`analyze/presidential_support.py`,
+`analyze/sap_position.py`),
 the modules that word and publish posts, the Action Center's hourly run
 (`_ACTION_CENTER_PATHS`), which keeps no learned data) and
 `_DISPLAY_ONLY_NAMES` (display-only constants such as `HOLDING_CATEGORIES`),
@@ -1064,6 +1066,34 @@ with no successful completion in `PIPELINE_STALE_ALERT_DAYS`;
 `check_pipeline_overrun` watches the opposite case of a run that started
 and is taking too long.
 
+**What makes a night long is upstream fetching, not the analysis-code
+fingerprint** (measured 2026-10-14: the fingerprint changed on 19 of the 21
+nights before, and its slowest two nights were both unchanged-hash nights).
+Most steps wait on rate limits (Congress.gov 1.2/s, the FEC 0.25/s), so
+request count is run time. Two rules keep it from spiking (2026-10):
+
+- **A bill's own records** (`bill-`, `-actions-`, `-cosponsors-`,
+  `-summaries-`, `-titles-`) stay fresh until the bill changes. The hourly
+  bill refresh reads Congress.gov's list of bills updated since its last
+  pass, marks each listed bill's records stale
+  (`bill_refresh.mark_bill_records_stale`), and records since when its
+  passes have joined without a gap (`coveredSince` in its marker). A
+  current-Congress record written since then is kept up to
+  `BILL_RECORD_BACKSTOP_HOURS` (30 days) while the refresh has run within
+  `PIPELINE_CACHE_TTL_HOURS`; otherwise the plain TTL applies
+  (`congress._bill_record_get`). With one TTL for all of them, about 20,000
+  of these were refetched every third or fourth night.
+- **Per-entity fetches expire by key** (`api_cache_get(..., spread=True)`:
+  member and bill records, FEC candidates, committees and receipts, GovInfo
+  packages): each key expires at its own point in the last third of its
+  TTL, never later, so entries written in one run fall out of step instead
+  of all coming due on one night. A new high-volume per-entity fetch opts
+  in the same way.
+
+A bill's actions that can't be read fall back to the last history read
+(any age) before raising `CongressUnavailable`, which discards the run's
+whole stage and sponsorship step.
+
 Each member pipeline executes in 4 phases per chamber, defined in
 `senate_pipeline.py`/`house_pipeline.py`:
 
@@ -1127,7 +1157,14 @@ issue is served, a linked bill's stored stage names who acts next
 members, their phones and their votes on the issue's roll calls come from the
 state the reader picks on the page; the call script is a fixed template
 around the record (`callScript`). Results
-are stored in the `action_issues` table.
+are stored in the `action_issues` table. It runs through the nightly chain
+too: until 2026-10 it stood down for the Senate, Supplementary, House and
+Stock trades links, and the Action Center went as stale as the chain was
+long (13 hours on 2026-10-14). A refresh takes minutes, mostly waiting on
+feeds and the LLM, and measured beside the chain it fits in memory (the
+reasons are in `scheduler._hourly_action_refresh`); only an overlapping
+refresh of its own holds it back. The hourly bill refresh still stands down
+for the Senate and House runs, which rewrite the rows it updates.
 
 Each issue's actions are fixed templates around stored data:
 
