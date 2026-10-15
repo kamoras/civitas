@@ -25,6 +25,7 @@ import { PipelinesDashboard } from "@/components/admin/PipelinesDashboard";
 import { SystemDashboard } from "@/components/admin/SystemDashboard";
 import { ApiDashboard } from "@/components/admin/ApiDashboard";
 import { TrafficDashboard } from "@/components/admin/TrafficDashboard";
+import { TrendPostsDashboard } from "@/components/admin/TrendPostsDashboard";
 import { useHostHistory } from "@/components/admin/useHostHistory";
 import { VacancyControl } from "@/components/admin/VacancyControl";
 
@@ -33,7 +34,8 @@ const TOKEN_KEY = "civitas_admin_token";
 // The dashboard used to be one ~20-panel column. Each tab is now one
 // question an operator comes with: who is using the site and how fast is it
 // (Traffic), are the nightly runs healthy (Pipelines), is the hourly news
-// refresh publishing or suppressing (Action Center), what is in the stores
+// refresh publishing or suppressing (Action Center), are the trend posts
+// party-balanced and what did each candidate get (Trends), what is in the stores
 // (Data & ML), is the box itself OK (System), and the one write action
 // (Tools). Overview summarises each and links through.
 const TABS = [
@@ -42,6 +44,7 @@ const TABS = [
   { id: "api", label: "API" },
   { id: "pipelines", label: "Pipelines" },
   { id: "action", label: "Action Center" },
+  { id: "trends", label: "Trends" },
   { id: "data", label: "Data & ML" },
   { id: "system", label: "System" },
   { id: "tools", label: "Tools" },
@@ -523,6 +526,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
               processStartedAt={d?.uptime?.processStartedAt ?? null}
             />
           )}
+          {tab === "trends" && <TrendPostsDashboard token={token} />}
           {tab === "data" && <DataDashboard d={d} />}
           {tab === "system" && (
             <SystemDashboard dashboard={d} stats={hostStats} history={hostHistory} />

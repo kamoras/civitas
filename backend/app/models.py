@@ -2135,6 +2135,22 @@ class BroadcastPost(Base):
     card_image: Mapped[str | None] = mapped_column(Text, nullable=True)
     card_image_alt: Mapped[str | None] = mapped_column(Text, nullable=True)
     card_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A picture the post carries itself, rather than the linked page's card:
+    # the record image a trend post shows (app/api/og, record cards). The
+    # feed entry shows it in place of the card, with alt_text; Bluesky gets
+    # it as an image embed. NULL for a post that has none.
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # What Bluesky was sent, so engagement can be compared by format:
+    # "image" | "card" (link card) | "text"; NULL until sent.
+    embed_kind: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # The Bluesky post's at:// URI once sent, and its public counts as last
+    # read (broadcast.refresh_engagement); NULL until read.
+    bsky_uri: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    bsky_likes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bsky_reposts: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bsky_replies: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    engagement_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class SiteVisit(VisitsBase):
@@ -2728,3 +2744,71 @@ class MemberPhoto(Base):
     bioguide_face_share: Mapped[float | None] = mapped_column(Float, nullable=True)
     depiction_face_share: Mapped[float | None] = mapped_column(Float, nullable=True)
     checked_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class TrendObservation(Base):
+    """One Bluesky trend as getTrends listed it at one hourly read
+    (fetch/trending.fetch_bluesky_trends): the record of how long topics stay
+    listed, which the trend posts' hold-and-recheck rests on, and the admin
+    view's trend lifetimes. Pruned after OBSERVATION_RETENTION
+    (trend_poster)."""
+    __tablename__ = "trend_observations"
+    __table_args__ = (Index("ix_trend_observation_topic_seen", "topic", "observed_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    # Bluesky's topic id: stable while the topic trends, new if it trends again.
+    topic: Mapped[str] = mapped_column(String(64), nullable=False)
+    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)  # 0 = first listed
+    status: Mapped[str] = mapped_column(String(16), default="")  # "hot" | "trending" | ...
+    category: Mapped[str] = mapped_column(String(32), default="")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    post_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class TrendCandidate(Base):
+    """The audit row for one Bluesky trend the trend poster evaluated
+    (analyze/trend_poster.py): its scores, the record it matched and how,
+    the parties of the members it names and of the record's sponsors, and
+    what was decided and why. One row per topic, updated at each evaluation
+    until it is posted (final). The parties are recorded for the audit
+    only: selection never reads them (test_trend_selection_is_party_blind),
+    and the admin view compares the posted share with the eligible pool's."""
+    __tablename__ = "trend_candidates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    topic: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    category: Mapped[str] = mapped_column(String(32), default="")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    relevance: Mapped[float] = mapped_column(Float, nullable=False)
+    tragedy: Mapped[float] = mapped_column(Float, nullable=False)
+    political_violence: Mapped[float] = mapped_column(Float, nullable=False)
+    loaded: Mapped[float] = mapped_column(Float, nullable=False)
+    # JSON list of neutrality-gate problems with the display name.
+    neutrality: Mapped[str] = mapped_column(Text, default="[]")
+    # issue | member | act | nominee; NULL when nothing matched.
+    match_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    match_strength: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The record: kind (vote | bill | event | issue | document), its key
+    # ("vote:senate/119/2/123"), date and page.
+    record_kind: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    record_key: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    record_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    record_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON lists of party letters: members the trend names, and the matched
+    # record's sponsors (a bill's, a vote's bill's) or named officials.
+    named_parties: Mapped[str] = mapped_column(Text, default="[]")
+    sponsor_parties: Mapped[str] = mapped_column(Text, default="[]")
+    selection_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # ineligible | eligible | held | dropped | skipped | posted.
+    decision: Mapped[str] = mapped_column(String(10), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    broadcast_post_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    decided_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)

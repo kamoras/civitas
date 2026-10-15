@@ -174,6 +174,9 @@ class Settings(BaseSettings):
     # Bluesky integration (leave BSKY_HANDLE empty to disable)
     BSKY_HANDLE: str = ""
     BSKY_APP_PASSWORD: str = ""
+    # Where the pipeline reads a post's image from inside the stack (the
+    # frontend's /api/og renderer), without going out through Cloudflare.
+    FRONTEND_INTERNAL_URL: str = "http://frontend:3000"
     # Site feedback form -> GitHub issue creation (leave empty to disable;
     # the endpoint returns 503 rather than silently dropping submissions).
     # Needs a token scoped to Issues: write on GITHUB_FEEDBACK_REPO only —

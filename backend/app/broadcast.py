@@ -56,9 +56,18 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+import httpx
+
 from app.config import settings
+from app.contact import SELF_FETCH_USER_AGENT
 from app.models import BroadcastPost
-from app.pipeline.analyze.bluesky_utils import fetch_og_card, publish_post, strip_hashtags
+from app.pipeline.analyze.bluesky_utils import (
+    BSKY_MAX_IMAGE_BYTES,
+    PostImage,
+    fetch_og_card,
+    publish_post,
+    strip_hashtags,
+)
 from app.time_utils import COMMENT_DEADLINE_TZ, utcnow
 
 logger = logging.getLogger(__name__)
@@ -75,6 +84,7 @@ KINDS: dict[str, str] = {
     "spotlight": "One member of Congress a day, with their scores",
     "race": "News about a race on the November ballot",
     "result": "Election-night counts, in each state's own figures",
+    "trend": "On the record: the official record behind a topic trending on Bluesky",
 }
 
 MAX_BSKY_ATTEMPTS = 3
@@ -138,6 +148,10 @@ FEEDS: dict[str, Feed] = {
         Feed("elections", "Civitas: Elections",
              "News about races on the November ballot, and the count on election night.",
              ("race", "result")),
+        Feed("trends", "Civitas: On the record",
+             "When a U.S. policy topic trends on Bluesky, the official record behind it: a vote, a bill, "
+             "a rule or the day's congressional record, in the record's own words.",
+             ("trend",)),
     )
 }
 
@@ -204,6 +218,9 @@ def publish(
     state: str | None = None,
     source_url: str | None = None,
     bluesky: bool = True,
+    image_url: str | None = None,
+    alt_text: str | None = None,
+    embed_kind: str | None = None,
 ) -> BroadcastPost:
     """Record a post, then deliver it to Bluesky if an account is set up.
 
@@ -213,6 +230,13 @@ def publish(
     to the feed — one that only makes sense beside an earlier post Bluesky
     never took. A scheduled kind written outside the posting windows is
     stored `pending` and sent by `deliver_pending` (module docstring).
+
+    `image_url` (with `alt_text`) is a picture the post carries itself: the
+    feed entry shows it in place of the page's card, and Bluesky gets it as
+    an image embed when `embed_kind` is "image" ("card" sends the link card
+    instead; trend_poster alternates the two to measure them). The image is
+    read from inside the stack at send time (_post_image); one that can't
+    be read goes as the card, never holding the post.
     """
     if kind not in KINDS:
         raise ValueError(f"unknown broadcast kind {kind!r}")
@@ -228,6 +252,9 @@ def publish(
         state=state.upper() if state else None,
         published_at=utcnow(),
         bsky_status="pending" if bluesky and _bluesky_configured() else "off",
+        image_url=image_url,
+        alt_text=alt_text,
+        embed_kind=embed_kind,
     )
     db.add(post)
     db.commit()
@@ -295,16 +322,49 @@ def _deliver_to_bluesky(db: Session, post: BroadcastPost) -> bool:
     if claimed != 1:
         return False
     db.refresh(post)
-    ok = publish_post(
+    image = _post_image(post) if post.embed_kind == "image" else None
+    sent = publish_post(
         post.text, post.url,
         success_msg=f"Posted to Bluesky ({post.kind}): {post.title[:80]}",
         error_context=f"broadcast post {post.id}",
+        **({"image": image} if image is not None else {}),
     )
-    post.bsky_status = "sent" if ok else "failed"
-    if ok:
+    post.bsky_status = "sent" if sent else "failed"
+    if sent:
         post.bsky_sent_at = utcnow()
+        post.bsky_uri = getattr(sent, "uri", None) or None
+        post.embed_kind = getattr(sent, "embed_kind", None) or post.embed_kind
     db.commit()
-    return ok
+    return bool(sent)
+
+
+def _png_size(data: bytes) -> tuple[int, int] | None:
+    """A PNG's width and height from its IHDR chunk, or None for anything
+    that isn't a PNG."""
+    if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return None
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+
+
+def _post_image(post: BroadcastPost) -> PostImage | None:
+    """The post's image, read from the frontend inside the stack (the
+    public URL with FRONTEND_INTERNAL_URL in place of the site), or None —
+    and the link card — when it can't be read, isn't a PNG, is over
+    Bluesky's size limit, or has no alt text."""
+    if not post.image_url or not post.alt_text or not post.image_url.startswith(SITE_URL):
+        return None
+    internal = settings.FRONTEND_INTERNAL_URL.rstrip("/") + post.image_url[len(SITE_URL):]
+    try:
+        resp = httpx.get(internal, timeout=30, headers={"User-Agent": SELF_FETCH_USER_AGENT})
+        resp.raise_for_status()
+    except Exception:
+        logger.warning("Post image unreadable (%s); sending the link card", internal)
+        return None
+    size = _png_size(resp.content)
+    if size is None or len(resp.content) > BSKY_MAX_IMAGE_BYTES:
+        logger.warning("Post image unusable (%s, %d bytes); sending the link card", internal, len(resp.content))
+        return None
+    return PostImage(data=resp.content, alt=post.alt_text, width=size[0], height=size[1])
 
 
 def deliver_pending(db: Session) -> int:
@@ -403,3 +463,53 @@ def subjects_published_since(db: Session, kind: str, since: datetime) -> list[st
         .filter(BroadcastPost.kind == kind, BroadcastPost.published_at >= since)
         .all()
     ]
+
+
+# Bluesky's public AppView, which answers getPosts without an account.
+_BSKY_GET_POSTS = "https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts"
+# How long after sending a post's likes are still read, how often, and the
+# kinds read: the trend posts' image-vs-card trial (trend_poster) compares
+# them by embed_kind. A post's likes come in its first days.
+ENGAGEMENT_WINDOW = timedelta(days=14)
+ENGAGEMENT_REFRESH = timedelta(hours=6)
+ENGAGEMENT_KINDS = ("trend",)
+
+
+def refresh_engagement(db: Session) -> int:
+    """Read the public like, repost and reply counts of recently sent posts
+    of ENGAGEMENT_KINDS. Returns how many were updated; a failed read
+    updates nothing (the counts keep their last values) rather than zeroing
+    them."""
+    rows = (
+        db.query(BroadcastPost)
+        .filter(
+            BroadcastPost.kind.in_(ENGAGEMENT_KINDS),
+            BroadcastPost.bsky_uri.isnot(None),
+            BroadcastPost.bsky_sent_at >= utcnow() - ENGAGEMENT_WINDOW,
+            or_(BroadcastPost.engagement_checked_at.is_(None),
+                BroadcastPost.engagement_checked_at <= utcnow() - ENGAGEMENT_REFRESH),
+        )
+        .all()
+    )
+    updated = 0
+    for start in range(0, len(rows), 25):  # getPosts takes at most 25
+        batch = {post.bsky_uri: post for post in rows[start:start + 25]}
+        try:
+            resp = httpx.get(_BSKY_GET_POSTS, params=[("uris", uri) for uri in batch], timeout=15,
+                             headers={"User-Agent": SELF_FETCH_USER_AGENT})
+            resp.raise_for_status()
+            found = resp.json()["posts"]
+        except Exception:
+            logger.warning("Bluesky engagement read failed; counts left as they were")
+            continue
+        for item in found:
+            post = batch.get(item.get("uri"))
+            if post is None:
+                continue
+            post.bsky_likes = int(item.get("likeCount") or 0)
+            post.bsky_reposts = int(item.get("repostCount") or 0)
+            post.bsky_replies = int(item.get("replyCount") or 0)
+            post.engagement_checked_at = utcnow()
+            updated += 1
+        db.commit()
+    return updated

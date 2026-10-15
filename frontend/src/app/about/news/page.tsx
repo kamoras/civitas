@@ -14,7 +14,7 @@ import {
 export const metadata = pageMetadata({
   title: "How the Action Center and Congress Reports Work",
   description:
-    "How Civitas picks the day's civic news and keeps it in its sources' own words, how daily Congress reports are built from the Congressional Record, and how corrections are handled.",
+    "How Civitas picks the day's civic news and keeps it in its sources' own words, how daily Congress reports are built from the Congressional Record, when a trending topic gets an On the record post, and how corrections are handled.",
   path: "/about/news",
 });
 
@@ -48,6 +48,11 @@ export default function NewsChapter() {
         <Point>
           Congress reports come from the Congressional Record&apos;s own daily summary, in its own
           wording.
+        </Point>
+        <Point>
+          When a U.S. policy topic trends on Bluesky and matches an official record, an &ldquo;On
+          the record&rdquo; post shows that record in its own words. Which trends are posted is
+          chosen without reading party, and audited for it.
         </Point>
         <Point>
           Anything withdrawn is logged publicly with its date and reason, not quietly deleted.
@@ -294,6 +299,58 @@ export default function NewsChapter() {
           them as soon as they are written; one written overnight waits for Bluesky until the hours
           U.S. users are most active that day, measured from Bluesky&apos;s own public activity.
           News, an Action Center issue or an election-night count, never waits.
+        </P>
+      </Section>
+
+      <Section id="trend-posts" title="On the record: trending topics">
+        <P>
+          Bluesky publishes a public list of what is trending. Each hour Civitas reads it, and when
+          a U.S. policy topic on it matches an official record, it may post that record: a vote, a
+          bill, a rule or the day&apos;s Congressional Record. A match counts only if it is one of
+          four pinned kinds: an Action Center issue whose wording is close to the trend&apos;s
+          (cosine similarity of 0.5 or more), an Act whose exact title the trend names, a nominee
+          named in a roll call, or a bill sponsored by a member the trend names. A member named on
+          their own is never enough; there has to be a record of theirs to show.
+        </P>
+        <P>
+          Whether a trend is about U.S. policy is a vote among the most similar labelled Bluesky
+          trends (nearest neighbors), the same method the Action Center uses for articles; the
+          labels were made by an AI agent against a written rubric, published with them. The
+          trend&apos;s name is the only text a post takes from Bluesky, so it is checked before
+          anything else: a name that reads as electioneering, editorializes, states advocacy as
+          fact, or that a vote of labelled examples finds loaded is skipped, not reworded.
+        </P>
+        <More label="Tragedies and violence">
+          <P>
+            They aren&apos;t excluded outright, because an official response to one is part of the
+            public record. A trend about one is eligible only when a vote finds it about political
+            violence, and only with an official record responding to it, or the agency&apos;s own
+            record. The post then states only what that record says, and nothing about victims or
+            perpetrators. With no such record, there is no post.
+          </P>
+        </More>
+        <P>
+          Every word of a post is fixed template text, the record&apos;s own fields, or
+          Bluesky&apos;s name for the trend, quoted and attributed to Bluesky. No model writes any
+          of it. The picture is the record itself (a vote&apos;s tally by party, a bill, a rule) on
+          a card with its source, its page on Civitas and the date the data was read, and alt text
+          made from the same fields. For the first four weeks, alternate days carry that picture or
+          a plain link card instead, to measure which people engage with more.
+        </P>
+        <P>
+          Selection doesn&apos;t look at party: among eligible trends, the one posted is the one
+          with the highest rank on Bluesky&apos;s list times the strength of its match. Every
+          candidate, posted or not, is recorded with the parties of the members it names and of the
+          record&apos;s sponsors, and the share of posts leaning to each party is tested against the
+          share in the whole eligible pool (an exact binomial test); a divergence alerts the
+          operator.
+        </P>
+        <P>
+          There are at most two a day, at least four hours apart, and only inside the posting
+          window, the hours U.S. users are most active on Bluesky. A trend that qualifies outside it
+          is held, and dropped if it has left the list by the next check. The same record is posted
+          at most once in 14 days, and never one an issue post already carried. Posts go to the{" "}
+          <A href="/feeds">feeds</A> and the Bluesky account.
         </P>
       </Section>
 

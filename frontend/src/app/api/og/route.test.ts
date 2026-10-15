@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { DayReport } from "@/types/congress";
 import {
+  type RecordCard,
   chamberTile,
   formatStanding,
   parseCongressDate,
   parseIssueId,
   parsePoliticianId,
+  parseBillRef,
+  parseRecordId,
   parseStateCode,
+  parseVoteRef,
+  recordCardKey,
+  recordCardTexts,
   scoreFooterLabel,
 } from "./route";
 
@@ -153,5 +159,124 @@ describe("chamberTile", () => {
     const r = report(day("not_in_session", 0), day("no_record", 0));
     expect(chamberTile(r, "senate")).toEqual({ value: "—", label: "SENATE: NOT IN SESSION" });
     expect(chamberTile(r, "house")).toEqual({ value: "—", label: "HOUSE: NO RECORD YET" });
+  });
+});
+
+describe("record card references", () => {
+  it("accepts a roll call by chamber, congress, session and number", () => {
+    expect(parseVoteRef("senate/119/2/123")).toBe("senate/119/2/123");
+    expect(parseVoteRef("house/119/1/7")).toBe("house/119/1/7");
+    expect(parseVoteRef("scotus/119/1/7")).toBeNull();
+    expect(parseVoteRef("senate/119/2")).toBeNull();
+    expect(parseVoteRef("senate/119/2/12a")).toBeNull();
+    expect(parseVoteRef("senate/../admin")).toBeNull();
+    expect(parseVoteRef(null)).toBeNull();
+  });
+
+  it("accepts a bill as congress and type.number", () => {
+    for (const ok of ["119/S.4668", "119/HR.22", "119/HJRES.5", "119/SRES.12"]) {
+      expect(parseBillRef(ok)).toBe(ok);
+    }
+    expect(parseBillRef("119/HR22")).toBeNull();
+    expect(parseBillRef("119/H.R.22")).toBeNull();
+    expect(parseBillRef("S.4668")).toBeNull();
+    expect(parseBillRef("119/S.4668/x")).toBeNull();
+    expect(parseBillRef("")).toBeNull();
+  });
+
+  it("accepts only a numeric record id", () => {
+    expect(parseRecordId("42")).toBe("42");
+    expect(parseRecordId("4a")).toBeNull();
+    expect(parseRecordId("../42")).toBeNull();
+    expect(parseRecordId(null)).toBeNull();
+  });
+
+  it("maps each query parameter to the backend's card key", () => {
+    const key = (q: string) => recordCardKey(new URLSearchParams(q));
+    expect(key("vote=senate/119/2/123")).toBe("vote:senate/119/2/123");
+    expect(key("bill=119/S.4668&title=0")).toBe("bill:119/S.4668");
+    expect(key("congressEvent=9")).toBe("event:9");
+    expect(key("explore=31")).toBe("document:31");
+    expect(key("explore=x")).toBeNull();
+    expect(key("issue=650")).toBeNull();
+  });
+});
+
+describe("recordCardTexts", () => {
+  // Built the way backend record_cards.RecordCard.alt builds it, so a
+  // rendered string that isn't in it is something the alt text omits.
+  const source = "Source: Senate.gov · civitas-research.org/votes/1 · data as of October 10, 2026";
+  const card: RecordCard = {
+    kind: "vote",
+    key: "senate/119/2/123",
+    eyebrow: "Senate roll call 123, 119th Congress",
+    headline: "On Passage of the Bill",
+    date: "2026-10-09",
+    path: "/votes/1",
+    source_name: "Senate.gov",
+    as_of: "2026-10-10",
+    lines: ["Passed"],
+    tally: [
+      {
+        position: "yea",
+        label: "Yea",
+        total: 52,
+        parties: [
+          { party: "R", name: "Republican", count: 50 },
+          { party: "D", name: "Democratic", count: 2 },
+          { party: "I", name: "Independent", count: 0 },
+        ],
+      },
+      {
+        position: "nay",
+        label: "Nay",
+        total: 47,
+        parties: [
+          { party: "D", name: "Democratic", count: 45 },
+          { party: "I", name: "Independent", count: 2 },
+        ],
+      },
+      { position: "notVoting", label: "Not voting", total: 1, parties: [] },
+    ],
+    source,
+    alt:
+      "Senate roll call 123, 119th Congress, October 9, 2026. On Passage of the Bill. Passed. " +
+      "Yea 52: Republican 50, Democratic 2. Nay 47: Democratic 45, Independent 2. " +
+      `Not voting 1. ${source}.`,
+  };
+  const texts = recordCardTexts(card);
+
+  it("renders the source line verbatim", () => {
+    expect(texts).toContain(source);
+  });
+
+  it("renders every tally total and every counted party", () => {
+    for (const row of card.tally) {
+      expect(texts).toContain(row.label);
+      expect(texts).toContain(String(row.total));
+      for (const p of row.parties.filter((x) => x.count > 0)) {
+        expect(texts).toContain(`${p.name} ${p.count}`);
+      }
+    }
+  });
+
+  it("renders the eyebrow, the record's date, the headline and each line", () => {
+    expect(texts).toEqual(
+      expect.arrayContaining([card.eyebrow, "October 9, 2026", card.headline, "Passed"])
+    );
+  });
+
+  it("renders nothing the alt text does not say", () => {
+    for (const text of texts) expect(card.alt).toContain(text);
+    expect(texts.join(" ")).not.toContain("Independent 0");
+  });
+
+  it("leaves out a date the record does not have", () => {
+    expect(recordCardTexts({ ...card, date: null, tally: [] })).toEqual([
+      card.eyebrow,
+      card.headline,
+      "Passed",
+      source,
+    ]);
   });
 });
