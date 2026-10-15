@@ -1021,6 +1021,14 @@ Cook are listed as alerts. Against Cook: 119th lines r 0.9998, mean
 absolute difference 0.27, 423 of 435 equal when rounded, all within one;
 120th lines r 0.9997, 0.28, 403 equal, 432 within one. Texas's Red-206 tables are the independent cross-check; California's is also its correction source, so agreement there only confirms the correction was applied. It moves no score:
 Constituent Alignment still reads Cook's figure.
+The whole table can be downloaded and cited: `GET /api/public/v1/district-lean`
+(every district on both maps with Cook's published PVI for the same lines,
+the method, each input with its version and license, every correction with
+its certified source, the agreement with Cook, and the data file's SHA-256)
+and `GET /api/elections/district-lean.csv` (the same districts, one row
+each), both from `district_lean.published()` / `csv_text()`; `/about/data#computed-lean`
+links them, the script, the data and corrections files, and gives an APA
+citation dated by the file's `_as_of`.
 The same list tells the election-night sync that a redrawn seat has no
 holder to measure a flip against, and lets an incumbent running under a new
 number link to their record — labelled a *sitting member* there (a *member before this election* from
@@ -1664,6 +1672,8 @@ GET /api/public/v1/bills/{id}/votes              The roll calls on a bill, with 
 GET /api/public/v1/search                        Floor speeches, presidential actions,
                                                  Supreme Court opinions and federal rules
 GET /api/public/v1/states                        States and their member counts
+GET /api/public/v1/district-lean                 Every House district's computed lean, both maps,
+                                                 with Cook's PVI, method, inputs and licenses
 GET /api/public/v1/presidential-support/{chamber}  How often each member votes with the
                                                  president's stated position, and the
                                                  rate expected for their seat
