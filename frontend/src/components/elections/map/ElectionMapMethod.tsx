@@ -12,7 +12,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
     <section
       id="method"
       aria-labelledby="method-heading"
-      className="space-y-4 text-[15px] leading-relaxed text-ink-lo"
+      className="scroll-mt-[var(--header-clearance)] space-y-4 text-[15px] leading-relaxed text-ink-lo"
     >
       <h2 id="method-heading" className="font-display text-2xl font-bold text-ink-hi">
         How this is measured

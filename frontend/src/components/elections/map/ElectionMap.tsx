@@ -590,7 +590,12 @@ export default function ElectionMap({
 
   return (
     <div className="space-y-4">
-      <div {...{ [SHARE_EXCLUDE_ATTR]: "" }} className="space-y-3">
+      {/* Clear of the fixed site header when scrolled to (scroll-mt). */}
+      <div
+        id="map-views"
+        {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+        className="scroll-mt-[var(--header-clearance)] space-y-3"
+      >
         <div
           role="group"
           aria-label="Map view"
@@ -624,7 +629,7 @@ export default function ElectionMap({
             Polls and Difference are off: no seat has a poll-informed range yet.
           </p>
         )}
-        <p className="font-mono text-xs text-ink-lo">
+        <p className="min-w-0 break-words font-mono text-xs text-ink-lo">
           {changedLine(view, counts, data.national)}
           {view !== "diff" && counts.differ > 0 && (
             <>
@@ -632,7 +637,7 @@ export default function ElectionMap({
               <button
                 type="button"
                 onClick={() => setView("diff")}
-                className="min-h-6 text-ink-hi underline"
+                className="inline min-h-6 whitespace-normal break-words text-left text-ink-hi underline"
               >
                 {counts.differ} {counts.differ === 1 ? "seat" : "seats"} where polls tell a
                 different story →
@@ -646,7 +651,7 @@ export default function ElectionMap({
         <section
           id="general-map"
           aria-labelledby="general-map-stamp"
-          className="relative min-w-0 border border-phos/20 bg-surface p-3 sm:p-4"
+          className="relative min-w-0 scroll-mt-[var(--header-clearance)] border border-phos/20 bg-surface p-3 sm:p-4"
           {...{ [SHARE_SECTION_ATTR]: "general-map" }}
           {...shareMetaAttrs({
             source:
