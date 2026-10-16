@@ -112,12 +112,22 @@ const SUBLINK =
   "flex min-h-11 items-center font-mono text-xs uppercase tracking-[0.12em] transition-colors";
 
 /**
- * A section in the desktop row: its hub's link and, beside it, a button that
- * discloses the section's other pages (the WAI-ARIA disclosure navigation
- * pattern, "with top-level links": a button with aria-expanded and a plain
- * list of links, no menu role, so Tab walks it like any other links).
- * Escape closes it and returns focus to the button; so does focus or a
- * pointer leaving it.
+ * A section in the desktop row: one trigger, the section's name, that opens
+ * a panel of all its pages (the WAI-ARIA disclosure navigation pattern: a
+ * button with aria-expanded and a plain list of links, no menu role, so Tab
+ * walks it like any other links). Escape closes it and returns focus to the
+ * button; so does focus or a pointer leaving it. A section with one page
+ * (Explore) is a plain link.
+ *
+ * It was the section's link with a separate 24 px ▾ button beside it, and
+ * a narrow box floating under the label: two controls that looked like one,
+ * a list that didn't line up with anything, and no hub in it. The panel is
+ * now a band under the header's rule, on the page's own grid, as wide as
+ * the content: the section's name and every one of its pages (the hub
+ * first), in columns, the current page marked by a rule (Congress.gov and
+ * GovTrack open section menus the same way: one trigger, the overview
+ * inside). The links run down each column (CSS columns), the order Tab
+ * walks them. Tab stops in the row went from 13 to 7.
  */
 function SectionItem({
   section,
@@ -125,7 +135,6 @@ function SectionItem({
   open,
   onToggle,
   onClose,
-  alignRight,
   pathname,
 }: {
   section: SectionKey;
@@ -133,11 +142,9 @@ function SectionItem({
   open: boolean;
   onToggle: () => void;
   onClose: () => void;
-  alignRight: boolean;
   pathname: string;
 }) {
-  const { label, href } = SECTIONS[section];
-  const subs = sectionSubpages(section);
+  const { label, href, tabs } = SECTIONS[section];
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -169,62 +176,70 @@ function SectionItem({
     };
   }, [open, onClose]);
 
-  const panelId = `nav-pages-${section}`;
-  return (
-    <div ref={ref} className="relative flex items-center gap-0.5">
-      <Link
-        href={href}
-        aria-current={active ? "page" : undefined}
-        className={`tracking-normal xl:tracking-widest ${navLinkClass(active, section === ACCENT, "xs")}`}
-      >
+  const labelClass = `tracking-normal xl:tracking-widest ${navLinkClass(active, section === ACCENT, "xs")}`;
+  if (tabs.length < 2) {
+    return (
+      <Link href={href} aria-current={active ? "page" : undefined} className={labelClass}>
         {label.toUpperCase()}
       </Link>
-      {subs.length > 0 && (
-        <button
-          ref={buttonRef}
-          type="button"
-          aria-expanded={open}
-          aria-controls={panelId}
-          aria-label={`${label} pages`}
-          onClick={onToggle}
-          className="inline-flex h-6 w-6 items-center justify-center font-mono text-xs text-ink-min transition-colors hover:text-phos aria-expanded:text-phos"
+    );
+  }
+  const panelId = `nav-pages-${section}`;
+  // `pathOf` match on the hub too: the hub is a page of the section like
+  // any other here.
+  const isCurrent = (h: string) =>
+    h === href ? pathname === pathOf(href) : currentSubpage(section, h, pathname);
+  return (
+    // Not positioned: the panel spans the header (the nav is its
+    // containing block), not this item.
+    <div ref={ref} className="flex items-center">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+        className={`inline-flex min-h-6 items-center gap-1.5 ${labelClass} aria-expanded:border-phos aria-expanded:text-ink-hi`}
+      >
+        {label.toUpperCase()}
+        {active && <span className="sr-only">{", current section"}</span>}
+        <span
+          aria-hidden="true"
+          className={`inline-block text-[0.6rem] text-ink-min transition-transform ${open ? "rotate-180" : ""}`}
         >
-          <span
-            aria-hidden="true"
-            className={`inline-block transition-transform ${open ? "rotate-180" : ""}`}
-          >
-            &#9662;
-          </span>
-        </button>
-      )}
-      {subs.length > 0 && (
-        <ul
-          id={panelId}
-          hidden={!open}
-          className={`absolute top-full z-10 mt-3 w-max min-w-56 max-w-80 border border-white/15 border-t-phos/50 bg-surface-base py-1 ${
-            alignRight ? "right-0" : "left-0"
-          }`}
-        >
-          {subs.map((t) => {
-            const current = currentSubpage(section, t.href, pathname);
-            return (
-              <li key={t.key}>
-                <Link
-                  href={t.href}
-                  aria-current={current ? "page" : undefined}
-                  onClick={() => onClose()}
-                  className={`${SUBLINK} px-4 ${current ? "text-ink-hi" : "text-ink-lo hover:bg-white/[0.04] hover:text-ink-hi"}`}
-                >
-                  <span aria-hidden="true" className="mr-2 text-ink-min">
-                    &rsaquo;
-                  </span>
-                  {t.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+          &#9662;
+        </span>
+      </button>
+      <div
+        id={panelId}
+        hidden={!open}
+        className="absolute inset-x-0 top-[calc(100%+3px)] z-10 border-b-3 border-white/15 bg-surface-base"
+      >
+        <div className="mx-auto grid max-w-7xl grid-cols-[12rem_minmax(0,1fr)] gap-x-9 px-4 py-5 sm:px-6">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">{label}</p>
+          <ul className="max-w-3xl columns-2 gap-x-9 xl:columns-3">
+            {tabs.map((t) => {
+              const current = isCurrent(t.href);
+              return (
+                <li key={t.key} className="break-inside-avoid">
+                  <Link
+                    href={t.href}
+                    aria-current={current ? "page" : undefined}
+                    onClick={() => onClose()}
+                    className={`flex min-h-11 items-center border-l-2 pl-3 font-display text-sm transition-colors ${
+                      current
+                        ? "border-phos text-ink-hi"
+                        : "border-white/15 text-ink-lo hover:border-ink-lo hover:text-ink-hi"
+                    }`}
+                  >
+                    {t.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
@@ -374,7 +389,7 @@ export default function Navbar() {
       <RecordsBand />
       {/* The skip link is the root layout's, ahead of everything: a second
           one here cost keyboard users an extra Tab on every page. */}
-      <nav aria-label="Main navigation" className="border-b-3 border-white/15">
+      <nav aria-label="Main navigation" className="relative border-b-3 border-white/15">
         <div
           ref={barRef}
           className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between"
@@ -412,7 +427,7 @@ export default function Navbar() {
               rowFits ? "" : "invisible pointer-events-none absolute right-0"
             }`}
           >
-            {NAV.map((section, i) => (
+            {NAV.map((section) => (
               <SectionItem
                 key={section}
                 section={section}
@@ -422,7 +437,6 @@ export default function Navbar() {
                   setOpened(openSection === section ? null : { section, path: pathname })
                 }
                 onClose={closeSection}
-                alignRight={i >= NAV.length - 2}
                 pathname={pathname}
               />
             ))}

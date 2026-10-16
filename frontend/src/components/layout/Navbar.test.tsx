@@ -39,9 +39,12 @@ describe("Navbar search", () => {
 });
 
 describe("Navbar", () => {
-  it("discloses a section's pages with a button, not a menu, and Escape closes it", () => {
+  it("opens a section's pages from one trigger, not a menu, and Escape closes it", () => {
     render(<Navbar />);
-    const button = screen.getByRole("button", { name: "Elections pages" });
+    const row = screen.getByTestId("nav-row");
+    // One control per section: the name is the trigger, no separate link.
+    const button = within(row).getByRole("button", { name: /^ELECTIONS/ });
+    expect(within(row).queryByRole("link", { name: "ELECTIONS" })).toBeNull();
     expect(button).toHaveAttribute("aria-expanded", "false");
     const panel = document.getElementById(button.getAttribute("aria-controls")!)!;
     expect(panel).not.toBeVisible();
@@ -50,8 +53,17 @@ describe("Navbar", () => {
     fireEvent.click(button);
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(panel).toBeVisible();
+    // Every page of the section, the hub first, the current one marked.
+    expect(
+      within(panel)
+        .getAllByRole("link")
+        .map((l) => l.getAttribute("href"))
+    ).toEqual(SECTIONS.elections.tabs.map((t) => t.href));
     const seatMap = within(panel).getByRole("link", { name: /Seat map/ });
     expect(seatMap).toHaveAttribute("aria-current", "page");
+    expect(within(panel).getByRole("link", { name: "Ballots by state" })).not.toHaveAttribute(
+      "aria-current"
+    );
 
     seatMap.focus();
     fireEvent.keyDown(seatMap, { key: "Escape" });
@@ -61,22 +73,23 @@ describe("Navbar", () => {
 
   it("opens one section at a time", () => {
     render(<Navbar />);
-    fireEvent.click(screen.getByRole("button", { name: "Congress pages" }));
-    fireEvent.click(screen.getByRole("button", { name: "Elections pages" }));
-    expect(screen.getByRole("button", { name: "Congress pages" })).toHaveAttribute(
+    const row = screen.getByTestId("nav-row");
+    fireEvent.click(within(row).getByRole("button", { name: /^CONGRESS/ }));
+    fireEvent.click(within(row).getByRole("button", { name: /^ELECTIONS/ }));
+    expect(within(row).getByRole("button", { name: /^CONGRESS/ })).toHaveAttribute(
       "aria-expanded",
       "false"
     );
   });
 
-  it("marks the section of the page, and a section with no other pages has no button", () => {
+  it("marks the section of the page, and a section with one page is a plain link", () => {
     render(<Navbar />);
-    const nav = screen.getByRole("navigation", { name: "Main navigation" });
-    expect(within(nav).getByRole("link", { name: "ELECTIONS" })).toHaveAttribute(
-      "aria-current",
-      "page"
-    );
-    expect(screen.queryByRole("button", { name: "Explore pages" })).not.toBeInTheDocument();
+    const row = screen.getByTestId("nav-row");
+    expect(
+      within(row).getByRole("button", { name: /^ELECTIONS,? ?current section$/ })
+    ).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: "EXPLORE" })).toHaveAttribute("href", "/explore");
+    expect(within(row).queryByRole("button", { name: /^EXPLORE/ })).toBeNull();
   });
 
   it("lists every section's pages one level down in the phone menu", () => {
