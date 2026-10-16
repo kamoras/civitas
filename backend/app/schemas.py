@@ -946,6 +946,8 @@ class PublicSearchResultSchema(_PublicModel):
     chamber: str = Field(description="Senate, House, Executive, Judicial or Regulatory (the chamber filter's "
                                      "values, capitalized)")
     agency_name: str = Field(description="The issuing agency, for a Federal Register document; empty otherwise")
+    agency_slug: str = Field(description="That agency's Civitas id, as in /agencies/{slug} (the Federal Register's own "
+                                         "slug for it); empty when there is none or it has not been read yet")
     url: str = Field(description="The document at its official source")
     site_url: str = _SITE_URL
     summary: str
@@ -1366,8 +1368,9 @@ class RelatedExploreDoc(CamelModel):
     comment_url: str | None = None
     comments_close_on: str | None = None
     # The issuing agency, for a Federal Register document: who takes the
-    # comments and decides the rule.
+    # comments and decides the rule. agency_slug: its page (/agencies/...).
     agency_name: str | None = None
+    agency_slug: str | None = None
 
 
 class RelatedSenator(CamelModel):
