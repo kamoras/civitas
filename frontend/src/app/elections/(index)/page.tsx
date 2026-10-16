@@ -8,6 +8,7 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import BackToTop from "@/components/BackToTop";
 import Link from "next/link";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
+import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import ResultsOverview from "@/components/elections/results/ResultsOverview";
@@ -384,6 +385,12 @@ export default function ElectionsPage() {
                   className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
                 >
                   [ NEW HOUSE MAPS: WHAT CHANGED → ]
+                </Link>{" "}
+                <Link
+                  href={ELECTION_MAP_HREF}
+                  className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+                >
+                  [ SENATE AND HOUSE MAP: USUAL VOTE AND POLL RANGES → ]
                 </Link>
               </>
             ) : null}

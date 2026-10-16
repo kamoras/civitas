@@ -9,6 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.config import settings
 from app.database import SessionLocal
 from app.error_utils import exception_summary
+from app.forecast.build import run_refresh as election_map_refresh
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
 from app.pipeline.supplementary_pipeline import (
@@ -810,6 +811,19 @@ def start_scheduler() -> None:
         CronTrigger(minute="10,40", timezone="UTC"),
         id="congress_activity_sync",
         replace_existing=True,
+    )
+
+    # The 2026 election map's data (app/forecast/build.py) — every three
+    # hours at :55, and once at start, a no-op outside the campaign. Not
+    # through _start_job: it reads the database and writes only its own
+    # file on the data volume, so it is no database writer for a data
+    # reset to wait on, and a reset under it only shortens one build.
+    scheduler.add_job(
+        election_map_refresh,
+        CronTrigger(hour="*/3", minute="55", timezone="UTC"),
+        id="election_map_refresh",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
     )
 
     # Agency list and budgets — hourly at :30, clear of the :10/:40 Congress

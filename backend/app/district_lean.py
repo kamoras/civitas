@@ -68,6 +68,14 @@ def lines_table(state: str, congress: int | None) -> dict[str, float]:
     return {k: v for k, v in table.items() if k.split("-")[0] == state}
 
 
+def lean_label(lean: float) -> str:
+    """How a lean is written wherever the site shows one beside the 2026
+    map (the map, the race pages): rounded to a whole point, "R+3",
+    "D+2" or "EVEN". One function, so the two pages can't disagree."""
+    r = round(lean)
+    return "EVEN" if r == 0 else f"{'R' if r > 0 else 'D'}+{abs(r)}"
+
+
 def lean_for(state: str, district: int | None, congress: int | None) -> float | None:
     return lines_table(state, congress).get(f"{state}-{district if district is not None else 0}")
 

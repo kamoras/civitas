@@ -13,6 +13,7 @@ import {
   A,
 } from "@/components/about/AboutPage";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import {
   countWord,
   fetchLiveStates,
@@ -94,23 +95,27 @@ export default async function ElectionsChapter() {
         </P>
       </Section>
 
-      <Section id="race-context" title="What shapes a race (and why there is no forecast)">
+      <Section id="race-context" title="What shapes a race">
         <P>
           Each federal contest&apos;s research opens with what shapes the race. Civitas publishes no
-          prediction, odds or rating for any race, and calls none; these figures describe a race,
-          they don&apos;t forecast it.
+          odds or rating for any race, and calls none; these figures describe a race. The one place
+          this year&apos;s polls appear is the <A href="#election-map">Senate and House map</A>, as
+          a range for the margin, kept apart from this block because the block shows the
+          incumbent&apos;s Representation Score.
         </P>
         <P>
-          <strong>The seat.</strong> Its lean is the Cook-PVI-style figure: how much more Republican
-          or Democratic it voted than the nation in the last two presidential elections. Beside it,
-          one square for every seat of its kind, from the most Democratic-leaning to the most
-          Republican: every U.S. House district on the lines this election is fought on, or the 50
-          states for a Senate race. The count of seats leaning further each way is worked out on the
-          server from the same table the lean comes from. A district that only has its state&apos;s
-          figure is not placed among districts, and from election day the lean is not shown at all,
-          so that it can&apos;t be read as a call on the count. A House district also shows the lean
-          Civitas computes from precinct returns with the same formula, beside Cook&apos;s and used
-          in no score (<A href="/about/data#computed-lean">how it is computed</A>).
+          <strong>The seat.</strong> Its lean is the figure the 2026 election map shows, computed by
+          Civitas with Cook&apos;s formula (Cook&apos;s own PVI is shown beside it as a
+          cross-check): how much more Republican or Democratic it voted than the nation in the last
+          two presidential elections. Beside it, one square for every seat of its kind, from the
+          most Democratic-leaning to the most Republican: every U.S. House district on the lines
+          this election is fought on, or the 50 states for a Senate race. The count of seats leaning
+          further each way is worked out on the server from the same table the lean comes from. A
+          district that only has its state&apos;s figure is not placed among districts, and from
+          election day the lean is not shown at all, so that it can&apos;t be read as a call on the
+          count. A House district&apos;s figure is computed from precinct returns and used in no
+          score (<A href="/about/data#computed-lean">how it is computed</A>); where Civitas has
+          none, the page shows Cook&apos;s, labelled as Cook&apos;s.
         </P>
         <P>
           <strong>The money.</strong> Each candidate&apos;s contributions are split into the
@@ -128,6 +133,39 @@ export default async function ElectionsChapter() {
           dates they are as of, the seat&apos;s lean and the FEC link. The{" "}
           <span className="font-mono text-ink-hi">[ JSON ]</span> link is the race as the page reads
           it.
+        </P>
+      </Section>
+
+      <Section id="election-map" title="The 2026 Senate and House map: usual vote and poll ranges">
+        <P>
+          <A href={ELECTION_MAP_HREF}>The map</A> covers every Senate and House seat, in three
+          views. <strong>Usual vote</strong> is each state<strong>Usual vote</strong> is each
+          state&apos;s lean from the last two presidentialapos;s or district
+          <strong>Usual vote</strong> is each state&apos;s lean from the last two presidentialapos;s
+          lean from the last two presidential elections, computed by Civitas from official returns;
+          no model is involved. <strong>Polls</strong> is a range for the margin: that lean, plus
+          incumbency and the national generic-ballot average, combined with the race&apos;s own
+          polls. A range that crosses even is grey and says too close to tell.{" "}
+          <strong>Difference</strong> marks the seats whose polls pull the range clear of where the
+          lean, incumbency and the national swing alone would put it.
+        </P>
+        <P>
+          It is not a prediction and calls no race: it shows no chance of anyone winning and no seat
+          total by party. Every number in the method is fitted by a script on official results and
+          FiveThirtyEight&apos;s archive of final-weeks polls (1998 to 2022), and checked on
+          election cycles the fit never saw; the map&apos;s own method section shows how often its
+          ranges held the result, and why there is no seat total. It has nothing to do with
+          Representation Scores, which measure a member&apos;s record, not an election. Only
+          Democrat-versus-Republican races whose November ballot Civitas has confirmed get a range.
+          The House fit covers 2018, 2020 and 2022, with each district&apos;s lean rebuilt from
+          precinct returns as it stood before each election, on the lines it was held on.
+        </P>
+        <P>
+          This year&apos;s polls come from Wikipedia&apos;s race articles. The poll figures and the
+          ranges built on them are shared under Wikipedia&apos;s licence, CC BY-SA 4.0, with
+          attribution to Wikipedia contributors: reuse them under the same licence. Each seat links
+          the article revision its polls were read from. From election day the map is withdrawn and
+          the results map takes its place.
         </P>
       </Section>
 
@@ -616,6 +654,12 @@ export default async function ElectionsChapter() {
               &ldquo;leads&rdquo; once it has, and never &ldquo;wins&rdquo;: an official
               count&apos;s leader can still face a runoff (Georgia requires a majority), a recount
               or a court.
+            </Item>
+            <Item label="Before election day">
+              This rule is about the count. Before election day the{" "}
+              <A href="#election-map">Senate and House map</A> shows a range for each margin and how
+              often such ranges held the result, never a winner; it is withdrawn when the count
+              begins.
             </Item>
             <Item label="A seat changing party">
               A seat is only described as changing party once half its reporting areas are in. Where
