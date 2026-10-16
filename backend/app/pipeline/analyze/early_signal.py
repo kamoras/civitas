@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.http_client import make_async_client
-from app.models import ActionIssue, ActionIssueStatus, RepSponsoredBill, SponsoredBill
+from app.models import ActionIssue, ActionIssueStatus, RepSponsoredBill, RetiredReason, SponsoredBill
 from app.pipeline.analyze import action_metrics
 from app.pipeline.analyze.bill_analyzer import classify_policy_area, recent_roll_call_key
 from app.pipeline.fetch.congress import (
@@ -391,6 +391,7 @@ def retire_stale_vote_drafts(db: Session, today: str) -> int:
     ):
         if _vote_is_stale(row.primary_article_date, today):
             row.is_current = False
+            row.retired_reason = RetiredReason.UNCONFIRMED
             retired += 1
             action_metrics.increment("early_signal_retired_stale")
             logger.info("Retired developing issue %d: its vote (%s) is past the window", row.id, row.primary_article_date)
@@ -417,10 +418,49 @@ def expire_stale_developing_issues(db: Session, now) -> int:
     )
     for row in stale:
         row.is_current = False
+        row.retired_reason = RetiredReason.UNCONFIRMED
         action_metrics.increment("early_signal_expired")
         action_metrics.increment(f"early_signal_expired_{row.source_type or 'unknown'}")
         logger.info("Expired unconfirmed developing issue %d: '%s'", row.id, row.title[:60])
     return len(stale)
+
+
+# The clause a draft's summary closes on while it waits for news coverage
+# (the vote and rule templates above), and what it says once the draft is
+# retired without it: "has not appeared yet" on a month-old record reads as
+# a story still developing.
+_AWAITING_COVERAGE = re.compile(r"; news coverage of the (vote|rule) has not appeared yet\.$")
+_RETIRED_UNCONFIRMED = r"; news coverage of the \1 did not appear while it was on the Action Center."
+
+
+def reword_retired_drafts(db: Session) -> int:
+    """Close the summary of a draft retired UNCONFIRMED on what happened to
+    it. A COVERED draft keeps its summary: coverage did appear, and saying
+    otherwise can't be undone (the rewrite no longer matches). A draft
+    retired before reasons were recorded gets one first, from whether a
+    reported issue, current or not, covers its bill. Idempotent."""
+    retired = db.query(ActionIssue).filter(
+        ActionIssue.status == ActionIssueStatus.DEVELOPING,
+        ActionIssue.is_current == False,  # noqa: E712
+    )
+    unexplained = retired.filter(ActionIssue.retired_reason.is_(None)).all()
+    if unexplained:
+        reported = db.query(ActionIssue).filter(ActionIssue.status != ActionIssueStatus.DEVELOPING).all()
+        for row in unexplained:
+            row.retired_reason = (
+                RetiredReason.COVERED if covering_issue(db, row, candidates=reported) else RetiredReason.UNCONFIRMED
+            )
+        db.flush()
+    reworded = 0
+    for row in retired.filter(
+        ActionIssue.retired_reason == RetiredReason.UNCONFIRMED,
+        ActionIssue.summary.like("%has not appeared yet."),
+    ):
+        summary = _AWAITING_COVERAGE.sub(_RETIRED_UNCONFIRMED, row.summary)
+        if summary != row.summary:
+            row.summary = summary
+            reworded += 1
+    return reworded
 
 
 ROLL_CALL_SOURCES = ("senate_roll_call_vote", "house_roll_call_vote")
@@ -454,6 +494,10 @@ def retire_covered_developing_issues(db: Session) -> int:
         if covering is None:
             continue
         draft.is_current = False
+        draft.retired_reason = RetiredReason.COVERED
+        # Its page links the covering issue at once; mark_recent_duplicates
+        # decides the homepage's duplicates afresh each run.
+        draft.duplicate_of_id = covering.id
         retired += 1
         action_metrics.increment("early_signal_retired_covered")
         logger.info("Retired developing issue %d: issue %d covers its bill", draft.id, covering.id)

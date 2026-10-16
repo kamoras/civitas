@@ -48,17 +48,20 @@ _SUPPORT_DEFAULT = {"statements": {"status": "ok", "read": 0}, "senate": {"rollC
 
 
 def _run(db_session, explore_result=None, justice_result=None, president_result=None,
-         committee_leadership_result=None, district_pvi_result=None, presidential_support_result=None):
+         committee_leadership_result=None, district_pvi_result=None, presidential_support_result=None,
+         court_changed=False):
     with patch("app.pipeline.supplementary_pipeline.SessionLocal", return_value=db_session), \
          patch("app.pipeline.explore_pipeline.run_explore_pipeline", new_callable=AsyncMock) as mock_explore, \
-         patch("app.pipeline.justice_pipeline.run_justice_pipeline", new_callable=AsyncMock) as mock_justice, \
+         patch("app.pipeline.supplementary_pipeline.run_justice_pipeline", new_callable=AsyncMock) as mock_justice, \
          patch("app.pipeline.president_pipeline.run_president_pipeline", new_callable=AsyncMock) as mock_president, \
          patch("app.pipeline.fetch.committee_leadership.refresh_committee_leadership_data",
                new_callable=AsyncMock) as mock_committee_leadership, \
          patch("app.pipeline.fetch.district_pvi.refresh_district_pvi",
                new_callable=AsyncMock) as mock_district_pvi, \
          patch("app.pipeline.supplementary_pipeline.run_presidential_support",
-               new_callable=AsyncMock) as mock_presidential_support:
+               new_callable=AsyncMock) as mock_presidential_support, \
+         patch("app.pipeline.supplementary_pipeline.court_roster_changed",
+               new_callable=AsyncMock, return_value=court_changed):
         # No phase reaches the network or loads a model here: the fast suite
         # runs offline with no model (AGENTS.md).
         # An exception or a callable becomes the mock's side effect;
@@ -141,6 +144,16 @@ class TestSupplementaryPipelineRunTracking:
         run = db_session.query(SupplementaryPipelineRun).one()
         assert run.justices_skipped is True
         assert run.justices_scored == 0
+
+    def test_justices_run_off_cadence_the_night_the_court_changes(self, db_session):
+        # A confirmation or a departure: the Court's list differs from the
+        # stored sitting justices, so the refresh runs that night rather
+        # than on the weekly day.
+        db_session.add(Justice(id="j1", name="Test Justice", last_name="Justice", loyalty_through_term=2025))
+        db_session.commit()
+        with patch("app.pipeline.supplementary_pipeline.utcnow", return_value=datetime(2026, 7, 15)):
+            result = _run(db_session, justice_result={"justices": 9}, court_changed=True)
+        assert result["justices_scored"] == 9
 
     def test_justices_run_off_cadence_until_loyalty_is_first_measured(self, db_session):
         # A sitting justice whose loyalty was never measured (the release

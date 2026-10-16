@@ -86,6 +86,59 @@ describe("ExplorePage", () => {
     expect(screen.getByRole("button", { name: "Newest" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("lists an agency's documents from an agency page's link, and filters by another", async () => {
+    api.searchExplore.mockResolvedValue({
+      query: "",
+      results: [
+        {
+          ...doc(2, "Food labels"),
+          chamber: "Regulatory",
+          agencyName: "Food and Drug Administration",
+          agencySlug: "food-and-drug-administration",
+        },
+      ],
+      count: 1,
+    });
+    params = new URLSearchParams("agency=health-and-human-services-department");
+    window.history.replaceState(null, "", "/explore?agency=health-and-human-services-department");
+    api.fetchExploreStats.mockResolvedValue({
+      totalDocuments: 2,
+      openForComment: 0,
+      agencies: [
+        {
+          slug: "health-and-human-services-department",
+          name: "Health and Human Services Department",
+          depth: 0,
+          documents: 2,
+        },
+        {
+          slug: "food-and-drug-administration",
+          name: "Food and Drug Administration",
+          depth: 1,
+          documents: 1,
+        },
+      ],
+    });
+    render(<ExplorePage />);
+
+    expect(await screen.findByText("Food labels")).toBeInTheDocument();
+    expect(api.searchExplore).toHaveBeenCalledWith(
+      "",
+      expect.objectContaining({ agency: "health-and-human-services-department", sort: "date" })
+    );
+    expect(
+      await screen.findByText(/document from Health and Human Services Department/)
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: /Agency/ }), {
+      target: { value: "food-and-drug-administration" },
+    });
+    expect(api.searchExplore).toHaveBeenLastCalledWith(
+      "",
+      expect.objectContaining({ agency: "food-and-drug-administration" })
+    );
+    expect(window.location.search).toBe("?agency=food-and-drug-administration");
+  });
+
   it("puts a new search in the address, so a refresh shows the same results", async () => {
     api.searchExplore.mockResolvedValue({ query: "b", results: [], count: 0 });
     open("q=energy");

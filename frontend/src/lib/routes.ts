@@ -47,3 +47,13 @@ export function issuesUrl(date: string | null, issue: string | null): string {
   const q = params.toString();
   return q ? `/action?${q}` : "/action";
 }
+
+/** A federal agency's page, by its Federal Register slug. */
+export function agencyHref(slug: string): string {
+  return `/agencies/${encodeURIComponent(slug)}`;
+}
+
+/** Explore, filtered to an agency's documents (its sub-agencies' included). */
+export function agencyExploreHref(slug: string): string {
+  return `/explore?agency=${encodeURIComponent(slug)}`;
+}

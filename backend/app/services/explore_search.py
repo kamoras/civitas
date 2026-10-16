@@ -210,7 +210,7 @@ def _hydrate(db, doc_ids: list[int]) -> dict[int, dict]:
         params = {f"id{i}": doc_id for i, doc_id in enumerate(chunk)}
         rows.extend(db.execute(text(
             f"""SELECT id, title, date, doc_type, source, politician_name,
-                       politician_id, chamber, agency_name, url, summary,
+                       politician_id, chamber, agency_name, agency_slug, url, summary,
                        comment_url, comments_close_on, cited_by_count, authority,
                        substr(coalesce(body, ''), 1, 400) AS body_head,
                        length(coalesce(body, '')) AS body_length
@@ -228,6 +228,7 @@ def _hydrate(db, doc_ids: list[int]) -> dict[int, dict]:
             "politicianId": row.politician_id or "",
             "chamber": row.chamber or "",
             "agencyName": row.agency_name or "",
+            "agencySlug": row.agency_slug or "",
             "url": row.url or "",
             "summary": row.summary or "",
             "commentUrl": row.comment_url or "",
@@ -289,6 +290,7 @@ def _query_identifiers(query: str) -> set[str]:
 def _identifier_matches(
     db, query: str, *, limit: int, doc_type: str | None,
     chamber: str | None, politician_id: str | None,
+    agency_slugs: list[str] | None = None,
 ) -> list[int]:
     """Documents *known by* an identifier the query names — the document
     whose own FR citation, FR document number, RIN or executive-order
@@ -326,6 +328,9 @@ def _identifier_matches(
     if politician_id:
         sql += " AND politician_id = :politician_id"
         params["politician_id"] = politician_id
+    if agency_slugs:
+        sql += " AND agency_slug IN (" + ", ".join(f":a{i}" for i in range(len(agency_slugs))) + ")"
+        params.update({f"a{i}": s for i, s in enumerate(agency_slugs)})
     rows = db.execute(text(sql + " ORDER BY id"), params).fetchall()
     return [
         int(row.id) for row in rows
@@ -342,17 +347,21 @@ def browse_documents(
     doc_type: str | None = None,
     chamber: str | None = None,
     commentable: bool = False,
+    agency_slugs: list[str] | None = None,
 ) -> dict:
-    """Documents with no query. One member's, newest first: what a profile's
-    "view all documents" link opens. With no member, only `commentable`
-    (every open comment period), closing soonest first: a reader looking
-    for a rule to comment on needs the next deadline before the newest
-    notice. Same response shape as hybrid_search, with no retrieval channel
+    """Documents with no query. One member's, or one agency's
+    (`agency_slugs`: it and its sub-agencies), newest first: what a
+    profile's or an agency page's "view all documents" link opens. With
+    neither, only `commentable` (every open comment period), closing
+    soonest first: a reader looking for a rule to comment on needs the next
+    deadline before the newest notice. Same response shape as hybrid_search, with no retrieval channel
     involved (so no distance, no matched terms)."""
     today = comment_period_today()
     query = db.query(ExploreDocument.id)
     if politician_id is not None:
         query = query.filter(ExploreDocument.politician_id == politician_id)
+    if agency_slugs:
+        query = query.filter(ExploreDocument.agency_slug.in_(agency_slugs))
     if doc_type:
         query = query.filter(ExploreDocument.doc_type == doc_type)
     if chamber or commentable:
@@ -363,7 +372,8 @@ def browse_documents(
             ExploreDocument.comments_close_on >= today,
         )
     order = (
-        (ExploreDocument.date.desc(), ExploreDocument.id.desc()) if politician_id is not None
+        (ExploreDocument.date.desc(), ExploreDocument.id.desc())
+        if politician_id is not None or (agency_slugs and not commentable)
         else (ExploreDocument.comments_close_on.asc(), ExploreDocument.date.desc(), ExploreDocument.id.desc())
     )
     ids = [row.id for row in query.order_by(*order).limit(limit)]
@@ -398,6 +408,7 @@ def hybrid_search(
     commentable: bool = False,
     sort: str = "relevance",
     include_priors: bool = True,
+    agency_slugs: list[str] | None = None,
 ) -> dict:
     """Run both retrieval channels, fuse, rank, and return a page.
 
@@ -428,7 +439,8 @@ def hybrid_search(
     # else, so scoping the semantic channel to that chamber asks the index
     # a question it can answer precisely, instead of retrieving a general
     # pool and hoping enough regulatory documents survive the filter.
-    effective_chamber = chamber or ("Regulatory" if commentable else None)
+    # An agency's documents are rulemaking too (only those carry one).
+    effective_chamber = chamber or ("Regulatory" if commentable or agency_slugs else None)
 
     # A query that is only publisher identifiers ("89 FR 52508") is a lookup
     # the encoder has no meaning for: on known-item probes the semantic
@@ -452,10 +464,11 @@ def hybrid_search(
     keyword = search_lexical(
         db, query, limit=pool, doc_type=doc_type, chamber=effective_chamber,
         politician_id=politician_id, commentable_after=commentable_after,
+        agency_slugs=agency_slugs,
     )
     exact = _identifier_matches(
         db, query, limit=pool, doc_type=doc_type, chamber=effective_chamber,
-        politician_id=politician_id,
+        politician_id=politician_id, agency_slugs=agency_slugs,
     )
     exact_ids = set(exact)
 
@@ -498,6 +511,10 @@ def hybrid_search(
             doc for doc in candidates
             if doc["commentUrl"] and doc["commentsCloseOn"] >= today
         ]
+    if agency_slugs:
+        # The vector index holds no agency, so its hits are filtered here.
+        wanted = set(agency_slugs)
+        candidates = [doc for doc in candidates if doc["agencySlug"] in wanted]
     if not candidates:
         return {
             "results": [], "count": 0, "indexReady": True,

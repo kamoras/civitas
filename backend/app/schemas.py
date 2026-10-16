@@ -947,6 +947,8 @@ class PublicSearchResultSchema(_PublicModel):
     chamber: str = Field(description="Senate, House, Executive, Judicial or Regulatory (the chamber filter's "
                                      "values, capitalized)")
     agency_name: str = Field(description="The issuing agency, for a Federal Register document; empty otherwise")
+    agency_slug: str = Field(description="That agency's Civitas id, as in /agencies/{slug} (the Federal Register's own "
+                                         "slug for it); empty when there is none or it has not been read yet")
     url: str = Field(description="The document at its official source")
     site_url: str = _SITE_URL
     summary: str
@@ -1368,8 +1370,9 @@ class RelatedExploreDoc(CamelModel):
     comment_url: str | None = None
     comments_close_on: str | None = None
     # The issuing agency, for a Federal Register document: who takes the
-    # comments and decides the rule.
+    # comments and decides the rule. agency_slug: its page (/agencies/...).
     agency_name: str | None = None
+    agency_slug: str | None = None
 
 
 class RelatedSenator(CamelModel):
@@ -1556,6 +1559,18 @@ class ActionIssueSchema(CamelModel):
     # uses this to show a disclosure badge and to exclude these from
     # normal top-story ranking competition.
     status: str = "confirmed"
+    # False once the issue is off the Action Center. With status
+    # "developing" the draft was retired (retired_reason says why), and the
+    # page says so rather than "Developing".
+    is_current: bool = True
+    # Why a developing draft left the Action Center (models.RetiredReason):
+    # "unconfirmed" (no coverage in time) or "covered" (a reported issue
+    # covers it). None while current, and for a draft retired before reasons
+    # were recorded until the next refresh gives it one.
+    retired_reason: str | None = None
+    # The issue this one was found to duplicate (duplicate_of_id): for a
+    # retired vote draft, the reported issue covering the same vote.
+    covered_by: str | None = None
     # What a DEVELOPING issue was drafted from ("senate_roll_call_vote",
     # "federal_register_significant_rule", "election_results", ...); None
     # for an ordinary news-derived issue. The page names the source in its

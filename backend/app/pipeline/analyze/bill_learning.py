@@ -55,10 +55,12 @@ import logging
 from collections import Counter
 
 import numpy as np
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.database import execute_retrying_lock
 from app.models import LearnedClassification
+from app.pipeline.vector_store import get_model_version
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -237,10 +239,14 @@ def record_classification(
 
     The vector store's reference corpus is populated separately by embed_bills().
     This stores metadata for exact-match lookups and audit trail.
-    """
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-    from app.pipeline.vector_store import get_model_version
 
+    Committed at once: SQLite has one writer, and the caller goes on to
+    classify the next bill (embeddings, kNN) before it would commit. Held
+    open across that, the write lock was held ~20 s at a time on the
+    2026-10-16 nightly, near the 30 s busy timeout every other writer
+    (the hourly Action Center refresh, the congress and election syncs)
+    waits behind.
+    """
     meta = json.dumps({
         "text_prefix": bill_text[:200],
         "confidence": round(confidence, 3),
@@ -266,6 +272,7 @@ def record_classification(
         },
     )
     execute_retrying_lock(db, stmt)
+    db.commit()
 
 
 def invalidate_thin_classifications(db: Session, min_text_length: int = 40) -> int:

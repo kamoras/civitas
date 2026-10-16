@@ -92,3 +92,15 @@ describe("PoliticiansPage state picker", () => {
     expect(screen.queryByRole("link", { name: /Find your election district/ })).toBeNull();
   });
 });
+
+describe("PoliticiansPage delegation order", () => {
+  it("puts a picked state's senators before the House finder, and its House members after", async () => {
+    open("state=OH");
+    const finder = await screen.findByText(/Find your House member by city, town or county/);
+    const senator = screen.getByRole("link", { name: /Senator · Ohio/ });
+    const house = screen.getAllByRole("link", { name: /Representative · Ohio/ });
+    const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(senator.compareDocumentPosition(finder) & FOLLOWING).toBeTruthy();
+    for (const h of house) expect(finder.compareDocumentPosition(h) & FOLLOWING).toBeTruthy();
+  });
+});
