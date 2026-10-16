@@ -188,6 +188,13 @@ export default function DataChapter() {
               or, where the state&apos;s site turns the check away, linked as unconfirmed beside
               USAGov&apos;s directory of election offices; otherwise USAGov&apos;s directory alone.
             </Fact>
+            <Fact label="Silver Bulletin · Wikipedia">
+              The election map&apos;s past polls, which its ranges are fitted and checked on, come
+              from Silver Bulletin&apos;s raw poll file (every rated poll since 1998 with its
+              result), used free of charge as its terms allow and attributed to Silver Bulletin as
+              they ask; a new copy is used only after it passes Civitas&apos;s checks. This
+              year&apos;s polls come from Wikipedia&apos;s race articles (CC BY-SA 4.0).
+            </Fact>
             <Fact label="News & trends">
               RSS feeds from six newsrooms, Google Trends and Bluesky, for the Action Center.
             </Fact>

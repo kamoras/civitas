@@ -576,6 +576,20 @@ def _col_index(ref: str) -> int:
     return index - 1
 
 
+def xlsx_sheet_as_first(xlsx: bytes, sheet: str) -> bytes:
+    """The workbook with worksheet file `sheet` ("sheet13") moved into
+    sheet1's place, so _xlsx_rows (which reads the first sheet) reads it."""
+    src = zipfile.ZipFile(io.BytesIO(xlsx))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as dst:
+        for name in src.namelist():
+            if name == "xl/worksheets/sheet1.xml":
+                dst.writestr(name, src.read(f"xl/worksheets/{sheet}.xml"))
+            else:
+                dst.writestr(name, src.read(name))
+    return buf.getvalue()
+
+
 def _xlsx_rows(payload: bytes, skip: int = 0) -> list[dict] | None:
     """Rows from a .xlsx workbook's first sheet, read with the standard
     library alone — an xlsx IS a zip of XML, so this needs no Excel

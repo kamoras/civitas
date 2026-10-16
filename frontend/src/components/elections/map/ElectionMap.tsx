@@ -35,6 +35,7 @@ import {
   legendCells,
   mapCounts,
   mapTitle,
+  fundamentalsSentence,
   pollSourceSentence,
   racePageHref,
   nationalSentence,
@@ -54,7 +55,7 @@ import type {
 } from "@/types/electionMap";
 
 const SHARE_SOURCE =
-  "Civitas, from official returns (MEDSL, FEC, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0";
+  "Civitas, from official returns (MEDSL, FEC, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0; past polls: Silver Bulletin";
 
 const TILE = 10;
 const GAP = 1;
@@ -730,7 +731,7 @@ function SeatDetail({
         {seat.status === "range" ? (
           <div>
             <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-              Polls suggest
+              {seat.fundamentalsOnly ? "Fundamentals only" : "Polls suggest"}
             </dt>
             <dd>
               <span className="text-ink-hi">a margin from {rangeLabel(seat)}</span>
@@ -753,10 +754,22 @@ function SeatDetail({
       </dl>
       {seat.status === "range" && (
         <>
-          <p className="text-xs">{coverageSentence(data.calibration, data.chamber)}</p>
+          <p className="text-xs">
+            {coverageSentence(data.calibration, data.chamber, seat.fundamentalsOnly)}
+          </p>
           <p className="text-xs">{pollSourceSentence(seat, data.pollWindowDays)}</p>
           {seat.polls.list.length > 0 && (
-            <ul className="space-y-1 border-t border-white/[0.07] pt-2 text-xs">
+            <ul
+              className="space-y-1 border-t border-white/[0.07] pt-2 text-xs"
+              aria-label={
+                seat.fundamentalsOnly ? "Newest polls, not in the range" : "Polls in the average"
+              }
+            >
+              {seat.fundamentalsOnly && (
+                <li className="font-mono uppercase tracking-[0.12em] text-ink-min">
+                  Newest polls · not in the range
+                </li>
+              )}
               {seat.polls.list.slice(0, 6).map((p, i) => (
                 <li key={`${p.pollster}-${p.end}-${i}`}>
                   {p.url ? (
@@ -1247,6 +1260,12 @@ export default function ElectionMap({
                     ))}
                 </select>
               </div>
+            )}
+            {!data.pollsInRange && view !== "usual" && (
+              <p className="mt-2 font-mono text-xs text-ink-hi">
+                FUNDAMENTALS ONLY · {data.daysToElection} DAYS OUT.{" "}
+                <span className="text-ink-lo">{fundamentalsSentence(data.pollWindowDays)}</span>
+              </p>
             )}
             {data.stale && (
               <p className="mt-2 font-mono text-xs text-signal-amber">
