@@ -1279,6 +1279,20 @@ transaction's first write, so retrying it loses nothing.
 `tests/test_write_lock_holds.py` makes a pipeline write at every slow call
 of the refresh's stages on a file-backed database.
 
+The pipeline holds itself to the same rule. **A learning-store write
+commits at once** (`bill_learning.record_classification`,
+`donor_classifier_ai._store_donor_learning`,
+`industry_classifier._store_classification`): every caller goes on to
+classify the next bill or donor (an encode, the kNN pass) before it would
+commit, and on 2026-10-16 the hold watcher caught the Senate run holding
+the lock 19 to 22 s that way, near the busy timeout everything else waits
+on. A commit per upsert costs about 0.1 ms, against tens of ms of
+classification per item, and keeps every later read in the run (the
+exact-match lookups, the kNN references) seeing the rows already written,
+which a buffer flushed at batch end would not. The same test file makes a
+second-connection write at each classification step of the bill, donor and
+industry classifiers.
+
 Each issue's actions are fixed templates around stored data:
 
 - **The committee with jurisdiction**, one per chamber or none
