@@ -855,12 +855,15 @@ def start_scheduler() -> None:
 
     # Agency list and budgets — hourly at :30, clear of the :10/:40 Congress
     # sync, the :15 action refresh and the :25 dead-run tidy; a no-op unless
-    # a source is a week old (checked inside).
+    # a source is a week old or was never read (checked inside). And once at
+    # start, so a deploy that brings the agency pages, or a fresh database,
+    # fills them as the pipeline process comes up rather than at the next :30.
     scheduler.add_job(
         _agency_sync,
         CronTrigger(minute="30", timezone="UTC"),
         id="agency_sync",
         replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
     )
 
     # Generated data files — daily at 15:40, clear of the :45 bill refresh

@@ -5,7 +5,7 @@ import { CHAMBER_NAME, currentCongress } from "@/lib/congress";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
-import { CongressTabs } from "@/components/congress/CongressNav";
+import SectionTabs from "@/components/layout/SectionTabs";
 import CommitteeEntries from "@/components/congress/CommitteeEntries";
 import type { CommitteeSummary } from "@/types/congress";
 
@@ -87,7 +87,7 @@ export default async function CommitteesPage({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-5xl">
-          <CongressTabs active="committees" />
+          <SectionTabs section="congress" active="committees" />
           <PageMasthead
             className="mb-8"
             eyebrow="Committees · meetings and reports"

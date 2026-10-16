@@ -1,40 +1,5 @@
 import Link from "next/link";
-import { TAB_CONTROL, BOXED_CONTROL } from "@/lib/controlStyles";
-import { presidentSupportHref } from "@/lib/presidentialSupport";
-
-/** Reports | Bills | Committees | With the president: each a page of its
- * own, so each is linkable and renders on the server. */
-export function CongressTabs({
-  active,
-}: {
-  active: "reports" | "bills" | "committees" | "president";
-}) {
-  const tab = (label: string, href: string, on: boolean) => (
-    <Link
-      href={href}
-      aria-current={on ? "page" : undefined}
-      className={`border-b-2 py-3 font-mono text-sm uppercase tracking-[0.14em] transition-colors ${
-        on ? TAB_CONTROL.selected : TAB_CONTROL.unselected
-      }`}
-    >
-      {label}
-    </Link>
-  );
-  return (
-    <nav
-      aria-label="Congress sections"
-      className="mb-8 flex flex-wrap items-end gap-x-6 border-b border-white/15 sm:gap-x-8"
-    >
-      <span className="py-3 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-        Congress
-      </span>
-      {tab("Reports", "/congress", active === "reports")}
-      {tab("Bills", "/congress/bills", active === "bills")}
-      {tab("Committees", "/congress/committees", active === "committees")}
-      {tab("With the president", presidentSupportHref("house"), active === "president")}
-    </nav>
-  );
-}
+import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 interface Step {
   href: string;
