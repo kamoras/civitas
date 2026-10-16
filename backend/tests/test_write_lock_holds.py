@@ -16,6 +16,7 @@ failing a run.
 
 import json
 import logging
+from datetime import datetime
 
 import numpy as np
 import pytest
@@ -119,9 +120,12 @@ def test_the_monitor_stage_never_holds_the_write_lock_through_the_model(file_ses
     assert all(ok for _, ok in pipeline_write.results), pipeline_write.results
 
 
-def test_the_signal_stages_commit_before_the_next_fetch(file_sessionmaker, pipeline_write, monkeypatch):
+def test_the_signal_stages_commit_before_the_next_fetch(file_sessionmaker, pipeline_write, monkeypatch, freeze_utcnow):
     """A roll-call draft is committed before the Federal Register request
     and the news fetch after it, not held open through them."""
+    # The vote is dated: on the clock's day after it, so it is still recent
+    # enough to draft whatever date the suite runs on.
+    freeze_utcnow(datetime(2026, 10, 15, 12))
     vote = {
         "chamber": "Senate", "congress": 119, "session": 1, "rollNumber": 301, "year": 2026,
         "question": "On Passage of the Bill", "voteTitle": "A bill to fund the parks", "result": "Bill Passed",

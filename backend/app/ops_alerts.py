@@ -624,7 +624,7 @@ def check_state_pvi_staleness() -> None:
     # Presidential county-level canvass data is reliably compiled within a
     # few weeks of the election; mid-December of the election year is a
     # comfortable buffer before alerting.
-    if date.today() < date(next_cycle, 12, 15):
+    if utcnow().date() < date(next_cycle, 12, 15):
         resolve_ops_alert("stale-state-pvi")  # regenerated for the new cycle
     else:
         send_ops_alert(

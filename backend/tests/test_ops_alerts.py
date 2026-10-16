@@ -138,17 +138,6 @@ class TestCheckFeedbackTokenExpiration:
         mock_alert.assert_not_called()
 
 
-class _FrozenDate(date):
-    """datetime.date is immutable/built-in — can't patch .today() on it
-    directly, so freeze it via a real subclass instead (comparisons with
-    plain `date` instances still work via inheritance)."""
-    _frozen = date(2026, 1, 1)
-
-    @classmethod
-    def today(cls):
-        return cls._frozen
-
-
 class TestCheckStatePviStaleness:
     """state_pvi.json's sources are deliberately pinned to immutable
     historical snapshots (see the check's own docstring) — a scheduled
@@ -158,10 +147,9 @@ class TestCheckStatePviStaleness:
     def _check(self, window: str, today: date):
         from app.ops_alerts import check_state_pvi_staleness
 
-        frozen = type("FrozenDate", (_FrozenDate,), {"_frozen": today})
         with patch("app.pipeline.analyze.score_calculator._read_pvi_json",
                    return_value={"_window": window}), \
-             patch("app.ops_alerts.date", frozen), \
+             patch("app.ops_alerts.utcnow", return_value=datetime.combine(today, datetime.min.time())), \
              patch("app.ops_alerts.send_ops_alert") as mock_alert:
             check_state_pvi_staleness()
         return mock_alert
