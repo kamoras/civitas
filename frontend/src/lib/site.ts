@@ -26,8 +26,9 @@ export const SITE_URL = "https://civitas-research.org";
  * so the name search engines are given is the full one, matching the
  * domain. Google picks the site name it shows from the WebSite structured
  * data, the title and og:site_name, and wants them to agree
- * (developers.google.com/search/docs/appearance/site-names). The on-page
- * mark stays "CIVITAS"; this is the name, not the logo.
+ * (developers.google.com/search/docs/appearance/site-names). The page sets
+ * it the same way: the header's lockup (the pixel CIVITAS mark, RESEARCH
+ * beside it), the homepage's nameplate and the footer's colophon.
  */
 export const SITE_NAME = "Civitas Research";
 /** The root layout's title template: every page but the homepage. */

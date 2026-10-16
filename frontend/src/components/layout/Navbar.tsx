@@ -388,16 +388,24 @@ export default function Navbar() {
         >
           {/* The lockup: the pixel mark, the site's one use of that face,
               and RESEARCH beside it in the mono, after a hairline. */}
+          {/* Under 360 px RESEARCH would push MENU off the bar, so the mark
+              stands alone there; the link's name is the full one. */}
           <Link
             ref={logoRef}
             href="/"
+            aria-label="Civitas Research"
             className="group inline-flex min-h-6 items-center gap-2.5 text-ink-hi"
           >
             <span className="font-pixel text-xs tracking-widest transition-colors group-hover:text-phos sm:text-sm min-[56rem]:text-xs xl:text-sm">
               CIVITAS
             </span>
-            <span aria-hidden="true" className="h-3.5 border-l border-ink-min/60 sm:h-4" />
-            <span className="font-mono text-xs tracking-[0.3em] text-ink-lo">RESEARCH</span>
+            <span
+              aria-hidden="true"
+              className="hidden h-3.5 border-l border-ink-min/60 min-[360px]:inline sm:h-4"
+            />
+            <span className="hidden font-mono text-xs tracking-[0.18em] text-ink-lo min-[360px]:inline sm:tracking-[0.3em]">
+              RESEARCH
+            </span>
           </Link>
 
           {/*
