@@ -52,7 +52,7 @@ def _run(db_session, explore_result=None, justice_result=None, president_result=
          court_changed=False):
     with patch("app.pipeline.supplementary_pipeline.SessionLocal", return_value=db_session), \
          patch("app.pipeline.explore_pipeline.run_explore_pipeline", new_callable=AsyncMock) as mock_explore, \
-         patch("app.pipeline.justice_pipeline.run_justice_pipeline", new_callable=AsyncMock) as mock_justice, \
+         patch("app.pipeline.supplementary_pipeline.run_justice_pipeline", new_callable=AsyncMock) as mock_justice, \
          patch("app.pipeline.president_pipeline.run_president_pipeline", new_callable=AsyncMock) as mock_president, \
          patch("app.pipeline.fetch.committee_leadership.refresh_committee_leadership_data",
                new_callable=AsyncMock) as mock_committee_leadership, \
@@ -60,7 +60,7 @@ def _run(db_session, explore_result=None, justice_result=None, president_result=
                new_callable=AsyncMock) as mock_district_pvi, \
          patch("app.pipeline.supplementary_pipeline.run_presidential_support",
                new_callable=AsyncMock) as mock_presidential_support, \
-         patch("app.pipeline.justice_pipeline.court_roster_changed",
+         patch("app.pipeline.supplementary_pipeline.court_roster_changed",
                new_callable=AsyncMock, return_value=court_changed):
         # No phase reaches the network or loads a model here: the fast suite
         # runs offline with no model (AGENTS.md).

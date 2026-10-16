@@ -329,7 +329,7 @@ class TestCourtRosterChanges:
     def test_a_list_shorter_than_a_quorum_retires_nobody_and_alerts(self, db_session):
         nine = [f"justice_{n}" for n in range(9)]
         self._seat(db_session, nine)
-        with patch("app.ops_alerts.send_ops_alert") as alert:
+        with patch("app.services.justice_service.send_ops_alert") as alert:
             result = self._run(db_session, [_oyez_justice(j, 1_000_000_000) for j in nine[:3]])
         assert "retired" not in result
         assert db_session.query(Justice).filter(Justice.is_active.is_(True)).count() == 9

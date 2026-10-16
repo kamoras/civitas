@@ -8,6 +8,7 @@ from typing import Sequence
 from sqlalchemy.orm import Session
 
 from app.models import Justice, JusticeVote
+from app.ops_alerts import send_ops_alert
 from app.photos import justice_photo
 from app.schemas import (
     JusticeAgreementSchema,
@@ -207,8 +208,6 @@ def retire_departed_justices(db: Session, sitting: set[str], ended: dict[str, st
     if not gone:
         return []
     if len(sitting) < QUORUM:
-        from app.ops_alerts import send_ops_alert
-
         send_ops_alert(
             "Supreme Court list too short to trust",
             f"Oyez listed {len(sitting)} sitting justices, fewer than the Court's quorum of {QUORUM}; "

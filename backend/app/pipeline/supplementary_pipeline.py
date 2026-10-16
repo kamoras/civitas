@@ -20,6 +20,7 @@ from app.http_client import make_async_client
 from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline import lease
+from app.pipeline.justice_pipeline import court_roster_changed, run_justice_pipeline
 from app.pipeline.analyze.presidential_support import run_presidential_support
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
@@ -130,8 +131,6 @@ async def run_supplementary_pipeline() -> dict:
         if not run_justices:
             # A confirmation or a departure is picked up the night Oyez
             # lists it, not on the next weekly day (one request).
-            from app.pipeline.justice_pipeline import court_roster_changed
-
             try:
                 run_justices = await court_roster_changed(db)
             except Exception:
@@ -148,7 +147,6 @@ async def run_supplementary_pipeline() -> dict:
                     if not held:
                         progress.skip("justice_scorecards", detail=f"skipped: {held.why}")
                     else:
-                        from app.pipeline.justice_pipeline import run_justice_pipeline
                         justice_result = await run_justice_pipeline(db)
                         run.justices_scored = justice_result.get("justices", 0)
                         logger.info("Justice pipeline refreshed %d justices", run.justices_scored)
