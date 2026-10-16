@@ -4,6 +4,7 @@ win language and its licence, and the map hides from election day on."""
 
 import asyncio
 import json
+import math
 from datetime import date, datetime
 from pathlib import Path
 
@@ -22,6 +23,24 @@ TRAINING = json.loads((DATA / "forecast_training.json").read_text())
 FITTED = json.loads((DATA / "forecast_model.json").read_text())
 
 
+def assert_close(got, want, rel=1e-9, abs_tol=0.0, path="$"):
+    """Equal structure, numbers within tolerance: the file holds fitted values
+    at write precision (fit_forecast_model.WRITE_DIGITS), and a least-squares
+    refit on another platform's BLAS differs in its last bits."""
+    if isinstance(want, dict):
+        assert isinstance(got, dict) and set(got) == set(want), path
+        for k in want:
+            assert_close(got[k], want[k], rel, abs_tol, f"{path}.{k}")
+    elif isinstance(want, list):
+        assert isinstance(got, (list, tuple)) and len(got) == len(want), path
+        for i, (g, w) in enumerate(zip(got, want)):
+            assert_close(g, w, rel, abs_tol, f"{path}[{i}]")
+    elif isinstance(want, float) or isinstance(got, float):
+        assert math.isclose(got, want, rel_tol=rel, abs_tol=abs_tol), f"{path}: {got} != {want}"
+    else:
+        assert got == want, f"{path}: {got} != {want}"
+
+
 # ---------------------------------------------------------------------------
 # Reproducibility
 # ---------------------------------------------------------------------------
@@ -30,14 +49,16 @@ FITTED = json.loads((DATA / "forecast_model.json").read_text())
 @pytest.mark.parametrize("horizon", model.HORIZONS)
 def test_fit_reproduces_from_the_training_file(horizon):
     refit = model.fit(TRAINING["races"], TRAINING["generic"], horizon)
-    assert json.loads(json.dumps(refit)) == FITTED["fits"][str(horizon)]
+    assert_close(refit, FITTED["fits"][str(horizon)])
 
 
 def test_held_out_evaluation_reproduces():
     # One horizon is enough to prove the file is the code's output; the
     # fit script writes all three the same way.
     again = model.leave_one_cycle_out(TRAINING["races"], TRAINING["generic"], 14)
-    assert json.loads(json.dumps(again)) == FITTED["evaluation"]["14"]
+    # The evaluation is written already rounded for display (3-4 decimals),
+    # so a last-bit difference in a fit can move a figure by one unit there.
+    assert_close(again, FITTED["evaluation"]["14"], abs_tol=1e-3)
 
 
 def test_training_rows_are_every_contested_cycle():

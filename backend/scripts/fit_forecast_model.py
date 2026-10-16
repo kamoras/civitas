@@ -192,6 +192,23 @@ def polls(text: str) -> tuple[dict, dict]:
     return races, generic
 
 
+# Fitted numbers are written to 10 significant digits: far beyond anything
+# the map shows, and short of the last bits a different BLAS changes in a
+# least-squares solve, so the file is the same on every platform. The test
+# compares a refit with it within that precision.
+WRITE_DIGITS = 10
+
+
+def at_write_precision(value):
+    if isinstance(value, float):
+        return float(f"{value:.{WRITE_DIGITS}g}")
+    if isinstance(value, dict):
+        return {k: at_write_precision(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [at_write_precision(v) for v in value]
+    return value
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", type=Path, default=Path.home() / ".cache" / "civitas-forecast")
@@ -230,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"horizon {h}: {json.dumps({k: ev[k] for k in ('races', 'polledRaces', 'all', 'polled', 'coverage80', 'coverage95', 'meanAbsError')})}")
         for b in ev["calibration"]:
             print("   ", b)
-    MODEL.write_text(json.dumps(out, indent=1) + "\n")
+    MODEL.write_text(json.dumps(at_write_precision(out), indent=1) + "\n")
     return 0
 
 

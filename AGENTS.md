@@ -1575,7 +1575,7 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   and presidential returns, CC0; FEC incumbency codes; FiveThirtyEight's
   `raw_polls.csv`, CC BY 4.0, pinned to a commit) and writes every parameter
   and the leave-one-cycle-out evaluation to `app/data/forecast_model.json`.
-  The test refits from the training file and must match exactly. A race's
+  The test refits from the training file and must match it within tolerance at write precision (10 significant digits; a different BLAS changes a least-squares solve's last bits). A race's
   historical lean uses only the two presidential elections before it.
 - **Polls from Wikipedia, gated, attributed.** `forecast/polls.py` reads each
   race article's current revision (recorded per seat), parses the table whose
