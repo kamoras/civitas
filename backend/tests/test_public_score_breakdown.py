@@ -36,10 +36,12 @@ from app.pipeline.analyze.score_calculator import (
     calculate_confidence,
     calculate_scores,
     compute_overall_score,
+    explain_scores,
     load_les_reference,
 )
 from app.pipeline.sponsorship_backfill import carry_forward_sponsored_bills
 from app.schemas import PublicScoreBreakdownSchema
+from app.score_keeping import stored_breakdown
 from app.services._scorecard_common import build_score_breakdown_entity
 from app.services.representative_service import _rep_eager_options, upsert_representative
 from app.services.senator_service import _senator_eager_options
@@ -68,12 +70,16 @@ def _bills(model, fk: str, n: int) -> list:
             for i in range(n)]
 
 
-def _store_like_the_pipeline(db, member, eager, donation_attr: str, entity_type: str) -> None:
+def _store_like_the_pipeline(db, member, eager, donation_attr: str, entity_type: str, keep: bool = True) -> None:
     """Score the member's stored inputs with the pipeline's own function and
-    store the result as a run would, with the day's history snapshot."""
+    store the result as a run would, with the day's history snapshot and,
+    unless `keep` is False (a score stored before they were kept), the
+    run's breakdown."""
     db.flush()
     loaded = db.query(type(member)).options(*eager()).filter_by(id=member.id).one()
-    scores = calculate_scores(build_score_breakdown_entity(loaded, lobbying_donation_attr=donation_attr))
+    inputs = build_score_breakdown_entity(loaded, lobbying_donation_attr=donation_attr)
+    scores = calculate_scores(inputs)
+    loaded.score_breakdown = stored_breakdown(explain_scores(inputs)) if keep else None
     loaded.score_funding_independence = scores["fundingIndependence"]
     loaded.score_constituent_alignment = scores["constituentAlignment"]
     loaded.score_funding_diversity = scores["fundingDiversity"]
@@ -85,7 +91,7 @@ def _store_like_the_pipeline(db, member, eager, donation_attr: str, entity_type:
     db.commit()
 
 
-def _senator(db, member_id="s-full", bills=6):
+def _senator(db, member_id="s-full", bills=6, keep=True):
     member = Senator(id=member_id, bioguide_id="Z000001", name="Pat Placeholder", state="OH", party="D",
                    years_in_office=8, total_raised=4_000_000, total_contributions=4_000_000,
                    total_from_pacs=600_000, small_donor_percentage=31, leadership_score=0.6,
@@ -97,7 +103,7 @@ def _senator(db, member_id="s-full", bills=6):
     db.add(KeyVote(senator_id=member_id, bill_name="Placeholder Act", bill_id="S.1", date="2026-02-01",
                    vote="Yea", voted_with_party=True, vote_category="key"))
     _store_like_the_pipeline(db, member, _senator_eager_options,
-                             "donation_to_senator", "senator")
+                             "donation_to_senator", "senator", keep)
 
 
 def _representative(db, member_id="r-full", bills=8):
@@ -188,6 +194,61 @@ def test_the_points_component_is_what_the_rule_says(client, db_session):
     assert approval["label"] == "Constituent approval" and approval["score"] is not None
     as_mean = recompute({"components": [{**c, "combines": "mean"} for c in dim["components"]]})
     assert round(as_mean) != dim["score"]
+
+
+def test_a_bill_that_moves_after_the_run_leaves_the_arithmetic_on_the_score(client, db_session):
+    """2026-10-16: two senators' bills became law after the night's run, the
+    hourly refresh stored it, and the breakdown recomputed on it showed
+    components that gave 86 beside a score of 75. The run's own components
+    are served, and today's records are reported beside them."""
+    _senator(db_session)
+    bill = db_session.query(SponsoredBill).filter_by(senator_id="s-full", stage="INTRODUCED").first()
+    bill.stage, bill.is_law = "ENACTED", True
+    db_session.commit()
+
+    body = _breakdown(client, "senators", "s-full")
+    _assert_reproduced(body)
+    les = body["dimensions"]["legislativeEffectiveness"]
+    assert les["basis"] == "scored"
+    since = les["sinceScored"]
+    assert since["score"] > les["storedScore"] and since["billsChanged"] == 1
+    assert since["scoredAt"].endswith("Z")
+    # A dimension the move didn't touch says nothing.
+    assert body["dimensions"]["fundingIndependence"]["sinceScored"] is None
+    # The profile's own breakdown route serves the same arithmetic.
+    internal = client.get("/api/senators/s-full/score-breakdown").json()["legislativeEffectiveness"]
+    assert internal["score"] == les["storedScore"] and internal["sinceScored"] == since
+
+
+def test_a_score_stored_before_breakdowns_were_kept_is_recomputed(client, db_session):
+    _senator(db_session, keep=False)
+    body = _breakdown(client, "senators", "s-full")
+    _assert_reproduced(body)
+    assert {d["basis"] for d in body["dimensions"].values()} == {"recomputed"}
+    assert all(d["sinceScored"] is None for d in body["dimensions"].values())
+
+
+def test_the_sum_points_and_clamp_are_stated(client, db_session):
+    """Constituent approval is shown as the points it adds, each dimension
+    states its sum before rounding, and a sum below 0 says it was held at 0
+    (one senator's Constituent Alignment summed to -2.49 and showed 0)."""
+    _senator(db_session)
+    dim = _breakdown(client, "senators", "s-full")["dimensions"]["constituentAlignment"]
+    (approval,) = [c for c in dim["components"] if c["combines"] == "points"]
+    assert approval["points"] == round(approval["weight"] * (approval["score"] - 50), 1)
+    assert dim["sum"] == round(recompute(dim), 1) and round(dim["sum"]) == dim["score"]
+    assert dim["clamped"] is False
+
+    member = db_session.get(Senator, "s-full")
+    member.score_constituent_alignment = 0
+    member.score_breakdown = stored_breakdown({"constituentAlignment": {"score": 0, "components": [
+        {"label": "Seat-relative vote alignment", "weight": 0.7, "score": 0.0, "detail": "d"},
+        {"label": "Position congruence", "weight": 0.3, "score": 10.0, "detail": "d"},
+        {"label": "Constituent approval", "weight": 0.3, "score": 30.0, "detail": "d"},
+    ]}})
+    db_session.commit()
+    dim = _breakdown(client, "senators", "s-full")["dimensions"]["constituentAlignment"]
+    assert dim["sum"] == -3.0 and dim["clamped"] is True and dim["score"] == dim["storedScore"] == 0
 
 
 @pytest.mark.parametrize("chamber", ["senators", "representatives"])

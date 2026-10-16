@@ -25,6 +25,7 @@ import logging
 from collections import defaultdict
 
 from app.pipeline.analyze.party_line_record import load_record
+from app.score_keeping import held, keep_rescored
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,10 @@ def rescore_stale_constituent_alignment(
                 continue
             reference = {**CONSTITUENT_REFERENCE.load(), chamber: ref}
             for row, m in zip(rows, members):
+                if held(row):
+                    # Keeps the whole scorecard of the last run it passed,
+                    # as the latest run's failure left it.
+                    continue
                 core = _constituent_alignment_core(
                     m["votingRecord"], [], {}, m["state"], m["party"],
                     district=m["district"], bioguide_id=m["bioguideId"], reference=reference,
@@ -141,6 +146,8 @@ def rescore_stale_constituent_alignment(
                     row.score_confidence = json.dumps(confidence)
                 if chamber == "house":
                     row.district_lines_congress = house_lines
+                keep_rescored(db, "senator" if chamber == "senate" else "representative", row,
+                              "constituentAlignment", core)
             db.commit()
             # Persisted only once the scores it describes are committed: a
             # current-statistic reference is what marks the chamber done, so

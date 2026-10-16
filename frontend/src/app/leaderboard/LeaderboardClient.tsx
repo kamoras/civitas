@@ -39,6 +39,7 @@ import {
   signedPoints,
 } from "@/lib/justices";
 import { houseSeatLabel } from "@/lib/elections";
+import { HeldScoreTag } from "@/components/scorecard/HeldScore";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
 type SortKey = "score" | "pac_dollars" | "pac_pct" | "ideology" | "leadership";
@@ -120,7 +121,7 @@ function ThinDataTag({ dims }: { dims?: string[] }) {
   const which = dims.map((d) => SCORE_TERMS[d as ScoreKey]?.label ?? asLabel(d)).join(", ");
   return (
     <span
-      title={`Little data behind: ${which}. That part of the score is mostly a pull toward 50.`}
+      title={`Little data behind: ${which}. That part of the score is mostly a pull toward a middle value.`}
       className="ml-2 inline-block border border-signal-amber/40 px-1 font-mono text-xs tracking-[0.08em] text-signal-amber"
     >
       THIN DATA<span className="sr-only">: little data behind {which}</span>
@@ -1169,7 +1170,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                                 isTopTen ? "border-l-2 border-l-signal-red/30" : ""
                               }`}
                               tabIndex={0}
-                              aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}${tiedWith(score) > 1 ? `, shared by ${tiedWith(score)}` : ""}, score ${displayScore(score)}${entry.thinData?.length ? ", thin data" : ""}`}
+                              aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}${tiedWith(score) > 1 ? `, shared by ${tiedWith(score)}` : ""}, score ${displayScore(score)}${entry.thinData?.length ? ", thin data" : ""}${entry.representationScore.held ? `, held from the ${entry.representationScore.held.scoredOn ?? "earlier"} run` : ""}`}
                               {...rowNavProps(router, `/politicians/${entry.id}`)}
                               {...hoverProps(score)}
                             >
@@ -1184,6 +1185,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                                   {entry.name}
                                 </span>
                                 <ThinDataTag dims={entry.thinData} />
+                                <HeldScoreTag held={entry.representationScore.held} />
                               </td>
                               <td className="px-3 py-3 text-center">
                                 <span
@@ -1260,6 +1262,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                             <div className="flex items-center gap-2">
                               <span className="text-ink-hi text-sm truncate">{entry.name}</span>
                               <ThinDataTag dims={entry.thinData} />
+                              <HeldScoreTag held={entry.representationScore.held} />
                               <span
                                 className={`text-xs px-1 border shrink-0 ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
                               >
@@ -1354,8 +1357,9 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                     Scores are shrunk toward a neutral value when data is thin: members with limited
                     public data are not penalized or rewarded for it.{" "}
                     <span className="font-mono text-signal-amber">THIN DATA</span> marks a member
-                    with too little data behind a part of the score for it to be more than that pull
-                    toward 50.{" "}
+                    with too little data behind a part of the score for it to be more than that
+                    pull. <span className="font-mono text-signal-amber">HELD</span> marks a score
+                    kept from an earlier run because the latest run couldn&apos;t score the member.{" "}
                     <Link
                       href="/about/scores#overall"
                       className="underline decoration-white/30 underline-offset-4 hover:text-phos"
