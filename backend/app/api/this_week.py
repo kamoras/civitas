@@ -28,7 +28,7 @@ from app.pipeline.congress_activity import eastern_today
 from app.retractions import retraction_for_issue
 from app.services.congress_service import CHAMBERS, bill_label, long_date, next_meeting, week_bounds
 from app.time_utils import comment_period_today
-from app.voter_calendar import next_deadlines
+from app.voter_calendar import CLOSING_SOON_DAYS, next_deadlines, registration_closing
 
 router = APIRouter()
 
@@ -221,6 +221,10 @@ def election(db: Session) -> dict:
         # Each state's next voter deadline (registration, early voting, mail
         # ballots), soonest first, on that state's own clock.
         "deadlines": next_deadlines(e.election_day),
+        # The states whose registration closes in the next few days, with
+        # where to register: the "closing soon" strip.
+        "registrationClosing": registration_closing(e.election_day),
+        "closingSoonDays": CLOSING_SOON_DAYS,
     }
 
 

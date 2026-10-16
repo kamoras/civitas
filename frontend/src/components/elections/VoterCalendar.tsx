@@ -1,6 +1,8 @@
 import type { VoterCalendar as Calendar, VoterDeadline } from "@/types/election";
 import { safeHref } from "@/lib/formatting";
 import { shortDate } from "@/lib/congress";
+import DeadlineRibbon from "@/components/elections/DeadlineRibbon";
+import RegisterLink from "@/components/elections/RegisterLink";
 import { INLINE_LINK } from "@/lib/controlStyles";
 
 /** "6 days left", "last day", "in 6 days": the backend's countdown, worded
@@ -21,10 +23,12 @@ function checked(d: VoterDeadline): string {
   const on = d.verification.checkedOn ? `, checked ${shortDate(d.verification.checkedOn)}` : "";
   // Only verified items reach the page: the generator refuses any other.
   if (d.verification.status === "statute") return `From state law${on}`;
+  if (d.verification.status === "republished")
+    return `As published by ${d.source.publisher ?? "a county election office"}${on}`;
   return `From ${d.source.publisher ?? "the state"}${on}`;
 }
 
-function Row({ d }: { d: VoterDeadline }) {
+function Row({ d, register }: { d: VoterDeadline; register?: Calendar["register"] }) {
   const href = safeHref(d.source.url);
   const left = countdownText(d);
   const closed = d.status === "closed";
@@ -34,6 +38,12 @@ function Row({ d }: { d: VoterDeadline }) {
         {closed && <span className="mr-2 font-mono text-xs text-ink-min">CLOSED</span>}
         {d.sentence}
         {left && <span className="ml-2 font-mono text-xs text-phos">{left}</span>}
+        {register && d.kind === "registration" && !closed && (
+          <>
+            {" "}
+            <RegisterLink link={register} showNote={false} className="ml-1 text-sm" />
+          </>
+        )}
       </p>
       <p className="mt-0.5 text-xs text-ink-lo">
         {d.rule}
@@ -53,6 +63,48 @@ function Row({ d }: { d: VoterDeadline }) {
         )}
       </p>
     </li>
+  );
+}
+
+/** The first line on registering: "Register online by Mon, Oct 19", its
+ *  countdown and the register link; what follows the deadline (same-day
+ *  registration, in the state's words); or that the state has no
+ *  registration. Falls back to the older API's summary sentence. */
+function Registration({ calendar }: { calendar: Calendar }) {
+  const line = calendar.registration;
+  if (!line) {
+    return calendar.registrationSummary ? (
+      <p className="mt-1 font-display text-lg font-semibold text-ink-hi">
+        {calendar.registrationSummary}
+      </p>
+    ) : null;
+  }
+  const left =
+    line.status === "open" ? countdownText({ status: "open", countdown: line.countdown }) : null;
+  const link = calendar.register;
+  const canRegister = line.status === "open" || line.status === "same_day";
+  return (
+    <div className="mt-1">
+      <p className="font-display text-xl font-semibold text-ink-hi">
+        {line.sentence}
+        {left && <span className="ml-2 font-mono text-sm text-phos">{left}</span>}
+      </p>
+      {line.sameDay && <p className="mt-0.5 text-sm text-ink">After that: {line.sameDay}</p>}
+      {link && canRegister && (
+        <p className="mt-1 text-sm">
+          <RegisterLink
+            link={link}
+            label={line.status === "open" ? "Register to vote" : "How to register"}
+            className="font-mono text-sm"
+          />
+        </p>
+      )}
+      {link && line.status === "open" && !link.statePage && (
+        <p className="mt-0.5 text-xs text-ink-lo">
+          vote.gov is the federal government&apos;s registration directory.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -118,10 +170,21 @@ export default function VoterCalendar({
       className="mb-6 border border-white/15 bg-surface px-4 py-3"
     >
       {heading}
-      {calendar.registrationSummary && (
-        <p className="mt-1 font-display text-lg font-semibold text-ink-hi">
-          {calendar.registrationSummary}
+      {calendar.republished && (
+        <p className="mt-1 border-l-2 border-signal-amber/60 pl-2 text-sm text-ink">
+          {calendar.republished}
         </p>
+      )}
+      <Registration calendar={calendar} />
+      {calendar.electionDay && calendar.items.length > 0 && (
+        <DeadlineRibbon
+          items={calendar.items}
+          today={calendar.localToday}
+          electionDay={calendar.electionDay}
+          registerBy={
+            calendar.registration?.status === "open" ? calendar.registration.closesOn : null
+          }
+        />
       )}
       {next && !isRegistration(next) && (
         <p className="mt-1 text-base text-ink">
@@ -133,7 +196,7 @@ export default function VoterCalendar({
         <p className="mt-1 text-base text-ink">Every deadline for this election has passed.</p>
       )}
       {calendar.note && <p className="mt-1 text-sm text-ink-lo">{calendar.note}</p>}
-      <details className="group mt-2">
+      <details className="group mt-2" open>
         <summary className="cursor-pointer list-none font-mono text-xs text-signal-cyan hover:text-phos [&::-webkit-details-marker]:hidden">
           Every deadline, with its source{" "}
           <span aria-hidden="true" className="inline-block group-open:rotate-180">
@@ -142,7 +205,11 @@ export default function VoterCalendar({
         </summary>
         <ul className="mt-2 text-sm">
           {calendar.items.map((d) => (
-            <Row key={`${d.kind}-${d.method}-${d.basis}-${d.date}`} d={d} />
+            <Row
+              key={`${d.kind}-${d.method}-${d.basis}-${d.date}`}
+              d={d}
+              register={calendar.register}
+            />
           ))}
         </ul>
       </details>
