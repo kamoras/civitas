@@ -984,7 +984,7 @@ async def search_documents(
     ))
     if not outcome["indexReady"]:
         return _pub_json(
-            {"query": q, "results": [], "count": 0, "partial": False, "indexBuilding": True},
+            {"query": q, "results": [], "count": 0, "partial": False, "indexBuilding": True, "notHeld": []},
             request, max_age=0,
         )
 
@@ -1000,11 +1000,12 @@ async def search_documents(
         # The keyword channel marks matched terms with control characters
         # for the site's renderer; a public client gets plain text.
         result["snippet"] = (result.get("snippet") or "").replace(HIGHLIGHT_START, "").replace(HIGHLIGHT_END, "")
-        result["siteUrl"] = f"{SITE_URL}/explore/{result['id']}"
+        result["siteUrl"] = f"{SITE_URL}/explore/{result['key']}"
     # Keyword channel only (the vector index missing or mid-rebuild): a
     # partial answer, kept no longer than a failed fetch is.
     partial = bool(outcome["semanticUnavailable"])
     return _pub_json(
-        {"query": q, "results": results, "count": len(results), "partial": partial, "indexBuilding": False},
+        {"query": q, "results": results, "count": len(results), "partial": partial, "indexBuilding": False,
+         "notHeld": outcome.get("notHeld", [])},
         request, max_age=FAILURE_RETRY_S if partial else CACHE_TTL_SEARCH_S,
     )

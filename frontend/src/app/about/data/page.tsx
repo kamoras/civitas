@@ -442,9 +442,14 @@ export default function DataChapter() {
           </Item>
           <Item label="Keywords">
             A keyword index
-            <Cite id="robertson2009" />, the only way to find an executive order number or a docket.
-            A document&apos;s own Federal Register citation or document number finds that document
-            first.
+            <Cite id="robertson2009" />, for exact words. A document&apos;s own identifier finds
+            that document first: its Federal Register citation or document number, an executive
+            order or proclamation number, a regulation identifier number, the Regulations.gov docket
+            it takes comments in (&ldquo;IRS-2026-1090&rdquo;), or a floor speech&apos;s
+            Congressional Record citation (&ldquo;172 Cong. Rec. H5836&rdquo;). A search that is
+            only an identifier matches it as written, and when no document here is known by it the
+            page says so, and where the official copy is, instead of listing documents that only
+            share a word with it.
           </Item>
           <Item label="Recency">A newer document is usually the more useful answer.</Item>
           <Item label="Authority">
@@ -453,6 +458,15 @@ export default function DataChapter() {
             rulemaking, not a document, and doesn&apos;t count.
           </Item>
         </List>
+        <P>
+          Each kind of document is held from the day Civitas began reading it, not from the start of
+          the record: the search page lists each kind&apos;s first and last date under the search
+          box. Floor speeches are kept after their Congress ends. Every document&apos;s page is at
+          an address made from its official identifier (its Federal Register document number, its
+          Congressional Record granule, its Supreme Court docket), which stays the same when the
+          document is read again, and &ldquo;Cite this&rdquo; credits the agency, the chamber or the
+          Court that issued it, with Civitas as where it was read.
+        </P>
         <P>
           Copies of the same document are collapsed (a recurring notice that only opens the same way
           is not a copy), and no single member or agency can crowd the top results: the rest are

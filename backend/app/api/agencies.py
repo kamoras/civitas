@@ -29,6 +29,7 @@ from app.pipeline.fetch.agencies import FR_SOURCE, USASPENDING_SOURCE, linking_p
 from app.pipeline.fetch.fr_rulemaking import FR_TYPE_LABELS
 from app.retractions import retraction_for_issue
 from app.time_utils import comment_period_today
+from app.services.explore_keys import public_key
 
 router = APIRouter(prefix="/agencies")
 
@@ -222,6 +223,7 @@ def _doc(d: ExploreDocument, today: str) -> dict:
     is_open = bool(d.comment_url and d.comments_close_on and d.comments_close_on >= today)
     return {
         "id": d.id,
+        "key": public_key(d.external_id, d.id),
         "title": d.title,
         "docType": d.doc_type,
         "date": d.date,

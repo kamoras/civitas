@@ -794,6 +794,9 @@ export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry
 
 export interface ExploreResult {
   id: number;
+  /** The permanent key its page is at (/explore/{key}). Optional only for
+   * an older backend. */
+  key?: string;
   title: string;
   date: string;
   docType: string;
@@ -895,6 +898,17 @@ export interface ExploreResponse {
   // this flag so the UI can show an honest "still indexing" state instead of
   // "no results found" while the stats header still claims thousands of docs.
   indexEmpty?: boolean;
+  /** Identifiers the query names that no document here is known by, each
+   * with why (before the corpus starts, or not read yet) and its official
+   * source (backend services/explore_coverage.not_held). */
+  notHeld?: ExploreNotHeld[];
+}
+
+export interface ExploreNotHeld {
+  identifier: string;
+  sentence: string;
+  url: string;
+  source: string;
 }
 
 /** A sitting member a search names (GET /api/explore/matches). */
@@ -964,6 +978,10 @@ export interface ExploreStats {
    * its sub-agencies with documents (depth 1+); counts include sub-agencies.
    * Optional only for a response cached before the field. */
   agencies?: { slug: string; name: string; depth: number; documents: number }[];
+  /** Each document type's first and last date held, and count: the corpus
+   * starts where each feed's ingest did. Optional only for a response
+   * cached before the field. */
+  coverage?: { label: string; from: string; to: string; count: number }[];
 }
 
 export async function searchExplore(
@@ -1013,6 +1031,11 @@ export async function searchExplore(
 
 export interface ExploreDocumentDetail {
   id: number;
+  /** The document's permanent address (/explore/{key}), from its official
+   * identifier: "fr-2026-17123" for a Federal Register document, "crec-" and
+   * the Congressional Record granule for a floor speech (services/
+   * explore_keys.py). Optional only for a backend older than the field. */
+  key?: string;
   title: string;
   summary: string;
   body: string;
@@ -1043,6 +1066,12 @@ export interface ExploreDocumentDetail {
    * under, each with the Congress of the day (api/explore.py). Optional only
    * for a backend older than the field. */
   bills?: { billId: string; label: string | null; congress: number }[];
+  /** A floor speech's Congressional Record citation, "172 Cong. Rec.
+   * H5836" (the page its granule starts on), and its speaker's full name
+   * when the speaker is a member Civitas knows. Optional only for a backend
+   * older than the fields. */
+  crCitation?: string;
+  speakerName?: string;
 }
 
 export interface ExploreDocumentSummary {

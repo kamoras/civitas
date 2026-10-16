@@ -29,6 +29,7 @@ from app.retractions import retraction_for_issue
 from app.services.congress_service import CHAMBERS, bill_label, long_date, next_meeting, week_bounds
 from app.time_utils import comment_period_today
 from app.voter_calendar import CLOSING_SOON_DAYS, next_deadlines, registration_closing
+from app.services.explore_keys import public_key
 
 router = APIRouter()
 
@@ -197,7 +198,7 @@ def comment_deadlines(db: Session) -> list[dict]:
     )
     return [
         {
-            "id": d.id, "title": d.title, "docType": d.doc_type, "agencyName": d.agency_name,
+            "id": d.id, "key": public_key(d.external_id, d.id), "title": d.title, "docType": d.doc_type, "agencyName": d.agency_name,
             "commentsCloseOn": d.comments_close_on, "commentUrl": d.comment_url,
             "daysLeft": (date.fromisoformat(d.comments_close_on) - date.fromisoformat(today)).days,
             "issueId": in_news.get(d.id),

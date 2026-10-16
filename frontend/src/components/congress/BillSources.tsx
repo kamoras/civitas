@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { BillDetail } from "@/types/bill";
 import type { BillRecord } from "@/types/congress";
 import CiteThis from "@/components/shared/CiteThis";
+import { congressGovCitedSource } from "@/lib/citedSources";
 import { longDate } from "@/lib/congress";
 import { ordinal } from "@/components/scorecard/format";
 
@@ -129,7 +130,9 @@ export default function BillSources({
           </h3>
           <CiteThis
             title={`${label}${title && title !== label ? `: ${title}` : ""}${congress ? ` (${ordinal(congress)} Congress)` : ""}`}
+            date={record?.introducedDate ?? detail?.introducedDate ?? null}
             path={canonicalPath}
+            source={congressGovCitedSource("U.S. Congress", record?.congressGovUrl)}
           />
         </div>
       </div>

@@ -35,6 +35,7 @@ from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
 from app.services import bill_journey
 from app.services.congress_service import amendment_fields, bill_coverage, bill_days, bill_label
+from app.services.explore_keys import public_key
 from app.services.nomination_links import nomination_votes
 from app.services.roll_call_shape import candidate_of, shape
 
@@ -546,8 +547,8 @@ def floor_debate(db: Session, congress: int, bill_id: str) -> list[dict]:
     headings when the page is served; the speech text is never searched."""
     number = bill_id.split(".", 1)[-1]
     rows = (
-        db.query(ExploreDocument.id, ExploreDocument.title, ExploreDocument.date, ExploreDocument.chamber,
-                 ExploreDocument.politician_name, ExploreDocument.politician_id)
+        db.query(ExploreDocument.id, ExploreDocument.external_id, ExploreDocument.title, ExploreDocument.date,
+                 ExploreDocument.chamber, ExploreDocument.politician_name, ExploreDocument.politician_id)
         .filter(ExploreDocument.doc_type.in_(SPEECH_DOC_TYPES), ExploreDocument.title.contains(number))
         .order_by(ExploreDocument.date.desc(), ExploreDocument.id)
         .all()
@@ -564,7 +565,8 @@ def floor_debate(db: Session, congress: int, bill_id: str) -> list[dict]:
         # turn, with how many turns they took (each turn is a speech).
         key = r.politician_id or r.politician_name or r.id
         speaker = group["speakers"].setdefault(key, {
-            "speaker": r.politician_name or "", "politicianId": r.politician_id, "speechId": r.id, "speeches": 0,
+            "speaker": r.politician_name or "", "politicianId": r.politician_id, "speechId": r.id,
+            "speechKey": public_key(r.external_id, r.id), "speeches": 0,
         })
         speaker["speeches"] += 1
     return [{**g, "speakers": list(g["speakers"].values())} for g in groups.values()]

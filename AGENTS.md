@@ -601,8 +601,10 @@ here: **do not change a ranking weight because a result set looks better.**
 
 `backend/scripts/evaluate_explore_search.py` is the instrument. It reports
 MRR and Recall@k for each channel and for the fusion, broken out by query
-style (title / paraphrase / identifier / rare-term / passage), against the
-live index. Run it before and after, and say what moved. Every probe is built
+style (title / paraphrase / identifier / the document's own FR citation,
+document number, docket and Record citation / rare-term / passage), and how
+often an identifier the corpus does not hold gets documents back, against
+the live index. Run it before and after, and say what moved. Every probe is built
 from the document's own words (the "paraphrase" style is a bag of its most
 frequent words, not a rewording), so keyword leads semantic by construction
 and identifier probes are near zero for any encoder: compare the semantic
@@ -2162,6 +2164,7 @@ the pending list).
 | Federal agencies: weekly Register list + USAspending budgets, name crosswalk, agency pages | `backend/app/pipeline/fetch/agencies.py`, `backend/app/api/agencies.py`, `backend/scripts/calibrate_agency_crosswalk.py` (`app/data/agency_crosswalk.json`), `frontend/src/app/agencies/` |
 | Presidential nominations (daily Congress.gov sync, FJC join, list/stats/detail, roll-call links) | `backend/app/pipeline/fetch/nominations.py`, `backend/app/services/nomination_service.py`, `services/nomination_links.py`, `backend/app/api/nominations.py`, `frontend/src/app/congress/nominations/` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
+| Explore permanent addresses (`/explore/{key}` from the official identifier; old row ids 308 to it), coverage windows and "not held here" notes | `backend/app/services/explore_keys.py`, `backend/app/services/explore_coverage.py`, `frontend/src/lib/exploreHref.ts` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
 | Search-quality evaluation harness | `backend/scripts/evaluate_explore_search.py` |
@@ -2194,7 +2197,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx`; data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
+| Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
 | Site navigation: sections, main menu, footer, section tabs, hub cards and the homepage index | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
@@ -2424,7 +2427,12 @@ the pending list).
   inherited by every page and declare the whole site a duplicate of the
   homepage). A section layout's canonical is inherited the same way, so a
   dynamic child (`/politicians/[id]`, `/explore/[id]`…) must set its own,
-  taken from the record, not the request's spelling. Its 404 can't (a
+  taken from the record, not the request's spelling. An Explore document's
+  is its permanent key (`services/explore_keys.py`: the FR document
+  number, the Record granule, the Court's docket), never its row id, which
+  the pipeline can replace; every other address for it answers a 308 to
+  the key, and links, the sitemap, the public API's `siteUrl` and "Cite
+  this" use the key (`exploreHref`). Its 404 can't (a
   route's `notFound()` discards its page's metadata; the head comes from
   the layouts above), so a section whose index page is a client component
   keeps that page's metadata in a layout inside an `(index)` route group

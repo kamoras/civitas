@@ -38,6 +38,7 @@ from app.models import (
 )
 from app.ordinals import ordinal
 from app.services.bill_record import bill_label, party_breakdown
+from app.services.explore_keys import public_key
 from app.services.roll_call_shape import shape
 
 SITE_DOMAIN = "civitas-research.org"
@@ -213,7 +214,7 @@ def document_card(db: Session, doc_id: int) -> RecordCard | None:
         kind="document", key=f"document:{doc_id}",
         eyebrow=", ".join(x for x in (d.agency_name, d.doc_type) if x) or d.doc_type,
         headline=d.title.strip(), lines=lines, date=d.date[:10],
-        path=f"/explore/{doc_id}",
+        path=f"/explore/{public_key(d.external_id, d.id)}",
         source_name=d.source or "Federal Register", as_of=_as_of(d.created_at),
     )
 

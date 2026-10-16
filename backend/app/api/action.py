@@ -44,6 +44,7 @@ from app.schemas import (
     NationalMonitorSchema, NationalMonitorDetailSchema, MonitorUpdateSchema,
     TimelineEntrySchema,
 )
+from app.services.explore_keys import public_key
 
 logger = logging.getLogger(__name__)
 
@@ -415,7 +416,7 @@ def _build_issue_response(
             )
         related_docs = [
             RelatedExploreDoc(
-                id=d.id, title=d.title, doc_type=d.doc_type,
+                id=d.id, key=public_key(d.external_id, d.id), title=d.title, doc_type=d.doc_type,
                 date=d.date, url=d.url,
                 comment_url=d.comment_url or None,
                 comments_close_on=d.comments_close_on or None,
@@ -1036,8 +1037,8 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
     # and there are hundreds open at once.
     open_docs = (
         db.query(
-            ExploreDocument.id, ExploreDocument.title, ExploreDocument.agency_name, ExploreDocument.agency_slug,
-            ExploreDocument.comments_close_on, ExploreDocument.comment_url, ExploreDocument.doc_type,
+            ExploreDocument.id, ExploreDocument.external_id, ExploreDocument.title, ExploreDocument.agency_name,
+            ExploreDocument.agency_slug, ExploreDocument.comments_close_on, ExploreDocument.comment_url, ExploreDocument.doc_type,
             ExploreDocument.date, ExploreDocument.summary, ExploreDocument.fr_page_views,
         )
         .filter(
@@ -1057,6 +1058,7 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
     for d in docs:
         result.append({
             "id": d.id,
+            "key": public_key(d.external_id, d.id),
             "title": d.title,
             "agencyName": d.agency_name,
             "agencySlug": d.agency_slug or None,

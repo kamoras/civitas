@@ -29,6 +29,7 @@ from app.pipeline.fetch.congressional_record import congress_start
 from app.redistricting import redrawn_overlap_states
 from app.services.bill_service import _collect_bills
 from app.services.congress_service import session_days
+from app.services.explore_keys import public_key
 
 router = APIRouter()
 
@@ -196,16 +197,18 @@ EXPLORE_SITEMAP_PAGE = 10_000
 
 @router.get("/sitemap/explore")
 def sitemap_explore(page: int = Query(0, ge=0, le=10_000), db: Session = Depends(get_db)) -> JSONResponse:
-    """One page of Explore document ids and dates, oldest id first, so a
-    page's contents only grow at the end and existing pages stay stable."""
+    """One page of Explore documents' permanent keys (services/
+    explore_keys.py: the canonical /explore/{key}) and dates, oldest row
+    first, so a page's contents only grow at the end and existing pages
+    stay stable."""
     rows = (
-        db.query(ExploreDocument.id, ExploreDocument.date)
+        db.query(ExploreDocument.id, ExploreDocument.external_id, ExploreDocument.date)
         .order_by(ExploreDocument.id)
         .offset(page * EXPLORE_SITEMAP_PAGE)
         .limit(EXPLORE_SITEMAP_PAGE)
         .all()
     )
     return cached_json(
-        {"documents": [{"id": str(doc_id), "lastmod": _iso_date(day)} for doc_id, day in rows]},
+        {"documents": [{"id": public_key(ext, doc_id), "lastmod": _iso_date(day)} for doc_id, ext, day in rows]},
         max_age=CACHE_TTL_REFERENCE_S,
     )

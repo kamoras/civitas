@@ -6,6 +6,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import CiteThis from "@/components/shared/CiteThis";
+import { congressGovCitedSource } from "@/lib/citedSources";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
@@ -324,7 +325,12 @@ export default async function NominationPage({ params }: PageProps) {
               </p>
             </section>
 
-            <CiteThis title={title} date={n.receivedDate} path={path} />
+            <CiteThis
+              title={title}
+              date={n.receivedDate}
+              path={path}
+              source={congressGovCitedSource("U.S. Senate", n.congressGovUrl)}
+            />
           </div>
         </main>
         <BackToTop />

@@ -92,10 +92,27 @@ _FR_DOC_RE = re.compile(r"\bFR\s+Doc\.?\s*(\d{4}-\d{4,6})\b", re.IGNORECASE)
 _RIN_RE = re.compile(r"\bRIN\s+(\d{4}[-–][A-Z]{2}\d{2})\b")
 
 
-# Regulations.gov docket and document ids ("EPA-HQ-OAR-2021-0317", a
-# document in it "...-0317-0001"): the agency's own format. Recognised only
-# as a whole query (is_identifier_query), never counted as a citation edge.
-_DOCKET_RE = re.compile(r"\b[A-Z]{2,}(?:-[A-Z0-9]+)*-\d{4}-\d{4,}\b")
+# A docket id as Regulations.gov writes them: the agency's letters, any
+# sub-agency or docket-type segments, a four-digit year, then a sequence
+# ("IRS-2026-1090", "EPA-HQ-OAR-2021-0317", "FDA-2018-N-3240",
+# "DOD-2026-OS-0662"); a document in it adds a four-digit number
+# ("IRS-2026-1090-0001"). The agencies' own formats, not a guess. Recognised
+# in a query and in a document's own comment link (docket_identifiers),
+# never counted as a citation edge.
+_DOCKET_ID_RE = re.compile(r"\b[A-Z]{2,}(?:-[A-Z0-9]+)*-(?:19|20)\d{2}(?:-[A-Z0-9]+)*-\d{4,}\b")
+# The Federal Register's comment link names the Regulations.gov document
+# that takes comments: /commenton/<docket>-<four-digit document number>.
+_REGS_GOV_RE = re.compile(r"regulations\.gov/(?:commenton|document|docket)/([A-Za-z0-9_-]+)", re.IGNORECASE)
+
+
+# A GovInfo Congressional Record granule ("CREC-2026-09-16-pt1-PgH5836-3"),
+# which a floor speech's external id carries: the day, and the page the
+# granule starts on (H House, S Senate, E Extensions, D Digest).
+_GRANULE_RE = re.compile(r"CREC-(\d{4})-(\d{2})-(\d{2})-PT\d+-PG([HSED])(\d+)(?:-\d+)?", re.IGNORECASE)
+# How the Record is cited: "172 Cong. Rec. H5836".
+_CONG_REC_RE = re.compile(
+    r"\b(\d{2,3})\s+CONG(?:RESSIONAL)?\.?\s*REC(?:ORD)?\.?\s+([HSED])\s?-?(\d{1,5})\b", re.IGNORECASE)
+
 
 # Case-insensitive copies for search queries, where "rin 1615-ad22" is how
 # people type. The case-sensitivity above stays for citation edges: in a
@@ -103,31 +120,21 @@ _DOCKET_RE = re.compile(r"\b[A-Z]{2,}(?:-[A-Z0-9]+)*-\d{4}-\d{4,}\b")
 # nothing else can only be one.
 _QUERY_IDENTIFIER_RES = tuple(
     re.compile(p.pattern, p.flags | re.IGNORECASE)
-    for p in (_EO_RE, _EO_ABBR_RE, _EO_TITLE_RE, _PROC_RE, _FR_CITE_RE, _FR_DOC_RE, _RIN_RE, _DOCKET_RE)
+    for p in (_EO_RE, _EO_ABBR_RE, _EO_TITLE_RE, _PROC_RE, _FR_CITE_RE, _FR_DOC_RE, _RIN_RE, _DOCKET_ID_RE,
+              _CONG_REC_RE, _GRANULE_RE)
 )
 _WORD_RE = re.compile(r"\w")
 
 
 def is_identifier_query(query: str) -> bool:
     """Whether a search query is nothing but publisher-assigned identifiers
-    ("89 FR 52508", "rin 1615-ad22", a docket id), in any case — a lookup,
+    ("89 FR 52508", "rin 1615-ad22", a docket id, "172 Cong. Rec. H5836"), in any case — a lookup,
     with no meaning for an embedding to find. Explore search's semantic
     channel abstains on these (services/explore_search.hybrid_search)."""
     rest = query or ""
     for pattern in _QUERY_IDENTIFIER_RES:
         rest = pattern.sub(" ", rest)
     return rest != (query or "") and not _WORD_RE.search(rest)
-
-
-# A docket id as Regulations.gov writes them: the agency's letters, any
-# sub-agency or docket-type segments, a four-digit year, then a sequence
-# ("IRS-2026-1090", "EPA-HQ-OAR-2021-0317", "FDA-2018-N-3240",
-# "DOD-2026-OS-0662"); a document in it adds a four-digit number
-# ("IRS-2026-1090-0001"). The agencies' own formats, not a guess.
-_DOCKET_ID_RE = re.compile(r"\b[A-Z]{2,}(?:-[A-Z0-9]+)*?-(?:19|20)\d{2}(?:-[A-Z0-9]+)*?-\d{4,}\b")
-# The Federal Register's comment link names the Regulations.gov document
-# that takes comments: /commenton/<docket>-<four-digit document number>.
-_REGS_GOV_RE = re.compile(r"regulations\.gov/(?:commenton|document|docket)/([A-Za-z0-9_-]+)", re.IGNORECASE)
 
 
 def docket_identifiers(comment_url: str | None) -> set[str]:
@@ -146,15 +153,6 @@ def docket_identifiers(comment_url: str | None) -> set[str]:
     return found
 
 
-# A GovInfo Congressional Record granule ("CREC-2026-09-16-pt1-PgH5836-3"),
-# which a floor speech's external id carries: the day, and the page the
-# granule starts on (H House, S Senate, E Extensions, D Digest).
-_GRANULE_RE = re.compile(r"CREC-(\d{4})-(\d{2})-(\d{2})-PT\d+-PG([HSED])(\d+)(?:-\d+)?", re.IGNORECASE)
-# How the Record is cited: "172 Cong. Rec. H5836".
-_CONG_REC_RE = re.compile(
-    r"\b(\d{2,3})\s+CONG(?:RESSIONAL)?\.?\s*REC(?:ORD)?\.?\s+([HSED])\s?-?(\d{1,5})\b", re.IGNORECASE)
-
-
 def record_volume(year: int, month: int, day: int) -> int:
     """The Congressional Record's volume for a day: one a session, 171 for
     the 119th Congress's first (2025). A session starts on January 3
@@ -171,6 +169,21 @@ def congressional_record_identifiers(external_id: str | None) -> set[str]:
     year, month, day, letter, page = m.groups()
     volume = record_volume(int(year), int(month), int(day))
     return {f"crec:{volume}-{letter.upper()}{int(page)}", f"crecgranule:{m.group(0).upper()}"}
+
+
+def query_record_identifiers(query: str) -> set[str]:
+    """The executive orders abbreviated "EO", dockets, and Congressional
+    Record citations or granules a search query names, in the namespaces declared_identifiers gives documents:
+    "irs-2026-1090" -> docket:IRS-2026-1090, "172 Cong. Rec. H5836" ->
+    crec:172-H5836. Queries only: these are never citation edges."""
+    q = (query or "").upper()
+    # "EO 14148", how titles and readers abbreviate an order; in a
+    # document's prose too loose to be a citation edge.
+    found = {f"eo:{int(m.group(1))}" for m in _EO_TITLE_RE.finditer(q)}
+    found |= {f"docket:{m.group(0)}" for m in _DOCKET_ID_RE.finditer(q)}
+    found |= {f"crec:{int(m.group(1))}-{m.group(2)}{int(m.group(3))}" for m in _CONG_REC_RE.finditer(q)}
+    found |= {f"crecgranule:{m.group(0)}" for m in _GRANULE_RE.finditer(q)}
+    return found
 
 
 def _normalize_rin(raw: str) -> str:
@@ -208,6 +221,7 @@ def declared_identifiers(
     title: str | None,
     doc_type: str | None,
     identifiers_json: str | None = None,
+    comment_url: str | None = None,
 ) -> set[str]:
     """Canonical identifiers a document *is known by* — its citable names.
 
@@ -226,7 +240,11 @@ def declared_identifiers(
     2 and 3 are what make this work on documents ingested before the
     `identifiers` column existed — they need no re-ingest, so the graph
     covers the existing corpus from the first run rather than only
-    documents added afterwards.
+    documents added afterwards. `external_id` also carries a floor
+    speech's Congressional Record granule (congressional_record_identifiers),
+    and `comment_url` the Regulations.gov docket a rule takes comments in
+    (docket_identifiers): names a reader looks a document up by, which no
+    other document cites in a form extract_citations reads.
     """
     ids: set[str] = set()
 
@@ -237,6 +255,9 @@ def declared_identifiers(
             stored = []
         if isinstance(stored, list):
             ids.update(str(i) for i in stored if i)
+
+    ids |= docket_identifiers(comment_url)
+    ids |= congressional_record_identifiers(external_id)
 
     ext = external_id or ""
     if ext.startswith("fr-reg-"):

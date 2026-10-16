@@ -73,6 +73,7 @@ from app.pipeline.analyze.action_center import (
 )
 from app.pipeline.fetch.congress import congress_first_year
 from app.services.bill_record import canonical_bill_id
+from app.services.explore_keys import public_key
 
 # The pinned cosine for an issue match and a member's bill: the trend-post
 # design's decision, not a fit. It is only one of the gates (the relevance
@@ -205,7 +206,7 @@ class RecordIndex:
                       congress=row.congress, parties=self.sponsor_party(row.bill_id))
 
     def document_record(self, d: ExploreDocument) -> Record:
-        return Record("document", f"document:{d.id}", d.date[:10], f"{_SITE}/explore/{d.id}", d.title)
+        return Record("document", f"document:{d.id}", d.date[:10], f"{_SITE}/explore/{public_key(d.external_id, d.id)}", d.title)
 
     def issue_record(self, issue: ActionIssue) -> Record:
         try:
