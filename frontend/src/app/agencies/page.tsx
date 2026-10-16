@@ -12,6 +12,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import BudgetBars from "@/components/agencies/BudgetBars";
 import SourceLine from "@/components/agencies/SourceLine";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
+import SectionCards from "@/components/sections/SectionCards";
 import { shareMetaAttrs } from "@/lib/shareImage";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
@@ -179,6 +180,8 @@ export default async function AgenciesPage({
                 [ FIND ]
               </button>
             </form>
+
+            <SectionCards section="agencies" current="directory" className="mb-10" />
 
             {!budget && (
               <p className="mb-10 text-sm text-ink-lo">

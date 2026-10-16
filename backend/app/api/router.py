@@ -24,6 +24,7 @@ from app.api.presidential_support import router as presidential_support_router
 from app.api.public import router as public_router
 from app.api.redistricting import router as redistricting_router
 from app.api.representatives import router as representatives_router
+from app.api.sections import router as sections_router
 from app.api.senators import router as senators_router
 from app.api.sitemap import router as sitemap_router
 from app.api.sources import router as sources_router
@@ -52,6 +53,7 @@ api_router.include_router(congress_router, tags=["congress"])
 api_router.include_router(cards_router, tags=["cards"])
 api_router.include_router(compare_router, tags=["compare"])
 api_router.include_router(this_week_router, tags=["this-week"])
+api_router.include_router(sections_router, tags=["sections"])
 api_router.include_router(sources_router, tags=["sources"])
 api_router.include_router(notable_router, tags=["notable"])
 api_router.include_router(feedback_router, tags=["feedback"])

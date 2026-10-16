@@ -4,6 +4,7 @@ import type { LiveResults, PviMap, RaceSummary } from "@/types/election";
 import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { describeElections } from "@/lib/seo";
 import { everyLiveStateVoting, showsResults } from "@/lib/results";
+import SectionCards from "@/components/sections/SectionCards";
 import { ElectionsInitialProvider, type ElectionsInitial } from "./ElectionsInitial";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -95,6 +96,11 @@ async function readInitial(): Promise<ElectionsInitial> {
 
 export default async function ElectionsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ElectionsInitialProvider value={await readInitial()}>{children}</ElectionsInitialProvider>
+    <ElectionsInitialProvider
+      value={await readInitial()}
+      hub={<SectionCards section="elections" current="ballots" />}
+    >
+      {children}
+    </ElectionsInitialProvider>
   );
 }
