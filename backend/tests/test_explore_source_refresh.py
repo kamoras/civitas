@@ -65,6 +65,11 @@ class TestFetchFrMetadata:
         found, missing = asyncio.run(fetch_fr_metadata(
             _client(lambda req: httpx.Response(404, json={"status": 404})), ["X26-10831"]))
         assert not found and missing == {"X26-10831"}
+        # The Register's real 404 for one number is an HTML page, not JSON
+        # (checked 2026-10-16): still not found, never the refresh failing.
+        found, missing = asyncio.run(fetch_fr_metadata(
+            _client(lambda req: httpx.Response(404, text="<!DOCTYPE html><html>Not found</html>")), ["X26-10925"]))
+        assert not found and missing == {"X26-10925"}
 
     def test_an_outage_is_not_not_found(self):
         assert asyncio.run(fetch_fr_metadata(_client(lambda req: httpx.Response(503, text="down")), ["a", "b"])) is None

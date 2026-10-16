@@ -37,3 +37,38 @@ export function fiscalYearLabel(fy: number | null, throughPeriod: number | null)
     ? `FY${fy} through ${FISCAL_MONTHS[throughPeriod - 1]}`
     : `FY${fy}`;
 }
+
+function words(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+/** The agencies a name search finds, best first: its short name exactly
+ * ("EPA", "IRS"), then its name exactly, then every typed word starting a
+ * word of its name or short name ("forest" finds the Forest Service). A
+ * match inside a word does not count: "epa" is in "Department", and a
+ * substring search put the EPA sixth of 28. Ties keep the given order. */
+export function matchAgencies<T extends { name: string; shortName: string | null }>(
+  agencies: T[],
+  q: string
+): T[] {
+  const typed = words(q);
+  if (!typed.length) return [];
+  const whole = typed.join(" ");
+  const rank = (a: T): number => {
+    const short = words(a.shortName ?? "").join(" ");
+    if (short && short === whole) return 0;
+    const name = words(a.name);
+    if (name.join(" ") === whole) return 1;
+    const pool = [...name, ...words(a.shortName ?? "")];
+    return typed.every((t) => pool.some((w) => w.startsWith(t))) ? 2 : -1;
+  };
+  return agencies
+    .map((a, i) => ({ a, i, r: rank(a) }))
+    .filter((x) => x.r >= 0)
+    .sort((x, y) => x.r - y.r || x.i - y.i)
+    .map((x) => x.a);
+}

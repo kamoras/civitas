@@ -59,7 +59,6 @@ GATES = {
     "policy_relevance": ("policy_relevance_calibration.json", "articles kept as U.S. policy news"),
     "cluster_pairs": ("cluster_pair_calibration.json", "article pairs joined into one story"),
     "claim_restatement": ("claim_restatement_calibration.json", "claim pairs read as one claim restated"),
-    "trend_relevance": ("trend_gates_calibration.json", "trends voted relevant"),
     "trend_tragedy": ("trend_gates_calibration.json", "trends voted a tragedy"),
     "trend_political_violence": ("trend_gates_calibration.json", "trends voted political violence"),
     "trend_loaded": ("trend_gates_calibration.json", "trend names voted loaded"),

@@ -2,14 +2,16 @@
 gave thirty floor speeches and no link to the senator, and "flag burning"
 never offered the Flag Burners Act."""
 
+from datetime import datetime
+
 from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.database import get_db
 from app.main import app
-from app.models import Representative, Senator, SponsoredBill
+from app.models import Agency, Representative, Senator, SponsoredBill
 from app.services.bill_service import clear_bill_collection_cache
-from app.services.explore_matches import bill_matches, explore_matches, member_matches
+from app.services.explore_matches import agency_matches, bill_matches, explore_matches, member_matches
 
 
 def _seed(db):
@@ -85,3 +87,22 @@ def test_the_route(db_session):
     body = res.json()
     assert body["members"]["items"][0]["id"] == "avery-holt"
     assert "max-age" in res.headers["cache-control"]
+
+
+def test_an_agency_is_found_by_its_name_short_name_or_description(db_session):
+    assert agency_matches(db_session, "aviation") == (0, [])  # the list not read yet: no group
+    now = datetime(2026, 10, 1)
+    db_session.add_all([
+        Agency(slug="federal-aviation-administration", fr_id=1, synced_at=now, name="Federal Aviation Administration",
+               short_name="FAA", description="Regulates civil aviation."),
+        Agency(slug="transportation-department", fr_id=2, synced_at=now, name="Transportation Department", short_name="DOT",
+               description="Oversees highways, rail and civil aviation."),
+        Agency(slug="education-department", fr_id=3, synced_at=now, name="Education Department", short_name="ED"),
+    ])
+    db_session.commit()
+    total, items = agency_matches(db_session, "aviation")
+    # Both describe aviation; the one whose name says it ranks first.
+    assert total == 2 and [a["slug"] for a in items] == ["federal-aviation-administration", "transportation-department"]
+    assert agency_matches(db_session, "faa")[1][0] == {
+        "slug": "federal-aviation-administration", "name": "Federal Aviation Administration", "shortName": "FAA"}
+    assert explore_matches(db_session, "education")["agencies"]["items"][0]["slug"] == "education-department"

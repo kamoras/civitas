@@ -142,10 +142,13 @@ export default async function ElectionsChapter() {
           views. <strong>Usual vote</strong> is each state&apos;s or district&apos;s lean from the
           last two presidential elections, computed by Civitas from official returns; no model is
           involved. <strong>Polls</strong> is a range for the margin: that lean, plus incumbency and
-          the national generic-ballot average, combined with the race&apos;s own polls. A range that
-          crosses even is grey and says too close to tell. <strong>Difference</strong> marks the
-          seats whose polls pull the range clear of where the lean, incumbency and the national
-          swing alone would put it.
+          the national generic-ballot average, combined with the race&apos;s own polls where it has
+          any; each range says whether it comes from polls or has no poll behind it. A lean and a
+          margin are both written like D+8, but a margin counts the gap between two candidates, so
+          it runs twice a lean: a seat that leans D+8 has a margin of D+16 when the country splits
+          evenly. A range that crosses even is grey and says too close to tell.{" "}
+          <strong>Difference</strong> marks the seats whose polls pull the range clear of where the
+          lean, incumbency and the national swing alone would put it.
         </P>
         <P>
           It is not a prediction and calls no race: it shows no chance of anyone winning and no seat

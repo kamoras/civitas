@@ -175,8 +175,8 @@ export default function RaceContext({
         {!resultsMode && (
           <>
             {" "}
-            The {race.cycleYear} {race.district == null ? "Senate" : "House"} map shows the range
-            polls suggest for its margin, beside how the{" "}
+            The {race.cycleYear} {race.district == null ? "Senate" : "House"} map shows a range for
+            its margin, from polls where there are any, beside how the{" "}
             {race.district == null ? "state" : "district"} usually votes.{" "}
             <Link
               href={mapHref("polls", race.district == null ? "senate" : "house", race.id)}
