@@ -1,0 +1,958 @@
+{
+ "_source": "Results and incumbency: Federal Election Commission, Federal Elections 2018, 2020 and 2022, US House Results by State (certified results, public domain). Lean: app/data/forecast_house_lean.json (Civitas, from VEST 2016 and 2020 precinct results, CC BY 4.0, and Census blocks and districts), each district's lean before the election on the lines it was held on. Polls: FiveThirtyEight pollster-ratings/raw_polls.csv at commit be387bc (CC BY 4.0).",
+ "_regenerate": "backend/scripts/fit_forecast_model.py",
+ "_method": "app/forecast/model.py (module docstring)",
+ "fits": {
+  "0": {
+   "horizon": 0,
+   "halfLife": 28.0,
+   "pollFloor": 5.25,
+   "pollSpread": 6.0,
+   "beta": [
+    0.7655030944,
+    1.778486533,
+    4.083454731,
+    0.8548525611
+   ],
+   "priorSd": 6.816123231,
+   "houseEffects": {
+    "pollsters": {
+     "1892polling": 0.882,
+     "abcnewsthewashingtonpost": 0.164,
+     "africanamericanresearchcollaborative": 0.006,
+     "alaskasurveyresearch": -0.273,
+     "amberintegrated": 0.306,
+     "americanpulseresearchpolling": 2.027,
+     "americanresearchgroup": -1.945,
+     "americanviewpoint": 3.051,
+     "apnorc": -0.798,
+     "atlasintel": 0.294,
+     "basswoodresearch": 1.273,
+     "beaconresearchshawcoresearch": -0.34,
+     "bendixenamandiinternational": -0.882,
+     "benensonstrategygroup": 0.192,
+     "benensonstrategygroupgsstrategygroup": -0.318,
+     "bigvillage": -1.638,
+     "boldbluecampaigns": 0.037,
+     "braunresearch": 0.091,
+     "breakthroughcampaigns": 0.364,
+     "brilliantcornersresearchstrategies": -0.253,
+     "carrollstrategies": -0.178,
+     "cbsnews": -0.133,
+     "centerstreetpac": -0.636,
+     "changeresearch": -1.988,
+     "christophernewportuniversitywasoncenterforcivicleadership": -0.066,
+     "civiqs": 0.244,
+     "claritycampaignlabs": 0.182,
+     "clearviewresearch": -0.909,
+     "climatenexus": -0.291,
+     "coefficient": 0.894,
+     "colbycollege": -0.014,
+     "colehargravesnodgrassassociates": 0.245,
+     "cygnal": 0.829,
+     "dataforprogress": 1.68,
+     "datatargeting": 2.5,
+     "davidbinderresearch": -0.055,
+     "dccctargetingandanalyticsdepartment": -1.551,
+     "desalesuniversitykamranafshardataanalyticscenter": -1.317,
+     "dfmresearch": -0.036,
+     "digitalresearch": -0.968,
+     "dittmanresearch": -0.7,
+     "dixiestrategies": -0.245,
+     "echeloninsights": -0.13,
+     "emersoncollege": 0.284,
+     "expeditionstrategies": -0.31,
+     "fabrizioleeassociates": 0.059,
+     "fabrizioleeassociatesimpactresearch": 0.717,
+     "flemingassociates": 0.196,
+     "fm3research": -0.275,
+     "franklinmarshallcollegecenterforopinionresearch": 0.755,
+     "gallup": -0.416,
+     "garinhartyangresearchgroup": -1.759,
+     "gbao": -1.569,
+     "glengariffgroup": 1.31,
+     "globalstrategygroup": -1.558,
+     "globalstrategygroupgbaonavigatorresearch": -1.416,
+     "gorightstrategies": 1.038,
+     "gqr": -1.911,
+     "gravismarketing": 0.943,
+     "gsstrategygroup": 1.207,
+     "harperpolling": 0.366,
+     "harrisinsightsanalytics": 0.624,
+     "hartresearchassociatespublicopinionstrategies": 0.174,
+     "hendrixcollege": 0.204,
+     "impactresearch": -1.674,
+     "insideradvantage": 0.591,
+     "ipsos": -0.669,
+     "jayhawkconsultingservices": -3.312,
+     "jmcanalyticsboldbluecampaigns": 0.098,
+     "johnzogbystrategies": 0.555,
+     "keatingresearch": 0.636,
+     "kff": -0.715,
+     "lakeresearchpartners": -0.815,
+     "lighthouseresearch": -0.818,
+     "lucid": 0.15,
+     "maristcollege": -0.48,
+     "marquetteuniversitylawschool": -0.551,
+     "masondixonpollingstrategy": 1.194,
+     "mclaughlinassociates": 4.305,
+     "meetingstreetinsights": 0.207,
+     "mellmangroup": -0.656,
+     "mitchellresearchcommunications": 1.133,
+     "monmouthuniversitypollinginstitute": -0.012,
+     "montanastateuniversitybillings": -0.017,
+     "montanastateuniversitybozemanhumanecologylearningandproblemsolvinglab": 0.494,
+     "mooreinformationgroup": 0.827,
+     "morningconsult": -1.008,
+     "muhlenbergcollegeinstituteofpublicopinion": -0.036,
+     "nationalresearch": 1.299,
+     "newsnation": 0.03,
+     "noblepredictiveinsights": 0.5,
+     "normingtonpettsassociates": -0.601,
+     "ogdenfry": 1.918,
+     "onmessageinc": 1.375,
+     "opinium": -1.542,
+     "panatlanticresearch": -0.137,
+     "patriotpolling": 0.864,
+     "pewresearchcenter": -0.278,
+     "pioneerpollingtarrancegroup": 0.099,
+     "premise": -1.18,
+     "ptimusanalytics": 0.573,
+     "publicopinionstrategies": 1.538,
+     "publicpolicypolling": -1.254,
+     "publicreligionresearchinstitute": -1.02,
+     "quinnipiacuniversity": -0.144,
+     "rasmussenreports": 2.848,
+     "remingtonresearchgroup": 2.753,
+     "researchpollinginc": 0.266,
+     "rmgresearch": 1.371,
+     "saintanselmcollegesurveycenter": -0.974,
+     "seapollingstrategicdesign": -0.609,
+     "selzerco": -0.365,
+     "sienacollege": -1.718,
+     "soonerpollcom": -1.026,
+     "ssrs": -1.115,
+     "stocktonuniversitywilliamjhughescenterforpublicpolicy": 0.587,
+     "stpetepolls": 1.02,
+     "strategicnational": 1.133,
+     "strategies360": -0.884,
+     "suffolkuniversity": 0.418,
+     "surveymonkey": 0.745,
+     "surveyusa": 1.58,
+     "susquehannapollingresearchinc": -1.02,
+     "targetinsyght": -0.93,
+     "targetpoint": 1.241,
+     "tarrancegroup": 2.151,
+     "thenewyorktimessienacollege": -0.468,
+     "thepollingcompanyinc": 1.797,
+     "thewashingtonpostgeorgemasonuniversityscharschoolofpolicyandgovernment": -1.369,
+     "thewinstongroup": 0.606,
+     "thirtyninthstreetstrategies": 0.215,
+     "thomaspartnersstrategies": 1.171,
+     "tippinsights": 0.26,
+     "trafalgargroup": 1.511,
+     "tuftsuniversitypublicopinionlab": -0.086,
+     "tulchinresearch": -1.781,
+     "universityofcaliforniaberkeleyinstituteofgovernmentalstudies": -1.925,
+     "universityofmontanasocialscienceresearchlaboratory": -0.482,
+     "universityofnevadalasvegasleebusinessschool": 0.064,
+     "universityofnewhampshiresurveycenter": 1.332,
+     "universityofnorthfloridapublicopinionresearchlab": 0.041,
+     "universityofsoutherncaliforniadornsifecenterforeconomicandsocialresearch": -1.725,
+     "universityofutahhinckleyinstituteofpolitics": -0.028,
+     "vcreekamg": 0.625,
+     "victoriaresearchconsulting": -1.179,
+     "victoryresearch": -2.183,
+     "weaskamerica": 0.636,
+     "wpaintelligence": 2.926,
+     "y2analytics": 0.995,
+     "yougov": -0.658
+    },
+    "partisan": 4.739
+   },
+   "scale": 0.9983,
+   "priorScale": 0.9987,
+   "pollScale": 0.9916
+  },
+  "7": {
+   "horizon": 7,
+   "halfLife": 28.0,
+   "pollFloor": 5.5,
+   "pollSpread": 6.0,
+   "beta": [
+    1.093834166,
+    1.778604509,
+    4.079755652,
+    0.8583133226
+   ],
+   "priorSd": 6.821709045,
+   "houseEffects": {
+    "pollsters": {
+     "1892polling": 0.882,
+     "abcnewsthewashingtonpost": 0.164,
+     "africanamericanresearchcollaborative": 0.006,
+     "alaskasurveyresearch": -0.273,
+     "amberintegrated": 0.306,
+     "americanpulseresearchpolling": 2.027,
+     "americanresearchgroup": -1.945,
+     "americanviewpoint": 3.051,
+     "apnorc": -0.798,
+     "atlasintel": 0.294,
+     "basswoodresearch": 1.273,
+     "beaconresearchshawcoresearch": -0.34,
+     "bendixenamandiinternational": -0.882,
+     "benensonstrategygroup": 0.192,
+     "benensonstrategygroupgsstrategygroup": -0.318,
+     "bigvillage": -1.638,
+     "boldbluecampaigns": 0.037,
+     "braunresearch": 0.091,
+     "breakthroughcampaigns": 0.364,
+     "brilliantcornersresearchstrategies": -0.253,
+     "carrollstrategies": -0.178,
+     "cbsnews": -0.133,
+     "centerstreetpac": -0.636,
+     "changeresearch": -1.988,
+     "christophernewportuniversitywasoncenterforcivicleadership": -0.066,
+     "civiqs": 0.244,
+     "claritycampaignlabs": 0.182,
+     "clearviewresearch": -0.909,
+     "climatenexus": -0.291,
+     "coefficient": 0.894,
+     "colbycollege": -0.014,
+     "colehargravesnodgrassassociates": 0.245,
+     "cygnal": 0.829,
+     "dataforprogress": 1.68,
+     "datatargeting": 2.5,
+     "davidbinderresearch": -0.055,
+     "dccctargetingandanalyticsdepartment": -1.551,
+     "desalesuniversitykamranafshardataanalyticscenter": -1.317,
+     "dfmresearch": -0.036,
+     "digitalresearch": -0.968,
+     "dittmanresearch": -0.7,
+     "dixiestrategies": -0.245,
+     "echeloninsights": -0.13,
+     "emersoncollege": 0.284,
+     "expeditionstrategies": -0.31,
+     "fabrizioleeassociates": 0.059,
+     "fabrizioleeassociatesimpactresearch": 0.717,
+     "flemingassociates": 0.196,
+     "fm3research": -0.275,
+     "franklinmarshallcollegecenterforopinionresearch": 0.755,
+     "gallup": -0.416,
+     "garinhartyangresearchgroup": -1.759,
+     "gbao": -1.569,
+     "glengariffgroup": 1.31,
+     "globalstrategygroup": -1.558,
+     "globalstrategygroupgbaonavigatorresearch": -1.416,
+     "gorightstrategies": 1.038,
+     "gqr": -1.911,
+     "gravismarketing": 0.943,
+     "gsstrategygroup": 1.207,
+     "harperpolling": 0.366,
+     "harrisinsightsanalytics": 0.624,
+     "hartresearchassociatespublicopinionstrategies": 0.174,
+     "hendrixcollege": 0.204,
+     "impactresearch": -1.674,
+     "insideradvantage": 0.591,
+     "ipsos": -0.669,
+     "jayhawkconsultingservices": -3.312,
+     "jmcanalyticsboldbluecampaigns": 0.098,
+     "johnzogbystrategies": 0.555,
+     "keatingresearch": 0.636,
+     "kff": -0.715,
+     "lakeresearchpartners": -0.815,
+     "lighthouseresearch": -0.818,
+     "lucid": 0.15,
+     "maristcollege": -0.48,
+     "marquetteuniversitylawschool": -0.551,
+     "masondixonpollingstrategy": 1.194,
+     "mclaughlinassociates": 4.305,
+     "meetingstreetinsights": 0.207,
+     "mellmangroup": -0.656,
+     "mitchellresearchcommunications": 1.133,
+     "monmouthuniversitypollinginstitute": -0.012,
+     "montanastateuniversitybillings": -0.017,
+     "montanastateuniversitybozemanhumanecologylearningandproblemsolvinglab": 0.494,
+     "mooreinformationgroup": 0.827,
+     "morningconsult": -1.008,
+     "muhlenbergcollegeinstituteofpublicopinion": -0.036,
+     "nationalresearch": 1.299,
+     "newsnation": 0.03,
+     "noblepredictiveinsights": 0.5,
+     "normingtonpettsassociates": -0.601,
+     "ogdenfry": 1.918,
+     "onmessageinc": 1.375,
+     "opinium": -1.542,
+     "panatlanticresearch": -0.137,
+     "patriotpolling": 0.864,
+     "pewresearchcenter": -0.278,
+     "pioneerpollingtarrancegroup": 0.099,
+     "premise": -1.18,
+     "ptimusanalytics": 0.573,
+     "publicopinionstrategies": 1.538,
+     "publicpolicypolling": -1.254,
+     "publicreligionresearchinstitute": -1.02,
+     "quinnipiacuniversity": -0.144,
+     "rasmussenreports": 2.848,
+     "remingtonresearchgroup": 2.753,
+     "researchpollinginc": 0.266,
+     "rmgresearch": 1.371,
+     "saintanselmcollegesurveycenter": -0.974,
+     "seapollingstrategicdesign": -0.609,
+     "selzerco": -0.365,
+     "sienacollege": -1.718,
+     "soonerpollcom": -1.026,
+     "ssrs": -1.115,
+     "stocktonuniversitywilliamjhughescenterforpublicpolicy": 0.587,
+     "stpetepolls": 1.02,
+     "strategicnational": 1.133,
+     "strategies360": -0.884,
+     "suffolkuniversity": 0.418,
+     "surveymonkey": 0.745,
+     "surveyusa": 1.58,
+     "susquehannapollingresearchinc": -1.02,
+     "targetinsyght": -0.93,
+     "targetpoint": 1.241,
+     "tarrancegroup": 2.151,
+     "thenewyorktimessienacollege": -0.468,
+     "thepollingcompanyinc": 1.797,
+     "thewashingtonpostgeorgemasonuniversityscharschoolofpolicyandgovernment": -1.369,
+     "thewinstongroup": 0.606,
+     "thirtyninthstreetstrategies": 0.215,
+     "thomaspartnersstrategies": 1.171,
+     "tippinsights": 0.26,
+     "trafalgargroup": 1.511,
+     "tuftsuniversitypublicopinionlab": -0.086,
+     "tulchinresearch": -1.781,
+     "universityofcaliforniaberkeleyinstituteofgovernmentalstudies": -1.925,
+     "universityofmontanasocialscienceresearchlaboratory": -0.482,
+     "universityofnevadalasvegasleebusinessschool": 0.064,
+     "universityofnewhampshiresurveycenter": 1.332,
+     "universityofnorthfloridapublicopinionresearchlab": 0.041,
+     "universityofsoutherncaliforniadornsifecenterforeconomicandsocialresearch": -1.725,
+     "universityofutahhinckleyinstituteofpolitics": -0.028,
+     "vcreekamg": 0.625,
+     "victoriaresearchconsulting": -1.179,
+     "victoryresearch": -2.183,
+     "weaskamerica": 0.636,
+     "wpaintelligence": 2.926,
+     "y2analytics": 0.995,
+     "yougov": -0.658
+    },
+    "partisan": 4.739
+   },
+   "scale": 0.9982,
+   "priorScale": 0.9987,
+   "pollScale": 0.9969
+  },
+  "14": {
+   "horizon": 14,
+   "halfLife": 28.0,
+   "pollFloor": 4.75,
+   "pollSpread": 7.0,
+   "beta": [
+    1.108083852,
+    1.778956177,
+    4.051977678,
+    0.8874018777
+   ],
+   "priorSd": 6.849466878,
+   "houseEffects": {
+    "pollsters": {
+     "1892polling": 0.882,
+     "abcnewsthewashingtonpost": 0.164,
+     "africanamericanresearchcollaborative": 0.006,
+     "alaskasurveyresearch": -0.273,
+     "amberintegrated": 0.306,
+     "americanpulseresearchpolling": 2.027,
+     "americanresearchgroup": -1.945,
+     "americanviewpoint": 3.051,
+     "apnorc": -0.798,
+     "atlasintel": 0.294,
+     "basswoodresearch": 1.273,
+     "beaconresearchshawcoresearch": -0.34,
+     "bendixenamandiinternational": -0.882,
+     "benensonstrategygroup": 0.192,
+     "benensonstrategygroupgsstrategygroup": -0.318,
+     "bigvillage": -1.638,
+     "boldbluecampaigns": 0.037,
+     "braunresearch": 0.091,
+     "breakthroughcampaigns": 0.364,
+     "brilliantcornersresearchstrategies": -0.253,
+     "carrollstrategies": -0.178,
+     "cbsnews": -0.133,
+     "centerstreetpac": -0.636,
+     "changeresearch": -1.988,
+     "christophernewportuniversitywasoncenterforcivicleadership": -0.066,
+     "civiqs": 0.244,
+     "claritycampaignlabs": 0.182,
+     "clearviewresearch": -0.909,
+     "climatenexus": -0.291,
+     "coefficient": 0.894,
+     "colbycollege": -0.014,
+     "colehargravesnodgrassassociates": 0.245,
+     "cygnal": 0.829,
+     "dataforprogress": 1.68,
+     "datatargeting": 2.5,
+     "davidbinderresearch": -0.055,
+     "dccctargetingandanalyticsdepartment": -1.551,
+     "desalesuniversitykamranafshardataanalyticscenter": -1.317,
+     "dfmresearch": -0.036,
+     "digitalresearch": -0.968,
+     "dittmanresearch": -0.7,
+     "dixiestrategies": -0.245,
+     "echeloninsights": -0.13,
+     "emersoncollege": 0.284,
+     "expeditionstrategies": -0.31,
+     "fabrizioleeassociates": 0.059,
+     "fabrizioleeassociatesimpactresearch": 0.717,
+     "flemingassociates": 0.196,
+     "fm3research": -0.275,
+     "franklinmarshallcollegecenterforopinionresearch": 0.755,
+     "gallup": -0.416,
+     "garinhartyangresearchgroup": -1.759,
+     "gbao": -1.569,
+     "glengariffgroup": 1.31,
+     "globalstrategygroup": -1.558,
+     "globalstrategygroupgbaonavigatorresearch": -1.416,
+     "gorightstrategies": 1.038,
+     "gqr": -1.911,
+     "gravismarketing": 0.943,
+     "gsstrategygroup": 1.207,
+     "harperpolling": 0.366,
+     "harrisinsightsanalytics": 0.624,
+     "hartresearchassociatespublicopinionstrategies": 0.174,
+     "hendrixcollege": 0.204,
+     "impactresearch": -1.674,
+     "insideradvantage": 0.591,
+     "ipsos": -0.669,
+     "jayhawkconsultingservices": -3.312,
+     "jmcanalyticsboldbluecampaigns": 0.098,
+     "johnzogbystrategies": 0.555,
+     "keatingresearch": 0.636,
+     "kff": -0.715,
+     "lakeresearchpartners": -0.815,
+     "lighthouseresearch": -0.818,
+     "lucid": 0.15,
+     "maristcollege": -0.48,
+     "marquetteuniversitylawschool": -0.551,
+     "masondixonpollingstrategy": 1.194,
+     "mclaughlinassociates": 4.305,
+     "meetingstreetinsights": 0.207,
+     "mellmangroup": -0.656,
+     "mitchellresearchcommunications": 1.133,
+     "monmouthuniversitypollinginstitute": -0.012,
+     "montanastateuniversitybillings": -0.017,
+     "montanastateuniversitybozemanhumanecologylearningandproblemsolvinglab": 0.494,
+     "mooreinformationgroup": 0.827,
+     "morningconsult": -1.008,
+     "muhlenbergcollegeinstituteofpublicopinion": -0.036,
+     "nationalresearch": 1.299,
+     "newsnation": 0.03,
+     "noblepredictiveinsights": 0.5,
+     "normingtonpettsassociates": -0.601,
+     "ogdenfry": 1.918,
+     "onmessageinc": 1.375,
+     "opinium": -1.542,
+     "panatlanticresearch": -0.137,
+     "patriotpolling": 0.864,
+     "pewresearchcenter": -0.278,
+     "pioneerpollingtarrancegroup": 0.099,
+     "premise": -1.18,
+     "ptimusanalytics": 0.573,
+     "publicopinionstrategies": 1.538,
+     "publicpolicypolling": -1.254,
+     "publicreligionresearchinstitute": -1.02,
+     "quinnipiacuniversity": -0.144,
+     "rasmussenreports": 2.848,
+     "remingtonresearchgroup": 2.753,
+     "researchpollinginc": 0.266,
+     "rmgresearch": 1.371,
+     "saintanselmcollegesurveycenter": -0.974,
+     "seapollingstrategicdesign": -0.609,
+     "selzerco": -0.365,
+     "sienacollege": -1.718,
+     "soonerpollcom": -1.026,
+     "ssrs": -1.115,
+     "stocktonuniversitywilliamjhughescenterforpublicpolicy": 0.587,
+     "stpetepolls": 1.02,
+     "strategicnational": 1.133,
+     "strategies360": -0.884,
+     "suffolkuniversity": 0.418,
+     "surveymonkey": 0.745,
+     "surveyusa": 1.58,
+     "susquehannapollingresearchinc": -1.02,
+     "targetinsyght": -0.93,
+     "targetpoint": 1.241,
+     "tarrancegroup": 2.151,
+     "thenewyorktimessienacollege": -0.468,
+     "thepollingcompanyinc": 1.797,
+     "thewashingtonpostgeorgemasonuniversityscharschoolofpolicyandgovernment": -1.369,
+     "thewinstongroup": 0.606,
+     "thirtyninthstreetstrategies": 0.215,
+     "thomaspartnersstrategies": 1.171,
+     "tippinsights": 0.26,
+     "trafalgargroup": 1.511,
+     "tuftsuniversitypublicopinionlab": -0.086,
+     "tulchinresearch": -1.781,
+     "universityofcaliforniaberkeleyinstituteofgovernmentalstudies": -1.925,
+     "universityofmontanasocialscienceresearchlaboratory": -0.482,
+     "universityofnevadalasvegasleebusinessschool": 0.064,
+     "universityofnewhampshiresurveycenter": 1.332,
+     "universityofnorthfloridapublicopinionresearchlab": 0.041,
+     "universityofsoutherncaliforniadornsifecenterforeconomicandsocialresearch": -1.725,
+     "universityofutahhinckleyinstituteofpolitics": -0.028,
+     "vcreekamg": 0.625,
+     "victoriaresearchconsulting": -1.179,
+     "victoryresearch": -2.183,
+     "weaskamerica": 0.636,
+     "wpaintelligence": 2.926,
+     "y2analytics": 0.995,
+     "yougov": -0.658
+    },
+    "partisan": 4.739
+   },
+   "scale": 0.9947,
+   "priorScale": 0.9987,
+   "pollScale": 0.9971
+  }
+ },
+ "evaluation": {
+  "0": {
+   "races": 1148,
+   "polledRaces": 252,
+   "cycles": [
+    2018,
+    2020,
+    2022
+   ],
+   "all": {
+    "combined": {
+     "brier": 0.0345,
+     "logLoss": 0.1331
+    },
+    "fundamentals": {
+     "brier": 0.0392,
+     "logLoss": 0.1514
+    }
+   },
+   "polled": {
+    "combined": {
+     "brier": 0.1102,
+     "logLoss": 0.3734
+    },
+    "fundamentals": {
+     "brier": 0.1313,
+     "logLoss": 0.4576
+    },
+    "pollsOnly": {
+     "brier": 0.1276,
+     "logLoss": 0.3979
+    }
+   },
+   "coverage80": 0.793,
+   "coverage95": 0.934,
+   "meanAbsError": 5.33,
+   "calibration": [
+    {
+     "low": 0.0,
+     "high": 0.05,
+     "n": 477,
+     "meanChance": 0.004,
+     "demShare": 0.008,
+     "demCarried": 4,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.05,
+     "high": 0.15,
+     "n": 51,
+     "meanChance": 0.091,
+     "demShare": 0.059,
+     "demCarried": 3,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.15,
+     "high": 0.35,
+     "n": 33,
+     "meanChance": 0.229,
+     "demShare": 0.333,
+     "demCarried": 11,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.35,
+     "high": 0.65,
+     "n": 51,
+     "meanChance": 0.5,
+     "demShare": 0.647,
+     "demCarried": 33,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.65,
+     "high": 0.85,
+     "n": 34,
+     "meanChance": 0.768,
+     "demShare": 0.824,
+     "demCarried": 28,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.85,
+     "high": 0.95,
+     "n": 44,
+     "meanChance": 0.903,
+     "demShare": 0.909,
+     "demCarried": 40,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.95,
+     "high": 1.0,
+     "n": 458,
+     "meanChance": 0.997,
+     "demShare": 0.989,
+     "demCarried": 453,
+     "years": [
+      2018,
+      2022
+     ]
+    }
+   ],
+   "seatTotals": [
+    {
+     "year": 2018,
+     "expectedDem": 168.3,
+     "actualDem": 186,
+     "races": 379,
+     "independentSd": 3.28
+    },
+    {
+     "year": 2020,
+     "expectedDem": 205.5,
+     "actualDem": 191,
+     "races": 383,
+     "independentSd": 3.22
+    },
+    {
+     "year": 2022,
+     "expectedDem": 188.3,
+     "actualDem": 195,
+     "races": 386,
+     "independentSd": 3.75
+    }
+   ]
+  },
+  "7": {
+   "races": 1148,
+   "polledRaces": 256,
+   "cycles": [
+    2018,
+    2020,
+    2022
+   ],
+   "all": {
+    "combined": {
+     "brier": 0.0351,
+     "logLoss": 0.1358
+    },
+    "fundamentals": {
+     "brier": 0.0393,
+     "logLoss": 0.1521
+    }
+   },
+   "polled": {
+    "combined": {
+     "brier": 0.1166,
+     "logLoss": 0.3942
+    },
+    "fundamentals": {
+     "brier": 0.1354,
+     "logLoss": 0.4681
+    },
+    "pollsOnly": {
+     "brier": 0.1324,
+     "logLoss": 0.41
+    }
+   },
+   "coverage80": 0.79,
+   "coverage95": 0.934,
+   "meanAbsError": 5.34,
+   "calibration": [
+    {
+     "low": 0.0,
+     "high": 0.05,
+     "n": 478,
+     "meanChance": 0.004,
+     "demShare": 0.008,
+     "demCarried": 4,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.05,
+     "high": 0.15,
+     "n": 52,
+     "meanChance": 0.089,
+     "demShare": 0.096,
+     "demCarried": 5,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.15,
+     "high": 0.35,
+     "n": 34,
+     "meanChance": 0.222,
+     "demShare": 0.353,
+     "demCarried": 12,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.35,
+     "high": 0.65,
+     "n": 48,
+     "meanChance": 0.507,
+     "demShare": 0.604,
+     "demCarried": 29,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.65,
+     "high": 0.85,
+     "n": 38,
+     "meanChance": 0.759,
+     "demShare": 0.868,
+     "demCarried": 33,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.85,
+     "high": 0.95,
+     "n": 43,
+     "meanChance": 0.907,
+     "demShare": 0.907,
+     "demCarried": 39,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.95,
+     "high": 1.0,
+     "n": 455,
+     "meanChance": 0.997,
+     "demShare": 0.989,
+     "demCarried": 450,
+     "years": [
+      2018,
+      2022
+     ]
+    }
+   ],
+   "seatTotals": [
+    {
+     "year": 2018,
+     "expectedDem": 166.7,
+     "actualDem": 186,
+     "races": 379,
+     "independentSd": 3.27
+    },
+    {
+     "year": 2020,
+     "expectedDem": 205.0,
+     "actualDem": 191,
+     "races": 383,
+     "independentSd": 3.26
+    },
+    {
+     "year": 2022,
+     "expectedDem": 188.4,
+     "actualDem": 195,
+     "races": 386,
+     "independentSd": 3.72
+    }
+   ]
+  },
+  "14": {
+   "races": 1148,
+   "polledRaces": 245,
+   "cycles": [
+    2018,
+    2020,
+    2022
+   ],
+   "all": {
+    "combined": {
+     "brier": 0.0349,
+     "logLoss": 0.1332
+    },
+    "fundamentals": {
+     "brier": 0.0399,
+     "logLoss": 0.1549
+    }
+   },
+   "polled": {
+    "combined": {
+     "brier": 0.1183,
+     "logLoss": 0.4099
+    },
+    "fundamentals": {
+     "brier": 0.142,
+     "logLoss": 0.5122
+    },
+    "pollsOnly": {
+     "brier": 0.1297,
+     "logLoss": 0.4047
+    }
+   },
+   "coverage80": 0.779,
+   "coverage95": 0.929,
+   "meanAbsError": 5.37,
+   "calibration": [
+    {
+     "low": 0.0,
+     "high": 0.05,
+     "n": 480,
+     "meanChance": 0.004,
+     "demShare": 0.01,
+     "demCarried": 5,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.05,
+     "high": 0.15,
+     "n": 56,
+     "meanChance": 0.092,
+     "demShare": 0.125,
+     "demCarried": 7,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.15,
+     "high": 0.35,
+     "n": 28,
+     "meanChance": 0.241,
+     "demShare": 0.25,
+     "demCarried": 7,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.35,
+     "high": 0.65,
+     "n": 42,
+     "meanChance": 0.506,
+     "demShare": 0.619,
+     "demCarried": 26,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.65,
+     "high": 0.85,
+     "n": 41,
+     "meanChance": 0.755,
+     "demShare": 0.878,
+     "demCarried": 36,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.85,
+     "high": 0.95,
+     "n": 44,
+     "meanChance": 0.902,
+     "demShare": 0.886,
+     "demCarried": 39,
+     "years": [
+      2018,
+      2022
+     ]
+    },
+    {
+     "low": 0.95,
+     "high": 1.0,
+     "n": 457,
+     "meanChance": 0.997,
+     "demShare": 0.989,
+     "demCarried": 452,
+     "years": [
+      2018,
+      2022
+     ]
+    }
+   ],
+   "seatTotals": [
+    {
+     "year": 2018,
+     "expectedDem": 165.5,
+     "actualDem": 186,
+     "races": 379,
+     "independentSd": 3.2
+    },
+    {
+     "year": 2020,
+     "expectedDem": 205.1,
+     "actualDem": 191,
+     "races": 383,
+     "independentSd": 3.27
+    },
+    {
+     "year": 2022,
+     "expectedDem": 190.9,
+     "actualDem": 195,
+     "races": 386,
+     "independentSd": 3.7
+    }
+   ]
+  }
+ },
+ "_nationalCoefficient": "the Senate fit's generic-ballot coefficient at the same horizon (model.fit, national_coef): three House cycles cannot identify it"
+}

@@ -271,8 +271,15 @@ def combine(prior: float, prior_sd: float, avg: float | None, avg_sd: float | No
     return (prior * wp + avg * wa) / (wp + wa), math.sqrt(1 / (wp + wa))
 
 
-def fit(rows: list[dict], generic: dict, horizon: int) -> dict:
-    """Every parameter of the method at one horizon, from training rows."""
+def fit(rows: list[dict], generic: dict, horizon: int, national_coef: float | None = None) -> dict:
+    """Every parameter of the method at one horizon, from training rows.
+
+    `national_coef` fixes the generic-ballot coefficient instead of fitting
+    it. The national term is identified only across election cycles (every
+    race in a cycle shares one generic-ballot average), so a history of a
+    few cycles cannot estimate it: the House's three would fit it on two
+    values per held-out fold. The House takes the Senate fit's coefficient
+    (thirteen cycles), and fits everything else itself."""
     races = [[Poll.from_row(r) for r in row["polls"]] for row in rows]
     gen = {y: [Poll.from_row(r) for r in v] for y, v in generic.items()}
     effects = house_effects(races + list(gen.values()))
@@ -290,7 +297,11 @@ def fit(rows: list[dict], generic: dict, horizon: int) -> dict:
     usable = [i for i, row in enumerate(rows) if nat.get(row["year"]) is not None]
     x = np.array([[rows[i]["lean"], rows[i]["inc"], nat[rows[i]["year"]]] for i in usable])
     y = np.array([rows[i]["margin"] for i in usable])
-    beta, prior_sd = fit_fundamentals(x, y)
+    if national_coef is None:
+        beta, prior_sd = fit_fundamentals(x, y)
+    else:
+        b, prior_sd = fit_fundamentals(x[:, :2], y - national_coef * x[:, 2])
+        beta = b + [float(national_coef)]
     params = {"horizon": horizon, "halfLife": half_life, "pollFloor": floor, "pollSpread": spread,
               "beta": beta, "priorSd": prior_sd, "houseEffects": effects}
     means, sds, prior_m, avg_m, actual = [], [], [], [], []
@@ -368,14 +379,16 @@ def calibration_table(p: list[float], dem_won: list[float], years: list[int]) ->
     return rows
 
 
-def leave_one_cycle_out(rows: list[dict], generic: dict, horizon: int) -> dict:
+def leave_one_cycle_out(rows: list[dict], generic: dict, horizon: int, national_coef_for=None) -> dict:
     """Every race predicted by a fit that never saw its cycle."""
     out = []
     for year in sorted({r["year"] for r in rows}):
         train = [r for r in rows if r["year"] != year]
         test = [r for r in rows if r["year"] == year]
         gen_train = {y: v for y, v in generic.items() if int(y) != year}
-        params = fit(train, gen_train, horizon)
+        # A borrowed national coefficient is itself refitted without the
+        # held-out cycle, so nothing from that cycle reaches its prediction.
+        params = fit(train, gen_train, horizon, national_coef_for(year) if national_coef_for else None)
         # The national average for the held-out year uses only that year's
         # generic-ballot polls (and the house effects of the other years).
         gen_all = {y: [Poll.from_row(x) for x in v] for y, v in generic.items()}

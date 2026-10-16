@@ -12,6 +12,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app import district_lean
 from app.api import election_map as api
 from app.election_phase import CAMPAIGN, ELECTION_DAY, ActiveElection
 from app.forecast import build, model
@@ -21,6 +22,9 @@ from app.models import Candidate, Race
 DATA = Path(__file__).resolve().parents[1] / "app" / "data"
 TRAINING = json.loads((DATA / "forecast_training.json").read_text())
 FITTED = json.loads((DATA / "forecast_model.json").read_text())
+HOUSE_TRAINING = json.loads((DATA / "forecast_house_training.json").read_text())
+HOUSE_FITTED = json.loads((DATA / "forecast_house_model.json").read_text())
+HOUSE_LEAN = json.loads((DATA / "forecast_house_lean.json").read_text())
 
 
 def assert_close(got, want, rel=1e-9, abs_tol=0.0, path="$"):
@@ -61,15 +65,55 @@ def test_held_out_evaluation_reproduces():
     assert_close(again, FITTED["evaluation"]["14"], abs_tol=1e-3)
 
 
+@pytest.mark.parametrize("horizon", model.HORIZONS)
+def test_house_fit_reproduces_from_its_training_file(horizon):
+    # The House borrows the Senate fit's national coefficient (model.fit).
+    coef = model.fit(TRAINING["races"], TRAINING["generic"], horizon)["beta"][3]
+    refit = model.fit(HOUSE_TRAINING["races"], HOUSE_TRAINING["generic"], horizon, coef)
+    assert_close(refit, HOUSE_FITTED["fits"][str(horizon)])
+
+
+def test_house_held_out_evaluation_reproduces():
+    def coef_for(year):  # the Senate's, refitted without the held-out cycle
+        return model.fit([r for r in TRAINING["races"] if r["year"] != year],
+                         {y: v for y, v in TRAINING["generic"].items() if int(y) != year}, 14)["beta"][3]
+
+    again = model.leave_one_cycle_out(HOUSE_TRAINING["races"], HOUSE_TRAINING["generic"], 14, coef_for)
+    assert_close(again, HOUSE_FITTED["evaluation"]["14"], abs_tol=1e-3)
+
+
+def test_house_training_leans_are_the_history_files_own():
+    """Each House race's lean is the one the history file holds for that
+    cycle's lines, which uses only presidential votes cast before it."""
+    for r in HOUSE_TRAINING["races"]:
+        assert r["lean"] == HOUSE_LEAN["leans"][str(r["year"])][r["state"]]
+    assert {r["year"] for r in HOUSE_TRAINING["races"]} == {2018, 2020, 2022}
+    assert not any(r["year"] == 2020 and r["state"].startswith("NC-") for r in HOUSE_TRAINING["races"])
+    assert all("2024" not in m for m in HOUSE_LEAN["_method"].values() if "2016" in m)
+
+
+def test_house_history_lean_recomputes_from_its_counts():
+    nation = HOUSE_LEAN["nation"]
+    for cycle, congress in (("2018", "116"), ("2022", "118")):
+        for district, (d16, r16, d20, r20) in list(HOUSE_LEAN["lines"][congress].items())[:40]:
+            if cycle == "2018":
+                want = -100 * (d16 / (d16 + r16) - nation["2016"]["D"] / sum(nation["2016"].values()))
+            else:
+                want = model.two_party_lean({"D": d16, "R": r16}, {"D": d20, "R": r20}, nation["2016"], nation["2020"])
+            # Stored at two decimals; a rounding edge may land either way.
+            assert math.isclose(HOUSE_LEAN["leans"][cycle][district], want, abs_tol=0.006)
+
+
 def test_training_rows_are_every_contested_cycle():
     years = {r["year"] for r in TRAINING["races"]}
     assert years == set(range(1998, 2023, 2))
     assert all(r["inc"] in (-1, 0, 1) for r in TRAINING["races"])
 
 
-def test_ranges_hold_about_their_stated_share_on_held_out_cycles():
+@pytest.mark.parametrize("fitted", [FITTED, HOUSE_FITTED], ids=["senate", "house"])
+def test_ranges_hold_about_their_stated_share_on_held_out_cycles(fitted):
     for h in model.HORIZONS:
-        ev = FITTED["evaluation"][str(h)]
+        ev = fitted["evaluation"][str(h)]
         assert 0.72 <= ev["coverage80"] <= 0.88, ev["coverage80"]
         assert 0.90 <= ev["coverage95"] <= 0.99, ev["coverage95"]
         # Polls add information: the combined method beats both halves.
@@ -139,6 +183,11 @@ def test_fieldwork_after_the_revision_fails_the_gate():
         parse(article(ROW), as_of=date(2026, 10, 8))
 
 
+def test_a_cell_spanning_two_columns_counts_once():
+    (poll,) = parse(article(ROW.replace("|–\n|6%\n", '|colspan="2"|6%\n'))).polls
+    assert (poll.dem, poll.rep) == (51.0, 43.0)
+
+
 def test_a_poll_listed_twice_fails_the_gate():
     with pytest.raises(wiki.GateFailure, match="twice"):
         parse(article(ROW + ROW))
@@ -196,6 +245,11 @@ def _seed(db):
                      incumbent_challenge="C", confirmed_general=True))
     db.add(Candidate(id="S2", race_id="2026-SEN-OH", name="LEE, JORDAN", ballot_name="Jordan Lee", party="REP",
                      incumbent_challenge="I", confirmed_general=True))
+    db.add(Race(id="2026-HOUSE-OH-9", cycle_year=2026, office="H", state="OH", district=9, is_special=False))
+    db.add(Candidate(id="H1", race_id="2026-HOUSE-OH-9", name="SMITH, ALEX", ballot_name="Alex Smith", party="DEM",
+                     incumbent_challenge="I", confirmed_general=True))
+    db.add(Candidate(id="H2", race_id="2026-HOUSE-OH-9", name="LEE, JORDAN", ballot_name="Jordan Lee", party="REP",
+                     incumbent_challenge="C", confirmed_general=True))
     db.add(Race(id="2026-SEN-WY", cycle_year=2026, office="S", state="WY", is_special=False))
     db.add(Candidate(id="S3", race_id="2026-SEN-WY", name="ROE, PAT", party="REP", incumbent_challenge="O",
                      confirmed_general=True))
@@ -230,37 +284,67 @@ def _revisions():
         "2026 United States Senate election in Ohio": dict(rev, title="2026 United States Senate election in Ohio",
                                                            content=article(ROW)),
         build.GENERIC_ARTICLE: dict(rev, title=build.GENERIC_ARTICLE, content=GENERIC),
+        HOUSE_OHIO: dict(rev, title=HOUSE_OHIO, content="== District 8 ==\nnothing\n== District 9 ==\n"
+                         + article(ROW).replace("==General election==", "===General election===")
+                         .replace("===Polling===", "====Polling====").replace("===Results===", "====Results====")),
     }
+
+
+HOUSE_OHIO = "2026 United States House of Representatives elections in Ohio"
 
 
 def _built(db_session, freeze_utcnow):
     freeze_utcnow(datetime(2026, 10, 15, 16, 0))
     _seed(db_session)
-    return build.build(db_session, _revisions())
+    return build.build(db_session, _revisions(), house_titles=[HOUSE_OHIO])
+
+
+def _seats(data):
+    return [s for c in data["chambers"].values() for s in c["seats"]]
 
 
 def test_build_describes_ranges_and_never_chances(db_session, freeze_utcnow):
     data = _built(db_session, freeze_utcnow)
-    oh = next(s for s in data["seats"] if s["id"] == "2026-SEN-OH")
+    oh = next(s for s in _seats(data) if s["id"] == "2026-SEN-OH")
     assert oh["status"] == "range" and oh["range80"][0] < oh["mean"] < oh["range80"][1]
     assert oh["polls"]["used"] == 1 and oh["polls"]["list"][0]["usedInAverage"]
     assert oh["polls"]["all"] == oh["polls"]["list"]
-    wy = next(s for s in data["seats"] if s["id"] == "2026-SEN-WY")
+    wy = next(s for s in _seats(data) if s["id"] == "2026-SEN-WY")
     assert wy["status"] == "not_contested" and "Democratic" in wy["reason"]
+
+
+def test_a_race_with_no_confirmed_ballot_says_so_not_uncontested(db_session, freeze_utcnow):
+    db_session.add(Race(id="2026-SEN-NY", cycle_year=2026, office="S", state="NY", is_special=False))
+    db_session.add(Candidate(id="F1", race_id="2026-SEN-NY", name="FILER, ONE", party="DEM",
+                             confirmed_general=False))
+    data = _built(db_session, freeze_utcnow)
+    ny = next(s for s in _seats(data) if s["id"] == "2026-SEN-NY")
+    assert ny["status"] == "unconfirmed" and "not yet confirmed" in ny["reason"]
     assert data["national"]["margin"] == -4.0
     # The seats and the national line are what the map shows; the
     # calibration block is the method page's evidence (how often the
     # method's implied chances came true on held-out cycles).
-    text = json.dumps({"seats": data["seats"], "national": data["national"]}).lower()
+    text = json.dumps({"seats": _seats(data), "national": data["national"]}).lower()
     for word in ("wins", "winner", "favored", "favoured", "projected", "probability", "pdem", "chance"):
         assert word not in text, word
 
 
-def test_calibration_shown_is_the_fitted_evaluation(db_session, freeze_utcnow):
+def test_a_house_seat_reads_its_district_section(db_session, freeze_utcnow):
     data = _built(db_session, freeze_utcnow)
-    ev = FITTED["evaluation"][str(data["horizon"])]
-    assert data["calibration"]["table"] == ev["calibration"]
-    assert data["calibration"]["coverage80"] == ev["coverage80"]
+    (oh9,) = data["chambers"]["house"]["seats"]
+    assert oh9["status"] == "range" and oh9["polls"]["used"] == 1
+    assert oh9["article"]["title"] == HOUSE_OHIO and oh9["district"] == 9
+    # Its lean is the 2026-lines computed lean the site publishes.
+    assert oh9["lean"] == district_lean.lean_for("OH", 9, build.HOUSE_LINES)
+
+
+@pytest.mark.parametrize("chamber,fitted", [("senate", FITTED), ("house", HOUSE_FITTED)])
+def test_calibration_shown_is_the_fitted_evaluation(db_session, freeze_utcnow, chamber, fitted):
+    data = _built(db_session, freeze_utcnow)
+    ev = fitted["evaluation"][str(data["horizon"])]
+    shown = data["chambers"][chamber]["calibration"]
+    assert shown["table"] == ev["calibration"]
+    assert shown["coverage80"] == ev["coverage80"]
     assert data["horizon"] == 14  # 19 days out: the 14-day fit
 
 
@@ -278,7 +362,8 @@ def test_a_rejected_table_and_an_outage_are_named_not_read_as_no_poll(db_session
     _seed(db_session)
     revs = _revisions()
     revs["2026 United States Senate election in Ohio"]["content"] = article(ROW.replace("|6%", "|16%"))
-    oh = next(s for s in build.build(db_session, revs)["seats"] if s["id"] == "2026-SEN-OH")
+    oh = next(s for s in _seats(build.build(db_session, revs, house_titles=[HOUSE_OHIO]))
+              if s["id"] == "2026-SEN-OH")
     assert oh["status"] == "range" and oh["pollSource"]["state"] == "rejected"
     assert "sum" in oh["pollSource"]["detail"]
     with pytest.raises(wiki.GateFailure):
@@ -291,9 +376,9 @@ def test_an_outage_keeps_the_last_good_polls_and_dates_the_national_figure(db_se
     _seed(db_session)
     path = tmp_path / "election_map.json"
     monkeypatch.setattr(build, "map_path", lambda: str(path))
-    path.write_text(json.dumps(build.build(db_session, _revisions())))
+    path.write_text(json.dumps(build.build(db_session, _revisions(), house_titles=[HOUSE_OHIO])))
     again = build.build(db_session, None)
-    oh = next(s for s in again["seats"] if s["id"] == "2026-SEN-OH")
+    oh = next(s for s in _seats(again) if s["id"] == "2026-SEN-OH")
     assert oh["pollSource"]["state"] == "unreachable" and oh["pollSource"]["keptFrom"] == "2026-10-15"
     assert oh["polls"]["used"] == 1
     assert again["national"]["status"] == "kept" and again["national"]["updated"] == "2026-10-14"
@@ -307,7 +392,7 @@ def test_a_seat_with_no_lean_says_so(db_session, freeze_utcnow, monkeypatch):
         return {k: v for k, v in leans.items() if k != "OH"}, meta
 
     monkeypatch.setattr(build, "_lean_table", without_ohio)
-    oh = next(s for s in _built(db_session, freeze_utcnow)["seats"] if s["id"] == "2026-SEN-OH")
+    oh = next(s for s in _seats(_built(db_session, freeze_utcnow)) if s["id"] == "2026-SEN-OH")
     assert oh["status"] == "no_lean" and oh["leanLabel"] is None
 
 
@@ -325,6 +410,12 @@ def test_an_unreachable_wikipedia_raises_an_ops_alert(db_session, freeze_utcnow,
     with pytest.raises(wiki.GateFailure):
         asyncio.run(build.refresh(db_session))
     assert alerts == ["Election map: Wikipedia unreachable"]
+
+
+def test_api_serves_one_chamber_when_asked(db_session, freeze_utcnow, monkeypatch):
+    data = _built(db_session, freeze_utcnow)
+    body = _client(monkeypatch, data).get("/api/elections/map?chamber=house").json()
+    assert list(body["chambers"]) == ["house"] and body["chambersAvailable"] == ["senate", "house"]
 
 
 def test_api_marks_an_old_map_stale(db_session, freeze_utcnow, monkeypatch):
@@ -353,11 +444,12 @@ def test_api_serves_the_map_with_its_licence(db_session, freeze_utcnow, monkeypa
     data = _built(db_session, freeze_utcnow)
     client = _client(monkeypatch, data)
     body = client.get("/api/elections/map").json()
-    assert all("all" not in s.get("polls", {}) for s in body["seats"])
+    assert all("all" not in s.get("polls", {}) for c in body["chambers"].values() for s in c["seats"])
     assert body["sources"]["polls"]["license"] == "CC BY-SA 4.0"
     assert body["sources"]["polls"]["attribution"] == "Wikipedia contributors"
     csv_text = client.get("/api/elections/map.csv").text
     assert "Wikipedia contributors, CC BY-SA 4.0" in csv_text and "Not a race call." in csv_text
+    assert "\nhouse,2026-HOUSE-OH-9,OH,9," in csv_text
 
 
 def test_api_hides_the_map_from_election_day(db_session, freeze_utcnow, monkeypatch):

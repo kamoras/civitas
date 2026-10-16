@@ -1,6 +1,8 @@
-"""Build the 2026 general-election map's data: every Senate seat on the
-ballot, with its structural lean and, where Democrats and Republicans
-both have a nominee, the poll-informed range of the vote margin.
+"""Build the 2026 general-election map's data: every Senate seat and every
+House seat on the ballot, with its structural lean and, where Democrats
+and Republicans both have a nominee, the poll-informed range of the vote
+margin. Each chamber has its own fitted parameters and its own held-out
+checks (app/data/forecast_model.json, forecast_house_model.json).
 
 Runs in the pipeline process (scheduler._election_map_refresh) and
 writes /data/election_map.json; the API serves that file
@@ -39,7 +41,11 @@ from app.time_utils import utcnow
 logger = logging.getLogger(__name__)
 
 DATA = Path(__file__).resolve().parents[1] / "data"
-MODEL_PATH = DATA / "forecast_model.json"
+MODEL_PATHS = {"senate": DATA / "forecast_model.json", "house": DATA / "forecast_house_model.json"}
+OFFICES = {"senate": "S", "house": "H"}
+# The Congress whose district lines the 2026 House election is fought on.
+HOUSE_LINES = 120
+HOUSE_ARTICLE_PREFIX = "2026 United States House of Representatives election"
 STATE_PVI_PATH = DATA / "state_pvi.json"
 MAP_FILE = "election_map.json"
 GENERIC_ARTICLE = "2026 United States House of Representatives elections"
@@ -49,8 +55,11 @@ GENERIC_ARTICLE = "2026 United States House of Representatives elections"
 # "strongly". A display grouping, not a fitted value.
 LEANS_MAX = 5.0
 USUALLY_MAX = 15.0
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 ALERT_CONDITION = "election-map-refresh"
+# The newest polls a seat's detail lists (each with its source); every poll
+# in the average still counts, and "used" says how many there are.
+POLLS_SHOWN = 6
 
 
 def map_path() -> str:
@@ -60,6 +69,18 @@ def map_path() -> str:
 def article_title(race: Race) -> str:
     return (f"{race.cycle_year} United States Senate {'special ' if race.is_special else ''}"
             f"election in {STATE_NAMES[race.state]}")
+
+
+def house_articles(race: Race, titles: list[str]) -> list[str]:
+    """The articles that may hold a House seat's polls: an at-large seat's
+    own article ("...election in Alaska"), or the state's article(s)
+    ("...elections in Ohio", California's two halves), from the list of
+    titles Wikipedia holds under HOUSE_ARTICLE_PREFIX."""
+    name = STATE_NAMES[race.state]
+    if race.district == 0:
+        return [f"{HOUSE_ARTICLE_PREFIX} in {name}"]
+    stem = f"{HOUSE_ARTICLE_PREFIX}s in {name}"
+    return [t for t in titles if t == stem or t.startswith(stem + " (")] or [stem]
 
 
 def _lean_table() -> tuple[dict[str, float], dict]:
@@ -72,6 +93,13 @@ def _lean_table() -> tuple[dict[str, float], dict]:
     leans = {st: model.two_party_lean(inputs[older][st], inputs[newer][st], nation[older], nation[newer])
              for st in inputs[newer]}
     return leans, {"source": spvi["_source"], "window": spvi["_window"], "file": "app/data/state_pvi.json"}
+
+
+def _house_leans() -> tuple[dict[str, float], dict]:
+    table = district_lean.computed_lean(HOUSE_LINES)
+    meta = district_lean.meta() or {}
+    return table, {"source": meta.get("source"), "window": meta.get("window"), "file": "app/data/district_lean.json",
+                   "congress": HOUSE_LINES}
 
 
 lean_label = margin_label = district_lean.lean_label
@@ -143,7 +171,30 @@ def _previous() -> dict:
         return {}
 
 
-def build(db: Session, revisions: dict[str, dict] | None, today: date | None = None) -> dict | None:
+def _calibration(evaluation: dict) -> dict:
+    return {
+        "cycles": [evaluation["cycles"][0], evaluation["cycles"][-1]],
+        "races": evaluation["races"],
+        "coverage80": evaluation["coverage80"],
+        "coverage95": evaluation["coverage95"],
+        "meanAbsError": evaluation["meanAbsError"],
+        "table": evaluation["calibration"],
+        "seatTotals": evaluation["seatTotals"],
+        # Cycles whose Democratic seat count fell outside the central 90%
+        # band that independent races would give (1.645 standard
+        # deviations): the measured reason the map adds up no total.
+        "seatTotalsOutside90": sum(
+            1 for t in evaluation["seatTotals"]
+            if abs(t["actualDem"] - t["expectedDem"]) > 1.6448536269514722 * t["independentSd"]),
+        "brier": {"combined": evaluation["polled"]["combined"]["brier"],
+                  "fundamentals": evaluation["polled"]["fundamentals"]["brier"],
+                  "pollsOnly": evaluation["polled"]["pollsOnly"]["brier"],
+                  "polledRaces": evaluation["polledRaces"]},
+    }
+
+
+def build(db: Session, revisions: dict[str, dict] | None, today: date | None = None,
+          house_titles: list[str] | None = None) -> dict | None:
     """The map's data, or None outside the campaign (election day on)."""
     election = active_election(db, today)
     if election.phase != CAMPAIGN:
@@ -151,14 +202,8 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
     today = today or utcnow().date()
     days_left = (election.election_day - today).days
     horizon = max(h for h in model.HORIZONS if h <= max(days_left, 0))
-    fitted = json.loads(MODEL_PATH.read_text())
-    params = fitted["fits"][str(horizon)]
-    evaluation = fitted["evaluation"][str(horizon)]
-    leans, lean_source = _lean_table()
     before = _previous()
-    previous = {s["id"]: s for s in before.get("seats", [])}
     prev_national = before.get("national")
-
     try:
         national = _national((revisions or {}).get(GENERIC_ARTICLE), today)
         national["status"] = "ok"
@@ -168,14 +213,37 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
         # The page shows this: the figure is the last good revision's, and
         # its date ("updated") says how old.
         national = dict(prev_national, status="kept", statusDetail=str(exc))
-    shift = params["beta"][3] * national["margin"]
 
-    races = (db.query(Race).options(selectinload(Race.candidates))
-             .filter(Race.cycle_year == election.cycle, Race.office == "S").order_by(Race.id).all())
-    seats = []
-    for race in races:
-        seats.append(_seat(race, leans.get(race.state), params, national, revisions, previous.get(race.id),
-                           today, election.election_day))
+    leans = {"senate": _lean_table(), "house": _house_leans()}
+    chambers, training = {}, {}
+    for chamber, office in OFFICES.items():
+        fitted = json.loads(MODEL_PATHS[chamber].read_text())
+        params = fitted["fits"][str(horizon)]
+        training[chamber] = fitted["_source"]
+        previous = {s["id"]: s for s in (before.get("chambers", {}).get(chamber, {}).get("seats", []))}
+        races = (db.query(Race).options(selectinload(Race.candidates))
+                 .filter(Race.cycle_year == election.cycle, Race.office == office)
+                 .order_by(Race.state, Race.district, Race.id).all())
+        table, _ = leans[chamber]
+        seats = []
+        for race in races:
+            key = race.state if chamber == "senate" else f"{race.state}-{race.district or 0}"
+            titles = ([article_title(race)] if chamber == "senate"
+                      else house_articles(race, house_titles or []))
+            # A seat with no lean is still emitted (status "no_lean").
+            seats.append(_seat(race, table.get(key), params, national, revisions, titles,
+                               previous.get(race.id), today, election.election_day))
+        shift = params["beta"][3] * national["margin"]
+        chambers[chamber] = {
+            "shift": round(shift, 2),
+            "shiftLabel": margin_label(shift),
+            "calibration": _calibration(fitted["evaluation"][str(horizon)]),
+            "model": {"beta": params["beta"], "priorSd": params["priorSd"], "halfLife": params["halfLife"],
+                      "pollFloor": params["pollFloor"], "pollSpread": params["pollSpread"],
+                      "scale": params["scale"], "file": f"app/data/{MODEL_PATHS[chamber].name}",
+                      "fit": fitted["_regenerate"]},
+            "seats": seats,
+        }
     return {
         "schemaVersion": SCHEMA_VERSION,
         "asOf": utcnow().isoformat(timespec="seconds") + "Z",
@@ -183,49 +251,27 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
         "daysToElection": days_left,
         "horizon": horizon,
         "pollWindowDays": model.WINDOW_DAYS,
-        "chamber": "senate",
-        "national": dict(national, shift=round(shift, 2), shiftLabel=margin_label(shift)),
+        "national": national,
         "bins": {"leansMax": LEANS_MAX, "usuallyMax": USUALLY_MAX},
-        "calibration": {
-            "cycles": [evaluation["cycles"][0], evaluation["cycles"][-1]],
-            "races": evaluation["races"],
-            "coverage80": evaluation["coverage80"],
-            "coverage95": evaluation["coverage95"],
-            "meanAbsError": evaluation["meanAbsError"],
-            "table": evaluation["calibration"],
-            "seatTotals": evaluation["seatTotals"],
-            # Cycles whose Democratic seat count fell outside the central 90%
-            # band that independent races would give (1.645 standard
-            # deviations): the measured reason the map adds up no total.
-            "seatTotalsOutside90": sum(
-                1 for t in evaluation["seatTotals"]
-                if abs(t["actualDem"] - t["expectedDem"]) > 1.6448536269514722 * t["independentSd"]),
-            "brier": {"combined": evaluation["polled"]["combined"]["brier"],
-                      "fundamentals": evaluation["polled"]["fundamentals"]["brier"],
-                      "pollsOnly": evaluation["polled"]["pollsOnly"]["brier"],
-                      "polledRaces": evaluation["polledRaces"]},
-        },
-        "model": {"beta": params["beta"], "priorSd": params["priorSd"], "halfLife": params["halfLife"],
-                  "pollFloor": params["pollFloor"], "pollSpread": params["pollSpread"], "scale": params["scale"],
-                  "file": "app/data/forecast_model.json", "fit": fitted["_regenerate"]},
         "sources": {
-            "lean": lean_source,
-            "training": fitted["_source"],
+            "lean": {chamber: meta for chamber, (_, meta) in leans.items()},
+            "training": training,
             "polls": {"attribution": wiki.POLL_ATTRIBUTION, "license": wiki.POLL_LICENSE,
                       "licenseUrl": wiki.POLL_LICENSE_URL,
                       "notice": "Poll figures, averages and the ranges built on them are derived from "
                                 "Wikipedia's race articles (Wikipedia contributors) and shared under "
                                 "CC BY-SA 4.0: reuse them under the same licence, with attribution."},
         },
-        "seats": seats,
+        "chambers": chambers,
     }
 
 
-def _seat(race, lean: float | None, params, national, revisions, previous, today: date,
+def _seat(race, lean: float | None, params, national, revisions, titles: list[str], previous, today: date,
           election_day: date) -> dict:
     dem, rep = _nominee(race.candidates, "DEM"), _nominee(race.candidates, "REP")
     seat = {
         "id": race.id, "state": race.state, "stateName": STATE_NAMES[race.state], "special": race.is_special,
+        "district": race.district,
         "lean": None if lean is None else round(lean, 2),
         "leanLabel": None if lean is None else lean_label(lean),
         "usualBin": None if lean is None else bin_of(lean),
@@ -238,14 +284,17 @@ def _seat(race, lean: float | None, params, national, revisions, previous, today
         return dict(seat, status="no_lean",
                     reason="Civitas has no usual-vote figure for this seat, so it can show neither its usual "
                            "vote nor a range.")
+    if not any(c.confirmed_general for c in race.candidates):
+        return dict(seat, status="unconfirmed",
+                    reason="Civitas has not yet confirmed who is on this race's November ballot (only campaign "
+                           "filings so far), so it shows no range.")
     if dem is None or rep is None:
         missing = "Democratic" if dem is None else "Republican"
         return dict(seat, status="not_contested",
                     reason=f"No {missing} nominee is on the ballot, so there is no Democrat-versus-Republican "
                            "margin to describe.")
-    title = article_title(race)
-    rev = (revisions or {}).get(title)
-    article = {"title": title}
+    article = {"title": titles[0]}
+    rev = None
     parsed: list[dict] = []
     # What the poll source said, for the page to word: "ok" (the article was
     # read; its table had these polls, maybe none recent), "no_table" (read,
@@ -256,16 +305,25 @@ def _seat(race, lean: float | None, params, national, revisions, previous, today
     try:
         if revisions is None:
             raise _Unreachable("Wikipedia could not be reached")
-        if rev is None:
-            source = {"state": "no_article"}
-        else:
+        found = False
+        for title in titles:
+            rev = revisions.get(title)
+            if rev is None:
+                continue
             as_of = wiki.revision_date(rev)
             table = wiki.poll_table(rev["content"], _display_name(dem), _display_name(rep), as_of,
-                                    wiki.named_refs(rev["content"]))
-            parsed = [p.as_dict() for p in (table.polls if table else [])]
-            article.update(revid=rev["revid"], timestamp=rev["timestamp"],
-                           url=wiki.revision_url(rev["title"], rev["revid"]), status="ok")
-            source = {"state": "ok" if table is not None else "no_table", "revisionDate": as_of.isoformat()}
+                                    wiki.named_refs(rev["content"]),
+                                    district=race.district if race.office == "H" and race.district else None)
+            article = {"title": title, "revid": rev["revid"], "timestamp": rev["timestamp"],
+                       "url": wiki.revision_url(rev["title"], rev["revid"]), "status": "ok"}
+            source = {"state": "no_table", "revisionDate": as_of.isoformat()}
+            found = True
+            if table is not None:
+                parsed = [p.as_dict() for p in table.polls]
+                source["state"] = "ok"
+                break
+        if not found:
+            source = {"state": "no_article"}
     except (wiki.GateFailure, _Unreachable) as exc:
         source = {"state": "unreachable" if isinstance(exc, _Unreachable) else "rejected", "detail": str(exc),
                   "checkedOn": today.isoformat()}
@@ -274,11 +332,11 @@ def _seat(race, lean: float | None, params, national, revisions, previous, today
         kept = (previous or {}).get("article", {})
         if previous and kept.get("revid") and previous.get("dem") == seat["dem"] and previous.get("rep") == seat["rep"]:
             parsed = previous.get("polls", {}).get("all", [])
-            article.update({k: kept[k] for k in ("revid", "timestamp", "url") if k in kept})
+            article.update({k: kept[k] for k in ("title", "revid", "timestamp", "url") if k in kept})
             if parsed and kept.get("timestamp"):
                 source["keptFrom"] = kept["timestamp"][:10]
         article["status"] = f"{source['state']}: {exc}"
-        logger.warning("Election map: %s %s", title, article["status"])
+        logger.warning("Election map: %s %s", article["title"], article["status"])
     seat["pollSource"] = source
     seat["article"] = article
 
@@ -328,7 +386,8 @@ def _seat(race, lean: float | None, params, national, revisions, previous, today
         # first); "all" keeps every parsed row for the next build to fall
         # back on if a revision fails its gates, and the API leaves it out.
         polls={"count": len(parsed), "used": r["pollsUsed"], "latest": latest,
-               "list": sorted((p for p in parsed if p["usedInAverage"]), key=lambda p: p["end"], reverse=True),
+               "list": sorted((p for p in parsed if p["usedInAverage"]), key=lambda p: p["end"],
+                              reverse=True)[:POLLS_SHOWN],
                "all": parsed},
         difference={"strength": strength,
                     "direction": None if strength == 0 else ("D" if r["mean"] < r["prior"] else "R"),
@@ -343,18 +402,22 @@ async def refresh(db: Session) -> dict | None:
     election = active_election(db)
     if election.phase != CAMPAIGN:
         return None
-    races = db.query(Race).filter(Race.cycle_year == election.cycle, Race.office == "S").all()
-    titles = sorted({article_title(r) for r in races}) + [GENERIC_ARTICLE]
-    revisions = await wiki.fetch_current(titles)
+    races = db.query(Race).filter(Race.cycle_year == election.cycle, Race.office.in_(("S", "H"))).all()
+    house_titles = await wiki.titles_with_prefix(HOUSE_ARTICLE_PREFIX)
+    titles = {GENERIC_ARTICLE}
+    for r in races:
+        titles.update([article_title(r)] if r.office == "S" else house_articles(r, house_titles or []))
+    revisions = None if house_titles is None else await wiki.fetch_current(sorted(titles))
     if revisions is None:
         send_ops_alert("Election map: Wikipedia unreachable",
                        "The election map's refresh could not read Wikipedia's race articles; seats keep their "
                        "previous polls and say so.",
                        dedupe_key=f"election-map-wikipedia-{utcnow():%Y-%m-%d}", condition=ALERT_CONDITION)
-    data = build(db, revisions)
+    data = build(db, revisions, house_titles=house_titles)
     if data is not None:
         write_text_atomic(map_path(), json.dumps(data, separators=(",", ":")))
-        logger.info("Election map: %d seats written", len(data["seats"]))
+        logger.info("Election map: %s seats written",
+                    {c: len(v["seats"]) for c, v in data["chambers"].items()})
         if revisions is not None:
             resolve_ops_alert(ALERT_CONDITION)
     return data

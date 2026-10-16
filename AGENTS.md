@@ -88,8 +88,8 @@ civitas/
 │   │   │   ├── stock_pipeline.py  # STOCK Act trade-disclosure ingestion (sibling phase)
 │   │   │   ├── vector_store.py  # sqlite-vec + sentence-transformer model management
 │   │   │   └── lexical_index.py # SQLite FTS5 keyword index (BM25F) over explore docs
-│   │   ├── forecast/            # The pre-election Senate map's poll ranges — outside pipeline/ and
-│   │   │                        #   apart from scoring (see "The 2026 Senate map")
+│   │   ├── forecast/            # The pre-election map's poll ranges — outside pipeline/ and
+│   │   │                        #   apart from scoring (see "The 2026 Senate and House map")
 │   │   ├── live_results/        # Election-night count sync, seat-flip issues, results posts — outside
 │   │   │                        #   pipeline/ so it never moves the analysis-code fingerprint
 │   │   ├── models.py            # SQLAlchemy ORM (Senator, Representative, KeyVote, Justice, NationalMonitor, TimelineEntry, etc.)
@@ -1589,7 +1589,7 @@ wrong number on election night is worse than none:
 - "Civitas never calls a race" governs **election-night counts**: what a
   count says, and when. It is not a ban on describing an election before
   it. The pre-election map (below, `app/forecast/`) publishes a calibrated
-  range for each Senate margin with its method and held-out checks shown,
+  range for each Senate and House margin with its method and held-out checks shown,
   and stays inside the same spirit: ranges, never a winner, no chance of
   winning on any surface, no seat tally by party, and it is withdrawn the
   moment `active_election()` leaves the campaign phase, so no estimate ever
@@ -1600,9 +1600,10 @@ wrong number on election night is worse than none:
   tiers, `HELD_BALLOT_MARKER_TIERS`): after election day nothing rebuilds
   them — the roster and ballot syncs stand down (`election_is_held`).
 
-**The 2026 Senate map** (`app/forecast/`, `GET /api/elections/map`,
-`frontend/src/app/elections/map/`). Before election day each Senate seat
-shows its usual vote (the state's lean, `state_pvi.json`) and, where both
+**The 2026 Senate and House map** (`app/forecast/`, `GET /api/elections/map`,
+`frontend/src/app/elections/map/`). Before election day each seat shows its
+usual vote (a state's lean, `state_pvi.json`; a district's computed lean on
+the 2026 lines, `district_lean.json`) and, where both
 parties have a nominee, an 80% range for the margin: a structural line
 (lean, incumbency, the generic-ballot average) combined by inverse variance
 with the race's own poll average, one calibration scale on the spread. Rules
@@ -1622,12 +1623,25 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   and the leave-one-cycle-out evaluation to `app/data/forecast_model.json`.
   The test refits from the training file and must match it within tolerance at write precision (10 significant digits; a different BLAS changes a least-squares solve's last bits). A race's
   historical lean uses only the two presidential elections before it.
+- **The House fit's lean is rebuilt, not borrowed.** `scripts/
+  build_house_lean_history.py` makes each district's pre-election lean for
+  2018, 2020 and 2022 on the lines each was held on, with
+  `build_district_lean.py`'s own block method (VEST 2016/2020 on Census 2020
+  blocks; 116th lines from TIGER polygons, 118th from the BEF), into
+  `app/data/forecast_house_lean.json`; results and incumbency come from the
+  FEC's Federal Elections workbooks. Three cycles cannot identify the
+  generic-ballot coefficient, so the House takes the Senate fit's
+  (`model.fit(national_coef=)`), refitted without each held-out cycle. Don't
+  add a House cycle from a source behind a sign-in form (MEDSL's House file
+  is one) or a lean made another way.
 - **Polls from Wikipedia, gated, attributed.** `forecast/polls.py` reads each
   race article's current revision (recorded per seat), parses the table whose
   columns are the confirmed nominees, and rejects the whole table on a failed
   gate (fieldwork after the revision or before 2025, shares over 102, a poll
   listed twice, nominee columns ambiguous); a rejected revision keeps the
-  previous good one's polls. Everything poll-derived (API, CSV, share images)
+  previous good one's polls. A House seat's table is in the "District N"
+  section of its state's House article. A race whose ballot Civitas hasn't
+  confirmed is "unconfirmed", never shown as uncontested. Everything poll-derived (API, CSV, share images)
   is CC BY-SA 4.0, "Wikipedia contributors", and says so.
 - **Outage is not "no data".** Each seat's `pollSource` names what the
   poll source did (read / no table / no article / rejected / unreachable,
@@ -1910,7 +1924,7 @@ the pending list).
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
-| 2026 Senate map: usual vote and poll ranges (pre-election; separate from scoring) | `backend/app/forecast/` (`model.py`, `polls.py`, `build.py`), `backend/scripts/fit_forecast_model.py`, `app/data/forecast_model.json`, `backend/app/api/election_map.py`, `frontend/src/components/elections/map/`, `frontend/src/lib/electionMap.ts` |
+| 2026 Senate and House map: usual vote and poll ranges (pre-election; separate from scoring) | `backend/app/forecast/` (`model.py`, `polls.py`, `build.py`), `backend/scripts/fit_forecast_model.py`, `backend/scripts/build_house_lean_history.py`, `app/data/forecast_model.json`, `forecast_house_model.json`, `forecast_house_lean.json`, `backend/app/api/election_map.py`, `frontend/src/components/elections/map/`, `frontend/src/lib/electionMap.ts` |
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |

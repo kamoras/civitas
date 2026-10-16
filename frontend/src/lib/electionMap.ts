@@ -9,12 +9,47 @@
  * is "projected", and shows no chance of anyone winning and no seat tally
  * by party. A range is not a call.
  */
-import type { ElectionMapData, MapBin, MapSeat, RangedSeat } from "@/types/electionMap";
+import type {
+  ElectionMapData,
+  ElectionMapResponse,
+  MapBin,
+  MapChamberKey,
+  MapSeat,
+  RangedSeat,
+} from "@/types/electionMap";
 
 export const MAP_VIEWS = ["usual", "polls", "diff"] as const;
 export type MapView = (typeof MAP_VIEWS)[number];
-export const MAP_CHAMBERS = ["senate"] as const;
-export type MapChamber = (typeof MAP_CHAMBERS)[number];
+export const MAP_CHAMBERS = ["senate", "house"] as const;
+export type MapChamber = MapChamberKey;
+
+export const CHAMBER_LABEL: Record<MapChamber, string> = { senate: "SENATE", house: "HOUSE" };
+const CHAMBER_WORD: Record<MapChamber, string> = { senate: "Senate", house: "House" };
+
+/** One chamber's map out of the API's response, in the shape every
+ * component reads. No figure is computed here. */
+export function chamberView(r: ElectionMapResponse, chamber: MapChamber): ElectionMapData {
+  const c = r.chambers[chamber];
+  return {
+    chamber,
+    asOf: r.asOf,
+    electionDay: r.electionDay,
+    daysToElection: r.daysToElection,
+    horizon: r.horizon,
+    national: { ...r.national, shift: c.shift, shiftLabel: c.shiftLabel },
+    stale: r.stale,
+    pollWindowDays: r.pollWindowDays,
+    bins: r.bins,
+    calibration: c.calibration,
+    model: c.model,
+    sources: {
+      lean: r.sources.lean[chamber],
+      training: r.sources.training[chamber],
+      polls: r.sources.polls,
+    },
+    seats: c.seats,
+  };
+}
 
 /**
  * In-app links to the map always name the view: /elections/map is a route
@@ -166,15 +201,33 @@ export function crossesEven(seat: RangedSeat): boolean {
   return seat.close;
 }
 
-/** The seat's name on the map: "Ohio", "Florida (special)". */
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
+
+/** The seat's name on the map: "Ohio", "Florida (special)", "Ohio's 9th
+ * district", "Alaska at-large". */
 export function seatName(seat: MapSeat): string {
+  if (seat.district != null)
+    return seat.district === 0
+      ? `${seat.stateName} at-large`
+      : `${seat.stateName}'s ${ordinal(seat.district)} district`;
   return seat.special ? `${seat.stateName} (special)` : seat.stateName;
 }
 
 /** "80% ranges held the result 79% of the time on cycles the method never
  * saw (419 Senate races, 1998–2022)." — the evidence behind every range. */
-export function coverageSentence(c: ElectionMapData["calibration"]): string {
-  return `Ranges like these held the result ${Math.round(c.coverage80 * 100)}% of the time on election cycles the method never saw (${c.races} Senate races, ${c.cycles[0]}–${c.cycles[1]}).`;
+export function coverageSentence(
+  c: ElectionMapData["calibration"],
+  chamber: MapChamber = "senate"
+): string {
+  return `Ranges like these held the result ${Math.round(c.coverage80 * 100)}% of the time on election cycles the method never saw (${c.races} ${CHAMBER_WORD[chamber]} races, ${c.cycles[0]}–${c.cycles[1]}).`;
+}
+
+export function chamberWord(chamber: MapChamber): string {
+  return CHAMBER_WORD[chamber];
 }
 
 /** The national line in the legend: what the generic ballot does to every
@@ -247,7 +300,11 @@ export function formatAsOf(iso: string): string {
 
 /** The footer every view and every share image carries. */
 export function footerText(data: ElectionMapData): string {
-  return `${data.stale ? "NOT UPDATED SINCE " + formatAsOf(data.asOf) + ". " : ""}Usual vote: Civitas, from official returns (MEDSL, FEC). Polls: ${data.sources.polls.attribution}, ${data.sources.polls.license}. As of ${formatAsOf(data.asOf)}. Ranges, not results. Not a race call.`;
+  const usual =
+    data.chamber === "house"
+      ? "Civitas, from precinct returns (VEST, MEDSL) and Census blocks"
+      : "Civitas, from official returns (MEDSL, FEC)";
+  return `${data.stale ? "NOT UPDATED SINCE " + formatAsOf(data.asOf) + ". " : ""}Usual vote: ${usual}. Polls: ${data.sources.polls.attribution}, ${data.sources.polls.license}. As of ${formatAsOf(data.asOf)}. Ranges, not results. Not a race call.`;
 }
 
 /** The Difference view's glyph for a seat: « ‹ toward D, › » toward R. */
@@ -269,6 +326,95 @@ export function seatAriaLabel(seat: MapSeat, view: MapView): string {
         ? ""
         : ", no seat poll";
   return `${seatName(seat)}: ${view === "usual" ? usual : `${polls}; ${usual}`}${view === "diff" ? diff : ""}.`;
+}
+
+/** A state's name on the House map: "Ohio: 15 seats, 3 too close to tell". */
+export function stateAriaLabel(
+  stateName: string,
+  seats: MapSeat[],
+  view: MapView,
+  leansMax: number
+): string {
+  const n = seats.length;
+  const head = `${stateName}: ${n} ${n === 1 ? "seat" : "seats"}`;
+  if (view === "usual") {
+    const close = seats.filter(
+      (s) => s.usualBin === "close" || s.usualBin === "D_leans" || s.usualBin === "R_leans"
+    ).length;
+    return `${head}, ${close} within ${leansMax} points of even in the usual vote.`;
+  }
+  if (view === "polls") {
+    const close = seats.filter((s) => s.status === "range" && s.pollsBin === "close").length;
+    return `${head}, ${close} too close to tell.`;
+  }
+  const differ = seats.filter((s) => s.status === "range" && s.difference.strength > 0).length;
+  return `${head}, ${differ} where polls disagree with the usual vote.`;
+}
+
+/* ── House tile layout: equal-size tiles, one per seat, each state a
+   near-square block, the blocks in rows by STATE_TILES' rough geography. ─ */
+
+export interface HouseBlock {
+  state: string;
+  x: number;
+  y: number;
+  cols: number;
+  rows: number;
+  seats: MapSeat[];
+}
+
+export const HOUSE_TILE = 10;
+export const HOUSE_GAP = 1;
+const BLOCK_GAP = 6;
+const LABEL_H = 7;
+const ROW_GAP = 4;
+
+/** Block positions (SVG units) and the canvas size. Pure layout: the same
+ * seats always give the same picture. */
+export function houseLayout(seats: MapSeat[]): {
+  blocks: HouseBlock[];
+  width: number;
+  height: number;
+} {
+  const byState = new Map<string, MapSeat[]>();
+  for (const s of seats) byState.set(s.state, [...(byState.get(s.state) ?? []), s]);
+  for (const list of byState.values()) list.sort((a, b) => (a.district ?? 0) - (b.district ?? 0));
+  const step = HOUSE_TILE + HOUSE_GAP;
+  const rows = new Map<number, { state: string; col: number }[]>();
+  for (const st of byState.keys()) {
+    const pos = STATE_TILES[st];
+    if (!pos) continue;
+    rows.set(pos[1], [...(rows.get(pos[1]) ?? []), { state: st, col: pos[0] }]);
+  }
+  const placed: HouseBlock[] = [];
+  let y = 0;
+  let width = 0;
+  const rowBlocks: HouseBlock[][] = [];
+  for (const r of [...rows.keys()].sort((a, b) => a - b)) {
+    let x = 0;
+    let tallest = 0;
+    const line: HouseBlock[] = [];
+    for (const { state } of rows.get(r)!.sort((a, b) => a.col - b.col)) {
+      const list = byState.get(state)!;
+      const cols = Math.ceil(Math.sqrt(list.length));
+      const rowsN = Math.ceil(list.length / cols);
+      const block = { state, x, y: y + LABEL_H, cols, rows: rowsN, seats: list };
+      line.push(block);
+      x += cols * step - HOUSE_GAP + BLOCK_GAP;
+      tallest = Math.max(tallest, rowsN);
+    }
+    width = Math.max(width, x - BLOCK_GAP);
+    rowBlocks.push(line);
+    y += LABEL_H + tallest * step + ROW_GAP;
+  }
+  // Centre each row on the widest.
+  for (const line of rowBlocks) {
+    const last = line[line.length - 1];
+    const w = last.x + last.cols * step - HOUSE_GAP;
+    const shift = (width - w) / 2;
+    for (const b of line) placed.push({ ...b, x: b.x + shift });
+  }
+  return { blocks: placed, width, height: y - ROW_GAP };
 }
 
 /* ── Tile layout: one tile per state, roughly where the state sits ──── */
