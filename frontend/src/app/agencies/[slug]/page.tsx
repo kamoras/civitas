@@ -191,7 +191,7 @@ function Overview({ a }: { a: AgencyDetail }) {
       id="overview"
       data-share-section="overview"
       aria-labelledby="overview-heading"
-      className="mb-10 scroll-mt-28 border border-white/[0.07]"
+      className="mb-10 border border-white/[0.07]"
     >
       <TerminalTitlebar title={a.shortName ?? "Agency"} />
       <div className="p-4">

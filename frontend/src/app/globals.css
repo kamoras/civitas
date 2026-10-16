@@ -40,10 +40,20 @@
 }
 
 /* ===== BASE STYLES ===== */
-/* The header is fixed: a control reached by keyboard (or a #fragment)
-   scrolls to below it, never under it (WCAG 2.2 2.4.11). */
+
+/* The fixed header covers the top of the viewport, so anything the browser
+   scrolls into view (a focused control on Shift+Tab, an #anchor, a
+   scrollIntoView) lands below it rather than under it: WCAG 2.2 SC 2.4.11,
+   Focus Not Obscured. One rule here instead of a scroll-mt on every anchor
+   target, which covered the 57 targets someone remembered and no focusable
+   control at all (at least 220 focus stops hid under the header across 50
+   routes, 2026-10-16). A page with a sticky bar under the header marks it
+   data-sticky-subnav and gets that bar's height too. */
 html {
   scroll-padding-top: var(--header-clearance);
+}
+html:has([data-sticky-subnav]) {
+  scroll-padding-top: calc(var(--header-clearance) + 3rem);
 }
 
 body {

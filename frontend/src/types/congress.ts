@@ -5,6 +5,25 @@ import type { NominationVote } from "@/types/nomination";
 
 export type Chamber = "senate" | "house";
 
+/** How a roll call's record reads (backend services/roll_call_shape.py):
+ * which kind of vote, its count in words and what it decided. Optional for
+ * a backend image older than these fields. */
+export interface RollCallShape {
+  /** "question" (yeas against nays), "election" (of the Speaker: each vote
+   * names a candidate) or "quorum" (members answer present; nothing decided). */
+  kind?: "question" | "election" | "quorum";
+  /** "50–50, Vice President of the United States voted Yea", "433 present",
+   * "Doe (TX) 218, Roe 215, Poe 1". */
+  tally?: string;
+  /** What was decided: the chamber's result, "Doe (TX) elected",
+   * "No one elected" or "Quorum call". */
+  resultLabel?: string;
+  /** A Senate tie the Vice President broke; null otherwise. */
+  tieBreaker?: { byWhom: string; vote: string } | null;
+  /** An election's candidates, most votes first; [] otherwise. */
+  candidates?: { name: string; votes: number }[];
+}
+
 export interface CongressEvent {
   /** The Congress the day fell in; a bill number names a different bill in each. */
   congress: number | null;
@@ -23,7 +42,7 @@ export interface CongressEvent {
   chamber: Chamber;
 }
 
-export interface RollCallSummary {
+export interface RollCallSummary extends RollCallShape {
   chamber: Chamber;
   congress: number;
   session: number;
@@ -174,6 +193,8 @@ export interface PartySplit {
   nay: number;
   present: number;
   notVoting: number;
+  /** An election of the Speaker: this party's votes for each candidate. */
+  candidates?: Record<string, number>;
 }
 
 export interface VoteMember {
@@ -182,7 +203,9 @@ export interface VoteMember {
   party: string;
   state: string;
   position: string;
-  bucket: "yea" | "nay" | "present" | "notVoting";
+  bucket: "yea" | "nay" | "present" | "notVoting" | "candidate";
+  /** An election of the Speaker: the candidate this member voted for. */
+  candidate?: string | null;
   page: string | null;
   /** The member's own name, where the site has a page for them (a House
    * roll call prints only the Clerk's surname form); null otherwise. */
@@ -232,7 +255,7 @@ export interface CongressCoverage {
   rollCallSources: Record<Chamber, string>;
 }
 
-export interface BillRecordVote {
+export interface BillRecordVote extends RollCallShape {
   chamber: Chamber;
   session: number;
   number: number;

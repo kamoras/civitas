@@ -12,6 +12,7 @@ import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import Photo from "@/components/Photo";
+import { HeldScoreNote, ThinDataNote } from "@/components/scorecard/HeldScore";
 
 /**
  * `min-h-6` for WCAG 2.2 SC 2.5.8 (24x24 targets): the links sit in a
@@ -81,7 +82,7 @@ export default function ScorecardHeader({
     <header
       id="overview"
       {...{ [SHARE_SECTION_ATTR]: "overview" }}
-      className={`grid scroll-mt-[var(--header-clearance)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:grid-rows-[auto_1fr] ${PARTY_BORDER[member.party]}`}
+      className={`grid gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:grid-rows-[auto_1fr] ${PARTY_BORDER[member.party]}`}
     >
       {/* Three blocks in reading order for a phone — who, the score, then
           how to reach them; on a desktop the score takes the right column
@@ -131,7 +132,7 @@ export default function ScorecardHeader({
 
       <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
         <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-          <MetricTooltip text="The weighted average of the three scores below. 100 means full representation of the constituents by these measures; a score near 50 often means limited data.">
+          <MetricTooltip text="The weighted average of the three scores below. 100 means full representation of the constituents by these measures. 50 is not the middle member: see where this score sits in the chamber just below.">
             Representation Score
           </MetricTooltip>
         </p>
@@ -155,6 +156,8 @@ export default function ScorecardHeader({
             )}
           </div>
         </div>
+        <HeldScoreNote held={member.representationScore.held} />
+        <ThinDataNote dims={member.representationScore.thinData} />
         {glance}
         {standing}
         <ScoreTrendSection entityId={member.id} entityType={chamber} />

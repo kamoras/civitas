@@ -7,6 +7,7 @@ import { retryKeepingFocus } from "@/lib/tabFocus";
 import { formatUtcDate, policyAreaLabel, safeHref } from "@/lib/formatting";
 import { SECTION_HEADING, TEXT_LINK } from "@/components/action/IssueEnrichment";
 import type { MonitorUpdate, NationalMonitor } from "@/lib/api";
+import { scrollBehavior } from "@/lib/motion";
 
 /** "Sep 29 at 9:14 AM" from the update's own timestamp, else its date. */
 function updateTime(update: MonitorUpdate): string {
@@ -95,17 +96,13 @@ function MonitorRow({
     if (!initiallyOpen) return;
     const t = setTimeout(() => {
       buttonRef.current?.focus({ preventScroll: true });
-      ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      ref.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     }, 100);
     return () => clearTimeout(t);
   }, [initiallyOpen]);
 
   return (
-    <li
-      ref={ref}
-      id={`monitor-${monitor.slug}`}
-      className="scroll-mt-[calc(var(--header-clearance)+3rem)] border-b border-white/[0.07]"
-    >
+    <li ref={ref} id={`monitor-${monitor.slug}`} className="border-b border-white/[0.07]">
       <h3>
         <button
           ref={buttonRef}

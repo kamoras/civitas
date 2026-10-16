@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import Masthead, { electionLinks } from "./Masthead";
+import { YOUR_STATE_KEY } from "@/hooks/useYourState";
+import { __resetSessionTokenCache } from "@/hooks/useSessionToken";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  sessionStorage.clear();
+  __resetSessionTokenCache();
+});
 
 describe("Masthead voter links", () => {
   it("lead to the pages where a state is chosen, and the page asks for nothing", () => {
@@ -15,6 +21,18 @@ describe("Masthead voter links", () => {
     expect(href("CONGRESS THIS WEEK")).toBe("/congress");
     // No form in the masthead: no field, no select, no button.
     expect(document.querySelector("input, select, textarea, button, form")).toBeNull();
+  });
+});
+
+describe("Masthead with a state chosen in the header", () => {
+  it("goes straight to that state's members and ballot", () => {
+    sessionStorage.setItem(YOUR_STATE_KEY, "OH");
+    render(<Masthead />);
+    const voters = screen.getByRole("navigation", { name: "For voters" });
+    const href = (name: string) =>
+      [...voters.querySelectorAll("a")].find((a) => a.textContent === name)!.getAttribute("href");
+    expect(href("YOUR MEMBERS")).toBe("/politicians?state=OH");
+    expect(href("YOUR BALLOT")).toBe("/elections/states/OH");
   });
 });
 

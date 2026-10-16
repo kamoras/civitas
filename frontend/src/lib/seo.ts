@@ -19,7 +19,7 @@ import {
   SITE_URL,
   absoluteUrl,
 } from "@/lib/site";
-import { billCanonicalPath, calendarDate } from "./congress";
+import { billCanonicalPath, calendarDate, voteResult, voteTally } from "./congress";
 
 const PARTY_ADJECTIVES: Record<string, string> = {
   D: "Democratic",
@@ -144,7 +144,7 @@ export function describeRollCall(v: VoteDetail): { title: string; description: s
   return {
     title: `${subject}: ${chamber} roll call ${v.number}`,
     description:
-      `${v.question}: ${v.result || "recorded"}, ${v.yeas}–${v.nays}, ${calendarDate(v.date)}. ` +
+      `${v.question}: ${voteResult(v) || "recorded"}, ${voteTally(v)}, ${calendarDate(v.date)}. ` +
       `How every ${members} voted, by party, from the ${chamber}'s own record.`,
   };
 }

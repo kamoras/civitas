@@ -158,6 +158,8 @@ export interface ElectionCalendar {
     register: RegisterLink | null;
   }[];
   registrationClosing?: RegistrationClosing[];
+  /** The window registrationClosing covers, in days (voter_calendar.CLOSING_SOON_DAYS). */
+  closingSoonDays?: number;
   fecDeadlines: FecDeadline[];
   nextThirtyDays: number;
   nextDate: string | null;

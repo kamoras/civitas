@@ -42,7 +42,7 @@ from app.pipeline.fetch.congress import (
 )
 from app.pipeline.fetch.daily_digest import first_bill_id
 from app.pipeline.fetch.federal_register import fetch_recent_significant_rules
-from app.pipeline.fetch.floor_logs import bill_id_from_number, house_roll_call_url, senate_roll_call_url
+from app.pipeline.fetch.floor_logs import bill_id_from_number, house_roll_call_url, senate_roll_call_url, tally
 from app.pipeline.house_pipeline import roll_call_year
 from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.services.bill_service import names_phrase, short_title
@@ -139,9 +139,7 @@ def _vote_bill_entries(vote: dict, bill_id: str | None) -> list[dict]:
 
 
 def _vote_margin_ratio(vote: dict) -> float:
-    casts = [m.get("voteCast", "") for m in vote.get("members", [])]
-    yeas = sum(1 for c in casts if c == "Yea")
-    nays = sum(1 for c in casts if c == "Nay")
+    yeas, nays, _ = _tally(vote)
     if yeas + nays == 0:
         return 0.0
     return abs(yeas - nays) / (yeas + nays)
@@ -154,10 +152,18 @@ def _is_final_passage(vote: dict) -> bool:
 
 
 def _tally(vote: dict) -> tuple[int, int, int]:
-    casts = [m.get("voteCast", "") for m in vote.get("members", [])]
-    yeas = sum(1 for c in casts if c == "Yea")
-    nays = sum(1 for c in casts if c == "Nay")
-    return yeas, nays, len(casts) - yeas - nays
+    """(yeas, nays, everyone else), read as the stored roll calls read it
+    (floor_logs.tally): the House records "Aye"/"No" on a recorded vote,
+    which counting only "Yea"/"Nay" read as 0-0."""
+    counts = tally(vote.get("members", []))
+    return counts["yeas"], counts["nays"], counts["present"] + counts["not_voting"]
+
+
+def _tie_phrase(vote: dict) -> str:
+    """", Vice President of the United States voted Yea" for a Senate tie
+    the record says was broken (fetch/congress.senate_tie_breaker), else ""."""
+    tie = vote.get("tieBreaker") or {}
+    return f", {tie['byWhom']} voted {tie['vote']}" if tie.get("byWhom") and tie.get("vote") else ""
 
 
 def _compose_developing_issue(vote: dict) -> tuple[str, str, list[str]]:
@@ -176,13 +182,15 @@ def _compose_developing_issue(vote: dict) -> tuple[str, str, list[str]]:
     yeas, nays, not_voting = _tally(vote)
     day = vote_date_iso(vote.get("voteDate"))
 
-    title = f"{short} vote on {measure}: {result}, {yeas}-{nays}" if result else f"{short} vote on {measure}, {yeas}-{nays}"
+    tie = _tie_phrase(vote)
+    title = (f"{short} vote on {measure}: {result}, {yeas}-{nays}{tie}" if result
+             else f"{short} vote on {measure}, {yeas}-{nays}{tie}")
     summary = (
-        f"The {short} voted {yeas} to {nays}{f' on {day}' if day else ''} "
+        f"The {short} voted {yeas} to {nays}{tie}{f' on {day}' if day else ''} "
         f"on the question \"{question}\" for {measure}{f'. Result: {result}' if result else ''}. "
         "This is from the chamber's official roll-call record; news coverage of the vote has not appeared yet."
     )
-    facts = [f"Tally: {yeas} yea, {nays} nay, {not_voting} not voting."]
+    facts = [f"Tally: {yeas} yea, {nays} nay, {not_voting} not voting{tie}."]
     if measure_title and measure_title != measure:
         facts.append(f"{measure}: {measure_title}")
     facts.append(f"Chamber: {chamber_name}{f', {day}' if day else ''}.")

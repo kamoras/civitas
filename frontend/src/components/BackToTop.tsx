@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { scrollBehavior } from "@/lib/motion";
 
 export default function BackToTop() {
   const [visible, setVisible] = useState(false);
@@ -17,7 +18,7 @@ export default function BackToTop() {
 
   return (
     <button
-      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      onClick={() => window.scrollTo({ top: 0, behavior: scrollBehavior() })}
       aria-label="Back to top"
       className="fixed bottom-20 right-4 z-40 font-mono text-xs tracking-widest
                  text-signal-cyan hover:text-phos

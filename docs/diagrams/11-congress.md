@@ -40,6 +40,25 @@ roll calls on demand was considered and not done: stored, they would also
 reach the day and week reports and `record_span`, which would then claim
 days the Digest back-fill never read.
 
+**Three roll calls that aren't yeas against nays** (`services/roll_call_shape.py`).
+Every surface that shows a roll call (its page, a bill's vote panel, the day
+and week reports, member vote rows, the share card, the public API) reads it
+through one function, because printing "yeas–nays" and the result states
+something false for these:
+
+- *A Senate tie the Vice President broke.* The Vice President isn't a member,
+  so the vote is in no position and the yeas and nays stay equal; Senate.gov
+  records it in `<tie_breaker>`, stored in `roll_calls.tie_breaker_by` /
+  `tie_breaker_vote` and shown with the count ("50–50, Vice President of the
+  United States voted Yea"). Senate ties stored before those columns are read
+  again once (`reread_senate_ties`).
+- *An election of the Speaker.* Each recorded vote is a candidate's name,
+  counted per candidate. The Clerk's result names the candidate with the most
+  votes even on a ballot no one won, so "elected" is read from
+  the count by the House's rule: a majority of the votes cast for a person.
+- *A quorum call.* Members answer present and nothing is decided: shown as
+  "433 present", with no carried or rejected result.
+
 **The Digest's own words.** Every event keeps the record's wording. Parsing
 only decides which heading an entry sits under ("Measures Passed:",
 "Nominations Confirmed:", a House measure's own heading, "Suspensions:") and

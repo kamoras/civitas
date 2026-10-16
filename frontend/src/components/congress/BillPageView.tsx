@@ -65,7 +65,7 @@ function SectionHead({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <h2 id={id} className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi">
+      <h2 id={id} className="font-display text-2xl font-extrabold text-ink-hi">
         {title}
         {count !== undefined && (
           // The comma is for a screen reader, which ran the two together
@@ -167,7 +167,7 @@ export default function BillPageView({
             <div
               id="overview"
               {...shareSection("overview")}
-              className="grid scroll-mt-28 gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]"
+              className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]"
             >
               <header className="flex min-w-0 flex-col gap-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">

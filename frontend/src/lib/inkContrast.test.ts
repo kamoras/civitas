@@ -54,9 +54,10 @@ const rgb = (hex: string): [number, number, number] => [
 ];
 
 /**
- * Backgrounds text is composited on, worst (lightest) last. `#262010` is not a
+ * Backgrounds text is composited on, worst (lightest) last. `#302818` is not a
  * surface token — it is a 10% amber wash sitting on `surface.raised`, and it
- * is the lightest thing any text in the app is actually painted over. A tinted
+ * is the lightest thing any text in the app is actually painted over. (This
+ * read #262010 until 2026-10, which is the same wash over `surface.base`.) A tinted
  * badge is a surface; measuring against the token alone is how the previous
  * floor passed its own check and still failed in the browser.
  */
@@ -64,7 +65,7 @@ const SURFACES = {
   base: "#0E0C0A",
   surface: "#14110E",
   raised: "#191512",
-  amberWash: "#262010",
+  amberWash: "#302818",
 } as const;
 
 /** Each token, and the smallest Lc it is allowed to reach on ANY surface. */

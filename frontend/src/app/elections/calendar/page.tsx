@@ -13,6 +13,7 @@ import SpecialsBoardView from "@/components/elections/specials/Specials";
 import { longDate } from "@/lib/specials";
 import CalendarList from "@/components/elections/specials/CalendarList";
 import ClosingSoon from "@/components/elections/ClosingSoon";
+import { INLINE_LINK } from "@/lib/controlStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -69,6 +70,7 @@ export default async function ElectionCalendarPage() {
           {cal.registrationClosing && (
             <ClosingSoon
               rows={cal.registrationClosing}
+              days={cal.closingSoonDays}
               className="mt-8 border border-phos/20 bg-surface px-4 py-3"
             />
           )}
@@ -88,7 +90,7 @@ export default async function ElectionCalendarPage() {
           <section
             id="specials-board"
             aria-labelledby="specials"
-            className="mt-10 scroll-mt-[var(--header-clearance)] border border-phos/20 bg-surface px-4 pb-4"
+            className="mt-10 border border-phos/20 bg-surface px-4 pb-4"
           >
             <h2
               id="specials"
@@ -103,11 +105,7 @@ export default async function ElectionCalendarPage() {
             <p>
               Election dates and special elections:{" "}
               {fec ? (
-                <a
-                  href={fec}
-                  className="text-signal-cyan underline underline-offset-4 hover:text-phos"
-                  rel="noopener"
-                >
+                <a href={fec} className={INLINE_LINK} rel="noopener">
                   the FEC&apos;s election calendar
                 </a>
               ) : (
@@ -119,11 +117,7 @@ export default async function ElectionCalendarPage() {
               deadlines: each state&apos;s election office or its election law, for the{" "}
               {longDate(cal.voterDeadlinesFor)} election. Reporting deadlines:{" "}
               {reports ? (
-                <a
-                  href={reports}
-                  className="text-signal-cyan underline underline-offset-4 hover:text-phos"
-                  rel="noopener"
-                >
+                <a href={reports} className={INLINE_LINK} rel="noopener">
                   the FEC
                 </a>
               ) : (

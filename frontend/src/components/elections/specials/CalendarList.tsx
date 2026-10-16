@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ElectionCalendar } from "@/types/specials";
 import { calendarEntries, longDate, type CalendarEntry as Entry } from "@/lib/specials";
 import RegisterLink from "@/components/elections/RegisterLink";
+import { useYourState } from "@/hooks/useYourState";
 
 type Row = Entry & { group?: Entry[] };
 
@@ -54,9 +55,17 @@ function monthOf(iso: string): string {
 }
 
 /** The calendar, filtered by state in the browser over what the page
- * already has (AGENTS.md §8: a choice, never remembered). */
+ * already has. It starts on the state chosen in the header for this tab
+ * (useYourState, AGENTS.md §8), when the calendar lists it, until the
+ * reader sets the filter here; "Every state" here leaves the header's
+ * choice alone. */
 export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
-  const [state, setState] = useState("");
+  const yours = useYourState();
+  const [picked, setPicked] = useState<string | null>(null);
+  const setState = (next: string) => {
+    setPicked(next);
+    if (next) yours.setState(next);
+  };
   const all = calendarEntries(cal);
   // Every state and DC from the API, a state whose deadlines couldn't be
   // read included and labelled; an older API's list from the entries.
@@ -71,6 +80,7 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
         ).entries()
       );
   states.sort((a, b) => a[1].localeCompare(b[1]));
+  const state = picked ?? (states.some(([code]) => code === yours.state) ? yours.state : "");
   const shown = state ? all.filter((e) => e.state === state || e.state === null) : groupByDay(all);
   const ahead = shown.filter((e) => !e.passed);
   const passed = shown.filter((e) => e.passed);

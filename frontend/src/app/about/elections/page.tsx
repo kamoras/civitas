@@ -20,6 +20,7 @@ import {
   fetchRankedChoiceStates,
   stateNameList,
 } from "@/lib/liveStates";
+import { INLINE_LINK } from "@/lib/controlStyles";
 
 // The live-count state list below is read from the backend (fetchLiveStates),
 // every five minutes (LIVE_STATES_REVALIDATE_S). A literal: Next reads it
@@ -214,7 +215,7 @@ export default async function ElectionsChapter() {
         <P>
           When a seat in Congress falls empty, a special election fills it, often in a month with no
           other federal election. The{" "}
-          <Link href={CALENDAR_HREF} className="text-signal-cyan hover:text-phos">
+          <Link href={CALENDAR_HREF} className={INLINE_LINK}>
             calendar
           </Link>{" "}
           lists the seats empty today, from the House Clerk&apos;s and the Senate&apos;s own member

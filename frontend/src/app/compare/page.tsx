@@ -22,6 +22,8 @@ import { displayScore, formatCurrency } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import VotingAgreement from "@/components/compare/VotingAgreement";
+import { HeldScoreTag, heldScoreText } from "@/components/scorecard/HeldScore";
+import { useYourState } from "@/hooks/useYourState";
 
 type Chamber = "senate" | "house";
 
@@ -69,6 +71,11 @@ function SenatorSelector({
   const [senateStates, setSenateStates] = useState<StateInfo[]>([]);
   const [houseStates, setHouseStates] = useState<RepStateInfo[]>([]);
   const [selectedState, setSelectedState] = useState(initialState ?? "");
+  // Without a preselected member, the panel opens on the state chosen in
+  // the header for this tab (useYourState) until the reader picks here.
+  const yours = useYourState();
+  const [stateTouched, setStateTouched] = useState(Boolean(initialState));
+  const shownState = stateTouched ? selectedState : yours.state;
   const [members, setMembers] = useState<Senator[]>([]);
   const [loading, setLoading] = useState(false);
   const label = side === "left" ? "LEFT" : "RIGHT";
@@ -104,6 +111,12 @@ function SenatorSelector({
     if (initialState) loadMembers(initialState, initialChamber ?? "senate");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The header's state, once it can be read, and again on a chamber change.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- starts a fetch for a state chosen outside this component
+    if (!stateTouched && yours.state) loadMembers(yours.state, chamber);
+  }, [stateTouched, yours.state, chamber, loadMembers]);
 
   const handleChamberToggle = (newChamber: Chamber) => {
     setChamber(newChamber);
@@ -151,9 +164,11 @@ function SenatorSelector({
         </label>
         <select
           id={`state-${side}`}
-          value={selectedState}
+          value={shownState}
           onChange={(e) => {
+            setStateTouched(true);
             setSelectedState(e.target.value);
+            if (e.target.value) yours.setState(e.target.value);
             setMembers([]);
             onSelect(null, chamber);
             if (e.target.value) loadMembers(e.target.value, chamber);
@@ -363,6 +378,7 @@ function ComparisonTable({
             [{left.party}] {left.state}
           </div>
           <div className="text-ink text-xs font-mono leading-snug mt-1">{left.name}</div>
+          <HeldScoreTag held={left.representationScore.held} />
           <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
             {leftChamber === "house" ? "House" : "Senate"}
           </div>
@@ -378,6 +394,7 @@ function ComparisonTable({
             [{right.party}] {right.state}
           </div>
           <div className="text-ink text-xs font-mono leading-snug mt-1">{right.name}</div>
+          <HeldScoreTag held={right.representationScore.held} />
           <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
             {rightChamber === "house" ? "House" : "Senate"}
           </div>
@@ -399,6 +416,20 @@ function ComparisonTable({
           </span>
         </div>
       )}
+
+      {/* A score held from an earlier run sits beside the other's newer
+          one: say so in words, not only in the tag. */}
+      {[left, right].map((m) => {
+        const held = m.representationScore.held;
+        return held ? (
+          <p
+            key={m.id}
+            className="px-3 py-2 border-b border-signal-amber/40 bg-signal-amber/10 text-center font-sans text-xs text-ink-lo"
+          >
+            {m.name}: {heldScoreText(held)}
+          </p>
+        ) : null;
+      })}
 
       {/* Score metrics */}
       <div className="divide-y divide-white/[0.07]">

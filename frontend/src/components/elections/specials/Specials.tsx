@@ -5,6 +5,7 @@ import { dayText, longDate } from "@/lib/specials";
 import { NOT_FINAL, reportingText } from "@/lib/results";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { CALENDAR_HREF } from "@/lib/routes";
+import { INLINE_LINK } from "@/lib/controlStyles";
 
 /*
   Special elections as the backend serves them (app/special_elections.py):
@@ -67,7 +68,7 @@ function SpecialCountLines({ s }: { s: SpecialElection }) {
         {source && (
           <>
             {" · "}
-            <a href={source} className="text-signal-cyan hover:text-phos" rel="noopener">
+            <a href={source} className={INLINE_LINK} rel="noopener">
               the state&apos;s count
             </a>
           </>
@@ -80,10 +81,7 @@ function SpecialCountLines({ s }: { s: SpecialElection }) {
 export function SpecialItem({ s }: { s: SpecialElection }) {
   const absent = noCountText(s);
   return (
-    <li
-      id={`special-${s.id}`}
-      className="scroll-mt-[var(--header-clearance)] border-t border-white/[0.07] py-3"
-    >
+    <li id={`special-${s.id}`} className="border-t border-white/[0.07] py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="font-display text-base font-bold text-ink-hi">{s.seat}</p>
         <p className="font-mono text-[11px] tracking-[0.12em] text-ink-min">
@@ -116,7 +114,7 @@ function VacancyItem({ v }: { v: SeatVacancy }) {
       <p className="mt-0.5 text-sm text-ink-lo">
         {v.footnote ?? (v.office === "S" ? "No senator is listed for this seat." : "Vacant.")}{" "}
         {source && (
-          <a href={source} className="text-signal-cyan hover:text-phos" rel="noopener">
+          <a href={source} className={INLINE_LINK} rel="noopener">
             {v.office === "H" ? "House Clerk" : "Senate"}
           </a>
         )}

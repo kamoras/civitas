@@ -38,7 +38,7 @@ from app.pipeline.fetch.election_results import live_results_states
 from app.pipeline.fetch.poll_close import last_poll_close, state_zone
 from app.state_names import STATE_NAMES
 from app.time_utils import EASTERN, congress_in_session, utcnow
-from app.voter_calendar import CLOSED, calendar_for_state, registration_closing
+from app.voter_calendar import CLOSED, CLOSING_SOON_DAYS, calendar_for_state, registration_closing
 
 CALENDAR_HREF = "/elections/calendar"
 FEC_CALENDAR_URL = "https://www.fec.gov/data/election-dates/"
@@ -371,6 +371,7 @@ def election_calendar(db: Session, now: datetime | None = None) -> dict:
         "voterDeadlinesFor": election.election_day.isoformat(),
         "states": states,
         "registrationClosing": registration_closing(election.election_day, now),
+        "closingSoonDays": CLOSING_SOON_DAYS,
         "fecDeadlines": fec,
         "nextThirtyDays": sum(1 for d in upcoming_dates if d <= soon),
         "nextDate": upcoming_dates[0] if upcoming_dates else None,

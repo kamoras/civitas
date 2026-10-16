@@ -633,7 +633,7 @@ export default function ExploreDocumentView({
           {/* id="comment": every "Comment →" link (search results, the
               Action Center, the homepage deadlines) points here. */}
           {commentOpen && (
-            <div id="comment" className="scroll-mt-24 border border-phos/40 p-5 mb-6 bg-phos/5">
+            <div id="comment" className="border border-phos/40 p-5 mb-6 bg-phos/5">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
@@ -905,7 +905,7 @@ export default function ExploreDocumentView({
           <section
             id="cite"
             aria-labelledby="cite-heading"
-            className="scroll-mt-24 mt-8 flex flex-col gap-2 border-t border-white/[0.07] pt-6"
+            className="mt-8 flex flex-col gap-2 border-t border-white/[0.07] pt-6"
           >
             <h2
               id="cite-heading"

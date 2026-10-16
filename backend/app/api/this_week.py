@@ -23,6 +23,7 @@ from app.database import get_db
 from app.election_phase import active_election, election_today
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, CongressDay, ExploreDocument, RollCall
+from app.services.roll_call_shape import shapes
 from app.pipeline.congress_activity import eastern_today
 from app.retractions import retraction_for_issue
 from app.services.congress_service import CHAMBERS, bill_label, long_date, next_meeting, week_bounds
@@ -93,6 +94,7 @@ def congress_week(db: Session, today: date | None = None) -> dict:
         sentence = " ".join(_chamber_sentence(chambers[c], today) for c in CHAMBERS)
     votes = sorted((v for c in CHAMBERS for v in chambers[c].pop("_votes")),
                    key=lambda v: (v.date, v.number), reverse=True)
+    shaped = shapes(db, votes[:3])
     return {
         # The day "today" in the sentence is (Eastern): a page about another
         # day labels the strip with it, so "meets today" isn't read as that
@@ -107,6 +109,7 @@ def congress_week(db: Session, today: date | None = None) -> dict:
                 "chamber": v.chamber, "congress": v.congress, "session": v.session, "number": v.number,
                 "date": v.date, "question": v.question, "title": v.title, "result": v.result,
                 "billId": v.bill_id, "billLabel": bill_label(v.bill_id),
+                **shaped[v.id],
             }
             for v in votes[:3]
         ],

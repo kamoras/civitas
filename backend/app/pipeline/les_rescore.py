@@ -20,6 +20,7 @@ import logging
 from sqlalchemy.orm import selectinload
 
 from app.pipeline.analyze.score_calculator import _LES_MAX_STAGE
+from app.score_keeping import held, keep_rescored
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
     from app.models import HousePipelineRun, PipelineRun, Representative, Senator
     from app.pipeline.analyze.population_reference import LES_REFERENCE
     from app.pipeline.analyze.score_calculator import (
-        _calc_legislative_effectiveness,
+        _legislative_effectiveness_core,
         bills_inputs_from_status,
         derive_chamber_majority,
         stored_bills_status,
@@ -91,7 +92,11 @@ def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
                 continue
             reference = {**LES_REFERENCE.load(), chamber: ref}
             for row, (bills, party), known in zip(rows, members, inputs):
-                row.score_legislative_effectiveness = _calc_legislative_effectiveness(
+                if held(row):
+                    # Keeps the whole scorecard of the last run it passed,
+                    # as the latest run's failure left it.
+                    continue
+                part = _legislative_effectiveness_core(
                     bills,
                     row.leadership_score,
                     party=party,
@@ -103,6 +108,9 @@ def rescore_stale_legislative_effectiveness(session_factory) -> list[str]:
                     bills_known=not known.get("sponsoredBillsUnavailable"),
                     carried_from=known.get("sponsoredBillsCarriedFrom"),
                 )
+                row.score_legislative_effectiveness = part["score"]
+                keep_rescored(db, "senator" if chamber == "senate" else "representative", row,
+                              "legislativeEffectiveness", part)
             db.commit()
             # Persisted only once the scores it describes are committed: a
             # reference on the current scale is what marks the chamber done,

@@ -46,7 +46,7 @@ export default function ScoreColumn({
     <section
       id={shareId}
       {...{ [SHARE_SECTION_ATTR]: shareId }}
-      className="flex scroll-mt-[var(--header-clearance)] flex-col border border-white/25 bg-surface font-sans"
+      className="flex flex-col border border-white/25 bg-surface font-sans"
     >
       <header className="flex items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
         <div className="min-w-0">
