@@ -46,8 +46,15 @@ export interface AgencyBudgetRow {
   outlays: number | null;
 }
 
+/** Documents stored before agencies were read, still being linked to the
+ * agency that issued them; null once every one is. While it is set, a
+ * document count is a count so far, never "none". */
+export type DocumentsLinking = { linked: number; total: number } | null;
+
 export interface AgencyIndex {
   agencies: AgencySummary[];
+  /** Optional only for a response cached before the field. */
+  documentsLinking?: DocumentsLinking;
   agenciesSource: AgencySource;
   agenciesAsOf: string | null;
   budget: {
@@ -128,6 +135,8 @@ export interface AgencyDetail {
     openCommentsCount: number;
     proposedRules: AgencyDocument[];
     finalRules: AgencyDocument[];
+    /** Optional only for a response cached before the field. */
+    linking?: DocumentsLinking;
   };
   /** Null when the keyword index couldn't be asked (not "none name it"). */
   executiveOrders: {

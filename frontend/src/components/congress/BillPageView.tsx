@@ -9,7 +9,7 @@ import { billStageStyle } from "@/lib/billStages";
 import { policyAreaLabel } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { CHAMBER_NAME, dayHref, longDate, shortDate } from "@/lib/congress";
-import { CongressTabs } from "./CongressNav";
+import SectionTabs from "@/components/layout/SectionTabs";
 import BillSources from "./BillSources";
 import CommitteeEntries from "./CommitteeEntries";
 import StageLadder from "./StageLadder";
@@ -144,7 +144,7 @@ export default function BillPageView({
         <Navbar />
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
           <div className="mx-auto max-w-6xl">
-            <CongressTabs active="bills" />
+            <SectionTabs section="congress" active="bills" />
             <nav aria-label="Breadcrumb" className="mb-4 text-sm text-ink-lo">
               <Link href="/congress" className="hover:text-phos">
                 Congress
