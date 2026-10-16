@@ -29,6 +29,7 @@ from app.broadcast import FEEDS, KINDS, SITE_URL, withdrawn_subjects
 from app.database import get_db
 from app.models import BroadcastPost
 from app.services.senator_service import STATE_NAMES
+from app import whats_new as whats_new_module
 
 router = APIRouter()
 
@@ -197,6 +198,17 @@ def feed_index():
             {"code": code, "name": name, "path": state_feed_path(code)}
             for code, name in sorted(STATE_NAMES.items(), key=lambda kv: kv[1])
         ],
+    }, max_age=CACHE_TTL_LIST_S)
+
+
+@router.get("/whats-new")
+def whats_new():
+    """New pages and features, newest first (app/data/whats_new.json): the
+    list /changelog shows. The same entries are posted once each to the
+    What's new feed (app/whats_new.py)."""
+    return cached_json({
+        "entries": [{k: e[k] for k in ("id", "date", "title", "summary", "url")} for e in whats_new_module.entries()],
+        "feed": feed_path("new"),
     }, max_age=CACHE_TTL_LIST_S)
 
 

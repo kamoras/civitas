@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import type { LiveResults, PviMap, RaceSummary } from "@/types/election";
+import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
 import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { describeElections } from "@/lib/seo";
 import { everyLiveStateVoting, showsResults } from "@/lib/results";
+import SectionCards from "@/components/sections/SectionCards";
 import { ElectionsInitialProvider, type ElectionsInitial } from "./ElectionsInitial";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -84,17 +86,42 @@ async function fetchPvi(): Promise<PviMap | null> {
   }
 }
 
+// The specials board (with the season), and between general elections the
+// calendar it leads with. Null when the backend can't answer: the page then
+// stays on the campaign frame it would otherwise show.
+async function fetchJson<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${BACKEND}${path}`, { next: { revalidate: 120 } });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 // Rendered per request, never at build time: `next build` has no backend,
 // so a prerendered page would always be the no-data frame.
 async function readInitial(): Promise<ElectionsInitial> {
   await connection();
   const renderedAt = Date.now();
-  const [pvi, phase] = await Promise.all([fetchPvi(), fetchPhase(renderedAt)]);
-  return { pvi, phase, renderedAt };
+  const [pvi, phase, specials] = await Promise.all([
+    fetchPvi(),
+    fetchPhase(renderedAt),
+    fetchJson<SpecialsBoard>("/api/elections/specials"),
+  ]);
+  const calendar = specials?.season?.betweenCycles
+    ? await fetchJson<ElectionCalendar>("/api/elections/calendar")
+    : null;
+  return { pvi, phase, specials, calendar, renderedAt };
 }
 
 export default async function ElectionsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ElectionsInitialProvider value={await readInitial()}>{children}</ElectionsInitialProvider>
+    <ElectionsInitialProvider
+      value={await readInitial()}
+      hub={<SectionCards section="elections" current="ballots" />}
+    >
+      {children}
+    </ElectionsInitialProvider>
   );
 }

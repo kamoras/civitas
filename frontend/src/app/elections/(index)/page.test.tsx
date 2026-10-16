@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { afterEach, beforeEach } from "vitest";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import ElectionsPage from "./page";
+import { ElectionsInitialProvider, type ElectionsInitial } from "./ElectionsInitial";
 
 const fetchPviMap = vi.hoisted(() => vi.fn());
 const fetchLiveResults = vi.hoisted(() => vi.fn());
@@ -136,13 +137,49 @@ describe("ElectionsPage", () => {
       "Ballots by state",
       "Seat map",
       "New House maps",
+      "Calendar",
       "Archive",
     ]);
     expect(tabs[0]).toHaveAttribute("aria-current", "page");
-    expect(tabs[3]).toHaveAttribute("href", "/elections/archive");
+    expect(tabs[3]).toHaveAttribute("href", "/elections/calendar");
+    expect(tabs[4]).toHaveAttribute("href", "/elections/archive");
     expect(tabs[1]).toHaveAttribute("href", "/elections/map?chamber=senate&view=usual");
     // The inline masthead links, which ran off a phone screen, are gone.
     expect(screen.queryByText(/POLL RANGES →/)).not.toBeInTheDocument();
+  });
+
+  it("leads with the specials and the calendar between general elections", async () => {
+    // In an odd year the page used to be a countdown to a general a year or
+    // more off and the same lean map; the backend's season now says the
+    // general isn't in its campaign, and the specials board leads.
+    fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2028 });
+    const season = { season: "off_season", betweenCycles: true, cycle: 2028, firstPrimary: null };
+    const initial = {
+      pvi: { states: { GA: 3 }, districts: {}, cycleYear: 2028 },
+      phase: null,
+      renderedAt: Date.parse("2027-06-01T12:00:00Z"),
+      calendar: null,
+      specials: {
+        asOf: "2027-06-01",
+        vacancies: [],
+        vacanciesReadAt: null,
+        upcoming: [],
+        recent: [],
+        lastSpecial: null,
+        averageSwing: { swing: null, count: 0, of: 0, since: "2026-06-01", sentence: null },
+        sources: { fec: "https://www.fec.gov/data/election-dates/" },
+        season,
+      },
+    } as unknown as ElectionsInitial;
+    render(
+      <ElectionsInitialProvider value={initial}>
+        <ElectionsPage />
+      </ElectionsInitialProvider>
+    );
+    expect(await screen.findByRole("heading", { name: "Between general elections" })).toBeTruthy();
+    expect(screen.getByText(/The 2028 primaries are not on the FEC's calendar yet/)).toBeTruthy();
+    expect(screen.getByText(/Every seat in Congress is filled/)).toBeTruthy();
+    expect(screen.getByText(/The calendar couldn't be read just now/)).toBeTruthy();
   });
 
   it("still renders the directory when the payload carries no lean data", async () => {

@@ -1321,8 +1321,13 @@ votes (`trend_relevance.py`, `political_violence_examples.json`/`loaded_language
 are calibrated by `scripts/calibrate_trend_gates.py` into
 `trend_gates_calibration.json`. The trend's name must pass a neutrality gate
 (`grounding`'s electioneering, editorializing and advocacy-as-fact checks plus a
-loaded-language vote); a tragedy is eligible only with a high political-violence
-vote and an official record (not an issue). Every word is template text, a
+loaded-language vote); a tragedy (the tragedy vote) is eligible with an
+official record, or with a confirmed Action Center issue reported by two or
+more outlets whose lede compose() verified (`trend_poster.tragedy_issue_refusal`;
+the post quotes that lede, credited to its outlet, under the neutrality gate
+and the loaded-language vote). The political-violence vote was removed
+2026-10-16: agents' shootings, deaths in detention and attacks on the
+Capitol are in scope, and the news answers them before any vote or document. Every word is template text, a
 stored record field, or the trend's name quoted and attributed to Bluesky — no
 model. Selection is party-blind (rank weight × match strength); each trend gets
 one `TrendCandidate` audit row with the parties of the members it names and of
@@ -1565,6 +1570,20 @@ posted still keeps its page: the issue cleanup deletes only developing
 issues nobody confirmed (`_cleanup_old_unposted_issues`), since the sitemap
 lists every confirmed issue.
 
+**A user-facing feature ships with its changelog entry.** A PR that adds a
+page or a feature a reader would notice adds one entry to
+`backend/app/data/whats_new.json` (its `_contract` names the fields: a
+stable id, the UTC release date, a title, one plain sentence, the page's
+path). That one entry is `/changelog`'s "New on the site" list, the What's
+new feed and one Bluesky post (`app/whats_new.py`, kind `feature`): no post
+is ever written by hand, and no code is written per feature. The posting
+rule (at most one a day, in the posting window, never on a day busier than
+the median of the fortnight before, never an entry over 28 days old, never
+a page that doesn't load) is in the module's docstring with the replay
+behind it. Write the sentence to stay true: no named politicians, no
+pronouns, no em dashes, no emoji, no year or Congress number
+(`tests/test_whats_new.py`). Changing an entry's id posts it again.
+
 **Ahead of each election** a nightly pre-check (`ops_alerts.check_election_readiness`)
 compares each cycle-specific data file with the election the calendar says
 is next and alerts, once its lead time begins, for what is missing: the
@@ -1684,6 +1703,23 @@ wrong number on election night is worse than none:
   `/elections/{raceId}` link goes there once the site's election is a later
   one (`race_detail`'s `archiveCycle`). The same §7 rules hold there:
   quoted, and no race called.
+- A special election is read the same way, from its own day until
+  `RESULTS_GRACE_DAYS` after its count last moves (`live_results/specials.py`):
+  the same readers find it by its date (`election_results.pick_election`),
+  the same gates apply, and its count is stored on its FEC calendar row
+  (`FederalElectionDate`), never on a `Race` (a special is on no cycle's
+  ballot pages). Its swing against the seat's usual vote is a measurement
+  in the lean's own units, given only once settled and where both major
+  parties ran (`app/special_elections.py`).
+- The archive page checks the frozen map against the count
+  (`app/forecast/accountability.py`): a seat is graded only once its count
+  is official by the source's own flag, only against the archive's frozen
+  ranges (never the live file or a refit: no look-ahead), and in the map's
+  units (two-party margin, top two D and R, as the fit's training results).
+  Shares inside the 80% and 95% ranges carry exact binomial intervals,
+  per chamber and range basis, beside the coverage the map promised, and
+  the misses are listed. The swing map is the official margin minus twice
+  the lean. Every figure is the backend's; nothing is graded early.
 - A data reset inside the results window keeps the held election's ballot and
   count (`database.RESET_KEEPS_WHILE_RESULTS`) and the coverage markers its
   pages read beside them (statewide, judicial and ballot-basis `api_cache`
@@ -2050,6 +2086,7 @@ the pending list).
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
 | Senate and House map: usual vote and poll ranges (pre-election; separate from scoring) | `backend/app/forecast/` (`model.py`, `polls.py`, `training_polls.py`, `build.py`), `backend/scripts/fit_forecast_model.py`, `backend/scripts/fetch_silver_bulletin_polls.py`, `backend/scripts/build_house_lean_history.py`, `app/data/forecast_model.json`, `forecast_house_model.json`, `forecast_house_lean.json`, `backend/app/api/election_map.py`, `frontend/src/components/elections/map/`, `frontend/src/lib/electionMap.ts` |
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
+| The map's ranges against the official count, and the swing map (archive page, the hub's Archive card) | `backend/app/forecast/accountability.py`, `backend/app/api/election_archive.py` (`/{cycle}/accountability`, `/{cycle}/swing.csv`, `latest_check` for `api/sections.py`), `frontend/src/components/elections/archive/MapAccountability.tsx`, `frontend/src/lib/sectionPreviews.ts` (`elections.archive`) |
 | Archive of each held election (frozen pre-election map, ballot, counts, measures) | `backend/app/election_archive.py`, `backend/app/api/election_archive.py`, `frontend/src/app/elections/[raceId]/page.tsx` (a year is an archive, anything else an old race link), `frontend/src/app/elections/archive/page.tsx`, `frontend/src/components/elections/archive/CycleArchive.tsx` |
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
@@ -2057,6 +2094,7 @@ the pending list).
 | Voter calendar (registration, early voting, mail-ballot deadlines; status on the state's own clock) | `backend/app/voter_calendar.py`, `backend/app/data/election_calendar.json` (built by `backend/scripts/build_election_calendar.py` from `scripts/election_calendar_sources.json`), `frontend/src/components/elections/VoterCalendar.tsx` |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
 | What changed on the new House maps (old/new district overlap, lean before/after, enacting act) | `backend/app/redistricting.py`, `backend/app/api/redistricting.py`, `backend/scripts/build_redistricting_overlap.py` → `app/data/redistricting_overlap.json`, `frontend/src/components/redistricting/`, `frontend/src/app/elections/redistricting/` |
+| Special elections, vacancies and the election calendar (FEC election and reporting dates, House Clerk and Senate vacancies, a special's live count and swing, the season /elections leads with) | `backend/app/pipeline/fetch/special_elections.py`, `backend/app/live_results/specials.py`, `backend/app/special_elections.py`, `backend/app/api/special_elections.py` |
 | Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
@@ -2098,6 +2136,7 @@ the pending list).
 | Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this" | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx`; data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
+| Site navigation: sections, main menu, footer, section tabs, hub cards and the homepage "Sections" band | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
 | Homepage (masthead, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
 
@@ -2278,6 +2317,15 @@ the pending list).
   own with `shareMetaAttrs`), and the captured image carries the source
   line, the as-of date and the score scale under the picture, since a
   picture travels without its page.
+- **A new page goes in `SECTIONS`** (`src/lib/routes.ts`): that one table is
+  the main navigation (a disclosure button per section on desktop, two
+  levels on a phone), the footer, each section's tab bar, its hub's cards and
+  the homepage's "Sections" band, so a page that isn't in it is reachable
+  only by an inline link. `routes.test.ts` fails on a page route in no
+  section (records with a `[segment]`, the footer's own pages and the admin
+  aside). A page with a live figure gets it from `GET /api/sections`
+  (`app/api/sections.py`), worded in `lib/sectionPreviews.ts`; a figure not
+  read yet says so, never a bare zero.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
   Activating a tab must focus **the incoming tab**, not its panel — the
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving

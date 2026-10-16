@@ -44,6 +44,11 @@ body {
   color: var(--foreground);
   background: var(--background);
   overflow-x: hidden;
+  /* A word longer than its box breaks rather than running past the screen
+     edge, where overflow-x: hidden would cut it off. Only such a word: text
+     that fits is untouched. At a doubled text size a masthead's "THURSDAY,"
+     or a figure label's "INTRODUCED" no longer fit a phone (WCAG 1.4.10). */
+  overflow-wrap: break-word;
 }
 
 /* ===== LAYOUT STABILITY: THE FOOTER STARTS BELOW THE FIRST SCREEN =====

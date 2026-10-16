@@ -44,7 +44,6 @@ export interface TrendCandidate {
   // Bluesky's own getTrends category; only "politics" is eligible.
   category: string | null;
   tragedy: number | null;
-  politicalViolence: number | null;
   loaded: number | null;
   neutrality: string[];
   matchType: string | null;

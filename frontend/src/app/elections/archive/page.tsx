@@ -101,6 +101,13 @@ export default async function ElectionArchiveIndexPage() {
                         {c.measures} statewide measures
                         {c.hasMap ? " · the map before election day" : ""}
                       </span>
+                      {c.accountability && (
+                        <span className="mt-1 block font-mono text-xs text-ink-hi">
+                          {c.accountability.graded > 0
+                            ? `The map's ranges: ${c.accountability.held80} of ${c.accountability.graded} official margins inside the 80%, ${c.accountability.held95} inside the 95%`
+                            : `The map's ranges: none graded yet, 0 of ${c.accountability.ranged} seats with a range official`}
+                        </span>
+                      )}
                       {c.recordAsOf && (
                         <span className="mt-1 block font-mono text-[11px] text-ink-min">
                           Recorded {formatEasternTime(c.recordAsOf)}

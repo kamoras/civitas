@@ -68,7 +68,11 @@ frontend/       Next.js 16 app
 3. Run the backend tests: `cd backend && python -m pytest tests/`
    (`-m "not slow"` skips the tests that load the sentence-transformer model)
 4. Run the frontend checks: `cd frontend && npm run lint && npm run knip && npm test && npm run build`
-5. Open a pull request with a clear description of what changed and why
+5. A new page or feature a reader would notice: add its entry to
+   `backend/app/data/whats_new.json` (the file's `_contract` says how). It
+   becomes the `/changelog` line, the What's new feed entry and one Bluesky
+   post; nobody writes the post by hand.
+6. Open a pull request with a clear description of what changed and why
 
 CI gates every PR on all of the above, plus `ruff check app/ scripts/ tests/ migrations/` (ruff 0.16.9, pinned; rules in `backend/ruff.toml`) and two backend
 coverage checks: a 46% total floor and a 60% floor on the lines your PR

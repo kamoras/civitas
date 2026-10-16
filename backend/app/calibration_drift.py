@@ -57,7 +57,6 @@ _KEEP_HOURS = 24 * 365 * 5
 # calibration in use") and what a pass means, for the alert.
 GATES = {
     "trend_tragedy": ("trend_gates_calibration.json", "trends voted a tragedy"),
-    "trend_political_violence": ("trend_gates_calibration.json", "trends voted political violence"),
     "trend_loaded": ("trend_gates_calibration.json", "trend names voted loaded"),
     "committee_routing": ("committee_routing_calibration.json", "issues routed to a committee"),
     "member_photo": ("member_photo_calibration.json", "members switched to the bioguide portrait"),

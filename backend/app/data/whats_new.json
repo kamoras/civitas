@@ -1,0 +1,124 @@
+{
+  "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
+  "entries": [
+    {
+      "id": "election-map-check",
+      "date": "2026-10-16",
+      "title": "The seat map checked against the count",
+      "summary": "Once a state lists a race's count as official, the archive checks it against the seat map's ranges from before the election, lists every miss, and maps how far each seat swung from its usual vote.",
+      "url": "/elections/archive"
+    },
+    {
+      "id": "election-calendar",
+      "date": "2026-10-16",
+      "title": "Election calendar",
+      "summary": "Every federal election date and filing deadline in one place, with each special election, each vacant seat in Congress and the next dates for every state.",
+      "url": "/elections/calendar"
+    },
+    {
+      "id": "special-election-counts",
+      "date": "2026-10-16",
+      "title": "Special elections and counts",
+      "summary": "Each special election the FEC lists is kept on the site, and its count is read from the state's own results feed on election night, as the general's is.",
+      "url": "/elections/calendar"
+    },
+    {
+      "id": "site-navigation",
+      "date": "2026-10-16",
+      "title": "Every section, one menu",
+      "summary": "The main menu, the footer and each section's tabs now list every section and page the same way, with a live figure beside each section.",
+      "url": "/"
+    },
+    {
+      "id": "election-archive",
+      "date": "2026-10-16",
+      "title": "Election archive",
+      "summary": "Each general election stays on the site once held: its ballot, the candidates as printed, each race's count as the state reported it, and the measures, quoted.",
+      "url": "/elections/archive"
+    },
+    {
+      "id": "nominations",
+      "date": "2026-10-16",
+      "title": "Presidential nominations",
+      "summary": "Every presidential nomination sent to the Senate, with its status, how long confirmation took and the roll calls that name it.",
+      "url": "/congress/nominations"
+    },
+    {
+      "id": "election-map",
+      "date": "2026-10-16",
+      "title": "Election map",
+      "summary": "How each Senate and House seat usually votes, a range for the margin from the cycle's polls where a seat has any, and where the two disagree, with no race called.",
+      "url": "/elections/map"
+    },
+    {
+      "id": "agencies",
+      "date": "2026-10-16",
+      "title": "Federal agencies",
+      "summary": "Every agency the Federal Register lists, with its spending from USAspending.gov, the rules it proposes and issues, and its open comment periods.",
+      "url": "/agencies"
+    },
+    {
+      "id": "committee-meetings",
+      "date": "2026-10-15",
+      "title": "Committee meetings and reports",
+      "summary": "Every Senate and House committee meeting and committee report this Congress, as the Daily Digest printed each one, found by committee, word or bill number.",
+      "url": "/congress/committees"
+    },
+    {
+      "id": "roll-call-pages",
+      "date": "2026-10-15",
+      "title": "A page for every roll call",
+      "summary": "Each Senate and House roll call, nominations included, has a page of its own, linked from every list of votes.",
+      "url": "/congress"
+    },
+    {
+      "id": "computed-district-lean",
+      "date": "2026-10-15",
+      "title": "A second district lean, computed here",
+      "summary": "A partisan lean for every House district worked out with Cook's formula from open precinct returns, shown beside Cook's figure, with CSV and JSON downloads.",
+      "url": "/about/data#computed-lean"
+    },
+    {
+      "id": "redistricting",
+      "date": "2026-10-14",
+      "title": "What changed on the new House maps",
+      "summary": "For each district on a redrawn map, where its residents lived before, how its partisan lean moved, and the act or court order behind the map.",
+      "url": "/elections/redistricting"
+    },
+    {
+      "id": "votes-with-the-president",
+      "date": "2026-10-14",
+      "title": "Votes with the president",
+      "summary": "How often each member of Congress votes with the president's stated positions on bills, beside the rate the member's seat predicts.",
+      "url": "/congress/president"
+    },
+    {
+      "id": "compare-agreement",
+      "date": "2026-10-14",
+      "title": "How often two members vote alike",
+      "summary": "Pick any two members of Congress to see how often the two voted the same way this Congress.",
+      "url": "/compare"
+    },
+    {
+      "id": "call-your-members",
+      "date": "2026-10-14",
+      "title": "Call your members from an issue",
+      "summary": "Pick a state on an Action Center issue for the office phone of each member, each member's votes on the issue's roll calls, and a call script.",
+      "url": "/action"
+    },
+    {
+      "id": "voter-calendar",
+      "date": "2026-10-13",
+      "title": "Voter calendar",
+      "summary": "Registration, early voting and mail-ballot deadlines for every state, read from each state's election office, on each state's ballot page.",
+      "url": "/elections"
+    },
+    {
+      "id": "find-a-house-member-by-town",
+      "date": "2026-10-13",
+      "title": "Find a House member by town",
+      "summary": "Find the House member for a city, town or county by picking a state and typing a place name, with no address asked for.",
+      "url": "/politicians"
+    }
+  ]
+}
