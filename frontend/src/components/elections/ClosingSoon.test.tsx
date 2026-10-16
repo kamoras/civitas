@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import ClosingSoon from "./ClosingSoon";
+import { YOUR_STATE_KEY } from "@/hooks/useYourState";
 import type { RegistrationClosing } from "@/types/thisWeek";
 
 function row(over: Partial<RegistrationClosing>): RegistrationClosing {
@@ -79,5 +80,36 @@ describe("ClosingSoon", () => {
     render(<ClosingSoon rows={[row({})]} compact />);
     expect(screen.queryByText(/Register online by/)).not.toBeInTheDocument();
     expect(screen.queryByText(/After that/)).not.toBeInTheDocument();
+  });
+});
+
+describe("ClosingSoon: the header's state", () => {
+  afterEach(() => sessionStorage.clear());
+
+  it("puts the reader's state first when it is closing soon", () => {
+    sessionStorage.setItem(YOUR_STATE_KEY, "MI");
+    render(<ClosingSoon rows={[row({ state: "CA", stateName: "California" }), row({})]} />);
+    const line = screen.getByText(/^Your state/).closest("p")!;
+    expect(line).toHaveTextContent(
+      "Your state · Michigan: Register online by Mon, Oct 19 (3 days left)"
+    );
+    expect(
+      within(line).getByRole("link", { name: /^Register: Michigan Secretary of State/ })
+    ).toBeTruthy();
+  });
+
+  it("says when the reader's state isn't among them, and links its deadlines", () => {
+    sessionStorage.setItem(YOUR_STATE_KEY, "TX");
+    render(<ClosingSoon rows={[row({})]} />);
+    expect(screen.getByText(/Texas isn't among them\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Texas's deadlines" })).toHaveAttribute(
+      "href",
+      "/elections/states/TX#voter-deadlines"
+    );
+  });
+
+  it("says nothing extra without a chosen state", () => {
+    render(<ClosingSoon rows={[row({})]} />);
+    expect(screen.queryByText(/^Your state/)).not.toBeInTheDocument();
   });
 });
