@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { serializeJsonLd } from "@/components/seo/JsonLd";
 import {
+  describeRedistrictingIndex,
   describeBill,
   describeElections,
   describeProfile,
@@ -237,5 +238,12 @@ describe("siteJsonLd", () => {
       about: { "@id": organization["@id"] },
       isPartOf: { "@id": website["@id"] },
     });
+  });
+});
+
+describe("describeRedistrictingIndex", () => {
+  it("speaks of a redraw as coming until its election, and as past after", () => {
+    expect(describeRedistrictingIndex("2026", 9).description).toMatch(/^9 states vote on/);
+    expect(describeRedistrictingIndex("2026", 9, false).description).toMatch(/^9 states voted on/);
   });
 });

@@ -20,11 +20,12 @@ def _states() -> dict:
 
 
 def on_november_ballot(state: str, kind: str, year: int) -> bool:
-    """Whether `kind` (one of KINDS) is on `state`'s November general
-    ballot in `year`. A state the file doesn't list answers True: a gap
-    nobody checked is still a gap the page has to name."""
+    """Whether `kind` (one of KINDS, or the optional "statewide_executive")
+    is on `state`'s November general ballot in `year`. A state or kind the
+    file doesn't list answers True: a gap nobody checked is still a gap the
+    page has to name."""
     entry = _states().get(state)
-    if entry is None:
+    if entry is None or kind not in entry:
         return True
     cycle = entry[kind]
     return cycle is not None and (year - cycle["from"]) % cycle["every"] == 0

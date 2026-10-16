@@ -332,7 +332,8 @@ export function describeStateBallot(
 /** The redistricting index: what people search when a map changes. */
 export function describeRedistrictingIndex(
   cycle: string | null,
-  states: number
+  states: number,
+  upcoming = true
 ): {
   title: string;
   description: string;
@@ -340,7 +341,7 @@ export function describeRedistrictingIndex(
   const year = cycle ?? "";
   return {
     title: `New ${year} congressional maps: what changed in each district`.replace("  ", " "),
-    description: `${states} states vote on new U.S. House maps in ${year}. For each district: where its residents lived before, how its partisan lean moved, and the act or court order behind the map. Census counts, downloadable.`,
+    description: `${states} states ${upcoming ? "vote" : "voted"} on new U.S. House maps in ${year}. For each district: where its residents lived before, how its partisan lean moved, and the act or court order behind the map. Census counts, downloadable.`,
   };
 }
 

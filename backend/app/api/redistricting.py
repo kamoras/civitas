@@ -6,13 +6,16 @@ their district by — the counties and places on each map (AGENTS.md §8:
 nobody is asked where they live; they filter by a place they know).
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from sqlalchemy.orm import Session
 
 from app.api.politicians import counties_on_lines_of
 from app.api.response_helpers import CACHE_TTL_REFERENCE_S, cached_json
 from app.config import settings
+from app.database import get_db
 from app.district_places import places_on_lines_of
+from app.election_phase import active_election
 from app.live_results.sync import _maps
 from app.redistricting import overlap_file, redrawn_overlap_states, state_changes
 from app.state_names import STATE_NAMES
@@ -21,8 +24,9 @@ router = APIRouter(prefix="/elections/redistricting")
 
 
 @router.get("")
-def redistricting_index():
-    """Each state voting on new House lines this cycle, with its summary,
+def redistricting_index(db: Session = Depends(get_db)):
+    """Each state voting on new House lines in the file's cycle (said as
+    past once that election is held: `upcoming`), with its summary,
     and each state whose new map is not in force (listed with the reason)."""
     doc = overlap_file()
     cycle = doc.get("cycle")
@@ -42,9 +46,14 @@ def redistricting_index():
         for st, entry in sorted(((_maps().get(cycle) or {}) if cycle else {}).items())
         if st not in redrawn
     ]
+    election = active_election(db)
     return cached_json(
         {
             "cycle": cycle,
+            # Whether the cycle's election is still ahead: "states vote on
+            # new lines in 2026" until it is held, "voted" after, so the
+            # page never presents a past redraw as the coming one.
+            "upcoming": bool(cycle) and str(election.cycle) == str(cycle) and election.phase == "campaign",
             "fromCongress": doc.get("fromCongress"),
             "toCongress": doc.get("toCongress"),
             "states": states,

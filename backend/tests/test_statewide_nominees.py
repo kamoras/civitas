@@ -662,6 +662,17 @@ class TestSourcesFileOptIns:
                 assert needs.get(general["strategy"], lambda g: True)(general), state
                 assert not general.get("statewide_offices_basis"), state
 
+    def test_a_basis_has_an_election_calendar_to_be_checked_against(self):
+        """A basis is a claim about the state's election calendar, so the
+        calendar must be on file (state_ballot_scope's statewide_executive),
+        or the claim is never made at all."""
+        from app.state_ballot_scope import _states as scope
+
+        for state, entry in self._states().items():
+            if entry.get("statewide_offices_basis"):
+                assert "statewide_executive" in scope().get(state, {}), state
+                assert not any(ch.isdigit() for ch in entry["statewide_offices_basis"]), state
+
     def test_a_basis_is_never_set_without_the_opt_in(self):
         for state, entry in self._states().items():
             if entry.get("statewide_offices_basis"):

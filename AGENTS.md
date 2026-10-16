@@ -1431,6 +1431,20 @@ posted still keeps its page: the issue cleanup deletes only developing
 issues nobody confirmed (`_cleanup_old_unposted_issues`), since the sitemap
 lists every confirmed issue.
 
+**Ahead of each election** a nightly pre-check (`ops_alerts.check_election_readiness`)
+compares each cycle-specific data file with the election the calendar says
+is next and alerts, once its lead time begins, for what is missing: the
+cycle's entry in `redrawn_congressional_maps.json` (from January 1; an empty
+entry when no state redrew), a computed district lean for every state on
+the seated Congress's lines (`district_lean.lines_table` carries the last
+table forward only for a state whose map didn't change, and only once the
+cycle is listed), the voter calendar (150 days out), the poll closing times
+(45 days) and towns' sample ballots (60 days; a town ballot from an earlier
+cycle is never served as this one's). Standing law is stored as law
+(`election_rules.json`'s `standing`, a runoff counted from the general;
+`office_terms.json`'s year rules; `state_ballot_scope.json`'s
+`statewide_executive`), so the next cycle computes its own.
+
 **Election night and after** (`election_phase.py`, `live_results/sync.py`).
 The site's election is not simply the *next* one: from election day (Eastern
 date) it stays on the election just held while any race's vote totals are

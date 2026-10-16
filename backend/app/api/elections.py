@@ -25,6 +25,8 @@ from app.state_ballot_scope import on_november_ballot
 from app.voter_calendar import calendar_for_state
 from app.election_calendar import (
     federal_states,
+    next_election_day,
+    previous_election_day,
     next_senate_election_year,
     seats_up_for_year,
 )
@@ -199,23 +201,41 @@ _election_rules_cache: dict | None = None
 
 
 def _election_rules(state: str, cycle: int, key: str) -> list[dict]:
-    """`key` of `state`'s entry in data/election_rules.json for `cycle`: a
-    cited legal fact per state. "generalRunoffs" -- where November is not
+    """`key` for `state` in `cycle` from data/election_rules.json: a cited
+    legal fact per state. "generalRunoffs" -- where November is not
     decided by a plurality (Georgia's majority rule; Louisiana's House
     contests held as an all-party open primary), with the runoff's date.
     "otherPrimaries" -- contests whose primary was not the state's one
     primary date (Alabama's postponed House districts). "topPrimary" --
     an all-party primary that sent its top two (four) to November whatever
-    their party (California, Washington; Alaska). [] when the file
+    their party (California, Washington; Alaska).
+
+    The file's `standing` rules are the law in force every cycle (a runoff
+    date as the statute counts it, `runoffDaysAfter` the general, computed
+    here from the cycle's own election day); `cycles` holds one cycle's
+    one-off facts. A standing rule therefore holds in a cycle nobody has
+    written up, and a one-off never leaks into the next. [] when the file
     is missing: the page then says nothing rather than guessing."""
     global _election_rules_cache
     if _election_rules_cache is None:
         try:
-            _election_rules_cache = json.loads(_ELECTION_RULES_PATH.read_text())["cycles"]
+            data = json.loads(_ELECTION_RULES_PATH.read_text())
+            _election_rules_cache = {"standing": data.get("standing") or {}, "cycles": data.get("cycles") or {}}
         except Exception:
             logger.exception("election_rules.json unavailable")
-            _election_rules_cache = {}
-    return list(((_election_rules_cache.get(str(cycle)) or {}).get(state) or {}).get(key) or [])
+            _election_rules_cache = {"standing": {}, "cycles": {}}
+    entries = [
+        *((_election_rules_cache["standing"].get(state) or {}).get(key) or []),
+        *(((_election_rules_cache["cycles"].get(str(cycle)) or {}).get(state) or {}).get(key) or []),
+    ]
+    out = []
+    for entry in entries:
+        entry = dict(entry)
+        if "runoffDaysAfter" in entry:
+            general = next_election_day(date(cycle, 1, 1))
+            entry["runoffDate"] = (general + timedelta(days=entry.pop("runoffDaysAfter"))).isoformat()
+        out.append(entry)
+    return out
 
 
 def _seat_places(state: str, code: str, district: str | None, spec: dict) -> list[str]:
@@ -1101,7 +1121,7 @@ def _statewide_section(db: Session, state: str, cycle: int) -> tuple[list[dict],
             ),
             "nominees": sorted(by_office[(code, district)], key=lambda n: n["party"]),
             # Null when data/office_terms.json does not list this office.
-            "termYears": term_years("statewide", state, code),
+            "termYears": term_years("statewide", state, code, cycle),
             # For a seat: "district" when each voter votes in one district's
             # seat only (the page helps them find theirs), "statewide" when
             # every voter votes for each seat (Georgia's PSC). Null for an
@@ -1203,7 +1223,7 @@ def _state_leg_section(db: Session, state: str, cycle: int, marker: dict | None)
         if districts:
             out.append({
                 "chamber": chamber, "label": label, "districts": districts,
-                "termYears": term_years("legislature", state, chamber),
+                "termYears": term_years("legislature", state, chamber, cycle),
             })
     return out
 
@@ -1305,7 +1325,7 @@ def _judicial_section(
         if entries:
             out.append({
                 "court": court, "label": label, "seats": entries,
-                "termYears": term_years("judicial", state, court),
+                "termYears": term_years("judicial", state, court, cycle),
             })
     return out, coverage
 
@@ -2044,7 +2064,7 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
         raise HTTPException(status_code=404, detail="Unknown state")
 
     async with make_async_client(timeout=30.0) as client:
-        if ballot_pdf.is_configured(town):
+        if ballot_pdf.is_configured(town) and _in_active_cycle((ballot_pdf_source_for_town(town) or {}).get("election_date"), db):
             pdf_result = await ballot_pdf.fetch_town_ballot_pdf(client, db, town, spend=spend_upstream)
             if pdf_result is not None:
                 source = ballot_pdf_source_for_town(town) or {}
@@ -2086,6 +2106,22 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
         "electionDate": result["election_date"],
         "contests": result["contests"],
     }, max_age=CACHE_TTL_DETAIL_S)
+
+
+def _in_active_cycle(election_date: str | None, db: Session) -> bool:
+    """Whether a document dated `election_date` belongs to the site's
+    election: after the general before it, up to and including its own
+    general. A town's sample ballot names one election (its URL embeds the
+    date); once the cycle moves on it is last cycle's ballot, not a ballot
+    for this one, and the town is not covered until its entry names the
+    new election. An undated document is not assumed current."""
+    try:
+        day = date.fromisoformat(election_date or "")
+    except ValueError:
+        return False
+    current = active_election(db).election_day
+    before = previous_election_day(current - timedelta(days=1))
+    return (before is None or day > before) and day <= current
 
 
 @router.get("/races/{race_id}")
