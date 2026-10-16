@@ -9,6 +9,7 @@ import type {
   StateLegDistrict,
   StatewideRace,
 } from "@/types/election";
+import type { AccountabilitySummary } from "@/types/mapAccountability";
 
 export interface ArchiveTotals {
   races: number;
@@ -28,6 +29,9 @@ export interface ArchivedCycle extends ArchiveTotals {
   recordAsOf: string | null;
   mapAsOf: string | null;
   hasMap: boolean;
+  /** The map's ranges against the official counts, in a line; null where
+   * no map was kept. */
+  accountability?: AccountabilitySummary | null;
   /** The site is still on this election's count: the record is re-copied
    * from it until the results window closes. */
   stillCounting: boolean;

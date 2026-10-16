@@ -39,6 +39,8 @@ def test_nothing_read_is_null_or_a_reason_never_a_made_up_zero(db_session, freez
     assert body["elections"]["map"]["available"] is False and body["elections"]["map"]["reason"]
     assert body["elections"]["ballots"]["phase"] == "campaign"
     assert body["elections"]["redistricting"]["states"] > 0
+    # No election archived yet: null, and the card words what starts it.
+    assert body["elections"]["archive"] is None
 
 
 def test_counts_the_latest_week_and_month_congress_met(db_session, freeze_utcnow):
