@@ -167,7 +167,10 @@ export function __resetStatusCache() {
   statusInFlight = null;
 }
 
-export default function RecordsBand() {
+/** `aside`: what the band carries on its right where the desktop row is
+ *  shown (56rem, as Navbar); below that it is in MENU and the band is the
+ *  status line alone. */
+export default function RecordsBand({ aside }: { aside?: React.ReactNode }) {
   const [status, setStatus] = useState<PipelineStatus | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -282,6 +285,7 @@ export default function RecordsBand() {
             <span className="text-ink-min">READING RUN STATUS…</span>
           )}
         </span>
+        {aside && <div className="hidden min-[56rem]:block">{aside}</div>}
       </div>
     </div>
   );

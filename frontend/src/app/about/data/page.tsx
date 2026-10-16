@@ -512,7 +512,18 @@ export default function DataChapter() {
         <P>
           None of it is shared or sold. Requests this server makes go only to the public sources
           listed above, and none carries anything about a visitor. Nothing is kept in your browser
-          either: the site stores no preferences, history or record of what you did there.
+          past the tab you have open: the site stores no preferences, history or record of what you
+          did there.
+        </P>
+        <P>
+          The one choice the site holds is the state you pick in the header, so each page that needs
+          a state doesn&apos;t ask again. It is kept in this tab only and is gone when you close it,
+          and it reaches our server only in the address of a page you open, such as a state&apos;s
+          member list. &ldquo;Use my location&rdquo; runs only when you press it. Your browser then
+          works out where you are, which on many devices uses its maker&apos;s own location service
+          (Apple&apos;s, Google&apos;s or Microsoft&apos;s), not Civitas Research. The page turns
+          that position into a state on your device and keeps only the state. The position itself is
+          never sent to us, logged or stored.
         </P>
         <P>
           Your browser asks nothing of any other host. Every picture comes from this server: the
