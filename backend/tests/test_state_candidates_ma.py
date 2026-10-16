@@ -57,12 +57,22 @@ primary: Walter Grochowski, 13 votes against 978 "All Others", not
 marked as the winner.
 """
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from app.pipeline.fetch import state_candidates_ma as mam
 from app.pipeline.fetch.state_candidates_common import surname
+
+
+@pytest.fixture(autouse=True)
+def _fixture_era(freeze_utcnow):
+    """The fixtures are 2026 primaries, read in September 2026: run as of
+    then, never the real clock (AGENTS.md, Testing). Before it, no primary
+    has been held, let alone settled."""
+    freeze_utcnow(datetime(2026, 10, 1, 16))
+
 
 FIXTURES = Path(__file__).parent
 DISTRICT6 = (FIXTURES / "fixtures_ma_house_d_district6.html").read_text()

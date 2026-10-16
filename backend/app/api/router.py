@@ -29,6 +29,7 @@ from app.api.representatives import router as representatives_router
 from app.api.sections import router as sections_router
 from app.api.senators import router as senators_router
 from app.api.sitemap import router as sitemap_router
+from app.api.special_elections import router as special_elections_router
 from app.api.sources import router as sources_router
 from app.api.this_week import router as this_week_router
 from app.api.visits import router as visits_router
@@ -51,6 +52,7 @@ api_router.include_router(election_map_router, tags=["elections"])
 api_router.include_router(election_archive_router, tags=["elections"])
 api_router.include_router(elections_router, tags=["elections"])
 api_router.include_router(redistricting_router, tags=["elections"])
+api_router.include_router(special_elections_router, tags=["elections"])
 api_router.include_router(bills_router, tags=["bills"])
 api_router.include_router(congress_router, tags=["congress"])
 api_router.include_router(nominations_router, tags=["nominations"])

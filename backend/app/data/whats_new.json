@@ -2,6 +2,27 @@
   "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
   "entries": [
     {
+      "id": "election-map-check",
+      "date": "2026-10-16",
+      "title": "The seat map checked against the count",
+      "summary": "Once a state lists a race's count as official, the archive checks it against the seat map's ranges from before the election, lists every miss, and maps how far each seat swung from its usual vote.",
+      "url": "/elections/archive"
+    },
+    {
+      "id": "election-calendar",
+      "date": "2026-10-16",
+      "title": "Election calendar",
+      "summary": "Every federal election date and filing deadline in one place, with each special election, each vacant seat in Congress and the next dates for every state.",
+      "url": "/elections/calendar"
+    },
+    {
+      "id": "special-election-counts",
+      "date": "2026-10-16",
+      "title": "Special elections and counts",
+      "summary": "Each special election the FEC lists is kept on the site, and its count is read from the state's own results feed on election night, as the general's is.",
+      "url": "/elections/calendar"
+    },
+    {
       "id": "site-navigation",
       "date": "2026-10-16",
       "title": "Every section, one menu",

@@ -60,6 +60,10 @@ export function agencyExploreHref(slug: string): string {
   return `/explore?agency=${encodeURIComponent(slug)}`;
 }
 
+/** Special elections, vacant seats and every federal election date and
+ * deadline (app/elections/calendar). */
+export const CALENDAR_HREF = "/elections/calendar";
+
 /**
  * The elections archive: every general election Civitas has kept a record
  * of (`/elections/archive`), and each one's page (`/elections/{cycle}`).
@@ -154,6 +158,7 @@ export const SECTIONS = {
       { key: "ballots", label: "Ballots by state", href: "/elections" },
       { key: "map", label: "Seat map", href: "/elections/map?chamber=senate&view=usual" },
       { key: "redistricting", label: "New House maps", href: "/elections/redistricting" },
+      { key: "calendar", label: "Calendar", href: "/elections/calendar" },
       { key: "archive", label: "Archive", href: ELECTIONS_ARCHIVE_HREF },
     ],
   },

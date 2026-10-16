@@ -2589,7 +2589,8 @@ class TestValidateFactsAbsenceOfInformation:
 
 
 class TestValidateFactsMetricPaths:
-    def test_stale_future_dated_fact_dropped(self):
+    def test_stale_future_dated_fact_dropped(self, freeze_utcnow):
+        freeze_utcnow(datetime(2026, 6, 1, 16))  # December 2025 is past
         facts = ["The ban will remain in effect until December 2025."]
         assert _validate_facts(facts) == []
 

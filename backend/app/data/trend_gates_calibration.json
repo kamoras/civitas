@@ -32,37 +32,6 @@
    0.947
   ]
  },
- "political_violence": {
-  "examples_file": "political_violence_examples.json",
-  "label": "political",
-  "subset": "tragedy",
-  "examples_hash": "2b50a260d09f56d4",
-  "examples": 143,
-  "positives": 45,
-  "k": 5,
-  "threshold": 0.8,
-  "loo_auc": [
-   0.914,
-   0.852,
-   0.963
-  ],
-  "auc_by_k": {
-   "5": 0.914,
-   "9": 0.901,
-   "15": 0.913,
-   "25": 0.911
-  },
-  "precision": [
-   0.926,
-   0.8,
-   1.0
-  ],
-  "recall": [
-   0.556,
-   0.404,
-   0.7
-  ]
- },
  "loaded": {
   "examples_file": "loaded_language_examples.json",
   "label": "loaded",

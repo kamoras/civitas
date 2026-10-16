@@ -206,6 +206,52 @@ def pick_general(elections: list[tuple[str, dict]], state: str = "") -> dict | N
     )
 
 
+def is_general_day(day: date) -> bool:
+    """Whether `day` is a federal general election day (2 U.S.C. §7)."""
+    from app.election_calendar import previous_election_day
+
+    return previous_election_day(day) == day
+
+
+def pick_special(elections: list[tuple[str, dict]], state: str = "") -> dict | None:
+    """The one election held on a special election's date (any day but a
+    federal general's) that is that special: of the entries that are not a
+    demo, test, preview or recount copy, the only one named "special" (or
+    "unexpired"), else the only election held that day at all (a state that
+    names its special for the seat, "Congressional District 7 General
+    Election", holds nothing else that day). None when nothing is held that
+    day; UntrustedCount when several remain and no rule singles one out --
+    the same refusal pick_general makes, for the same reason. The contest
+    read from it is then matched to the seat by office and district
+    (live_results/specials.py), so an election that is not the special
+    yields no count for it."""
+    counts = [
+        (name or "", entry) for name, entry in elections
+        if not _NOT_THE_COUNT_RE.search(name or "") and not _RECOUNT_RE.search(name or "")
+    ]
+    specials = [(name, entry) for name, entry in counts if _SPECIAL_RE.search(name)]
+    if len(specials) == 1:
+        return specials[0][1]
+    if not specials and len(counts) == 1:
+        return counts[0][1]
+    if not counts:
+        return None
+    raise UntrustedCount(
+        f"{state or 'state'}: {len(counts)} elections share the special's date and none is singly the "
+        f"special ({', '.join(repr(n) for n, _ in counts)}); refusing to guess",
+    )
+
+
+def pick_election(elections: list[tuple[str, dict]], state: str, election_day: date) -> dict | None:
+    """The election a live read is after on `election_day`: the general on
+    a federal general's day (pick_general), the special on any other
+    (pick_special). The readers call this, so a special election is read
+    by the same readers under the same trust gates as a general."""
+    if is_general_day(election_day):
+        return pick_general(elections, state)
+    return pick_special(elections, state)
+
+
 def _readers() -> dict:
     # Imported lazily: each vendor module imports this one's dataclasses.
     from app.pipeline.fetch import (

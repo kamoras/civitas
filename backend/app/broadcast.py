@@ -85,6 +85,7 @@ KINDS: dict[str, str] = {
     "spotlight": "One member of Congress a day, with their scores",
     "race": "News about a race on the November ballot",
     "result": "Election-night counts, in each state's own figures",
+    "special": "A special election for a seat in Congress, when the FEC's election calendar lists it",
     "trend": "On the record: the official record behind a topic trending on Bluesky",
     "feature": "New pages and features on Civitas, once each",
 }
@@ -148,8 +149,9 @@ FEEDS: dict[str, Feed] = {
              ("congress_day", "congress_week", "congress_ahead")),
         Feed("members", "Civitas: Member spotlight", KINDS["spotlight"] + ".", ("spotlight",)),
         Feed("elections", "Civitas: Elections",
-             "News about races on the November ballot, and the count on election night.",
-             ("race", "result")),
+             "News about races on the November ballot, special elections for seats in Congress as the FEC "
+             "lists them, and the count on election night.",
+             ("race", "result", "special")),
         Feed("trends", "Civitas: On the record",
              "When a U.S. policy topic trends on Bluesky, the official record behind it: a vote, a bill, "
              "a rule or the day's congressional record, in the record's own words.",

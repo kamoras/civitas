@@ -41,8 +41,9 @@ def comment_period_today() -> str:
 
     A period is open while ``comments_close_on >= comment_period_today()``.
     Compare against this — never ``date.today()`` or ``utcnow().date()``.
+    Read through ``utcnow``, the one clock a test pins (AGENTS.md, Testing).
     """
-    return datetime.now(COMMENT_DEADLINE_TZ).date().isoformat()
+    return utcnow().replace(tzinfo=timezone.utc).astimezone(COMMENT_DEADLINE_TZ).date().isoformat()
 
 
 # A Congress begins at noon on January 3 of each odd year: the 20th

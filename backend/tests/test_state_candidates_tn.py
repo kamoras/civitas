@@ -28,12 +28,23 @@ small CONSTRUCTED row list instead of a fixture.
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from app.pipeline.fetch import state_candidates_tn as tn
+from app.time_utils import utcnow
+
+
+@pytest.fixture(autouse=True)
+def _fixture_era(freeze_utcnow):
+    """The fixtures are 2026 primaries, read in September 2026: run as of
+    then, never the real clock (AGENTS.md, Testing). Before it, no primary
+    has been held, let alone settled."""
+    freeze_utcnow(datetime(2026, 10, 1, 16))
+
 
 ROWS = json.loads((Path(__file__).parent / "fixtures_tn_precinct_rows.json").read_text())
 
@@ -199,9 +210,9 @@ class TestFetchConfirmedCandidates:
         # A file dated within settle_days (21) of today reads as
         # published-but-not-yet-settled, confirming nobody rather than
         # trusting a still-being-counted count.
-        from datetime import UTC, datetime, timedelta
+        from datetime import timedelta
 
-        recent = (datetime.now(UTC) - timedelta(days=1)).date().isoformat()
+        recent = (utcnow() - timedelta(days=1)).date().isoformat()
         self._patched(monkeypatch, stages=[{"url": _REAL_URL, "held": recent, "official": None}])
         assert await tn.fetch_confirmed_candidates(None, 2026, "TN", {}) == []
 

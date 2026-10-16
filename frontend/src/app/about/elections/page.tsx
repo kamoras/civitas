@@ -12,7 +12,7 @@ import {
   More,
   A,
 } from "@/components/about/AboutPage";
-import { ACTION_CENTER_HREF, ELECTIONS_ARCHIVE_HREF } from "@/lib/routes";
+import { ACTION_CENTER_HREF, CALENDAR_HREF, ELECTIONS_ARCHIVE_HREF } from "@/lib/routes";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import {
   countWord,
@@ -196,6 +196,37 @@ export default async function ElectionsChapter() {
         <P>
           Deadlines are counted on the state&apos;s own clock. A deadline that has passed stays on
           the page and says so, with the ways to register that are still open.
+        </P>
+      </Section>
+
+      <Section id="special-elections" title="Special elections and the calendar">
+        <P>
+          When a seat in Congress falls empty, a special election fills it, often in a month with no
+          other federal election. The{" "}
+          <Link href={CALENDAR_HREF} className="text-signal-cyan hover:text-phos">
+            calendar
+          </Link>{" "}
+          lists the seats empty today, from the House Clerk&apos;s and the Senate&apos;s own member
+          lists, and every special election on the FEC&apos;s election calendar. It also lists every
+          federal primary, runoff and general, each state&apos;s voter deadlines, and the campaign
+          finance reports due on one date for every filer. Each date&apos;s status is counted on its
+          state&apos;s own clock.
+        </P>
+        <P>
+          On the night of a special, its count is read from the state&apos;s own results feed in the
+          same way as a general&apos;s: nothing before the state&apos;s last polls close, no test or
+          out-of-date data, and the count only leads until the state says it is official. Civitas
+          calls no race. A special primary is a contest per party, so no count is read for it. A
+          state whose feed Civitas has no reader for says so.
+        </P>
+        <P>
+          Once a special&apos;s count is settled and both a Democrat and a Republican ran, the page
+          shows its swing: the Republican share of the two-party vote, less 50, beside the
+          seat&apos;s usual vote (the same lean the seat map uses). The gap is the swing, in points
+          toward one party. A seat&apos;s usual vote comes from presidential elections, so a swing
+          mixes the national mood with the race itself. It is a measure of what happened, not a
+          forecast. Between general elections, the elections page leads with all of this instead of
+          a countdown.
         </P>
       </Section>
 
@@ -742,6 +773,27 @@ export default async function ElectionsChapter() {
             races only, the only ones Civitas reads on election night. It leaves out the news
             coverage beside each race and campaign-finance figures, which the FEC keeps. A count it
             shows as leading still only leads, official or not: Civitas calls no race there either.
+          </P>
+        </Sub>
+        <Sub title="Checking the map against the count" id="election-night-map-check">
+          <P>
+            The archive page checks the seat map in public. Once a state lists a race&apos;s count
+            as official, and never before, Civitas works out the margin the same way the map
+            measured it (the gap between the Democrat and the Republican, in points of their two
+            votes) and checks whether it fell inside the 80% and 95% ranges the map showed before
+            the election. It uses the map exactly as it was frozen on election day, never a version
+            rebuilt after the result. For each chamber it shows the share that fell inside, with the
+            range of shares that luck alone could give (an exact binomial interval), beside what the
+            map promised: 80% and 95%, and how its ranges did on past elections it never saw. The
+            seats that missed are listed by name. A race whose top two were not a Democrat and a
+            Republican is not graded, because the map never measured one.
+          </P>
+          <P>
+            Beside it, a swing map shows how far each seat&apos;s official margin ran from its usual
+            vote. A usual vote is a lean, which runs on half a margin&apos;s scale, so it is doubled
+            first: the margin the seat gives when the country splits evenly. The table and a CSV
+            list every seat. While counts are still coming in, the page says how many are official
+            so far. It measures the map and the count; it calls no race.
           </P>
         </Sub>
       </Section>
