@@ -935,8 +935,25 @@ in `frontend/src/lib/elections.ts`).
 What this rules in and out:
 
 - **Out:** any field asking for a street address, ZIP, precinct, or
-  geolocation permission to personalise what's shown; any per-visitor
-  identifier retained across requests to remember such a choice.
+  geolocation permission to personalise what's shown (the one exception
+  is the state below); any per-visitor identifier retained across requests
+  to remember such a choice.
+- **In, exactly this:** the reader's state, asked once in the header
+  (`components/layout/YourStatePicker.tsx`, `hooks/useYourState.ts`) and
+  used by every page that needs a state (the member directory, an issue's
+  contact list, the calendar, compare, the homepage's links, `/elections`).
+  It is held for the open tab only, in `sessionStorage`; never
+  `localStorage`, a cookie or anything kept across visits; and it reaches
+  the server only as the `?state=` a page already puts in its own URL. Its
+  "Use my location" button never runs by itself: on a click it asks the
+  browser for a position and places it in a state on the device, against
+  the site's own state shapes (`lib/stateFromPoint.ts`, the election map's
+  `/data/states-10m.json`). The coordinates are not sent, logged or
+  stored; only the state is kept, as if picked from the list; a refusal
+  falls back to the list. On-click, on-device, state only, per tab:
+  nothing finer than a state (no county, district or town from a
+  position), and nothing kept past the tab. `YourStatePicker.test.tsx`
+  holds both (no request carries coordinates; session storage only).
 - **In:** filtering, maps, and drill-down over data the page already has;
   explicit, unremembered navigation choices (the town selector, the state
   picker); linking out to the official lookup for a reader who wants a
@@ -1142,8 +1159,8 @@ remember a "your state" pick in `localStorage` (also read by the compare
 page), a "log my action" diary with streaks, and which issues the browser had
 voted on; all three were removed in 2026-09, and `ForgetLegacyStorage` clears
 what earlier visits left behind. Browser storage is for a per-tab convenience
-at most (`sessionStorage`, as the admin token uses), never a record of the
-visitor.
+at most (`sessionStorage`, as the admin token and the header's state choice
+use), never a record of the visitor.
 
 A feature that can only work by asking where the visitor lives is a feature
 this project doesn't ship. State the resulting limitation as content (see
@@ -2180,7 +2197,7 @@ the pending list).
 | Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx`; data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
-| Site navigation: sections, main menu, footer, section tabs, hub cards and the homepage "Sections" band | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
+| Site navigation: sections, main menu, footer, section tabs, hub cards and the homepage index | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
 | Homepage (masthead, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
 
@@ -2364,7 +2381,8 @@ the pending list).
 - **A new page goes in `SECTIONS`** (`src/lib/routes.ts`): that one table is
   the main navigation (a disclosure button per section on desktop, two
   levels on a phone), the footer, each section's tab bar, its hub's cards and
-  the homepage's "Sections" band, so a page that isn't in it is reachable
+  the homepage's index (which is why the footer on `/` drops its section
+  columns, `Footer omit`), so a page that isn't in it is reachable
   only by an inline link. `routes.test.ts` fails on a page route in no
   section (records with a `[segment]`, the footer's own pages and the admin
   aside). A page with a live figure gets it from `GET /api/sections`

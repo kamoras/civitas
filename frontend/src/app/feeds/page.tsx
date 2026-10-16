@@ -39,7 +39,7 @@ async function fetchIndex(): Promise<FeedIndex | null> {
 
 /** "Everything", or the topic ("Civitas: Congress" -> "Congress"). */
 function feedName(f: { slug: string; title: string }): string {
-  return f.slug === "all" ? "Everything" : f.title.replace(/^Civitas: /, "");
+  return f.slug === "all" ? "Everything" : f.title.replace(/^Civitas Research: /, "");
 }
 
 /* Every claim here is checked against the code (backend/app/broadcast.py,
@@ -51,8 +51,8 @@ export default async function FeedsPage() {
   const feeds = index?.feeds ?? [
     {
       slug: "all",
-      title: "Civitas",
-      description: "Everything Civitas publishes.",
+      title: "Civitas Research",
+      description: "Everything Civitas Research publishes.",
       path: FEED_PATH,
     },
   ];

@@ -60,6 +60,14 @@ def latest(db: Session = Depends(get_db)) -> JSONResponse:
     return cached_json(report, max_age=_TTL_S)
 
 
+@router.get("/coverage")
+def coverage(db: Session = Depends(get_db)) -> JSONResponse:
+    """What Civitas's record of Congress holds (the first day on record, the
+    Congresses whose roll calls are held) and the sentence a page states
+    where a day, week, month or roll call is outside it."""
+    return cached_json(congress_service.coverage(db), max_age=3600)
+
+
 @router.get("/day/{day}")
 def day(day: str = Path(pattern=r"^\d{4}-\d{2}-\d{2}$"), db: Session = Depends(get_db)) -> JSONResponse:
     parsed = _parse_date(day)

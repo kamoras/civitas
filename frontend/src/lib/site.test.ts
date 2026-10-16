@@ -52,7 +52,7 @@ describe("pageMetadata", () => {
   it("advertises the feed on every page — a route's `alternates` replaces the root's", () => {
     const m = pageMetadata({ title: "t", description: "d", path: "/x" });
     expect(m.alternates?.types).toEqual({
-      "application/atom+xml": [{ url: FEED_PATH, title: "Civitas" }],
+      "application/atom+xml": [{ url: FEED_PATH, title: "Civitas Research" }],
     });
   });
 
@@ -65,8 +65,8 @@ describe("pageMetadata", () => {
     });
     expect(m.alternates?.types).toEqual({
       "application/atom+xml": [
-        { url: "/feed/states/GA.xml", title: "Civitas: Georgia" },
-        { url: FEED_PATH, title: "Civitas" },
+        { url: "/feed/states/GA.xml", title: "Civitas Research: Georgia" },
+        { url: FEED_PATH, title: "Civitas Research" },
       ],
     });
     expect(

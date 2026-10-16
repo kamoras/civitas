@@ -161,7 +161,17 @@ def test_a_vote_carries_its_roll_call_and_each_party_split(client):
     assert vote["rollCall"]["sourceUrl"].startswith("https://www.senate.gov/")
     (rc,) = _body(client, "/bills/hr.1/votes")["entries"]
     assert (rc["yeas"], rc["nays"], rc["chamber"]) == (1, 0, "senate")
-    assert _body(client, "/bills/HR.1/votes", congress=118)["entries"] == []
+    assert _body(client, "/bills/HR.1/votes")["covered"] is True
+
+
+def test_a_congress_whose_roll_calls_are_not_held_says_so(client, db_session):
+    """An empty list outside the held Congresses is "not held", not "no
+    recorded vote": a past Congress's bill the House passed on a roll call
+    read as a bill with none."""
+    held = sorted({rc.congress for rc in db_session.query(RollCall)})
+    body = _body(client, "/bills/HR.1/votes", congress=held[0] - 1)
+    PublicBillVotesSchema.model_validate(body)
+    assert (body["entries"], body["covered"], body["heldCongresses"]) == ([], False, held)
 
 
 @pytest.mark.parametrize("path,member,schema", [
@@ -440,3 +450,16 @@ def test_paging_through_every_position(client, db_session):
     seen = [e["rollCall"]["number"] for e in first["entries"] + last["entries"]]
     assert seen == [103, 102, 101, 5]
     assert first["entries"][0]["vote"] == "Not Voting"
+def test_a_tie_the_vice_president_broke_is_stated(client, db_session):
+    """A tie broken by the Vice President (who is no member, so the yeas and
+    nays stay equal) carries the tie-breaker, as /developers documents."""
+    db_session.add(RollCall(chamber="senate", congress=119, session=1, number=7, date="2026-02-03",
+                            question="On Passage of the Bill", result="Bill Passed", yeas=50, nays=50,
+                            bill_id="HR.2", tie_breaker_by="Vice President of the United States",
+                            tie_breaker_vote="Yea"))
+    db_session.commit()
+    body = _body(client, "/bills/HR.2/votes")
+    PublicBillVotesSchema.model_validate(body)
+    (rc,) = body["entries"]
+    assert (rc["yeas"], rc["nays"], rc["kind"], rc["candidates"]) == (50, 50, "question", [])
+    assert rc["tieBreaker"] == {"byWhom": "Vice President of the United States", "vote": "Yea"}

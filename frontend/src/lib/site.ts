@@ -26,8 +26,9 @@ export const SITE_URL = "https://civitas-research.org";
  * so the name search engines are given is the full one, matching the
  * domain. Google picks the site name it shows from the WebSite structured
  * data, the title and og:site_name, and wants them to agree
- * (developers.google.com/search/docs/appearance/site-names). The on-page
- * mark stays "CIVITAS"; this is the name, not the logo.
+ * (developers.google.com/search/docs/appearance/site-names). The page sets
+ * it the same way: the header's lockup (the pixel CIVITAS mark, RESEARCH
+ * beside it), the homepage's nameplate and the footer's colophon.
  */
 export const SITE_NAME = "Civitas Research";
 /** The root layout's title template: every page but the homepage. */
@@ -50,7 +51,7 @@ export const FEED_PATH = "/feed.xml";
  * drops its parent's, so the root layout and `pageMetadata` both carry it.
  */
 export const FEED_ALTERNATES = {
-  "application/atom+xml": [{ url: FEED_PATH, title: "Civitas" }],
+  "application/atom+xml": [{ url: FEED_PATH, title: SITE_NAME }],
 };
 
 export interface Feed {
@@ -61,17 +62,17 @@ export interface Feed {
 /** The topic feeds a page can name as its own (backend/app/broadcast.py
  *  FEEDS; paths from api/feed.py feed_path). */
 export const TOPIC_FEEDS = {
-  issues: { url: "/feed/issues.xml", title: "Civitas: Action Center" },
-  congress: { url: "/feed/congress.xml", title: "Civitas: Congress" },
-  elections: { url: "/feed/elections.xml", title: "Civitas: Elections" },
-  trends: { url: "/feed/trends.xml", title: "Civitas: On the record" },
-  new: { url: "/feed/new.xml", title: "Civitas: What's new" },
+  issues: { url: "/feed/issues.xml", title: "Civitas Research: Action Center" },
+  congress: { url: "/feed/congress.xml", title: "Civitas Research: Congress" },
+  elections: { url: "/feed/elections.xml", title: "Civitas Research: Elections" },
+  trends: { url: "/feed/trends.xml", title: "Civitas Research: On the record" },
+  new: { url: "/feed/new.xml", title: "Civitas Research: What's new" },
 } satisfies Record<string, Feed>;
 
 /** A state's feed: its races and its members of Congress (api/feed.py
  *  state_feed_path, titled as the feed titles itself). */
 export function stateFeed(code: string, name: string): Feed {
-  return { url: `/feed/states/${code.toUpperCase()}.xml`, title: `Civitas: ${name}` };
+  return { url: `/feed/states/${code.toUpperCase()}.xml`, title: `Civitas Research: ${name}` };
 }
 
 /**
@@ -198,6 +199,13 @@ export function notFoundMetadata(title: string, description: string): Metadata {
  * RECORD", matched no query anyone makes. Both are kept under what a
  * result page shows (~60 and 160 characters).
  */
-export const HOME_TITLE = "Civitas Research: Congress Scorecards & Political Transparency";
+export const HOME_TITLE = "Civitas Research: Congress Scorecards, Money and Votes";
 export const HOME_DESCRIPTION =
-  "Civitas Research is a nonpartisan public record of the U.S. government: scorecards for every member of Congress, president and justice, from votes and donors.";
+  "Civitas Research is an independent record of the U.S. government: who funds Congress and the president, how they vote, and the source of every number.";
+/**
+ * The line under the name, everywhere the name is set as a masthead (the
+ * homepage, the footer, the default share image). Five words, the site's
+ * one promise: nothing is shown that can't be traced to the document it
+ * came from. The name and the description carry the search terms.
+ */
+export const SITE_TAGLINE = "No number without its source.";

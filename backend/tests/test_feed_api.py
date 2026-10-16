@@ -44,9 +44,9 @@ def test_an_empty_feed_is_still_a_valid_feed(client):
     root = _feed(client.get("/api/feed/all.xml"))
     assert root.tag == f"{A}feed"
     assert root.findtext(f"{A}id") == "https://civitas-research.org/feed.xml"
-    assert root.findtext(f"{A}title") == "Civitas"
+    assert root.findtext(f"{A}title") == "Civitas Research"
     assert root.findtext(f"{A}updated") == "2026-09-29T00:00:00Z"
-    assert root.findtext(f"{A}author/{A}name") == "Civitas"
+    assert root.findtext(f"{A}author/{A}name") == "Civitas Research"
     assert root.findtext(f"{A}icon") == "https://civitas-research.org/apple-icon.png"  # PNG: Discord can't draw SVG
     assert root.find(f"{A}link[@rel='self']").get("href") == "https://civitas-research.org/feed.xml"
     assert root.findall(f"{A}entry") == []
@@ -68,7 +68,7 @@ def test_entries_newest_first_with_everything_a_reader_needs(client, db_session)
     assert last.findtext(f"{A}title") == "Congress, Friday"
     assert last.find(f"{A}content").get("type") == "html"
     assert last.findtext(f"{A}content") == (
-        '<p>The Senate met.</p><p><a href="https://civitas-research.org/congress/2026-09-26">Read on Civitas</a></p>'
+        '<p>The Senate met.</p><p><a href="https://civitas-research.org/congress/2026-09-26">Read on Civitas Research</a></p>'
     )
     assert last.find(f"{A}link").get("href") == "https://civitas-research.org/congress/2026-09-26"
     assert last.findtext(f"{A}published") == "2026-09-27T22:00:00Z"
@@ -90,7 +90,7 @@ def test_a_state_feed_holds_that_states_posts(client, db_session):
     _post(db_session, "race", state="NC", title="NC race")
     _post(db_session, "issue")
     root = _feed(client.get("/api/feed/states/ga.xml"))
-    assert root.findtext(f"{A}title") == "Civitas: Georgia"
+    assert root.findtext(f"{A}title") == "Civitas Research: Georgia"
     assert root.findtext(f"{A}id") == "https://civitas-research.org/feed/states/GA.xml"
     assert sorted(e.findtext(f"{A}title") for e in root.findall(f"{A}entry")) == ["GA member", "GA race"]
 
@@ -180,7 +180,7 @@ def test_an_entry_carries_the_pages_card_like_the_bluesky_post(client, db_sessio
         '<p><a href="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA">'
         '<img src="https://civitas-research.org/api/og?state=GA" alt="Georgia Ballot 2026"></a></p>'
         "<p>Brennan leads in new polling.</p><p>The race is rated a toss-up.</p>"
-        '<p><a href="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA">Read on Civitas</a></p>'
+        '<p><a href="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA">Read on Civitas Research</a></p>'
         '<p>Source: <a href="https://www.ajc.com/politics/poll-brennan/">ajc.com</a></p>'
     )
     links = {link.get("rel"): link.get("href") for link in entry.findall(f"{A}link")}

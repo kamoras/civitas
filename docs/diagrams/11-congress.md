@@ -24,6 +24,41 @@ flowchart TB
 the current session's roll calls, and only then the back-fill, so a fresh
 database shows this week before the Congress's first months.
 
+**What isn't held is said, never shown as none** (`congress_service.coverage`,
+`bill_coverage`). The record starts with the back-fill's first day, the
+roll calls with the Congresses `roll_calls` holds, and Explore keeps the
+sitting Congress's floor speeches only. A bill of an earlier Congress says
+which of its votes, floor debate and Record days aren't held (and links
+each roll call its Congress.gov history names to the chamber's own record),
+the public API's `/bills/{id}/votes` carries `covered` and `heldCongresses`,
+and a `/congress` day, week, month or roll call outside the record is a 404
+that states where the record starts (`GET /api/congress/coverage`). Before this,
+a bill of an earlier Congress that the House passed on a roll call read "No
+recorded votes on this bill in either chamber", and a day before the record
+began said neither chamber met. Fetching past Congresses'
+roll calls on demand was considered and not done: stored, they would also
+reach the day and week reports and `record_span`, which would then claim
+days the Digest back-fill never read.
+
+**Three roll calls that aren't yeas against nays** (`services/roll_call_shape.py`).
+Every surface that shows a roll call (its page, a bill's vote panel, the day
+and week reports, member vote rows, the share card, the public API) reads it
+through one function, because printing "yeas–nays" and the result states
+something false for these:
+
+- *A Senate tie the Vice President broke.* The Vice President isn't a member,
+  so the vote is in no position and the yeas and nays stay equal; Senate.gov
+  records it in `<tie_breaker>`, stored in `roll_calls.tie_breaker_by` /
+  `tie_breaker_vote` and shown with the count ("50–50, Vice President of the
+  United States voted Yea"). Senate ties stored before those columns are read
+  again once (`reread_senate_ties`).
+- *An election of the Speaker.* Each recorded vote is a candidate's name,
+  counted per candidate. The Clerk's result names the candidate with the most
+  votes even on a ballot no one won, so "elected" is read from
+  the count by the House's rule: a majority of the votes cast for a person.
+- *A quorum call.* Members answer present and nothing is decided: shown as
+  "433 present", with no carried or rejected result.
+
 **The Digest's own words.** Every event keeps the record's wording. Parsing
 only decides which heading an entry sits under ("Measures Passed:",
 "Nominations Confirmed:", a House measure's own heading, "Suspensions:") and

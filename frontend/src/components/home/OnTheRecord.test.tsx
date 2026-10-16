@@ -73,4 +73,13 @@ describe("OnTheRecordList", () => {
       "/congress/votes/senate/119/2/252"
     );
   });
+
+  it("names the week it describes when Congress is out, rather than reading as current", () => {
+    const { rerender } = render(<OnTheRecordList data={data} />);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toMatch(/^On the record/);
+    rerender(<OnTheRecordList data={data} recess />);
+    const heading = screen.getByRole("heading", { level: 2 });
+    expect(heading.textContent).toMatch(/^Last week of business: /);
+    expect(heading.querySelector("a")?.textContent).toMatch(/^Every roll call/);
+  });
 });

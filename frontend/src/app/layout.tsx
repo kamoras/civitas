@@ -94,7 +94,6 @@ export default function RootLayout({
           >
             Skip to main content
           </a>
-          <div className="crt-overlay" aria-hidden="true" />
           {children}
           <LoadTimingBeacon />
           <NavigationBeacon />

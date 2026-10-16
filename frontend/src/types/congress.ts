@@ -5,6 +5,25 @@ import type { NominationVote } from "@/types/nomination";
 
 export type Chamber = "senate" | "house";
 
+/** How a roll call's record reads (backend services/roll_call_shape.py):
+ * which kind of vote, its count in words and what it decided. Optional for
+ * a backend image older than these fields. */
+export interface RollCallShape {
+  /** "question" (yeas against nays), "election" (of the Speaker: each vote
+   * names a candidate) or "quorum" (members answer present; nothing decided). */
+  kind?: "question" | "election" | "quorum";
+  /** "50–50, Vice President of the United States voted Yea", "433 present",
+   * "Doe (TX) 218, Roe 215, Poe 1". */
+  tally?: string;
+  /** What was decided: the chamber's result, "Doe (TX) elected",
+   * "No one elected" or "Quorum call". */
+  resultLabel?: string;
+  /** A Senate tie the Vice President broke; null otherwise. */
+  tieBreaker?: { byWhom: string; vote: string } | null;
+  /** An election's candidates, most votes first; [] otherwise. */
+  candidates?: { name: string; votes: number }[];
+}
+
 export interface CongressEvent {
   /** The Congress the day fell in; a bill number names a different bill in each. */
   congress: number | null;
@@ -23,7 +42,7 @@ export interface CongressEvent {
   chamber: Chamber;
 }
 
-export interface RollCallSummary {
+export interface RollCallSummary extends RollCallShape {
   chamber: Chamber;
   congress: number;
   session: number;
@@ -174,6 +193,8 @@ export interface PartySplit {
   nay: number;
   present: number;
   notVoting: number;
+  /** An election of the Speaker: this party's votes for each candidate. */
+  candidates?: Record<string, number>;
 }
 
 export interface VoteMember {
@@ -182,7 +203,9 @@ export interface VoteMember {
   party: string;
   state: string;
   position: string;
-  bucket: "yea" | "nay" | "present" | "notVoting";
+  bucket: "yea" | "nay" | "present" | "notVoting" | "candidate";
+  /** An election of the Speaker: the candidate this member voted for. */
+  candidate?: string | null;
   page: string | null;
   /** The member's own name, where the site has a page for them (a House
    * roll call prints only the Clerk's surname form); null otherwise. */
@@ -212,7 +235,27 @@ export interface BillPerson {
   page: string | null;
 }
 
-export interface BillRecordVote {
+/** Whether a part of a bill's page that comes from Civitas's own record is
+ * held for the bill's Congress (bill_record.bill_coverage): an empty part
+ * outside it is "not held", never "none". */
+export interface CoveragePart {
+  held: boolean;
+  /** What isn't held and where it is, worded by the backend; null when held. */
+  sentence: string | null;
+}
+
+/** What Civitas's record of Congress holds (GET /api/congress/coverage). */
+export interface CongressCoverage {
+  firstDay: string | null;
+  firstCongress: number | null;
+  rollCallCongresses: number[];
+  sentence: string;
+  rollCallSentence: string;
+  congressionalRecordUrl: string;
+  rollCallSources: Record<Chamber, string>;
+}
+
+export interface BillRecordVote extends RollCallShape {
   chamber: Chamber;
   session: number;
   number: number;
@@ -263,7 +306,9 @@ export interface BillRecord {
     date: string;
     text: string;
     type: string;
-    rollCalls: { chamber: string; number: number; session: number }[];
+    /** `sourceUrl`: the chamber's own record of the roll call (null when
+     * the action doesn't say which), the link for a vote Civitas doesn't hold. */
+    rollCalls: { chamber: string; number: number; session: number; sourceUrl?: string | null }[];
   }[];
   textVersions: { type: string; date: string; formats: Record<string, string> }[];
   votes: BillRecordVote[];
@@ -281,6 +326,9 @@ export interface BillRecord {
   congressGovUrl: string;
   /** Parts Congress.gov could not return this time: shown as unavailable, never as empty. */
   unavailable: string[];
+  /** Whether the votes, floor debate and Record days (Digest and committee
+   * entries) are held for the bill's Congress. Optional for an older backend. */
+  coverage?: { votes: CoveragePart; floor: CoveragePart; digest: CoveragePart };
 }
 
 /** A committee meeting or a report filed on a measure, as the Daily Digest

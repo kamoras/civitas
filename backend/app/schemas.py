@@ -879,17 +879,42 @@ class PublicPartySplitSchema(_PublicModel):
     not_voting: int
 
 
+class PublicTieBreakerSchema(_PublicModel):
+    by_whom: str = Field(description="Who broke the tie, as Senate.gov records it "
+                                     "(\"Vice President of the United States\")")
+    vote: str = Field(description="How the tie was broken: Yea or Nay")
+
+
+class PublicCandidateVotesSchema(_PublicModel):
+    name: str = Field(description="The candidate, as the House Clerk records the vote (e.g. \"Doe (TX)\": a surname, with the state where two members share it)")
+    votes: int
+
+
 class PublicRollCallSchema(_PublicModel):
     chamber: Literal["senate", "house"]
     congress: int
     session: int
     number: int = Field(description="The roll call's number in its chamber and session")
     date: str = Field(description="YYYY-MM-DD")
+    kind: Literal["question", "election", "quorum"] = Field(
+        description="question: a Yea/Nay vote on a question. election: an election of the Speaker, where each "
+                    "vote names a candidate (see candidates; the yea and nay counts are 0). quorum: a quorum "
+                    "call, where members answer present and nothing is decided (result is the chamber's field, "
+                    "but no question carried or failed)")
     question: str = Field(description="The question voted on, as the chamber recorded it")
-    result: str = Field(description="The result, as the chamber recorded it")
+    result: str = Field(description="The result, as the chamber recorded it. For an election of the Speaker "
+                                    "the House Clerk names the candidate with the most votes, whether or not "
+                                    "that candidate won the majority that elects")
+    tie_breaker: PublicTieBreakerSchema | None = Field(
+        description="A Senate tie broken by the Vice President, who is not a member: the vote is in no "
+                    "member's position, so the yeas and nays are equal and this says how the tie was broken. "
+                    "Null when the record names none")
+    candidates: list[PublicCandidateVotesSchema] = Field(
+        description="An election of the Speaker: each candidate's votes, most first; empty for any other vote")
     source_url: str = Field(description="The roll call at its official source (Senate.gov or the House Clerk); "
                                         "empty when not recorded")
-    parties: list[PublicPartySplitSchema] = Field(description="How each party voted")
+    parties: list[PublicPartySplitSchema] = Field(description="How each party voted (an election's votes for "
+                                                              "candidates are in candidates, not here)")
 
 
 class PublicMemberVoteSchema(_PublicModel):
@@ -947,9 +972,14 @@ class PublicBillRollCallSchema(PublicRollCallSchema):
 class PublicBillVotesSchema(_PublicModel):
     bill_id: str = Field(description="The bill, as Civitas names it (e.g. HR.1234)")
     congress: int
+    covered: bool = Field(description="Whether Civitas holds this Congress's roll calls. False: entries is empty "
+                                      "because the votes aren't held here, not because the bill had no recorded "
+                                      "vote; the chambers' own records (Senate.gov, the House Clerk) have them")
+    held_congresses: list[int] = Field(description="The Congresses whose roll calls Civitas holds, oldest first")
     site_url: str = _SITE_URL
     entries: list[PublicBillRollCallSchema] = Field(description="Every roll call on the bill Civitas holds, "
-                                                                "newest first; empty when none is recorded")
+                                                                "newest first. Empty with covered true: the "
+                                                                "bill has had no recorded vote")
 
 
 class PublicScoreSnapshotSchema(_PublicModel):

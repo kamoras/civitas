@@ -23,6 +23,7 @@ import { PARTY_COLORS } from "@/lib/partyStyles";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import VotingAgreement from "@/components/compare/VotingAgreement";
 import { HeldScoreTag, heldScoreText } from "@/components/scorecard/HeldScore";
+import { useYourState } from "@/hooks/useYourState";
 
 type Chamber = "senate" | "house";
 
@@ -70,6 +71,11 @@ function SenatorSelector({
   const [senateStates, setSenateStates] = useState<StateInfo[]>([]);
   const [houseStates, setHouseStates] = useState<RepStateInfo[]>([]);
   const [selectedState, setSelectedState] = useState(initialState ?? "");
+  // Without a preselected member, the panel opens on the state chosen in
+  // the header for this tab (useYourState) until the reader picks here.
+  const yours = useYourState();
+  const [stateTouched, setStateTouched] = useState(Boolean(initialState));
+  const shownState = stateTouched ? selectedState : yours.state;
   const [members, setMembers] = useState<Senator[]>([]);
   const [loading, setLoading] = useState(false);
   const label = side === "left" ? "LEFT" : "RIGHT";
@@ -105,6 +111,12 @@ function SenatorSelector({
     if (initialState) loadMembers(initialState, initialChamber ?? "senate");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The header's state, once it can be read, and again on a chamber change.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- starts a fetch for a state chosen outside this component
+    if (!stateTouched && yours.state) loadMembers(yours.state, chamber);
+  }, [stateTouched, yours.state, chamber, loadMembers]);
 
   const handleChamberToggle = (newChamber: Chamber) => {
     setChamber(newChamber);
@@ -152,9 +164,11 @@ function SenatorSelector({
         </label>
         <select
           id={`state-${side}`}
-          value={selectedState}
+          value={shownState}
           onChange={(e) => {
+            setStateTouched(true);
             setSelectedState(e.target.value);
+            if (e.target.value) yours.setState(e.target.value);
             setMembers([]);
             onSelect(null, chamber);
             if (e.target.value) loadMembers(e.target.value, chamber);

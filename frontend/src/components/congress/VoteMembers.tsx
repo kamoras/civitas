@@ -23,16 +23,52 @@ const BUCKETS: { key: VoteMember["bucket"]; label: string; tone: string }[] = [
  * display scaling of those counts, not a new figure. */
 export function PartyBar({ split }: { split: PartySplit }) {
   const total = split.yea + split.nay + split.present + split.notVoting || 1;
+  const party = PARTY_NAME[split.party] ?? split.party;
+  const candidates = Object.entries(split.candidates ?? {}).sort((a, b) => b[1] - a[1]);
+  const rest = [
+    ...(split.present ? [[`${split.present} present`, `${split.present} present`]] : []),
+    ...(split.notVoting ? [[`${split.notVoting} NV`, `${split.notVoting} not voting`]] : []),
+  ];
+  // A Speaker election (votes name candidates) or a quorum call (members
+  // answer present) has no yea/nay split to draw.
+  const noSplit = candidates.length > 0 || (!split.yea && !split.nay && split.present > 0);
+  const parts: string[][] = noSplit
+    ? [...candidates.map(([name, n]) => [`${n} ${name}`, `${n} for ${name}`]), ...rest]
+    : [
+        [`${split.yea} yea`, `${split.yea} yea`],
+        [`${split.nay} nay`, `${split.nay} nay`],
+        ...(split.notVoting ? [[`${split.notVoting} NV`, `${split.notVoting} not voting`]] : []),
+      ];
+  // The figures are abbreviated and dot-separated on screen; a screen reader
+  // gets the same counts as a sentence ("Republicans: 50 yea, 3 nay").
+  const figures = (
+    <span className="min-w-0 break-words font-mono text-xs tabular-nums text-ink-lo">
+      <span aria-hidden="true">{parts.map((p) => p[0]).join(" · ")}</span>
+      <span className="sr-only">
+        {party}: {parts.map((p) => p[1]).join(", ")}
+      </span>
+    </span>
+  );
+  if (noSplit) {
+    return (
+      <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-x-3 text-sm">
+        <span aria-hidden="true" className="text-ink">
+          {party}
+        </span>
+        {figures}
+      </div>
+    );
+  }
   return (
-    <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-sm sm:grid-cols-[7rem_minmax(0,1fr)_10rem]">
-      <span className="text-ink">{PARTY_NAME[split.party] ?? split.party}</span>
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-sm sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,10rem)]">
+      <span aria-hidden="true" className="text-ink">
+        {party}
+      </span>
       <div aria-hidden="true" className="flex h-2.5 bg-white/[0.08]">
         <div className="bg-ink-lo" style={{ width: `${(split.yea / total) * 100}%` }} />
         <div className="bg-white/30" style={{ width: `${(split.nay / total) * 100}%` }} />
       </div>
-      <span className="col-start-2 font-mono text-xs tabular-nums text-ink-lo sm:col-start-auto">
-        {split.yea} yea · {split.nay} nay{split.notVoting ? ` · ${split.notVoting} NV` : ""}
-      </span>
+      <span className="col-start-2 min-w-0 sm:col-start-auto">{figures}</span>
     </div>
   );
 }
@@ -63,6 +99,29 @@ export default function VoteMembers({
   const shown = members
     .filter((m) => !state || m.state === state)
     .sort((a, b) => (state ? (a.district ?? 999) - (b.district ?? 999) : 0));
+  // An election of the Speaker: one group per candidate, most votes first,
+  // ahead of present and not voting.
+  const groups = useMemo(() => {
+    const votes = new Map<string, number>();
+    for (const m of members)
+      if (m.candidate) votes.set(m.candidate, (votes.get(m.candidate) ?? 0) + 1);
+    const candidates = [...votes.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => ({
+        key: `candidate:${name}`,
+        label: name,
+        tone: "text-ink",
+        has: (m: VoteMember) => m.candidate === name,
+      }));
+    return [
+      ...candidates,
+      ...BUCKETS.map((b) => ({
+        ...b,
+        key: b.key as string,
+        has: (m: VoteMember) => m.bucket === b.key,
+      })),
+    ];
+  }, [members]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -95,13 +154,18 @@ export default function VoteMembers({
         </button>
       )}
       <div id={listId} className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {BUCKETS.map(({ key, label, tone }) => {
-          const group = shown.filter((m) => m.bucket === key);
+        {groups.map(({ key, label, tone, has }) => {
+          const group = shown.filter(has);
           if (!group.length) return null;
           return (
             <div key={key} className="flex flex-col gap-2">
               <span className={`font-mono text-xs uppercase tracking-[0.12em] ${tone}`}>
-                {label} · {group.length}
+                <span aria-hidden="true">
+                  {label} · {group.length}
+                </span>
+                <span className="sr-only">
+                  {label}: {group.length}
+                </span>
               </span>
               {named && (
                 <ul className="flex flex-col gap-1 text-sm">

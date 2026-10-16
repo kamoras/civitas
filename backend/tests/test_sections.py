@@ -1,5 +1,5 @@
 """GET /api/sections: one live figure per section page, for the hub cards
-and the homepage's "Sections" band."""
+and the homepage's index."""
 
 from datetime import datetime
 
@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.api import sections
 from app.database import get_db
 from app.main import app
-from app.models import Agency, PresidentialSupport, Representative, RollCall
+from app.models import Agency, CongressDay, PresidentialSupport, Representative, RollCall
 
 
 def _get(db_session):
@@ -78,3 +78,23 @@ def test_agencies(db_session):
     assert a["directory"] == {"count": 1}
     assert a["comments"] == {"open": 7}
     assert a["budget"] is None
+
+
+def test_a_recess_is_one_line_for_the_three_reports(db_session, freeze_utcnow):
+    # The latest day was a pro forma sitting: the day, week and month
+    # figures would each read "None"; the index says when business last was.
+    freeze_utcnow(datetime(2026, 10, 15, 16))
+    db_session.add_all([
+        _vote("2026-09-30", 1, "senate"),
+        CongressDay(chamber="senate", date="2026-10-15", in_session=True, is_final=True, source="digest"),
+        CongressDay(chamber="house", date="2026-10-15", in_session=True, is_final=True, source="digest"),
+    ])
+    db_session.commit()
+    assert sections.congress(db_session)["recess"] == {
+        "line": "No record votes or floor business since Wednesday, September 30",
+        "lastBusinessDay": "2026-09-30",
+        "week": "2026-09-28",
+    }
+    db_session.add(_vote("2026-10-15", 2))
+    db_session.commit()
+    assert sections.congress(db_session)["recess"] is None

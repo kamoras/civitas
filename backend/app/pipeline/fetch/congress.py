@@ -950,6 +950,20 @@ def roll_call_rejected(result: str | None) -> bool | None:
     return None
 
 
+def senate_tie_breaker(root) -> dict | None:
+    """The vote that broke a tie, as Senate.gov records it in
+    <tie_breaker>: {"byWhom": "Vice President of the United States",
+    "vote": "Yea"}, or None when the record names none. The Vice President
+    votes only to break a tie (Constitution, Article I, section 3) and is
+    not a member, so the vote is in no member's position and the yeas and
+    nays stay equal: without this a passed bill reads "Bill Passed 50-50".
+    Every Senate roll call carries the element; it is empty unless a tie
+    was broken."""
+    by_whom = _root_text(root, "//tie_breaker/by_whom")
+    vote = _root_text(root, "//tie_breaker/tie_breaker_vote")
+    return {"byWhom": by_whom, "vote": vote} if by_whom and vote else None
+
+
 def parse_senate_vote_xml(
     xml_text: str, congress: int, session: int, roll_number: int
 ) -> dict | None:
@@ -1003,6 +1017,7 @@ def parse_senate_vote_xml(
         "congress": congress,
         "session": session,
         "rollNumber": roll_number,
+        "tieBreaker": senate_tie_breaker(root),
         "voteTitle": vote_title,
         "voteDate": vote_date,
         "question": question,

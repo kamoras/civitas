@@ -19,7 +19,7 @@ import {
   SITE_URL,
   absoluteUrl,
 } from "@/lib/site";
-import { billCanonicalPath, calendarDate } from "./congress";
+import { billCanonicalPath, calendarDate, voteResult, voteTally } from "./congress";
 
 const PARTY_ADJECTIVES: Record<string, string> = {
   D: "Democratic",
@@ -144,7 +144,7 @@ export function describeRollCall(v: VoteDetail): { title: string; description: s
   return {
     title: `${subject}: ${chamber} roll call ${v.number}`,
     description:
-      `${v.question}: ${v.result || "recorded"}, ${v.yeas}–${v.nays}, ${calendarDate(v.date)}. ` +
+      `${v.question}: ${voteResult(v) || "recorded"}, ${voteTally(v)}, ${calendarDate(v.date)}. ` +
       `How every ${members} voted, by party, from the ${chamber}'s own record.`,
   };
 }
@@ -232,7 +232,7 @@ export function siteJsonLd() {
       // guidelines): the 192px app icon, not the 32-unit SVG favicon.
       logo: absoluteUrl("/apple-icon.png"),
       description:
-        "An independent, open-source political transparency project that scores U.S. members of Congress and presidents from public records.",
+        "An independent, open-source public record of the U.S. government: who funds Congress and the president, how they vote, and the source document behind every number.",
       sameAs: [BSKY_PROFILE_URL, GITHUB_REPO_URL],
     },
   ];

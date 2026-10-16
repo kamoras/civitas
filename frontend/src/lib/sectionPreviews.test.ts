@@ -15,6 +15,7 @@ const FIGURES: SectionFigures = {
     reports: { date: "2026-10-15", recordVotes: 0 },
     week: { start: "2026-10-12", recordVotes: 12 },
     month: { month: "2026-10", recordVotes: 30 },
+    recess: null,
     committees: { count: 40, metThisWeek: 7 },
     bills: { inMotion: 512 },
     president: { house: { rate: 0.5612, rollCalls: 21 }, senate: null },

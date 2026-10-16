@@ -6,6 +6,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import RecordsBand from "./RecordsBand";
+import YourStatePicker from "./YourStatePicker";
 
 // The main navigation is the SECTIONS table (lib/routes.ts): each section's
 // hub, with its other pages one step below it. Leaderboard and Compare are
@@ -112,12 +113,22 @@ const SUBLINK =
   "flex min-h-11 items-center font-mono text-xs uppercase tracking-[0.12em] transition-colors";
 
 /**
- * A section in the desktop row: its hub's link and, beside it, a button that
- * discloses the section's other pages (the WAI-ARIA disclosure navigation
- * pattern, "with top-level links": a button with aria-expanded and a plain
- * list of links, no menu role, so Tab walks it like any other links).
- * Escape closes it and returns focus to the button; so does focus or a
- * pointer leaving it.
+ * A section in the desktop row: one trigger, the section's name, that opens
+ * a panel of all its pages (the WAI-ARIA disclosure navigation pattern: a
+ * button with aria-expanded and a plain list of links, no menu role, so Tab
+ * walks it like any other links). Escape closes it and returns focus to the
+ * button; so does focus or a pointer leaving it. A section with one page
+ * (Explore) is a plain link.
+ *
+ * It was the section's link with a separate 24 px ▾ button beside it, and
+ * a narrow box floating under the label: two controls that looked like one,
+ * a list that didn't line up with anything, and no hub in it. The panel is
+ * now a band under the header's rule, on the page's own grid, as wide as
+ * the content: the section's name and every one of its pages (the hub
+ * first), in columns, the current page marked by a rule (Congress.gov and
+ * GovTrack open section menus the same way: one trigger, the overview
+ * inside). The links run down each column (CSS columns), the order Tab
+ * walks them. Tab stops in the row went from 13 to 7.
  */
 function SectionItem({
   section,
@@ -125,7 +136,6 @@ function SectionItem({
   open,
   onToggle,
   onClose,
-  alignRight,
   pathname,
 }: {
   section: SectionKey;
@@ -133,11 +143,9 @@ function SectionItem({
   open: boolean;
   onToggle: () => void;
   onClose: () => void;
-  alignRight: boolean;
   pathname: string;
 }) {
-  const { label, href } = SECTIONS[section];
-  const subs = sectionSubpages(section);
+  const { label, href, tabs } = SECTIONS[section];
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -169,70 +177,144 @@ function SectionItem({
     };
   }, [open, onClose]);
 
-  const panelId = `nav-pages-${section}`;
-  return (
-    <div ref={ref} className="relative flex items-center gap-0.5">
-      <Link
-        href={href}
-        aria-current={active ? "page" : undefined}
-        className={`tracking-normal xl:tracking-widest ${navLinkClass(active, section === ACCENT, "xs")}`}
-      >
+  const labelClass = `tracking-normal xl:tracking-widest ${navLinkClass(active, section === ACCENT, "xs")}`;
+  if (tabs.length < 2) {
+    return (
+      <Link href={href} aria-current={active ? "page" : undefined} className={labelClass}>
         {label.toUpperCase()}
       </Link>
-      {subs.length > 0 && (
-        <button
-          ref={buttonRef}
-          type="button"
-          aria-expanded={open}
-          aria-controls={panelId}
-          aria-label={`${label} pages`}
-          onClick={onToggle}
-          className="inline-flex h-6 w-6 items-center justify-center font-mono text-xs text-ink-min transition-colors hover:text-phos aria-expanded:text-phos"
+    );
+  }
+  const panelId = `nav-pages-${section}`;
+  // `pathOf` match on the hub too: the hub is a page of the section like
+  // any other here.
+  const isCurrent = (h: string) =>
+    h === href ? pathname === pathOf(href) : currentSubpage(section, h, pathname);
+  return (
+    // Not positioned: the panel spans the header (the nav is its
+    // containing block), not this item.
+    <div ref={ref} className="flex items-center">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+        className={`inline-flex min-h-6 items-center gap-1.5 ${labelClass} aria-expanded:border-ink-hi aria-expanded:text-ink-hi`}
+      >
+        {label.toUpperCase()}
+        {active && <span className="sr-only">{", current section"}</span>}
+        <span
+          aria-hidden="true"
+          className={`inline-block text-[0.6rem] text-ink-min transition-transform ${open ? "rotate-180" : ""}`}
         >
-          <span
-            aria-hidden="true"
-            className={`inline-block transition-transform ${open ? "rotate-180" : ""}`}
+          &#9662;
+        </span>
+      </button>
+      <div
+        id={panelId}
+        hidden={!open}
+        className="absolute inset-x-0 top-[calc(100%+3px)] z-10 border-b-3 border-white/15 bg-surface-base"
+      >
+        <div className="mx-auto grid max-w-7xl grid-cols-[12rem_minmax(0,1fr)] gap-x-9 px-4 py-5 sm:px-6">
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">{label}</p>
+          <ul className="max-w-3xl columns-2 gap-x-9 xl:columns-3">
+            {tabs.map((t) => {
+              const current = isCurrent(t.href);
+              return (
+                <li key={t.key} className="break-inside-avoid">
+                  <Link
+                    href={t.href}
+                    aria-current={current ? "page" : undefined}
+                    onClick={() => onClose()}
+                    className={`flex min-h-11 items-center border-l-2 pl-3 font-display text-sm transition-colors ${
+                      current
+                        ? "border-ink-hi text-ink-hi"
+                        : "border-white/15 text-ink-lo hover:border-ink-lo hover:text-ink-hi"
+                    }`}
+                  >
+                    {t.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const SEARCH_TOGGLE =
+  "inline-flex items-center font-mono tracking-widest text-ink-lo transition-colors hover:text-ink-hi aria-expanded:text-phos";
+
+/**
+ * The site search, in the header on every page: a SEARCH button that opens
+ * one labelled field under the bar. It was a "request a record" box in the
+ * homepage's body, which asked a reader for input before showing them
+ * anything; a header search is where readers look for one, and it serves
+ * every page. A plain GET form to /search?q= (app/search/route.ts), a
+ * labelled input and a submit button, so it works without JavaScript and
+ * can be enhanced in place.
+ */
+function SearchPanel({ onEscape }: { onEscape: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => inputRef.current?.focus(), []);
+  return (
+    <div id="site-search" className="border-t border-white/[0.07] bg-surface-base/[0.98]">
+      <form
+        role="search"
+        action="/search"
+        method="get"
+        className="mx-auto max-w-7xl px-4 py-3 sm:px-6"
+      >
+        <label
+          htmlFor="site-search-input"
+          className="block font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        >
+          Search the record
+        </label>
+        <div className="mt-2 flex items-end gap-3">
+          <input
+            ref={inputRef}
+            id="site-search-input"
+            type="search"
+            name="q"
+            // Escape closes the search and returns focus to its button.
+            onKeyDown={(e) => {
+              if (e.key === "Escape") onEscape();
+            }}
+            placeholder="Topic, document or bill number"
+            className="min-w-0 flex-1 border-0 border-b border-white/20 bg-transparent pb-1 font-mono text-sm text-ink-hi placeholder:text-ink-min focus:border-phos"
+          />
+          <button
+            type="submit"
+            className="inline-flex min-h-11 items-center font-mono text-sm tracking-[0.12em] text-phos-mid hover:text-phos"
           >
-            &#9662;
-          </span>
-        </button>
-      )}
-      {subs.length > 0 && (
-        <ul
-          id={panelId}
-          hidden={!open}
-          className={`absolute top-full z-10 mt-3 w-max min-w-56 max-w-80 border border-white/15 border-t-phos/50 bg-surface-base py-1 ${
-            alignRight ? "right-0" : "left-0"
-          }`}
-        >
-          {subs.map((t) => {
-            const current = currentSubpage(section, t.href, pathname);
-            return (
-              <li key={t.key}>
-                <Link
-                  href={t.href}
-                  aria-current={current ? "page" : undefined}
-                  onClick={() => onClose()}
-                  className={`${SUBLINK} px-4 ${current ? "text-ink-hi" : "text-ink-lo hover:bg-white/[0.04] hover:text-ink-hi"}`}
-                >
-                  <span aria-hidden="true" className="mr-2 text-ink-min">
-                    &rsaquo;
-                  </span>
-                  {t.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+            [ SEARCH ]
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
 
 export default function Navbar() {
   const pathname = usePathname();
-  const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // The toggle that opened the search, to take focus back on Escape (the
+  // row's or the MENU layout's, whichever is shown).
+  const searchToggleRef = useRef<HTMLButtonElement | null>(null);
+  const toggleSearch = (e: React.MouseEvent<HTMLButtonElement>) => {
+    searchToggleRef.current = e.currentTarget;
+    setMenuOpen(false);
+    setSearchOpen((o) => !o);
+  };
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    searchToggleRef.current?.focus();
+  }, []);
   // The desktop section whose pages are showing, and the page it was opened
   // on: a navigation by any route (a link, Back) closes it without an effect.
   const [opened, setOpened] = useState<{ section: SectionKey; path: string } | null>(null);
@@ -247,12 +329,6 @@ export default function Navbar() {
   // MENU's breakpoint, or always MENU when the row doesn't fit.
   const menuOnly = rowFits ? "min-[56rem]:hidden" : "";
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   const closeMenu = useCallback(() => {
     setMenuOpen(false);
     toggleRef.current?.focus();
@@ -260,8 +336,11 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!menuOpen || !menuRef.current) return;
-    const firstLink = menuRef.current.querySelector<HTMLElement>("a[href]");
-    firstLink?.focus();
+    // The panel's first control, in reading order: the state picker at its
+    // top, then the sections. Starting on the first link skipped the
+    // picker, which Tab then reached only after every link.
+    const first = menuRef.current.querySelector<HTMLElement>("select, a[href], button");
+    first?.focus();
   }, [menuOpen]);
 
   useEffect(() => {
@@ -273,7 +352,7 @@ export default function Navbar() {
       }
       if (e.key !== "Tab" || !menuRef.current) return;
       const focusable = menuRef.current.querySelectorAll<HTMLElement>(
-        "a[href], button:not([disabled])"
+        "a[href], button:not([disabled]), select"
       );
       if (focusable.length === 0) return;
       const first = focusable[0];
@@ -293,9 +372,8 @@ export default function Navbar() {
   return (
     <header
       role="banner"
-      className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-300 ${
-        scrolled || menuOpen ? "bg-surface-base/95 backdrop-blur-md" : "bg-surface-base/80"
-      }`}
+      // Solid, not a translucent blur: the header is paper, not glass.
+      className="fixed top-0 left-0 right-0 z-50 bg-surface-base"
     >
       {/*
         The band lives inside the fixed header rather than above it so every
@@ -304,20 +382,34 @@ export default function Navbar() {
         `--header-clearance` (6rem). Keep it to one line on mobile — a second line would
         push past that margin.
       */}
-      <RecordsBand />
+      <RecordsBand aside={<YourStatePicker />} />
       {/* The skip link is the root layout's, ahead of everything: a second
           one here cost keyboard users an extra Tab on every page. */}
-      <nav aria-label="Main navigation" className="border-b-3 border-white/15">
+      <nav aria-label="Main navigation" className="relative border-b-3 border-white/15">
         <div
           ref={barRef}
           className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between"
         >
+          {/* The lockup: the pixel mark, the site's one use of that face,
+              and RESEARCH beside it in the mono, after a hairline. */}
+          {/* Under 360 px RESEARCH would push MENU off the bar, so the mark
+              stands alone there; the link's name is the full one. */}
           <Link
             ref={logoRef}
             href="/"
-            className="font-pixel text-xs sm:text-sm min-[56rem]:text-xs xl:text-sm text-ink-hi hover:text-phos transition-colors tracking-widest"
+            aria-label="Civitas Research"
+            className="group inline-flex min-h-6 items-center gap-2.5 text-ink-hi"
           >
-            CIVITAS
+            <span className="font-pixel text-xs tracking-widest transition-colors group-hover:text-phos sm:text-sm min-[56rem]:text-xs xl:text-sm">
+              CIVITAS
+            </span>
+            <span
+              aria-hidden="true"
+              className="hidden h-3.5 border-l border-ink-min/60 min-[360px]:inline sm:h-4"
+            />
+            <span className="hidden font-mono text-xs tracking-[0.18em] text-ink-lo min-[360px]:inline sm:tracking-[0.3em]">
+              RESEARCH
+            </span>
           </Link>
 
           {/*
@@ -345,7 +437,7 @@ export default function Navbar() {
               rowFits ? "" : "invisible pointer-events-none absolute right-0"
             }`}
           >
-            {NAV.map((section, i) => (
+            {NAV.map((section) => (
               <SectionItem
                 key={section}
                 section={section}
@@ -355,7 +447,6 @@ export default function Navbar() {
                   setOpened(openSection === section ? null : { section, path: pathname })
                 }
                 onClose={closeSection}
-                alignRight={i >= NAV.length - 2}
                 pathname={pathname}
               />
             ))}
@@ -369,23 +460,50 @@ export default function Navbar() {
             >
               [BSKY]
             </a>
+            <button
+              type="button"
+              onClick={toggleSearch}
+              aria-expanded={searchOpen}
+              aria-controls="site-search"
+              className={`${SEARCH_TOGGLE} min-h-6 text-xs`}
+            >
+              SEARCH
+            </button>
           </div>
 
           {/* Mobile hamburger. A 44x44 target (WCAG 2.5.8 asks 24, 2.5.5 44)
               around the same 20 px word: the negative margins give the
               padding back, so the bar's height and the word's place don't
               move. It was the 36x20 word alone, in the hardest thumb zone. */}
-          <button
-            ref={toggleRef}
-            className={`${menuOnly} -my-3 -mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors`}
-            onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
-            aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
-            aria-expanded={menuOpen}
-            aria-controls="mobile-menu"
-          >
-            {menuOpen ? "CLOSE" : "MENU"}
-          </button>
+          {/* The MENU layout's search, beside MENU: the same panel. */}
+          <div className={`${menuOnly} -my-3 flex items-center`}>
+            <button
+              type="button"
+              onClick={toggleSearch}
+              aria-expanded={searchOpen}
+              aria-controls="site-search"
+              className={`${SEARCH_TOGGLE} min-h-11 min-w-11 justify-center px-2 text-sm`}
+            >
+              SEARCH
+            </button>
+            <button
+              ref={toggleRef}
+              className={`-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors`}
+              onClick={() => {
+                setSearchOpen(false);
+                if (menuOpen) closeMenu();
+                else setMenuOpen(true);
+              }}
+              aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={menuOpen}
+              aria-controls="mobile-menu"
+            >
+              {menuOpen ? "CLOSE" : "MENU"}
+            </button>
+          </div>
         </div>
+
+        {searchOpen && <SearchPanel onEscape={closeSearch} />}
 
         {/* Mobile menu: two levels, every section's pages listed under its
             hub, so any page is two taps from MENU (MENU, then the page).
@@ -397,6 +515,9 @@ export default function Navbar() {
             id="mobile-menu"
             className={`${menuOnly} max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
           >
+            <div className="border-b border-white/[0.07] py-3">
+              <YourStatePicker size="lg" />
+            </div>
             <ul>
               {NAV.map((section) => {
                 const { label, href } = SECTIONS[section];

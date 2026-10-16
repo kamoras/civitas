@@ -15,11 +15,12 @@ import {
   monthLabel,
   rollCallHref,
   shortDate,
+  voteResult,
   weekHref,
 } from "@/lib/congress";
 import { PeriodNav } from "./CongressNav";
 import SectionTabs from "@/components/layout/SectionTabs";
-import { Empty, Figure, FigureGroup, Section, VoteRow } from "./ReportParts";
+import { Empty, Figure, FigureGroup, Section, TallyText, VoteRow } from "./ReportParts";
 
 function chamberCell(day: PeriodDay, chamber: "senate" | "house") {
   const c = day[chamber];
@@ -299,7 +300,7 @@ export default function PeriodReportView({
                         >
                           {CHAMBER_NAME[v.chamber]} No. {v.number}
                         </Link>{" "}
-                        {v.result}, {v.yeas}–{v.nays}
+                        {voteResult(v)}, <TallyText vote={v} />
                         {v.billLabel && v.billId && (
                           <>
                             {" · "}

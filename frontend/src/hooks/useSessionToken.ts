@@ -37,15 +37,19 @@ function writeKey(key: string, value: string | null): void {
   listeners.get(key)?.forEach((notify) => notify());
 }
 
-export interface SessionToken {
-  token: string | null;
+export interface SessionValue {
+  value: string | null;
   /** False until the client can actually read storage. */
   ready: boolean;
-  signIn: (token: string) => void;
-  signOut: () => void;
+  set: (value: string | null) => void;
 }
 
-export function useSessionToken(key: string): SessionToken {
+/**
+ * A value held in `sessionStorage` for the open tab only: gone when the tab
+ * closes, never sent anywhere. The store behind both the admin token and
+ * the reader's state choice (useYourState).
+ */
+export function useSessionValue(key: string): SessionValue {
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
       let forKey = listeners.get(key);
@@ -83,13 +87,25 @@ export function useSessionToken(key: string): SessionToken {
   // same thing the server did. `ready` flips on the first post-hydration read.
   const getServerSnapshot = useCallback(() => null, []);
 
-  const token = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const value = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const ready = useSyncExternalStore(subscribe, alwaysReady, neverReady);
+  const set = useCallback((next: string | null) => writeKey(key, next), [key]);
+  return { value, ready, set };
+}
 
-  const signIn = useCallback((next: string) => writeKey(key, next), [key]);
-  const signOut = useCallback(() => writeKey(key, null), [key]);
+export interface SessionToken {
+  token: string | null;
+  /** False until the client can actually read storage. */
+  ready: boolean;
+  signIn: (token: string) => void;
+  signOut: () => void;
+}
 
-  return { token, ready, signIn, signOut };
+export function useSessionToken(key: string): SessionToken {
+  const { value, ready, set } = useSessionValue(key);
+  const signIn = useCallback((next: string) => set(next), [set]);
+  const signOut = useCallback(() => set(null), [set]);
+  return { token: value, ready, signIn, signOut };
 }
 
 const alwaysReady = () => true;

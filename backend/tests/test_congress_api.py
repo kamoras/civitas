@@ -12,7 +12,13 @@ from app.main import app
 from app.models import CongressDay, CongressEvent, RollCall
 from app.pipeline import congress_activity as ca
 from app.services import congress_service as cs
+from app.ordinals import ordinal
+from app.pipeline.fetch.congress import congress_first_year, congress_of_date
+from app.pipeline.fetch.floor_logs import house_roll_call_url, senate_roll_call_url
 from tests.congress_activity_helpers import _digest_responses, _fake_get
+
+# The first day the fixture week puts on record (its earliest roll call).
+FIRST_DAY = "2026-09-23"
 
 
 @pytest.fixture
@@ -372,3 +378,43 @@ class TestRecess:
 
     def test_a_dated_day_report_is_that_days_record(self, client, pro_forma_day):
         assert "recess" not in client.get("/api/congress/day/2026-10-01").json()
+
+
+class TestCoverage:
+    """Outside Civitas's record an empty list is "not held", never "none": a
+    bill of an earlier Congress the House passed on a roll call read "No
+    recorded votes on this bill in either chamber", and a day before the
+    record began said neither chamber met. The fixture week's Congress is
+    the one held; the Congress before it is not."""
+
+    def test_the_record_states_where_it_starts(self, client):
+        held = congress_of_date(FIRST_DAY)
+        body = client.get("/api/congress/coverage").json()
+        assert (body["firstDay"], body["firstCongress"], body["rollCallCongresses"]) == (FIRST_DAY, held, [held])
+        first = date.fromisoformat(FIRST_DAY)
+        assert body["sentence"] == (f"Civitas's record of Congress starts {first:%B} {first.day}, {first.year}, "
+                                    f"in the {ordinal(held)} Congress.")
+        assert body["rollCallSentence"] == f"Civitas holds roll calls from the {ordinal(held)} Congress on."
+
+    def test_a_past_congress_bill_says_which_parts_are_not_held(self, week_of_sept_21):
+        held = congress_of_date(FIRST_DAY)
+        past = cs.bill_coverage(week_of_sept_21, held - 1)
+        assert [past[k]["held"] for k in ("votes", "floor", "digest")] == [False, False, False]
+        assert past["votes"]["sentence"].startswith(f"Civitas holds roll calls from the {ordinal(held)} Congress on")
+        first = date.fromisoformat(FIRST_DAY)
+        assert f"{first:%B} {first.day}, {first.year}" in past["digest"]["sentence"]
+        sitting = cs.bill_coverage(week_of_sept_21, held)
+        assert all(sitting[k] == {"held": True, "sentence": None} for k in ("votes", "floor", "digest"))
+
+    def test_a_roll_call_the_history_names_links_to_the_chambers_record(self, week_of_sept_21):
+        from app.services import bill_record as br
+
+        past = congress_of_date(FIRST_DAY) - 1
+        record = br.shape_record(week_of_sept_21, past, "HR.2", {"actions": [
+            {"actionDate": "", "text": "Passed", "recordedVotes": [
+                {"chamber": "House", "rollNumber": 209, "sessionNumber": 1},
+                {"chamber": "Senate", "rollNumber": 12, "sessionNumber": 2},
+                {"chamber": "House", "rollNumber": None, "sessionNumber": 1}]}]})
+        assert [rc["sourceUrl"] for rc in record["actions"][0]["rollCalls"]] == [
+            house_roll_call_url(congress_first_year(past), 209), senate_roll_call_url(past, 2, 12), None]
+        assert record["votes"] == [] and record["coverage"]["votes"]["held"] is False

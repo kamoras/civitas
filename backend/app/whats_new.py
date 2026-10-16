@@ -1,4 +1,4 @@
-"""New on Civitas: each user-facing feature, announced once.
+"""New on Civitas Research: each user-facing feature, announced once.
 
 The source is app/data/whats_new.json, one entry per feature (its
 `_contract` names the fields). Writing the entry is part of shipping the
@@ -8,7 +8,7 @@ What's new feed and, once each, a post (kind "feature", through
 app.broadcast.publish, so the feed first and then Bluesky).
 
 The post is a fixed template around the entry's own words:
-"New on Civitas: <title>. <summary>" and the page's link, whose card
+"New on Civitas Research: <title>. <summary>" and the page's link, whose card
 (the page's Open Graph image) Bluesky and the feed entry show. No model
 writes any of it; tests/test_whats_new.py holds every entry to the
 shown-text rules (no em dash, no emoji, no pronoun) and to the post's length.
@@ -83,7 +83,7 @@ def entries() -> list[dict]:
 
 
 def post_text(entry: dict) -> str:
-    return f"New on Civitas: {entry['title']}. {entry['summary']}"
+    return f"New on Civitas Research: {entry['title']}. {entry['summary']}"
 
 
 def page_url(entry: dict) -> str:
@@ -175,7 +175,7 @@ def post_whats_new(db: Session) -> str:
             )
             continue
         broadcast.publish(
-            db, kind=KIND, subject=_subject(entry), title=f"New on Civitas: {entry['title']}",
+            db, kind=KIND, subject=_subject(entry), title=f"New on Civitas Research: {entry['title']}",
             text=post_text(entry), url=page_url(entry),
         )
         return f"posted {entry['id']}"

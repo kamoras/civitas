@@ -456,6 +456,15 @@ def _vote_title(parsed: dict) -> str:
     return parsed.get("amendment") or parsed.get("documentTitle") or parsed.get("voteTitle") or ""
 
 
+def _tie_breaker_columns(chamber: str, parsed: dict) -> dict:
+    """RollCall's tie-breaker columns from a parse: "" when a Senate record
+    names none, NULL for the House (which has no tie-breaking vote)."""
+    if chamber != "senate":
+        return {"tie_breaker_by": None, "tie_breaker_vote": None}
+    tie = parsed.get("tieBreaker") or {}
+    return {"tie_breaker_by": (tie.get("byWhom") or "")[:60], "tie_breaker_vote": (tie.get("vote") or "")[:12]}
+
+
 def _store_roll_call(db: Session, chamber: str, congress: int, session: int, number: int,
                      parsed: dict, url: str, bill_id: str | None = None) -> None:
     counts = floor_logs.tally(parsed["members"])
@@ -463,6 +472,7 @@ def _store_roll_call(db: Session, chamber: str, congress: int, session: int, num
     if chamber == "senate":
         vote_date = _senate_vote_date(vote_date) or ""
     row = RollCall(
+        **_tie_breaker_columns(chamber, parsed),
         chamber=chamber, congress=congress, session=session, number=number, date=vote_date,
         question=parsed.get("question") or "", title=_vote_title(parsed),
         result=(parsed.get("result") or "")[:120], rejected=parsed.get("rejected"),
@@ -624,6 +634,39 @@ async def repair_house_requirements(client: httpx.AsyncClient, db: Session,
     return repaired, "ok"
 
 
+# Senate ties stored before roll_calls read <tie_breaker> (NULL columns):
+# re-read until none is left, each one request, once. A tie is rare (under
+# 2% of a Congress's Senate roll calls), so one batch covers them.
+_TIE_REREAD_BATCH = 20
+
+
+async def reread_senate_ties(client: httpx.AsyncClient, db: Session,
+                             limit: int = _TIE_REREAD_BATCH) -> tuple[int, str]:
+    """-> (read, outcome). Re-reads the Senate roll calls with equal yeas
+    and nays whose tie-breaker was never read, and sets it ("" when the
+    record names none); the stored tally and positions are left as they
+    are. A failed fetch leaves the row unread for the next run."""
+    rows = db.query(RollCall).filter(
+        RollCall.chamber == "senate", RollCall.tie_breaker_vote.is_(None),
+        RollCall.yeas == RollCall.nays, RollCall.yeas > 0,
+    ).order_by(RollCall.id.desc()).limit(limit).all()
+    read = 0
+    for rc in rows:
+        body = await _get(client, rc.source_url, label="senate roll call")
+        if body is None:
+            return read, "failed"
+        if body is _ABSENT:
+            continue
+        parsed = parse_senate_vote_xml(body.decode("utf-8", errors="replace"), rc.congress, rc.session, rc.number)
+        if parsed is None:
+            continue
+        for column, value in _tie_breaker_columns("senate", parsed).items():
+            setattr(rc, column, value)
+        db.commit()
+        read += 1
+    return read, "ok"
+
+
 # ── The run ───────────────────────────────────────────────────────
 
 async def run_congress_sync() -> dict:
@@ -654,6 +697,8 @@ async def run_congress_sync() -> dict:
             result["rollCalls"] = votes
             fixed, status = await repair_house_requirements(client, db)
             result["requirementsRepaired"] = {"repaired": fixed, "status": status}
+            ties, status = await reread_senate_ties(client, db)
+            result["tiesRead"] = {"read": ties, "status": status}
         result["finishedAt"] = utcnow().isoformat()
         api_cache_set(db, _CACHE_TIER, _LAST_RUN_KEY, result, normal_ttl_hours=24 * 30)
         return result

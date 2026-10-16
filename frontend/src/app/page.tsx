@@ -4,7 +4,7 @@ import Masthead from "@/components/home/Masthead";
 import RecordIndex from "@/components/home/RecordIndex";
 import Holdings from "@/components/home/Holdings";
 import OnTheRecord from "@/components/home/OnTheRecord";
-import SectionsBand from "@/components/home/SectionsBand";
+import SectionsBand, { BAND } from "@/components/home/SectionsBand";
 import ElectionNight from "@/components/home/ElectionNight";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import JsonLd from "@/components/seo/JsonLd";
@@ -43,17 +43,20 @@ export default async function Home() {
             until the count settles): the count is the news then. */}
         <ElectionNight />
         <Masthead electionPhase={summary?.phase.phase ?? null} />
-        <OnTheRecord />
-        {/* Every section and its pages, each with its live figure: the
-            site's directory, one screen below the day's record. */}
-        <SectionsBand />
+        {/* Ordered by how often each block changes: the day's record (its
+            first row the day's top issue), this week, the week's notable
+            votes; then the one index of every way into the site, beside
+            the sources it is all built from. */}
+        <RecordIndex />
         <ThisWeekStrip variant="full" />
-        <div className="mx-auto mt-8 grid max-w-7xl grid-cols-1 gap-8 px-4 sm:px-6 md:mt-10 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-9">
-          <RecordIndex />
+        <OnTheRecord />
+        <div className="mx-auto mt-10 grid max-w-7xl grid-cols-1 gap-8 px-4 sm:px-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-9">
+          <SectionsBand />
           <Holdings />
         </div>
       </main>
-      <Footer />
+      {/* The index lists these sections' pages in full, a screen above. */}
+      <Footer omit={BAND} />
     </>
   );
 }

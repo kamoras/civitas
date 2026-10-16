@@ -73,7 +73,7 @@ async function violations() {
 }
 
 describe("ThisWeekStrip", () => {
-  it("full: countdown, every state's ballot as a link, Congress and deadlines", async () => {
+  it("full: countdown, every state's ballot as a link behind a disclosure, Congress and deadlines", async () => {
     render(
       <main>
         <FullStrip data={data} />
@@ -81,12 +81,16 @@ describe("ThisWeekStrip", () => {
     );
     expect(screen.getByText("23")).toBeInTheDocument();
     expect(screen.getByText(/days until Election Day · Tue, Nov 3/)).toBeInTheDocument();
-    // Navigation only: links to each ballot page, no field to type into.
-    expect(screen.getByRole("link", { name: "Alaska ballot" })).toHaveAttribute(
-      "href",
-      "/elections/states/AK"
-    );
-    expect(screen.getByRole("link", { name: "District of Columbia ballot" })).toBeInTheDocument();
+    // Navigation only: links to each ballot page, behind a disclosure, no
+    // field to type into.
+    const ballots = screen.getByText("See who's on your state's ballot").closest("details")!;
+    expect(ballots.open).toBe(false);
+    expect(
+      within(ballots).getByRole("link", { name: "Alaska ballot", hidden: true })
+    ).toHaveAttribute("href", "/elections/states/AK");
+    expect(
+      within(ballots).getByRole("link", { name: "District of Columbia ballot", hidden: true })
+    ).toBeInTheDocument();
     expect(document.querySelector("input, select, textarea")).toBeNull();
     expect(screen.getByText("Congress is out until Tuesday, October 20.")).toBeInTheDocument();
     expect(screen.getByText(/SENATE · no record votes this week/)).toBeInTheDocument();

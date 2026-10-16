@@ -84,6 +84,7 @@ from app.state_names import STATE_NAMES
 from app.time_utils import comment_period_today
 from app.services.pagination import paginate_bounds
 from app.services.bill_record import bill_votes, canonical_bill_id
+from app.services.congress_service import roll_call_congresses
 from app.services.member_positions import member_positions
 from app.services.representative_service import (
     get_rep_leaderboard,
@@ -727,7 +728,9 @@ def _roll_call(rc: dict | None, chamber: str | None = None, congress: int | None
     return {
         "chamber": rc.get("chamber") or chamber, "congress": rc.get("congress") or congress,
         "session": rc["session"], "number": rc["number"], "date": rc["date"],
+        "kind": rc.get("kind") or "question",
         "question": rc.get("question") or "", "result": rc.get("result") or "",
+        "tieBreaker": rc.get("tieBreaker"), "candidates": rc.get("candidates") or [],
         "sourceUrl": rc.get("sourceUrl") or "",
         "parties": [{"party": p["party"], "yea": p["yea"], "nay": p["nay"], "present": p["present"],
                      "notVoting": p["notVoting"]} for p in rc.get("parties") or []],
@@ -875,15 +878,19 @@ def get_bill_votes(
 ) -> JSONResponse:
     """Every roll call on the bill that Civitas holds, newest first, with
     the tally and each party's split: the votes on the bill's page. Read
-    from Civitas's own record of the chambers' roll calls, so a bill never
-    brought to a recorded vote has none."""
+    from Civitas's own record of the chambers' roll calls, which starts
+    with the Congresses in heldCongresses: for a bill of another Congress,
+    covered is false and the list is empty because the votes aren't held,
+    not because there were none. Within it, a bill never brought to a
+    recorded vote has none."""
     bill_id = canonical_bill_id(bill_id)
     if bill_id is None:
         raise HTTPException(status_code=404, detail="Not a bill id")
     congress = congress or settings.CURRENT_CONGRESS
     votes = bill_votes(db, congress, bill_id)
+    held = roll_call_congresses(db)
     return _pub_json({
-        "billId": bill_id, "congress": congress,
+        "billId": bill_id, "congress": congress, "covered": congress in held, "heldCongresses": held,
         "siteUrl": f"{SITE_URL}/congress/bills/{bill_id}" + (
             "" if congress == settings.CURRENT_CONGRESS else f"?congress={congress}"),
         "entries": [{**_roll_call(v, congress=congress), "yeas": v["yeas"], "nays": v["nays"],

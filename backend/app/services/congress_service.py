@@ -15,12 +15,15 @@ from datetime import date, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import CongressDay, CongressEvent, RepSponsoredBill, RollCall, SponsoredBill
+from app.ordinals import ordinal
 from app.pipeline.congress_activity import digest_cursor, eastern_today, last_run
 from app.pipeline.fetch.daily_digest import words_to_int
 from app.pipeline.analyze.bill_stage import became_law_action
 from app.pipeline.bill_refresh import stored_laws
 from app.pipeline.fetch.congress import congress_of_date
+from app.services.roll_call_shape import shape, shapes
 
 CHAMBERS = ("senate", "house")
 _CHAMBER_NAME = {"senate": "Senate", "house": "House"}
@@ -183,13 +186,16 @@ def _event(e: CongressEvent) -> dict:
     }
 
 
-def _vote(rc: RollCall) -> dict:
+def _vote(rc: RollCall, shaped: dict | None = None) -> dict:
+    """`shaped`: the roll call's roll_call_shape.shape, read by the caller
+    (shapes) where it can be an election, which needs its positions."""
     return {
         "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
         "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
         "rejected": rc.rejected, "majorityRequirement": rc.majority_requirement,
         "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
         "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
+        **(shaped or shape(rc)),
     }
 
 
@@ -291,7 +297,8 @@ def record_not_published(db: Session, day: date, run: dict | None) -> bool:
 
 
 def chamber_day(row: CongressDay | None, events: list[CongressEvent], votes: list[RollCall],
-                run: dict | None, day_iso: str, chamber: str, no_record_published: bool = False) -> dict:
+                run: dict | None, day_iso: str, chamber: str, no_record_published: bool = False,
+                shaped: dict[int, dict] | None = None) -> dict:
     if row is None:
         status = "live" if votes else ("no_record_published" if no_record_published else "no_record")
     elif not row.in_session:
@@ -322,7 +329,7 @@ def chamber_day(row: CongressDay | None, events: list[CongressEvent], votes: lis
         # page say the log is unavailable instead of showing nothing.
         "floorLogStatus": _source_outcome(run, day_iso, chamber),
         "counts": _counts(digest, votes),
-        "votes": [_vote(v) for v in sorted(votes, key=lambda v: v.number)],
+        "votes": [_vote(v, (shaped or {}).get(v.id)) for v in sorted(votes, key=lambda v: v.number)],
         "passed": by_kind["passed"],
         "failed": by_kind["failed"],
         "reported": by_kind["reported"],
@@ -350,6 +357,78 @@ def record_span(db: Session) -> tuple[date, date] | None:
     counted as a new visitor). None before anything is recorded."""
     days = session_days(db)
     return (date.fromisoformat(days[0]), eastern_today()) if days else None
+
+
+# ── What the record holds ─────────────────────────────────────────
+# Civitas's record of Congress starts where the Daily Digest back-fill and
+# the roll-call sync start (congress_activity._BACKFILL_START, the sitting
+# Congress's first day when the record began), and Explore keeps the
+# sitting Congress's floor speeches only (explore_pipeline.
+# _purge_out_of_scope_speeches). Outside those, an empty list is "not held
+# here", never "none": a bill of an earlier Congress the House passed on a
+# roll call read "No recorded votes on this bill in either chamber".
+
+_GOVINFO_CREC = "https://www.govinfo.gov/app/collection/crec"
+_ROLL_CALL_SOURCES = {"senate": "https://www.senate.gov/legislative/votes_new.htm",
+                      "house": "https://clerk.house.gov/Votes"}
+
+
+def _full_date(d: date) -> str:
+    """Month D, YYYY: a date that can be in any year needs its year."""
+    return f"{d:%B} {d.day}, {d.year}"
+
+
+def roll_call_congresses(db: Session) -> list[int]:
+    """The Congresses whose roll calls Civitas holds, oldest first."""
+    return sorted(c for (c,) in db.query(RollCall.congress).distinct() if c)
+
+
+def coverage(db: Session) -> dict:
+    """What Civitas's record of Congress holds, in figures and as one
+    sentence a page can state where something isn't held: the first day on
+    record, its Congress, and the Congresses whose roll calls are held."""
+    span = record_span(db)
+    first = span[0] if span else None
+    held = roll_call_congresses(db)
+    if first is None:
+        sentence = "Civitas's record of Congress hasn't been read yet."
+    else:
+        sentence = (f"Civitas's record of Congress starts {_full_date(first)}, in the "
+                    f"{ordinal(congress_of_date(first.isoformat()))} Congress.")
+    roll_calls = (f"Civitas holds roll calls from the {ordinal(held[0])} Congress on." if held
+                  else "Civitas holds no roll calls yet.")
+    return {"firstDay": first.isoformat() if first else None, "rollCallSentence": roll_calls,
+            "firstCongress": congress_of_date(first.isoformat()) if first else None,
+            "rollCallCongresses": held, "sentence": sentence,
+            "congressionalRecordUrl": _GOVINFO_CREC, "rollCallSources": _ROLL_CALL_SOURCES}
+
+
+def bill_coverage(db: Session, congress: int) -> dict:
+    """For a bill of `congress`, whether each part of its page that comes
+    from Civitas's own record is held: its roll calls, its floor debate and
+    its days in the Congressional Record (the daily reports and committee
+    entries). Each part: {"held", "sentence"}, the sentence null when held."""
+    held = roll_call_congresses(db)
+    span = record_span(db)
+    first = span[0] if span else None
+    first_congress = congress_of_date(first.isoformat()) if first else None
+    n = ordinal(congress)
+    votes = congress in held
+    floor = congress == settings.CURRENT_CONGRESS
+    digest = first_congress is not None and congress >= first_congress
+    return {
+        "votes": {"held": votes, "sentence": None if votes else (
+            f"Civitas holds roll calls from the {ordinal(held[0])} Congress on, so this {n} Congress bill's "
+            "votes aren't held here. The chambers' own records have them, at Senate.gov and the House Clerk."
+            if held else "Civitas holds no roll calls yet.")},
+        "floor": {"held": floor, "sentence": None if floor else (
+            f"Civitas keeps the sitting {ordinal(settings.CURRENT_CONGRESS)} Congress's floor speeches only, so "
+            f"this {n} Congress bill's floor debate isn't held here. The Congressional Record at GovInfo has it.")},
+        "digest": {"held": digest, "sentence": None if digest else (
+            f"Civitas's record of Congress starts {_full_date(first)}, so this {n} Congress bill's days in the "
+            "Congressional Record and its committee entries aren't held here."
+            if first else "Civitas's record of Congress hasn't been read yet.")},
+    }
 
 
 def latest_day(db: Session) -> date | None:
@@ -434,7 +513,7 @@ def last_business_day(db: Session, on_or_before: date) -> date | None:
     return date.fromisoformat(best) if best else None
 
 
-def _long_date(d: date) -> str:
+def long_date(d: date) -> str:
     return f"{d:%A, %B} {d.day}"
 
 
@@ -454,7 +533,7 @@ def recess(db: Session, report: dict) -> dict | None:
         return None
     sentences = [
         "Neither chamber has taken a record vote or passed or confirmed anything since "
-        f"{_long_date(last)}." if last else "Neither chamber has taken a record vote or passed anything on record."
+        f"{long_date(last)}." if last else "Neither chamber has taken a record vote or passed anything on record."
     ]
     nxt = []
     for c in CHAMBERS:
@@ -481,9 +560,11 @@ def day_report(db: Session, day: date) -> dict:
     votes = db.query(RollCall).filter(RollCall.date == iso).all()
     run = last_run(db)
     unpublished = not rows and not votes and record_not_published(db, day, run)
+    shaped = shapes(db, votes)
     chambers = {
         c: chamber_day(rows.get(c), [e for e in events if e.chamber == c],
-                       [v for v in votes if v.chamber == c], run, iso, c, no_record_published=unpublished)
+                       [v for v in votes if v.chamber == c], run, iso, c, no_record_published=unpublished,
+                       shaped=shaped)
         for c in CHAMBERS
     }
     met = session_days(db)
@@ -596,6 +677,7 @@ def period_report(db: Session, start: date, end: date) -> dict:
            if not is_resolution(e.bill_id) and e.bill_id and e.bill_id not in cleared
            and not passed_both_chambers(e.bill_id, e.chamber, e.text)]
     decided = [v for v in p["votes"] if v.yeas + v.nays > 0]
+    shaped = shapes(db, p["votes"])
     closest = sorted(decided, key=lambda v: (votes_from_threshold(v), v.date, v.number))[:3]
 
     days = []
@@ -630,8 +712,8 @@ def period_report(db: Session, start: date, end: date) -> dict:
         "days": days,
         "passedBothChambers": both,
         "passedOneChamber": one,
-        "closestVotes": [_vote(v) for v in closest],
-        "votes": [_vote(v) for v in sorted(p["votes"], key=lambda v: (v.date, v.chamber, v.number))],
+        "closestVotes": [_vote(v, shaped.get(v.id)) for v in closest],
+        "votes": [_vote(v, shaped.get(v.id)) for v in sorted(p["votes"], key=lambda v: (v.date, v.chamber, v.number))],
         "becameLaw": _became_law(db, start, end),
         "syncedAt": (last_run(db) or {}).get("finishedAt"),
     }
@@ -697,7 +779,10 @@ def bill_days(db: Session, bill_id: str, congress: int) -> list[dict]:
     for e in rows:
         out.setdefault((e.date, e.chamber), {"date": e.date, "chamber": e.chamber, "entries": []})["entries"].append(
             {"kind": e.kind, "text": e.text, "source": e.source})
-    for v in db.query(RollCall).filter(RollCall.bill_id == bill_id, RollCall.congress == congress):
+    votes = db.query(RollCall).filter(RollCall.bill_id == bill_id, RollCall.congress == congress).all()
+    shaped = shapes(db, votes)
+    for v in votes:
+        sh = shaped[v.id]
         out.setdefault((v.date, v.chamber), {"date": v.date, "chamber": v.chamber, "entries": []})["entries"].append(
-            {"kind": "vote", "text": f"{v.question}: {v.result}, {v.yeas}-{v.nays}", "source": "roll_call"})
+            {"kind": "vote", "text": f"{v.question}: {sh['resultLabel']}, {sh['tally']}", "source": "roll_call"})
     return sorted(out.values(), key=lambda d: d["date"], reverse=True)

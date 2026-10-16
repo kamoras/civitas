@@ -97,7 +97,7 @@ def _content_html(post: BroadcastPost) -> str:
         alt = escape(image_alt or post.title)
         parts.append(f'<p><a href="{escape(post.url)}"><img src="{escape(image)}" alt="{alt}"></a></p>')
     parts += [f"<p>{escape(p)}</p>" for p in post.text.split("\n") if p.strip()]
-    parts.append(f'<p><a href="{escape(post.url)}">Read on Civitas</a></p>')
+    parts.append(f'<p><a href="{escape(post.url)}">Read on Civitas Research</a></p>')
     if post.source_url:
         host = urlsplit(post.source_url).hostname or post.source_url
         parts.append(f'<p>Source: <a href="{escape(post.source_url)}">{escape(host.removeprefix("www."))}</a></p>')
@@ -115,7 +115,7 @@ def render_atom(*, title: str, subtitle: str, path: str, posts: list[BroadcastPo
     _sub(feed, "link", rel="alternate", type="text/html", href=f"{SITE_URL}/")
     _sub(feed, "updated", _rfc3339(posts[0].published_at) if posts else _EMPTY_FEED_UPDATED)
     author = _sub(feed, "author")
-    _sub(author, "name", "Civitas")
+    _sub(author, "name", "Civitas Research")
     _sub(author, "uri", SITE_URL)
     # A PNG, not the SVG favicon: Discord and most feed readers don't draw
     # SVG, and a feed reader or bot shows this beside every entry.
@@ -222,7 +222,7 @@ def state_feed(name: str, request: Request, db: Session = Depends(get_db)) -> Re
         raise HTTPException(status_code=404, detail="No such feed")
     posts = _newest(db, BroadcastPost.state == code)
     body = render_atom(
-        title=f"Civitas: {STATE_NAMES[code]}",
+        title=f"Civitas Research: {STATE_NAMES[code]}",
         subtitle=f"Civitas posts about {STATE_NAMES[code]}: its races on the ballot and its members of Congress.",
         path=state_feed_path(code),
         posts=posts,

@@ -1,19 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { billPageHref } from "@/lib/congress";
-import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
+import { SITE_TAGLINE } from "@/lib/site";
+import { stateBallotHref } from "@/lib/elections";
+import { useYourState } from "@/hooks/useYourState";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
 import type { ElectionPhase } from "@/types/election";
-
-// Listed by name, as a reader looks for their state ("Alabama, Alaska…"),
-// not by postal code ("AK, AL…").
-const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
-  (STATE_NAMES[a] ?? a).localeCompare(STATE_NAMES[b] ?? b)
-);
 
 const VOTER_LINK =
   "inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos";
@@ -36,246 +29,102 @@ export function electionLinks(phase: ElectionPhase | null): { href: string; labe
   return [];
 }
 
-const RESEARCH_LINKS: readonly { href: string; label: string }[] = [
-  { href: "/about/scores", label: "METHODS" },
-  { href: "/about/data#sources", label: "SOURCES" },
-  { href: "/developers", label: "DATA & API" },
-  { href: "/changelog", label: "SCORING CHANGELOG" },
-];
-
 /**
- * The homepage masthead:overprint wordmark, the statement of what this is,
- * the governance stamp, and the record request slip.
+ * The homepage masthead: the nameplate and its line, the statement of what this
+ * is, and the voter's ways in. It asks the reader for nothing.
  *
  * Replaces a full-viewport centred hero over a canvas animation. That is
  * marketing-page anatomy — hero, then proof, then a call to action — and it
  * read as a product launch rather than a public-interest project. This is a
- * document header: what the record is, who keeps it, and how to pull
- * something out of it.
+ * document header: what the record is and how to find something in it.
+ *
+ * No props and no form (2026-10, reader feedback that both cost the page
+ * its seriousness, and that a homepage asking for input before it shows
+ * anything takes away from it): the tilted rubber stamp is gone, its facts
+ * stated once, plainly, in the source ledger ("Built from the public
+ * record") and the footer; the "request a record" box is the header's
+ * search, on every page; and the state select is the header's too, asked
+ * once for every page, with the voter links following it.
  */
 export default function Masthead({
   electionPhase = null,
 }: {
   electionPhase?: ElectionPhase | null;
 }) {
-  const router = useRouter();
-  const [query, setQuery] = useState("");
-  // A navigation choice only, never kept (AGENTS.md §8): it fills in two
-  // links. Before a pick they go to the pages that ask for one.
-  const [state, setState] = useState("");
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = query.trim();
-    if (!q) return;
-    // The slip says it takes a bill number: one ("H.R. 7008", "s 4668")
-    // opens that bill's page, which full-text search ranked below unrelated
-    // documents that merely share the digits. Anything else is a search;
-    // /explore reads ?q= on mount and runs it itself.
-    router.push(billPageHref(q) ?? `/explore?q=${encodeURIComponent(q)}`);
-  };
-
+  // With a state chosen in the header (this tab only), the two links go
+  // straight to that state's members and ballot.
+  const { state } = useYourState();
   return (
     <section className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-9">
-        <div className="min-w-0">
-          {/* The two offset plates are drawn from `data-text` as pseudo-
-              elements (see .overprint in globals.css), so the mark's text
-              content stays exactly "CIVITAS" — copyable, findable and
-              scrapeable once rather than three times.
-
-              A nameplate, not the heading. It was the page's h1, which meant
-              the homepage's one h1 was a brand mark carrying no information
-              about the page, while the sentence that actually says what this
-              is sat in a <p>. It is also the third "CIVITAS" in the accessible
-              tree after the nav's home link and the document title, and the
-              second on screen — the nav wordmark sits 86px directly above it.
-              `aria-hidden` leaves it as the printed nameplate it looks like. */}
-          <div
+      <div className="min-w-0">
+        {/* The nameplate, set like a masthead: the name, a heavy rule, the
+            line it stands for. It was the pixel "CIVITAS" with two
+            off-register colour plates, an effect of its moment. The name
+            is hidden from screen readers (the header's link names the site
+            right above it); the tagline is read. */}
+        <div className="max-w-2xl">
+          <p
             aria-hidden="true"
-            className="overprint font-pixel text-[min(1.5rem,12vw)] leading-none text-ink-hi sm:text-3xl"
-            data-text="CIVITAS"
+            className="font-display text-xl font-bold uppercase leading-none tracking-[0.22em] text-ink-hi sm:text-2xl"
           >
-            <span className="relative">CIVITAS</span>
-          </div>
-
-          {/* A statement of scope, not a slogan.
-
-              The same three clauses were set at 43px extrabold uppercase over
-              three lines, which is billboard treatment — the one place the
-              voice slipped from register to pitch. The clauses are the honest
-              description of what the record covers, so they stay; what goes is
-              the shouting. A masthead states its remit and gets out of the
-              way.
-
-              The subject widened in 2026 and the sentence did not. "Every
-              member of Congress" described the whole record when Congress was
-              the whole record; it now also holds 47 presidencies, the nine
-              sitting justices, 484 races with 4,316 candidates, 2,554
-              state-legislative nominees and 26 ballot measures. A remit
-              statement that names a third of the remit is not modest, it is
-              inaccurate — and the people asking for power are half of what a
-              voter comes here to check. */}
-          <h1 className="mt-6 max-w-2xl font-display text-[26px] font-semibold leading-[1.22] tracking-[-0.015em] text-ink-hi sm:mt-7 sm:text-[32px]">
-            A public record of the people who hold power and the people asking for it, who funds
-            them, how they vote, and what they pass.
-          </h1>
-
-          <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">
-            Scored nightly from federal and state filings. Every number traces back to the document
-            it came from. Where a figure is a range, as on the{" "}
-            <Link
-              href={ELECTION_MAP_HREF}
-              className="underline decoration-white/30 underline-offset-4 hover:text-phos"
-            >
-              election map
-            </Link>
-            , the page says how it was made.
+            Civitas Research
           </p>
-
-          {/* The voter's way in, in the first screen: who represents me,
-              what's on my ballot and what Congress is doing had one
-              labelled entry above the fold on a phone between them (the
-              state picker for ballots sat two screens down). A state picked
-              here only fills in the two links; nothing is asked or kept. */}
-          <nav
-            aria-label="For voters"
-            className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs tracking-[0.1em]"
-          >
-            <label className="inline-flex max-w-full flex-wrap items-center gap-2 text-ink-min">
-              YOUR STATE:
-              <select
-                value={state}
-                // The code from our own list, never the field's text, into
-                // an href.
-                onChange={(e) => setState(STATES_BY_NAME.find((c) => c === e.target.value) ?? "")}
-                className="min-h-[28px] min-w-0 max-w-full border border-white/20 bg-surface-base px-1 font-mono text-xs tracking-normal text-ink"
-              >
-                <option value="">Pick one</option>
-                {STATES_BY_NAME.map((code) => (
-                  <option key={code} value={code}>
-                    {STATE_NAMES[code] ?? code}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Link
-              href={state ? `/politicians?state=${state}` : "/politicians"}
-              className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-            >
-              YOUR MEMBERS
-            </Link>
-            <Link
-              href={state ? `/elections/states/${state}` : "/elections"}
-              className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-            >
-              YOUR BALLOT
-            </Link>
-            {electionLinks(electionPhase).map(({ href, label }) => (
-              <Link key={label} href={href} className={VOTER_LINK}>
-                {label}
-              </Link>
-            ))}
-            <Link href="/congress" className={VOTER_LINK}>
-              CONGRESS THIS WEEK
-            </Link>
-          </nav>
-
-          {/* The researcher's way in, in the first screen: the methods, the
-              source list, the API and the scoring changelog were reachable
-              before only from the footer, four screens down on a phone. */}
-          <nav
-            aria-label="For researchers"
-            className="mt-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-xs tracking-[0.1em]"
-          >
-            <span className="text-ink-min">FOR RESEARCHERS:</span>
-            {RESEARCH_LINKS.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-
-        <div className="min-w-0">
-          <form
-            onSubmit={submit}
-            className="border border-ink-min/45"
-            aria-labelledby="request-a-record"
-          >
-            <h2
-              id="request-a-record"
-              className="border-b border-ink-min/45 bg-white/[0.04] px-3 py-1.5 font-mono text-xs tracking-[0.16em] text-ink-lo"
-            >
-              REQUEST A RECORD
-            </h2>
-            <div className="px-3 py-3">
-              <label
-                htmlFor="record-request"
-                className="mb-2 block font-mono text-xs tracking-[0.1em] text-ink-min"
-              >
-                TOPIC · BILL NO. · DOCUMENT
-              </label>
-              <input
-                id="record-request"
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="e.g. prescription drug pricing"
-                className="w-full border-0 border-b border-white/20 bg-transparent pb-1 font-mono text-sm text-ink-hi placeholder:text-ink-min focus:border-phos focus:outline-none"
-              />
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <button
-                  type="submit"
-                  className="font-mono text-sm tracking-[0.12em] text-phos-mid hover:text-phos"
-                >
-                  [ PULL THE FILE ]
-                </button>
-                {/* No count here on purpose. This read "535 on file", a
-                    literal, three lines under "Every number traces back to the document it came from" —
-                    and wrong twice over: it excludes the presidents and
-                    justices the directory also holds, and the House is only
-                    momentarily at 435 between vacancies. The real number needs
-                    /api/politicians, which has no pagination and returns the
-                    entire roster, which is not a fetch a label is worth. The
-                    directory prints its own count on arrival. */}
-                <Link
-                  href="/politicians"
-                  className="font-mono text-xs tracking-[0.06em] text-ink-min hover:text-ink-lo"
-                >
-                  Everyone on file →
-                </Link>
-              </div>
-            </div>
-          </form>
-
-          {/* Governance disclosure, asserted rather than murmured in a
-              footer. Deliberately not a charity claim — Civitas isn't a
-              registered nonprofit, or a registered organization of any
-              kind; it's an open source project maintained for free (2026-08
-              correction: earlier copy called it "non-profit," which implies
-              a registered entity that doesn't exist).
-
-              Below the request slip, not above it. The stamp is the most
-              saturated thing on the page by some margin — full-strength
-              magenta, rotated, against a column of ink and phosphor — so
-              placing it first made boilerplate the first thing the eye landed
-              on, ahead of both the record index and the only control on the
-              page. Reading order now runs control, then disclosure. */}
-          <p className="stamp mt-7 text-xs leading-[1.75]">
-            Open source · free to use
-            <br />
-            No party, candidate
-            <br />
-            or PAC money
-            <br />
-            <span className="text-signal-red">AGPL-3.0 · SELF-HOSTED</span>
+          <p className="mt-3 border-t-3 border-ink-hi pt-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-lo">
+            {SITE_TAGLINE}
           </p>
         </div>
+
+        <h1 className="mt-6 max-w-2xl font-display text-[26px] font-semibold leading-[1.22] tracking-[-0.015em] text-ink-hi sm:mt-7 sm:text-[32px]">
+          A public record of U.S. power: who holds it, who wants it, who pays for it, how they vote
+          and what they pass.
+        </h1>
+
+        <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">
+          Rebuilt every night from federal and state filings. Every number links to the document it
+          came from. Where a figure is an estimate, like the ranges on the{" "}
+          <Link
+            href={ELECTION_MAP_HREF}
+            className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+          >
+            election map
+          </Link>
+          , the page shows how it was made.
+        </p>
+
+        {/* The voter's way in, in the first screen. The state is asked once,
+            in the header (YourStatePicker); with none chosen, each link
+            leads to a page where it is. The researcher's links (methods,
+            API, changelog) are in the page's one index. */}
+        <nav
+          aria-label="For voters"
+          className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs tracking-[0.1em]"
+        >
+          <Link
+            href={state ? `/politicians?state=${state}` : "/politicians"}
+            className={VOTER_LINK}
+          >
+            YOUR MEMBERS
+          </Link>
+          <Link href={state ? stateBallotHref(state) : "/elections"} className={VOTER_LINK}>
+            YOUR BALLOT
+          </Link>
+          {electionLinks(electionPhase).map(({ href, label }) => (
+            <Link key={label} href={href} className={VOTER_LINK}>
+              {label}
+            </Link>
+          ))}
+          <Link href="/congress" className={VOTER_LINK}>
+            CONGRESS THIS WEEK
+          </Link>
+        </nav>
+
+        {/* Who pays for this, said once, flat out: it was a tilted rubber
+            stamp, a prop that read as a gimmick. Plain mono, the record's
+            own face. */}
+        <p className="mt-5 max-w-2xl font-mono text-xs uppercase leading-relaxed tracking-[0.1em] text-ink-lo">
+          No party money. No PAC money. No ads, no accounts. Open source, self-hosted, run by
+          volunteers.
+        </p>
       </div>
     </section>
   );

@@ -2919,6 +2919,15 @@ class RollCall(Base):
     nays: Mapped[int] = mapped_column(Integer, default=0)
     present: Mapped[int] = mapped_column(Integer, default=0)
     not_voting: Mapped[int] = mapped_column(Integer, default=0)
+    # A Senate tie broken by the Vice President, as Senate.gov records it
+    # (<tie_breaker>, fetch/congress.senate_tie_breaker): who broke it
+    # ("Vice President of the United States") and how ("Yea"). The vote is
+    # in no member's position, so the yeas and nays above stay equal. Both
+    # "" when the record names no tie-breaker; NULL when not read (a House
+    # roll call, or a Senate one stored before the column existed: a tied
+    # one is read again, congress_activity.reread_senate_ties).
+    tie_breaker_by: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    tie_breaker_vote: Mapped[str | None] = mapped_column(String(12), nullable=True)
     bill_id: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
     source_url: Mapped[str] = mapped_column(String(300), default="")
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

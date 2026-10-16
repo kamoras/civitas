@@ -9,10 +9,42 @@ vi.mock("./RecordsBand", () => ({ default: () => null }));
 
 const KEYS = Object.keys(SECTIONS) as SectionKey[];
 
-describe("Navbar", () => {
-  it("discloses a section's pages with a button, not a menu, and Escape closes it", () => {
+describe("Navbar search", () => {
+  it("opens a plain labelled GET form to /search?q=, focused", () => {
     render(<Navbar />);
-    const button = screen.getByRole("button", { name: "Elections pages" });
+    const [toggle] = screen.getAllByRole("button", { name: "SEARCH" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const box = screen.getByLabelText("Search the record");
+    expect(box).toHaveFocus();
+    expect(box).toHaveAttribute("name", "q");
+    const form = box.closest("form")!;
+    expect(form).toHaveAttribute("action", "/search");
+    expect(form).toHaveAttribute("method", "get");
+    expect(within(form).getByRole("button", { name: "[ SEARCH ]" })).toHaveAttribute(
+      "type",
+      "submit"
+    );
+  });
+
+  it("closes on Escape and gives focus back to its button", () => {
+    render(<Navbar />);
+    const [toggle] = screen.getAllByRole("button", { name: "SEARCH" });
+    fireEvent.click(toggle);
+    fireEvent.keyDown(screen.getByLabelText("Search the record"), { key: "Escape" });
+    expect(screen.queryByLabelText("Search the record")).toBeNull();
+    expect(toggle).toHaveFocus();
+  });
+});
+
+describe("Navbar", () => {
+  it("opens a section's pages from one trigger, not a menu, and Escape closes it", () => {
+    render(<Navbar />);
+    const row = screen.getByTestId("nav-row");
+    // One control per section: the name is the trigger, no separate link.
+    const button = within(row).getByRole("button", { name: /^ELECTIONS/ });
+    expect(within(row).queryByRole("link", { name: "ELECTIONS" })).toBeNull();
     expect(button).toHaveAttribute("aria-expanded", "false");
     const panel = document.getElementById(button.getAttribute("aria-controls")!)!;
     expect(panel).not.toBeVisible();
@@ -21,8 +53,17 @@ describe("Navbar", () => {
     fireEvent.click(button);
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(panel).toBeVisible();
+    // Every page of the section, the hub first, the current one marked.
+    expect(
+      within(panel)
+        .getAllByRole("link")
+        .map((l) => l.getAttribute("href"))
+    ).toEqual(SECTIONS.elections.tabs.map((t) => t.href));
     const seatMap = within(panel).getByRole("link", { name: /Seat map/ });
     expect(seatMap).toHaveAttribute("aria-current", "page");
+    expect(within(panel).getByRole("link", { name: "Ballots by state" })).not.toHaveAttribute(
+      "aria-current"
+    );
 
     seatMap.focus();
     fireEvent.keyDown(seatMap, { key: "Escape" });
@@ -32,28 +73,31 @@ describe("Navbar", () => {
 
   it("opens one section at a time", () => {
     render(<Navbar />);
-    fireEvent.click(screen.getByRole("button", { name: "Congress pages" }));
-    fireEvent.click(screen.getByRole("button", { name: "Elections pages" }));
-    expect(screen.getByRole("button", { name: "Congress pages" })).toHaveAttribute(
+    const row = screen.getByTestId("nav-row");
+    fireEvent.click(within(row).getByRole("button", { name: /^CONGRESS/ }));
+    fireEvent.click(within(row).getByRole("button", { name: /^ELECTIONS/ }));
+    expect(within(row).getByRole("button", { name: /^CONGRESS/ })).toHaveAttribute(
       "aria-expanded",
       "false"
     );
   });
 
-  it("marks the section of the page, and a section with no other pages has no button", () => {
+  it("marks the section of the page, and a section with one page is a plain link", () => {
     render(<Navbar />);
-    const nav = screen.getByRole("navigation", { name: "Main navigation" });
-    expect(within(nav).getByRole("link", { name: "ELECTIONS" })).toHaveAttribute(
-      "aria-current",
-      "page"
-    );
-    expect(screen.queryByRole("button", { name: "Explore pages" })).not.toBeInTheDocument();
+    const row = screen.getByTestId("nav-row");
+    expect(
+      within(row).getByRole("button", { name: /^ELECTIONS,? ?current section$/ })
+    ).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: "EXPLORE" })).toHaveAttribute("href", "/explore");
+    expect(within(row).queryByRole("button", { name: /^EXPLORE/ })).toBeNull();
   });
 
   it("lists every section's pages one level down in the phone menu", () => {
     render(<Navbar />);
     fireEvent.click(screen.getByRole("button", { name: "Open navigation menu" }));
     const menu = document.getElementById("mobile-menu")!;
+    // Focus starts on the panel's first control, the state picker.
+    expect(within(menu).getByLabelText("Your state")).toHaveFocus();
     for (const key of KEYS) {
       const subs = sectionSubpages(key);
       if (!subs.length) continue;
@@ -103,9 +147,9 @@ describe("Navbar row overflow guard", () => {
   it("keeps the row where it fits with the gap to spare", () => {
     const row = measured(900, 116, 599);
     expect(row.className).toContain("min-[56rem]:flex");
-    expect(screen.getByRole("button", { name: "Open navigation menu" }).className).toContain(
-      "min-[56rem]:hidden"
-    );
+    // MENU and the MENU layout's SEARCH share one wrapper, hidden with the row shown.
+    const menu = screen.getByRole("button", { name: "Open navigation menu" });
+    expect(menu.parentElement!.className).toContain("min-[56rem]:hidden");
     vi.unstubAllGlobals();
   });
 
@@ -116,7 +160,7 @@ describe("Navbar row overflow guard", () => {
     expect(row.className).toContain("invisible");
     expect(row).toHaveAttribute("inert");
     const menu = screen.getByRole("button", { name: "Open navigation menu" });
-    expect(menu.className).not.toContain("min-[56rem]:hidden");
+    expect(menu.parentElement!.className).not.toContain("min-[56rem]:hidden");
     fireEvent.click(menu);
     expect(document.getElementById("mobile-menu")!.className).not.toContain("min-[56rem]:hidden");
     vi.unstubAllGlobals();
