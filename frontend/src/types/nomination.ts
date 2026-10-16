@@ -1,6 +1,6 @@
 /** Presidential nominations (backend services/nomination_service.py). */
 
-import type { PartySplit, VoteMember } from "@/types/congress";
+import type { PartySplit, RollCallShape, VoteMember } from "@/types/congress";
 
 export type NominationStatus = "pending" | "confirmed" | "returned" | "withdrawn";
 export type NominationKind = "civilian" | "judicial" | "military";
@@ -95,7 +95,7 @@ export interface NominationDetail extends Omit<NominationSummary, "nominees"> {
   committee: { code: string; name: string } | null;
   fjc: { judgeId: string; url: string } | null;
   congressGovUrl: string;
-  rollCalls: {
+  rollCalls: (RollCallShape & {
     chamber: "senate";
     congress: number;
     session: number;
@@ -115,7 +115,7 @@ export interface NominationDetail extends Omit<NominationSummary, "nominees"> {
     citations: number;
     /** Each party's split, on the vote to confirm only. */
     parties: PartySplit[] | null;
-  }[];
+  })[];
   finalVote: { session: number; number: number; members: VoteMember[] } | null;
   updateDate: string;
 }

@@ -526,6 +526,117 @@ describe("roll call page", () => {
     render(<RollCallView vote={nomination} path="/congress/votes/senate/119/2/256" />);
     expect(await violations()).toEqual([]);
   });
+
+  it("names the Vice President's tie-breaking vote", () => {
+    const tie: VoteDetail = {
+      ...detail,
+      number: 7,
+      yeas: 50,
+      nays: 50,
+      result: "Bill Passed",
+      kind: "question",
+      tally: "50–50, Vice President of the United States voted Yea",
+      resultLabel: "Bill Passed",
+      tieBreaker: { byWhom: "Vice President of the United States", vote: "Yea" },
+      candidates: [],
+    };
+    render(<RollCallView vote={tie} path="/congress/votes/senate/119/1/7" />);
+    expect(screen.getByText("50–50")).toBeTruthy();
+    expect(
+      screen.getByText("Tie broken: Vice President of the United States voted Yea")
+    ).toBeTruthy();
+    // A screen reader hears the count spelled out, not "50 50".
+    expect(screen.getByText("50 yeas to 50 nays.")).toHaveClass("sr-only");
+    expect(screen.getByText("50–50")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("counts a Speaker election by candidate, not as 0–0 with everyone not voting", () => {
+    const member = (lastName: string, party: string, candidate: string) => ({
+      lastName,
+      firstName: "",
+      party,
+      state: "LA",
+      position: candidate,
+      bucket: "candidate" as const,
+      candidate,
+      page: null,
+    });
+    const election: VoteDetail = {
+      ...detail,
+      chamber: "house",
+      session: 1,
+      number: 2,
+      question: "Election of the Speaker",
+      title: "",
+      result: "Doe (TX)",
+      rejected: null,
+      majorityRequirement: "1/2",
+      billId: null,
+      billLabel: null,
+      yeas: 0,
+      nays: 0,
+      notVoting: 0,
+      kind: "election",
+      tally: "Doe (TX) 2, Roe 1",
+      resultLabel: "Doe (TX) elected",
+      tieBreaker: null,
+      candidates: [
+        { name: "Doe (TX)", votes: 2 },
+        { name: "Roe", votes: 1 },
+      ],
+      parties: [
+        { party: "R", yea: 0, nay: 0, present: 0, notVoting: 0, candidates: { "Doe (TX)": 2 } },
+        { party: "D", yea: 0, nay: 0, present: 0, notVoting: 0, candidates: { Roe: 1 } },
+      ],
+      members: [
+        member("Aster", "R", "Doe (TX)"),
+        member("Birch", "R", "Doe (TX)"),
+        member("Cedar", "D", "Roe"),
+      ],
+    };
+    render(<RollCallView vote={election} path="/congress/votes/house/119/1/2" />);
+    expect(screen.getByText("Doe (TX) elected")).toBeTruthy();
+    // The question is the title, said once.
+    expect(screen.getAllByText("Election of the Speaker")).toHaveLength(1);
+    expect(screen.getByText("2 Doe (TX)")).toBeTruthy();
+    expect(screen.getByText("Republicans: 2 for Doe (TX)")).toHaveClass("sr-only");
+    expect(screen.getByText("Doe (TX) · 2")).toBeTruthy();
+    expect(screen.getByText("Roe · 1")).toBeTruthy();
+    expect(screen.queryByText("Not voting · 3")).toBeNull();
+    expect(screen.queryByText("Required")).toBeNull();
+  });
+
+  it("shows a quorum call as members present, with no result", () => {
+    const quorum: VoteDetail = {
+      ...detail,
+      chamber: "house",
+      session: 1,
+      number: 1,
+      question: "Call by States",
+      title: "QUORUM",
+      result: "Passed",
+      rejected: null,
+      billId: null,
+      billLabel: null,
+      yeas: 0,
+      nays: 0,
+      present: 433,
+      notVoting: 2,
+      kind: "quorum",
+      tally: "433 present",
+      resultLabel: "Quorum call",
+      tieBreaker: null,
+      candidates: [],
+      parties: [{ party: "R", yea: 0, nay: 0, present: 219, notVoting: 1 }],
+    };
+    render(<RollCallView vote={quorum} path="/congress/votes/house/119/1/1" />);
+    expect(screen.getByText("Quorum call")).toBeTruthy();
+    expect(screen.getByText("433 present")).toBeTruthy();
+    expect(screen.getByText("219 present · 1 NV")).toBeTruthy();
+    expect(screen.getByText("Republicans: 219 present, 1 not voting")).toHaveClass("sr-only");
+    expect(screen.queryByText("Passed")).toBeNull();
+    expect(screen.queryByText("0–0")).toBeNull();
+  });
 });
 
 describe("bill page", () => {

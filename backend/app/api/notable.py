@@ -32,6 +32,7 @@ from app.pipeline.fetch.floor_logs import NAY_POSITIONS, YEA_POSITIONS
 from app.pipeline.transform.normalize_votes import MAJORITY_LEADER_TITLES, is_housekeeping
 from app.services.bill_record import MemberLinks
 from app.services.congress_service import bill_label, week_bounds
+from app.services.roll_call_shape import shape
 
 router = APIRouter()
 
@@ -74,6 +75,7 @@ def _vote_ref(rc: RollCall) -> dict:
         "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
         "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
         "yeas": rc.yeas, "nays": rc.nays, "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id),
+        "tieBreaker": shape(rc)["tieBreaker"],
     }
 
 
@@ -85,7 +87,11 @@ def _closest(votes: list[RollCall]) -> dict | None:
         return None
     rc = min(pool, key=lambda v: (abs(v.yeas - v.nays), _desc_key(v)))
     margin = abs(rc.yeas - rc.nays)
-    if margin == 0:
+    tie = shape(rc)["tieBreaker"]
+    if margin == 0 and tie:
+        sentence = (f"Tied {rc.yeas}–{rc.nays} in the {_CHAMBER_NAME[rc.chamber]}, broken by the "
+                    f"{tie['byWhom']} voting {tie['vote']}: {rc.result}.")
+    elif margin == 0:
         sentence = f"Tied {rc.yeas}–{rc.nays} in the {_CHAMBER_NAME[rc.chamber]}: {rc.result}."
     else:
         sentence = (f"Decided by {margin} vote{'' if margin == 1 else 's'} in the "

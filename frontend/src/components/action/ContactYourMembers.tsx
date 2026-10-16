@@ -16,6 +16,7 @@ import { formatUtcDate, safeHref } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { boxedControl } from "@/lib/controlStyles";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
+import { useYourState } from "@/hooks/useYourState";
 import { rollCallHref } from "@/lib/congress";
 import type { ActionIssue, IssueMember, IssueVote } from "@/types/action";
 
@@ -262,7 +263,16 @@ export default function ContactYourMembers({
   /** Members the coverage names are listed above: these are the reader's own. */
   afterNamed?: boolean;
 }) {
-  const [state, setState] = useState("");
+  // Starts from the state chosen in the header for this tab
+  // (useYourState) and follows it until the reader picks here; a pick here
+  // becomes the header's.
+  const yours = useYourState();
+  const [picked, setPicked] = useState<string | null>(null);
+  const state = picked ?? yours.state;
+  const setState = (next: string) => {
+    setPicked(next);
+    if (next) yours.setState(next);
+  };
   const [place, setPlace] = useState("");
   const [showAllHouse, setShowAllHouse] = useState(false);
   const selectId = useId();
@@ -316,8 +326,8 @@ export default function ContactYourMembers({
       </p>
       <p className="mt-0.5 text-[13px] text-ink-lo">
         Pick your state for each office&apos;s phone and contact form
-        {(issue.voteCount ?? 0) > 0 ? ", and how each member voted on this" : ""}. Nothing you pick
-        is saved.
+        {(issue.voteCount ?? 0) > 0 ? ", and how each member voted on this" : ""}. Your pick stays
+        in this tab only.
       </p>
       <label htmlFor={selectId} className="sr-only">
         Your state

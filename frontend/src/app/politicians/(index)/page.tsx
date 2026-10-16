@@ -26,6 +26,7 @@ import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import Photo from "@/components/Photo";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
+import { useYourState } from "@/hooks/useYourState";
 
 type BranchFilter = "all" | "senate" | "house" | "president" | "scotus";
 type PartyFilter = "ALL" | "D" | "R" | "I";
@@ -273,11 +274,19 @@ function PoliticiansPageContent() {
   };
   const [branch, setBranch] = useState<BranchFilter>(initialBranch);
   const [party, setParty] = useState<PartyFilter>("ALL");
-  const [state, setStateValue] = useState<string>(initialState);
+  // The filter starts from ?state=, else from the state chosen in the
+  // header for this tab (useYourState), and follows the header until the
+  // reader sets the filter here; a state picked here becomes the header's.
+  const yours = useYourState();
+  const [stateValue, setStateValue] = useState<string>(initialState);
+  const [stateTouched, setStateTouched] = useState(Boolean(initialState));
+  const state = stateTouched ? stateValue : yours.state;
   const setState = (next: string) => {
+    setStateTouched(true);
     setStateValue(next);
     setCountyValue("");
     writeParams({ state: next, county: "" });
+    if (next) yours.setState(next);
   };
   const [search, setSearch] = useState<string>("");
   const searchRef = useRef<HTMLInputElement>(null);
