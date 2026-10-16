@@ -92,7 +92,7 @@ export function RaceResultCard({
       // A #race- link lands here, focused (StateResults), and clear of the
       // fixed header, as AboutPage's anchors are.
       tabIndex={-1}
-      className="scroll-mt-[var(--header-clearance)] border border-white/[0.09] bg-surface p-4 sm:p-5"
+      className="border border-white/[0.09] bg-surface p-4 sm:p-5"
       // A shared picture of the count names the state's own source and
       // when it was read, as the card does.
       {...{ [SHARE_SECTION_ATTR]: `race-${result.raceId}` }}
@@ -218,7 +218,7 @@ export function RaceResultCard({
 /** A House row's grid: two columns on a phone (label, then everything
  * else, the tag wrapping under the leader), four from `sm`. */
 const HOUSE_ROW_GRID =
-  "scroll-mt-[var(--header-clearance)] grid grid-cols-[3.75rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 border-b border-white/[0.07] px-4 py-3 last:border-b-0 sm:grid-cols-[4.5rem_minmax(0,1fr)_12rem_8rem]";
+  "grid grid-cols-[3.75rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 border-b border-white/[0.07] px-4 py-3 last:border-b-0 sm:grid-cols-[4.5rem_minmax(0,1fr)_12rem_8rem]";
 /** The status tag's cell: under the leader on a phone, its own column from `sm`. */
 const HOUSE_ROW_TAG =
   "col-start-2 justify-self-start sm:col-start-auto sm:justify-self-end sm:text-right";
@@ -357,7 +357,7 @@ export function SenateNoCountCard({
       id={`result-${raceId}`}
       aria-labelledby={`result-${raceId}-title`}
       tabIndex={-1}
-      className="scroll-mt-[var(--header-clearance)] border border-white/[0.09] bg-surface p-4 sm:p-5"
+      className="border border-white/[0.09] bg-surface p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Heading

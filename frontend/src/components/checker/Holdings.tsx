@@ -495,7 +495,7 @@ export default function Holdings({
           asOf: data.asOfDate ?? data.filedDate,
           scaleMax: null,
         })}
-        className="scroll-mt-[var(--header-clearance)] border border-white/25 bg-surface font-sans"
+        className="border border-white/25 bg-surface font-sans"
       >
         <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
           <div className="min-w-0">

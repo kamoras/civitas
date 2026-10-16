@@ -6,6 +6,8 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import ElectionMapMethod from "./ElectionMapMethod";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
+import { trapTab } from "@/lib/focusedDialog";
+import { MAP_LABEL_HALO } from "@/lib/results";
 import {
   CHAMBER_LABEL,
   CLOSE_HATCH,
@@ -182,7 +184,7 @@ function SenateTileMap({
                   x={x + TILE / 2}
                   y={y + TILE / 2 + 1.2}
                   textAnchor="middle"
-                  className="fill-ink-min/50 font-mono"
+                  className={`fill-ink-min/75 font-mono ${MAP_LABEL_HALO}`}
                   fontSize="3"
                 >
                   {state}
@@ -202,7 +204,7 @@ function SenateTileMap({
             className={
               mini
                 ? undefined
-                : "cursor-pointer outline-none [&:focus-visible>rect.frame]:stroke-ink-hi"
+                : "cursor-pointer outline-none [&:focus-visible>rect.frame]:stroke-signal-cyan [&:focus-visible>rect.frame]:[stroke-width:1]"
             }
             onClick={
               mini
@@ -260,7 +262,7 @@ function SenateTileMap({
                 x={x + TILE / 2}
                 y={y + (view === "diff" ? 3.6 : TILE / 2 + 1.2)}
                 textAnchor="middle"
-                className="pointer-events-none fill-ink-hi font-mono"
+                className={`pointer-events-none fill-ink-hi font-mono ${MAP_LABEL_HALO}`}
                 fontSize="3"
               >
                 {state}
@@ -279,7 +281,7 @@ function SenateTileMap({
                     textAnchor="middle"
                     fontSize={mini ? 7 : 5}
                     fill={d ? DEM : REP}
-                    className="pointer-events-none font-mono motion-safe:animate-[map-pulse_0.6s_ease-in-out_2]"
+                    className={`pointer-events-none font-mono motion-safe:animate-[map-pulse_0.6s_ease-in-out_2] ${MAP_LABEL_HALO}`}
                   >
                     {glyph}
                   </text>
@@ -342,7 +344,7 @@ function HouseTileMap({
           className={
             mini
               ? undefined
-              : "cursor-pointer outline-none [&:focus-visible>rect.frame]:stroke-ink-hi"
+              : "cursor-pointer outline-none [&:focus-visible>rect.frame]:stroke-signal-cyan [&:focus-visible>rect.frame]:[stroke-width:1]"
           }
           onClick={
             mini
@@ -404,7 +406,7 @@ function HouseTileMap({
                     textAnchor="middle"
                     fontSize="9"
                     fill={s.status === "range" && s.difference.direction === "D" ? DEM : REP}
-                    className="pointer-events-none font-mono motion-safe:animate-[map-pulse_0.6s_ease-in-out_2]"
+                    className={`pointer-events-none font-mono motion-safe:animate-[map-pulse_0.6s_ease-in-out_2] ${MAP_LABEL_HALO}`}
                   >
                     {glyph}
                   </text>
@@ -1068,22 +1070,12 @@ export default function ElectionMap({
         return;
       }
       // The sheet is modal on a phone: Tab cycles inside it.
-      if (e.key !== "Tab" || !modal || !detailRef.current) return;
-      const focusable = [
+      if (!modal || !detailRef.current) return;
+      trapTab(e, [
         ...detailRef.current.querySelectorAll<HTMLElement>(
           "a[href], button:not([disabled]), select, [tabindex='0']"
         ),
-      ];
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      ]);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1151,12 +1143,8 @@ export default function ElectionMap({
       }}
     >
       <div className="space-y-4">
-        {/* Clear of the fixed site header when scrolled to (scroll-mt). */}
-        <div
-          id="map-views"
-          {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-          className="scroll-mt-[var(--header-clearance)] space-y-3"
-        >
+        {/* Clear of the fixed site header when scrolled to: globals.css scroll-padding-top. */}
+        <div id="map-views" {...{ [SHARE_EXCLUDE_ATTR]: "" }} className="space-y-3">
           <div
             role="group"
             aria-label="Chamber"
@@ -1246,7 +1234,7 @@ export default function ElectionMap({
           <section
             id="general-map"
             aria-labelledby="general-map-stamp"
-            className="relative min-w-0 scroll-mt-[var(--header-clearance)] border border-phos/20 bg-surface p-3 sm:p-4"
+            className="relative min-w-0 border border-phos/20 bg-surface p-3 sm:p-4"
             {...{ [SHARE_SECTION_ATTR]: "general-map" }}
             // A share image is drawn at a fixed layout width with the tile
             // map, whatever the screen: a phone's House state list made a

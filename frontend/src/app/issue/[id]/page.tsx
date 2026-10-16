@@ -175,7 +175,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           <header
             id="summary"
             {...{ [SHARE_SECTION_ATTR]: "summary" }}
-            className="mt-6 scroll-mt-[var(--header-clearance)] border-b-3 border-ink-min/60 pb-6"
+            className="mt-6 border-b-3 border-ink-min/60 pb-6"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               {/* issueDateLabel inside: firstSurfaced, then "updated" when the
@@ -237,11 +237,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           {/* Media coverage: lines quoted from the sources, each with its
               outlet — or, for an election-results issue, the count. */}
           {issue.facts?.length > 0 && (
-            <div
-              id={factsId}
-              {...{ [SHARE_SECTION_ATTR]: factsId }}
-              className="scroll-mt-[var(--header-clearance)]"
-            >
+            <div id={factsId} {...{ [SHARE_SECTION_ATTR]: factsId }}>
               <Coverage
                 issue={issue}
                 className="mt-10"

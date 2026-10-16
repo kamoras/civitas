@@ -168,7 +168,7 @@ function NewRow({ d, filter }: { d: NewDistrict; filter: string }) {
   return (
     <li
       id={`new-${d.number}`}
-      className="grid scroll-mt-24 grid-cols-[34px_1fr] gap-3 border-t border-white/[0.07] py-3"
+      className="grid grid-cols-[34px_1fr] gap-3 border-t border-white/[0.07] py-3"
     >
       <Num n={d.number} />
       <div className="min-w-0">
@@ -205,7 +205,7 @@ function OldRow({ d, filter }: { d: OldDistrict; filter: string }) {
   return (
     <li
       id={`old-${d.number}`}
-      className="grid scroll-mt-24 grid-cols-[34px_1fr] gap-3 border-t border-white/[0.07] py-3"
+      className="grid grid-cols-[34px_1fr] gap-3 border-t border-white/[0.07] py-3"
     >
       <Num n={d.number} />
       <div className="min-w-0">
@@ -357,7 +357,7 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
     <section
       id="method-and-data"
       aria-labelledby="method"
-      className="mt-10 scroll-mt-24 border-t-3 border-ink-min/60 pt-5"
+      className="mt-10 border-t-3 border-ink-min/60 pt-5"
     >
       <h2 id="method" className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
         Method &amp; data

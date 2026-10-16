@@ -1,6 +1,7 @@
 import type { VoterCalendar as Calendar, VoterDeadline } from "@/types/election";
 import { safeHref } from "@/lib/formatting";
 import { shortDate } from "@/lib/congress";
+import { INLINE_LINK } from "@/lib/controlStyles";
 
 /** "6 days left", "last day", "in 6 days": the backend's countdown, worded
  *  for a deadline or for a window that hasn't opened. */
@@ -42,7 +43,7 @@ function Row({ d }: { d: VoterDeadline }) {
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-signal-cyan hover:text-phos"
+            className={INLINE_LINK}
             aria-label={`${checked(d)} (opens in new tab)`}
           >
             {checked(d)} ↗
@@ -100,7 +101,7 @@ export default function VoterCalendar({
             href={lookupHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-signal-cyan hover:text-phos"
+            className={INLINE_LINK}
             aria-label={`${where} (opens in new tab)`}
           >
             {where} ↗

@@ -55,3 +55,14 @@ export function boxedControl(selected: boolean): string {
 export function tabControl(selected: boolean): string {
   return selected ? TAB_CONTROL.selected : TAB_CONTROL.unselected;
 }
+
+/**
+ * A link inside running text. Underlined, not only coloured: cyan on the
+ * ink ramp is 1.1-1.3:1 against the words around it, so colour alone does not
+ * mark it as a link (WCAG 1.4.1; axe's link-in-text-block). It was
+ * `text-signal-cyan hover:text-phos` at 21 call sites, three of them failing
+ * axe on the pages audited. Links that stand alone (a row, a command, a
+ * button-shaped link) don't need it.
+ */
+export const INLINE_LINK =
+  "text-signal-cyan underline decoration-signal-cyan/50 underline-offset-2 hover:text-phos";

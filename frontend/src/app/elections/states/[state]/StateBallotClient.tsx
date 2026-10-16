@@ -79,6 +79,7 @@ import type {
   TownBallot,
   TownEntry,
 } from "@/types/election";
+import { INLINE_LINK } from "@/lib/controlStyles";
 
 // ── Detail content: what the drawer shows for each kind of contest ─────
 
@@ -346,12 +347,7 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
         <p className="mt-1 text-xs text-ink-lo">
           Each voter votes in one district&apos;s seat only.{" "}
           {canFilter ? "Filter by your town to find yours, or " : "Find yours with "}
-          <a
-            href={lookupHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-signal-cyan hover:text-phos"
-          >
+          <a href={lookupHref} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
             {canFilter ? "check the official lookup" : "the official lookup"}
           </a>
           .
@@ -498,12 +494,7 @@ function StateOfficesNotLoaded({
       <p className="text-xs text-ink-lo mt-2">
         This does <strong>not</strong> mean there are none on the ballot: those contests are read
         state by state from each state&apos;s own results, and this one is not covered yet. Use the{" "}
-        <a
-          href={lookupHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-signal-cyan hover:text-phos"
-        >
+        <a href={lookupHref} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
           official lookup ↗
         </a>{" "}
         to see every contest on your ballot.
@@ -580,7 +571,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
                 href={lookupHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-signal-cyan hover:text-phos"
+                className={INLINE_LINK}
               >
                 official lookup ↗
               </a>
@@ -604,7 +595,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
                 href={lookupHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-signal-cyan hover:text-phos"
+                className={INLINE_LINK}
               >
                 official lookup ↗
               </a>
@@ -632,7 +623,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
                 href={lookupHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-signal-cyan hover:text-phos"
+                className={INLINE_LINK}
               >
                 official lookup ↗
               </a>
@@ -682,12 +673,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         <p className="text-sm text-ink">{OPERATOR_NONE_TEXT(state)}</p>
         <p className="text-[10px] text-ink-min mt-2">
           Check the{" "}
-          <a
-            href={lookupHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-signal-cyan hover:text-phos"
-          >
+          <a href={lookupHref} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
             official lookup ↗
           </a>{" "}
           for everything on your ballot.
@@ -707,12 +693,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
           Per {measureCoverage.sourceName || "our source"}
           {measureCoverage.checkedAt ? `, checked ${measureCoverage.checkedAt.slice(0, 10)}` : ""}.
           Your county or city may still have local measures: check the{" "}
-          <a
-            href={lookupHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-signal-cyan hover:text-phos"
-          >
+          <a href={lookupHref} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
             official lookup ↗
           </a>
           .
@@ -740,12 +721,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
       </p>
       <p className="text-xs text-ink-lo mt-2">
         This does <strong>not</strong> mean there are none: {why} Use the{" "}
-        <a
-          href={lookupHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-signal-cyan hover:text-phos"
-        >
+        <a href={lookupHref} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
           official lookup ↗
         </a>{" "}
         to see everything on your ballot.
@@ -879,7 +855,7 @@ function TownDetail({
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label={`${ballot.source} (opens in new tab)`}
-                            className="text-signal-cyan hover:text-phos"
+                            className={INLINE_LINK}
                           >
                             {ballot.source} ↗
                           </a>
@@ -1175,7 +1151,7 @@ function HouseDetail({
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={`${ballot.officialLookup.label} (opens in new tab)`}
-                className="text-signal-cyan hover:text-phos"
+                className={INLINE_LINK}
               >
                 {stateName}&apos;s own voter lookup ↗
               </a>
@@ -1193,7 +1169,7 @@ function HouseDetail({
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Find your representative at house.gov (opens in new tab)"
-            className="text-signal-cyan hover:text-phos"
+            className={INLINE_LINK}
           >
             look it up at house.gov ↗
           </a>
@@ -1202,7 +1178,7 @@ function HouseDetail({
       )}
       {houseRaces.some((r) => r.redistricting) && (
         <p className="mb-3 font-mono text-xs tracking-[0.1em]">
-          <Link href={redistrictingHref(ballot.state)} className="text-signal-cyan hover:text-phos">
+          <Link href={redistrictingHref(ballot.state)} className={INLINE_LINK}>
             [ WHAT CHANGED ON THE NEW MAP → ]
           </Link>{" "}
           <span className="font-sans tracking-normal text-ink-min">
@@ -1971,7 +1947,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`${officialLookup.fallback?.label ?? "National directory of election offices"} (opens in new tab)`}
-                      className="text-signal-cyan hover:text-phos"
+                      className={INLINE_LINK}
                     >
                       national directory ↗
                     </a>

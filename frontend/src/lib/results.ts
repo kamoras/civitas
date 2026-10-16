@@ -1024,3 +1024,13 @@ export function stateFill(
 ): string {
   return stateShade("", races, chamber, covered, hasRace, feedDown, pollsOpen).fill;
 }
+
+/**
+ * A dark halo under a label drawn on a map tile, so the label reads on any
+ * fill. State letters in ink-hi sat straight on the party fills at 1.98:1 on
+ * a solid Republican tile and about 3.3:1 on the mid shades (WCAG 1.4.3); the
+ * halo puts page-dark behind every letter, whatever the tile. `em` keeps it in
+ * proportion at every label size.
+ */
+export const MAP_LABEL_HALO =
+  "[paint-order:stroke] stroke-surface-base [stroke-width:0.25em] [stroke-linejoin:round]";

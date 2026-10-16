@@ -195,7 +195,7 @@ export default async function AgenciesPage({
                 data-share-section="budget"
                 {...shareMetaAttrs({ source: "USAspending.gov", asOf: budget.asOf })}
                 aria-labelledby="budget-heading"
-                className="mb-10 scroll-mt-28 border border-white/[0.07]"
+                className="mb-10 border border-white/[0.07]"
               >
                 <TerminalTitlebar title={`Budgetary resources · ${fy}`} />
                 <div className="p-4">
@@ -253,10 +253,7 @@ export default async function AgenciesPage({
             )}
 
             <section aria-labelledby="agency-directory">
-              <h2
-                id="agency-directory"
-                className="scroll-mt-[var(--header-clearance)] font-display text-xl font-extrabold text-ink-hi"
-              >
+              <h2 id="agency-directory" className="font-display text-xl font-extrabold text-ink-hi">
                 Every agency
               </h2>
               <p className="mt-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">

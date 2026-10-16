@@ -221,7 +221,7 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-[var(--header-clearance)]">
+    <section id={id} aria-labelledby={`${id}-h`}>
       {kicker && (
         <p className="font-mono text-xs uppercase tracking-[0.16em] text-signal-cyan">{kicker}</p>
       )}
@@ -238,7 +238,7 @@ export function Section({
 
 export function Sub({ title, id, children }: { title: string; id?: string; children: ReactNode }) {
   return (
-    <div id={id} className="scroll-mt-[var(--header-clearance)] space-y-3 pt-2">
+    <div id={id} className="space-y-3 pt-2">
       <h3 className="font-display text-lg font-semibold text-ink-hi">{title}</h3>
       {children}
     </div>

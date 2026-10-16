@@ -3,6 +3,7 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { useState } from "react";
 import { FIPS_TO_STATE } from "@/lib/stateCodes";
+import { MAP_LABEL_HALO } from "@/lib/results";
 import { ComposableMap, Geographies, Geography, useMapContext } from "react-simple-maps";
 
 // Extracted from the Action Center's old elections tab (2026-07), when it and
@@ -226,6 +227,7 @@ function SmallStateCallouts({
               fontFamily="ui-monospace, monospace"
               fontSize={14}
               fill="#e8e4dc"
+              className={MAP_LABEL_HALO}
             >
               {stateCode}
             </text>

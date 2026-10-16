@@ -16,6 +16,7 @@ import { mapHref } from "@/lib/electionMap";
 import type { LeanContext, RaceWithCandidates } from "@/types/election";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
+import { INLINE_LINK } from "@/lib/controlStyles";
 
 /** The seat's lean in words: what R+5 means, for a reader who has never
  * seen a PVI. "The last two presidential elections" is the PVI's own
@@ -204,7 +205,7 @@ export default function RaceContext({
                     <span className="font-mono text-ink">{formatPvi(race.pvi)}</span>.{" "}
                   </>
                 )}
-              <Link href={COMPUTED_LEAN_HREF} className="text-signal-cyan hover:text-phos">
+              <Link href={COMPUTED_LEAN_HREF} className={INLINE_LINK}>
                 How it is computed
               </Link>
             </p>

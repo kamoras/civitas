@@ -82,7 +82,7 @@ export default function ScorecardHeader({
     <header
       id="overview"
       {...{ [SHARE_SECTION_ATTR]: "overview" }}
-      className={`grid scroll-mt-[var(--header-clearance)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:grid-rows-[auto_1fr] ${PARTY_BORDER[member.party]}`}
+      className={`grid gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:grid-rows-[auto_1fr] ${PARTY_BORDER[member.party]}`}
     >
       {/* Three blocks in reading order for a phone — who, the score, then
           how to reach them; on a desktop the score takes the right column

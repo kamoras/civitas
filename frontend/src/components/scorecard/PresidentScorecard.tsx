@@ -416,7 +416,7 @@ export default function PresidentScorecard({
           <header
             id="overview"
             {...{ [SHARE_SECTION_ATTR]: "overview" }}
-            className={`grid scroll-mt-[var(--header-clearance)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
+            className={`grid gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
           >
             {/* Portrait above the name below sm: beside it, the name had
                 about 146px at 320px and long surnames split mid-word. */}
