@@ -292,7 +292,7 @@ export default function NewsChapter() {
           day, published by the Government Publishing Office the next day. Until it appears, the
           page shows each chamber&apos;s floor log: the House writes its log through the day, the
           Senate posts its log after the session ends. Record votes come from each chamber&apos;s
-          roll-call files, with every member&apos;s vote, back to the start of the 119th Congress.
+          roll-call files, with every member&apos;s vote, back to January 2025.
         </P>
         <P>
           Every entry uses the Record&apos;s own wording. The one-line summary at the top is filled

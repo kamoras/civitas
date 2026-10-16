@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { congressOrdinal } from "@/lib/sources";
 import { notFound } from "next/navigation";
 import type { StateRedistricting } from "@/types/redistricting";
 import { fetchRecord } from "@/lib/ssrPayload";
@@ -78,8 +79,8 @@ export default async function StateRedistrictingPage({
         data={{
           "@context": "https://schema.org",
           "@type": "Dataset",
-          name: `${data.stateName} U.S. House districts, ${data.fromCongress}th to ${data.toCongress}th Congress lines: 2020 Census resident overlap`,
-          description: `2020 Census residents in each pair of an old and a new ${data.stateName} congressional district, with each district's Cook PVI on both maps.`,
+          name: `${data.stateName} U.S. House districts, ${congressOrdinal(data.fromCongress)} to ${congressOrdinal(data.toCongress)} Congress lines: Census resident overlap`,
+          description: `Census residents in each pair of an old and a new ${data.stateName} congressional district, with each district's Cook PVI on both maps.`,
           url: absoluteUrl(redistrictingHref(data.state)),
           isAccessibleForFree: true,
           distribution: [

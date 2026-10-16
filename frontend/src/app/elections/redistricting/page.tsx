@@ -112,8 +112,8 @@ export default async function RedistrictingIndexPage() {
 
           <p className="mt-8 max-w-2xl text-xs leading-relaxed text-ink-min">
             Lean is Cook PVI: how a district voted for president relative to the nation, on the same
-            2020 + 2024 window before and after, so a change in lean is a change in the lines. It is
-            not a forecast. Each state page explains the method and lists every source.
+            presidential elections before and after, so a change in lean is a change in the lines.
+            It is not a forecast. Each state page explains the method and lists every source.
           </p>
         </div>
       </main>

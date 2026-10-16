@@ -1,5 +1,6 @@
 "use client";
 
+import { congressOrdinal } from "@/lib/sources";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type {
@@ -13,6 +14,7 @@ import {
   districtAreaLabel,
   formatComputedLean,
   formatPvi,
+  leanWindowWords,
   matchesDistrictQuery,
   placeDistrictSummary,
   pviColor,
@@ -233,8 +235,9 @@ function OverlapMatrix({ data }: { data: StateRedistricting }) {
     >
       <table className="border-collapse font-mono text-[10px] text-ink-lo">
         <caption className="sr-only">
-          2020 Census residents in each pair of an old ({data.fromCongress}th Congress) and a new (
-          {data.toCongress}th Congress) district. Rows are old districts, columns new ones.
+          Census residents in each pair of an old ({congressOrdinal(data.fromCongress)} Congress)
+          and a new ({congressOrdinal(data.toCongress)} Congress) district. Rows are old districts,
+          columns new ones.
         </caption>
         <thead>
           <tr>
@@ -346,6 +349,9 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
   const [open, setOpen] = useState(false);
   const downloads = redistrictingDownloads(data.state);
   const actUrl = safeHref(data.map?.url ?? null);
+  const leanYears = leanWindowWords(
+    data.sources.pviAfter?.window ?? data.sources.pviBefore?.window
+  );
   return (
     <section
       id="method-and-data"
@@ -357,10 +363,10 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
       </h2>
       <div className="mt-3 max-w-3xl space-y-3 text-[13px] leading-relaxed text-ink-lo">
         <p>
-          Every 2020 Census block is assigned to one district on each map by the Census
-          Bureau&apos;s block equivalency files. Each block&apos;s 2020 population is counted in the
-          pair of districts (old, new) it falls in, so every resident is counted exactly once and
-          each state&apos;s cells add up to its 2020 population (
+          Every block of the Census the maps were drawn to is assigned to one district on each map
+          by the Census Bureau&apos;s block equivalency files. Each block&apos;s Census population
+          is counted in the pair of districts (old, new) it falls in, so every resident is counted
+          exactly once and each state&apos;s cells add up to its Census population (
           {data.summary.population.toLocaleString("en-US")}). The sentences above leave out overlaps
           under {data.minResidents} residents: a block the line cuts through is assigned whole to
           one side, so an overlap that small can be the block file&apos;s rounding rather than
@@ -371,8 +377,9 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
           most of its residents came from; its &quot;before&quot; lean is the predecessor&apos;s.
           The weighted figure averages the leans of every old district its residents came from, by
           residents. The average resident&apos;s shift is how far each resident&apos;s district lean
-          moved, either way, averaged over residents. Both leans are Cook PVI on the same 2020 +
-          2024 presidential window, so the change is the lines, not new elections.
+          moved, either way, averaged over residents. Both leans are Cook PVI on the same
+          presidential elections{leanYears ? ` (${leanYears})` : ""}, so the change is the lines,
+          not new elections.
         </p>
         <p>
           <span className="text-ink-hi">Seats by lean</span> (the figures at the top) count each
@@ -390,8 +397,8 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
           lot.
         </p>
         <p>
-          Population is the 2020 Census, the count the maps were drawn to; it does not track moves
-          since. Lean is how a district voted for president relative to the nation, not a forecast.
+          Population is the decennial Census the maps were drawn to; it does not track moves since.
+          Lean is how a district voted for president relative to the nation, not a forecast.
         </p>
         <ul className="list-none space-y-1.5 border-l border-white/[0.09] pl-3">
           <li>
@@ -415,11 +422,11 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
             <span className="text-ink-hi">Residents:</span> {data.sources.overlap}
           </li>
           <PviSourceLine
-            label={`Old lean (${data.fromCongress}th Congress lines)`}
+            label={`Old lean (${congressOrdinal(data.fromCongress)} Congress lines)`}
             meta={data.sources.pviBefore}
           />
           <PviSourceLine
-            label={`New lean (${data.toCongress}th Congress lines)`}
+            label={`New lean (${congressOrdinal(data.toCongress)} Congress lines)`}
             meta={data.sources.pviAfter}
           />
           {data.sources.computedLean && (
@@ -525,10 +532,10 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
       <ShareSubjectProvider
         subject={{
           title: `${data.stateName}'s new House map`,
-          subtitle: `${data.cycle} ballot · ${data.fromCongress}th Congress lines to ${data.toCongress}th`,
+          subtitle: `${data.cycle} ballot · ${congressOrdinal(data.fromCongress)} Congress lines to ${congressOrdinal(data.toCongress)}`,
           url: absoluteUrl(redistrictingHref(data.state)),
           source:
-            "U.S. Census Bureau 2020 blocks and block equivalency files; Cook PVI (pinned Wikipedia revisions)",
+            "U.S. Census Bureau blocks and block equivalency files; Cook PVI (pinned Wikipedia revisions)",
           // The new lines' Cook table, as of its pinned revision.
           asOf: data.sources.pviAfter?.revision?.timestamp ?? null,
         }}

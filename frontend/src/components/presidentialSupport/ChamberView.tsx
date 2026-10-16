@@ -1,5 +1,6 @@
 "use client";
 
+import { congressOrdinal } from "@/lib/sources";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
@@ -190,7 +191,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
 
           <section aria-labelledby="ps-all">
             <h2 id="ps-all" className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-              Every member · {chamberWord}, {view.congress}th Congress
+              Every member · {chamberWord}, {congressOrdinal(view.congress)} Congress
             </h2>
             <div role="group" aria-label="Sort members" className="mt-2 flex flex-wrap gap-2">
               {(
