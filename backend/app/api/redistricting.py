@@ -10,11 +10,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.politicians import counties_on_lines_of
 from app.api.response_helpers import CACHE_TTL_REFERENCE_S, cached_json
 from app.config import settings
 from app.database import get_db
-from app.district_places import places_on_lines_of
+from app.district_places import counties_on_lines_of, places_on_lines_of
 from app.election_phase import active_election
 from app.live_results.sync import _maps
 from app.redistricting import overlap_file, redrawn_overlap_states, state_changes

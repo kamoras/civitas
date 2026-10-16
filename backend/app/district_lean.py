@@ -19,7 +19,7 @@ import json
 import logging
 import pathlib
 
-from app.live_results.sync import _map_in, _maps
+from app.district_lines import table_for_lines
 from app.pipeline.fetch.district_pvi import district_pvi_for_congress
 
 logger = logging.getLogger(__name__)
@@ -56,35 +56,16 @@ def computed_lean(congress: int | None) -> dict[str, float]:
     return table if isinstance(table, dict) else {}
 
 
-def _elected_in(congress: int) -> int:
-    """The election year that seats `congress` (the 1st was elected in 1788)."""
-    return 1786 + 2 * congress
-
-
 def lines_table(state: str, congress: int | None) -> dict[str, float]:
-    """The computed-lean table that describes `state`'s districts on
-    `congress`'s lines: that Congress's own table, or — when nobody has
-    built one yet (the next cycle's, before the new returns exist) — the
-    newest earlier Congress's, but only for a state whose map is the same
-    in both elections. "The same" is read from
-    redrawn_congressional_maps.json, and only once that file lists the
-    election `congress` is chosen in: a cycle nobody has reviewed (a court
-    stay "for 2026 only" carries no weight in 2028 until someone says so)
-    gets nothing, and the elections readiness check alerts for it. A state
-    that redrew gets nothing until its own table is built."""
+    """The computed-lean table for `state`'s districts on `congress`'s
+    lines: that Congress's own table, or the newest earlier one where the
+    state's map is unchanged and the cycle's maps are confirmed
+    (district_lines.table_for_lines); empty otherwise."""
     if congress is None:
         return {}
-    own = computed_lean(congress)
-    if own:
-        return own
-    cycles = _maps()
-    target = _elected_in(congress)
-    if str(target) not in cycles:
-        return {}
-    earlier = max((int(c) for c in (_file().get("congresses") or {}) if int(c) < congress), default=None)
-    if earlier is None or _map_in(cycles, target, state) != _map_in(cycles, _elected_in(earlier), state):
-        return {}
-    return computed_lean(earlier)
+    tables = {int(c): (t or {}).get("districts") or {} for c, t in (_file().get("congresses") or {}).items()}
+    table = table_for_lines(congress, tables) or {}
+    return {k: v for k, v in table.items() if k.split("-")[0] == state}
 
 
 def lean_for(state: str, district: int | None, congress: int | None) -> float | None:

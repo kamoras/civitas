@@ -512,7 +512,7 @@ class TestElectionReadiness:
         maps = maps if maps is not None else {"2026": {}}
         with patch("app.ops_alerts.utcnow", return_value=dt.combine(today, dt.min.time())), \
              patch("app.live_results.sync._maps", return_value=maps), \
-             patch("app.district_lean._maps", return_value=maps):
+             patch("app.district_lines._maps", return_value=maps):
             return election_readiness_gaps(self.ELECTION)
 
     def test_nothing_is_asked_for_before_its_lead_time(self):
