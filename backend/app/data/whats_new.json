@@ -2,6 +2,13 @@
   "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
   "entries": [
     {
+      "id": "site-search",
+      "date": "2026-10-16",
+      "title": "Search the whole site",
+      "summary": "One search box in the header finds members, bills, roll calls, agencies, committees, districts, races, ballot measures, issues, nominations, documents and pages as you type, and an exact match such as a bill number or a district code goes straight to its page.",
+      "url": "/search"
+    },
+    {
       "id": "election-map-check",
       "date": "2026-10-16",
       "title": "The seat map checked against the count",

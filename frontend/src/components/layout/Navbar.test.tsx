@@ -4,36 +4,52 @@ import Navbar from "./Navbar";
 import Footer from "./Footer";
 import { SECTIONS, sectionSubpages, type SectionKey } from "@/lib/routes";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/elections/map" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/elections/map",
+  useRouter: () => ({ push: vi.fn() }),
+}));
 vi.mock("./RecordsBand", () => ({ default: () => null }));
 
 const KEYS = Object.keys(SECTIONS) as SectionKey[];
 
 describe("Navbar search", () => {
-  it("opens a plain labelled GET form to /search?q=, focused", () => {
+  function stubDialog() {
+    const proto = HTMLDialogElement.prototype as HTMLDialogElement & Record<string, unknown>;
+    proto.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    };
+    proto.close = function (this: HTMLDialogElement) {
+      this.removeAttribute("open");
+      this.dispatchEvent(new Event("close"));
+    };
+  }
+
+  it("is a link to /search (no JavaScript needed) that opens the search, focused", () => {
+    stubDialog();
     render(<Navbar />);
-    const [toggle] = screen.getAllByRole("button", { name: "SEARCH" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    const [toggle] = screen.getAllByRole("link", { name: "Search" });
+    expect(toggle).toHaveAttribute("href", "/search");
     fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    const box = screen.getByLabelText("Search the record");
+    const box = screen.getByRole("combobox", { name: "Search the whole site" });
     expect(box).toHaveFocus();
     expect(box).toHaveAttribute("name", "q");
     const form = box.closest("form")!;
     expect(form).toHaveAttribute("action", "/search");
     expect(form).toHaveAttribute("method", "get");
-    expect(within(form).getByRole("button", { name: "[ SEARCH ]" })).toHaveAttribute(
-      "type",
-      "submit"
-    );
+    // A clean name: no brackets read out.
+    expect(within(form).getByRole("button", { name: "Go" })).toHaveAttribute("type", "submit");
   });
 
-  it("closes on Escape and gives focus back to its button", () => {
+  it("closes on Escape from anywhere in it and gives focus back to its link", () => {
+    stubDialog();
     render(<Navbar />);
-    const [toggle] = screen.getAllByRole("button", { name: "SEARCH" });
+    const [toggle] = screen.getAllByRole("link", { name: "Search" });
     fireEvent.click(toggle);
-    fireEvent.keyDown(screen.getByLabelText("Search the record"), { key: "Escape" });
-    expect(screen.queryByLabelText("Search the record")).toBeNull();
+    const dialog = screen.getByRole("combobox").closest("dialog")!;
+    // The close button stands in for any control in the dialog; the native
+    // modal's Escape is its `cancel`, which closes it.
+    fireEvent.click(within(dialog).getByRole("button", { name: /close search/i }));
+    expect(dialog).not.toHaveAttribute("open");
     expect(toggle).toHaveFocus();
   });
 });

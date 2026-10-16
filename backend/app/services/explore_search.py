@@ -458,7 +458,7 @@ def hybrid_search(
                 chamber=effective_chamber, politician_id=politician_id,
             )
         except Exception:
-            logger.exception("Semantic channel failed for %r", query)
+            logger.exception("Semantic channel failed")  # never the query (AGENTS.md §8)
             semantic = None
 
     keyword = search_lexical(

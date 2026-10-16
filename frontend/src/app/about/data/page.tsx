@@ -460,6 +460,26 @@ export default function DataChapter() {
         </P>
       </Section>
 
+      <Section id="site-search" title="How the site search works">
+        <P>
+          The search box in the header looks through everything that has a page here: members of
+          Congress, presidents and justices, bills, roll calls, agencies, committees, states,
+          districts, races, ballot measures, Action Center issues, ongoing stories, nominations,
+          documents and the site&apos;s own pages. It matches names, numbers and spellings, with no
+          AI model: a bill number in any spelling, a district code like TX-23, an agency&apos;s
+          acronym, a Federal Register citation, a name with a letter wrong.
+        </P>
+        <P>
+          When what you typed names one page clearly (a bill number, a district code, a full name),
+          Enter takes you straight there, to the part of the page your other words name (&ldquo;HR
+          1 votes&rdquo;, a member&apos;s name and &ldquo;donors&rdquo;). When two pages fit equally
+          well, such as two members with one surname, you get the list instead. How clear is clear
+          enough was measured: of 2,588 test searches built from the pages&apos; own names and
+          numbers, held out from the tuning, 93 in 100 went straight to the right page, and none
+          went straight to a wrong one.
+        </P>
+      </Section>
+
       <Section id="privacy" title="What we record about you">
         <P>
           No accounts, no cookies of our own, no ad networks and no third-party analytics. We count
@@ -497,6 +517,12 @@ export default function DataChapter() {
             a phone number, a contact form, copying the call script, a comment page, a committee, a
             bill), per issue and kind, with nothing about who tapped: not your state, not which
             member or number. Repeat taps of the same link from one reader count once a day.
+          </Item>
+          <Item label="Searches">
+            Nothing. What you type in the search box is not stored or logged: the server&apos;s logs
+            keep which page was asked for but not the words after it, a search&apos;s answer is kept
+            only by your own browser, for a few minutes, and the server forgets the words once it
+            has answered.
           </Item>
           <Item label="API use">
             A count per day of requests to the <A href="/developers">public API and MCP server</A>,

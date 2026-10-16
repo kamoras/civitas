@@ -61,6 +61,10 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Keyword Index**: SQLite FTS5 (`explore_fts`, external-content over
   `explore_documents`) with BM25F ranking — the second retrieval channel behind
   Explore search; see `pipeline/lexical_index.py`
+- **Site search**: one entity index of everything with a page (`/data/site_search.db`,
+  SQLite FTS5 + trigram + exact identifier keys), rebuilt by the pipeline
+  process when its sources move; the header's autocomplete and `/search`
+  read it with no model — see `app/site_search.py`
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
@@ -624,6 +628,14 @@ document type can earn belongs in the fusion as a *partial* ranker (documents
 it can't score contribute nothing) rather than as a full ordering, or it
 silently demotes every document that had no way to earn it.
 
+The same discipline covers site search (`app/site_search.py`): its scoring
+weights and its "straight to the page" thresholds are fitted by
+`backend/scripts/calibrate_site_search.py` on known-item probes built from
+the index (half the entities fit, half reported) and read from
+`app/data/site_search_calibration.json`. A wrong jump is worse than a
+results page: the thresholds allow no wrong jump in any probe type on the
+fit half. Rerun it when the index gains a kind or aliases.
+
 ### 4. Content-based party alignment
 
 A bill's party alignment comes from **how the parties actually voted on it**
@@ -989,6 +1001,16 @@ What this rules in and out:
   district a *known* place sits in. Every visitor who picks the same town
   sends the identical request; nothing visitor-specific leaves the server.
   That distinction — our address, not theirs — is the whole line.
+
+**What a reader searches for is never kept.** The site search
+(`/api/search`, `/api/search/suggest`, `/search`) and Explore carry the query
+in the URL, so: nginx's access log has one format, `civitas_private`, with no
+query string and no referrer (`test_nginx_config.py`); uvicorn's access log
+drops query strings (`main.DropQueryString`); search answers are
+`Cache-Control: private` (the reader's browser may keep them, nginx's disk
+cache never does); the `/search` page fetches with `no-store` (Next's data
+cache is a file); and no log line names a query. Keep a new search-like
+endpoint the same way.
 
 The one thing counted about visitors — daily unique visits — uses an HMAC of
 the IP under a random salt that exists only for the current UTC day and is
@@ -2137,6 +2159,7 @@ the pending list).
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
 | Federal agencies: weekly Register list + USAspending budgets, name crosswalk, agency pages | `backend/app/pipeline/fetch/agencies.py`, `backend/app/api/agencies.py`, `backend/scripts/calibrate_agency_crosswalk.py` (`app/data/agency_crosswalk.json`), `frontend/src/app/agencies/` |
 | Presidential nominations (daily Congress.gov sync, FJC join, list/stats/detail, roll-call links) | `backend/app/pipeline/fetch/nominations.py`, `backend/app/services/nomination_service.py`, `services/nomination_links.py`, `backend/app/api/nominations.py`, `frontend/src/app/congress/nominations/` |
+| Site search: entity index (write time), identifier parser, ranking, direct navigation, section anchors | `backend/app/site_search_index.py`, `backend/app/site_search.py`, `backend/app/api/search.py`, `backend/app/data/site_pages.json`, `backend/app/data/site_search_sections.json`, `backend/scripts/calibrate_site_search.py`, `frontend/src/components/search/`, `frontend/src/app/search/page.tsx` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |

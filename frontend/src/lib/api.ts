@@ -18,6 +18,7 @@ import type { Agreement } from "@/types/compare";
 import type { MemberSupport } from "@/types/presidentialSupport";
 import type { TrendPostsAudit } from "@/types/trendPosts";
 import type { MapSeatLines } from "@/types/electionMap";
+import type { SearchSuggestions } from "@/types/search";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -2352,4 +2353,20 @@ export async function fetchRedistrictedSeat(
 export function redistrictingDownloads(state: string): { csv: string; json: string } {
   const base = `${API_BASE}/elections/redistricting/${encodeURIComponent(state)}`;
   return { csv: `${base}/overlap.csv`, json: base };
+}
+
+/** Site search's suggestions for what has been typed (the header's
+ * combobox). Not through cachedFetch: the browser's own private cache
+ * (Cache-Control: private) keeps an answer, and nothing typed is held in
+ * this module (AGENTS.md §8). */
+export async function fetchSearchSuggestions(
+  q: string,
+  signal?: AbortSignal
+): Promise<SearchSuggestions> {
+  const data = await requestJson<SearchSuggestions>(
+    `${API_BASE}/search/suggest?q=${encodeURIComponent(q)}`,
+    "Search suggestions",
+    { init: { signal } }
+  );
+  return { ...data, items: Array.isArray(data?.items) ? data.items : [] };
 }

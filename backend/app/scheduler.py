@@ -39,6 +39,7 @@ from app.pipeline.fetch import nominations
 from app.pipeline.fetch import bill_display_titles
 from app.pipeline.fetch.agencies import run_agency_sync
 from app.services.bill_service import warm_bill_collection_cache
+from app import site_search_index
 
 if TYPE_CHECKING:
     from app.pipeline_chain import Link
@@ -992,6 +993,14 @@ def start_scheduler() -> None:
     # function on a worker thread; the first beat goes out at once.
 
     scheduler.add_job(
+        _site_search_refresh,
+        CronTrigger(minute="*/10"),
+        id="site_search_refresh",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+
+    scheduler.add_job(
         _heartbeat,
         CronTrigger(minute=f"*/{_HEARTBEAT_MINUTES}"),
         id="scheduler_heartbeat",
@@ -1057,6 +1066,21 @@ def _record_next_run() -> None:
     from app.shared_state import write_record
 
     write_record(heartbeat_path(), {"nextRun": _live_next_run()})
+
+
+def _site_search_refresh() -> None:
+    """Site search's entity index (app/site_search_index.py), rebuilt when
+    its sources moved: checked every ten minutes and at start. Not a data
+    writer (it reads the database and writes its own file, renamed into
+    place), so not registered through _start_job: a data reset neither
+    waits on it nor skips it, and the next tick after one rebuilds."""
+    db = SessionLocal()
+    try:
+        site_search_index.refresh_index(db)
+    except Exception:
+        logger.exception("Site search index refresh failed")
+    finally:
+        db.close()
 
 
 def _heartbeat() -> None:
