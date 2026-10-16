@@ -52,7 +52,7 @@ export default async function SectionsBand() {
                   const p = sectionPreview(figures, key, t.key);
                   return (
                     <li key={t.key} className="py-1">
-                      <div className="flex items-baseline justify-between gap-3">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                         <Link
                           href={t.href}
                           className="inline-flex min-h-6 items-center text-sm text-ink underline decoration-white/20 underline-offset-4 hover:text-phos"

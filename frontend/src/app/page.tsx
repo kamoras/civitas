@@ -48,7 +48,7 @@ export default async function Home() {
             site's directory, one screen below the day's record. */}
         <SectionsBand />
         <ThisWeekStrip variant="full" />
-        <div className="mx-auto mt-8 grid max-w-7xl grid-cols-1 gap-8 px-4 sm:px-6 md:mt-10 md:grid-cols-12 md:gap-9">
+        <div className="mx-auto mt-8 grid max-w-7xl grid-cols-1 gap-8 px-4 sm:px-6 md:mt-10 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-9">
           <RecordIndex />
           <Holdings />
         </div>

@@ -33,4 +33,15 @@ describe("layout stability", () => {
     );
     expect(missing).toEqual([]);
   });
+
+  it("lays out page columns with fr tracks, never a 12-column grid", () => {
+    // A 12-column grid has eleven gaps; at a doubled text size the rem gaps
+    // alone (11 x 4.5rem for gap-9) are wider than a 768 px screen, so the
+    // page scrolled sideways (the homepage masthead and footer, 2026-10).
+    // Two tracks, e.g. grid-cols-[minmax(0,2fr)_minmax(0,1fr)], have one.
+    const offenders = sourceFiles(SRC).filter((file) =>
+      /\bgrid-cols-12\b/.test(readFileSync(file, "utf8"))
+    );
+    expect(offenders).toEqual([]);
+  });
 });
