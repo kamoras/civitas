@@ -1,3 +1,6 @@
+import type { RegisterLink } from "@/types/election";
+import type { RegistrationClosing } from "@/types/thisWeek";
+
 /** Special elections, vacant seats and the federal election calendar, as
  * `GET /api/elections/specials` and `GET /api/elections/calendar` serve
  * them (backend app/special_elections.py). Every figure and sentence is the
@@ -128,6 +131,7 @@ export interface CalendarDeadline {
   status: "upcoming" | "open" | "closed";
   daysLeft: number | null;
   source: { publisher: string | null; url: string; type: string };
+  register?: RegisterLink | null;
 }
 
 export interface FecDeadline {
@@ -145,6 +149,15 @@ export interface ElectionCalendar {
   elections: CalendarElection[];
   voterDeadlines: CalendarDeadline[];
   voterDeadlinesFor: string;
+  /** Every state and DC, for the state filter, whether or not its
+   *  deadlines could be read. Absent from an older API. */
+  states?: {
+    state: string;
+    stateName: string;
+    deadlinesRead: boolean;
+    register: RegisterLink | null;
+  }[];
+  registrationClosing?: RegistrationClosing[];
   fecDeadlines: FecDeadline[];
   nextThirtyDays: number;
   nextDate: string | null;

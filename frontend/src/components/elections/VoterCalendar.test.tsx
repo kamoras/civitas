@@ -163,3 +163,121 @@ describe("VoterCalendar", () => {
     expect(countdownText({ status: "closed", countdown: null })).toBeNull();
   });
 });
+
+describe("VoterCalendar: registering", () => {
+  const register = {
+    url: "https://olvr.sos.example.gov/",
+    publisher: "Washington Secretary of State",
+    confirmed: true,
+    statePage: true,
+  };
+
+  it("leads with the deadline, its countdown and where to register, then draws the ribbon", async () => {
+    render(
+      <main>
+        <VoterCalendar
+          calendar={{
+            ...calendar,
+            electionDay: "2026-11-03",
+            register,
+            registration: {
+              status: "open",
+              sentence: "Register online by Mon, Oct 26",
+              closesOn: "2026-10-26",
+              daysLeft: 6,
+              countdown: "6 days",
+              sameDay: "Register in person at a voting center through Election Day.",
+              source: item({}).source,
+            },
+          }}
+          stateName="Washington"
+          {...LOOKUP}
+        />
+      </main>
+    );
+    expect(screen.getByText("Register online by Mon, Oct 26")).toHaveTextContent("6 days left");
+    expect(
+      screen.getByText("After that: Register in person at a voting center through Election Day.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "Register to vote: Washington Secretary of State (opens in new tab)",
+      })
+    ).toHaveAttribute("href", register.url);
+    // The open registration row links it too.
+    expect(
+      screen.getAllByRole("link", { name: /^Register: Washington Secretary of State/ })
+    ).toHaveLength(1);
+    // The list is open by default: it is the ribbon's text equivalent.
+    expect(screen.getByText("Every deadline, with its source").closest("details")).toHaveAttribute(
+      "open"
+    );
+    expect(document.querySelector('[aria-hidden="true"]')).toHaveTextContent(
+      "REGISTER BY MON, OCT 26"
+    );
+    const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
+    expect(r.violations.map((v) => v.id)).toEqual([]);
+  });
+
+  it("says plainly that North Dakota has no registration, with no register link", () => {
+    render(
+      <VoterCalendar
+        calendar={{
+          ...calendar,
+          register: null,
+          registration: {
+            status: "none",
+            sentence: "North Dakota does not have voter registration.",
+            closesOn: null,
+            daysLeft: null,
+            countdown: null,
+            sameDay: null,
+            source: null,
+          },
+        }}
+        stateName="North Dakota"
+        {...LOOKUP}
+      />
+    );
+    expect(screen.getByText("North Dakota does not have voter registration.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^Register/ })).not.toBeInTheDocument();
+  });
+
+  it("words same-day registration and an unconfirmed vote.gov link as such", () => {
+    render(
+      <VoterCalendar
+        calendar={{
+          ...calendar,
+          register: {
+            url: "https://vote.gov/",
+            publisher: "Vote.gov",
+            confirmed: false,
+            statePage: false,
+          },
+          registration: {
+            status: "same_day",
+            sentence: "Register at your polling place on Election Day and vote.",
+            closesOn: "2026-11-03",
+            daysLeft: 14,
+            countdown: "14 days",
+            sameDay: null,
+            source: null,
+          },
+        }}
+        stateName="New Hampshire"
+        {...LOOKUP}
+      />
+    );
+    expect(
+      screen.getByText("Register at your polling place on Election Day and vote.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "How to register: vote.gov, unconfirmed (opens in new tab)",
+      })
+    ).toHaveAttribute("href", "https://vote.gov/");
+    expect(
+      screen.getByText("This site blocks automated checks, so we can't confirm it's up.")
+    ).toBeInTheDocument();
+  });
+});

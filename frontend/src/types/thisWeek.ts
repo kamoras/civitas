@@ -1,3 +1,5 @@
+import type { RegisterLink } from "@/types/election";
+
 /** GET /api/this-week (backend/app/api/this_week.py): the "this week"
  *  strip's data. Every figure and sentence is the backend's. */
 
@@ -39,6 +41,8 @@ export interface CommentDeadline {
 
 /** A state's next voter deadline, for the "this week" strip. */
 export interface StateNextDeadline {
+  /** Where to register, on a registration deadline. */
+  register?: RegisterLink | null;
   state: string;
   sentence: string;
   countdown: string | null;
@@ -57,6 +61,9 @@ export interface ThisWeek {
     /** Each state's next voter deadline, soonest first; absent from an
      * older API. */
     deadlines?: StateNextDeadline[];
+    /** States whose registration closes within closingSoonDays. */
+    registrationClosing?: RegistrationClosing[];
+    closingSoonDays?: number;
   };
   congress: {
     /** The day the sentence's "today" is (Eastern); absent from an older API. */
@@ -67,4 +74,17 @@ export interface ThisWeek {
     recentVotes: ThisWeekVote[];
   };
   commentDeadlines: CommentDeadline[];
+}
+
+/** A state whose regular registration closes soon (backend
+ *  voter_calendar.registration_closing). */
+export interface RegistrationClosing {
+  state: string;
+  stateName: string;
+  sentence: string;
+  closesOn: string;
+  daysLeft: number;
+  countdown: string | null;
+  sameDay: string | null;
+  register: RegisterLink | null;
 }

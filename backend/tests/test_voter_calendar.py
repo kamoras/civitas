@@ -329,3 +329,218 @@ def test_the_refreshed_calendar_wins_over_the_bundled_one(calendar):
     assert voter_calendar.calendar_for_state("WA", ELECTION) is None
     assert voter_calendar.calendar_for_state("OR", date(2028, 11, 7), _utc(2028, 10, 1, 12)) is not None
     refreshed.unlink()
+
+
+# ── Registering: where, by when, and who closes soon ─────────────
+
+class _Redirecting(_Pages):
+    """A client whose GET answers each URL with (status, html[, final url, headers])."""
+
+    def get(self, url, **kwargs):
+        status, body, *rest = self.pages[url]
+        final = (rest[0] if rest else None) or url
+        headers = {"content-type": "text/html", **(rest[1] if len(rest) > 1 else {})}
+        return httpx.Response(status, content=body.encode(), headers=headers,
+                              request=httpx.Request("GET", final))
+
+
+_REG_PAGE = "<h1>Register to vote online</h1>"
+
+
+@pytest.mark.parametrize("url, page, cited, status", [
+    # Answers on a .gov host and reads as a registration page.
+    ("https://olvr.sos.example.gov/", (200, _REG_PAGE), set(), "verified"),
+    # A state.xx.us host is a state's own.
+    ("https://www.sec.state.ma.us/ovr/", (200, _REG_PAGE), set(), "verified"),
+    # A host outside .gov the state's own deadline citations already use (D.C.'s dcboe.org).
+    ("https://www.dcboe.org/register", (200, _REG_PAGE), {"www.dcboe.org"}, "verified"),
+    # A bot wall's challenge: kept, unconfirmed.
+    ("https://mvic.sos.example.gov/", (403, "<title>Just a moment...</title>", None, {"cf-mitigated": "challenge"}),
+     set(), "blocked"),
+])
+def test_a_register_page_is_checked_before_it_is_linked(generator, url, page, cited, status):
+    reg, why = generator.check_register({"url": url, "publisher": "SOS"}, cited, _Redirecting({url: page}),
+                                        None, "2026-10-16")
+    assert why is None and reg["status"] == status and reg["url"] == url and reg["checkedOn"] == "2026-10-16"
+
+
+@pytest.mark.parametrize("url, page", [
+    ("https://olvr.sos.example.gov/", (404, "<h1>Not found</h1>")),  # a dead link
+    ("https://registertovote.example.com/", (200, _REG_PAGE)),  # not a government host
+    ("https://olvr.sos.example.gov/", (200, _REG_PAGE, "https://ads.example.com/register")),  # lands elsewhere
+    ("https://olvr.sos.example.gov/", (200, "<h1>Welcome</h1>")),  # not a registration page
+    ("https://olvr.sos.example.gov/", (403, "<h1>Forbidden</h1>")),  # refused, not walled
+])
+def test_a_register_page_that_fails_its_check_is_refused(generator, url, page):
+    reg, why = generator.check_register({"url": url}, set(), _Redirecting({url: page}), None, "2026-10-16")
+    assert reg is None and why
+
+
+def test_a_state_with_no_registration_is_held_to_its_quote(generator):
+    url = "https://www.sos.nd.example.gov/info.pdf"
+    entry = {"none": True, "url": url, "quote": "north dakota does not have voter registration."}
+    ok = _Pages({url: (200, "<p>North Dakota does not have voter registration.</p>")})
+    reg, why = generator.check_register(entry, set(), ok, None, "2026-10-16")
+    assert why is None and reg["none"] is True
+    reg, why = generator.check_register(entry, set(), _Pages({url: (200, "<p>Vote!</p>")}), None, "2026-10-16")
+    assert reg is None and "quote" in why
+
+
+def test_the_generator_names_every_failed_deadline_and_never_links_a_dead_register_page(generator, capsys):
+    """Every unverified deadline in one run, and nothing written; a register
+    page that fails its check is left out (vote.gov instead) and named, but
+    doesn't hold back the deadlines."""
+    pages = _Pages({"https://sos.example.gov/a": (200, "<p>at least 8 days before</p>"),
+                    "https://sos.example.gov/b": (200, "<p>x</p>"),
+                    "https://olvr.sos.example.gov/": (404, "")})
+    states = {
+        code: {"timeZone": "America/Los_Angeles", "items": [_reg("https://sos.example.gov/b", "missing")]}
+        for code in ("OR", "WA")
+    }
+    with pytest.raises(SystemExit) as exc:
+        generator.build(_sources(states), pages, None)
+    assert "OR[0]" in str(exc.value) and "WA[0]" in str(exc.value)
+    out = generator.build(_sources({"WA": {
+        "timeZone": "America/Los_Angeles", "items": [_reg("https://sos.example.gov/a", "at least 8 days before")],
+        "register": {"url": "https://olvr.sos.example.gov/"}}}), pages, None)
+    assert "register" not in out["states"]["WA"] and out["states"]["WA"]["items"]
+    assert "WA register: not linked" in capsys.readouterr().err
+    assert out["builtOn"]
+
+
+def test_a_newer_bundled_calendar_wins_over_an_older_refresh(calendar):
+    """A calendar shipped in the image after the last refresh (a state added,
+    a citation fixed) is used at once; a refresh built later wins again."""
+    calendar({"WA": WA})
+    bundled = json.loads(voter_calendar._PATH.read_text())
+    voter_calendar._PATH.write_text(json.dumps({**bundled, "builtOn": "2026-10-16"}))
+    refreshed = pathlib.Path(voter_calendar.runtime_data_path(voter_calendar._PATH.name))
+    refreshed.parent.mkdir(parents=True, exist_ok=True)
+    refreshed.write_text(json.dumps({"electionDate": "2026-11-03", "states": {"OR": {**WA}}}))
+    assert voter_calendar.calendar_for_state("WA", ELECTION) is not None
+    refreshed.write_text(json.dumps({"electionDate": "2026-11-03", "builtOn": "2026-10-20",
+                                     "states": {"OR": {**WA}}}))
+    assert voter_calendar.calendar_for_state("WA", ELECTION) is None
+    assert voter_calendar.calendar_for_state("OR", ELECTION) is not None
+    refreshed.unlink()
+
+
+def _reg_state(zone, *, online="2026-10-19", same_day=None, none=False, register=None):
+    items = [{"kind": "registration", "method": "online", "rule": "15 days before.", "date": online,
+              "source": _src()},
+             {"kind": "registration", "method": "mail", "basis": "received", "rule": "Must arrive.",
+              "date": online, "source": _src()}]
+    if same_day:
+        items.append({"kind": "same_day_registration", "method": "in_person", "rule": same_day[2],
+                      "date": same_day[0], "endDate": same_day[1], "source": _src()})
+    entry = {"timeZone": zone, "items": [] if none else items}
+    if register:
+        entry["register"] = register
+    if none:
+        entry["register"] = {"none": True, "url": "https://sos.nd.example.gov/info.pdf", "status": "verified"}
+        entry["items"] = [{"kind": "absentee_request", "method": "any", "rule": "r", "date": "2026-11-02",
+                           "source": _src()}]
+    return entry
+
+
+_ZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix",
+          "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"]
+
+
+@pytest.mark.parametrize("zone", _ZONES)
+def test_days_left_to_register_count_on_the_state_clock_around_midnight(calendar, freeze_utcnow, zone):
+    """One minute before midnight on the deadline, where the voter is, it is
+    the last day; one minute after, registration has closed, whatever UTC says."""
+    calendar({"XX": _reg_state(zone)})
+    tz = ZoneInfo(zone)
+
+    def at(local):
+        freeze_utcnow(local.replace(tzinfo=tz).astimezone(ZoneInfo("UTC")).replace(tzinfo=None))
+        return voter_calendar.calendar_for_state("XX", ELECTION)["registration"]
+
+    day_before = at(datetime(2026, 10, 18, 23, 59))
+    assert day_before["daysLeft"] == 1 and day_before["countdown"] == "tomorrow"
+    last = at(datetime(2026, 10, 19, 23, 59))
+    assert last["status"] == "open" and last["daysLeft"] == 0 and last["countdown"] == "today"
+    assert last["sentence"] == "Register online by Mon, Oct 19"
+    after = at(datetime(2026, 10, 20, 0, 1))
+    assert after == {"status": "closed", "sentence": "Registration for this election has closed.",
+                     "closesOn": None, "daysLeft": None, "countdown": None, "sameDay": None, "source": None}
+
+
+def test_the_closing_soon_list_is_the_next_ten_days_on_each_state_clock(calendar):
+    calendar({
+        "AA": _reg_state("America/New_York", online="2026-10-16"),  # today: listed
+        "BB": _reg_state("America/New_York", online="2026-10-26"),  # 10 days: listed
+        "CC": _reg_state("America/New_York", online="2026-10-27"),  # 11 days: not yet
+        "DD": _reg_state("America/New_York", online="2026-10-15"),  # closed: not listed
+        # Same-day registration only, regular closed: nothing to close soon.
+        "EE": _reg_state("America/New_York", online="2026-10-10",
+                         same_day=("2026-10-11", "2026-11-03", "Register at your polling place.")),
+        # Counted on Honolulu's clock, five or six hours behind Eastern.
+        "HI": _reg_state("Pacific/Honolulu", online="2026-10-26"),
+    })
+    now = _utc(2026, 10, 16, 23, 30)  # 7:30 p.m. Eastern, 1:30 p.m. in Honolulu
+    rows = voter_calendar.registration_closing(ELECTION, now)
+    assert [(r["state"], r["daysLeft"]) for r in rows] == [("AA", 0), ("BB", 10), ("HI", 10)]
+    # The edge moves with the clock: 1 a.m. Eastern on Oct 17 has closed AA,
+    # and brings CC to 10 days.
+    later = voter_calendar.registration_closing(ELECTION, _utc(2026, 10, 17, 5))
+    assert [r["state"] for r in later] == ["BB", "HI", "CC"]
+    assert voter_calendar.CLOSING_SOON_DAYS == 10
+
+
+def test_each_closing_state_carries_how_and_where_to_register(calendar):
+    reg = {"url": "https://olvr.sos.example.gov/", "publisher": "SOS", "status": "blocked"}
+    calendar({"MI": _reg_state("America/Detroit", register=reg,
+                               same_day=("2026-10-20", "2026-11-03", "From 14 days before, register at your clerk."))})
+    (row,) = voter_calendar.registration_closing(ELECTION, _utc(2026, 10, 16, 18))
+    assert row["sentence"] == "Register online by Mon, Oct 19" and row["countdown"] == "3 days"
+    assert row["sameDay"] == "From 14 days before, register at your clerk."
+    # Behind a bot wall: linked, but not vouched for.
+    assert row["register"] == {"url": reg["url"], "publisher": "SOS", "confirmed": False, "statePage": True}
+
+
+def test_north_dakota_and_same_day_registration_say_so_plainly(calendar):
+    data = {"electionDate": "2026-11-03",
+            "registerFallback": {"url": "https://vote.gov/", "publisher": "Vote.gov", "status": "blocked"},
+            "states": {
+                "ND": _reg_state("America/Chicago", none=True),
+                "NH": {"timeZone": "America/New_York", "items": [
+                    {"kind": "same_day_registration", "method": "in_person", "date": "2026-11-03",
+                     "endDate": "2026-11-03", "rule": "Register at your polling place on Election Day and vote.",
+                     "source": _src()}]},
+                "MN": _reg_state("America/Chicago", online="2026-10-13", same_day=(
+                    "2026-10-14", "2026-11-03", "Register at your polling place on Election Day.")),
+            }}
+    calendar(data["states"])
+    voter_calendar._PATH.write_text(json.dumps({**data, "states": json.loads(voter_calendar._PATH.read_text())["states"]}))
+    now = _utc(2026, 10, 16, 18)
+    nd = voter_calendar.calendar_for_state("ND", ELECTION, now)
+    assert nd["registration"]["sentence"] == "North Dakota does not have voter registration."
+    assert nd["registration"]["status"] == "none" and nd["register"] is None
+    nh = voter_calendar.calendar_for_state("NH", ELECTION, now)
+    assert nh["registration"]["status"] == "same_day"
+    assert nh["registration"]["sentence"] == "Register at your polling place on Election Day and vote."
+    # No state page on file: vote.gov, unconfirmed and not the state's own.
+    assert nh["register"] == {"url": "https://vote.gov/", "publisher": "Vote.gov", "confirmed": False,
+                              "statePage": False}
+    mn = voter_calendar.calendar_for_state("MN", ELECTION, now)
+    assert mn["registration"]["sentence"] == (
+        "Regular registration has closed. Register at your polling place on Election Day.")
+    assert [r["state"] for r in voter_calendar.registration_closing(ELECTION, now)] == []
+
+
+def test_every_state_in_the_bundled_calendar_has_somewhere_to_register():
+    data = json.loads(voter_calendar._PATH.read_text())
+    assert data["registerFallback"]["url"] == "https://vote.gov/"
+    for code, entry in data["states"].items():
+        reg = entry.get("register")
+        if reg is None:
+            continue  # vote.gov
+        assert reg["status"] in ("verified", "blocked"), code
+        host = urlsplit(reg["url"]).hostname or ""
+        cited = {urlsplit(i["source"]["url"]).hostname for i in entry["items"]}
+        assert host.endswith(".gov") or host.endswith(".us") or host in cited, (code, host)
+    assert data["states"]["ND"]["register"]["none"] is True
+    assert not data["states"]["NY"].get("unread") and data["states"]["NY"]["items"]

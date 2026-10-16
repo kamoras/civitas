@@ -4,6 +4,8 @@ import type { CommentDeadline, StateNextDeadline, ThisWeek } from "@/types/thisW
 import { countdownText } from "@/components/elections/VoterCalendar";
 import { rollCallHref, shortDate, weekHref } from "@/lib/congress";
 import { stateBallotHref } from "@/lib/elections";
+import ClosingSoon from "@/components/elections/ClosingSoon";
+import RegisterLink from "@/components/elections/RegisterLink";
 import { STATE_NAMES } from "@/lib/stateCodes";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -115,6 +117,12 @@ function DeadlineRow({ d }: { d: StateNextDeadline }) {
       </Link>
       <span className="text-ink-lo">: {d.sentence}</span>
       {left && <span className="ml-1 font-mono text-xs text-phos">{left}</span>}
+      {d.register && (
+        <>
+          {" "}
+          <RegisterLink link={d.register} showNote={false} className="ml-1 text-xs" />
+        </>
+      )}
     </li>
   );
 }
@@ -201,6 +209,15 @@ function FullStrip({ data }: { data: ThisWeek }) {
               <StatePicker states={election.states} compact={false} />
             </div>
           </details>
+          {election.registrationClosing && (
+            <ClosingSoon
+              rows={election.registrationClosing}
+              days={election.closingSoonDays}
+              headingLevel={3}
+              className="pt-2"
+              compact
+            />
+          )}
           {election.deadlines && election.deadlines.length > 0 && (
             <StateDeadlines rows={election.deadlines} />
           )}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ElectionCalendar } from "@/types/specials";
 import { calendarEntries, longDate, type CalendarEntry as Entry } from "@/lib/specials";
+import RegisterLink from "@/components/elections/RegisterLink";
 
 type Row = Entry & { group?: Entry[] };
 
@@ -57,11 +58,19 @@ function monthOf(iso: string): string {
 export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
   const [state, setState] = useState("");
   const all = calendarEntries(cal);
-  const states = Array.from(
-    new Map(
-      [...cal.elections, ...cal.voterDeadlines].map((e) => [e.state, e.stateName] as const)
-    ).entries()
-  ).sort((a, b) => a[1].localeCompare(b[1]));
+  // Every state and DC from the API, a state whose deadlines couldn't be
+  // read included and labelled; an older API's list from the entries.
+  const states: [string, string][] = cal.states
+    ? cal.states.map((s) => [
+        s.state,
+        s.deadlinesRead ? s.stateName : `${s.stateName} (deadlines not read)`,
+      ])
+    : Array.from(
+        new Map(
+          [...cal.elections, ...cal.voterDeadlines].map((e) => [e.state, e.stateName] as const)
+        ).entries()
+      );
+  states.sort((a, b) => a[1].localeCompare(b[1]));
   const shown = state ? all.filter((e) => e.state === state || e.state === null) : groupByDay(all);
   const ahead = shown.filter((e) => !e.passed);
   const passed = shown.filter((e) => e.passed);
@@ -94,14 +103,28 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
                   ) : (
                     g.text
                   )}
+                  {g.register && (
+                    <>
+                      {" "}
+                      <RegisterLink link={g.register} showNote={false} className="ml-1" />
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
           </details>
         ) : e.href ? (
-          <a href={e.href} className="inline-block py-1 hover:text-phos">
-            {e.text}
-          </a>
+          <>
+            <a href={e.href} className="inline-block py-1 hover:text-phos">
+              {e.text}
+            </a>
+            {e.register && (
+              <>
+                {" "}
+                <RegisterLink link={e.register} showNote={false} className="ml-1" />
+              </>
+            )}
+          </>
         ) : (
           e.text
         )}
