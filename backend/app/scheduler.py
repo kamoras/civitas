@@ -12,15 +12,15 @@ from app.error_utils import exception_summary
 from app.forecast.build import check_training_staleness as check_election_map_training_staleness
 from app.forecast.build import run_refresh as election_map_refresh
 from app.pipeline.senate_pipeline import run_senate_pipeline
-from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
+from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_hung
 from app.pipeline.supplementary_pipeline import (
-    run_supplementary_pipeline, is_supplementary_pipeline_running, supplementary_pipeline_age,
+    run_supplementary_pipeline, is_supplementary_pipeline_running, supplementary_pipeline_hung,
 )
 from app.pipeline.stock_pipeline import (
-    run_stock_trades_pipeline, is_stock_pipeline_running, stock_pipeline_age,
+    run_stock_trades_pipeline, is_stock_pipeline_running, stock_pipeline_hung,
 )
 from app.pipeline.election_pipeline import (
-    run_election_pipeline, is_election_pipeline_running, election_pipeline_age,
+    run_election_pipeline, is_election_pipeline_running, election_pipeline_hung,
     run_ballot_sync, ballot_tracker,
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
@@ -140,18 +140,18 @@ def pipelines_running() -> bool:
     Supplementary, Stock trades and Election count by their in-process flag
     (a RUNNING row with the flag down is a dead run's leftover — the admin
     status calls it stuck), and the Senate by a row its live lease speaks
-    for (run_tracker.senate_run_state). Each only until its run is past
-    STALE_PIPELINE_TIMEOUT: hung, its lock taken over from then — a wait on
-    it must end."""
-    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, senate_run_state
+    for (run_tracker.senate_run_state). Each only until its run is stale
+    (no progress for run_tracker.QUIET_PIPELINE_TIMEOUT, or past the age
+    ceiling): hung, its lock taken over from then — a wait on it must end."""
+    from app.pipeline.run_tracker import senate_run_state
 
-    for running, age in (
-        (is_house_pipeline_running, house_pipeline_age),
-        (is_supplementary_pipeline_running, supplementary_pipeline_age),
-        (is_stock_pipeline_running, stock_pipeline_age),
-        (is_election_pipeline_running, election_pipeline_age),
+    for running, hung in (
+        (is_house_pipeline_running, house_pipeline_hung),
+        (is_supplementary_pipeline_running, supplementary_pipeline_hung),
+        (is_stock_pipeline_running, stock_pipeline_hung),
+        (is_election_pipeline_running, election_pipeline_hung),
     ):
-        if running() and not _is_stale(age(), STALE_PIPELINE_TIMEOUT):
+        if running() and not hung():
             return True
     db = SessionLocal()
     try:
@@ -444,7 +444,10 @@ def _hourly_bill_status_refresh() -> None:
             if running:
                 logger.info("Bill status refresh skipped — nightly pipeline is running")
                 return
-            if is_house_pipeline_running() and not _is_stale(house_pipeline_age(), timedelta(hours=8)):
+            # Quiet for eight hours, not merely running that long: a House
+            # run on a cache warm-up night runs well past that while it
+            # works, and rewrites the rows this refresh updates.
+            if is_house_pipeline_running() and not house_pipeline_hung(timedelta(hours=8)):
                 logger.info("Bill status refresh skipped — house pipeline is running")
                 return
 
@@ -487,13 +490,12 @@ def _election_coverage_refresh() -> None:
         )
 
         if is_election_pipeline_running():
-            age = election_pipeline_age()
-            if not _is_stale(age, timedelta(hours=2)):
+            if not election_pipeline_hung(timedelta(hours=2)):
                 logger.info("Election coverage refresh skipped — election pipeline is running")
                 return
             logger.warning(
-                "Election pipeline has been running for %s — treating as hung "
-                "and proceeding with coverage refresh anyway", age,
+                "Election pipeline has written no progress for %dh — treating as hung "
+                "and proceeding with coverage refresh anyway", 2,
             )
         # Self-overlap guard: the PREVIOUS 15-minute refresh may still be
         # mid-flight (degraded LLM, slow network) — overlapping passes
@@ -556,13 +558,12 @@ def _election_ballot_sync() -> None:
 
     def _run():
         if is_election_pipeline_running():
-            age = election_pipeline_age()
-            if not _is_stale(age, timedelta(hours=6)):
+            if not election_pipeline_hung(timedelta(hours=6)):
                 logger.info("Ballot sync skipped — the nightly election pipeline is running")
                 return
             logger.warning(
-                "Election pipeline has been running for %s — treating as hung "
-                "and proceeding with the ballot sync anyway", age,
+                "Election pipeline has written no progress for %dh — treating as hung "
+                "and proceeding with the ballot sync anyway", 6,
             )
         # Under its tracker and lease (lease.run_tracked), shared with the
         # nightly pipeline's ballot step, taken only now, past the check

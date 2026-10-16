@@ -126,9 +126,11 @@ def _pipeline_timeout() -> timedelta:
 HUNG_AFTER = {
     DATA_RESET: timedelta(hours=1),
     ACTION_REFRESH: timedelta(hours=4),
-    # A pipeline's run lock goes stale at run_tracker.STALE_PIPELINE_TIMEOUT;
-    # the Senate run's lease, and the Supplementary steps' (whose own runs
-    # it bounds), with it.
+    # A pipeline's run lock goes stale at run_tracker.STALE_PIPELINE_TIMEOUT
+    # at the latest (its age ceiling; sooner once the run goes quiet, which
+    # a lease, beaten from a thread, can't see); the Senate run's lease, the
+    # House run's district lines and the Supplementary steps' (whose own
+    # runs it bounds), with it.
     SENATE_RUN: _pipeline_timeout(),
     JUSTICE_PIPELINE: _pipeline_timeout(),
     PRESIDENT_PIPELINE: _pipeline_timeout(),
