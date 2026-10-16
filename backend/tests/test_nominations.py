@@ -2,6 +2,7 @@
 write discipline, the FJC join, and the read side (services/nomination_service.py,
 api/nominations.py) with its link from each nomination roll call."""
 
+import asyncio
 import json
 from datetime import datetime
 
@@ -12,6 +13,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 
 from app import database
+from app.config import settings
 from app.database import get_db
 from app.main import app
 from app.models import Agency, AgencyBudget, LearnedClassification, Nomination, RollCall, RollCallPosition
@@ -383,3 +385,44 @@ def test_an_organization_links_the_agency_it_names_exactly(db_session, client):
     assert client.get("/api/nominations/119/PN1129").json()["agencySlug"] == "labor-department"
     orgs = {o["name"]: o["agencySlug"] for o in client.get("/api/nominations/stats").json()["organizations"]}
     assert orgs["Department of Labor"] == "labor-department" and orgs["Army"] is None
+
+
+# --- The Congress before, after a hand-over -------------------------------
+
+def _ended(db, now, monkeypatch):
+    """sync_ended_congress run at `now` with the 120th sitting (CONGRESS + 1)."""
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", CONGRESS + 1)
+    monkeypatch.setattr(nm, "utcnow", lambda: now)
+    return asyncio.run(nm.sync_ended_congress(db))
+
+
+def test_the_ended_congress_is_read_until_its_last_actions_are_in(db_session, monkeypatch, no_fjc):
+    # Synced while it sat; a nomination returned at sine die is updated
+    # after the 120th convenes.
+    monkeypatch.setattr(nm, "_get_json", _api([_item("PN1129", "2026-03-03T11:00:00Z")]))
+    _run(db_session)
+    monkeypatch.setattr(nm, "_get_json", _api([_item("PN1129", "2027-01-04T11:00:00Z")]))
+    summary = _ended(db_session, datetime(2027, 1, 10), monkeypatch)
+    assert summary["congress"] == CONGRESS and summary["stored"] == 1 and "closed" not in summary
+    # A complete pass a month after the 119th ended closes it; nothing is
+    # read for it again.
+    assert _ended(db_session, datetime(2027, 2, 5), monkeypatch)["closed"] is True
+    assert _ended(db_session, datetime(2027, 2, 6), monkeypatch) is None
+
+
+def test_a_congress_never_synced_has_nothing_to_close(db_session, monkeypatch, no_fjc):
+    monkeypatch.setattr(nm, "_get_json", _api([_item("PN1129", "2027-01-04T11:00:00Z")]))
+    assert _ended(db_session, datetime(2027, 1, 10), monkeypatch) is None
+
+
+def test_an_unreadable_listing_never_closes_the_ended_congress(db_session, monkeypatch, no_fjc):
+    monkeypatch.setattr(nm, "_get_json", _api([_item("PN1129", "2026-03-03T11:00:00Z")]))
+    _run(db_session)
+    monkeypatch.setattr(nm, "_get_json", _api(None))
+    assert "closed" not in _ended(db_session, datetime(2027, 3, 1), monkeypatch)
+    assert not nm.read_marker(db_session, CONGRESS).get("closed")
+
+
+def test_a_congress_ends_at_noon_eastern_on_january_3():
+    assert nm.congress_ended_at(119) == datetime(2027, 1, 3, 17)
+    assert nm.congress_ended_at(120) == datetime(2029, 1, 3, 17)
