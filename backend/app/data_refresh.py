@@ -149,9 +149,11 @@ def run_command(argv: list[str], timeout_s: int) -> tuple[int, str]:
     page requests never wait on it. (exit code, the end of its output)."""
     env = {**os.environ, "PYTHONPATH": str(BACKEND)}
     try:
+        # nice(1) rather than preexec_fn: the pipeline process is threaded
+        # (the scheduler), and preexec_fn is not safe to use with threads.
         done = subprocess.run(
-            argv, cwd=BACKEND, env=env, capture_output=True, text=True, timeout=timeout_s,
-            preexec_fn=lambda: os.nice(19),
+            ["nice", "-n", "19", *argv], cwd=BACKEND, env=env, capture_output=True, text=True,
+            timeout=timeout_s,
         )
     except subprocess.TimeoutExpired:
         return 124, f"timed out after {timeout_s}s"
