@@ -3,7 +3,6 @@ import { serializeJsonLd } from "@/components/seo/JsonLd";
 import {
   agencyJsonLd,
   describeAgency,
-  describeRedistrictingIndex,
   describeBill,
   describeElections,
   describeProfile,
@@ -11,6 +10,7 @@ import {
   aboutPageJsonLd,
   personJsonLd,
   siteJsonLd,
+  describeRedistrictingIndex,
 } from "./seo";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { BillDetail } from "@/types/bill";
@@ -191,6 +191,13 @@ describe("elections metadata", () => {
   });
 });
 
+describe("describeRedistrictingIndex", () => {
+  it("speaks of a redraw as coming until its election, and as past after", () => {
+    expect(describeRedistrictingIndex("2026", 9).description).toMatch(/^9 states vote on/);
+    expect(describeRedistrictingIndex("2026", 9, false).description).toMatch(/^9 states voted on/);
+  });
+});
+
 describe("siteJsonLd", () => {
   // The names Google's site-name system reads. "Civitas" alone is shared by
   // many organizations, so the full name leads and the short one is an
@@ -288,12 +295,5 @@ describe("agency metadata", () => {
     const ld = agencyJsonLd(fda);
     expect(ld["@type"]).toBe("GovernmentOrganization");
     expect(ld.parentOrganization?.url).toMatch(/\/agencies\/health-and-human-services-department$/);
-  });
-});
-
-describe("describeRedistrictingIndex", () => {
-  it("speaks of a redraw as coming until its election, and as past after", () => {
-    expect(describeRedistrictingIndex("2026", 9).description).toMatch(/^9 states vote on/);
-    expect(describeRedistrictingIndex("2026", 9, false).description).toMatch(/^9 states voted on/);
   });
 });
