@@ -12,6 +12,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import BudgetBars from "@/components/agencies/BudgetBars";
 import SourceLine from "@/components/agencies/SourceLine";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { shareMetaAttrs } from "@/lib/shareImage";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import type { AgencySummary } from "@/types/agency";
@@ -88,6 +89,8 @@ export default async function AgenciesPage({
         title: "Federal agencies",
         subtitle: fy ? `Budgetary resources, ${fy}` : "",
         url: absoluteUrl("/agencies"),
+        source: "USAspending.gov; Federal Register",
+        asOf: budget?.asOf ?? index.agenciesAsOf,
       }}
     >
       <JsonLd
@@ -143,6 +146,7 @@ export default async function AgenciesPage({
               <section
                 id="budget"
                 data-share-section="budget"
+                {...shareMetaAttrs({ source: "USAspending.gov", asOf: budget.asOf })}
                 aria-labelledby="budget-heading"
                 className="mb-10 scroll-mt-28 border border-white/[0.07]"
               >

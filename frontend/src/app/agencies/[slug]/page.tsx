@@ -165,7 +165,13 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
       <SourceLine
         source={b.source}
         asOf={b.asOf}
-        detail={`${b.name}, ${fiscalYearLabel(b.fiscalYear, b.throughPeriod)}`}
+        detail={`${b.name}, ${
+          current
+            ? fiscalYearLabel(b.fiscalYear, b.throughPeriod)
+            : latest
+              ? `FY${b.fiscalYear} not yet reported; latest ${fiscalYearLabel(latest.fiscalYear, latest.throughPeriod)}`
+              : "no fiscal year reported"
+        }`}
       />
     </>
   );
@@ -226,6 +232,8 @@ export default async function AgencyPage({ params }: PageProps) {
         title: a.name,
         subtitle: a.parent ? `Part of the ${a.parent.name}` : "Federal agency",
         url: absoluteUrl(path),
+        source: a.budget ? "USAspending.gov; Federal Register" : "Federal Register",
+        asOf: a.budget?.asOf ?? a.documentsAsOf,
       }}
     >
       <JsonLd
