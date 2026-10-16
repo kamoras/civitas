@@ -8,7 +8,14 @@ from unittest.mock import patch
 import pytest
 from fastapi import Response
 
-from app.api.action import _build_issue_response, _latest_current_issues, get_action_issues, list_monitors
+from app.api.action import (
+    _build_issue_response,
+    _latest_current_issues,
+    get_action_issue,
+    get_action_issues,
+    get_recent_action_issues,
+    list_monitors,
+)
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ActionIssueStatus, ApiCache, MonitorStatus, NationalMonitor
 
@@ -766,6 +773,31 @@ class TestRecentActionIssues:
         result = await get_recent_action_issues(Response(), limit=10, db=db_session)
 
         assert [i["title"] for i in result["issues"]] == ["Beef import tariffs", "Something else"]
+
+    async def test_leaves_out_drafts_retired_unconfirmed(self, db_session):
+        """A developing draft taken off the Action Center never had news
+        coverage behind it: two month-old vote drafts led the record on
+        2026-10-15. A retired confirmed story stays, and so does a live
+        draft, which says on its face that it is developing."""
+        retired = _make_issue("2026-10-14", 4, "House vote on S 2403: Passed, 401-14", is_current=False)
+        retired.status = ActionIssueStatus.DEVELOPING
+        retired.retired_reason = "unconfirmed"
+        live = _make_issue("2026-10-14", 5, "Senate vote on H.R. 1: Passed, 60-40", is_current=True)
+        live.status = ActionIssueStatus.DEVELOPING
+        db_session.add_all([
+            retired, live, _make_issue("2026-10-13", 1, "Retired confirmed story", is_current=False),
+        ])
+        db_session.commit()
+
+        result = await get_recent_action_issues(Response(), limit=10, db=db_session)
+        assert [i["title"] for i in result["issues"]] == ["Senate vote on H.R. 1: Passed, 60-40", "Retired confirmed story"]
+        assert result["issues"][0]["isCurrent"] is True and result["issues"][1]["isCurrent"] is False
+
+        # Its own page still opens, and says it is no longer current.
+        page = await get_action_issue(str(retired.id), Response(), db=db_session)
+        assert page["status"] == "developing" and page["isCurrent"] is False and page["coveredBy"] is None
+        assert page["retiredReason"] == "unconfirmed"
+        assert result["issues"][0]["retiredReason"] is None
 
     async def test_ordered_by_date_then_rank_newest_first(self, db_session):
         from fastapi import Response

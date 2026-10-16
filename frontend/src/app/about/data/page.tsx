@@ -161,6 +161,15 @@ export default function DataChapter() {
               the federal government argued for the score, with Epstein and Posner&apos;s coding
               through 2014); nomination dates; each justice&apos;s position per term.
             </Fact>
+            <Fact label="Federal Register · USAspending.gov">
+              Every federal agency the Register lists, with its description, parent and
+              sub-agencies, read weekly; and each toptier agency&apos;s budgetary resources,
+              obligations and outlays by fiscal year from USAspending. The two name agencies
+              differently, so they are paired by name similarity at a threshold measured against the
+              agencies&apos; own abbreviations; an agency whose name falls short is listed unlinked
+              rather than guessed. A rule&apos;s agency is the most specific one the Register lists
+              on it.
+            </Fact>
             <Fact label="State election offices">
               Certified candidate lists and primary results, from each state&apos;s own site. And
               statewide ballot measures, read directly from each state&apos;s own certified list,
