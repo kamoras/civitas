@@ -1090,7 +1090,10 @@ cities, towns and communities from the `"119"` map of
 county, and the House cards narrow to the districts covering it (a place
 typed in full says which districts it is in, and that it is split when it
 is in more than one)
-("Districts as of the current Congress"); the ballot page's finder says "2026
+("Districts as of the current Congress"). The state's senators come before
+the finder and its House members after it: the senators represent everyone
+in the state, so an arrival from the homepage's state picker sees them in a
+phone's first screen. The ballot page's finder says "2026
 election districts". Each file states the Congress whose lines it holds, and
 `GET /api/politicians/house-districts?state=XX` serves the one matching the
 Congress in office, so on Jan 3, 2027 the election file (the 120th's lines)
