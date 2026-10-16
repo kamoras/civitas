@@ -34,7 +34,7 @@ from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
 from app.services.congress_service import bill_days, bill_label
-from app.services.nomination_links import nominations_for_roll_calls
+from app.services.nomination_links import nomination_votes
 
 # Congress.gov type path segment for each site bill-id prefix.
 _TYPE_PATH = {
@@ -385,16 +385,16 @@ def roll_call_summaries(db: Session, refs: list[str | None]) -> dict[str, dict]:
     for p in db.query(RollCallPosition).filter(RollCallPosition.roll_call_id.in_([rc.id for rc in rows])):
         positions.setdefault(p.roll_call_id, []).append(p)
     short = roll_call_short_titles(db, rows)
-    nominations = nominations_for_roll_calls(db, rows)
+    nominations = nomination_votes(db, rows)
     return {
         wanted[(rc.chamber, rc.congress, rc.session, rc.number)]: {
             "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
             "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
             "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
             "billShortTitle": short.get(rc.id),
-            # The stored nominations the question names (a nomination has
-            # no bill); empty for any other vote.
-            "nominations": nominations.get(rc.id, []),
+            # What the vote decided about the nominations its question
+            # names (a nomination has no bill); null for any other vote.
+            "nominationVote": nominations.get(rc.id),
             "parties": party_breakdown(positions.get(rc.id, [])),
         }
         for rc in rows
@@ -441,7 +441,7 @@ def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> 
         "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
         "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
         "billShortTitle": roll_call_short_titles(db, [rc]).get(rc.id),
-        "nominations": nominations_for_roll_calls(db, [rc]).get(rc.id, []),
+        "nominationVote": nomination_votes(db, [rc]).get(rc.id),
         "parties": party_breakdown(positions), "members": members,
     }
 

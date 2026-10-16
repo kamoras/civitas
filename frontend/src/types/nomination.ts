@@ -28,6 +28,8 @@ export type StatusCounts = Record<NominationStatus, number>;
 export interface NominationList {
   congress: number;
   total: number;
+  /** Every status together, under the other filters. */
+  allStatuses: number;
   page: number;
   perPage: number;
   /** By status, under every filter but status. */
@@ -46,6 +48,17 @@ export interface ConfirmDistribution {
 export interface NominationStats {
   congress: number;
   total: number;
+  /** People named across every nomination. */
+  people: number;
+  /** Until `complete`, every figure is of the nominations read so far. */
+  backfill: {
+    complete: boolean;
+    read: number;
+    /** About how many the Congress has; null before the sync's first run. */
+    expected: number | null;
+    /** Daily runs the rest should take; null when complete or unknown. */
+    nightsLeft: number | null;
+  };
   counts: StatusCounts;
   kinds: Record<
     NominationKind,
@@ -86,6 +99,8 @@ export interface NominationDetail extends Omit<NominationSummary, "nominees"> {
     number: number;
     date: string;
     question: string;
+    /** The question as a reader says it: "Vote to confirm", "Vote to end debate (cloture)". */
+    label: string;
     result: string;
     rejected: boolean | null;
     yeas: number;
@@ -102,7 +117,19 @@ export interface NominationDetail extends Omit<NominationSummary, "nominees"> {
   updateDate: string;
 }
 
-/** A nomination a roll call's question names (VoteDetail, VoteRollCall). */
+/** What a roll call decided about the nominations its question names
+ *  (VoteDetail, VoteRollCall): the question as a label, how many it names
+ *  (every one, stored yet or not) and the stored ones. */
+export interface NominationVote {
+  /** "confirm" | "cloture" | "proceed" | "other", from the question. */
+  kind: "confirm" | "cloture" | "proceed" | "other";
+  /** "Vote to confirm", "Vote to end debate (cloture)"... */
+  label: string;
+  citationCount: number;
+  nominations: RollCallNomination[];
+}
+
+/** A nomination a roll call's question names (NominationVote). */
 export interface RollCallNomination {
   citation: string;
   congress: number;

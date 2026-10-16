@@ -89,7 +89,10 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
   if (!stats || !list) throw new Error("Nominations: the record could not be read");
   const congress = `${ordinal(stats.congress)} Congress`;
   const pages = Math.max(1, Math.ceil(list.total / PER_PAGE));
-  const people = KINDS.reduce((n, k) => n + stats.kinds[k].people, 0);
+  // Until the sync has read every nomination, everything here is of the
+  // oldest updates read so far: said plainly, and no median shown as the
+  // Congress's.
+  const { complete, read, expected, nightsLeft } = stats.backfill;
   const civilian = stats.kinds.civilian.timeToConfirm;
   const judicial = stats.kinds.judicial.timeToConfirm;
 
@@ -111,12 +114,33 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
               <CongressTabs active="nominations" />
               <PageMasthead eyebrow={`The Senate · ${congress}`} title="Nominations">
                 <p>
-                  The president nominates; the Senate confirms. Every nomination sent this Congress,
-                  from cabinet secretaries and judges to military promotions, as Congress.gov
-                  records it.
+                  The president nominates; the Senate confirms.{" "}
+                  {complete
+                    ? "Every nomination sent this Congress, from cabinet secretaries and judges to military promotions, as Congress.gov records it."
+                    : "The nominations sent this Congress, from cabinet secretaries and judges to military promotions, as Congress.gov records them, read a few hundred a day."}
                 </p>
               </PageMasthead>
             </div>
+
+            {!complete && stats.total > 0 && (
+              <p
+                role="status"
+                className="border border-signal-amber/40 bg-signal-amber/10 p-3 text-base text-ink sm:p-4"
+              >
+                <span className="font-mono text-xs uppercase tracking-[0.14em] text-signal-amber">
+                  Still reading
+                </span>
+                <br />
+                {expected != null
+                  ? `${read.toLocaleString()} of about ${expected.toLocaleString()} nominations read so far.`
+                  : `${read.toLocaleString()} nominations read so far.`}{" "}
+                Counts will change until every one is read
+                {nightsLeft != null
+                  ? `, in about ${nightsLeft} more day${nightsLeft === 1 ? "" : "s"}`
+                  : ""}
+                , and confirmation times are shown once they are.
+              </p>
+            )}
 
             {stats.total === 0 ? (
               <p className="text-base text-ink-lo">
@@ -134,9 +158,9 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     id="glance-title"
                     className="max-w-3xl font-display text-xl leading-snug text-ink sm:text-2xl"
                   >
-                    {stats.total.toLocaleString()} nominations naming {people.toLocaleString()}{" "}
-                    people.{" "}
-                    {civilian.median != null && (
+                    {stats.total.toLocaleString()} nominations{complete ? "" : " read so far"},
+                    naming {stats.people.toLocaleString()} people.{" "}
+                    {complete && civilian.median != null && (
                       <>
                         A civilian nomination took a median of{" "}
                         <span className="text-ink-hi">{days(civilian.median)}</span> to confirm
@@ -158,7 +182,6 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                       <Link
                         href={href({ status: s })}
                         className="flex h-full min-h-11 flex-col gap-1 p-3 hover:bg-surface-raised sm:p-4"
-                        title={STATUS_NOTE[s]}
                       >
                         <span className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
                           {STATUS_LABEL[s]}
@@ -170,24 +193,42 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     </li>
                   ))}
                 </ul>
+                <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                  {STATUSES.map((s) => (
+                    <div key={s}>
+                      <dt className="inline font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                        {STATUS_LABEL[s]}:
+                      </dt>{" "}
+                      <dd className="inline text-ink-lo">{STATUS_NOTE[s]}</dd>
+                    </div>
+                  ))}
+                </dl>
 
-                <div className="border border-white/15 bg-surface p-4 sm:p-5">
-                  <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                    Days from nomination to confirmation
-                  </h3>
-                  <p className="mt-1 text-sm text-ink-lo">
-                    Each bar counts confirmations that took that many days, {stats.binDays} days to
-                    a bar. The shaded band is the middle half; the line, the median.
-                  </p>
-                  <div className="mt-4">
-                    <ConfirmTimeChart stats={stats} />
+                {complete ? (
+                  <div className="border border-white/15 bg-surface p-4 sm:p-5">
+                    <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+                      Days from nomination to confirmation
+                    </h3>
+                    <p className="mt-1 text-sm text-ink-lo">
+                      Each bar counts confirmations that took that many days, {stats.binDays} days
+                      to a bar. The shaded band is the middle half; the line, the median.
+                    </p>
+                    <div className="mt-4">
+                      <ConfirmTimeChart stats={stats} />
+                    </div>
+                    <p className="mt-4 font-mono text-xs text-ink-min">
+                      Source: Congress.gov, received date to the &ldquo;Confirmed&rdquo; action ·{" "}
+                      {congress}
+                      {stats.asOf ? ` · as of ${calendarDate(stats.asOf)}` : ""}
+                    </p>
                   </div>
-                  <p className="mt-4 font-mono text-xs text-ink-min">
-                    Source: Congress.gov, received date to the &ldquo;Confirmed&rdquo; action ·{" "}
-                    {congress}
-                    {stats.asOf ? ` · as of ${calendarDate(stats.asOf)}` : ""}
+                ) : (
+                  <p className="border border-white/15 bg-surface p-4 text-sm text-ink-lo sm:p-5">
+                    Days from nomination to confirmation are shown once every nomination is read.
+                    The ones read so far are the oldest updates, so their median would not be this
+                    Congress&apos;s.
                   </p>
-                </div>
+                )}
               </section>
             )}
 
@@ -197,7 +238,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
               className="flex scroll-mt-28 flex-col gap-4"
             >
               <h2 id="list-title" className="font-display text-2xl font-extrabold text-ink-hi">
-                Every nomination
+                {complete ? "Every nomination" : "Nominations read so far"}
               </h2>
               <form
                 method="get"
@@ -279,7 +320,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     !f.status ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                   }`}
                 >
-                  All {STATUSES.reduce((n, s) => n + list.counts[s], 0).toLocaleString()}
+                  All {list.allStatuses.toLocaleString()}
                 </Link>
                 {STATUSES.map((s) => (
                   <Link

@@ -261,7 +261,7 @@ export default async function NominationPage({ params }: PageProps) {
                       className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-white/[0.09] py-2.5"
                     >
                       <Link href={rollCallHref(rc)} className={LINK}>
-                        {rc.question.replace(/ PN\S+( and PN\S+)+/, "")}
+                        {rc.label}
                         {rc.citations > 1 &&
                           ` (with ${rc.citations - 1} other nominations, en bloc)`}
                       </Link>
@@ -277,7 +277,7 @@ export default async function NominationPage({ params }: PageProps) {
             {names.length > 1 && (
               <section aria-labelledby="nominees" className="flex flex-col gap-3">
                 <h2 id="nominees" className="font-display text-2xl font-extrabold text-ink-hi">
-                  The {names.length.toLocaleString()} nominees
+                  The {n.nomineeCount.toLocaleString()} nominees
                 </h2>
                 {n.nominees[0]?.introText && (
                   <p className="text-sm text-ink-lo">{n.nominees[0].introText}</p>

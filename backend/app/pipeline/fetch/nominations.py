@@ -103,6 +103,20 @@ def _cursor_key(congress: int) -> str:
     return f"cursor-{congress}"
 
 
+# The marker is rewritten every run; api_cache rows untouched for 60 days are
+# pruned (action_center._prune_stale_api_cache), so it is read up to then.
+_MARKER_MAX_AGE_H = 60 * 24
+
+
+def read_marker(db: Session, congress: int) -> dict:
+    """The sync's state for a Congress: {"cursor", "backfillComplete",
+    "expected"}; empty before its first run. `expected` is how many
+    citations Congress.gov listed for the Congress when the backfill began;
+    `backfillComplete` turns true at the first pass that read everything
+    listed, and stays true."""
+    return api_cache_get(db, _CACHE_TIER, _cursor_key(congress), max_age_hours=_MARKER_MAX_AGE_H) or {}
+
+
 async def _get_json(client: httpx.AsyncClient, path: str) -> dict | None:
     """One Congress.gov request at this job's own pace; None when it could
     not be read."""
@@ -389,13 +403,13 @@ async def sync_nominations(db: Session, congress: int | None = None, *, limit: i
     limit), and the next pass picks up from the first update not applied."""
     congress = congress or settings.CURRENT_CONGRESS
     started = utcnow()
-    marker = api_cache_get(db, _CACHE_TIER, _cursor_key(congress))
+    marker = read_marker(db, congress)
     stored = dict(db.execute(
         select(Nomination.citation, Nomination.update_date).where(Nomination.congress == congress)
     ).all())
     db.commit()  # no read held open across the requests
     since = None
-    if marker and marker.get("cursor"):
+    if marker.get("cursor"):
         since = datetime.fromisoformat(marker["cursor"]) - _OVERLAP
     summary = {"congress": congress, "since": since.isoformat() if since else None, "listed": 0,
                "stored": 0, "fjcLinked": 0, "complete": False, "unreadable": None}
@@ -440,7 +454,15 @@ async def sync_nominations(db: Session, congress: int | None = None, *, limit: i
         # Oldest update first, so everything before this one is applied.
         cursor = _update_time({"updateDate": applied_through})
     else:
-        cursor = None
-    if cursor is not None:
-        api_cache_set(db, _CACHE_TIER, _cursor_key(congress), {"cursor": cursor.isoformat()})
+        cursor = datetime.fromisoformat(marker["cursor"]) if marker.get("cursor") else None
+    # A listing of the whole Congress (no cursor yet) says how many there
+    # are to read; later windows list only what changed, so it is kept.
+    expected = len(listed) if since is None else marker.get("expected")
+    backfill_complete = bool(marker.get("backfillComplete")) or summary["complete"]
+    api_cache_set(db, _CACHE_TIER, _cursor_key(congress), {
+        "cursor": cursor.isoformat() if cursor else None,
+        "backfillComplete": backfill_complete,
+        "expected": expected,
+    })
+    summary["backfillComplete"] = backfill_complete
     return summary

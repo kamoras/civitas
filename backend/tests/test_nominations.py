@@ -15,7 +15,7 @@ from app import database
 from app.database import get_db
 from app.main import app
 from app.models import LearnedClassification, Nomination, RollCall, RollCallPosition
-from app.pipeline.cache import api_cache_get
+from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch import nominations as nm
 from app.services import nomination_service as ns
 from app.services.nomination_links import citations_in
@@ -190,7 +190,19 @@ def test_a_limited_pass_resumes_at_the_first_update_not_applied(db_session, monk
     summary = _run(db_session, limit=2)
     assert summary["stored"] == 2 and not summary["complete"]
     assert _cursor(db_session) == datetime(2026, 3, 2).isoformat()
+    marker = nm.read_marker(db_session, CONGRESS)
+    assert (marker["backfillComplete"], marker["expected"]) == (False, 3)
     assert _run(db_session)["stored"] == 1  # PN3; PN1-2 skipped as stored
+    marker = nm.read_marker(db_session, CONGRESS)
+    assert (marker["backfillComplete"], marker["expected"]) == (True, 3)
+
+
+def test_a_failed_pass_keeps_the_backfill_state(db_session, monkeypatch, no_fjc):
+    monkeypatch.setattr(nm, "_get_json", _api([_item("PN1", "2026-03-01T00:00:00Z")]))
+    _run(db_session)
+    monkeypatch.setattr(nm, "_get_json", _api(None))
+    _run(db_session)
+    assert nm.read_marker(db_session, CONGRESS)["backfillComplete"] is True
 
 
 def test_three_unreadable_in_a_row_stop_the_pass(db_session, monkeypatch, no_fjc):
@@ -292,6 +304,7 @@ def client(db_session):
 def test_the_list_filters_and_counts(client):
     body = client.get("/api/nominations?kind=civilian").json()
     assert body["counts"] == {"pending": 1, "confirmed": 1, "returned": 0, "withdrawn": 1}
+    assert body["allStatuses"] == 3
     assert {i["citation"] for i in body["items"]} == {"PN1129", "PN12", "PN13"}
     assert [i["citation"] for i in client.get("/api/nominations?status=pending").json()["items"]] == ["PN12"]
     assert client.get("/api/nominations?agency=Army").json()["total"] == 1
@@ -305,7 +318,7 @@ def test_stats_count_days_to_confirm_by_kind(client):
     assert civilian["n"] == 1 and civilian["median"] == 60  # Jan 1 -> Mar 2
     assert civilian["bins"][-1] == {"start": 60, "end": 90, "count": 1}
     assert body["kinds"]["judicial"]["timeToConfirm"]["median"] == 90
-    assert body["counts"]["confirmed"] == 3 and body["total"] == 5
+    assert body["counts"]["confirmed"] == 3 and body["total"] == 5 and body["people"] == 5
 
 
 def test_a_nomination_page_has_its_roll_calls_and_each_senators_vote(client):
@@ -318,10 +331,34 @@ def test_a_nomination_page_has_its_roll_calls_and_each_senators_vote(client):
     assert client.get("/api/nominations/119/nonsense").status_code == 422
 
 
-def test_a_nomination_roll_call_links_its_nomination(client):
-    body = client.get("/api/congress/votes/senate/119/2/256").json()
-    assert [n["citation"] for n in body["nominations"]] == ["PN1129"]
-    assert client.get("/api/congress/votes/senate/119/2/257").json()["nominations"] == []
+def test_a_nomination_roll_call_links_its_nomination_labelled_by_its_question(client):
+    vote = client.get("/api/congress/votes/senate/119/2/256").json()["nominationVote"]
+    assert (vote["kind"], vote["label"], vote["citationCount"]) == ("confirm", "Vote to confirm", 1)
+    assert [n["citation"] for n in vote["nominations"]] == ["PN1129"]
+    cloture = client.get("/api/congress/votes/senate/119/2/255").json()["nominationVote"]
+    assert (cloture["kind"], cloture["label"]) == ("cloture", "Vote to end debate (cloture)")
+    # Names PN11290, which isn't stored: the vote is still one on a nomination.
+    other = client.get("/api/congress/votes/senate/119/2/257").json()["nominationVote"]
+    assert other["citationCount"] == 1 and other["nominations"] == []
+
+
+def test_a_partly_stored_en_bloc_vote_counts_every_nomination_it_names(db_session, client):
+    _roll_call(db_session, 300, "On the Nomination PN1129 and PN777 and PN778-2")
+    db_session.commit()
+    vote = client.get("/api/congress/votes/senate/119/2/300").json()["nominationVote"]
+    assert vote["citationCount"] == 3 and [n["citation"] for n in vote["nominations"]] == ["PN1129"]
+
+
+def test_stats_say_whether_the_backfill_has_read_everything(db_session, client):
+    assert client.get("/api/nominations/stats").json()["backfill"] == {
+        "complete": False, "read": 5, "expected": None, "nightsLeft": None}  # before any run
+    api_cache_set(db_session, "nominations", f"cursor-{CONGRESS}",
+                  {"cursor": None, "backfillComplete": False, "expected": 905})
+    backfill = client.get("/api/nominations/stats").json()["backfill"]
+    assert backfill == {"complete": False, "read": 5, "expected": 905, "nightsLeft": 3}
+    api_cache_set(db_session, "nominations", f"cursor-{CONGRESS}",
+                  {"cursor": None, "backfillComplete": True, "expected": 905})
+    assert client.get("/api/nominations/stats").json()["backfill"]["complete"] is True
 
 
 def test_the_sitemap_lists_every_nomination(client):

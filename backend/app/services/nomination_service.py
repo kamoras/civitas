@@ -19,9 +19,9 @@ from sqlalchemy.orm import Session
 
 from app.models import Nomination, RollCall
 from app.ordinals import ordinal
-from app.pipeline.fetch.nominations import HEARING_CODES, JUDICIARY, STATUSES
+from app.pipeline.fetch.nominations import HEARING_CODES, JUDICIARY, MAX_PER_RUN, STATUSES, read_marker
 from app.services.bill_record import MemberLinks, vote_detail
-from app.services.nomination_links import citations_in, nominee_names
+from app.services.nomination_links import citations_in, nominee_names, vote_label
 
 KINDS = ("civilian", "judicial", "military")
 # Width of the time-to-confirm histogram's bars, in days.
@@ -96,6 +96,7 @@ def list_nominations(
     return {
         "congress": congress, "total": total, "page": page, "perPage": per_page,
         "counts": {s: by_status.get(s, 0) for s in STATUSES},
+        "allStatuses": sum(by_status.values()),
         "items": [summary(r) for r in rows],
     }
 
@@ -110,6 +111,21 @@ def _distribution(days: list[int]) -> dict:
         "bins": [{"start": b * BIN_DAYS, "end": (b + 1) * BIN_DAYS, "count": counts.get(b, 0)}
                  for b in range(max(counts) + 1)],
     }
+
+
+def backfill(db: Session, congress: int, read: int) -> dict:
+    """Whether the sync has read every nomination of the Congress yet. Until
+    it has, every count and median is of a sample (the oldest updates
+    first), and the page says so: `read` of about `expected`, and how many
+    more daily runs at MAX_PER_RUN the rest should take. Unknown (null)
+    before the sync's first run."""
+    marker = read_marker(db, congress)
+    complete = bool(marker.get("backfillComplete"))
+    expected = marker.get("expected")
+    if expected is not None:
+        expected = max(expected, read)
+    nights = None if complete or expected is None else -(-(expected - read) // MAX_PER_RUN)
+    return {"complete": complete, "read": read, "expected": expected, "nightsLeft": nights}
 
 
 def stats(db: Session, congress: int) -> dict:
@@ -133,6 +149,8 @@ def stats(db: Session, congress: int) -> dict:
     return {
         "congress": congress,
         "total": len(rows),
+        "people": sum(by_kind[k]["people"] for k in KINDS),
+        "backfill": backfill(db, congress, len(rows)),
         "counts": {s: status_counts.get(s, 0) for s in STATUSES},
         "kinds": by_kind,
         "binDays": BIN_DAYS,
@@ -179,7 +197,8 @@ def detail(db: Session, congress: int, citation: str) -> dict | None:
         "congressGovUrl": congress_gov_url(row),
         "rollCalls": [{
             "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
-            "date": rc.date, "question": rc.question, "result": rc.result, "rejected": rc.rejected,
+            "date": rc.date, "question": rc.question, "label": vote_label(rc.question)[1],
+            "result": rc.result, "rejected": rc.rejected,
             "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
             "sourceUrl": rc.source_url, "citations": len(citations_in(rc.question)),
             "parties": final_detail["parties"] if rc is final else None,

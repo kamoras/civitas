@@ -54,26 +54,33 @@ export function days(n: number | null | undefined): string {
 }
 
 /** Where a member's vote row's title goes: the bill's page; for a vote on
- *  one nomination, its record; for an en bloc vote on several, the roll
- *  call's page, which lists each. Null when none applies (a procedural vote
- *  with no bill), or for a vote stored before its roll call, its bill id's. */
+ *  one nomination, its record; for an en bloc vote, the roll call's page,
+ *  which lists each. Null when none applies (a procedural vote with no bill,
+ *  or a nomination not read yet); for a vote stored before its roll call,
+ *  its bill id's. */
 export function voteSubjectHref(
   rc: VoteRollCall | null | undefined,
   billId?: string | null
 ): string | null {
-  const nominations = rc?.nominations ?? [];
-  if (rc && nominations.length === 1) return nominationHref(nominations[0]);
-  if (rc && nominations.length > 1) return rollCallHref(rc);
+  const nv = rc?.nominationVote;
+  if (rc && nv) {
+    if (nv.citationCount > 1) return rollCallHref(rc);
+    return nv.nominations[0] ? nominationHref(nv.nominations[0]) : null;
+  }
   return rc ? billPageHref(rc.billId, rc.congress) : billPageHref(billId);
 }
 
-/** The line a nomination vote's row adds: which nomination, and where it
- *  stands. Null for any other vote. */
+/** The line a nomination vote's row adds: which question it was (cloture is
+ *  not confirmation), on which nomination, and — on the vote to confirm
+ *  only — where the nomination stands. An en bloc vote counts every
+ *  nomination it names. Null for any other vote. */
 export function voteNominationLine(rc: VoteRollCall | null | undefined): string | null {
-  const nominations = rc?.nominations ?? [];
-  if (nominations.length === 1) {
-    const n = nominations[0];
-    return `Nomination ${n.citation} · ${n.organization} · ${STATUS_LABEL[n.status]}`;
-  }
-  return nominations.length > 1 ? `${nominations.length} nominations, en bloc` : null;
+  const nv = rc?.nominationVote;
+  if (!nv) return null;
+  if (nv.citationCount > 1) return `${nv.label} · ${nv.citationCount} nominations, en bloc`;
+  const n = nv.nominations[0];
+  if (!n) return nv.label;
+  const parts = [nv.label, `Nomination ${n.citation}`, n.organization];
+  if (nv.kind === "confirm") parts.push(STATUS_LABEL[n.status]);
+  return parts.filter(Boolean).join(" · ");
 }

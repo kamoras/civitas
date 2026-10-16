@@ -27,16 +27,43 @@ const nom = (citation: string) => ({
   nomineeCount: 1,
 });
 
+const nv = (
+  kind: "confirm" | "cloture",
+  citationCount: number,
+  stored: string[]
+): VoteRollCall["nominationVote"] => ({
+  kind,
+  label: kind === "confirm" ? "Vote to confirm" : "Vote to end debate (cloture)",
+  citationCount,
+  nominations: stored.map(nom),
+});
+
 describe("a member's vote row", () => {
-  it("opens one nomination's record", () => {
-    const r = rc({ nominations: [nom("PN1129")] });
+  it("opens one nomination's record, its status only on the vote to confirm", () => {
+    const r = rc({ nominationVote: nv("confirm", 1, ["PN1129"]) });
     expect(voteSubjectHref(r)).toBe("/congress/nominations/119/PN1129");
-    expect(voteNominationLine(r)).toBe("Nomination PN1129 · Department of Labor · Confirmed");
+    expect(voteNominationLine(r)).toBe(
+      "Vote to confirm · Nomination PN1129 · Department of Labor · Confirmed"
+    );
   });
-  it("opens an en bloc vote's roll call, which lists each", () => {
-    const r = rc({ nominations: [nom("PN1"), nom("PN2")] });
+  it("never calls a cloture vote confirmed", () => {
+    const r = rc({
+      question: "On the Cloture Motion PN1129",
+      nominationVote: nv("cloture", 1, ["PN1129"]),
+    });
+    expect(voteNominationLine(r)).toBe(
+      "Vote to end debate (cloture) · Nomination PN1129 · Department of Labor"
+    );
+  });
+  it("counts an en bloc vote by its question, however many are stored", () => {
+    const r = rc({ nominationVote: nv("confirm", 70, ["PN1"]) });
     expect(voteSubjectHref(r)).toBe("/congress/votes/senate/119/2/256");
-    expect(voteNominationLine(r)).toBe("2 nominations, en bloc");
+    expect(voteNominationLine(r)).toBe("Vote to confirm · 70 nominations, en bloc");
+  });
+  it("names the question alone for a nomination not read yet", () => {
+    const r = rc({ nominationVote: nv("cloture", 1, []) });
+    expect(voteSubjectHref(r)).toBeNull();
+    expect(voteNominationLine(r)).toBe("Vote to end debate (cloture)");
   });
   it("leaves a bill vote, and an older backend's row, as they were", () => {
     expect(voteSubjectHref(rc({ billId: "S.5", question: "On Passage" }))).toBe(
