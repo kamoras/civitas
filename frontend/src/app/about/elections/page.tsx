@@ -12,7 +12,7 @@ import {
   More,
   A,
 } from "@/components/about/AboutPage";
-import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { ACTION_CENTER_HREF, ELECTIONS_ARCHIVE_HREF } from "@/lib/routes";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import {
   countWord,
@@ -171,7 +171,8 @@ export default async function ElectionsChapter() {
           ranges built on them are shared under Wikipedia&apos;s licence, CC BY-SA 4.0, with
           attribution to Wikipedia contributors: reuse them under the same licence. Each seat links
           the article revision its polls were read from. From election day the map is withdrawn and
-          the results map takes its place.
+          the results map takes its place. The map as it stood before election day is kept in that
+          election&apos;s archive.
         </P>
       </Section>
 
@@ -720,6 +721,27 @@ export default async function ElectionsChapter() {
           <P>
             The results stay up for two weeks after the last count changes, never past January 3,
             when the new Congress is sworn in. Then the pages turn to the next election.
+          </P>
+        </Sub>
+        <Sub title="The archive: what stays after" id="election-night-archive">
+          <P>
+            From election day, each election is copied into its archive at{" "}
+            <Link href={ELECTIONS_ARCHIVE_HREF} className="text-phos underline">
+              /elections/archive
+            </Link>
+            : the seat map as its last refresh before election day left it, each Senate and House
+            race&apos;s count as its state reported it, and the candidates, nominees and statewide
+            ballot measures on the ballot, quoted from their sources. The count is copied again each
+            time it is read, until the results stay up no longer; after that nothing changes it. A
+            link to a race from an earlier election, such as an old post, opens that race in its
+            archive rather than the next election&apos;s ballot.
+          </P>
+          <P>
+            It keeps the whole ballot the state pages showed: federal races, statewide offices, the
+            legislature, elected judgeships and statewide measures. Counts are kept for the federal
+            races only, the only ones Civitas reads on election night. It leaves out the news
+            coverage beside each race and campaign-finance figures, which the FEC keeps. A count it
+            shows as leading still only leads, official or not: Civitas calls no race there either.
           </P>
         </Sub>
       </Section>

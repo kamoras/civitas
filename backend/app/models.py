@@ -1212,6 +1212,29 @@ class ElectionResultEvent(Base):
     race: Mapped["Race"] = relationship(back_populates="result_events")
 
 
+class ElectionArchive(Base):
+    """A held general election's record, kept after the site moves on to
+    the next one (app/election_archive.py): the seat map as its last
+    campaign build left it, and the federal ballot, statewide measures and
+    each race's count as they stood. Copied from election day until the
+    results window closes; after that nothing rewrites it, since the rows
+    it was copied from are ordinary derived data again (a data reset wipes
+    them, the measure prune deletes past elections' measures). Kept by a
+    reset (database.RESET_KEEPS)."""
+    __tablename__ = "election_archives"
+
+    cycle: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    election_day: Mapped[str] = mapped_column(String(10), nullable=False)
+    # The map's JSON (forecast/build.py's file) as it stood when the
+    # campaign ended. Written once, never replaced; NULL when no map for
+    # this election was on disk on election day.
+    map_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    map_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Races, candidates, counts and measures (election_archive.build_record).
+    record_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    record_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class LiveResultRead(Base):
     """How the last read of a state's live-results feed went, per election:
     what lets the page tell "the count hasn't started" from "Civitas
@@ -2800,6 +2823,56 @@ class RollCallPosition(Base):
     # "Yea" | "Nay" | "Present" | "Not Voting" (the House's "Aye"/"No"
     # are stored as recorded).
     position: Mapped[str] = mapped_column(String(12), nullable=False)
+
+
+class Nomination(Base):
+    """A presidential nomination as Congress.gov publishes it
+    (pipeline/fetch/nominations.py): one row per citation ("PN999-1"), each
+    field the record's own wording. `status` is Congress.gov's action
+    vocabulary read into four words (fetch/nominations.STATUS_CODES), not a
+    judgement; every action is kept verbatim beside it."""
+    __tablename__ = "nominations"
+    __table_args__ = (
+        UniqueConstraint("congress", "citation", name="uq_nomination"),
+        Index("ix_nomination_status", "congress", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    congress: Mapped[int] = mapped_column(Integer, nullable=False)
+    citation: Mapped[str] = mapped_column(String(16), nullable=False)  # "PN999-1"
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    part_number: Mapped[str] = mapped_column(String(4), default="00")
+    description: Mapped[str] = mapped_column(Text, default="")
+    received_date: Mapped[str] = mapped_column(String(10), default="")  # YYYY-MM-DD
+    organization: Mapped[str] = mapped_column(String(300), default="")
+    # The first position's title; every position is in `nominees`.
+    position_title: Mapped[str] = mapped_column(Text, default="")
+    is_military: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_list: Mapped[bool] = mapped_column(Boolean, default=False)
+    nominee_count: Mapped[int] = mapped_column(Integer, default=0)
+    # JSON: [{"ordinal", "positionTitle", "organization", "introText",
+    # "nomineeCount", "names": [{"firstName", "middleName", "lastName", "state"}]}]
+    nominees: Mapped[str] = mapped_column(Text, default="[]")
+    # JSON: [{"date", "code", "type", "text"}], newest first, as published.
+    actions: Mapped[str] = mapped_column(Text, default="[]")
+    latest_action_date: Mapped[str] = mapped_column(String(10), default="")
+    latest_action_text: Mapped[str] = mapped_column(Text, default="")
+    # "pending" | "confirmed" | "withdrawn" | "returned"
+    status: Mapped[str] = mapped_column(String(10), default="pending")
+    status_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # The committee the nomination was referred to (Congress.gov's system
+    # code, "ssju00"), from the referral action; NULL when none is named.
+    committee_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    committee_name: Mapped[str] = mapped_column(String(200), default="")
+    # JSON: [{"citation", "jacketNumber", "date"}] — Congress.gov's hearings.
+    hearings: Mapped[str] = mapped_column(Text, default="[]")
+    # The Federal Judicial Center's judge id (judges.csv "jid") for a
+    # confirmed Article III judgeship, from an exact match of court,
+    # nomination date and surname; NULL otherwise.
+    fjc_judge_id: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    fjc_node_id: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    update_date: Mapped[str] = mapped_column(String(25), default="")  # Congress.gov's updateDate
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class PolicyStatement(Base):

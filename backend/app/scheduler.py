@@ -34,6 +34,7 @@ from app.broadcast import deliver_pending, refresh_engagement
 from app.pipeline.analyze.trend_poster import run_trend_posts
 from app.pipeline import lease
 from app.pipeline import bill_refresh
+from app.pipeline.fetch import nominations
 from app.pipeline.fetch import bill_display_titles
 from app.pipeline.fetch.agencies import run_agency_sync
 from app.services.bill_service import warm_bill_collection_cache
@@ -605,6 +606,7 @@ def _election_results_sync() -> None:
         return
 
     def _run():
+        from app.election_archive import freeze
         from app.http_client import make_async_client
         from app.live_results.sync import results_tracker, sync_live_results
 
@@ -612,7 +614,15 @@ def _election_results_sync() -> None:
             db = SessionLocal()
             try:
                 async with make_async_client() as client:
-                    return await sync_live_results(db, client, election.election_day)
+                    summary = await sync_live_results(db, client, election.election_day)
+                # The election's archive (app/election_archive.py), copied
+                # on every pass through the window and frozen by its close.
+                try:
+                    freeze(db, election.election_day)
+                except Exception:
+                    db.rollback()
+                    logger.exception("Election archive copy failed")
+                return summary
             finally:
                 db.close()
 
@@ -748,6 +758,35 @@ def _agency_sync() -> None:
     _start_job(run_agency_sync, name="agency-sync")
 
 
+def _nominations_sync() -> None:
+    """Congress.gov's nominations (pipeline/fetch/nominations.py): daily,
+    outside the nightly chain, and skipped while any of its pipelines runs —
+    both read Congress.gov through one rate limiter, and the chain's need is
+    the greater."""
+    def _run():
+        try:
+            if pipelines_running():
+                logger.info("Nominations sync skipped — a nightly pipeline is running")
+                return
+
+            async def work():
+                db = SessionLocal()
+                try:
+                    return await nominations.sync_nominations(db)
+                finally:
+                    db.close()
+
+            summary = lease.run_tracked(
+                lease.NOMINATIONS_SYNC, nominations.nominations_tracker(), work, who="Nominations sync",
+            )
+            if summary is not None:
+                logger.info("Nominations sync: %s", summary)
+        except Exception:
+            logger.exception("Nominations sync failed")
+
+    _start_job(_run, name="nominations-sync")
+
+
 def start_scheduler() -> None:
     """Parse the cron schedule from settings and start the scheduler.
 
@@ -873,6 +912,16 @@ def start_scheduler() -> None:
         _data_refresh,
         CronTrigger(hour="15", minute="40", timezone="UTC"),
         id="data_refresh",
+        replace_existing=True,
+    )
+
+    # Nominations — daily at 14:50, after the nightly chain's usual end and
+    # clear of the :10/:40 congress sync, :15 action refresh, :30 agency
+    # sync and :45 bills.
+    scheduler.add_job(
+        _nominations_sync,
+        CronTrigger(hour="14", minute="50", timezone="UTC"),
+        id="nominations_sync",
         replace_existing=True,
     )
 

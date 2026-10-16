@@ -17,9 +17,9 @@ and nothing else counts:
     jurisdiction's, so neither matches.
   - nominee: a nominee a roll call names ("<Name>, of <State>, to be ...",
     the Senate's format for a nomination vote) named in full by a trend
-    the appointment vote finds is about the nomination itself
-    (trend_relevance). A person merely named in a story is not an anchor:
-    their confirmation is not the record of what they did since.
+    that began within NOMINEE_WINDOW of the vote. A person merely named in
+    a story is not an anchor: their confirmation is not the record of what
+    they did since, and a story about what they did since comes after it.
   - member: a member of Congress the trend names (in full, or by a surname
     under action_center's collision safeguards: one holder, not a common
     word, not part of someone else's name), AND a bill that member
@@ -83,6 +83,16 @@ MATCH_MIN_COSINE = 0.5
 EVIDENCE_GRACE = timedelta(days=2)
 # How far back an Action Center issue can anchor a trend.
 ISSUE_LOOKBACK = timedelta(days=14)
+# How long after a nomination vote a trend naming the nominee may begin and
+# still be about the vote: the vote's day and the day after (EVIDENCE_GRACE
+# already admits a trend that began up to two days before it). A decision,
+# from the 2026-09-12..10-15 backtest: of the 16 trends that named a
+# nominee of the sitting Congress in full, the nearest began 51 days after
+# the vote and none was about the nomination; the hand-labelled
+# appointment vote this replaced would have anchored two of them (a
+# confirmed official's remarks, a letter to three officials) but for
+# RECORD_RECENCY.
+NOMINEE_WINDOW = timedelta(days=1)
 # How old a record may be when the trend doesn't name it (module docstring):
 # a decision, set from the backtest's misattachments (2025 confirmations
 # attached to 2026 stories).
@@ -265,12 +275,9 @@ def _contains_phrase(title: str, phrase: str) -> bool:
 
 def find_evidence(
     index: RecordIndex, name: str, description: str, started: datetime, trend_emb: np.ndarray,
-    about_appointment: bool = False,
 ) -> tuple[list[Evidence], list[dict]]:
     """Every pinned match for one trend (strongest first), and the members it
-    names (action_center._find_related_senators' entries).
-    `about_appointment` is the appointment vote (trend_relevance): only then
-    can a nominee anchor the trend."""
+    names (action_center._find_related_senators' entries)."""
     text = f"{name}. {description}".strip()
     latest = _iso(started.date() + EVIDENCE_GRACE)
     oldest = _iso(started.date() - RECORD_RECENCY)
@@ -334,9 +341,10 @@ def find_evidence(
         if record is not None:
             found.append(Evidence("act", 1.0, record, named_parties, record.parties, detail=phrase))
 
-    # nominee
-    for rc in index.votes if about_appointment else ():
-        if rc.date > latest or rc.date < oldest or not rc.question.startswith("On the Nomination"):
+    # nominee: only a vote the trend began within NOMINEE_WINDOW of
+    nominee_oldest = _iso(started.date() - NOMINEE_WINDOW)
+    for rc in index.votes:
+        if rc.date > latest or rc.date < nominee_oldest or not rc.question.startswith("On the Nomination"):
             continue
         m = _NOMINEE_RE.match(rc.title or "")
         if not m:

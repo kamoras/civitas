@@ -1,3 +1,4 @@
+import type { NominationVote } from "@/types/nomination";
 import type { DisclosureOwner } from "@/lib/disclosures";
 
 export interface SponsoredBill {
@@ -214,6 +215,9 @@ export interface VoteRollCall {
   /** The bill's short or popular title from Congress.gov, when the chamber's title isn't it. */
   billShortTitle?: string | null;
   sourceUrl: string;
+  /** What the vote decided about the nominations its question names; null
+   *  for any other vote. Optional for a backend image older than this field. */
+  nominationVote?: NominationVote | null;
   parties: VoteRollCallParty[];
 }
 

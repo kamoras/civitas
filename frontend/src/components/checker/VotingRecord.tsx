@@ -7,7 +7,8 @@ import {
   VoteCounts,
   VotingRecord as VotingRecordType,
 } from "@/types/senator";
-import { billPageHref, rollCallHref } from "@/lib/congress";
+import { rollCallHref } from "@/lib/congress";
+import { voteNominationLine, voteSubjectHref } from "@/lib/nominations";
 import { fetchSenatorVotes, fetchRepVotes, type VotePeriod } from "@/lib/api";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
@@ -62,8 +63,11 @@ export function VoteRow({
   // call's page.
   const title = rc?.billShortTitle || voteTitle(rc?.title, rc?.billLabel, vote.billName);
   // The roll call's bill, or, for a vote stored before its roll call was
-  // recorded, the vote's own bill id. A nomination has no bill page.
-  const href = rc ? billPageHref(rc.billId, rc.congress) : billPageHref(vote.billId);
+  // recorded, the vote's own bill id. A nomination has no bill page; it has
+  // its own record, and an en bloc vote its roll call's page, which lists
+  // every nomination it decided.
+  const href = voteSubjectHref(rc, vote.billId);
+  const nominationLine = voteNominationLine(rc);
   return (
     <li className="flex items-start justify-between gap-3 border-b border-white/[0.07] py-2.5">
       <div className="min-w-0">
@@ -81,6 +85,7 @@ export function VoteRow({
           // lines cut off on a phone.
           <span className="block text-sm text-ink break-words">{title}</span>
         )}
+        {nominationLine && <p className="mt-0.5 text-xs text-ink-lo">{nominationLine}</p>}
         <p className="mt-0.5 text-xs text-ink-min">
           {rc ? (
             // Every roll call has a page with each member's position,

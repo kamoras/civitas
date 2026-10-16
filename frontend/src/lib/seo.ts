@@ -9,6 +9,7 @@ import type { PoliticianProfile } from "@/types/politicians";
 import type { VoteDetail } from "@/types/congress";
 import type { AgencyDetail } from "@/types/agency";
 import { formatCurrency } from "@/lib/formatting";
+import type { NominationDetail } from "@/types/nomination";
 import {
   BSKY_PROFILE_URL,
   GITHUB_REPO_URL,
@@ -145,6 +146,23 @@ export function describeRollCall(v: VoteDetail): { title: string; description: s
     description:
       `${v.question}: ${v.result || "recorded"}, ${v.yeas}–${v.nays}, ${calendarDate(v.date)}. ` +
       `How every ${members} voted, by party, from the ${chamber}'s own record.`,
+  };
+}
+
+/** A nomination's page: who, for what, and where it stands. */
+export function describeNomination(
+  n: NominationDetail,
+  heading: string
+): { title: string; description: string } {
+  const where =
+    n.status === "confirmed" && n.statusDate
+      ? `confirmed ${calendarDate(n.statusDate)}${n.daysToConfirm != null ? `, ${n.daysToConfirm} days after nomination` : ""}`
+      : n.status === "pending"
+        ? `pending since ${calendarDate(n.receivedDate)}`
+        : `${n.status} ${n.statusDate ? calendarDate(n.statusDate) : ""}`.trim();
+  return {
+    title: `${heading}: Nomination ${n.citation}`,
+    description: `${n.description} ${where[0].toUpperCase()}${where.slice(1)}. Committee, hearings, every action and how each senator voted.`,
   };
 }
 
@@ -371,6 +389,27 @@ export function describeElectionMap(cycle?: number): {
   return {
     title: `${year}Senate and House Map: Usual Vote and Poll Ranges`,
     description: `How each ${year}Senate and House seat usually votes, a range for the margin (from this year's polls where a seat has any), and where the two disagree. Ranges, not results; not a race call. Method and held-out calibration shown.`,
+  };
+}
+
+/** /elections/archive: every general election Civitas has kept a record of. */
+export function describeElectionArchiveIndex(): { title: string; description: string } {
+  return {
+    title: "Past U.S. general elections: results, ballots and the map before the vote",
+    description:
+      "Each general election Civitas covered, kept after the site moves on: every Senate and House race's count as its state reported it, the candidates and statewide ballot measures on the ballot, and the seat map as it stood the day before.",
+  };
+}
+
+/** /elections/{cycle}: "2026 general election results, ballot and pre-election map". */
+export function describeElectionArchive(
+  cycle: number,
+  races: number,
+  measures: number
+): { title: string; description: string } {
+  return {
+    title: `${cycle} general election: results, ballot and pre-election map`,
+    description: `The ${cycle} U.S. general election as Civitas recorded it: the count in ${races} Senate and House races as each state reported it, the candidates on the ballot and ${measures} statewide ballot measure${measures === 1 ? "" : "s"}, quoted from their sources, and the seat map as it stood before election day. No race is called.`,
   };
 }
 

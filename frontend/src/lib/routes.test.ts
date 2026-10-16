@@ -3,6 +3,7 @@ import { issuesUrl, monitorHref, SECTIONS } from "./routes";
 import { ELECTION_MAP_HREF } from "./electionMap";
 import { REDISTRICTING_HREF } from "./redistricting";
 import { presidentSupportHref } from "./presidentialSupport";
+import { NOMINATIONS_HREF } from "./nominations";
 
 describe("issuesUrl", () => {
   it("is bare /action for the live view with nothing expanded", () => {
@@ -36,5 +37,6 @@ describe("SECTIONS", () => {
     expect(href("elections", "map")).toBe(ELECTION_MAP_HREF);
     expect(href("elections", "redistricting")).toBe(REDISTRICTING_HREF);
     expect(href("congress", "president")).toBe(presidentSupportHref("house"));
+    expect(href("congress", "nominations")).toBe(NOMINATIONS_HREF);
   });
 });

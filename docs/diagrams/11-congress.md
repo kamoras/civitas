@@ -154,3 +154,28 @@ opposes passage. `/congress/president/house` and `/senate` show each
 member's rate beside the rate expected for their party and seat lean, with
 every counted vote and its statement. Informational, not scored; see the
 README's "Votes with the President".
+
+**Nominations.** A daily job at 14:50 UTC, outside the nightly chain and
+skipped while any chain pipeline runs (`scheduler._nominations_sync`,
+`pipeline/fetch/nominations.py`), reads Congress.gov's nominations for the
+current Congress: the listing updated since its cursor, then each new or
+changed citation's record, actions, nominees and (when an action says one
+was held) hearings, oldest update first, at most 500 a run at half a request
+a second on top of the shared Congress.gov limiter. Each is committed as it
+is read; the cursor moves only past what was applied in order, so an outage
+or one unreadable record is read again next run, never skipped.
+
+```mermaid
+flowchart LR
+    LIST["GET /nomination/{congress}<br/>fromDateTime = cursor − 1 h"] --> EACH["each new or changed citation:<br/>record · actions · nominees · hearings"]
+    EACH --> NDB[("nominations")]
+    FJC["FJC judges.csv<br/>(cached a week)"] --> NDB
+    NDB --> PAGES["/congress/nominations<br/>/congress/nominations/{congress}/{PN}"]
+    RC[("roll_calls<br/>question names PN999-1")] --> PAGES
+```
+
+Status is Congress.gov's action vocabulary in four words (`STATUS_CODES`:
+S05310 confirmed, S05330 withdrawn, S05335 returned; anything else pending).
+A roll call links its nominations by the citations its question states
+(`services/nomination_links.py`), read on request, so a vote stored by the
+half-hourly sync links the moment it is stored.
