@@ -102,10 +102,28 @@ had an official record, so no decision changed. The tests post an agent's
 shooting, a detention death and a Capitol attack anniversary, each with a
 passed Act as its record (`test_political_violence_with_an_official_record_posts`).
 
-What keeps those stories off Bluesky today is the official-record rule,
-not the vote: the immigration-enforcement trends above match only news
-issues. Whether a tragedy may post an issue that links no official record
-is a policy choice this change leaves as it was.
+What kept those stories off Bluesky was the official-record rule, not the
+vote: the immigration-enforcement trends above match only news issues. So
+a tragedy may now also post a **confirmed Action Center issue**: a news
+issue (not developing, not a duplicate) reported by two or more outlets,
+whose lede is a claim compose() verified in its source
+(`tragedy_issue_refusal`). The post quotes that lede, credited to its outlet
+("Civitas Action Center, <date>, quoting <outlet>: <lede>"), never the
+headline, and the lede must pass the neutrality gate and the loaded-language
+vote. Political reading is what the trend and record already carry:
+Bluesky filed the trend under politics, and the record passed the Action
+Center's U.S.-policy gate.
+
+Replayed: the 7 immigration-enforcement trends all anchor on one issue from
+2026-09-24, from before ledes were verified claims (its lede, "ICE has
+wasted tens of millions of dollars with 'uninformed' detention plans", is a
+characterisation no check verified), so they are still refused, rightly.
+The backtest posts the same 3. Of every issue in the database that could
+serve a tragedy (14 confirmed, multi-outlet, verified-lede issues since
+2026-10-02), the drafts are verbatim attributed claims; the loaded-language
+vote refuses 3 of them ("... alleging Trump's taxpayer-funded ads are
+illegal propaganda", and two plain ones at 0.30 and 0.31), and 2 are too
+long for a post.
 
 ## Selection, caps and the party audit
 

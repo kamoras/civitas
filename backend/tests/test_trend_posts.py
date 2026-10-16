@@ -98,7 +98,7 @@ def world(db_session, monkeypatch, freeze_utcnow):
     alerts = []
     monkeypatch.setattr(trend_poster, "send_ops_alert", lambda *a, **k: alerts.append((a, k)))
     monkeypatch.setattr(trend_poster, "resolve_ops_alert", lambda *a, **k: None)
-    state = {"trends": [], "scores": {}}
+    state = {"trends": [], "scores": {}, "monkeypatch": monkeypatch}
     monkeypatch.setattr(trend_poster, "fetch_bluesky_trends", lambda: state["trends"])
     monkeypatch.setattr(trend_poster, "score_trends", lambda triples: [
         state["scores"].get(n, dataclasses.replace(RELEVANT, relevance=1.0 if c == "politics" else 0.0))
@@ -255,12 +255,66 @@ def test_a_tragedy_with_no_record_is_never_posted(world):
     assert row.decision == "ineligible" and posts(world["db"]) == []
 
 
-def test_a_tragedy_needs_an_official_record_not_an_issue(world):
+def _canal_issue(db, **fields):
+    """The fixture's issue, set up as a tragedy's record would need it or not."""
+    issue = db.query(ActionIssue).filter_by(title="Canal toll plan advances").one()
+    for k, v in fields.items():
+        setattr(issue, k, v)
+    db.commit()
+    return issue
+
+
+CONFIRMED = dict(source_names=json.dumps(["Outlet One", "Outlet Two"]), summary_source="Outlet One",
+                 summary_source_url="https://outlet-one.example/story",
+                 summary="State officials closed the canal after a barge collision killed two workers.")
+
+
+@pytest.mark.parametrize("fields,why", [
+    ({}, "outlets"),  # one outlet (none listed), no verified lede
+    ({**CONFIRMED, "source_names": json.dumps(["Outlet One"])}, "outlets"),
+    ({**CONFIRMED, "summary_source_url": None}, "verified lede"),
+    ({**CONFIRMED, "status": "developing"}, "confirmed news issue"),
+    ({**CONFIRMED, "source_type": "house_roll_call_vote"}, "confirmed news issue"),
+    ({**CONFIRMED, "duplicate_of_id": 1}, "duplicate"),
+])
+def test_a_tragedy_needs_an_official_record_or_a_confirmed_issue(world, fields, why):
+    _canal_issue(world["db"], **fields)
     world["trends"] = [trend("Canal tolls", description="The canal toll plan advances in the state legislature.")]
     world["scores"]["Canal tolls"] = TRAGEDY
     run(world)
     row = world["db"].query(TrendCandidate).one()
-    assert row.decision == "skipped" and "official record" in row.reason
+    assert row.decision == "skipped" and why in row.reason
+
+
+def test_a_tragedy_posts_a_confirmed_issue_by_its_verified_lede(world, bluesky_configured):
+    _canal_issue(world["db"], **CONFIRMED)
+    world["trends"] = [trend("Canal tolls", description="The canal toll plan advances in the state legislature.")]
+    world["scores"]["Canal tolls"] = TRAGEDY
+    run(world)
+    (post,) = posts(world["db"])
+    assert post.text.split("On the record: ", 1)[1].startswith(
+        "Civitas Action Center, October 14, 2026, quoting Outlet One: State officials closed the canal")
+    assert "Canal toll plan advances" not in post.text  # the unverified headline is never the post
+
+
+def test_a_loaded_lede_is_never_posted(world, monkeypatch):
+    _canal_issue(world["db"], **CONFIRMED)
+    monkeypatch.setattr(trend_poster, "loaded_votes", lambda texts: [0.99 for _ in texts])
+    world["trends"] = [trend("Canal tolls", description="The canal toll plan advances in the state legislature.")]
+    world["scores"]["Canal tolls"] = TRAGEDY
+    run(world)
+    row = world["db"].query(TrendCandidate).one()
+    assert row.decision == "skipped" and "lede fails the neutrality check" in row.reason
+
+
+def test_an_endorsing_lede_is_never_posted(world):
+    """Verbatim and attributed is not neutral: a lede that restates a voter
+    directive is refused whoever said it first."""
+    _canal_issue(world["db"], **{**CONFIRMED, "summary": "Vote Pat Quill on November 3 to stop the canal deaths."})
+    world["trends"] = [trend("Canal tolls", description="The canal toll plan advances in the state legislature.")]
+    world["scores"]["Canal tolls"] = TRAGEDY
+    run(world)
+    assert world["db"].query(TrendCandidate).one().decision == "skipped"
 
 
 def test_a_tragedy_with_an_official_record_posts_only_the_record(world, bluesky_configured):
@@ -274,7 +328,8 @@ def test_a_tragedy_with_an_official_record_posts_only_the_record(world, bluesky_
 # Political violence stays in scope: an agent's shooting, a death in
 # immigration detention and an attack on the Capitol each post when an
 # official record answers them, whatever a vote would have read into them
-# (the political-violence vote was removed 2026-10-16).
+# (the political-violence vote was removed 2026-10-16), and when only the
+# news does, through a confirmed issue (test_political_violence_..._issue).
 @pytest.mark.parametrize("name,description,title", [
     ("Example Agent Accountability Act", "An immigration agent shot a man during an arrest; senators cite the bill.",
      "Example Agent Accountability Act"),
@@ -715,3 +770,41 @@ def test_an_issue_match_needs_a_description_and_the_trend_names_subject(world):
     rows = {r.topic: r for r in world["db"].query(TrendCandidate)}
     assert rows["a"].decision == "ineligible"  # no description
     assert rows["b"].decision == "ineligible"  # "canal" only in the description
+
+
+@pytest.mark.parametrize("name,description,lede", [
+    ("Agent shooting", "An immigration agent shot a man during an arrest.",
+     "Federal officials said an immigration agent shot a man during an arrest on Tuesday."),
+    ("Detention death", "A detainee died in an immigration processing center.",
+     "Immigration officials said a detainee died at a processing center on Monday."),
+    ("Capitol attack", "Rioters attacked the state capitol during the vote count.",
+     "Police said rioters forced their way into the state capitol during the vote count."),
+])
+def test_political_violence_with_a_confirmed_issue_posts_its_lede(world, bluesky_configured, name, description,
+                                                                  lede):
+    issue = ActionIssue(date="2026-10-14", rank=2, title=f"{name} headline", related_bill_ids="[]",
+                        related_explore_ids="[]", related_senators="[]",
+                        source_names=json.dumps(["Outlet One", "Outlet Two"]), summary=lede,
+                        summary_source="Outlet One", summary_source_url="https://outlet-one.example/a")
+    world["db"].add(issue)
+    world["db"].commit()
+    world["trends"] = [trend(name, description=description)]
+    world["scores"][name] = TRAGEDY
+    monkeypatch_issue_match(world, issue)
+    run(world)
+    (post,) = posts(world["db"])
+    assert post.text.endswith(lede) or lede.rstrip(".") in post.text
+
+
+def monkeypatch_issue_match(world, issue):
+    """Point the trend at this issue through the issue match (find_evidence's
+    cosine and distinctive-entity test are exercised elsewhere)."""
+    from app.pipeline.analyze.trend_evidence import Evidence
+
+    real = trend_evidence.find_evidence
+
+    def find(index, name, description, started, emb, **kw):
+        found, named = real(index, name, description, started, emb, **kw)
+        return [Evidence("issue", 0.9, index.issue_record(issue), [], [], anchor_issue_id=issue.id,
+                         detail=issue.title), *found], named
+    world["monkeypatch"].setattr(trend_poster, "find_evidence", find)
