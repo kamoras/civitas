@@ -727,3 +727,25 @@ up to a day. Posts are composed to fit — figures are dropped before the
 "Not final." qualifier, never the reverse — and the routine race-coverage
 poster stands down while any count moved in the last day.
 
+
+## Special elections and the calendar
+
+```mermaid
+flowchart LR
+    FEC["FEC election dates<br/>(every row, specials kept)"] --> FED["FederalElectionDate"]
+    REP["FEC reporting dates"] --> DUE["FecReportingDeadline"]
+    CLERK["House Clerk MemberData.xml<br/>(seat with no member)"] --> VAC["SeatVacancy"]
+    SEN["Senate member list<br/>(class seat with no senator)"] --> VAC
+    FED -->|"special general / runoff,<br/>its day to 14 days after its last change"| READ["live-results readers<br/>pick_election by date<br/>same trust gates"]
+    READ --> FED
+    FED --> SWING["swing vs the seat's usual vote<br/>(settled, D and R both ran)"]
+    FED & DUE & VAC & CAL["voter_calendar"] --> API["/api/elections/specials<br/>/api/elections/calendar"]
+    SWING --> API
+    API --> PAGE["/elections/calendar<br/>/elections lead between cycles"]
+```
+
+Read nightly by the Election run in every season (`pipeline/fetch/special_elections.py`).
+A special's count is read by the five-minute results job (`live_results/specials.py`)
+and stored on its calendar row, never on a `Race`. Status is computed on the state's
+own clock; the swing is a measurement in the lean's own units and is never a call
+(`app/special_elections.py`).

@@ -365,6 +365,30 @@ export function describeRedistrictingIndex(
   };
 }
 
+/** /elections/calendar: special elections and every federal date. Counts
+ * are the backend's; null when it couldn't be read. */
+export function describeElectionCalendar(
+  upcomingSpecials: number | null,
+  vacancies: number | null
+): { title: string; description: string } {
+  const lead =
+    upcomingSpecials == null
+      ? ""
+      : upcomingSpecials === 0
+        ? "No federal special election is scheduled. "
+        : `${upcomingSpecials} federal special election date${upcomingSpecials === 1 ? "" : "s"} ahead. `;
+  const empty =
+    vacancies == null
+      ? ""
+      : vacancies === 0
+        ? "Every seat in Congress is filled. "
+        : `${vacancies} seat${vacancies === 1 ? "" : "s"} in Congress empty today. `;
+  return {
+    title: "Special elections and election calendar",
+    description: `${lead}${empty}Every federal primary, runoff and special election date from the FEC, each state's voter deadlines, and campaign finance reporting deadlines, with special elections' official counts and their swing against each seat's lean.`,
+  };
+}
+
 /** One state's redistricting page: "Texas new congressional map 2026". */
 export function describeStateRedistricting(
   stateName: string,
