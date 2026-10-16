@@ -72,12 +72,16 @@ const ranged = (over: Partial<MapSeat> = {}): MapSeat =>
       ],
     },
     difference: { strength: 2, direction: "D", seatPolls: true },
+    rangeBasis: "polls",
+    rangeBasisLabel: "Margin range, from polls",
+    rangeBasisShort: "from polls",
     article: { title: "x", revid: 7, url: "https://en.wikipedia.org/w/index.php?oldid=7" },
     ...over,
   }) as MapSeat;
 
 const data: ElectionMapData = {
-  pollWindowDays: 45,
+  pollWindowDays: 21,
+  pollsInRange: true,
   asOf: "2026-10-15T16:00:00Z",
   electionDay: "2026-11-03",
   cycle: 2026,
@@ -102,6 +106,7 @@ const data: ElectionMapData = {
     races: 419,
     coverage80: 0.788,
     coverage95: 0.938,
+    coverage80Fundamentals: 0.83,
     meanAbsError: 6.59,
     table: [
       {
@@ -123,6 +128,18 @@ const data: ElectionMapData = {
     })),
     seatTotalsOutside90: 4,
     brier: { combined: 0.056, fundamentals: 0.102, pollsOnly: 0.06, polledRaces: 353 },
+    forward: {
+      cycle: 2024,
+      trainedOn: [1998, 2022],
+      races: 32,
+      polledRaces: 30,
+      coverage80: 0.938,
+      coverage95: 1,
+      coverage80Band: [0.656, 0.938],
+      meanAbsError: 4.1,
+      brier: { combined: 0.052, fundamentals: 0.112, pollsOnly: 0.05 },
+      logLoss: 0.175,
+    },
   },
   model: {
     beta: [0.2, 1.32, 15.1, 0.87],
@@ -136,7 +153,13 @@ const data: ElectionMapData = {
   },
   sources: {
     lean: { source: "state returns", window: "2020+2024", file: "app/data/state_pvi.json" },
-    training: "MEDSL; FEC; FiveThirtyEight",
+    training: "MEDSL; FEC; Silver Bulletin",
+    trainingPolls: {
+      attribution: "Silver Bulletin",
+      url: "https://www.natesilver.net/p/pollster-ratings-silver-bulletin",
+      terms:
+        "You are welcome to use this data free of charge for any purpose, but please attribute it to Silver Bulletin.",
+    },
     polls: {
       attribution: "Wikipedia contributors",
       license: "CC BY-SA 4.0",
@@ -190,7 +213,8 @@ const response: ElectionMapResponse = {
   cycle: data.cycle,
   daysToElection: data.daysToElection,
   horizon: data.horizon,
-  pollWindowDays: 45,
+  pollWindowDays: 21,
+  pollsInRange: true,
   national: { ...data.national },
   bins: data.bins,
   sources: {
@@ -202,7 +226,8 @@ const response: ElectionMapResponse = {
         file: "app/data/district_lean.json",
       },
     },
-    training: { senate: data.sources.training, house: "FEC; VEST; FiveThirtyEight" },
+    training: { senate: data.sources.training, house: "FEC; VEST; Silver Bulletin" },
+    trainingPolls: data.sources.trainingPolls,
     polls: data.sources.polls,
   },
   chambers: {
@@ -226,11 +251,18 @@ const response: ElectionMapResponse = {
 function renderMap(
   view: MapView,
   chamber: MapChamber = "senate",
-  over: { seats?: MapSeat[]; stale?: boolean; nationalStatus?: string; seat?: string } = {}
+  over: {
+    seats?: MapSeat[];
+    stale?: boolean;
+    nationalStatus?: string;
+    seat?: string;
+    pollsInRange?: boolean;
+  } = {}
 ) {
   const r: ElectionMapResponse = {
     ...response,
     stale: over.stale,
+    pollsInRange: over.pollsInRange ?? true,
     national: { ...response.national, status: over.nationalStatus ?? "ok" },
     chambers: over.seats
       ? { ...response.chambers, senate: { ...response.chambers.senate, seats: over.seats } }
@@ -270,12 +302,54 @@ describe("election map", () => {
     expect(window.location.search).toContain("view=diff");
     fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
     const detail = screen.getByRole("complementary", { name: "Seat detail" });
-    expect(detail.textContent).toContain("a margin from D+9 to R+5");
+    expect(detail.textContent).toContain("margin D+9 to R+5");
     expect(detail.textContent).toContain("TOO CLOSE TO TELL");
     expect(detail.textContent).toContain("Ranges like these held the result 79% of the time");
     expect(within(detail).getByRole("link", { name: "Example Polling" })).toHaveAttribute(
       "href",
       "https://example.org/poll"
+    );
+  });
+
+  it("further out than the poll window, shows fundamentals-only ranges with polls beside them", () => {
+    const far = ranged({
+      fundamentalsOnly: true,
+      mean: 14.6,
+      pollAverage: null,
+      pollShare: 0,
+      polls: {
+        count: 1,
+        used: 0,
+        latest: null,
+        list: [{ ...(ranged() as RangedSeat).polls.list[0], usedInAverage: false }],
+      },
+      difference: { strength: 0, direction: null, seatPolls: false },
+    } as Partial<RangedSeat>);
+    renderMap("polls", "senate", { pollsInRange: false, seats: [far, data.seats[1]] });
+    const frame = document.querySelector("[data-share-section='general-map']") as HTMLElement;
+    expect(frame.textContent).toContain("FUNDAMENTALS ONLY · 19 DAYS OUT.");
+    expect(frame.textContent).toContain("checked only over the final 21 days before election day");
+    expect(frame.textContent).toContain("Past polls the ranges are fitted on: Silver Bulletin.");
+    fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
+    const detail = screen.getByRole("complementary", { name: "Seat detail" });
+    expect(detail.textContent).toContain("Fundamentals only");
+    expect(detail.textContent).toContain(
+      "Fundamentals-only ranges held the result 83% of the time"
+    );
+    expect(
+      within(detail).getByRole("list", { name: "Newest polls, not in the range" })
+    ).toBeInTheDocument();
+    expect(detail.textContent).toContain("The newest polls are listed below, outside the range.");
+  });
+
+  it("names the past polls' source and the forward check in the method", () => {
+    render(<ElectionMapMethod data={data} />);
+    expect(screen.getByRole("link", { name: "Silver Bulletin's raw poll file" })).toHaveAttribute(
+      "href",
+      "https://www.natesilver.net/p/pollster-ratings-silver-bulletin"
+    );
+    expect(screen.getByText(/The hardest check is the newest cycle, 2024/).textContent).toContain(
+      "Its 80% ranges held the result 94% of the time in 32 races"
     );
   });
 
@@ -431,9 +505,62 @@ describe("election map", () => {
     fireEvent.keyDown(ohio, { key: "Enter" });
     const sheet = screen.getByRole("complementary", { name: "Seat detail" });
     fireEvent.click(within(sheet).getByRole("button", { name: /Ohio \(special\)/ }));
-    expect(sheet.textContent).toContain("a margin from R+1 to R+9");
+    expect(sheet.textContent).toContain("margin R+1 to R+9");
     fireEvent.click(document.querySelector("[data-seat='2026-SEN-OH']") as Element);
-    expect(sheet.textContent).toContain("a margin from D+9 to R+5");
+    expect(sheet.textContent).toContain("margin D+9 to R+5");
+  });
+
+  it("labels a range by what it rests on, never polls on a seat with none", () => {
+    const unpolled = ranged({
+      difference: { strength: 0, direction: null, seatPolls: false },
+      rangeBasis: "no_poll",
+      rangeBasisLabel: "Margin range, no poll of this seat",
+      rangeBasisShort: "no poll",
+    } as Partial<RangedSeat>);
+    renderMap("polls", "senate", { seats: [unpolled] });
+    const ohio = screen.getByRole("button", { name: /^Ohio:/ });
+    expect(ohio.getAttribute("aria-label")).toContain(
+      "Margin range, no poll of this seat: D+9 to R+5"
+    );
+    fireEvent.click(ohio);
+    const detail = screen.getByRole("complementary", { name: "Seat detail" });
+    expect(detail.textContent).toContain("Margin range, no poll of this seat");
+    expect(detail.textContent).toContain("R+5 lean");
+    expect(detail.textContent).not.toMatch(/polls suggest|from polls/i);
+  });
+
+  it("lists one poll asked two ways once, with both questions", () => {
+    const base = (ranged() as RangedSeat).polls.list[0];
+    const seat = ranged({
+      polls: {
+        count: 2,
+        used: 1,
+        latest: "2026-10-06",
+        list: [
+          {
+            ...base,
+            questions: [
+              { dem: 40, rep: 49 },
+              { dem: 42, rep: 51 },
+            ],
+          },
+        ],
+      },
+    } as Partial<RangedSeat>);
+    renderMap("polls", "senate", { seats: [seat] });
+    fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
+    const list = screen.getByRole("list", { name: "Polls in the average" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(list.textContent).toContain("D 40 / R 49; D 42 / R 51");
+    expect(list.textContent).toContain("one poll asked 2 ways, counted once");
+  });
+
+  it("explains the Senate's faint tiles in every view", () => {
+    for (const view of ["usual", "polls", "diff"] as const) {
+      const { unmount } = renderMap(view, "senate");
+      expect(screen.getByText(/no Senate race in this state this year/)).toBeInTheDocument();
+      unmount();
+    }
   });
 
   it("draws a seat with no poll of its own with a dashed outline in the Polls view", () => {
@@ -453,6 +580,30 @@ describe("election map", () => {
       "href",
       "/elections/states/OH#race-2026-SEN-OH"
     );
+  });
+
+  it("names each view button by its label alone, thumbnails drawn (wide screen)", () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes("min-width"),
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      renderMap("diff");
+      const group = screen.getByRole("group", { name: "Map view" });
+      // The Difference thumbnail draws « ‹ glyphs; none reach a name.
+      expect(group.querySelector("svg")).not.toBeNull();
+      expect(
+        within(group)
+          .getAllByRole("button")
+          .map((b) => b.getAttribute("aria-label"))
+      ).toEqual(["USUAL VOTE", "POLLS", "DIFFERENCE"]);
+      expect(within(group).getByRole("button", { name: "DIFFERENCE" })).toBeInTheDocument();
+    } finally {
+      window.matchMedia = original;
+    }
   });
 
   it("is a modal dialog on a phone: Escape closes it and focus goes back", async () => {

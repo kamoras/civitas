@@ -23,17 +23,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy.orm import Session, selectinload
 
-from app import district_lean
+from app import data_refresh, district_lean
 from app.atomic_write import runtime_data_path, write_text_atomic
-from app.election_calendar import new_congress_day, previous_election_day
+from app.election_calendar import last_certified_general
 from app.election_phase import CAMPAIGN, active_election
 from app.forecast import model
 from app.forecast import polls as wiki
+from app.forecast import training_polls
 from app.models import Race
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.ordinals import ordinal
@@ -44,8 +45,11 @@ from app.time_utils import utcnow
 logger = logging.getLogger(__name__)
 
 DATA = Path(__file__).resolve().parents[1] / "data"
-MODEL_PATHS = {"senate": DATA / "forecast_model.json", "house": DATA / "forecast_house_model.json"}
-TRAINING_PATHS = {"senate": DATA / "forecast_training.json", "house": DATA / "forecast_house_training.json"}
+# The fits and their training rows: refreshed by app/data_refresh.py into
+# the data volume, read through data_refresh.read (the checked-in copy
+# until the first refit).
+MODEL_FILES = {"senate": "forecast_model.json", "house": "forecast_house_model.json"}
+TRAINING_FILES = {"senate": "forecast_training.json", "house": "forecast_house_training.json"}
 OFFICES = {"senate": "S", "house": "H"}
 STATE_PVI_PATH = DATA / "state_pvi.json"
 MAP_FILE = "election_map.json"
@@ -62,6 +66,25 @@ TRAINING_CONDITION = "election-map-training-stale"
 # The newest polls a seat's detail lists (each with its source); every poll
 # in the average still counts, and "used" says how many there are.
 POLLS_SHOWN = 6
+# What a seat's range rests on, sent as a label so the page never calls a
+# range "polls" when no poll is in it: "polls" (the seat's own polls are in
+# the average), "no_poll" (none in the window: the usual vote, incumbency and
+# the national swing alone) or "before_window" (further out than the method
+# was checked with polls, so no poll enters any range).
+RANGE_BASIS = {
+    "polls": {"label": "Margin range, from polls", "short": "from polls"},
+    "no_poll": {"label": "Margin range, no poll of this seat", "short": "no poll"},
+    "before_window": {"label": "Margin range, before polls count", "short": "polls not counted yet"},
+}
+# The two numbers a seat shows are in different units, and both are written
+# "D+N": the page prints these beside them.
+UNITS = {
+    "lean": "Lean: how many points more Democratic (D) or Republican (R) a place votes than the whole "
+            "country, in each party's share of the vote.",
+    "margin": "Margin: how many points the Democrat or the Republican may finish ahead of the other. A margin "
+              "counts the gap between two shares, so it runs twice a lean: a place that leans D+8 has a margin "
+              "of D+16 when the country splits evenly.",
+}
 
 
 def map_path() -> str:
@@ -202,11 +225,13 @@ def _previous(election_day: date) -> dict:
 
 
 def _calibration(evaluation: dict) -> dict:
+    fw = evaluation.get("forward")
     return {
         "cycles": [evaluation["cycles"][0], evaluation["cycles"][-1]],
         "races": evaluation["races"],
         "coverage80": evaluation["coverage80"],
         "coverage95": evaluation["coverage95"],
+        "coverage80Fundamentals": evaluation.get("coverage80Fundamentals"),
         "meanAbsError": evaluation["meanAbsError"],
         "table": evaluation["calibration"],
         "seatTotals": evaluation["seatTotals"],
@@ -220,6 +245,17 @@ def _calibration(evaluation: dict) -> dict:
                   "fundamentals": evaluation["polled"]["fundamentals"]["brier"],
                   "pollsOnly": evaluation["polled"]["pollsOnly"]["brier"],
                   "polledRaces": evaluation["polledRaces"]},
+        # The newest cycle predicted by a fit on the cycles before it only
+        # (no look-ahead), beside the leave-one-cycle-out figures above.
+        "forward": None if not fw else {
+            "cycle": fw["cycle"], "trainedOn": fw["trainedOn"], "races": fw["races"],
+            "polledRaces": fw["polledRaces"], "coverage80": fw["coverage80"], "coverage95": fw["coverage95"],
+            "coverage80Band": fw["coverage80Band"], "meanAbsError": fw["meanAbsError"],
+            "brier": {"combined": fw["polled"]["combined"]["brier"],
+                      "fundamentals": fw["polled"]["fundamentals"]["brier"],
+                      "pollsOnly": fw["polled"]["pollsOnly"]["brier"]},
+            "logLoss": fw["polled"]["combined"]["logLoss"],
+        },
     }
 
 
@@ -232,6 +268,12 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
     today = today or utcnow().date()
     days_left = (election.election_day - today).days
     horizon = max(h for h in model.HORIZONS if h <= max(days_left, 0))
+    fits = {chamber: data_refresh.read(name) for chamber, name in MODEL_FILES.items()}
+    # Further out than the training polls reach, the method was never
+    # checked with polls: every seat shows the structural range alone, its
+    # polls listed beside it.
+    window = min(f["fits"][str(horizon)]["windowDays"] for f in fits.values())
+    polls_used = days_left <= window
     before = _previous(election.election_day)
     prev_national = before.get("national")
     try:
@@ -247,7 +289,7 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
     leans = {"senate": _lean_table(), "house": _house_leans(election.cycle)}
     chambers, training = {}, {}
     for chamber, office in OFFICES.items():
-        fitted = json.loads(MODEL_PATHS[chamber].read_text())
+        fitted = fits[chamber]
         params = fitted["fits"][str(horizon)]
         training[chamber] = fitted["_source"]
         previous = {s["id"]: s for s in (before.get("chambers", {}).get(chamber, {}).get("seats", []))}
@@ -262,7 +304,7 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
                       else house_articles(race, house_titles or []))
             # A seat with no lean is still emitted (status "no_lean").
             seats.append(_seat(race, table.get(key), params, national, revisions, titles,
-                               previous.get(race.id), today, election.election_day))
+                               previous.get(race.id), today, election.election_day, polls_used))
         shift = params["beta"][3] * national["margin"]
         chambers[chamber] = {
             "shift": round(shift, 2),
@@ -270,8 +312,9 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
             "calibration": _calibration(fitted["evaluation"][str(horizon)]),
             "model": {"beta": params["beta"], "priorSd": params["priorSd"], "halfLife": params["halfLife"],
                       "pollFloor": params["pollFloor"], "pollSpread": params["pollSpread"],
-                      "scale": params["scale"], "file": f"app/data/{MODEL_PATHS[chamber].name}",
-                      "fit": fitted["_regenerate"]},
+                      "scale": params["scale"], "priorScale": params["priorScale"],
+                      "file": f"app/data/{MODEL_FILES[chamber]}", "fit": fitted["_regenerate"],
+                      "refreshed": (fitted.get("_refreshed") or {}).get("at")},
             "seats": seats,
         }
     return {
@@ -281,12 +324,17 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
         "cycle": election.cycle,
         "daysToElection": days_left,
         "horizon": horizon,
-        "pollWindowDays": model.WINDOW_DAYS,
+        "pollWindowDays": window,
+        # False further out than the window: ranges are the structural line's.
+        "pollsInRange": polls_used,
         "national": national,
         "bins": {"leansMax": LEANS_MAX, "usuallyMax": USUALLY_MAX},
+        "units": UNITS,
         "sources": {
             "lean": {chamber: meta for chamber, (_, meta) in leans.items()},
             "training": training,
+            "trainingPolls": {"attribution": training_polls.ATTRIBUTION, "url": training_polls.PAGE_URL,
+                              "terms": data_refresh.read(training_polls.FILE_NAME).get("terms")},
             "polls": {"attribution": wiki.POLL_ATTRIBUTION, "license": wiki.POLL_LICENSE,
                       "licenseUrl": wiki.POLL_LICENSE_URL,
                       "notice": "Poll figures, averages and the ranges built on them are derived from "
@@ -298,7 +346,7 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
 
 
 def _seat(race, lean: float | None, params, national, revisions, titles: list[str], previous, today: date,
-          election_day: date) -> dict:
+          election_day: date, polls_used: bool = True) -> dict:
     dem, rep = _nominee(race.candidates, "DEM"), _nominee(race.candidates, "REP")
     seat = {
         "id": race.id, "state": race.state, "stateName": STATE_NAMES[race.state], "special": race.is_special,
@@ -385,10 +433,16 @@ def _seat(race, lean: float | None, params, national, revisions, titles: list[st
     inc = 1 if seat["incumbentParty"] == "R" else -1 if seat["incumbentParty"] == "D" else 0
     days_left = (election_day - today).days
     live = dict(params, horizon=max(days_left, 0))
-    r = model.predict({"lean": lean, "inc": inc}, poll_objs, national["margin"], live)
-    used = {(p.pollster, p.days_out, p.margin) for p in (r["average"].used if r["average"] else ())}
+    if not polls_used:
+        # The structural line alone, with its own calibrated spread
+        # (priorScale): no poll enters the range.
+        live["scale"] = params["priorScale"]
+    r = model.predict({"lean": lean, "inc": inc}, poll_objs if polls_used else [], national["margin"], live)
+    # By identity: two rows of one pollster can share a date and a margin.
+    used = {id(p) for p in (r["average"].used if r["average"] else ())}
     for p, obj in zip(parsed, poll_objs):
-        p["usedInAverage"] = (obj.pollster, obj.days_out, obj.margin) in used
+        p["usedInAverage"] = id(obj) in used
+    basis = "before_window" if not polls_used else "polls" if r["average"] is not None else "no_poll"
     poll_share = 0.0
     if r["pollSd"] is not None:
         wp, wa = 1 / params["priorSd"] ** 2, 1 / r["pollSd"] ** 2
@@ -417,13 +471,30 @@ def _seat(race, lean: float | None, params, national, revisions, titles: list[st
         # first); "all" keeps every parsed row for the next build to fall
         # back on if a revision fails its gates, and the API leaves it out.
         polls={"count": len(parsed), "used": r["pollsUsed"], "latest": latest,
-               "list": sorted((p for p in parsed if p["usedInAverage"]), key=lambda p: p["end"],
-                              reverse=True)[:POLLS_SHOWN],
+               # Beyond the window no poll is in the range, so the list is
+               # the newest polls, shown beside it.
+               "list": poll_list([p for p in parsed if p["usedInAverage"] or not polls_used]),
                "all": parsed},
+        fundamentalsOnly=not polls_used,
+        rangeBasis=basis, rangeBasisLabel=RANGE_BASIS[basis]["label"], rangeBasisShort=RANGE_BASIS[basis]["short"],
         difference={"strength": strength,
                     "direction": None if strength == 0 else ("D" if r["mean"] < r["prior"] else "R"),
                     "seatPolls": r["average"] is not None},
     )
+
+
+def poll_list(rows: list[dict]) -> list[dict]:
+    """The polls a seat lists, newest first, one entry per poll. An article
+    prints one poll asked two ways (with and without leaners, say) as two
+    rows under one pollster and one set of dates; the average counts it once
+    (model.eligible, pollsUsed), so the list does too: the first row, with
+    every question's shares under "questions"."""
+    groups: dict[tuple, list[dict]] = {}
+    for p in rows:
+        groups.setdefault((model.pollster_key(p["pollster"]), p["end"]), []).append(p)
+    entries = [qs[0] if len(qs) == 1 else dict(qs[0], questions=[{"dem": q["dem"], "rep": q["rep"]} for q in qs])
+               for qs in groups.values()]
+    return sorted(entries, key=lambda p: p["end"], reverse=True)[:POLLS_SHOWN]
 
 
 async def refresh(db: Session) -> dict | None:
@@ -471,43 +542,49 @@ def _alert_missing_house_lines(data: dict, cycle: int) -> None:
         resolve_ops_alert(HOUSE_LINES_CONDITION)
 
 
-def last_certified_general(today: date) -> int | None:
-    """The newest general election whose certified results exist by `today`:
-    every House winner is sworn in on January 3 (U.S. Const. amend. XX §1)
-    on a certified result, and states certify their Senate races by the
-    same canvasses, so from that day the results are official. The training
-    sources compile them later (MEDSL's Senate file, the FEC's "Federal
-    Elections" House tables), which is why the alert says what to check
-    rather than assuming a release has appeared."""
-    held = previous_election_day(today)
-    if held is not None and today < new_congress_day(held):
-        held = previous_election_day(held - timedelta(days=1))
-    return held.year if held else None
+def _coverage_line(chamber: str, doc: dict, due: int) -> list[str]:
+    """What keeps one chamber's fit from reaching `due`, input by input."""
+    cov = doc.get("_coverage") or {}
+    missing = []
+    if due not in cov.get("polls", []):
+        missing.append(f"{training_polls.ATTRIBUTION}'s raw-poll file (app/data/{training_polls.FILE_NAME}, "
+                       f"retrieved {data_refresh.read(training_polls.FILE_NAME).get('retrieved')}) has no {due} "
+                       f"{'generic-ballot' if chamber == 'house' else 'Senate'} polls yet")
+    if due not in cov.get("results", []):
+        missing.append(f"MEDSL's U.S. Senate file (doi:10.7910/DVN/PEJ5QU) has no {due} results yet"
+                       if chamber == "senate" else
+                       f"the FEC has not published its Federal Elections {due} compilation (US House Results by "
+                       "State); MEDSL's U.S. House file is behind a sign-in form Civitas does not answer")
+    if chamber == "house" and due not in cov.get("lean", []):
+        missing.append(f"app/data/forecast_house_lean.json has no {due} district lean "
+                       "(backend/scripts/build_house_lean_history.py)")
+    return missing or ["every input reaches it, but the last refit did not add it (see the forecast_model.json "
+                       "refresh alert)"]
 
 
 def check_training_staleness() -> None:
     """Alert once a general election the map's fits never saw has certified
-    results: the Senate and House fits (forecast_training.json,
-    forecast_house_training.json, and the House's lean history
-    forecast_house_lean.json behind it) stop at their newest cycle until
-    scripts/fit_forecast_model.py is extended and rerun. Nothing can
-    advance them on its own: each cycle needs its results and its
-    final-weeks polls from an openly licensed source. Resolved once both
-    fits include that election."""
+    results, naming each missing input per chamber: the training polls
+    (Silver Bulletin's rated file, refreshed by app/data_refresh.py), the
+    certified results (MEDSL's Senate file; the FEC's House compilation),
+    and for the House its lean history. The refit itself is automatic
+    (data_refresh: forecast_model.json); a gate that refused a new poll file
+    alerts on its own. Resolved once both fits include that election."""
     due = last_certified_general(utcnow().date())
     if due is None:
         return
-    newest = {chamber: max(r["year"] for r in json.loads(path.read_text())["races"])
-              for chamber, path in TRAINING_PATHS.items()}
+    docs = {chamber: data_refresh.read(name) for chamber, name in TRAINING_FILES.items()}
+    newest = {chamber: max(r["year"] for r in doc["races"]) for chamber, doc in docs.items()}
     behind = {chamber: year for chamber, year in newest.items() if year < due}
     if not behind:
         resolve_ops_alert(TRAINING_CONDITION)
         return
+    lines = [f"{chamber.capitalize()} (fit stops at {year}): " + "; ".join(_coverage_line(chamber, docs[chamber], due))
+             for chamber, year in sorted(behind.items())]
     send_ops_alert("Election map: fits are a cycle behind",
                    f"The {due} general election's certified results are official, but the election map's fits "
-                   f"stop at {', '.join(f'{c} {y}' for c, y in sorted(behind.items()))}. When that election's "
-                   f"results and final-weeks polls are available under an open licence, add it to "
-                   f"backend/scripts/fit_forecast_model.py and refit.",
+                   f"do not include it. " + " ".join(f"{line}." for line in lines) + " The map keeps the last "
+                   "fit and names its cycles; each chamber refits on its own once its inputs are there.",
                    dedupe_key=f"{TRAINING_CONDITION}-{due}", condition=TRAINING_CONDITION)
 
 

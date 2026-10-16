@@ -368,7 +368,8 @@ path generator.
 
 ```mermaid
 flowchart LR
-    FIT["fit_forecast_model.py<br/>Senate: MEDSL + FEC + 538, 1998–2022<br/>House: FEC + rebuilt lean + 538, 2018–2022"] --> MODEL["forecast_model.json<br/>forecast_house_model.json<br/>parameters + held-out checks"]
+    SB["Silver Bulletin raw polls<br/>fetch_silver_bulletin_polls.py, gated<br/>forecast_polls.json"] --> FIT
+    FIT["fit_forecast_model.py (data_refresh, on new polls + monthly)<br/>Senate: MEDSL + FEC + Silver Bulletin, from 1998<br/>House: FEC compilations + rebuilt lean, from 2018"] --> MODEL["/data/forecast_model.json<br/>forecast_house_model.json<br/>parameters + leave-one-out + forward check"]
     HIST["build_house_lean_history.py<br/>VEST 2016/2020 on Census blocks"] --> FIT
     WIKI["Wikipedia race articles<br/>(current revision, gated)"] --> BUILD
     DB["races + confirmed nominees"] --> BUILD
@@ -384,7 +385,11 @@ range for the margin (structural line + poll average, inverse variance,
 one fitted scale). Ranges, never a winner; no seat total, because the
 held-out seat counts missed by more than independent races allow. The
 whole package (`app/forecast/`) is outside `app/pipeline/` and imports
-nothing from scoring. Poll-derived output is CC BY-SA 4.0, "Wikipedia
+nothing from scoring. Further out than the training polls reach (their
+own oldest poll, 21 days), every range is the structural line's alone,
+labelled fundamentals only. The training polls are refreshed and gated by
+`app/data_refresh.py`; a refused file or an outage keeps the last
+accepted copy and alerts. Poll-derived output is CC BY-SA 4.0, "Wikipedia
 contributors". README "The 2026 Senate and House map" has the numbers.
 
 ## Election night: the live count
