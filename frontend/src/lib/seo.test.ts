@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { serializeJsonLd } from "@/components/seo/JsonLd";
 import {
+  agencyJsonLd,
+  describeAgency,
   describeRedistrictingIndex,
   describeBill,
   describeElections,
@@ -12,6 +14,7 @@ import {
 } from "./seo";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { BillDetail } from "@/types/bill";
+import type { AgencyDetail } from "@/types/agency";
 
 function profile(
   branch: string,
@@ -238,6 +241,53 @@ describe("siteJsonLd", () => {
       about: { "@id": organization["@id"] },
       isPartOf: { "@id": website["@id"] },
     });
+  });
+});
+
+describe("agency metadata", () => {
+  const fda = {
+    slug: "food-and-drug-administration",
+    name: "Food and Drug Administration",
+    shortName: "FDA",
+    parent: {
+      slug: "health-and-human-services-department",
+      name: "Health and Human Services Department",
+    },
+    budget: null,
+    documents: { total: 120, openCommentsCount: 3 },
+    website: "https://www.fda.gov",
+    frUrl: "https://www.federalregister.gov/agencies/food-and-drug-administration",
+  } as unknown as AgencyDetail;
+
+  it("leads with the name people search for and states what the page holds", () => {
+    const { title, description } = describeAgency(fda);
+    expect(title).toBe("Food and Drug Administration (FDA): budget, rules and comment periods");
+    expect(description).toContain("part of the Health and Human Services Department");
+    expect(description).toContain("3 open comment periods, 120 Federal Register documents");
+  });
+
+  it("states the latest reported year, never $0 for a year not yet reported", () => {
+    const rrb = {
+      ...fda,
+      parent: null,
+      shortName: "RRB",
+      name: "Railroad Retirement Board",
+      budget: {
+        reported: false,
+        budgetAuthority: null,
+        fiscalYear: 2026,
+        latest: { fiscalYear: 2025, budgetaryResources: 17_820_000_000 },
+      },
+    } as unknown as AgencyDetail;
+    const { description } = describeAgency(rrb);
+    expect(description).toContain("$17.8B in budgetary resources in FY2025");
+    expect(description).not.toContain("$0");
+  });
+
+  it("names its department as the parent organization", () => {
+    const ld = agencyJsonLd(fda);
+    expect(ld["@type"]).toBe("GovernmentOrganization");
+    expect(ld.parentOrganization?.url).toMatch(/\/agencies\/health-and-human-services-department$/);
   });
 });
 

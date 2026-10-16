@@ -58,11 +58,12 @@ References
 """
 
 import asyncio
+import json
 import logging
 import re
-import time
 
 import numpy as np
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.database import execute_retrying_lock
@@ -79,6 +80,7 @@ from app.pipeline.transform.industry_classifier import (
     classify_industries_batch_scored,
     INDUSTRY_DESCRIPTIONS,
 )
+from app.pipeline.vector_store import get_model_version
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -206,38 +208,6 @@ _SEMANTIC_PROTOTYPES = {
     "SKIP": _SKIP_PROTOTYPE,
 }
 
-# Max wall-clock seconds any single SQLAlchemy transaction may span while
-# writing donor learning-store rows. SQLite allows exactly one writer at a
-# time; without a bound here, a full Senate run's ~18k donors (up to 2
-# _store_donor_learning writes each) all land in ONE transaction that stays
-# open for the entire classification pass (SQLAlchemy's default "begin on
-# first write, commit on session.commit()" — see
-# _classify_donors_hybrid_sync's final db_session.commit()). Every other
-# write anywhere in the app — including ordinary request traffic like
-# site-visit tracking — then either waits out the 30s SQLite busy_timeout
-# (database.py) or fails outright with "database is locked" (observed
-# live in production 2026-07-21, twice: a 500 on POST /api/track-visit,
-# followed by the container going unhealthy and getting killed — both
-# times while a donor classification run was in progress). This was
-# invisible before classify_donors_hybrid ran on the event loop (nothing
-# else could run concurrently with it anyway — see that function's
-# docstring for the unrelated bug that was); moving it to a worker thread
-# surfaced this separate, real one.
-#
-# This is a TIME bound, not a donor-count bound, and that distinction is
-# the fix: an earlier version of this constant capped the batch at 500
-# donors, reasoning that 500 plain DB writes take at most a few seconds.
-# That reasoning didn't hold — most donors in this loop also need a real
-# sentence-transformer encode() call (the semantic tier, or the
-# candidate-affiliated check), which is 10-100x slower than a DB write and
-# highly variable per name. Live-observed: contention hit again with the
-# count-based version, ~100 seconds and roughly ~100 donors into a run —
-# nowhere near the 500-donor mark, because per-donor cost was far higher
-# than assumed. A count threshold can only bound wall-clock duration if
-# per-item cost is roughly constant; it isn't here. Time is the actual
-# thing every other writer is waiting on, so bound that directly instead
-# of a proxy for it.
-_COMMIT_INTERVAL_SECONDS = 2.0
 
 _semantic_embeddings: dict[str, np.ndarray] | None = None
 
@@ -659,12 +629,7 @@ def _classify_donors_hybrid_sync(
     # confident-looking mistake.
     _CORRECTION_THRESHOLD = 0.60
 
-    last_commit = time.monotonic()
     for donor in unique_donors:
-        if db_session is not None and time.monotonic() - last_commit > _COMMIT_INTERVAL_SECONDS:
-            db_session.commit()
-            last_commit = time.monotonic()
-
         name = donor["name"]
         name_upper = name.upper().strip()
         fec_receipt = donor.get("fec_receipt", {})
@@ -798,9 +763,6 @@ def _classify_donors_hybrid_sync(
             merged["skip"] = merged.get("type") == "SKIP"
             results[name_upper] = merged
 
-    if db_session is not None:
-        db_session.commit()
-
     return results
 
 
@@ -868,12 +830,7 @@ def _classify_remaining_via_nn(
 
     all_results: dict[str, dict] = {}
 
-    last_commit = time.monotonic()
     for donor in unique_donors:
-        if time.monotonic() - last_commit > _COMMIT_INTERVAL_SECONDS:
-            db_session.commit()
-            last_commit = time.monotonic()
-
         name = donor["name"]
         name_upper = name.upper().strip()
         industry = industry_results.get(name, "OTHER")
@@ -924,6 +881,15 @@ def _store_donor_learning(
 
     Uses INSERT ... ON CONFLICT DO UPDATE to handle races atomically.
 
+    Committed at once. SQLite has one writer, and every caller goes on to
+    classify more donors (an encode per name, then the kNN pass) before
+    it would commit: an upsert left open holds the write lock across that
+    work, and every other writer waits behind it (2026-07-21 a visit
+    write 500ed; 2026-10-16 the lock was held 20 s, the main loop's last
+    write held open through the kNN pass, near the 30 s busy timeout).
+    A commit per call costs ~0.1 ms against a donor's encode; it replaced
+    a commit every 2 s, which still held the lock across the work.
+
     2026-07: this always overwrites the persisted row — there is no
     comparison against the existing DB row's confidence, despite an
     earlier version of this docstring claiming one. That's the intended
@@ -948,10 +914,6 @@ def _store_donor_learning(
     its own measured, conservative threshold (_CORRECTION_THRESHOLD =
     0.60). `donor_type` is never touched once learned.
     """
-    import json
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-    from app.pipeline.vector_store import get_model_version
-
     meta_json = json.dumps(match_metadata) if match_metadata else None
 
     for entity_type, value, tier in [
@@ -990,6 +952,7 @@ def _store_donor_learning(
         )
         execute_retrying_lock(db_session, stmt)
         _seen_this_run[key] = confidence
+    db_session.commit()
 
 
 def _reset_pending_learnings() -> None:

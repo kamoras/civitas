@@ -274,13 +274,18 @@ function ExplorePageInner() {
   const [politicianId, setPoliticianId] = useState<string | undefined>(
     () => searchParams.get("politician_id") || undefined
   );
+  // ?agency=<slug>: an agency page's "all of its documents" link, and the
+  // agency filter below. With no query, the agency's documents newest first.
+  const [agency, setAgency] = useState<string | undefined>(
+    () => searchParams.get("agency") || undefined
+  );
   const [submitted, setSubmitted] = useState<SubmittedSearch | null>(() => {
     const initialQ = searchParams.get("q")?.trim();
     const openComments = searchParams.get("comment") === "open";
     if (initialQ) {
       return { query: initialQ, chamber: "all", commentableOnly: openComments, sort: "relevance" };
     }
-    if (searchParams.get("politician_id")) {
+    if (searchParams.get("politician_id") || searchParams.get("agency")) {
       return { query: "", chamber: "all", commentableOnly: openComments, sort: "date" };
     }
     return openComments
@@ -295,7 +300,7 @@ function ExplorePageInner() {
   }, []);
 
   const request = useAsyncData(
-    submitted ? `${searchKey(submitted)}|${politicianId ?? ""}` : "",
+    submitted ? `${searchKey(submitted)}|${politicianId ?? ""}|${agency ?? ""}` : "",
     submitted
       ? () =>
           searchExplore(submitted.query, {
@@ -304,6 +309,7 @@ function ExplorePageInner() {
             commentableOnly: submitted.commentableOnly || undefined,
             sort: submitted.sort,
             politicianId,
+            agency,
           })
       : null
   );
@@ -342,40 +348,70 @@ function ExplorePageInner() {
   const politicianName = politicianId
     ? results.find((r) => r.politicianId === politicianId)?.politicianName || "one member"
     : "";
+  const agencyOptions = stats?.agencies ?? [];
+  const agencyName = agency
+    ? agencyOptions.find((a) => a.slug === agency)?.name ||
+      results.find((r) => r.agencySlug === agency)?.agencyName ||
+      "one agency"
+    : "";
 
   // The address names the search on screen, so a refresh or a shared link
   // shows the same thing. History API, not router.replace(): on this
   // statically prerendered route a same-route replace() is a no-op once the
   // page was opened with a query string (AGENTS.md, "Client-side URL state").
-  const writeUrl = useCallback((q: string, member: string | undefined, openComments: boolean) => {
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    if (member) params.set("politician_id", member);
-    if (openComments) params.set("comment", "open");
-    const search = params.toString();
-    window.history.replaceState(null, "", search ? `?${search}` : window.location.pathname);
-  }, []);
+  const writeUrl = useCallback(
+    (q: string, member: string | undefined, openComments: boolean, agencySlug?: string) => {
+      const params = new URLSearchParams();
+      if (q) params.set("q", q);
+      if (member) params.set("politician_id", member);
+      if (agencySlug) params.set("agency", agencySlug);
+      if (openComments) params.set("comment", "open");
+      const search = params.toString();
+      window.history.replaceState(null, "", search ? `?${search}` : window.location.pathname);
+    },
+    []
+  );
 
   const runSearch = useCallback(
-    (q: string, ch: ChamberFilter, commentOnly: boolean, sort: "relevance" | "date") => {
+    (
+      q: string,
+      ch: ChamberFilter,
+      commentOnly: boolean,
+      sort: "relevance" | "date",
+      agencySlug: string | undefined = agency
+    ) => {
       const trimmed = q.trim();
-      // An empty box lists the filtered member's record, or every open
-      // comment period; with neither it asks for nothing.
-      if (!trimmed && !politicianId && !commentOnly) return;
+      // An empty box lists the filtered member's or agency's record, or
+      // every open comment period; with none of them it asks for nothing.
+      if (!trimmed && !politicianId && !agencySlug && !commentOnly) return;
       setSubmitted({ query: trimmed, chamber: ch, commentableOnly: commentOnly, sort });
-      writeUrl(trimmed, politicianId, commentOnly);
+      writeUrl(trimmed, politicianId, commentOnly, agencySlug);
     },
-    [politicianId, writeUrl]
+    [politicianId, agency, writeUrl]
   );
 
   const clearPolitician = () => {
     setPoliticianId(undefined);
     const trimmed = submitted?.query ?? "";
     const openComments = submitted?.commentableOnly ?? false;
-    writeUrl(trimmed, undefined, openComments);
+    writeUrl(trimmed, undefined, openComments, agency);
     // A browse has nothing left to show without its member, unless it is
     // the list of open comment periods.
-    if (!trimmed && !openComments) setSubmitted(null);
+    if (!trimmed && !openComments && !agency) setSubmitted(null);
+  };
+
+  const handleAgencyChange = (slug: string) => {
+    const next = slug || undefined;
+    setAgency(next);
+    // An agency with an empty box lists its documents, newest first.
+    const sort = !query.trim() && next ? "date" : sortOrder;
+    setSortOrder(sort);
+    if (query.trim() || politicianId || next || commentableOnly) {
+      runSearch(query, chamber, commentableOnly, sort, next);
+    } else {
+      setSubmitted(null);
+      writeUrl("", undefined, false);
+    }
   };
 
   // On a phone the masthead, the box and the filters fill the first screen,
@@ -405,7 +441,7 @@ function ExplorePageInner() {
 
   const handleChamberChange = (ch: ChamberFilter) => {
     setChamber(ch);
-    if (searched && (query.trim() || politicianId || commentableOnly)) {
+    if (searched && (query.trim() || politicianId || agency || commentableOnly)) {
       runSearch(query, ch, commentableOnly, sortOrder);
     }
   };
@@ -415,7 +451,7 @@ function ExplorePageInner() {
     setCommentableOnly(next);
     // On with an empty box: every open comment period, closing soonest
     // first. Off again with nothing else asked: back to the empty page.
-    if (query.trim() || politicianId || next) {
+    if (query.trim() || politicianId || agency || next) {
       runSearch(query, chamber, next, sortOrder);
     } else {
       setSubmitted(null);
@@ -425,7 +461,7 @@ function ExplorePageInner() {
 
   const handleSortChange = (s: "relevance" | "date") => {
     setSortOrder(s);
-    if (searched && (query.trim() || politicianId || commentableOnly)) {
+    if (searched && (query.trim() || politicianId || agency || commentableOnly)) {
       runSearch(query, chamber, commentableOnly, s);
     }
   };
@@ -473,10 +509,10 @@ function ExplorePageInner() {
                   />
                   <button
                     type="submit"
-                    disabled={loading || (!query.trim() && !politicianId)}
+                    disabled={loading || (!query.trim() && !politicianId && !agency)}
                     aria-busy={loading}
                     aria-label={loading ? "Searching" : "Search"}
-                    className="text-xs font-mono tracking-widest text-signal-cyan hover:text-phos disabled:text-ink-min transition-colors shrink-0 px-2 py-1
+                    className="min-w-[7.5rem] text-xs font-mono tracking-widest text-signal-cyan hover:text-phos disabled:text-ink-min transition-colors shrink-0 px-2 py-1
                                border border-white/15 hover:border-signal-cyan/40 disabled:border-white/[0.07]
                                "
                   >
@@ -562,6 +598,32 @@ function ExplorePageInner() {
                 Open for Public Comment
               </button>
             </div>
+
+            {/* Agency: the Federal Register documents of one agency and its
+                sub-agencies. Options are the agencies with documents here. */}
+            {(agencyOptions.length > 0 || agency) && (
+              <div className="flex justify-center">
+                <label className="flex w-full max-w-md items-center gap-2 text-xs text-ink-lo">
+                  <span className="shrink-0">Agency</span>
+                  <select
+                    value={agency ?? ""}
+                    onChange={(e) => handleAgencyChange(e.target.value)}
+                    className="min-h-8 w-full min-w-0 border border-white/[0.07] bg-surface-base px-2 text-xs text-ink-hi focus:border-signal-cyan/40"
+                  >
+                    <option value="">Every agency</option>
+                    {agency && !agencyOptions.some((a) => a.slug === agency) && (
+                      <option value={agency}>{agencyName}</option>
+                    )}
+                    {agencyOptions.map((a) => (
+                      <option key={a.slug} value={a.slug}>
+                        {"\u00a0\u00a0".repeat(a.depth)}
+                        {a.name} ({a.documents.toLocaleString("en-US")})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
           </div>
 
           {politicianId && (
@@ -628,8 +690,12 @@ function ExplorePageInner() {
           )}
 
           {/* Loading */}
+          {/* A screen tall, so what sits below the results (the source
+              note) starts off screen and isn't shoved down when they land:
+              that move was the page's layout shift on a browse link
+              (CLS 0.04-0.06 at 1280 px, 2026-10-15). */}
           {loading && (
-            <div className="text-center py-12" role="status" aria-live="polite">
+            <div className="min-h-screen text-center py-12" role="status" aria-live="polite">
               <div className="inline-block border border-white/[0.07] px-6 py-3">
                 <span className="text-ink-lo text-sm font-mono pulse-subtle">
                   Searching government records…
@@ -704,6 +770,11 @@ function ExplorePageInner() {
                     {results.length === RESULT_LIMIT ? "The most recent " : ""}
                     {results.length} document{results.length !== 1 ? "s" : ""} from {politicianName}
                   </>
+                ) : agency && !submitted?.commentableOnly ? (
+                  <>
+                    {results.length === RESULT_LIMIT ? "The most recent " : ""}
+                    {results.length} document{results.length !== 1 ? "s" : ""} from {agencyName}
+                  </>
                 ) : (
                   <>
                     {results.length === RESULT_LIMIT ? "The " : ""}
@@ -714,9 +785,12 @@ function ExplorePageInner() {
                 {submitted?.commentableOnly && (resultsFor || politicianId) && (
                   <span className="text-phos-mid ml-2">· open for comment only</span>
                 )}
+                {agency && (resultsFor || politicianId || submitted?.commentableOnly) && (
+                  <span className="text-ink-lo ml-2">· {agencyName} only</span>
+                )}
                 <span className="text-ink-min ml-2">
                   · sorted by{" "}
-                  {!resultsFor && !politicianId
+                  {!resultsFor && !politicianId && (!agency || submitted?.commentableOnly)
                     ? "closing date"
                     : !resultsFor || submitted?.sort === "date"
                       ? "newest first"
@@ -739,6 +813,8 @@ function ExplorePageInner() {
                   <>No results found for &ldquo;{resultsFor}&rdquo;</>
                 ) : politicianId ? (
                   <>No documents on record for this member</>
+                ) : agency && !submitted?.commentableOnly ? (
+                  <>No documents on record for this agency</>
                 ) : (
                   <>No comment periods are open right now</>
                 )}
