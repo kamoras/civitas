@@ -3,15 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { BillRecordVote, VoteDetail } from "@/types/congress";
-import {
-  CHAMBER_NAME,
-  resultTone,
-  rollCallHref,
-  shortDate,
-  voteResult,
-  voteTally,
-} from "@/lib/congress";
-import { VoteCount } from "./ReportParts";
+import { CHAMBER_NAME, resultTone, rollCallHref, shortDate, voteResult } from "@/lib/congress";
+import { TallyText, VoteCount } from "./ReportParts";
 import VoteMembers, { PartyBar } from "./VoteMembers";
 
 const TONE = { yes: "text-phos-mid", no: "text-signal-red", neutral: "text-ink-lo" } as const;
@@ -90,7 +83,8 @@ export default function VotePanel({
               >
                 <span className="flex flex-col gap-1 pl-2 font-mono text-xs uppercase tracking-[0.1em] text-ink-lo">
                   <span>
-                    {CHAMBER_NAME[v.chamber]} {v.number}
+                    {CHAMBER_NAME[v.chamber]} <span className="sr-only">roll call </span>
+                    {v.number}
                   </span>
                   <span className="text-ink-min">{shortDate(v.date)}</span>
                 </span>
@@ -117,7 +111,7 @@ export default function VotePanel({
                 {CHAMBER_NAME[vote.chamber]} vote {vote.number} · {shortDate(vote.date)}
               </p>
               <p className="mt-1 text-lg font-bold text-ink-hi">
-                {vote.question}: {voteResult(vote).toLowerCase()}, {voteTally(vote)}
+                {vote.question}: {voteResult(vote).toLowerCase()}, <TallyText vote={vote} />
               </p>
             </div>
             <Link

@@ -545,6 +545,9 @@ describe("roll call page", () => {
     expect(
       screen.getByText("Tie broken: Vice President of the United States voted Yea")
     ).toBeTruthy();
+    // A screen reader hears the count spelled out, not "50 50".
+    expect(screen.getByText("50 yeas to 50 nays.")).toHaveClass("sr-only");
+    expect(screen.getByText("50–50")).toHaveAttribute("aria-hidden", "true");
   });
 
   it("counts a Speaker election by candidate, not as 0–0 with everyone not voting", () => {
@@ -596,6 +599,7 @@ describe("roll call page", () => {
     // The question is the title, said once.
     expect(screen.getAllByText("Election of the Speaker")).toHaveLength(1);
     expect(screen.getByText("2 Johnson (LA)")).toBeTruthy();
+    expect(screen.getByText("Republicans: 2 for Johnson (LA)")).toHaveClass("sr-only");
     expect(screen.getByText("Johnson (LA) · 2")).toBeTruthy();
     expect(screen.getByText("Jeffries · 1")).toBeTruthy();
     expect(screen.queryByText("Not voting · 3")).toBeNull();
@@ -629,6 +633,7 @@ describe("roll call page", () => {
     expect(screen.getByText("Quorum call")).toBeTruthy();
     expect(screen.getByText("433 present")).toBeTruthy();
     expect(screen.getByText("219 present · 1 NV")).toBeTruthy();
+    expect(screen.getByText("Republicans: 219 present, 1 not voting")).toHaveClass("sr-only");
     expect(screen.queryByText("Passed")).toBeNull();
     expect(screen.queryByText("0–0")).toBeNull();
   });

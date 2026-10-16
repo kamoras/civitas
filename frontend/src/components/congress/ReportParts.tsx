@@ -1,6 +1,13 @@
 import Link from "next/link";
 import type { CongressEvent, RollCallShape, RollCallSummary } from "@/types/congress";
-import { billHref, resultTone, rollCallHref, voteResult, voteTally } from "@/lib/congress";
+import {
+  billHref,
+  resultTone,
+  rollCallHref,
+  spokenTally,
+  voteResult,
+  voteTally,
+} from "@/lib/congress";
 
 export function Figure({
   value,
@@ -86,13 +93,32 @@ export function VoteCount({
       <span
         className={`font-mono tabular-nums text-ink-hi ${isQuestion ? `${size} leading-none` : "text-sm"}`}
       >
-        {isQuestion ? `${vote.yeas}–${vote.nays}` : voteTally(vote)}
+        {isQuestion ? (
+          <>
+            <span aria-hidden="true">{`${vote.yeas}–${vote.nays}`}</span>
+            <span className="sr-only">{`${vote.yeas} yeas to ${vote.nays} nays.`}</span>
+          </>
+        ) : (
+          voteTally(vote)
+        )}
       </span>
       {vote.tieBreaker && (
         <span className="text-xs text-ink-lo">
           Tie broken: {vote.tieBreaker.byWhom} voted {vote.tieBreaker.vote}
         </span>
       )}
+    </>
+  );
+}
+
+/** A count inline in a sentence: the backend's words on screen
+ * ("50–50, Vice President of the United States voted Yea"), the same
+ * figures spelled out for a screen reader (spokenTally). */
+export function TallyText({ vote }: { vote: Parameters<typeof spokenTally>[0] }) {
+  return (
+    <>
+      <span aria-hidden="true">{voteTally(vote)}</span>
+      <span className="sr-only">{spokenTally(vote)}</span>
     </>
   );
 }

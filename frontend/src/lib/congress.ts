@@ -150,3 +150,21 @@ export function voteTally(v: { tally?: string; yeas: number; nays: number }): st
 export function voteResult(v: { resultLabel?: string; result: string }): string {
   return v.resultLabel ?? v.result;
 }
+
+/** A roll call's count as a screen reader should say it: "50 yeas to 50
+ * nays, tie broken by the Vice President of the United States voting Yea"
+ * where the screen shows "50–50" (an en dash some readers skip, giving
+ * "50 50"). A quorum call's or an election's count is in words already. */
+export function spokenTally(v: {
+  kind?: string;
+  tally?: string;
+  yeas: number;
+  nays: number;
+  tieBreaker?: { byWhom: string; vote: string } | null;
+}): string {
+  if (v.kind && v.kind !== "question") return voteTally(v);
+  const tie = v.tieBreaker
+    ? `, tie broken by the ${v.tieBreaker.byWhom} voting ${v.tieBreaker.vote}`
+    : "";
+  return `${v.yeas} yeas to ${v.nays} nays${tie}`;
+}
