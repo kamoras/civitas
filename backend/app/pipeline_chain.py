@@ -19,7 +19,7 @@ chain waits until no pipeline is running, then tries that link once more
 and reports what that attempt did: the other run may have been a single
 senator, or have failed, so it never stands in for this one. The wait ends
 because what it waits on does — every "running" it reads stops counting
-once its run is past STALE_PIPELINE_TIMEOUT (scheduler.pipelines_running),
+once its run is stale (scheduler.pipelines_running, run_tracker.row_is_stale),
 and the retry's lock takes over a hung run's.
 
 The one skip that ends a chain is a data reset holding the database: every
@@ -36,7 +36,8 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from app.pipeline.run_tracker import ALREADY_RUNNING, MEMBER_PIPELINE_RUNNING, STALE_PIPELINE_TIMEOUT
+from app.pipeline import run_tracker
+from app.pipeline.run_tracker import ALREADY_RUNNING, MEMBER_PIPELINE_RUNNING, QUIET_PIPELINE_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +72,10 @@ class Outcome:
 # Chains in progress, by id: the monotonic time of their last progress (a
 # link starting or ending, or a look while waiting). What check-and-deploy.sh
 # reads (pipelineChainIsRunning), so a restart between two links doesn't
-# drop the rest. One with no progress for STALE_PIPELINE_TIMEOUT — one link
-# that long — is wedged, not busy: reported busy it would hold every deploy
+# drop the rest. One with no progress for QUIET_PIPELINE_TIMEOUT — its own,
+# or any run's progress write (run_tracker.last_progress), so a link that
+# works for longer than that, as a House run on a cache warm-up night does,
+# stays live — is wedged, not busy: reported busy it would hold every deploy
 # off, the one that fixes it included, and it no longer holds the slot.
 _chains: dict[int, float] = {}
 _chains_lock = threading.Lock()
@@ -80,7 +83,9 @@ _ids = itertools.count(1)
 
 
 def _any_live(now: float) -> bool:
-    return any(now - progress < STALE_PIPELINE_TIMEOUT.total_seconds() for progress in _chains.values())
+    window = QUIET_PIPELINE_TIMEOUT.total_seconds()
+    runs = run_tracker.last_progress()
+    return any(now - max(progress, runs) < window for progress in _chains.values())
 
 
 def chain_running() -> bool:
@@ -137,8 +142,8 @@ def held_off(outcome: Outcome) -> bool:
 
 
 async def _wait_out(chain_id: int, busy: Callable[[], bool]) -> None:
-    """Until busy() is false — each run it reads stops counting once past
-    STALE_PIPELINE_TIMEOUT, so this ends. The chain's progress meanwhile:
+    """Until busy() is false — each run it reads stops counting once stale
+    (run_tracker.row_is_stale), so this ends. The chain's progress meanwhile:
     it is alive, only waiting."""
     while True:
         try:

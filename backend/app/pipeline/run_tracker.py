@@ -14,12 +14,70 @@ logger = logging.getLogger(__name__)
 
 _RunModel = TypeVar("_RunModel")
 
-# Shared stale-run threshold for every run lock and every reader of a run
-# row (live_run). 12h is the "definitely wedged, not just slow" bar;
-# distinct from and longer than the 2h/8h thresholds _hourly_action_refresh
-# uses in scheduler.py, which answer a different question (should THIS
-# hourly tick wait or proceed) than "should this row be marked failed."
-STALE_PIPELINE_TIMEOUT = timedelta(hours=12)
+# When a run is stale (hung or dead: its lock taken over, waits on it end),
+# for every run lock and every reader of a run row (live_run) or of a
+# pipeline's in-process flag (PipelineRunTracker.hung). Stale is no progress
+# written for QUIET_PIPELINE_TIMEOUT, or older than STALE_PIPELINE_TIMEOUT.
+#
+# Progress is any ProgressTracker write: a step's begin, update, heartbeat
+# or end, each of which advances the row's elapsed_seconds (so the row's
+# last progress is started_at + elapsed_seconds) and touches the run's
+# in-process flag. Until 2026-10 staleness was age alone, 12h, and the
+# House sponsorship step's cache warm-up (about 19,000 bills, 3,000
+# Congress.gov reads an hour: a run of 13h or more) would have been taken
+# for hung while it worked.
+#
+# The quiet window is the longest a normal step goes without a write, with
+# margin. Measured over every step timing from 2026-08-07 to 2026-10-16:
+# the longest steps that write nothing until they end were the Senate's
+# classify_sponsored_stages (102 min), Supplementary's explore_documents
+# (93 min, outside the 2026-09 calibration wedge) and Stock's house_ptr
+# (90 min); a cold Oyez crawl in Supplementary's justice step once took 5h
+# (run 69). Six hours clears all of them; a killed run is still found the
+# moment its lease or the startup sweep says so, and within six hours
+# otherwise.
+QUIET_PIPELINE_TIMEOUT = timedelta(hours=6)
+# The age ceiling, for a run that writes progress for ever (a loop that
+# never ends) and the leases a run holds for its whole length, which need
+# a finite hold (lease.HUNG_AFTER). Well above a warm-up night.
+STALE_PIPELINE_TIMEOUT = timedelta(hours=24)
+
+
+def last_progress_at(row):
+    """When a run row last recorded progress (see QUIET_PIPELINE_TIMEOUT)."""
+    return row.started_at + timedelta(seconds=row.elapsed_seconds or 0)
+
+
+def row_is_stale(
+    row, stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT, quiet_timeout: timedelta = QUIET_PIPELINE_TIMEOUT,
+) -> bool:
+    """Whether a RUNNING row's run is past the ceiling or has gone quiet."""
+    now = utcnow()
+    return now - row.started_at >= stale_timeout or now - last_progress_at(row) >= quiet_timeout
+
+
+# Each tracked pipeline's in-process flag, by run model (acquire_tracked_run
+# registers it), so a progress write can touch it (touch).
+_TRACKERS: dict[type, "PipelineRunTracker"] = {}
+# time.monotonic() of the last progress write by any run in this process
+# (the nightly chain's liveness reads it: pipeline_chain).
+_last_progress = 0.0
+
+
+def touch(model: type) -> None:
+    """Record progress for `model`'s run: called on every ProgressTracker
+    write."""
+    global _last_progress
+    _last_progress = time.monotonic()
+    tracker = _TRACKERS.get(model)
+    if tracker is not None:
+        tracker.touch()
+
+
+def last_progress() -> float:
+    """time.monotonic() of the last progress write in this process (0.0 if
+    none)."""
+    return _last_progress
 
 
 # The run table of every pipeline with one: the admin data reset (api/admin.py)
@@ -65,13 +123,16 @@ def _lease_on(db: Session, model: type, row_id: int) -> str:
 def _proven_dead(db: Session, model: type, row) -> bool:
     """Whether `row` (RUNNING) is proven dead by its run's lease: the lease
     row names this run (lease.tag, written with the row) and has lapsed.
-    Anything else keeps the age rule."""
+    Anything else keeps the stale rule (row_is_stale)."""
     return _lease_on(db, model, row.id) == "dead"
 
 
-def live_run(db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT) -> "_RunModel | None":
+def live_run(
+    db: Session, model: type[_RunModel], stale_timeout: timedelta = STALE_PIPELINE_TIMEOUT,
+    quiet_timeout: timedelta = QUIET_PIPELINE_TIMEOUT,
+) -> "_RunModel | None":
     """`model`'s RUNNING row if its run may still be live, else None: a row
-    older than `stale_timeout`, or one its lease proves dead (_proven_dead),
+    stale by row_is_stale, or one its lease proves dead (_proven_dead),
     is not. Anything short of proof gets the benefit of the doubt — a
     falsely dead run can be deployed over, reset under or run twice; a
     falsely live one only makes things wait. Every reader asking "is a
@@ -83,7 +144,7 @@ def live_run(db: Session, model: type[_RunModel], stale_timeout: timedelta = STA
     running = db.query(model).filter(model.status == PipelineStatus.RUNNING).first()
     if running is None:
         return None
-    if utcnow() - running.started_at >= stale_timeout or _proven_dead(db, model, running):
+    if row_is_stale(running, stale_timeout, quiet_timeout) or _proven_dead(db, model, running):
         logger.debug("%s run #%d is RUNNING but dead — not waited on", model.__name__, running.id)
         return None
     return running
@@ -93,8 +154,8 @@ def senate_run_state(db: Session) -> "tuple[int | None, bool, bool]":
     """One read of the Senate run's row and lease, for everything an admin
     sees: (the RUNNING row's id or None, whether it counts as running —
     live_run's answer — and whether an operator may clear it:
-    clear-stuck-senate). Clearable is a row no live lease speaks for: past
-    the age rule, proven dead, or named by no lease (a run from a release
+    clear-stuck-senate). Clearable is a row no live lease speaks for: stale
+    (row_is_stale), proven dead, or named by no lease (a run from a release
     without leases, or one left RUNNING after its lease was let go). A row
     its lease names while held may be a live run whose beats stalled."""
     from app.models import PipelineRun, PipelineStatus
@@ -102,7 +163,7 @@ def senate_run_state(db: Session) -> "tuple[int | None, bool, bool]":
     row = db.query(PipelineRun).filter(PipelineRun.status == PipelineStatus.RUNNING).first()
     if row is None:
         return None, False, False
-    past_age = utcnow() - row.started_at >= STALE_PIPELINE_TIMEOUT
+    past_age = row_is_stale(row)
     said = _lease_on(db, PipelineRun, row.id)
     return row.id, not past_age and said != "dead", past_age or said != "live"
 
@@ -137,7 +198,7 @@ def tidy_dead_runs() -> int:
     """mark_proven_dead_stale for every run table that holds a run lease,
     on its own session, so run history stops showing a proven-dead run as
     running. Run at startup and hourly. Rows no lease proves dead are left
-    to the age rule, applied by their own run lock as a new run starts.
+    to the stale rule (row_is_stale), applied by their own run lock as a new run starts.
     Logs, never raises."""
     from app.database import SessionLocal
 
@@ -295,14 +356,16 @@ def acquire_pipeline_lock_why(
     cleared = None
     if running:
         age = utcnow() - running.started_at
-        if age <= stale_timeout:
+        if not row_is_stale(running, stale_timeout):
             return None, ALREADY_RUNNING
         # Marked stale in the same transaction as the new row and the reset
         # check below, not committed ahead of them: a run that yields to the
         # reset backs out with a rollback, writing nothing (lease.DATA_RESET).
         running.status = PipelineStatus.STALE
         running.completed_at = utcnow()
-        running.error_message = f"Marked stale: exceeded {stale_timeout} timeout"
+        running.error_message = (
+            f"Marked stale: no progress for {QUIET_PIPELINE_TIMEOUT} or older than {stale_timeout}"
+        )
         cleared = (running.id, age)
 
     try:
@@ -355,6 +418,7 @@ def acquire_tracked_run(
     reaches the flag at a time: a second waits on the first's write lock,
     then fails on the RUNNING row's unique index."""
     token = None
+    _TRACKERS[model] = tracker
 
     def raise_flag(_run) -> bool:
         nonlocal token
@@ -403,12 +467,14 @@ class PipelineRunTracker:
     def __init__(self) -> None:
         self._token = 0
         self._started_at: float | None = None  # time.time() of the run going, None when idle
+        self._progress_at = 0.0  # time.time() of its last progress (touch), its start until then
         self._holder: str | None = None  # who started it, for a refusal to name
         self._lock = threading.Lock()
 
     def _begin(self, holder: str | None = None) -> int:
         self._token += 1
         self._started_at = time.time()
+        self._progress_at = self._started_at
         self._holder = holder
         return self._token
 
@@ -449,6 +515,27 @@ class PipelineRunTracker:
     def is_running(self) -> bool:
         with self._lock:
             return self._started_at is not None
+
+    def touch(self) -> None:
+        """Record progress by the run going (run_tracker.touch)."""
+        with self._lock:
+            if self._started_at is not None:
+                self._progress_at = time.time()
+
+    def hung(
+        self, quiet_after: timedelta = QUIET_PIPELINE_TIMEOUT, ceiling: timedelta = STALE_PIPELINE_TIMEOUT,
+    ) -> bool:
+        """Whether the run going has written no progress for `quiet_after`
+        or is older than `ceiling` (False when idle): presumed hung, so a
+        wait on it ends. Its start counts as progress, so a tracker no
+        ProgressTracker touches (a lease-tracked job) is judged by age."""
+        with self._lock:
+            if self._started_at is None:
+                return False
+            now = time.time()
+            return now - self._progress_at >= quiet_after.total_seconds() or (
+                now - self._started_at >= ceiling.total_seconds()
+            )
 
     @property
     def age(self) -> timedelta | None:

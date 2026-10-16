@@ -147,19 +147,26 @@ HOUSE_PIPELINE_STEPS = [
 # alongside HousePipelineRun's DB-persisted status.
 _tracker = PipelineRunTracker()
 
+# How many sponsored bills the sponsorship step reads between log lines: a
+# cache warm-up night reads about 19,000 (2026-10-16), so this is a line
+# every ten minutes or so at 3,000 reads an hour.
+SPONSORSHIP_LOG_EVERY = 500
+
 
 def is_house_pipeline_running() -> bool:
     return _tracker.is_running
 
 
-def house_pipeline_age() -> "timedelta | None":
-    """Wall-clock age of the in-process House run, or None when idle.
+def house_pipeline_hung(quiet_after: "timedelta | None" = None) -> bool:
+    """Whether the in-process House run has gone quiet (no progress for
+    `quiet_after`, run_tracker.QUIET_PIPELINE_TIMEOUT by default) or is past
+    the age ceiling: presumed hung, so a wait on it ends. False when idle.
 
     Lets callers distinguish a live run from a hung one — a run wedged
     silently mid-phase would otherwise hold the running flag indefinitely
     and block every hourly action-center refresh behind it.
     """
-    return _tracker.age
+    return _tracker.hung(quiet_after) if quiet_after is not None else _tracker.hung()
 
 
 def recent_not_covered_by_key_bills(
@@ -609,7 +616,7 @@ async def run_house_pipeline() -> dict:
                                 bill_actions = None
                                 unread_bills.append(f"{sp_key} ({sp_congress}) actions")
                             bills_read += 1
-                            if bills_read % 500 == 0:
+                            if bills_read % SPONSORSHIP_LOG_EVERY == 0:
                                 logger.info(
                                     "Sponsorship: %d sponsored bills read (member %d of %d)",
                                     bills_read, rep_idx + 1, len(reps),

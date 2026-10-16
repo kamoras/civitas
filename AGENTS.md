@@ -1131,7 +1131,10 @@ is going, and a nightly run that finds a triggered chain going leaves the
 night to it. A link skipped because another run holds the machine (another
 run of that pipeline, or a member pipeline holding Stock trades off) waits
 until no pipeline run is live (`scheduler.pipelines_running`, which stops
-counting a run once it is past `STALE_PIPELINE_TIMEOUT`), then is tried once
+counting a run once it is stale: no progress for `QUIET_PIPELINE_TIMEOUT`,
+6h, or older than `STALE_PIPELINE_TIMEOUT`, 24h — `run_tracker.row_is_stale`
+for run rows and run locks, `PipelineRunTracker.hung` for the in-process
+flags, both reading the same progress writes), then is tried once
 more and that attempt is what gets reported: the other run may have been a
 single senator, or have failed, so it never stands in for the link. The one
 skip that ends a chain is a data reset holding the database, which every
@@ -1156,7 +1159,15 @@ rate-limit wait appended, each write one short commit): the House
 sponsorship step once spent six hours on a cache warm-up of about 19,000
 bills with an empty detail and a frozen elapsed time (2026-10-16). The
 admin status computes a running row's elapsed time from its start, never
-from the stored value.
+from the stored value. Staleness is progress, not age (2026-10): a run that
+has written nothing for six hours (the longest step measured to write
+nothing until it ends took 102 minutes) is hung or dead, and its lock is
+taken over; one still writing keeps it until the 24h ceiling. The jobs that
+step aside for a pipeline (the bill refresh for House, the election syncs
+for Election) and the chain's liveness (`pipeline_chain`, which counts any
+run's progress write) use the same rule with their own windows. A new long
+step that writes nothing until it ends must heartbeat, or past six hours it
+reads as hung.
 
 Outside the chain, the **agency sync** (`fetch/agencies.py`,
 `scheduler._agency_sync`, `AGENCY_SYNC` lease) reads the Federal Register's

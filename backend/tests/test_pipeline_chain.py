@@ -94,11 +94,12 @@ class TestHeldOffByAnotherRun:
         assert outcomes["A"].status == "skipped" and outcomes["B"].status == "completed"
 
     def test_the_chain_is_reported_running_while_it_waits(self, monkeypatch):
-        # A wait longer than the staleness cap still has the chain alive.
+        # A wait longer than the quiet window still has the chain alive:
+        # each look is the chain's progress.
         seen, now = [], [time.monotonic()]
 
         def busy():
-            now[0] += 7 * 3600  # each look 7h after the last
+            now[0] += 5 * 3600  # each look 5h after the last, 15h in all
             seen.append(pipeline_chain.chain_running())
             return len(seen) < 3
 
@@ -125,6 +126,7 @@ class TestOneChainAtATime:
 
     def test_a_wedged_chain_does_not_hold_the_slot(self, monkeypatch):
         monkeypatch.setitem(pipeline_chain._chains, 1, time.monotonic() - 13 * 3600)
+        monkeypatch.setattr(pipeline_chain.run_tracker, "_last_progress", 0.0)  # no run wrote any either
         assert pipeline_chain.claim() is not None
 
     def test_a_claimed_chain_runs_under_its_claim_and_releases_it(self):
@@ -260,7 +262,7 @@ def test_pipelines_running_counts_live_runs_not_a_dead_runs_row(db_session, monk
     db_session.commit()
     assert scheduler.pipelines_running() is False
     monkeypatch.setattr(scheduler, "is_stock_pipeline_running", lambda: True)
-    monkeypatch.setattr(scheduler, "stock_pipeline_age", lambda: None)
+    monkeypatch.setattr(scheduler, "stock_pipeline_hung", lambda: False)
     assert scheduler.pipelines_running() is True
 
 
@@ -275,13 +277,12 @@ def test_pipelines_running_counts_a_senate_row_only_while_its_lease_is_live(db_s
 
 def test_pipelines_running_stops_counting_a_hung_run(monkeypatch):
     # Else a link waiting on it would wait for ever.
-    from datetime import timedelta
 
     from app import scheduler
 
     monkeypatch.setattr(scheduler, "is_house_pipeline_running", lambda: True)
-    monkeypatch.setattr(scheduler, "house_pipeline_age", lambda: timedelta(hours=13))
+    monkeypatch.setattr(scheduler, "house_pipeline_hung", lambda: True)
     with patch("app.pipeline.run_tracker.senate_run_state", return_value=(None, False, False)):
         assert scheduler.pipelines_running() is False
-        monkeypatch.setattr(scheduler, "house_pipeline_age", lambda: timedelta(hours=1))
+        monkeypatch.setattr(scheduler, "house_pipeline_hung", lambda: False)
         assert scheduler.pipelines_running() is True

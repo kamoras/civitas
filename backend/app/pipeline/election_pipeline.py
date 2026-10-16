@@ -138,9 +138,11 @@ def is_election_pipeline_running() -> bool:
     return _tracker.is_running
 
 
-def election_pipeline_age():
-    """Wall-clock age of the in-process election pipeline run, or None when idle."""
-    return _tracker.age
+def election_pipeline_hung(quiet_after: "timedelta | None" = None) -> bool:
+    """Whether the in-process election run has gone quiet (no progress
+    for `quiet_after`, run_tracker.QUIET_PIPELINE_TIMEOUT by default) or is
+    past the age ceiling: presumed hung. False when idle."""
+    return _tracker.hung(quiet_after) if quiet_after is not None else _tracker.hung()
 
 
 # The election-season ballot sync (scheduler.py) runs the ballot step on its

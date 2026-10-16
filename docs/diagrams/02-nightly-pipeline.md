@@ -35,7 +35,7 @@ condition stays active until the code that raised it sees the condition gone
 flowchart TB
     START(["APScheduler cron tick"]) --> LOCK{"a running row in<br/>this pipeline's run table?"}
     LOCK -->|yes, fresh| SKIP(["Skip this tick"])
-    LOCK -->|yes, older than 12h| MARK["Mark stale, proceed"]
+    LOCK -->|"yes, no progress for 6h<br/>or older than 24h"| MARK["Mark stale, proceed"]
     LOCK -->|no| FP
     MARK --> FP
 
@@ -96,8 +96,9 @@ Swarm rollout can't both start the same pipeline
 so a restart kills them without letting them record it; on startup the backend
 marks every pipeline's leftover `running` row `stale`
 (`main._invalidate_orphaned_pipelines`), sparing only a Senate run whose
-lease still holds (it may be live in the other task), and a row older than 12 hours is
-cleared at the next acquisition. `check-and-deploy.sh` does not deploy while
+lease still holds (it may be live in the other task), and a row that has written
+no progress for 6 hours, or is older than 24, is cleared at the next acquisition
+(`run_tracker.row_is_stale`). `check-and-deploy.sh` does not deploy while
 any pipeline runs.
 
 ## The fingerprint gate

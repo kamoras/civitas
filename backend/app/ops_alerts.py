@@ -674,16 +674,17 @@ def check_pipeline_overrun() -> None:
     which raised its own until it stopped standing down for the chain
     (2026-10).
     """
-    from app.pipeline.run_tracker import live_run
+    from app.pipeline.run_tracker import QUIET_PIPELINE_TIMEOUT, STALE_PIPELINE_TIMEOUT, live_run
 
     default_budget = timedelta(hours=settings.PIPELINE_OVERRUN_ALERT_HOURS)
     db = SessionLocal()
     try:
-        # Runs that may be live (run_tracker.live_run), however old — a
-        # budget can be set past the 12h age rule; a row its lease proves
-        # dead is a dead run's, not an overrunning one.
+        # Runs that may be live (run_tracker.live_run), however old or
+        # quiet — a budget can be set past the age ceiling, and a run that
+        # has gone quiet is the one this alert most needs to name; a row
+        # its lease proves dead is a dead run's, not an overrunning one.
         checks = [
-            (label, live_run(db, model, timedelta.max), budget)
+            (label, live_run(db, model, timedelta.max, timedelta.max), budget)
             for label, model, budget in (
                 ("Senate", PipelineRun, default_budget),
                 ("House", HousePipelineRun, default_budget),
@@ -708,8 +709,9 @@ def check_pipeline_overrun() -> None:
                 f"{label} pipeline run #{run.id} has been running for "
                 f"{hours:.1f}h (budget {budget.total_seconds() / 3600:.0f}h). "
                 f"Started {run.started_at.isoformat()}. {_active_step_line(run)}"
-                f"A run past 12h will be marked stale and the next attempt of "
-                f"this pipeline may start concurrently.",
+                f"A run with no progress for {QUIET_PIPELINE_TIMEOUT.total_seconds() / 3600:.0f}h, or past "
+                f"{STALE_PIPELINE_TIMEOUT.total_seconds() / 3600:.0f}h, is marked stale and the next attempt "
+                f"of this pipeline may start beside it.",
                 dedupe_key=f"overrun-{label.lower().replace(' ', '-')}-{run.id}",
                 condition=condition,
             )

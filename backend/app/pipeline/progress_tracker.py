@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.error_utils import record_exception
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
-from app.pipeline import rate_limiter
+from app.pipeline import rate_limiter, run_tracker
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -191,7 +191,10 @@ class ProgressTracker:
     def _flush(self) -> None:
         ordered = [self._steps[k] for k, _, _ in self._steps_def]
         self._run.progress_detail = json.dumps(ordered)
+        # Also the run's progress mark: started_at + elapsed_seconds is when
+        # it last wrote progress (run_tracker.row_is_stale).
         self._run.elapsed_seconds = round(time.time() - self._start_time, 1)
+        run_tracker.touch(type(self._run))
         try:
             self._db.commit()
         except Exception:

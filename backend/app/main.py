@@ -106,7 +106,7 @@ def _invalidate_orphaned_pipelines() -> None:
     while one runs, which is what keeps a start-first rollout's overlap
     from sweeping a live run.) Every table, not just the Senate's: an
     unswept row reads as "running" on the admin dashboard and blocks a
-    manual trigger until STALE_PIPELINE_TIMEOUT ages it out. The one
+    manual trigger until it goes stale (run_tracker.row_is_stale). The one
     exception is a Senate row whose lease still holds — it may be a run
     live in the other task, the one case that can be seen.
     """

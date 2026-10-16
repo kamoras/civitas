@@ -61,6 +61,14 @@ class _SyncThread:
         self._target()
 
 
+def _hung_after(quiet):
+    """A *_pipeline_hung stand-in for a run that has been quiet for `quiet`
+    (None: idle)."""
+    from app.pipeline.run_tracker import QUIET_PIPELINE_TIMEOUT
+
+    return lambda quiet_after=QUIET_PIPELINE_TIMEOUT: quiet is not None and quiet >= quiet_after
+
+
 def _run_hourly_refresh(
     refresh_state: dict, house_running: bool = False, stock_running: bool = False, stock_age=None,
     supplementary_running: bool = False, supplementary_age=None,
@@ -77,9 +85,9 @@ def _run_hourly_refresh(
 
         with patch("app.scheduler.is_house_pipeline_running", return_value=house_running), \
              patch("app.scheduler.is_stock_pipeline_running", return_value=stock_running), \
-             patch("app.scheduler.stock_pipeline_age", return_value=stock_age), \
+             patch("app.scheduler.stock_pipeline_hung", side_effect=_hung_after(stock_age)), \
              patch("app.scheduler.is_supplementary_pipeline_running", return_value=supplementary_running), \
-             patch("app.scheduler.supplementary_pipeline_age", return_value=supplementary_age):
+             patch("app.scheduler.supplementary_pipeline_hung", side_effect=_hung_after(supplementary_age)):
             scheduler._hourly_action_refresh()
 
     return mock_refresh
@@ -365,7 +373,7 @@ class TestElectionCoverageRefresh:
              patch("app.election_calendar.is_election_season", return_value=in_season), \
              patch("app.live_results.bluesky.counting_is_live", return_value=counting_live), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
-             patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
+             patch("app.scheduler.election_pipeline_hung", side_effect=_hung_after(pipeline_age)), \
              _tracker_running(coverage_tracker(), coverage_running, coverage_age), \
              patch("app.database.SessionLocal") as mock_session_local, \
              patch(
@@ -446,7 +454,7 @@ class TestElectionBallotSync:
         with patch("app.background.threading.Thread", _SyncThread), \
              patch("app.election_calendar.is_election_season", return_value=in_season), \
              patch("app.scheduler.is_election_pipeline_running", return_value=pipeline_running), \
-             patch("app.scheduler.election_pipeline_age", return_value=pipeline_age), \
+             patch("app.scheduler.election_pipeline_hung", side_effect=_hung_after(pipeline_age)), \
              _tracker_running(ballot_tracker(), sync_running, sync_age), \
              patch("app.scheduler.run_ballot_sync", sync), \
              patch("app.scheduler.logger") as mock_logger:
@@ -516,7 +524,7 @@ class TestLeasedJobs:
             ("app.pipeline.lease.job", {"new": _refused_leases(taken)}),
             ("app.election_calendar.is_election_season", {"return_value": True}),
             ("app.scheduler.is_election_pipeline_running", {"return_value": pipeline_running}),
-            ("app.scheduler.election_pipeline_age", {"return_value": timedelta(minutes=5)}),
+            ("app.scheduler.election_pipeline_hung", {"return_value": False}),
             ("app.scheduler.is_house_pipeline_running", {"return_value": False}),
             ("app.database.SessionLocal", {"return_value": MagicMock(
                 **{"query.return_value.filter.return_value.first.return_value": None},
