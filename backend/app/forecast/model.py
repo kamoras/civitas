@@ -1,7 +1,8 @@
 """The arithmetic behind the poll-informed vote-margin ranges.
 
 One module for both the fit (scripts/fit_forecast_model.py, which runs
-it over official historical results and 538's final-weeks polls) and
+it over official historical results and Silver Bulletin's final-weeks
+polls) and
 the live build (app.forecast.build, which runs it over this year's
 inputs with the fitted parameters), so the two cannot drift apart.
 
@@ -24,7 +25,8 @@ THE METHOD, in the order it runs:
    Time-for-Change Model"; Bafumi, Erikson & Wlezien 2010, "Forecasting
    House Seats from Generic Congressional Polls".)
 
-2. Poll average. Each pollster's most recent poll in the window, weighted
+2. Poll average. Each pollster's most recent poll in the window (the
+   training polls' own reach, poll_window), weighted
    by recency (a half-life) and the square root of its sample size, after
    subtracting the pollster's measured house effect — its average
    difference from the other pollsters in the same races, shrunk toward
@@ -49,8 +51,9 @@ THE METHOD, in the order it runs:
 
 Every fitted number is written by the fit script to
 app/data/forecast_model.json; nothing here is a hand-typed estimate. The
-constants below are the method's design choices (grids searched, the
-window looked back over), each one stated.
+poll window is the training polls' own reach (poll_window), recorded with
+each fit as windowDays. The constants below are the method's design
+choices (grids searched, sample clipping), each one stated.
 """
 
 from __future__ import annotations
@@ -63,10 +66,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# How far back a poll may be and still count, in days before the as-of
-# date. 538's final-weeks file reaches 61 days out at most, so the fit
-# cannot speak to older polls.
-WINDOW_DAYS = 45
 # Sample sizes enter as sqrt(n / N_REF), with n clipped to [N_MIN, N_CAP]
 # so one enormous online panel cannot drown out every other poll, and a
 # poll that states no sample counts as a typical one (N_REF).
@@ -189,17 +188,29 @@ class PollAverage:
     used: tuple[Poll, ...]
 
 
-def eligible(polls: list[Poll], horizon: int) -> list[Poll]:
+def poll_window(rows: list[dict], generic: dict) -> int:
+    """How far before election day the training polls reach, in days: the
+    oldest poll in the training rows. The archive (Silver Bulletin's raw
+    polls) keeps each race's final weeks only, so this is the span the fit
+    has seen polls over, and the method looks back no further: a poll older
+    than this was never part of any held-out check."""
+    days = [r[1] for row in rows for r in row["polls"]] + [r[1] for v in generic.values() for r in v]
+    if not days:
+        raise ValueError("no training polls: the poll window cannot be measured")
+    return int(max(days))
+
+
+def eligible(polls: list[Poll], horizon: int, window: int) -> list[Poll]:
     """Each pollster's most recent poll fielded by the as-of date (days_out
-    at or beyond `horizon`) and within WINDOW_DAYS of it. A pollster with
+    at or beyond `horizon`) and within `window` days of it. A pollster with
     two questions on its latest date (likely and registered voters, say)
     keeps both, averaged by the weights."""
     latest: dict[str, int] = {}
     for p in polls:
-        if horizon <= p.days_out <= horizon + WINDOW_DAYS:
+        if horizon <= p.days_out <= horizon + window:
             k = pollster_key(p.pollster)
             latest[k] = min(latest.get(k, p.days_out), p.days_out)
-    return [p for p in polls if horizon <= p.days_out <= horizon + WINDOW_DAYS
+    return [p for p in polls if horizon <= p.days_out <= horizon + window
             and latest.get(pollster_key(p.pollster)) == p.days_out]
 
 
@@ -208,8 +219,9 @@ def poll_weight(p: Poll, horizon: int, half_life: float) -> float:
     return 0.5 ** ((p.days_out - horizon) / half_life) * math.sqrt(n / N_REF)
 
 
-def poll_average(polls: list[Poll], horizon: int, half_life: float, effects: dict) -> PollAverage | None:
-    used = eligible(polls, horizon)
+def poll_average(polls: list[Poll], horizon: int, half_life: float, effects: dict,
+                 window: int) -> PollAverage | None:
+    used = eligible(polls, horizon, window)
     if not used:
         return None
     # A poll printed as several questions (likely and registered voters,
@@ -231,8 +243,9 @@ def poll_sd(k_eff: float, floor: float, spread: float) -> float:
 # ---------------------------------------------------------------------------
 
 
-def national(generic: dict, year: int, horizon: int, half_life: float, effects: dict) -> float | None:
-    avg = poll_average(generic.get(str(year), []), horizon, half_life, effects)
+def national(generic: dict, year: int, horizon: int, half_life: float, effects: dict,
+             window: int) -> float | None:
+    avg = poll_average(generic.get(str(year), []), horizon, half_life, effects, window)
     return None if avg is None else avg.margin
 
 
@@ -282,10 +295,11 @@ def fit(rows: list[dict], generic: dict, horizon: int, national_coef: float | No
     (thirteen cycles), and fits everything else itself."""
     races = [[Poll.from_row(r) for r in row["polls"]] for row in rows]
     gen = {y: [Poll.from_row(r) for r in v] for y, v in generic.items()}
+    window = poll_window(rows, generic)
     effects = house_effects(races + list(gen.values()))
     best = None
     for hl in HALF_LIFE_GRID:
-        avgs = [poll_average(p, horizon, hl, effects) for p in races]
+        avgs = [poll_average(p, horizon, hl, effects, window) for p in races]
         idx = [i for i, a in enumerate(avgs) if a is not None]
         err = np.array([avgs[i].margin - rows[i]["margin"] for i in idx])
         k = np.array([avgs[i].k_eff for i in idx])
@@ -293,7 +307,7 @@ def fit(rows: list[dict], generic: dict, horizon: int, national_coef: float | No
         if best is None or ll > best[3]:
             best = (hl, floor, spread, ll)
     half_life, floor, spread, _ = best
-    nat = {int(y): national(gen, int(y), horizon, half_life, effects) for y in gen}
+    nat = {int(y): national(gen, int(y), horizon, half_life, effects, window) for y in gen}
     usable = [i for i, row in enumerate(rows) if nat.get(row["year"]) is not None]
     x = np.array([[rows[i]["lean"], rows[i]["inc"], nat[rows[i]["year"]]] for i in usable])
     y = np.array([rows[i]["margin"] for i in usable])
@@ -302,7 +316,7 @@ def fit(rows: list[dict], generic: dict, horizon: int, national_coef: float | No
     else:
         b, prior_sd = fit_fundamentals(x[:, :2], y - national_coef * x[:, 2])
         beta = b + [float(national_coef)]
-    params = {"horizon": horizon, "halfLife": half_life, "pollFloor": floor, "pollSpread": spread,
+    params = {"horizon": horizon, "windowDays": window, "halfLife": half_life, "pollFloor": floor, "pollSpread": spread,
               "beta": beta, "priorSd": prior_sd, "houseEffects": effects}
     means, sds, prior_m, avg_m, actual = [], [], [], [], []
     for i in usable:
@@ -323,7 +337,7 @@ def fit(rows: list[dict], generic: dict, horizon: int, national_coef: float | No
 def predict_raw(row: dict, polls: list[Poll], nat: float, params: dict) -> dict:
     b = params["beta"]
     prior = b[0] + b[1] * row["lean"] + b[2] * row["inc"] + b[3] * nat
-    avg = poll_average(polls, params["horizon"], params["halfLife"], params["houseEffects"])
+    avg = poll_average(polls, params["horizon"], params["halfLife"], params["houseEffects"], params["windowDays"])
     avg_sd = poll_sd(avg.k_eff, params["pollFloor"], params["pollSpread"]) if avg else None
     mean, sd = combine(prior, params["priorSd"], avg.margin if avg else None, avg_sd)
     return {"prior": prior, "pollAverage": avg.margin if avg else None, "pollSd": avg_sd,
@@ -342,6 +356,9 @@ def predict(row: dict, polls: list[Poll], nat: float, params: dict) -> dict:
         "pDemPrior": 1 - normal_cdf(r["prior"] / (params["priorScale"] * params["priorSd"])),
         "pDemPolls": (1 - normal_cdf(r["pollAverage"] / (params["pollScale"] * r["pollSd"])))
         if r["pollAverage"] is not None else None,
+        # The structural line's own 80% range (what the map shows beyond
+        # the poll window), for its held-out coverage.
+        "priorHalf80": Z80 * params["priorScale"] * params["priorSd"],
     })
     return r
 
@@ -379,29 +396,120 @@ def calibration_table(p: list[float], dem_won: list[float], years: list[int]) ->
     return rows
 
 
+def predict_cycle(train: list[dict], test: list[dict], generic: dict, year: int, horizon: int,
+                  national_coef: float | None = None) -> list[dict]:
+    """Every race of `test` (one cycle, `year`) predicted by a fit on `train`
+    alone, which must not hold that cycle. The national average for the
+    held-out year uses only that year's generic-ballot polls (and the
+    house effects of the training years)."""
+    assert all(r["year"] != year for r in train), "the fit must not see the cycle it predicts"
+    gen_train = {y: v for y, v in generic.items() if int(y) != year}
+    params = fit(train, gen_train, horizon, national_coef)
+    gen_all = {y: [Poll.from_row(x) for x in v] for y, v in generic.items()}
+    nat = national(gen_all, year, horizon, params["halfLife"], params["houseEffects"], params["windowDays"])
+    if nat is None:
+        return []
+    out = []
+    for r in test:
+        pr = predict(r, [Poll.from_row(x) for x in r["polls"]], nat, params)
+        out.append({"year": year, "state": r["state"], "special": r["special"], "margin": r["margin"],
+                    "mean": pr["mean"], "prior": pr["prior"], "pollAverage": pr["pollAverage"],
+                    "low80": pr["low80"], "high80": pr["high80"], "low95": pr["low95"], "high95": pr["high95"],
+                    "pDem": pr["pDem"], "pDemPrior": pr["pDemPrior"], "pDemPolls": pr["pDemPolls"],
+                    "priorHalf80": pr["priorHalf80"]})
+    return out
+
+
 def leave_one_cycle_out(rows: list[dict], generic: dict, horizon: int, national_coef_for=None) -> dict:
     """Every race predicted by a fit that never saw its cycle."""
     out = []
     for year in sorted({r["year"] for r in rows}):
         train = [r for r in rows if r["year"] != year]
         test = [r for r in rows if r["year"] == year]
-        gen_train = {y: v for y, v in generic.items() if int(y) != year}
         # A borrowed national coefficient is itself refitted without the
         # held-out cycle, so nothing from that cycle reaches its prediction.
-        params = fit(train, gen_train, horizon, national_coef_for(year) if national_coef_for else None)
-        # The national average for the held-out year uses only that year's
-        # generic-ballot polls (and the house effects of the other years).
-        gen_all = {y: [Poll.from_row(x) for x in v] for y, v in generic.items()}
-        nat = national(gen_all, year, horizon, params["halfLife"], params["houseEffects"])
-        if nat is None:
-            continue
-        for r in test:
-            pr = predict(r, [Poll.from_row(x) for x in r["polls"]], nat, params)
-            out.append({"year": year, "state": r["state"], "special": r["special"], "margin": r["margin"],
-                        "mean": pr["mean"], "prior": pr["prior"], "pollAverage": pr["pollAverage"],
-                        "low80": pr["low80"], "high80": pr["high80"], "low95": pr["low95"], "high95": pr["high95"],
-                        "pDem": pr["pDem"], "pDemPrior": pr["pDemPrior"], "pDemPolls": pr["pDemPolls"]})
+        out += predict_cycle(train, test, generic, year, horizon,
+                             national_coef_for(year) if national_coef_for else None)
     return summarize(out)
+
+
+def forward(rows: list[dict], generic: dict, horizon: int, national_coef_for=None) -> dict | None:
+    """The newest cycle predicted by a fit on the cycles before it only: what
+    the method would have said had it been run that year, with nothing from
+    that year or later (not even a later cycle's house effects, which leave
+    one cycle out lets in). None when there is no earlier cycle to fit on.
+    `national_coef_for(year)` must likewise be fitted on cycles before
+    `year` only."""
+    cycles = sorted({r["year"] for r in rows})
+    if len(cycles) < 2:
+        return None
+    year = cycles[-1]
+    train = [r for r in rows if r["year"] < year]
+    test = [r for r in rows if r["year"] == year]
+    earlier = {y: v for y, v in generic.items() if int(y) <= year}
+    preds = predict_cycle(train, test, earlier, year, horizon,
+                          national_coef_for(year) if national_coef_for else None)
+    if not preds:
+        return None
+    out = summarize(preds)
+    out["cycle"] = year
+    out["trainedOn"] = [cycles[0], cycles[-2]]
+    out["coverage80Band"] = coverage_band(len(preds), 0.8)
+    held = sum(1 for p in preds if p["low80"] <= p["margin"] <= p["high80"])
+    out["coverage80Test"] = coverage_test(held, len(preds))
+    return out
+
+
+def coverage_band(n: int, p: float, level: float = 0.95) -> list[float]:
+    """The central `level` band of the share of n independent races an
+    honest p-range would hold (exact binomial quantiles), as shares. A
+    measured coverage outside it is unlikely to be bad luck alone."""
+    tail = (1 - level) / 2
+    pmf = [math.comb(n, k) * p ** k * (1 - p) ** (n - k) for k in range(n + 1)]
+    cdf, lo, hi = 0.0, 0, n
+    for k, mass in enumerate(pmf):
+        if cdf < tail <= cdf + mass:
+            lo = k
+        cdf += mass
+        if cdf >= 1 - tail:
+            hi = k
+            break
+    return [round(lo / n, 3), round(hi / n, 3)]
+
+
+# The forward check's two hypotheses about the 80% ranges, each one-sided:
+# - too narrow (overconfident, the harmful direction): coverage below the
+#   stated 0.80;
+# - far too wide: coverage above WIDE_COVERAGE, i.e. the 80% ranges
+#   behaving like 90% ranges, which takes them 28% wider than they should
+#   be (Z90 / Z80). Ranges a little too wide in one cycle cost the reader
+#   nothing but some caution, and over a few dozen races one result more
+#   or less moves coverage by three points, so only "far" is tested; the
+#   page shows the measured figure either way. A stated convention.
+WIDE_COVERAGE = 0.90
+
+
+def coverage_test(held: int, n: int) -> dict:
+    """Exact one-sided binomial p-values for `held` of n results inside
+    their 80% ranges: "under" (as few or fewer, if the ranges were honest
+    80% ranges) and "over" (as many or more, if they were 90% ranges)."""
+    def pmf(p):
+        return [math.comb(n, k) * p ** k * (1 - p) ** (n - k) for k in range(n + 1)]
+    return {"held": held, "n": n, "under": round(min(1.0, sum(pmf(0.8)[:held + 1])), 6),
+            "over": round(min(1.0, sum(pmf(WIDE_COVERAGE)[held:])), 6)}
+
+
+def holm(pvalues: dict, alpha: float) -> set:
+    """The keys Holm's step-down procedure rejects at familywise `alpha`
+    (Holm 1979): sorted ascending, the i-th smallest (from 0) is tested at
+    alpha / (m - i), stopping at the first that is not rejected."""
+    out = set()
+    m = len(pvalues)
+    for i, (key, pv) in enumerate(sorted(pvalues.items(), key=lambda kv: kv[1])):
+        if pv > alpha / (m - i):
+            break
+        out.add(key)
+    return out
 
 
 def summarize(preds: list[dict]) -> dict:
@@ -422,6 +530,10 @@ def summarize(preds: list[dict]) -> dict:
                    "pollsOnly": score("pDemPolls", polled)},
         "coverage80": round(float(np.mean([p["low80"] <= p["margin"] <= p["high80"] for p in preds])), 3),
         "coverage95": round(float(np.mean([p["low95"] <= p["margin"] <= p["high95"] for p in preds])), 3),
+        # The fundamentals-only 80% ranges' coverage (the map beyond the
+        # poll window).
+        "coverage80Fundamentals": round(float(np.mean([abs(p["margin"] - p["prior"]) <= p["priorHalf80"]
+                                                       for p in preds])), 3),
         "meanAbsError": round(float(np.mean([abs(p["mean"] - p["margin"]) for p in preds])), 2),
         "calibration": calibration_table([p["pDem"] for p in preds], dem, years),
         # Why the map shows no seat total: adding up races whose errors move

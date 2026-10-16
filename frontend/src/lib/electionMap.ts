@@ -54,12 +54,15 @@ export function chamberView(r: ElectionMapResponse, chamber: MapChamber): Electi
     national: { ...r.national, shift: c.shift, shiftLabel: c.shiftLabel },
     stale: r.stale,
     pollWindowDays: r.pollWindowDays,
+    // A file built before the field existed was always within its window.
+    pollsInRange: r.pollsInRange ?? true,
     bins: r.bins,
     calibration: c.calibration,
     model: c.model,
     sources: {
       lean: r.sources.lean[chamber],
       training: r.sources.training[chamber],
+      trainingPolls: r.sources.trainingPolls,
       polls: r.sources.polls,
     },
     seats: c.seats,
@@ -90,6 +93,8 @@ export function racePageHref(seat: MapSeat): string {
  * backend). An outage or a rejected table never reads as "no poll". */
 export function pollSourceSentence(seat: RangedSeat, windowDays: number): string {
   const src = seat.pollSource;
+  if (seat.fundamentalsOnly)
+    return `Fundamentals only: ${fundamentalsSentence(windowDays, seat.polls.count)}`;
   const kept = src.keptFrom
     ? ` Polls from the last good revision (${formatAsOf(src.keptFrom)}) are used.`
     : "";
@@ -110,6 +115,18 @@ export function pollSourceSentence(seat: RangedSeat, windowDays: number): string
         ? `${seat.polls.used} ${seat.polls.used === 1 ? "poll" : "polls"} in the average (the latest from each pollster in the last ${windowDays} days, newest ${seat.polls.latest}); they carry ${Math.round(seat.pollShare * 100)}% of the range's weight, the usual vote the rest.`
         : `No poll of this race in the last ${windowDays} days: the range is the usual vote with incumbency and the national swing alone, which is why it is wide.`;
   }
+}
+
+/** Further out than the training polls reach: why the range has no poll
+ * in it, and what the listed polls are. */
+export function fundamentalsSentence(windowDays: number, listed?: number): string {
+  const polls =
+    listed === undefined
+      ? " Each seat's polls are listed beside its range."
+      : listed > 0
+        ? " The newest polls are listed below, outside the range."
+        : "";
+  return `The method's polls were checked only over the final ${windowDays} days before election day, so until then the range is the usual vote with incumbency and the national swing alone.${polls}`;
 }
 
 export function parseView(value: string | string[] | undefined | null): MapView {
@@ -236,9 +253,13 @@ export function seatName(seat: MapSeat): string {
  * saw (419 Senate races, 1998–2022)." — the evidence behind every range. */
 export function coverageSentence(
   c: ElectionMapData["calibration"],
-  chamber: MapChamber = "senate"
+  chamber: MapChamber = "senate",
+  fundamentalsOnly = false
 ): string {
-  return `Ranges like these held the result ${Math.round(c.coverage80 * 100)}% of the time on election cycles the method never saw (${c.races} ${CHAMBER_WORD[chamber]} races, ${c.cycles[0]}–${c.cycles[1]}).`;
+  const share =
+    fundamentalsOnly && c.coverage80Fundamentals != null ? c.coverage80Fundamentals : c.coverage80;
+  const kind = fundamentalsOnly ? "Fundamentals-only ranges" : "Ranges like these";
+  return `${kind} held the result ${Math.round(share * 100)}% of the time on election cycles the method never saw (${c.races} ${CHAMBER_WORD[chamber]} races, ${c.cycles[0]}–${c.cycles[1]}).`;
 }
 
 export function chamberWord(chamber: MapChamber): string {
@@ -319,7 +340,11 @@ export function footerText(data: ElectionMapData): string {
     data.chamber === "house"
       ? "Civitas, from precinct returns (VEST, MEDSL) and Census blocks"
       : "Civitas, from official returns (MEDSL, FEC)";
-  return `${data.stale ? "NOT UPDATED SINCE " + formatAsOf(data.asOf) + ". " : ""}Usual vote: ${usual}. Polls: ${data.sources.polls.attribution}, ${data.sources.polls.license}. As of ${formatAsOf(data.asOf)}. Ranges, not results. Not a race call.`;
+  const training = data.sources.trainingPolls
+    ? ` Past polls the ranges are fitted on: ${data.sources.trainingPolls.attribution}.`
+    : "";
+  const fundamentals = data.pollsInRange ? "" : " Fundamentals only, no poll in the ranges.";
+  return `${data.stale ? "NOT UPDATED SINCE " + formatAsOf(data.asOf) + ". " : ""}Usual vote: ${usual}. Polls: ${data.sources.polls.attribution}, ${data.sources.polls.license}.${training}${fundamentals} As of ${formatAsOf(data.asOf)}. Ranges, not results. Not a race call.`;
 }
 
 /** The Difference view's glyph for a seat: « ‹ toward D, › » toward R. */

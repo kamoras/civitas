@@ -24,7 +24,7 @@ label specials instead of trusting any single upstream field.
 
 import logging
 import pathlib
-from datetime import date
+from datetime import date, timedelta
 
 from app.file_cache import Uncached, new_reload_lock, read_json_preferring, reload_if_moved
 
@@ -155,6 +155,20 @@ def new_congress_day(election_day: date) -> date:
     (U.S. Const. amend. XX §1). After it the winners are serving and the
     election is history, whatever its count still says."""
     return date(election_day.year + 1, 1, 3)
+
+
+def last_certified_general(today: date) -> int | None:
+    """The newest general election whose certified results exist by `today`:
+    every House winner is sworn in on January 3 (U.S. Const. amend. XX §1)
+    on a certified result, and states certify their Senate races by the
+    same canvasses, so from that day the results are official. Sources
+    compile them later (MEDSL, the FEC's "Federal Elections" tables, Silver
+    Bulletin's rated polls), which is why the map's staleness alert names
+    which input is missing rather than assuming a release has appeared."""
+    held = previous_election_day(today)
+    if held is not None and today < new_congress_day(held):
+        held = previous_election_day(held - timedelta(days=1))
+    return held.year if held else None
 
 
 # Single source of truth for the rotation: each class's first modern

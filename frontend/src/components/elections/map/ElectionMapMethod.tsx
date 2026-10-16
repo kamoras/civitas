@@ -66,7 +66,11 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
           the last {data.pollWindowDays} days, weighted by recency (half-life {data.model.halfLife}{" "}
           days) and the square root of its sample, after removing the pollster&apos;s measured house
           effect, or for a pollster with no record, the measured lean of polls the source marks as
-          party-sponsored. Sponsored polls are flagged, not hidden.
+          party-sponsored. Sponsored polls are flagged, not hidden. The {data.pollWindowDays} days
+          are not chosen: they are how far before election day the past polls the method is fitted
+          on reach, so it is never checked on older polls. Further out than that the map shows the
+          structural line alone, labelled fundamentals only, with each seat&apos;s polls listed
+          beside it{data.pollsInRange ? "" : " (as now)"}.
         </li>
         <li>
           <strong className="text-ink">Combination.</strong> The two are averaged by inverse
@@ -82,9 +86,10 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
           precinct returns placed on Census blocks: for 2018 and 2020 from the 2016 presidential
           vote alone, on the 116th Congress&apos;s lines (2012 has no open precinct returns), and
           for 2022 from 2016 and 2020 on the new lines drawn after the census. North Carolina&apos;s
-          2020 races are left out (it voted on new lines Census publishes only on older blocks), and
-          2024 is not fitted: no openly licensed archive holds its generic-ballot polls. So the
-          House checks cover three cycles, one of them the redistricting year 2022.
+          2020 races are left out (it voted on new lines Census publishes only on older blocks). A
+          cycle is added once the FEC publishes its compilation of that election&apos;s House
+          results (MEDSL&apos;s House file sits behind a sign-in form, which Civitas does not
+          answer), so the House checks cover {c.cycles[0]} to {c.cycles[1]}.
         </p>
       )}
       <p>
@@ -100,6 +105,20 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
         {coverageSentence(c, data.chamber)} The 95% ranges held it {pct(c.coverage95)} of the time.
         The middle of the range missed the margin by {c.meanAbsError} points on average.
       </p>
+      {c.forward && (
+        <p>
+          The hardest check is the newest cycle, {c.forward.cycle}, predicted by a fit on{" "}
+          {c.forward.trainedOn[0]} to {c.forward.trainedOn[1]} only, so nothing from{" "}
+          {c.forward.cycle} or later reached it. Its 80% ranges held the result{" "}
+          {pct(c.forward.coverage80)} of the time in {c.forward.races} races (for that many races,
+          honest 80% ranges land between {pct(c.forward.coverage80Band[0])} and{" "}
+          {pct(c.forward.coverage80Band[1])} in 95 cycles of 100), and its 95% ranges{" "}
+          {pct(c.forward.coverage95)}. On its {c.forward.polledRaces} races with polls the Brier
+          score was {c.forward.brier.combined.toFixed(3)}, against{" "}
+          {c.forward.brier.pollsOnly.toFixed(3)} for the poll average alone and{" "}
+          {c.forward.brier.fundamentals.toFixed(3)} for the structural line alone.
+        </p>
+      )}
       <p>
         Internally the ranges imply a chance for each race; the map never shows one, because a
         chance reads as a call. This table is how those chances were checked: of the races the
@@ -175,6 +194,26 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
           ).
         </li>
         <li>Training: {data.sources.training}</li>
+        {data.sources.trainingPolls && (
+          <li>
+            Past polls:{" "}
+            <a
+              href={data.sources.trainingPolls.url}
+              className="underline decoration-white/30 hover:text-ink-hi"
+              rel="noopener noreferrer"
+            >
+              {data.sources.trainingPolls.attribution}&apos;s raw poll file
+            </a>
+            , every rated poll since 1998 with its certified result, used free of charge as its
+            terms allow and attributed to {data.sources.trainingPolls.attribution} as they ask
+            {data.sources.trainingPolls.terms ? ` ("${data.sources.trainingPolls.terms}")` : ""}. A
+            new copy is used only if it passes checks: the terms are unchanged, the columns are the
+            same, no poll already used has gone or changed beyond a few corrections, every poll ends
+            before its election and within the window, shares add up, a new cycle has Senate and
+            generic-ballot polls, and its stated results agree with the MIT Election Lab&apos;s
+            certified counts. The fit refits itself when a new copy passes.
+          </li>
+        )}
         <li>
           This year&apos;s polls and the generic-ballot averages: Wikipedia&apos;s {data.cycle} race
           articles, read as of each article&apos;s revision shown with its seat. Every table passes

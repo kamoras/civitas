@@ -1,526 +1,325 @@
 {
- "_source": "Results and incumbency: Federal Election Commission, Federal Elections 2018, 2020 and 2022, US House Results by State (certified results, public domain). Lean: app/data/forecast_house_lean.json (Civitas, from VEST 2016 and 2020 precinct results, CC BY 4.0, and Census blocks and districts), each district's lean before the election on the lines it was held on. Polls: FiveThirtyEight pollster-ratings/raw_polls.csv at commit be387bc (CC BY 4.0).",
+ "_source": "Results and incumbency: Federal Election Commission, Federal Elections 2018, 2020 and 2022, US House Results by State (certified results, public domain). Lean: app/data/forecast_house_lean.json (Civitas, from VEST 2016 and 2020 precinct results, CC BY 4.0, and Census blocks and districts), each district's lean before the election on the lines it was held on. Polls: Silver Bulletin, pollster-ratings raw polls (Rawpolls 011226, retrieved 2026-10-16, sha256 46186ba8650b), used free of charge as its terms allow, attributed to Silver Bulletin.",
  "_regenerate": "backend/scripts/fit_forecast_model.py",
  "_method": "app/forecast/model.py (module docstring)",
  "fits": {
   "0": {
    "horizon": 0,
+   "windowDays": 21,
    "halfLife": 28.0,
-   "pollFloor": 5.25,
-   "pollSpread": 6.0,
+   "pollFloor": 6.75,
+   "pollSpread": 1.0,
    "beta": [
-    0.7655030944,
-    1.778486533,
-    4.083454731,
-    0.8548525611
+    0.9154474923,
+    1.777812185,
+    4.121576365,
+    0.8605979255
    ],
-   "priorSd": 6.816123231,
+   "priorSd": 6.782052685,
    "houseEffects": {
     "pollsters": {
-     "1892polling": 0.882,
-     "abcnewsthewashingtonpost": 0.164,
-     "africanamericanresearchcollaborative": 0.006,
-     "alaskasurveyresearch": -0.273,
-     "amberintegrated": 0.306,
-     "americanpulseresearchpolling": 2.027,
-     "americanresearchgroup": -1.945,
-     "americanviewpoint": 3.051,
-     "apnorc": -0.798,
-     "atlasintel": 0.294,
-     "basswoodresearch": 1.273,
-     "beaconresearchshawcoresearch": -0.34,
-     "bendixenamandiinternational": -0.882,
-     "benensonstrategygroup": 0.192,
-     "benensonstrategygroupgsstrategygroup": -0.318,
-     "bigvillage": -1.638,
-     "boldbluecampaigns": 0.037,
-     "braunresearch": 0.091,
-     "breakthroughcampaigns": 0.364,
-     "brilliantcornersresearchstrategies": -0.253,
-     "carrollstrategies": -0.178,
-     "cbsnews": -0.133,
-     "centerstreetpac": -0.636,
-     "changeresearch": -1.988,
-     "christophernewportuniversitywasoncenterforcivicleadership": -0.066,
-     "civiqs": 0.244,
-     "claritycampaignlabs": 0.182,
-     "clearviewresearch": -0.909,
-     "climatenexus": -0.291,
-     "coefficient": 0.894,
-     "colbycollege": -0.014,
-     "colehargravesnodgrassassociates": 0.245,
-     "cygnal": 0.829,
-     "dataforprogress": 1.68,
-     "datatargeting": 2.5,
-     "davidbinderresearch": -0.055,
-     "dccctargetingandanalyticsdepartment": -1.551,
-     "desalesuniversitykamranafshardataanalyticscenter": -1.317,
-     "dfmresearch": -0.036,
-     "digitalresearch": -0.968,
-     "dittmanresearch": -0.7,
-     "dixiestrategies": -0.245,
-     "echeloninsights": -0.13,
-     "emersoncollege": 0.284,
-     "expeditionstrategies": -0.31,
-     "fabrizioleeassociates": 0.059,
-     "fabrizioleeassociatesimpactresearch": 0.717,
-     "flemingassociates": 0.196,
-     "fm3research": -0.275,
-     "franklinmarshallcollegecenterforopinionresearch": 0.755,
-     "gallup": -0.416,
-     "garinhartyangresearchgroup": -1.759,
-     "gbao": -1.569,
-     "glengariffgroup": 1.31,
-     "globalstrategygroup": -1.558,
-     "globalstrategygroupgbaonavigatorresearch": -1.416,
-     "gorightstrategies": 1.038,
-     "gqr": -1.911,
-     "gravismarketing": 0.943,
-     "gsstrategygroup": 1.207,
-     "harperpolling": 0.366,
-     "harrisinsightsanalytics": 0.624,
-     "hartresearchassociatespublicopinionstrategies": 0.174,
-     "hendrixcollege": 0.204,
-     "impactresearch": -1.674,
-     "insideradvantage": 0.591,
-     "ipsos": -0.669,
-     "jayhawkconsultingservices": -3.312,
-     "jmcanalyticsboldbluecampaigns": 0.098,
-     "johnzogbystrategies": 0.555,
-     "keatingresearch": 0.636,
-     "kff": -0.715,
-     "lakeresearchpartners": -0.815,
-     "lighthouseresearch": -0.818,
-     "lucid": 0.15,
-     "maristcollege": -0.48,
-     "marquetteuniversitylawschool": -0.551,
-     "masondixonpollingstrategy": 1.194,
-     "mclaughlinassociates": 4.305,
-     "meetingstreetinsights": 0.207,
-     "mellmangroup": -0.656,
-     "mitchellresearchcommunications": 1.133,
-     "monmouthuniversitypollinginstitute": -0.012,
-     "montanastateuniversitybillings": -0.017,
-     "montanastateuniversitybozemanhumanecologylearningandproblemsolvinglab": 0.494,
-     "mooreinformationgroup": 0.827,
-     "morningconsult": -1.008,
-     "muhlenbergcollegeinstituteofpublicopinion": -0.036,
-     "nationalresearch": 1.299,
+     "africanamericanresearchcollaborative": -0.086,
+     "alaskasurveyresearch": -0.265,
+     "amberintegrated": 0.491,
+     "americanviewpoint": 0.214,
+     "atlasintel": 0.206,
+     "benensonstrategygroup": 0.102,
+     "bigvillage": -1.389,
+     "carrollstrategies": 0.022,
+     "cbsnewsthenewyorktimes": -0.112,
+     "changeresearch": -2.507,
+     "christophernewportuniversity": -0.346,
+     "coefficient": 0.208,
+     "cygnal": 0.257,
+     "dataforprogress": 0.738,
+     "desalesuniversity": -0.982,
+     "dittmanresearch": 0.367,
+     "dixiestrategies": 0.075,
+     "echeloninsights": 0.032,
+     "emersoncollege": 2.104,
+     "fabrizioleeassociates": -0.064,
+     "fabrizioleeassociatesimpactresearch": 0.102,
+     "franklinmarshallcollege": 0.982,
+     "gallup": -0.305,
+     "gbao": -0.474,
+     "glengariffgroup": -0.6,
+     "globalstrategygroup": 0.182,
+     "globalstrategygroupgbaonavigatorresearch": -0.413,
+     "gravismarketingkaplanstrategies": -0.727,
+     "greenbergquinlanrosner": -0.205,
+     "harrisinsightsanalytics": 0.469,
+     "hartresearchassociatespublicopinionstrategies": 0.001,
+     "impactresearch": -0.128,
+     "insideradvantage": 0.357,
+     "ipsos": -0.258,
+     "jayhawkconsultingservices": -0.991,
+     "jmcanalyticsboldbluecampaigns": 1.721,
+     "johnzogbystrategies": 0.476,
+     "leebusinessschooluniversityofnevadalasvegas": 0.009,
+     "lucid": 0.178,
+     "maristcollege": -0.343,
+     "masondixonpollingstrategy": 0.905,
+     "mclaughlinassociates": 0.565,
+     "mitchellresearchcommunications": 0.6,
+     "monmouthuniversity": -0.371,
+     "montanastateuniversitybillings": -0.03,
+     "morningconsult": -0.229,
      "newsnation": 0.03,
-     "noblepredictiveinsights": 0.5,
-     "normingtonpettsassociates": -0.601,
-     "ogdenfry": 1.918,
-     "onmessageinc": 1.375,
-     "opinium": -1.542,
-     "panatlanticresearch": -0.137,
-     "patriotpolling": 0.864,
-     "pewresearchcenter": -0.278,
-     "pioneerpollingtarrancegroup": 0.099,
-     "premise": -1.18,
-     "ptimusanalytics": 0.573,
-     "publicopinionstrategies": 1.538,
-     "publicpolicypolling": -1.254,
-     "publicreligionresearchinstitute": -1.02,
-     "quinnipiacuniversity": -0.144,
-     "rasmussenreports": 2.848,
-     "remingtonresearchgroup": 2.753,
-     "researchpollinginc": 0.266,
-     "rmgresearch": 1.371,
-     "saintanselmcollegesurveycenter": -0.974,
-     "seapollingstrategicdesign": -0.609,
-     "selzerco": -0.365,
-     "sienacollege": -1.718,
-     "soonerpollcom": -1.026,
-     "ssrs": -1.115,
-     "stocktonuniversitywilliamjhughescenterforpublicpolicy": 0.587,
-     "stpetepolls": 1.02,
-     "strategicnational": 1.133,
-     "strategies360": -0.884,
-     "suffolkuniversity": 0.418,
-     "surveymonkey": 0.745,
-     "surveyusa": 1.58,
-     "susquehannapollingresearchinc": -1.02,
-     "targetinsyght": -0.93,
-     "targetpoint": 1.241,
-     "tarrancegroup": 2.151,
-     "thenewyorktimessienacollege": -0.468,
-     "thepollingcompanyinc": 1.797,
-     "thewashingtonpostgeorgemasonuniversityscharschoolofpolicyandgovernment": -1.369,
-     "thewinstongroup": 0.606,
+     "opinium": -0.083,
+     "optimusanalytics": 0.825,
+     "premise": -0.274,
+     "publicopinionstrategies": 0.573,
+     "publicpolicypolling": -0.364,
+     "publicreligionresearchinstitute": -0.112,
+     "quinnipiacuniversity": 0.291,
+     "rasmussenreports": 2.089,
+     "remingtonresearchgroup": 0.468,
+     "researchpollinginc": -0.115,
+     "rethinkpriorities": 0.182,
+     "rmgresearch": -0.152,
+     "saintanselmcollege": -0.571,
+     "sienacollege": -0.405,
+     "soonerpollcom": -0.368,
+     "ssrs": -0.577,
+     "stpetepolls": 0.474,
+     "strategies360": -0.389,
+     "suffolkuniversity": -0.02,
+     "surveyusa": 0.697,
+     "susquehannapollingresearchinc": -0.247,
+     "targetinsyght": 0.62,
+     "thenewyorktimessienacollege": -0.636,
+     "thewashingtonpost": 0.124,
+     "thewinstongroup": 0.032,
      "thirtyninthstreetstrategies": 0.215,
-     "thomaspartnersstrategies": 1.171,
-     "tippinsights": 0.26,
-     "trafalgargroup": 1.511,
-     "tuftsuniversitypublicopinionlab": -0.086,
-     "tulchinresearch": -1.781,
-     "universityofcaliforniaberkeleyinstituteofgovernmentalstudies": -1.925,
-     "universityofmontanasocialscienceresearchlaboratory": -0.482,
-     "universityofnevadalasvegasleebusinessschool": 0.064,
-     "universityofnewhampshiresurveycenter": 1.332,
-     "universityofnorthfloridapublicopinionresearchlab": 0.041,
-     "universityofsoutherncaliforniadornsifecenterforeconomicandsocialresearch": -1.725,
-     "universityofutahhinckleyinstituteofpolitics": -0.028,
-     "vcreekamg": 0.625,
-     "victoriaresearchconsulting": -1.179,
-     "victoryresearch": -2.183,
-     "weaskamerica": 0.636,
-     "wpaintelligence": 2.926,
-     "y2analytics": 0.995,
-     "yougov": -0.658
+     "thomaspartnersstrategies": 1.386,
+     "tippinsights": -0.112,
+     "trafalgargroup": 0.835,
+     "tuftsuniversity": -0.18,
+     "tulchinresearch": -0.892,
+     "universityofnewhampshire": -0.712,
+     "universityofsoutherncalifornia": -1.618,
+     "wpaintelligence": 1.18,
+     "yougov": -1.057
     },
-    "partisan": 4.739
+    "partisan": 3.293
    },
-   "scale": 0.9983,
+   "scale": 0.9944,
    "priorScale": 0.9987,
-   "pollScale": 0.9916
+   "pollScale": 1.0055
   },
   "7": {
    "horizon": 7,
+   "windowDays": 21,
    "halfLife": 28.0,
-   "pollFloor": 5.5,
-   "pollSpread": 6.0,
+   "pollFloor": 7.0,
+   "pollSpread": 0.0,
    "beta": [
-    1.093834166,
-    1.778604509,
-    4.079755652,
-    0.8583133226
+    0.9879756286,
+    1.778832994,
+    4.080371566,
+    0.8614930391
    ],
-   "priorSd": 6.821709045,
+   "priorSd": 6.830127402,
    "houseEffects": {
     "pollsters": {
-     "1892polling": 0.882,
-     "abcnewsthewashingtonpost": 0.164,
-     "africanamericanresearchcollaborative": 0.006,
-     "alaskasurveyresearch": -0.273,
-     "amberintegrated": 0.306,
-     "americanpulseresearchpolling": 2.027,
-     "americanresearchgroup": -1.945,
-     "americanviewpoint": 3.051,
-     "apnorc": -0.798,
-     "atlasintel": 0.294,
-     "basswoodresearch": 1.273,
-     "beaconresearchshawcoresearch": -0.34,
-     "bendixenamandiinternational": -0.882,
-     "benensonstrategygroup": 0.192,
-     "benensonstrategygroupgsstrategygroup": -0.318,
-     "bigvillage": -1.638,
-     "boldbluecampaigns": 0.037,
-     "braunresearch": 0.091,
-     "breakthroughcampaigns": 0.364,
-     "brilliantcornersresearchstrategies": -0.253,
-     "carrollstrategies": -0.178,
-     "cbsnews": -0.133,
-     "centerstreetpac": -0.636,
-     "changeresearch": -1.988,
-     "christophernewportuniversitywasoncenterforcivicleadership": -0.066,
-     "civiqs": 0.244,
-     "claritycampaignlabs": 0.182,
-     "clearviewresearch": -0.909,
-     "climatenexus": -0.291,
-     "coefficient": 0.894,
-     "colbycollege": -0.014,
-     "colehargravesnodgrassassociates": 0.245,
-     "cygnal": 0.829,
-     "dataforprogress": 1.68,
-     "datatargeting": 2.5,
-     "davidbinderresearch": -0.055,
-     "dccctargetingandanalyticsdepartment": -1.551,
-     "desalesuniversitykamranafshardataanalyticscenter": -1.317,
-     "dfmresearch": -0.036,
-     "digitalresearch": -0.968,
-     "dittmanresearch": -0.7,
-     "dixiestrategies": -0.245,
-     "echeloninsights": -0.13,
-     "emersoncollege": 0.284,
-     "expeditionstrategies": -0.31,
-     "fabrizioleeassociates": 0.059,
-     "fabrizioleeassociatesimpactresearch": 0.717,
-     "flemingassociates": 0.196,
-     "fm3research": -0.275,
-     "franklinmarshallcollegecenterforopinionresearch": 0.755,
-     "gallup": -0.416,
-     "garinhartyangresearchgroup": -1.759,
-     "gbao": -1.569,
-     "glengariffgroup": 1.31,
-     "globalstrategygroup": -1.558,
-     "globalstrategygroupgbaonavigatorresearch": -1.416,
-     "gorightstrategies": 1.038,
-     "gqr": -1.911,
-     "gravismarketing": 0.943,
-     "gsstrategygroup": 1.207,
-     "harperpolling": 0.366,
-     "harrisinsightsanalytics": 0.624,
-     "hartresearchassociatespublicopinionstrategies": 0.174,
-     "hendrixcollege": 0.204,
-     "impactresearch": -1.674,
-     "insideradvantage": 0.591,
-     "ipsos": -0.669,
-     "jayhawkconsultingservices": -3.312,
-     "jmcanalyticsboldbluecampaigns": 0.098,
-     "johnzogbystrategies": 0.555,
-     "keatingresearch": 0.636,
-     "kff": -0.715,
-     "lakeresearchpartners": -0.815,
-     "lighthouseresearch": -0.818,
-     "lucid": 0.15,
-     "maristcollege": -0.48,
-     "marquetteuniversitylawschool": -0.551,
-     "masondixonpollingstrategy": 1.194,
-     "mclaughlinassociates": 4.305,
-     "meetingstreetinsights": 0.207,
-     "mellmangroup": -0.656,
-     "mitchellresearchcommunications": 1.133,
-     "monmouthuniversitypollinginstitute": -0.012,
-     "montanastateuniversitybillings": -0.017,
-     "montanastateuniversitybozemanhumanecologylearningandproblemsolvinglab": 0.494,
-     "mooreinformationgroup": 0.827,
-     "morningconsult": -1.008,
-     "muhlenbergcollegeinstituteofpublicopinion": -0.036,
-     "nationalresearch": 1.299,
+     "africanamericanresearchcollaborative": -0.086,
+     "alaskasurveyresearch": -0.265,
+     "amberintegrated": 0.491,
+     "americanviewpoint": 0.214,
+     "atlasintel": 0.206,
+     "benensonstrategygroup": 0.102,
+     "bigvillage": -1.389,
+     "carrollstrategies": 0.022,
+     "cbsnewsthenewyorktimes": -0.112,
+     "changeresearch": -2.507,
+     "christophernewportuniversity": -0.346,
+     "coefficient": 0.208,
+     "cygnal": 0.257,
+     "dataforprogress": 0.738,
+     "desalesuniversity": -0.982,
+     "dittmanresearch": 0.367,
+     "dixiestrategies": 0.075,
+     "echeloninsights": 0.032,
+     "emersoncollege": 2.104,
+     "fabrizioleeassociates": -0.064,
+     "fabrizioleeassociatesimpactresearch": 0.102,
+     "franklinmarshallcollege": 0.982,
+     "gallup": -0.305,
+     "gbao": -0.474,
+     "glengariffgroup": -0.6,
+     "globalstrategygroup": 0.182,
+     "globalstrategygroupgbaonavigatorresearch": -0.413,
+     "gravismarketingkaplanstrategies": -0.727,
+     "greenbergquinlanrosner": -0.205,
+     "harrisinsightsanalytics": 0.469,
+     "hartresearchassociatespublicopinionstrategies": 0.001,
+     "impactresearch": -0.128,
+     "insideradvantage": 0.357,
+     "ipsos": -0.258,
+     "jayhawkconsultingservices": -0.991,
+     "jmcanalyticsboldbluecampaigns": 1.721,
+     "johnzogbystrategies": 0.476,
+     "leebusinessschooluniversityofnevadalasvegas": 0.009,
+     "lucid": 0.178,
+     "maristcollege": -0.343,
+     "masondixonpollingstrategy": 0.905,
+     "mclaughlinassociates": 0.565,
+     "mitchellresearchcommunications": 0.6,
+     "monmouthuniversity": -0.371,
+     "montanastateuniversitybillings": -0.03,
+     "morningconsult": -0.229,
      "newsnation": 0.03,
-     "noblepredictiveinsights": 0.5,
-     "normingtonpettsassociates": -0.601,
-     "ogdenfry": 1.918,
-     "onmessageinc": 1.375,
-     "opinium": -1.542,
-     "panatlanticresearch": -0.137,
-     "patriotpolling": 0.864,
-     "pewresearchcenter": -0.278,
-     "pioneerpollingtarrancegroup": 0.099,
-     "premise": -1.18,
-     "ptimusanalytics": 0.573,
-     "publicopinionstrategies": 1.538,
-     "publicpolicypolling": -1.254,
-     "publicreligionresearchinstitute": -1.02,
-     "quinnipiacuniversity": -0.144,
-     "rasmussenreports": 2.848,
-     "remingtonresearchgroup": 2.753,
-     "researchpollinginc": 0.266,
-     "rmgresearch": 1.371,
-     "saintanselmcollegesurveycenter": -0.974,
-     "seapollingstrategicdesign": -0.609,
-     "selzerco": -0.365,
-     "sienacollege": -1.718,
-     "soonerpollcom": -1.026,
-     "ssrs": -1.115,
-     "stocktonuniversitywilliamjhughescenterforpublicpolicy": 0.587,
-     "stpetepolls": 1.02,
-     "strategicnational": 1.133,
-     "strategies360": -0.884,
-     "suffolkuniversity": 0.418,
-     "surveymonkey": 0.745,
-     "surveyusa": 1.58,
-     "susquehannapollingresearchinc": -1.02,
-     "targetinsyght": -0.93,
-     "targetpoint": 1.241,
-     "tarrancegroup": 2.151,
-     "thenewyorktimessienacollege": -0.468,
-     "thepollingcompanyinc": 1.797,
-     "thewashingtonpostgeorgemasonuniversityscharschoolofpolicyandgovernment": -1.369,
-     "thewinstongroup": 0.606,
+     "opinium": -0.083,
+     "optimusanalytics": 0.825,
+     "premise": -0.274,
+     "publicopinionstrategies": 0.573,
+     "publicpolicypolling": -0.364,
+     "publicreligionresearchinstitute": -0.112,
+     "quinnipiacuniversity": 0.291,
+     "rasmussenreports": 2.089,
+     "remingtonresearchgroup": 0.468,
+     "researchpollinginc": -0.115,
+     "rethinkpriorities": 0.182,
+     "rmgresearch": -0.152,
+     "saintanselmcollege": -0.571,
+     "sienacollege": -0.405,
+     "soonerpollcom": -0.368,
+     "ssrs": -0.577,
+     "stpetepolls": 0.474,
+     "strategies360": -0.389,
+     "suffolkuniversity": -0.02,
+     "surveyusa": 0.697,
+     "susquehannapollingresearchinc": -0.247,
+     "targetinsyght": 0.62,
+     "thenewyorktimessienacollege": -0.636,
+     "thewashingtonpost": 0.124,
+     "thewinstongroup": 0.032,
      "thirtyninthstreetstrategies": 0.215,
-     "thomaspartnersstrategies": 1.171,
-     "tippinsights": 0.26,
-     "trafalgargroup": 1.511,
-     "tuftsuniversitypublicopinionlab": -0.086,
-     "tulchinresearch": -1.781,
-     "universityofcaliforniaberkeleyinstituteofgovernmentalstudies": -1.925,
-     "universityofmontanasocialscienceresearchlaboratory": -0.482,
-     "universityofnevadalasvegasleebusinessschool": 0.064,
-     "universityofnewhampshiresurveycenter": 1.332,
-     "universityofnorthfloridapublicopinionresearchlab": 0.041,
-     "universityofsoutherncaliforniadornsifecenterforeconomicandsocialresearch": -1.725,
-     "universityofutahhinckleyinstituteofpolitics": -0.028,
-     "vcreekamg": 0.625,
-     "victoriaresearchconsulting": -1.179,
-     "victoryresearch": -2.183,
-     "weaskamerica": 0.636,
-     "wpaintelligence": 2.926,
-     "y2analytics": 0.995,
-     "yougov": -0.658
+     "thomaspartnersstrategies": 1.386,
+     "tippinsights": -0.112,
+     "trafalgargroup": 0.835,
+     "tuftsuniversity": -0.18,
+     "tulchinresearch": -0.892,
+     "universityofnewhampshire": -0.712,
+     "universityofsoutherncalifornia": -1.618,
+     "wpaintelligence": 1.18,
+     "yougov": -1.057
     },
-    "partisan": 4.739
+    "partisan": 3.293
    },
-   "scale": 0.9982,
+   "scale": 0.9912,
    "priorScale": 0.9987,
-   "pollScale": 0.9969
+   "pollScale": 1.0093
   },
   "14": {
    "horizon": 14,
+   "windowDays": 21,
    "halfLife": 28.0,
-   "pollFloor": 4.75,
-   "pollSpread": 7.0,
+   "pollFloor": 7.5,
+   "pollSpread": 0.0,
    "beta": [
-    1.108083852,
-    1.778956177,
-    4.051977678,
-    0.8874018777
+    0.5637744552,
+    1.777879686,
+    4.081284955,
+    0.7846640732
    ],
-   "priorSd": 6.849466878,
+   "priorSd": 6.802296348,
    "houseEffects": {
     "pollsters": {
-     "1892polling": 0.882,
-     "abcnewsthewashingtonpost": 0.164,
-     "africanamericanresearchcollaborative": 0.006,
-     "alaskasurveyresearch": -0.273,
-     "amberintegrated": 0.306,
-     "americanpulseresearchpolling": 2.027,
-     "americanresearchgroup": -1.945,
-     "americanviewpoint": 3.051,
-     "apnorc": -0.798,
-     "atlasintel": 0.294,
-     "basswoodresearch": 1.273,
-     "beaconresearchshawcoresearch": -0.34,
-     "bendixenamandiinternational": -0.882,
-     "benensonstrategygroup": 0.192,
-     "benensonstrategygroupgsstrategygroup": -0.318,
-     "bigvillage": -1.638,
-     "boldbluecampaigns": 0.037,
-     "braunresearch": 0.091,
-     "breakthroughcampaigns": 0.364,
-     "brilliantcornersresearchstrategies": -0.253,
-     "carrollstrategies": -0.178,
-     "cbsnews": -0.133,
-     "centerstreetpac": -0.636,
-     "changeresearch": -1.988,
-     "christophernewportuniversitywasoncenterforcivicleadership": -0.066,
-     "civiqs": 0.244,
-     "claritycampaignlabs": 0.182,
-     "clearviewresearch": -0.909,
-     "climatenexus": -0.291,
-     "coefficient": 0.894,
-     "colbycollege": -0.014,
-     "colehargravesnodgrassassociates": 0.245,
-     "cygnal": 0.829,
-     "dataforprogress": 1.68,
-     "datatargeting": 2.5,
-     "davidbinderresearch": -0.055,
-     "dccctargetingandanalyticsdepartment": -1.551,
-     "desalesuniversitykamranafshardataanalyticscenter": -1.317,
-     "dfmresearch": -0.036,
-     "digitalresearch": -0.968,
-     "dittmanresearch": -0.7,
-     "dixiestrategies": -0.245,
-     "echeloninsights": -0.13,
-     "emersoncollege": 0.284,
-     "expeditionstrategies": -0.31,
-     "fabrizioleeassociates": 0.059,
-     "fabrizioleeassociatesimpactresearch": 0.717,
-     "flemingassociates": 0.196,
-     "fm3research": -0.275,
-     "franklinmarshallcollegecenterforopinionresearch": 0.755,
-     "gallup": -0.416,
-     "garinhartyangresearchgroup": -1.759,
-     "gbao": -1.569,
-     "glengariffgroup": 1.31,
-     "globalstrategygroup": -1.558,
-     "globalstrategygroupgbaonavigatorresearch": -1.416,
-     "gorightstrategies": 1.038,
-     "gqr": -1.911,
-     "gravismarketing": 0.943,
-     "gsstrategygroup": 1.207,
-     "harperpolling": 0.366,
-     "harrisinsightsanalytics": 0.624,
-     "hartresearchassociatespublicopinionstrategies": 0.174,
-     "hendrixcollege": 0.204,
-     "impactresearch": -1.674,
-     "insideradvantage": 0.591,
-     "ipsos": -0.669,
-     "jayhawkconsultingservices": -3.312,
-     "jmcanalyticsboldbluecampaigns": 0.098,
-     "johnzogbystrategies": 0.555,
-     "keatingresearch": 0.636,
-     "kff": -0.715,
-     "lakeresearchpartners": -0.815,
-     "lighthouseresearch": -0.818,
-     "lucid": 0.15,
-     "maristcollege": -0.48,
-     "marquetteuniversitylawschool": -0.551,
-     "masondixonpollingstrategy": 1.194,
-     "mclaughlinassociates": 4.305,
-     "meetingstreetinsights": 0.207,
-     "mellmangroup": -0.656,
-     "mitchellresearchcommunications": 1.133,
-     "monmouthuniversitypollinginstitute": -0.012,
-     "montanastateuniversitybillings": -0.017,
-     "montanastateuniversitybozemanhumanecologylearningandproblemsolvinglab": 0.494,
-     "mooreinformationgroup": 0.827,
-     "morningconsult": -1.008,
-     "muhlenbergcollegeinstituteofpublicopinion": -0.036,
-     "nationalresearch": 1.299,
+     "africanamericanresearchcollaborative": -0.086,
+     "alaskasurveyresearch": -0.265,
+     "amberintegrated": 0.491,
+     "americanviewpoint": 0.214,
+     "atlasintel": 0.206,
+     "benensonstrategygroup": 0.102,
+     "bigvillage": -1.389,
+     "carrollstrategies": 0.022,
+     "cbsnewsthenewyorktimes": -0.112,
+     "changeresearch": -2.507,
+     "christophernewportuniversity": -0.346,
+     "coefficient": 0.208,
+     "cygnal": 0.257,
+     "dataforprogress": 0.738,
+     "desalesuniversity": -0.982,
+     "dittmanresearch": 0.367,
+     "dixiestrategies": 0.075,
+     "echeloninsights": 0.032,
+     "emersoncollege": 2.104,
+     "fabrizioleeassociates": -0.064,
+     "fabrizioleeassociatesimpactresearch": 0.102,
+     "franklinmarshallcollege": 0.982,
+     "gallup": -0.305,
+     "gbao": -0.474,
+     "glengariffgroup": -0.6,
+     "globalstrategygroup": 0.182,
+     "globalstrategygroupgbaonavigatorresearch": -0.413,
+     "gravismarketingkaplanstrategies": -0.727,
+     "greenbergquinlanrosner": -0.205,
+     "harrisinsightsanalytics": 0.469,
+     "hartresearchassociatespublicopinionstrategies": 0.001,
+     "impactresearch": -0.128,
+     "insideradvantage": 0.357,
+     "ipsos": -0.258,
+     "jayhawkconsultingservices": -0.991,
+     "jmcanalyticsboldbluecampaigns": 1.721,
+     "johnzogbystrategies": 0.476,
+     "leebusinessschooluniversityofnevadalasvegas": 0.009,
+     "lucid": 0.178,
+     "maristcollege": -0.343,
+     "masondixonpollingstrategy": 0.905,
+     "mclaughlinassociates": 0.565,
+     "mitchellresearchcommunications": 0.6,
+     "monmouthuniversity": -0.371,
+     "montanastateuniversitybillings": -0.03,
+     "morningconsult": -0.229,
      "newsnation": 0.03,
-     "noblepredictiveinsights": 0.5,
-     "normingtonpettsassociates": -0.601,
-     "ogdenfry": 1.918,
-     "onmessageinc": 1.375,
-     "opinium": -1.542,
-     "panatlanticresearch": -0.137,
-     "patriotpolling": 0.864,
-     "pewresearchcenter": -0.278,
-     "pioneerpollingtarrancegroup": 0.099,
-     "premise": -1.18,
-     "ptimusanalytics": 0.573,
-     "publicopinionstrategies": 1.538,
-     "publicpolicypolling": -1.254,
-     "publicreligionresearchinstitute": -1.02,
-     "quinnipiacuniversity": -0.144,
-     "rasmussenreports": 2.848,
-     "remingtonresearchgroup": 2.753,
-     "researchpollinginc": 0.266,
-     "rmgresearch": 1.371,
-     "saintanselmcollegesurveycenter": -0.974,
-     "seapollingstrategicdesign": -0.609,
-     "selzerco": -0.365,
-     "sienacollege": -1.718,
-     "soonerpollcom": -1.026,
-     "ssrs": -1.115,
-     "stocktonuniversitywilliamjhughescenterforpublicpolicy": 0.587,
-     "stpetepolls": 1.02,
-     "strategicnational": 1.133,
-     "strategies360": -0.884,
-     "suffolkuniversity": 0.418,
-     "surveymonkey": 0.745,
-     "surveyusa": 1.58,
-     "susquehannapollingresearchinc": -1.02,
-     "targetinsyght": -0.93,
-     "targetpoint": 1.241,
-     "tarrancegroup": 2.151,
-     "thenewyorktimessienacollege": -0.468,
-     "thepollingcompanyinc": 1.797,
-     "thewashingtonpostgeorgemasonuniversityscharschoolofpolicyandgovernment": -1.369,
-     "thewinstongroup": 0.606,
+     "opinium": -0.083,
+     "optimusanalytics": 0.825,
+     "premise": -0.274,
+     "publicopinionstrategies": 0.573,
+     "publicpolicypolling": -0.364,
+     "publicreligionresearchinstitute": -0.112,
+     "quinnipiacuniversity": 0.291,
+     "rasmussenreports": 2.089,
+     "remingtonresearchgroup": 0.468,
+     "researchpollinginc": -0.115,
+     "rethinkpriorities": 0.182,
+     "rmgresearch": -0.152,
+     "saintanselmcollege": -0.571,
+     "sienacollege": -0.405,
+     "soonerpollcom": -0.368,
+     "ssrs": -0.577,
+     "stpetepolls": 0.474,
+     "strategies360": -0.389,
+     "suffolkuniversity": -0.02,
+     "surveyusa": 0.697,
+     "susquehannapollingresearchinc": -0.247,
+     "targetinsyght": 0.62,
+     "thenewyorktimessienacollege": -0.636,
+     "thewashingtonpost": 0.124,
+     "thewinstongroup": 0.032,
      "thirtyninthstreetstrategies": 0.215,
-     "thomaspartnersstrategies": 1.171,
-     "tippinsights": 0.26,
-     "trafalgargroup": 1.511,
-     "tuftsuniversitypublicopinionlab": -0.086,
-     "tulchinresearch": -1.781,
-     "universityofcaliforniaberkeleyinstituteofgovernmentalstudies": -1.925,
-     "universityofmontanasocialscienceresearchlaboratory": -0.482,
-     "universityofnevadalasvegasleebusinessschool": 0.064,
-     "universityofnewhampshiresurveycenter": 1.332,
-     "universityofnorthfloridapublicopinionresearchlab": 0.041,
-     "universityofsoutherncaliforniadornsifecenterforeconomicandsocialresearch": -1.725,
-     "universityofutahhinckleyinstituteofpolitics": -0.028,
-     "vcreekamg": 0.625,
-     "victoriaresearchconsulting": -1.179,
-     "victoryresearch": -2.183,
-     "weaskamerica": 0.636,
-     "wpaintelligence": 2.926,
-     "y2analytics": 0.995,
-     "yougov": -0.658
+     "thomaspartnersstrategies": 1.386,
+     "tippinsights": -0.112,
+     "trafalgargroup": 0.835,
+     "tuftsuniversity": -0.18,
+     "tulchinresearch": -0.892,
+     "universityofnewhampshire": -0.712,
+     "universityofsoutherncalifornia": -1.618,
+     "wpaintelligence": 1.18,
+     "yougov": -1.057
     },
-    "partisan": 4.739
+    "partisan": 3.293
    },
-   "scale": 0.9947,
+   "scale": 0.995,
    "priorScale": 0.9987,
-   "pollScale": 0.9971
+   "pollScale": 1.0089
   }
  },
  "evaluation": {
   "0": {
    "races": 1148,
-   "polledRaces": 252,
+   "polledRaces": 181,
    "cycles": [
     2018,
     2020,
@@ -528,39 +327,40 @@
    ],
    "all": {
     "combined": {
-     "brier": 0.0345,
-     "logLoss": 0.1331
+     "brier": 0.0343,
+     "logLoss": 0.1345
     },
     "fundamentals": {
-     "brier": 0.0392,
-     "logLoss": 0.1514
+     "brier": 0.0386,
+     "logLoss": 0.1491
     }
    },
    "polled": {
     "combined": {
-     "brier": 0.1102,
-     "logLoss": 0.3734
+     "brier": 0.1099,
+     "logLoss": 0.3596
     },
     "fundamentals": {
-     "brier": 0.1313,
-     "logLoss": 0.4576
+     "brier": 0.1374,
+     "logLoss": 0.4551
     },
     "pollsOnly": {
-     "brier": 0.1276,
-     "logLoss": 0.3979
+     "brier": 0.1262,
+     "logLoss": 0.3908
     }
    },
-   "coverage80": 0.793,
-   "coverage95": 0.934,
-   "meanAbsError": 5.33,
+   "coverage80": 0.799,
+   "coverage95": 0.939,
+   "coverage80Fundamentals": 0.805,
+   "meanAbsError": 5.35,
    "calibration": [
     {
      "low": 0.0,
      "high": 0.05,
-     "n": 477,
+     "n": 479,
      "meanChance": 0.004,
-     "demShare": 0.008,
-     "demCarried": 4,
+     "demShare": 0.006,
+     "demCarried": 3,
      "years": [
       2018,
       2022
@@ -569,9 +369,9 @@
     {
      "low": 0.05,
      "high": 0.15,
-     "n": 51,
+     "n": 49,
      "meanChance": 0.091,
-     "demShare": 0.059,
+     "demShare": 0.061,
      "demCarried": 3,
      "years": [
       2018,
@@ -581,10 +381,10 @@
     {
      "low": 0.15,
      "high": 0.35,
-     "n": 33,
-     "meanChance": 0.229,
-     "demShare": 0.333,
-     "demCarried": 11,
+     "n": 36,
+     "meanChance": 0.227,
+     "demShare": 0.361,
+     "demCarried": 13,
      "years": [
       2018,
       2022
@@ -594,9 +394,9 @@
      "low": 0.35,
      "high": 0.65,
      "n": 51,
-     "meanChance": 0.5,
-     "demShare": 0.647,
-     "demCarried": 33,
+     "meanChance": 0.493,
+     "demShare": 0.627,
+     "demCarried": 32,
      "years": [
       2018,
       2022
@@ -605,10 +405,10 @@
     {
      "low": 0.65,
      "high": 0.85,
-     "n": 34,
-     "meanChance": 0.768,
-     "demShare": 0.824,
-     "demCarried": 28,
+     "n": 30,
+     "meanChance": 0.769,
+     "demShare": 0.9,
+     "demCarried": 27,
      "years": [
       2018,
       2022
@@ -617,10 +417,10 @@
     {
      "low": 0.85,
      "high": 0.95,
-     "n": 44,
-     "meanChance": 0.903,
-     "demShare": 0.909,
-     "demCarried": 40,
+     "n": 42,
+     "meanChance": 0.9,
+     "demShare": 0.929,
+     "demCarried": 39,
      "years": [
       2018,
       2022
@@ -629,10 +429,10 @@
     {
      "low": 0.95,
      "high": 1.0,
-     "n": 458,
+     "n": 461,
      "meanChance": 0.997,
-     "demShare": 0.989,
-     "demCarried": 453,
+     "demShare": 0.987,
+     "demCarried": 455,
      "years": [
       2018,
       2022
@@ -642,30 +442,175 @@
    "seatTotals": [
     {
      "year": 2018,
-     "expectedDem": 168.3,
+     "expectedDem": 169.2,
      "actualDem": 186,
      "races": 379,
-     "independentSd": 3.28
+     "independentSd": 3.36
     },
     {
      "year": 2020,
-     "expectedDem": 205.5,
+     "expectedDem": 204.0,
      "actualDem": 191,
      "races": 383,
-     "independentSd": 3.22
+     "independentSd": 3.13
     },
     {
      "year": 2022,
-     "expectedDem": 188.3,
+     "expectedDem": 186.9,
      "actualDem": 195,
      "races": 386,
-     "independentSd": 3.75
+     "independentSd": 3.72
     }
-   ]
+   ],
+   "forward": {
+    "races": 386,
+    "polledRaces": 34,
+    "cycles": [
+     2022
+    ],
+    "all": {
+     "combined": {
+      "brier": 0.0333,
+      "logLoss": 0.1019
+     },
+     "fundamentals": {
+      "brier": 0.0369,
+      "logLoss": 0.118
+     }
+    },
+    "polled": {
+     "combined": {
+      "brier": 0.1275,
+      "logLoss": 0.3652
+     },
+     "fundamentals": {
+      "brier": 0.1677,
+      "logLoss": 0.5473
+     },
+     "pollsOnly": {
+      "brier": 0.1516,
+      "logLoss": 0.4305
+     }
+    },
+    "coverage80": 0.86,
+    "coverage95": 0.974,
+    "coverage80Fundamentals": 0.863,
+    "meanAbsError": 4.86,
+    "calibration": [
+     {
+      "low": 0.0,
+      "high": 0.05,
+      "n": 163,
+      "meanChance": 0.003,
+      "demShare": 0.0,
+      "demCarried": 0,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.05,
+      "high": 0.15,
+      "n": 12,
+      "meanChance": 0.095,
+      "demShare": 0.083,
+      "demCarried": 1,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.15,
+      "high": 0.35,
+      "n": 10,
+      "meanChance": 0.247,
+      "demShare": 0.5,
+      "demCarried": 5,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.35,
+      "high": 0.65,
+      "n": 25,
+      "meanChance": 0.506,
+      "demShare": 0.64,
+      "demCarried": 16,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.65,
+      "high": 0.85,
+      "n": 14,
+      "meanChance": 0.769,
+      "demShare": 0.786,
+      "demCarried": 11,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.85,
+      "high": 0.95,
+      "n": 15,
+      "meanChance": 0.897,
+      "demShare": 1.0,
+      "demCarried": 15,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.95,
+      "high": 1.0,
+      "n": 147,
+      "meanChance": 0.995,
+      "demShare": 1.0,
+      "demCarried": 147,
+      "years": [
+       2022,
+       2022
+      ]
+     }
+    ],
+    "seatTotals": [
+     {
+      "year": 2022,
+      "expectedDem": 187.2,
+      "actualDem": 195,
+      "races": 386,
+      "independentSd": 3.72
+     }
+    ],
+    "cycle": 2022,
+    "trainedOn": [
+     2018,
+     2020
+    ],
+    "coverage80Band": [
+     0.759,
+     0.839
+    ],
+    "coverage80Test": {
+     "held": 332,
+     "n": 386,
+     "under": 0.999149,
+     "over": 0.995032
+    }
+   }
   },
   "7": {
    "races": 1148,
-   "polledRaces": 256,
+   "polledRaces": 159,
    "cycles": [
     2018,
     2020,
@@ -673,36 +618,37 @@
    ],
    "all": {
     "combined": {
-     "brier": 0.0351,
-     "logLoss": 0.1358
+     "brier": 0.036,
+     "logLoss": 0.1403
     },
     "fundamentals": {
      "brier": 0.0393,
-     "logLoss": 0.1521
+     "logLoss": 0.152
     }
    },
    "polled": {
     "combined": {
-     "brier": 0.1166,
-     "logLoss": 0.3942
+     "brier": 0.1269,
+     "logLoss": 0.4095
     },
     "fundamentals": {
-     "brier": 0.1354,
-     "logLoss": 0.4681
+     "brier": 0.15,
+     "logLoss": 0.4985
     },
     "pollsOnly": {
-     "brier": 0.1324,
-     "logLoss": 0.41
+     "brier": 0.1433,
+     "logLoss": 0.4358
     }
    },
-   "coverage80": 0.79,
-   "coverage95": 0.934,
-   "meanAbsError": 5.34,
+   "coverage80": 0.794,
+   "coverage95": 0.937,
+   "coverage80Fundamentals": 0.798,
+   "meanAbsError": 5.45,
    "calibration": [
     {
      "low": 0.0,
      "high": 0.05,
-     "n": 478,
+     "n": 479,
      "meanChance": 0.004,
      "demShare": 0.008,
      "demCarried": 4,
@@ -714,10 +660,10 @@
     {
      "low": 0.05,
      "high": 0.15,
-     "n": 52,
-     "meanChance": 0.089,
-     "demShare": 0.096,
-     "demCarried": 5,
+     "n": 50,
+     "meanChance": 0.091,
+     "demShare": 0.08,
+     "demCarried": 4,
      "years": [
       2018,
       2022
@@ -726,10 +672,10 @@
     {
      "low": 0.15,
      "high": 0.35,
-     "n": 34,
-     "meanChance": 0.222,
-     "demShare": 0.353,
-     "demCarried": 12,
+     "n": 36,
+     "meanChance": 0.226,
+     "demShare": 0.361,
+     "demCarried": 13,
      "years": [
       2018,
       2022
@@ -739,7 +685,7 @@
      "low": 0.35,
      "high": 0.65,
      "n": 48,
-     "meanChance": 0.507,
+     "meanChance": 0.49,
      "demShare": 0.604,
      "demCarried": 29,
      "years": [
@@ -750,10 +696,10 @@
     {
      "low": 0.65,
      "high": 0.85,
-     "n": 38,
-     "meanChance": 0.759,
-     "demShare": 0.868,
-     "demCarried": 33,
+     "n": 35,
+     "meanChance": 0.75,
+     "demShare": 0.886,
+     "demCarried": 31,
      "years": [
       2018,
       2022
@@ -762,10 +708,10 @@
     {
      "low": 0.85,
      "high": 0.95,
-     "n": 43,
-     "meanChance": 0.907,
-     "demShare": 0.907,
-     "demCarried": 39,
+     "n": 41,
+     "meanChance": 0.898,
+     "demShare": 0.927,
+     "demCarried": 38,
      "years": [
       2018,
       2022
@@ -774,10 +720,10 @@
     {
      "low": 0.95,
      "high": 1.0,
-     "n": 455,
+     "n": 459,
      "meanChance": 0.997,
-     "demShare": 0.989,
-     "demCarried": 450,
+     "demShare": 0.987,
+     "demCarried": 453,
      "years": [
       2018,
       2022
@@ -787,30 +733,175 @@
    "seatTotals": [
     {
      "year": 2018,
-     "expectedDem": 166.7,
+     "expectedDem": 166.0,
      "actualDem": 186,
      "races": 379,
-     "independentSd": 3.27
+     "independentSd": 3.33
     },
     {
      "year": 2020,
-     "expectedDem": 205.0,
+     "expectedDem": 204.3,
      "actualDem": 191,
      "races": 383,
-     "independentSd": 3.26
+     "independentSd": 3.21
     },
     {
      "year": 2022,
-     "expectedDem": 188.4,
+     "expectedDem": 188.6,
      "actualDem": 195,
      "races": 386,
-     "independentSd": 3.72
+     "independentSd": 3.77
     }
-   ]
+   ],
+   "forward": {
+    "races": 386,
+    "polledRaces": 33,
+    "cycles": [
+     2022
+    ],
+    "all": {
+     "combined": {
+      "brier": 0.0329,
+      "logLoss": 0.1016
+     },
+     "fundamentals": {
+      "brier": 0.036,
+      "logLoss": 0.1153
+     }
+    },
+    "polled": {
+     "combined": {
+      "brier": 0.1281,
+      "logLoss": 0.3693
+     },
+     "fundamentals": {
+      "brier": 0.1641,
+      "logLoss": 0.5288
+     },
+     "pollsOnly": {
+      "brier": 0.1641,
+      "logLoss": 0.466
+     }
+    },
+    "coverage80": 0.87,
+    "coverage95": 0.979,
+    "coverage80Fundamentals": 0.873,
+    "meanAbsError": 4.77,
+    "calibration": [
+     {
+      "low": 0.0,
+      "high": 0.05,
+      "n": 159,
+      "meanChance": 0.003,
+      "demShare": 0.0,
+      "demCarried": 0,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.05,
+      "high": 0.15,
+      "n": 14,
+      "meanChance": 0.091,
+      "demShare": 0.071,
+      "demCarried": 1,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.15,
+      "high": 0.35,
+      "n": 9,
+      "meanChance": 0.228,
+      "demShare": 0.222,
+      "demCarried": 2,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.35,
+      "high": 0.65,
+      "n": 25,
+      "meanChance": 0.495,
+      "demShare": 0.68,
+      "demCarried": 17,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.65,
+      "high": 0.85,
+      "n": 16,
+      "meanChance": 0.756,
+      "demShare": 0.75,
+      "demCarried": 12,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.85,
+      "high": 0.95,
+      "n": 16,
+      "meanChance": 0.899,
+      "demShare": 1.0,
+      "demCarried": 16,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.95,
+      "high": 1.0,
+      "n": 147,
+      "meanChance": 0.996,
+      "demShare": 1.0,
+      "demCarried": 147,
+      "years": [
+       2022,
+       2022
+      ]
+     }
+    ],
+    "seatTotals": [
+     {
+      "year": 2022,
+      "expectedDem": 189.0,
+      "actualDem": 195,
+      "races": 386,
+      "independentSd": 3.76
+     }
+    ],
+    "cycle": 2022,
+    "trainedOn": [
+     2018,
+     2020
+    ],
+    "coverage80Band": [
+     0.759,
+     0.839
+    ],
+    "coverage80Test": {
+     "held": 336,
+     "n": 386,
+     "under": 0.999893,
+     "over": 0.974925
+    }
+   }
   },
   "14": {
    "races": 1148,
-   "polledRaces": 245,
+   "polledRaces": 95,
    "cycles": [
     2018,
     2020,
@@ -818,39 +909,40 @@
    ],
    "all": {
     "combined": {
-     "brier": 0.0349,
-     "logLoss": 0.1332
+     "brier": 0.0369,
+     "logLoss": 0.1422
     },
     "fundamentals": {
-     "brier": 0.0399,
-     "logLoss": 0.1549
+     "brier": 0.0394,
+     "logLoss": 0.1522
     }
    },
    "polled": {
     "combined": {
-     "brier": 0.1183,
-     "logLoss": 0.4099
+     "brier": 0.1375,
+     "logLoss": 0.4341
     },
     "fundamentals": {
-     "brier": 0.142,
-     "logLoss": 0.5122
+     "brier": 0.1674,
+     "logLoss": 0.5603
     },
     "pollsOnly": {
-     "brier": 0.1297,
-     "logLoss": 0.4047
+     "brier": 0.1455,
+     "logLoss": 0.4436
     }
    },
-   "coverage80": 0.779,
-   "coverage95": 0.929,
-   "meanAbsError": 5.37,
+   "coverage80": 0.794,
+   "coverage95": 0.936,
+   "coverage80Fundamentals": 0.797,
+   "meanAbsError": 5.5,
    "calibration": [
     {
      "low": 0.0,
      "high": 0.05,
-     "n": 480,
+     "n": 484,
      "meanChance": 0.004,
-     "demShare": 0.01,
-     "demCarried": 5,
+     "demShare": 0.012,
+     "demCarried": 6,
      "years": [
       2018,
       2022
@@ -859,10 +951,10 @@
     {
      "low": 0.05,
      "high": 0.15,
-     "n": 56,
+     "n": 50,
      "meanChance": 0.092,
-     "demShare": 0.125,
-     "demCarried": 7,
+     "demShare": 0.08,
+     "demCarried": 4,
      "years": [
       2018,
       2022
@@ -871,10 +963,10 @@
     {
      "low": 0.15,
      "high": 0.35,
-     "n": 28,
-     "meanChance": 0.241,
-     "demShare": 0.25,
-     "demCarried": 7,
+     "n": 32,
+     "meanChance": 0.218,
+     "demShare": 0.375,
+     "demCarried": 12,
      "years": [
       2018,
       2022
@@ -883,10 +975,10 @@
     {
      "low": 0.35,
      "high": 0.65,
-     "n": 42,
-     "meanChance": 0.506,
-     "demShare": 0.619,
-     "demCarried": 26,
+     "n": 50,
+     "meanChance": 0.497,
+     "demShare": 0.62,
+     "demCarried": 31,
      "years": [
       2018,
       2022
@@ -895,10 +987,10 @@
     {
      "low": 0.65,
      "high": 0.85,
-     "n": 41,
-     "meanChance": 0.755,
-     "demShare": 0.878,
-     "demCarried": 36,
+     "n": 32,
+     "meanChance": 0.765,
+     "demShare": 0.938,
+     "demCarried": 30,
      "years": [
       2018,
       2022
@@ -907,10 +999,10 @@
     {
      "low": 0.85,
      "high": 0.95,
-     "n": 44,
-     "meanChance": 0.902,
-     "demShare": 0.886,
-     "demCarried": 39,
+     "n": 46,
+     "meanChance": 0.898,
+     "demShare": 0.87,
+     "demCarried": 40,
      "years": [
       2018,
       2022
@@ -919,10 +1011,10 @@
     {
      "low": 0.95,
      "high": 1.0,
-     "n": 457,
+     "n": 454,
      "meanChance": 0.997,
      "demShare": 0.989,
-     "demCarried": 452,
+     "demCarried": 449,
      "years": [
       2018,
       2022
@@ -932,27 +1024,177 @@
    "seatTotals": [
     {
      "year": 2018,
-     "expectedDem": 165.5,
+     "expectedDem": 164.0,
      "actualDem": 186,
      "races": 379,
-     "independentSd": 3.2
+     "independentSd": 3.25
     },
     {
      "year": 2020,
-     "expectedDem": 205.1,
+     "expectedDem": 202.8,
      "actualDem": 191,
      "races": 383,
-     "independentSd": 3.27
+     "independentSd": 3.22
     },
     {
      "year": 2022,
-     "expectedDem": 190.9,
+     "expectedDem": 190.2,
      "actualDem": 195,
      "races": 386,
-     "independentSd": 3.7
+     "independentSd": 3.72
     }
-   ]
+   ],
+   "forward": {
+    "races": 386,
+    "polledRaces": 18,
+    "cycles": [
+     2022
+    ],
+    "all": {
+     "combined": {
+      "brier": 0.0312,
+      "logLoss": 0.0984
+     },
+     "fundamentals": {
+      "brier": 0.035,
+      "logLoss": 0.112
+     }
+    },
+    "polled": {
+     "combined": {
+      "brier": 0.1,
+      "logLoss": 0.3044
+     },
+     "fundamentals": {
+      "brier": 0.1806,
+      "logLoss": 0.5971
+     },
+     "pollsOnly": {
+      "brier": 0.1101,
+      "logLoss": 0.3339
+     }
+    },
+    "coverage80": 0.863,
+    "coverage95": 0.979,
+    "coverage80Fundamentals": 0.858,
+    "meanAbsError": 4.73,
+    "calibration": [
+     {
+      "low": 0.0,
+      "high": 0.05,
+      "n": 159,
+      "meanChance": 0.003,
+      "demShare": 0.0,
+      "demCarried": 0,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.05,
+      "high": 0.15,
+      "n": 14,
+      "meanChance": 0.097,
+      "demShare": 0.071,
+      "demCarried": 1,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.15,
+      "high": 0.35,
+      "n": 8,
+      "meanChance": 0.224,
+      "demShare": 0.125,
+      "demCarried": 1,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.35,
+      "high": 0.65,
+      "n": 24,
+      "meanChance": 0.502,
+      "demShare": 0.667,
+      "demCarried": 16,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.65,
+      "high": 0.85,
+      "n": 14,
+      "meanChance": 0.754,
+      "demShare": 0.857,
+      "demCarried": 12,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.85,
+      "high": 0.95,
+      "n": 20,
+      "meanChance": 0.894,
+      "demShare": 0.9,
+      "demCarried": 18,
+      "years": [
+       2022,
+       2022
+      ]
+     },
+     {
+      "low": 0.95,
+      "high": 1.0,
+      "n": 147,
+      "meanChance": 0.996,
+      "demShare": 1.0,
+      "demCarried": 147,
+      "years": [
+       2022,
+       2022
+      ]
+     }
+    ],
+    "seatTotals": [
+     {
+      "year": 2022,
+      "expectedDem": 190.6,
+      "actualDem": 195,
+      "races": 386,
+      "independentSd": 3.72
+     }
+    ],
+    "cycle": 2022,
+    "trainedOn": [
+     2018,
+     2020
+    ],
+    "coverage80Band": [
+     0.759,
+     0.839
+    ],
+    "coverage80Test": {
+     "held": 333,
+     "n": 386,
+     "under": 0.999477,
+     "over": 0.992335
+    }
+   }
   }
  },
- "_nationalCoefficient": "the Senate fit's generic-ballot coefficient at the same horizon (model.fit, national_coef): three House cycles cannot identify it"
+ "_polls": {
+  "sha256": "46186ba8650b5fcd40bce613aafcfb2608a969f91318d2c316845f1dd66a6741",
+  "label": "Rawpolls 011226",
+  "retrieved": "2026-10-16"
+ },
+ "_nationalCoefficient": "the Senate fit's generic-ballot coefficient at the same horizon (model.fit, national_coef): a few House cycles cannot identify it"
 }

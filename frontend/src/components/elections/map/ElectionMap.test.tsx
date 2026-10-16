@@ -77,7 +77,8 @@ const ranged = (over: Partial<MapSeat> = {}): MapSeat =>
   }) as MapSeat;
 
 const data: ElectionMapData = {
-  pollWindowDays: 45,
+  pollWindowDays: 21,
+  pollsInRange: true,
   asOf: "2026-10-15T16:00:00Z",
   electionDay: "2026-11-03",
   cycle: 2026,
@@ -102,6 +103,7 @@ const data: ElectionMapData = {
     races: 419,
     coverage80: 0.788,
     coverage95: 0.938,
+    coverage80Fundamentals: 0.83,
     meanAbsError: 6.59,
     table: [
       {
@@ -123,6 +125,18 @@ const data: ElectionMapData = {
     })),
     seatTotalsOutside90: 4,
     brier: { combined: 0.056, fundamentals: 0.102, pollsOnly: 0.06, polledRaces: 353 },
+    forward: {
+      cycle: 2024,
+      trainedOn: [1998, 2022],
+      races: 32,
+      polledRaces: 30,
+      coverage80: 0.938,
+      coverage95: 1,
+      coverage80Band: [0.656, 0.938],
+      meanAbsError: 4.1,
+      brier: { combined: 0.052, fundamentals: 0.112, pollsOnly: 0.05 },
+      logLoss: 0.175,
+    },
   },
   model: {
     beta: [0.2, 1.32, 15.1, 0.87],
@@ -136,7 +150,13 @@ const data: ElectionMapData = {
   },
   sources: {
     lean: { source: "state returns", window: "2020+2024", file: "app/data/state_pvi.json" },
-    training: "MEDSL; FEC; FiveThirtyEight",
+    training: "MEDSL; FEC; Silver Bulletin",
+    trainingPolls: {
+      attribution: "Silver Bulletin",
+      url: "https://www.natesilver.net/p/pollster-ratings-silver-bulletin",
+      terms:
+        "You are welcome to use this data free of charge for any purpose, but please attribute it to Silver Bulletin.",
+    },
     polls: {
       attribution: "Wikipedia contributors",
       license: "CC BY-SA 4.0",
@@ -190,7 +210,8 @@ const response: ElectionMapResponse = {
   cycle: data.cycle,
   daysToElection: data.daysToElection,
   horizon: data.horizon,
-  pollWindowDays: 45,
+  pollWindowDays: 21,
+  pollsInRange: true,
   national: { ...data.national },
   bins: data.bins,
   sources: {
@@ -202,7 +223,8 @@ const response: ElectionMapResponse = {
         file: "app/data/district_lean.json",
       },
     },
-    training: { senate: data.sources.training, house: "FEC; VEST; FiveThirtyEight" },
+    training: { senate: data.sources.training, house: "FEC; VEST; Silver Bulletin" },
+    trainingPolls: data.sources.trainingPolls,
     polls: data.sources.polls,
   },
   chambers: {
@@ -226,11 +248,18 @@ const response: ElectionMapResponse = {
 function renderMap(
   view: MapView,
   chamber: MapChamber = "senate",
-  over: { seats?: MapSeat[]; stale?: boolean; nationalStatus?: string; seat?: string } = {}
+  over: {
+    seats?: MapSeat[];
+    stale?: boolean;
+    nationalStatus?: string;
+    seat?: string;
+    pollsInRange?: boolean;
+  } = {}
 ) {
   const r: ElectionMapResponse = {
     ...response,
     stale: over.stale,
+    pollsInRange: over.pollsInRange ?? true,
     national: { ...response.national, status: over.nationalStatus ?? "ok" },
     chambers: over.seats
       ? { ...response.chambers, senate: { ...response.chambers.senate, seats: over.seats } }
@@ -276,6 +305,48 @@ describe("election map", () => {
     expect(within(detail).getByRole("link", { name: "Example Polling" })).toHaveAttribute(
       "href",
       "https://example.org/poll"
+    );
+  });
+
+  it("further out than the poll window, shows fundamentals-only ranges with polls beside them", () => {
+    const far = ranged({
+      fundamentalsOnly: true,
+      mean: 14.6,
+      pollAverage: null,
+      pollShare: 0,
+      polls: {
+        count: 1,
+        used: 0,
+        latest: null,
+        list: [{ ...(ranged() as RangedSeat).polls.list[0], usedInAverage: false }],
+      },
+      difference: { strength: 0, direction: null, seatPolls: false },
+    } as Partial<RangedSeat>);
+    renderMap("polls", "senate", { pollsInRange: false, seats: [far, data.seats[1]] });
+    const frame = document.querySelector("[data-share-section='general-map']") as HTMLElement;
+    expect(frame.textContent).toContain("FUNDAMENTALS ONLY · 19 DAYS OUT.");
+    expect(frame.textContent).toContain("checked only over the final 21 days before election day");
+    expect(frame.textContent).toContain("Past polls the ranges are fitted on: Silver Bulletin.");
+    fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
+    const detail = screen.getByRole("complementary", { name: "Seat detail" });
+    expect(detail.textContent).toContain("Fundamentals only");
+    expect(detail.textContent).toContain(
+      "Fundamentals-only ranges held the result 83% of the time"
+    );
+    expect(
+      within(detail).getByRole("list", { name: "Newest polls, not in the range" })
+    ).toBeInTheDocument();
+    expect(detail.textContent).toContain("The newest polls are listed below, outside the range.");
+  });
+
+  it("names the past polls' source and the forward check in the method", () => {
+    render(<ElectionMapMethod data={data} />);
+    expect(screen.getByRole("link", { name: "Silver Bulletin's raw poll file" })).toHaveAttribute(
+      "href",
+      "https://www.natesilver.net/p/pollster-ratings-silver-bulletin"
+    );
+    expect(screen.getByText(/The hardest check is the newest cycle, 2024/).textContent).toContain(
+      "Its 80% ranges held the result 94% of the time in 32 races"
     );
   });
 
