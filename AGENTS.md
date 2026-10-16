@@ -1495,6 +1495,21 @@ every stage downstream treats it as one story. Four mechanical signals:
   alone matched 12 single stories along with 16 briefings; with it, 5
   briefings and no single story (`docs/research/action-center-relevance.md`).
 
+A **livestream or video page** ("WATCH LIVE: The president speaks at a midterm rally",
+"WATCH: Senate rejects …") is for watching, not a written report, so it never
+titles an issue or supplies its facts or sources, and a cluster of nothing
+else publishes nothing until a report joins it (`announces_broadcast`, in the
+issue loop). It is told by the headline's kicker, the label before its first
+": ", classified by embedding margin, so it covers outlets that file their
+livestreams as ordinary articles (PBS). The cut is fitted each day on labels
+the publishers supply, never hand labels (`fit_broadcast_cut`): stored feed
+articles filed under a video section of their site (The Hill's
+`/video-clips/`, BBC's `/news/videos/`) against the same feeds' other
+articles, F1-maximising, because the labels are noisy (The Hill files some
+livestreams as news). A live blog ("Live updates:") is a report and is left
+alone. `articles_dropped_broadcast` and `clusters_only_broadcast` are the
+counters.
+
 This has to happen here because once several stories share one article the
 boundary between them is not recoverable later — cluster coherence filtering
 sees one article, and a per-fact topic check does not separate the facts
@@ -1554,6 +1569,11 @@ After issues are committed, the Action Center pipeline also:
   the Archive and at its link; deleted instead if it never gathered three
   updates). Long-running stories went up to 28 days
   between issues on that history. The lifecycle runs on every refresh
+- **Lists one entry per monitor on the homepage record** — `GET
+  /api/action/issues/recent` keeps a monitor's newest issue only
+  (`_one_per_monitor`), beside the monitor's own entry. Two days of one story
+  are separate developments, not near-identical duplicates, so the duplicate
+  pass rightly keeps them; the record's six slots are where they crowded.
 
 **What gets posted is a volume decision, measured like any other.** The
 posting modules publish less than the site shows, on purpose: the day's top

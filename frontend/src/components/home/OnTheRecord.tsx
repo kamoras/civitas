@@ -72,7 +72,7 @@ function Entry({ entry }: { entry: NotableEntry }) {
         </p>
         <p className="mt-0.5 line-clamp-2 font-display text-sm leading-snug text-ink-lo">
           {what}
-          {v.title && v.title !== v.question ? ` — ${v.title}` : ""}
+          {v.title && v.title !== v.question ? ` · ${v.title}` : ""}
         </p>
       </div>
       <p className="flex flex-wrap gap-x-4 md:flex-col md:items-end md:gap-0">

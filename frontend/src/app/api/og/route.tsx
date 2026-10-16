@@ -180,7 +180,7 @@ export function issueCardTexts(issue: OgIssue | null) {
     summary,
     // The summary is a source's own words (post_composer), so it is quoted
     // as theirs, as the issue page does.
-    summaryCredit: summary && issue?.summarySource ? `— ${issue.summarySource}` : "",
+    summaryCredit: summary && issue?.summarySource ? `Quoted from ${issue.summarySource}` : "",
     section: issue?.status === "developing" ? "ACTION CENTER · DEVELOPING" : "ACTION CENTER",
     date: issue?.date ? calendarDate(issue.date) : "",
     photoCredit: issue?.imageCredit ? `Photo: ${issue.imageCredit}` : "",

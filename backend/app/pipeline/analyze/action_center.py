@@ -1708,6 +1708,110 @@ def _digest_reason(article: NewsArticle) -> str | None:
     return None
 
 
+# Livestream announcements ("WATCH LIVE: The president speaks at a midterm rally
+# in Ohio") are pages for watching an event, not reports of it.
+# Two became confirmed issue titles in two days (2026-10-12/13), one third
+# on the homepage record, and a permanent issue page kept saying "Watch
+# live" after the event. The page is marked by the headline's kicker, the
+# outlet's label before its first ": " (a news-headline convention like the
+# digest titles' product names above), and the kicker is classified by
+# embedding margin, not matched against a phrase list: the margin covers
+# outlets that file their livestreams as ordinary articles (PBS puts them
+# under /newshour/politics/ with no category).
+#
+# The cut is fitted on labels the publishers supply, never hand labels:
+# among the stored feed articles (FeedArticle), an item a publisher files
+# under a video section of its site (a path section naming video: The
+# Hill's /video-clips/, BBC's /news/videos/) against the articles the same
+# feeds file elsewhere, both with a kicker. The cut maximises F1 (ties to
+# the higher cut). The labels are noisy (The Hill files some livestreams
+# under /homenews/), so the cut is not "the lowest no article reaches".
+# Measured on the 90 days of national-feed items stored to 2026-10-16: 18
+# filed-video kickers and 126 article kickers; cut +0.120, 18 of 18 caught,
+# the 2 articles past it both Hill livestreams filed as news. Replayed on
+# the 1,441 headlines production composed or stored: 20 flagged, 10
+# livestreams and 9 recorded "WATCH:" clips (the publishers' video class),
+# and one Civitas vote-draft title that never passes through here; no feed
+# article's headline. The whole headline does not separate: its topic
+# outweighs the kicker.
+_BROADCAST_PROTOTYPES = (
+    ["tune in to the live stream now", "live broadcast airing now"],
+    ["a news report", "a recorded video clip", "a live blog of updates"],
+)
+# Filed-video kickers needed before a cut is fitted (a convention): with
+# fewer, nothing is held back. 18 were stored on 2026-10-16.
+_BROADCAST_MIN_FILED = 10
+_broadcast_cache: dict[str, object] = {}
+
+
+def _headline_kicker(title: str) -> str | None:
+    head, sep, _ = (title or "").partition(": ")
+    return (head.strip() or None) if sep else None
+
+
+def _filed_as_video(url: str) -> bool:
+    """The publisher filed the item under a video section of its site: a
+    path section (not the item's own slug) naming video."""
+    return any("video" in section for section in urlparse(url or "").path.lower().split("/")[:-1])
+
+
+def _broadcast_margins(kickers: list[str]) -> np.ndarray:
+    broadcast, other = _BROADCAST_PROTOTYPES
+    vecs = _embed_texts_sim([*kickers, *broadcast, *other])
+    k, b = vecs[:len(kickers)], vecs[len(kickers):len(kickers) + len(broadcast)]
+    o = vecs[len(kickers) + len(broadcast):]
+    return (k @ b.T).max(axis=1) - (k @ o.T).max(axis=1)
+
+
+def fit_broadcast_cut(labelled: list[tuple[str, bool]]) -> float | None:
+    """The F1-maximising cut (ties to the higher) over (kicker, filed as
+    video) pairs, or None with fewer than _BROADCAST_MIN_FILED filed-video
+    kickers or no article ones."""
+    filed = sum(v for _, v in labelled)
+    if filed < _BROADCAST_MIN_FILED or filed == len(labelled):
+        return None
+    x = _broadcast_margins([k for k, _ in labelled])
+    y = np.array([v for _, v in labelled])
+    values = np.unique(x)
+    cuts = (values[1:] + values[:-1]) / 2
+
+    def f1(cut: float) -> float:
+        tp = int((x[y] > cut).sum())
+        return 2 * tp / (tp + int((x > cut).sum()) + int(y.sum()))
+
+    return float(max(cuts, key=lambda c: (f1(c), c))) if len(cuts) else None
+
+
+def _broadcast_threshold(db: Session) -> float | None:
+    """Today's cut, fitted once per UTC day on the stored feed articles
+    (fit_broadcast_cut). None, and nothing held back, until the store has
+    enough filed-video items: a report wrongly held back hides a story, a
+    livestream title only reads badly."""
+    today = utcnow().date().isoformat()
+    if _broadcast_cache.get("date") != today:
+        rows = db.query(FeedArticle.source_name, FeedArticle.url, FeedArticle.title).all()
+        video_sources = {r.source_name for r in rows if _filed_as_video(r.url)}
+        labelled = [(k, _filed_as_video(r.url)) for r in rows if r.source_name in video_sources
+                    for k in [_headline_kicker(r.title)] if k]
+        cut = fit_broadcast_cut(labelled)
+        logger.info("Broadcast kicker cut: %s (%d filed-video of %d labelled kickers)",
+                    cut, sum(v for _, v in labelled), len(labelled))
+        _broadcast_cache.update(date=today, cut=cut)
+    return _broadcast_cache["cut"]
+
+
+def announces_broadcast(titles: list[str], db: Session) -> list[bool]:
+    """Per headline: is it a livestream or video page (its kicker scores
+    past today's cut)? A headline with no kicker never is."""
+    kickers = [_headline_kicker(t) for t in titles]
+    present = [k for k in kickers if k]
+    cut = _broadcast_threshold(db) if present else None
+    if cut is None:
+        return [False] * len(titles)
+    scores = iter(_broadcast_margins(present))
+    return [bool(k) and float(next(scores)) > cut for k in kickers]
+
+
 def _filter_policy_relevant(db: Session, articles: list[NewsArticle]) -> list[tuple[NewsArticle, np.ndarray]]:
     """Keep only articles about US policy/legislation (policy_relevance.judge);
     drop digest articles."""
@@ -5369,6 +5473,24 @@ def _run_refresh(db: Session) -> int:
         on_topic = [(a, float(s)) for a, s in zip(cluster, centered_sims) if float(s) >= SOURCE_SIM_FLOOR]
         if not on_topic:
             on_topic = [(cluster[0], 1.0)]
+
+        # A livestream announcement neither titles the issue nor supplies
+        # its facts or sources: its headline is an invitation to watch, and
+        # what it "claims" ("The president speaks at a midterm rally") is an event
+        # that hasn't happened yet when it is published. A cluster of
+        # nothing else waits for a report to join it. Replayed on the
+        # stored clusters of 2026-10-12/13: "Watch live: The president heads
+        # to a state as its Senate race heats up" takes the outlet's report of
+        # the trip; a rally covered only by two livestream pages publishes
+        # nothing.
+        live = announces_broadcast([a.title for a, _ in on_topic], db)
+        if any(live):
+            action_metrics.increment("articles_dropped_broadcast", sum(live))
+            on_topic = [pair for pair, is_live in zip(on_topic, live) if not is_live]
+            if not on_topic:
+                logger.info("Rank %d: only livestream announcements, no issue until a report joins", rank)
+                action_metrics.increment("clusters_only_broadcast")
+                continue
 
         filtered_cluster = [a for a, _ in on_topic]
         logger.info(

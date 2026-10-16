@@ -33,7 +33,7 @@ from app.timeline_entries import without_repeat_leads
 from app.trending import compute_trending_issue_ids
 from app.models import (
     ActionIssue, ActionIssueStatus, ApiCache, ExploreDocument, IssueView, MonitorStatus,
-    NationalMonitor, RepSponsoredBill, RollCall, RollCallPosition, SponsoredBill,
+    MonitorUpdate, NationalMonitor, RepSponsoredBill, RollCall, RollCallPosition, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
 )
@@ -796,7 +796,8 @@ async def get_recent_action_issues(
     issue on the homepage"). Which rows are duplicates is decided by the
     hourly refresh (action_center.mark_recent_duplicates), over the same
     pool this reads from: it was decided here, per request, which ran the
-    embedding model on a public GET inside the event loop.
+    embedding model on a public GET inside the event loop. Then one issue
+    per national monitor (_one_per_monitor).
     """
     response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
     pool = (
@@ -807,11 +808,43 @@ async def get_recent_action_issues(
         .all()
     )
     by_id = {p.id: p for p in pool}
-    issues = [i for i in pool if not _hidden_as_duplicate(i, by_id)][:limit]
+    issues = _one_per_monitor([i for i in pool if not _hidden_as_duplicate(i, by_id)], db)[:limit]
     member_facts = _current_member_facts(
         db, set().union(*(_issue_member_ids(i) for i in issues)),
     )
     return {"issues": [_build_issue_response(i, db, member_facts=member_facts) for i in issues]}
+
+
+def _one_per_monitor(issues: list[ActionIssue], db: Session) -> list[ActionIssue]:
+    """The newest issue of each national monitor's story, in order; issues
+    of no monitor are all kept. The homepage record also lists the monitor
+    itself, so an older development stays one click away.
+
+    Two developments of one story are not duplicates: a Sunday statement by
+    six senators against the Russian diesel deal (10-12) and their dozen's
+    letter two days later (10-15) are separate events, 0.82 apart by title
+    and three days apart, which the near-identical pass rightly keeps
+    apart. But both, and the deal itself, filled half the record's six
+    entries. Replayed over the stored issues for each day from 2026-09-01
+    to 2026-10-16: 18 of 46 days had a story twice or more in the record's
+    first six, and none after. An issue belongs to the monitors it links
+    (related_monitor_slugs) and to those whose updates quote its title (a
+    monitor opened after the issue backfills updates from it)."""
+    linked: dict[str, set[str]] = {}
+    for title, slug in (
+        db.query(MonitorUpdate.article_title, NationalMonitor.slug)
+        .join(NationalMonitor, MonitorUpdate.monitor_id == NationalMonitor.id)
+        .filter(MonitorUpdate.article_title.in_(sorted({i.title for i in issues})))
+    ):
+        linked.setdefault(title, set()).add(slug)
+    kept, seen = [], set()
+    for issue in issues:
+        slugs = set(_parse_json_field(issue.related_monitor_slugs or "[]")) | linked.get(issue.title, set())
+        if slugs & seen:
+            continue
+        seen |= slugs
+        kept.append(issue)
+    return kept
 
 
 # ActionIssue.source_type of an election-night seat-flip issue
