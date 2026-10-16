@@ -11,6 +11,7 @@ import Link from "next/link";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import ResultsOverview from "@/components/elections/results/ResultsOverview";
+import OffSeasonLead from "@/components/elections/specials/OffSeasonLead";
 import { electionTitle, formatPvi, pviColor, stateBallotHref } from "@/lib/elections";
 import { formatUtcDate } from "@/lib/formatting";
 import {
@@ -237,6 +238,10 @@ export default function ElectionsPage() {
             }
           : null;
 
+  // Between general elections (the backend's season) the specials and the
+  // calendar lead, not a countdown to a general a year or more away.
+  const betweenCycles = campaignMode && !!initial?.specials?.season?.betweenCycles;
+
   const haveServerPvi = !!initial?.pvi;
   useEffect(() => {
     if (haveServerPvi) return;
@@ -377,6 +382,12 @@ export default function ElectionsPage() {
                 this page checks for a new read every minute. A race &ldquo;leads&rdquo; even once
                 the state lists its count as official; Civitas calls no race.
               </>
+            ) : betweenCycles ? (
+              <>
+                No general election is in its campaign yet. Special elections, vacant seats and
+                every federal date ahead come first; pick a state below for whatever is filed for
+                its next general. Shading is partisan lean, not a forecast.
+              </>
             ) : campaignMode ? (
               <>
                 Pick a state for its candidates, their filings, statewide ballot measures, and the
@@ -384,6 +395,10 @@ export default function ElectionsPage() {
               </>
             ) : null}
           </PageMasthead>
+
+          {betweenCycles && initial?.specials && (
+            <OffSeasonLead board={initial.specials} cal={initial.calendar} />
+          )}
 
           {resultsMode && results && (
             <ResultsOverview
