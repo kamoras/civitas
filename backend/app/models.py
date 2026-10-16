@@ -1348,6 +1348,11 @@ class ExploreDocument(Base):
     politician_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     chamber: Mapped[str | None] = mapped_column(String, nullable=True)
     agency_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The Federal Register's slug for that agency (an Agency's key): the
+    # most specific agency its agencies[] lists, as read at ingest or by the
+    # nightly refresh (explore_pipeline._refresh_federal_register). NULL
+    # until read; "" when the Register lists no agency with a slug.
+    agency_slug: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     comment_url: Mapped[str | None] = mapped_column(String, nullable=True)
     comments_close_on: Mapped[str | None] = mapped_column(String, nullable=True)
     # The Federal Register's own reader count for the document (its API's
@@ -1383,6 +1388,58 @@ class ExploreDocument(Base):
     cited_by_count: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class Agency(Base):
+    """A federal agency as the Federal Register lists it (its
+    /api/v1/agencies.json, read weekly by fetch/agencies.py). Keyed by the
+    Register's slug, which its documents name in agencies[].slug, so a
+    document reaches its agency with no name matching. Rows are never
+    deleted: the Register keeps abolished agencies listed too."""
+    __tablename__ = "agencies"
+
+    slug: Mapped[str] = mapped_column(String, primary_key=True)
+    fr_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    short_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The agency's page on federalregister.gov, and its own website.
+    fr_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    website: Mapped[str | None] = mapped_column(String, nullable=True)
+    parent_slug: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    # When the Register's list last included it.
+    synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class AgencyBudget(Base):
+    """A toptier agency's budget as USAspending.gov reports it
+    (/api/v2/references/toptier_agencies/ for the current fiscal year,
+    /api/v2/agency/{code}/budgetary_resources/ by year), with the Federal
+    Register agency its name matched (fetch/agencies.crosswalk). An agency
+    whose name matched none is kept with agency_slug NULL, never guessed."""
+    __tablename__ = "agency_budgets"
+
+    toptier_code: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    abbreviation: Mapped[str | None] = mapped_column(String, nullable=True)
+    # USAspending's own slug, for its agency page (usaspending.gov/agency/...).
+    usaspending_slug: Mapped[str | None] = mapped_column(String, nullable=True)
+    agency_slug: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    match_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fiscal_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fiscal_quarter: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    budget_authority: Mapped[float | None] = mapped_column(Float, nullable=True)
+    obligated: Mapped[float | None] = mapped_column(Float, nullable=True)
+    outlays: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # JSON list of {fiscalYear, budgetaryResources, obligated, outlays,
+    # throughPeriod}, newest first; NULL until first read. Kept as last read
+    # when a week's request fails.
+    by_year: Mapped[str | None] = mapped_column(Text, nullable=True)
+    by_year_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # When a successful read of USAspending's list no longer included it
+    # (NULL while listed): kept, never read as a zero budget.
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class ActionIssue(Base):

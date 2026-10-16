@@ -37,11 +37,12 @@ import {
 import { formatEasternTime } from "@/lib/results";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { monitorHref } from "@/lib/routes";
-import type { ActionIssue, ActionItem, RelatedBill } from "@/types/action";
+import type { ActionIssue, ActionItem, RelatedBill, RelatedExploreDoc } from "@/types/action";
 import type { ActionTapKind } from "@/lib/api";
 import Photo from "@/components/Photo";
 import ContactYourMembers from "@/components/action/ContactYourMembers";
 import TrackedLink from "@/components/action/TrackedLink";
+import AgencyLink from "@/components/agencies/AgencyLink";
 
 /** Hairline section header: the one used by RecordIndex and /elections. */
 export const SECTION_HEADING =
@@ -315,6 +316,18 @@ export function followResultsActions(issue: ActionIssue): ActionItem[] {
   );
 }
 
+/** A document row's detail line, led by its agency (a link to the agency's
+ *  page when the document names it). */
+function withAgency(doc: RelatedExploreDoc | undefined, rest: string): React.ReactNode {
+  if (!doc?.agencyName) return rest;
+  return (
+    <>
+      <AgencyLink name={doc.agencyName} slug={doc.agencySlug} />
+      {rest ? ` · ${rest}` : ""}
+    </>
+  );
+}
+
 interface ActionRow {
   key: string;
   verb: string;
@@ -546,14 +559,12 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       key: `comment-${action.docId}`,
       verb: "Comment",
       what: doc?.title ?? action.text,
-      detail: [
-        doc?.agencyName,
-        doc?.docType.replace(/_/g, " "),
-        action.text,
-        describeDaysLeftOn(action.closesOn, today),
-      ]
-        .filter(Boolean)
-        .join(" · "),
+      detail: withAgency(
+        doc,
+        [doc?.docType.replace(/_/g, " "), action.text, describeDaysLeftOn(action.closesOn, today)]
+          .filter(Boolean)
+          .join(" · ")
+      ),
       href: `/explore/${action.docId}#comment`,
       internal: true,
       label: "Comment →",
@@ -569,14 +580,12 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       key: `doc-${doc.id}`,
       verb: commentOpen ? "Comment" : "Read",
       what: doc.title,
-      detail: [
-        doc.agencyName,
+      detail: withAgency(
+        doc,
         commentOpen
           ? `${kind} · comments close ${formatUtcDate(doc.commentsCloseOn!, { month: "short", day: "numeric" })} · ${describeDaysLeftOn(doc.commentsCloseOn!, today)}`
-          : `${kind} · ${doc.date}`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
+          : `${kind} · ${doc.date}`
+      ),
       href: commentOpen ? `/explore/${doc.id}#comment` : `/explore/${doc.id}`,
       internal: true,
       label: commentOpen ? "Comment →" : "Document →",

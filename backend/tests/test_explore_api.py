@@ -701,6 +701,7 @@ async def test_stats_count_every_group_in_one_pass(db_session):
         "byType": {"Executive Order": 1, "Proposed Rule": 2},
         "byChamber": {"Executive": 2},
         "openForComment": 1,
+        "agencies": [],
     }
 
 
