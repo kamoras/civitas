@@ -28,7 +28,7 @@ flowchart TB
         NIGHTLY["Nightly chain, 03:00 UTC<br/>senate → supplementary → house<br/>→ stock → election<br/>4-6h cold · 45-90m warm"]
         HOURLY["Hourly at :15<br/>Action Center refresh"]
         AGENCY["Weekly (tried hourly at :30)<br/>agency list + USAspending budgets"]
-        SUPP["Supplementary (in the chain)<br/>explore · justices (weekly) · PVI · presidents"]
+        SUPP["Supplementary (in the chain)<br/>explore · justices (weekly, or on a Court change) · PVI · presidents"]
         ELECT["Election pipeline<br/>races · candidates · ballot measures · coverage"]
     end
 

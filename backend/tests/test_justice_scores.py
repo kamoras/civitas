@@ -161,7 +161,8 @@ def test_an_unreadable_scdb_archive_is_none_not_an_empty_release_list(caplog):
 
 def test_the_run_reports_when_loyalty_was_not_measured(db_session):
     justice = {"id": "clarence_thomas", "name": "Clarence Thomas", "last_name": "Thomas"}
-    with patch("app.pipeline.justice_pipeline.fetch_current_justices", AsyncMock(return_value=[justice])), \
+    with patch("app.pipeline.justice_pipeline.fetch_justice_list", AsyncMock(return_value=None)), \
+         patch("app.pipeline.justice_pipeline.fetch_current_justices", AsyncMock(return_value=[justice])), \
          patch("app.pipeline.justice_pipeline.fetch_case_votes", AsyncMock(return_value=[])), \
          patch("app.pipeline.justice_pipeline._measure_loyalty", AsyncMock(return_value=(None, "x could not be read"))):
         result = asyncio.run(run_justice_pipeline(db_session))
@@ -269,3 +270,87 @@ def test_the_record_reads_the_database_for_the_terms_it_covers():
     [vote] = scdb_vote_records(cases, justices, {2024})
     assert vote["case_id"] == "scotus-2024-23-621" and vote["justice_id"] == "clarence_thomas"
     assert vote["is_close"] is False and vote["is_unanimous"] is False
+
+
+def _oyez_justice(jid: str, start: int, end: int | None = None, chief: bool = False) -> dict:
+    """One entry of Oyez's justice list: `end` None is a current role."""
+    return {"identifier": jid, "name": jid.replace("_", " ").title(), "last_name": jid.split("_")[-1],
+            "roles": [{"date_start": start, "date_end": 0 if end is None else end,
+                       "role_title": "Chief Justice of the United States" if chief else "Associate Justice"}]}
+
+
+class TestCourtRosterChanges:
+    """Who sits on the Court comes from Oyez's list every run: a departure
+    is marked, a new justice is added, and a list too short to be the
+    Court retires nobody."""
+
+    @staticmethod
+    def _seat(db_session, ids):
+        db_session.add_all([Justice(id=j, name=j, last_name=j, is_active=True) for j in ids])
+        db_session.commit()
+
+    @staticmethod
+    def _run(db_session, listed):
+        with patch("app.pipeline.justice_pipeline.fetch_justice_list", AsyncMock(return_value=listed)), \
+             patch("app.pipeline.justice_pipeline.fetch_case_votes", AsyncMock(return_value=[])), \
+             patch("app.pipeline.justice_pipeline._measure_loyalty", AsyncMock(return_value=(None, "not read"))):
+            return asyncio.run(run_justice_pipeline(db_session))
+
+    def test_a_vacancy_marks_the_departed_justice_and_keeps_the_record(self, db_session):
+        nine = [f"justice_{n}" for n in range(9)]
+        self._seat(db_session, nine)
+        listed = [_oyez_justice(j, 1_000_000_000) for j in nine[1:]]
+        listed.append(_oyez_justice(nine[0], 900_000_000, end=1_900_000_000))  # 2030-03-17 UTC
+        result = self._run(db_session, listed)
+        assert result["retired"] == ["justice_0"]
+        gone = db_session.get(Justice, "justice_0")
+        assert gone.is_active is False and gone.date_end == "2030-03-17"
+        assert db_session.query(Justice).filter(Justice.is_active.is_(True)).count() == 8
+        assert len(get_justice_leaderboard(db_session)) == 8
+
+    def test_a_confirmed_justice_is_added_the_run_oyez_lists_them(self, db_session):
+        eight = [f"justice_{n}" for n in range(8)]
+        self._seat(db_session, eight)
+        result = self._run(db_session, [_oyez_justice(j, 1_000_000_000) for j in eight + ["justice_new"]])
+        assert "retired" not in result
+        assert db_session.get(Justice, "justice_new").is_active is True
+        assert db_session.query(Justice).filter(Justice.is_active.is_(True)).count() == 9
+
+    def test_an_associate_made_chief_is_not_retired(self, db_session):
+        nine = [f"justice_{n}" for n in range(9)]
+        self._seat(db_session, nine)
+        listed = [_oyez_justice(j, 1_000_000_000) for j in nine[1:]]
+        promoted = _oyez_justice(nine[0], 1_000_000_000, chief=True)
+        promoted["roles"].insert(0, {"date_start": 800_000_000, "date_end": 1_000_000_000})
+        listed.append(promoted)
+        assert "retired" not in self._run(db_session, listed)
+        assert db_session.get(Justice, "justice_0").is_active is True
+
+    def test_a_list_shorter_than_a_quorum_retires_nobody_and_alerts(self, db_session):
+        nine = [f"justice_{n}" for n in range(9)]
+        self._seat(db_session, nine)
+        with patch("app.services.justice_service.send_ops_alert") as alert:
+            result = self._run(db_session, [_oyez_justice(j, 1_000_000_000) for j in nine[:3]])
+        assert "retired" not in result
+        assert db_session.query(Justice).filter(Justice.is_active.is_(True)).count() == 9
+        assert alert.call_args.kwargs["condition"] == "justice-list-short"
+
+    def test_an_unreadable_list_changes_nothing(self, db_session):
+        self._seat(db_session, ["justice_0"])
+        assert self._run(db_session, None)["justices"] == 0
+        assert db_session.get(Justice, "justice_0").is_active is True
+
+    def test_the_nightly_check_sees_a_change_and_not_an_outage(self, db_session):
+        from app.pipeline.justice_pipeline import court_roster_changed
+
+        self._seat(db_session, ["justice_0", "justice_1"])
+
+        def check(listed):
+            with patch("app.pipeline.justice_pipeline.fetch_justice_list", AsyncMock(return_value=listed)):
+                return asyncio.run(court_roster_changed(db_session))
+
+        same = [_oyez_justice("justice_0", 1), _oyez_justice("justice_1", 1)]
+        assert check(same) is False
+        assert check(same + [_oyez_justice("justice_2", 2)]) is True
+        assert check([same[0], _oyez_justice("justice_1", 1, end=2)]) is True
+        assert check(None) is False

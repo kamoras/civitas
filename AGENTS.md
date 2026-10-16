@@ -1185,7 +1185,12 @@ Between TRANSFORM and the rest, both chamber pipelines run
 
 **Presidents are never reconciled or removed, and neither is the Court** —
 both functions take an explicit chamber and reject anything but
-`senate`/`house`. A former president is permanent site content. Relatedly,
+`senate`/`house`. A former president is permanent site content. The Court
+has its own, narrower reconciliation: the justice step marks a justice no
+longer on Oyez's sitting list inactive (`retire_departed_justices`, never a
+delete, refused below the Court's quorum of six) and the Supplementary run
+checks that list nightly so a confirmation or departure doesn't wait for the
+weekly refresh (`court_roster_changed`). Relatedly,
 the Senate/House leaderboards rank only currently-serving members, while the
 presidential leaderboard ranks the *historical* field and excludes the
 sitting president (see `president_service.get_president_leaderboard`) — for
