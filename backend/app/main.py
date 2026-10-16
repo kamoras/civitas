@@ -414,7 +414,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(
-    title="Civitas API",
+    title="Civitas Research API",
     description="Backend API for the Civitas senator representation tracker",
     version="0.1.0",
     lifespan=lifespan,

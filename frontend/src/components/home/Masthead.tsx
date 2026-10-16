@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SITE_TAGLINE } from "@/lib/site";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
 import type { ElectionPhase } from "@/types/election";
@@ -25,7 +26,7 @@ export function electionLinks(phase: ElectionPhase | null): { href: string; labe
 }
 
 /**
- * The homepage masthead: the overprint wordmark, the statement of what this
+ * The homepage masthead: the nameplate and its line, the statement of what this
  * is, and the voter's ways in. It asks the reader for nothing.
  *
  * Replaces a full-viewport centred hero over a canvas animation. That is
@@ -49,46 +50,26 @@ export default function Masthead({
   return (
     <section className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
       <div className="min-w-0">
-        {/* The two offset plates are drawn from `data-text` as pseudo-
-              elements (see .overprint in globals.css), so the mark's text
-              content stays exactly "CIVITAS" — copyable, findable and
-              scrapeable once rather than three times.
-
-              A nameplate, not the heading. It was the page's h1, which meant
-              the homepage's one h1 was a brand mark carrying no information
-              about the page, while the sentence that actually says what this
-              is sat in a <p>. It is also the third "CIVITAS" in the accessible
-              tree after the nav's home link and the document title, and the
-              second on screen — the nav wordmark sits 86px directly above it.
-              `aria-hidden` leaves it as the printed nameplate it looks like. */}
-        <div
-          aria-hidden="true"
-          className="overprint font-pixel text-[min(1.5rem,12vw)] leading-none text-ink-hi sm:text-3xl"
-          data-text="CIVITAS"
-        >
-          <span className="relative">CIVITAS</span>
+        {/* The nameplate, set like a masthead: the name, a heavy rule, the
+            line it stands for. It was the pixel "CIVITAS" with two
+            off-register colour plates, an effect of its moment. The name
+            is hidden from screen readers (the header's link names the site
+            right above it); the tagline is read. */}
+        <div className="max-w-2xl">
+          <p
+            aria-hidden="true"
+            className="font-display text-xl font-bold uppercase leading-none tracking-[0.22em] text-ink-hi sm:text-2xl"
+          >
+            Civitas Research
+          </p>
+          <p className="mt-3 border-t-3 border-ink-hi pt-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-lo">
+            {SITE_TAGLINE}
+          </p>
         </div>
 
-        {/* A statement of scope, not a slogan.
-
-              The same three clauses were set at 43px extrabold uppercase over
-              three lines, which is billboard treatment — the one place the
-              voice slipped from register to pitch. The clauses are the honest
-              description of what the record covers, so they stay; what goes is
-              the shouting. A masthead states its remit and gets out of the
-              way.
-
-              The subject widened in 2026 and the sentence did not. "Every
-              member of Congress" described the whole record when Congress was
-              the whole record; it now also holds 47 presidencies, the nine
-              sitting justices, 484 races with 4,316 candidates, 2,554
-              state-legislative nominees and 26 ballot measures. A remit
-              statement that names a third of the remit is not modest, it is
-              inaccurate — and the people asking for power are half of what a
-              voter comes here to check. */}
         <h1 className="mt-6 max-w-2xl font-display text-[26px] font-semibold leading-[1.22] tracking-[-0.015em] text-ink-hi sm:mt-7 sm:text-[32px]">
-          A public record of who holds power and who wants it: who funds them, how they vote, and
-          what they pass.
+          A public record of U.S. power: who holds it, who wants it, who pays for it, how they vote
+          and what they pass.
         </h1>
 
         <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">

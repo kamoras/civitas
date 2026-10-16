@@ -127,8 +127,8 @@ export default function AboutOverview() {
   return (
     <AboutPage
       href="/about"
-      eyebrow="About · how Civitas works"
-      title="About Civitas"
+      eyebrow="About · how Civitas Research works"
+      title="About Civitas Research"
       lede={
         <p>
           Civitas scores the people who represent you (senators, representatives and presidents)

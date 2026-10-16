@@ -111,21 +111,6 @@ li {
   background: var(--ink-lo);
 }
 
-/* ===== CRT SCANLINES ===== */
-.crt-overlay {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0) 0px,
-    rgba(0, 0, 0, 0) 1px,
-    rgba(0, 0, 0, 0.03) 1px,
-    rgba(0, 0, 0, 0.03) 2px
-  );
-}
-
 /* ===== GLITCH TEXT ===== */
 .glitch {
   position: relative;
@@ -273,10 +258,6 @@ li {
     animation: none !important;
   }
 
-  .crt-overlay::after {
-    animation: none !important;
-  }
-
   * {
     animation: none !important;
     transition-duration: 0.01ms !important;
@@ -334,7 +315,6 @@ select:focus-visible,
 input:focus-visible {
   outline: 2px solid var(--signal-cyan);
   outline-offset: 2px;
-  box-shadow: 0 0 8px rgba(77, 227, 232, 0.4);
 }
 
 /* ===== EXTERNAL LINK A11Y =====
@@ -367,57 +347,6 @@ a[target="_blank"] {
    Two devices that Tailwind cannot express cleanly. Everything else in the
    direction — rule weights, density, docket refs, the request slip — is
    plain utilities over the tokens in tailwind.config.ts. */
-
-/* Two-colour misregistration on the wordmark.
-
-   This is the SAME magenta/cyan offset the .glitch rules above already use,
-   held still. Animated it reads as a Matrix effect, which argues against a
-   site whose whole claim is deterministic, auditable scoring; frozen, the
-   identical offset reads as cheap two-plate printing — an independent press
-   rather than a conspiracy. Same DNA, opposite connotation, no new assets.
-
-   The plates are PSEUDO-ELEMENTS fed by `data-text`, matching how .glitch
-   above already does this. Real duplicated spans were the obvious approach
-   and are wrong: aria-hidden keeps them out of the accessibility tree, but
-   they still land in the element's textContent, so selecting and copying the
-   wordmark yields "CIVITASCIVITASCIVITAS", find-in-page matches three times,
-   and any DOM-text scraper sees it tripled. Pseudo-element content is in none
-   of those. */
-.overprint {
-  position: relative;
-  display: inline-block;
-  white-space: nowrap;
-}
-
-.overprint::before,
-.overprint::after {
-  content: attr(data-text);
-  position: absolute;
-  top: 0;
-  left: 0;
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-}
-
-.overprint::before {
-  color: var(--signal-magenta);
-  transform: translate(-3px, 1px);
-}
-
-.overprint::after {
-  color: var(--signal-cyan);
-  transform: translate(3px, -1px);
-}
-
-/* Forced-colors mode replaces our palette wholesale, so the two plates
-   collapse onto the base copy as one smeared word. Drop them there. */
-@media (forced-colors: active) {
-  .overprint::before,
-  .overprint::after {
-    display: none;
-  }
-}
 
 /* Share-image capture (lib/shareImage.ts). For the moment a section is
    measured and cloned, it is laid out as the picture should look: controls

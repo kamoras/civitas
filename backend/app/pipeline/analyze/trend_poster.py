@@ -108,7 +108,7 @@ def record_sentences(card: RecordCard) -> list[str]:
 
 
 def issue_sentence(issue: ActionIssue) -> str:
-    return f"Civitas Action Center, {long_date(issue.date)}: {issue.title.rstrip('.')}."
+    return f"Civitas Research Action Center, {long_date(issue.date)}: {issue.title.rstrip('.')}."
 
 
 def tragedy_issue_sentence(issue: ActionIssue) -> str:
@@ -116,7 +116,7 @@ def tragedy_issue_sentence(issue: ActionIssue) -> str:
     compose() verified verbatim in its source and attributed to the party
     the source says acted, credited to that outlet. Never the headline,
     which no check verified."""
-    return (f"Civitas Action Center, {long_date(issue.date)}, quoting {issue.summary_source}: "
+    return (f"Civitas Research Action Center, {long_date(issue.date)}, quoting {issue.summary_source}: "
             f"{(issue.summary or '').strip().rstrip('.')}.")
 
 

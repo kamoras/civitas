@@ -66,7 +66,11 @@ export function AboutPage({
               {prev ? (
                 <PagerLink href={prev.href} dir="Previous" title={prev.title} />
               ) : (
-                <PagerLink href={ABOUT_OVERVIEW_HREF} dir="Back to" title="About Civitas" />
+                <PagerLink
+                  href={ABOUT_OVERVIEW_HREF}
+                  dir="Back to"
+                  title="About Civitas Research"
+                />
               )}
               {next && <PagerLink href={next.href} dir="Next" title={next.title} alignEnd />}
             </nav>

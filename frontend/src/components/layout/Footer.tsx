@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BSKY_PROFILE_URL, GITHUB_REPO_URL } from "@/lib/site";
+import { BSKY_PROFILE_URL, GITHUB_REPO_URL, SITE_TAGLINE } from "@/lib/site";
 import { SECTIONS, sectionSubpages, type SectionKey } from "@/lib/routes";
 
 /**
@@ -127,17 +127,14 @@ export default function Footer({ omit = [] }: { omit?: readonly SectionKey[] }) 
         */}
         <div className="grid grid-cols-1 gap-6 pt-5 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-9">
           <div>
-            {/* CIVITAS appears at the top of every page (nav) and, on the
-                homepage, in the overprint mark too — this colophon is the
-                one place the FULL name belongs: civitas-research.org is the
-                domain, "Civitas" alone is the mark, "Civitas Research" is
-                the standing name for the project itself, stated once, the
-                way a masthead credits a publication under its logo rather
-                than repeating the logo. */}
+            {/* The colophon: the name and its line, as the header and the
+                homepage's nameplate set them, then the terms. */}
             <p className="font-mono text-xs leading-[1.9] tracking-[0.08em] text-ink-min [overflow-wrap:anywhere]">
-              CIVITAS RESEARCH
+              <span className="text-ink-hi">CIVITAS RESEARCH</span>
               <br />
-              OPEN SOURCE PUBLIC-INTEREST PROJECT
+              {SITE_TAGLINE.toUpperCase()}
+              <br />
+              OPEN SOURCE · RUN BY VOLUNTEERS
               <br />
               NO PARTY, CANDIDATE OR PAC MONEY
               <br />
@@ -153,7 +150,7 @@ export default function Footer({ omit = [] }: { omit?: readonly SectionKey[] }) 
               (fec.gov); bills and roll-call votes from Congress.gov, Senate.gov and the House
               Clerk; ideal points from Voteview; Lobbying Disclosure Act filings (lda.gov); the
               Federal Register and GovInfo; and state election offices. Donor industries are
-              classified by Civitas from FEC filings, not taken from a third party. The
+              classified by Civitas Research from FEC filings, not taken from a third party. The
               Representation Scorecard is a weighted composite metric, not a measure of illegality
               or wrongdoing. Correlation between donations and votes does not prove causation.
               Verify all data at the original sources. Draw your own conclusions.

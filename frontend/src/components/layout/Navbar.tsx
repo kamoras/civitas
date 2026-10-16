@@ -199,7 +199,7 @@ function SectionItem({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={onToggle}
-        className={`inline-flex min-h-6 items-center gap-1.5 ${labelClass} aria-expanded:border-phos aria-expanded:text-ink-hi`}
+        className={`inline-flex min-h-6 items-center gap-1.5 ${labelClass} aria-expanded:border-ink-hi aria-expanded:text-ink-hi`}
       >
         {label.toUpperCase()}
         {active && <span className="sr-only">{", current section"}</span>}
@@ -228,7 +228,7 @@ function SectionItem({
                     onClick={() => onClose()}
                     className={`flex min-h-11 items-center border-l-2 pl-3 font-display text-sm transition-colors ${
                       current
-                        ? "border-phos text-ink-hi"
+                        ? "border-ink-hi text-ink-hi"
                         : "border-white/15 text-ink-lo hover:border-ink-lo hover:text-ink-hi"
                     }`}
                   >
@@ -300,7 +300,6 @@ function SearchPanel({ onEscape }: { onEscape: () => void }) {
 
 export default function Navbar() {
   const pathname = usePathname();
-  const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   // The toggle that opened the search, to take focus back on Escape (the
@@ -328,12 +327,6 @@ export default function Navbar() {
   const rowFits = useRowFits(barRef, logoRef, rowRef);
   // MENU's breakpoint, or always MENU when the row doesn't fit.
   const menuOnly = rowFits ? "min-[56rem]:hidden" : "";
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   const closeMenu = useCallback(() => {
     setMenuOpen(false);
@@ -375,9 +368,8 @@ export default function Navbar() {
   return (
     <header
       role="banner"
-      className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-300 ${
-        scrolled || menuOpen ? "bg-surface-base/95 backdrop-blur-md" : "bg-surface-base/80"
-      }`}
+      // Solid, not a translucent blur: the header is paper, not glass.
+      className="fixed top-0 left-0 right-0 z-50 bg-surface-base"
     >
       {/*
         The band lives inside the fixed header rather than above it so every
@@ -394,12 +386,18 @@ export default function Navbar() {
           ref={barRef}
           className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between"
         >
+          {/* The lockup: the pixel mark, the site's one use of that face,
+              and RESEARCH beside it in the mono, after a hairline. */}
           <Link
             ref={logoRef}
             href="/"
-            className="font-pixel text-xs sm:text-sm min-[56rem]:text-xs xl:text-sm text-ink-hi hover:text-phos transition-colors tracking-widest"
+            className="group inline-flex min-h-6 items-center gap-2.5 text-ink-hi"
           >
-            CIVITAS
+            <span className="font-pixel text-xs tracking-widest transition-colors group-hover:text-phos sm:text-sm min-[56rem]:text-xs xl:text-sm">
+              CIVITAS
+            </span>
+            <span aria-hidden="true" className="h-3.5 border-l border-ink-min/60 sm:h-4" />
+            <span className="font-mono text-xs tracking-[0.3em] text-ink-lo">RESEARCH</span>
           </Link>
 
           {/*

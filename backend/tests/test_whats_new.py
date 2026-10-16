@@ -55,8 +55,8 @@ def test_posts_the_newest_entry_in_the_template(db_session, setup):
     assert whats_new.post_whats_new(db_session) == "posted new-map"
     (post,) = _features(db_session)
     assert post.subject == "feature:new-map"
-    assert post.title == "New on Civitas: A map"
-    assert sent == [("New on Civitas: A map. Each seat on a map.", "https://civitas-research.org/map")]
+    assert post.title == "New on Civitas Research: A map"
+    assert sent == [("New on Civitas Research: A map. Each seat on a map.", "https://civitas-research.org/map")]
 
 
 def test_once_per_entry_and_one_a_day(db_session, setup, freeze_utcnow):
@@ -128,7 +128,7 @@ def test_the_feed_and_the_api_list(db_session, setup):
     app.dependency_overrides[get_db] = lambda: db_session
     client = TestClient(app)
     feed = client.get("/api/feed/new.xml")
-    assert feed.status_code == 200 and b"New on Civitas: A map" in feed.content
+    assert feed.status_code == 200 and b"New on Civitas Research: A map" in feed.content
     listed = client.get("/api/whats-new").json()
     assert listed["feed"] == "/feed/new.xml"
     assert [e["id"] for e in listed["entries"]] == ["new-map", "older", "stale"]
