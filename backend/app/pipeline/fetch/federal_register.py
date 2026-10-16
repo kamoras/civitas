@@ -6,14 +6,14 @@ It contains presidential documents from Clinton (1994) onward.
 
 import logging
 import re
-from datetime import date, timedelta
+from datetime import timedelta
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
-from app.time_utils import comment_period_today
+from app.time_utils import comment_period_today, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ async def fetch_recent_significant_rules(
     if cached is not None:
         return cached
 
-    start = (date.today() - timedelta(days=SIGNIFICANT_RULE_LOOKBACK_DAYS)).isoformat()
+    start = (utcnow().date() - timedelta(days=SIGNIFICANT_RULE_LOOKBACK_DAYS)).isoformat()
     params = {
         "conditions[type][]": "RULE",
         "conditions[significant]": "1",
