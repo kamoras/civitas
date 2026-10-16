@@ -127,7 +127,19 @@ class TestOneChainAtATime:
     def test_a_wedged_chain_does_not_hold_the_slot(self, monkeypatch):
         monkeypatch.setitem(pipeline_chain._chains, 1, time.monotonic() - 13 * 3600)
         monkeypatch.setattr(pipeline_chain.run_tracker, "_last_progress", 0.0)  # no run wrote any either
-        assert pipeline_chain.claim() is not None
+        chain_id = pipeline_chain.claim()
+        assert chain_id is not None
+        pipeline_chain.release(chain_id)
+
+    def test_no_run_progress_is_not_read_as_progress_at_boot(self, monkeypatch):
+        # Monotonic time counts from boot: soon after a restart, the 0.0
+        # "no progress yet" must not read as progress a moment ago.
+        monkeypatch.setattr(pipeline_chain.time, "monotonic", lambda: 600.0)
+        monkeypatch.setitem(pipeline_chain._chains, 1, 600.0 - 13 * 3600)
+        monkeypatch.setattr(pipeline_chain.run_tracker, "_last_progress", 0.0)
+        chain_id = pipeline_chain.claim()
+        assert chain_id is not None
+        pipeline_chain.release(chain_id)
 
     def test_a_claimed_chain_runs_under_its_claim_and_releases_it(self):
         chain_id = pipeline_chain.claim()

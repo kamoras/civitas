@@ -84,8 +84,11 @@ _ids = itertools.count(1)
 
 def _any_live(now: float) -> bool:
     window = QUIET_PIPELINE_TIMEOUT.total_seconds()
-    runs = run_tracker.last_progress()
-    return any(now - max(progress, runs) < window for progress in _chains.values())
+    # 0.0 is "no run has written progress", not a time: monotonic counts
+    # from boot, so read as one it would keep a wedged chain live for the
+    # first hours after a restart.
+    runs = run_tracker.last_progress() or None
+    return any(now - (progress if runs is None else max(progress, runs)) < window for progress in _chains.values())
 
 
 def chain_running() -> bool:
