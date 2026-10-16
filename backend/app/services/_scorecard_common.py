@@ -29,6 +29,7 @@ from app.pipeline.analyze.score_calculator import (
 )
 from app.pipeline.fetch.district_pvi import lines_congress, lines_of
 from app.pipeline.transform.normalize_votes import stored_vote
+from app.score_keeping import load_breakdown
 from app.services.bill_record import bill_label, canonical_bill_id, roll_call_summaries, typed_bill_number
 from app.services.score_findings import add_findings
 from app.services.word_search import matching_keys
@@ -251,13 +252,62 @@ def related_votes(db: Session, bill_ids: list[str], key_votes: list) -> list[dic
     return out
 
 
+# Components that move a dimension's score by weight x (score - 50) rather
+# than taking part in its weighted mean: Constituent approval adds or takes
+# points around 50 (score_calculator._constituent_alignment_core). Keyed by
+# label because the breakdown carries no other marker; the breakdown tests
+# recompute every dimension from these, so a renamed component fails there.
+POINTS_COMPONENTS = frozenset({"Constituent approval"})
+
+
+def parts_sum(components: list[dict]) -> float | None:
+    """The dimension's components combined by the published rule, before
+    rounding and the 0-100 clamp: the weighted mean of the "mean" parts plus
+    weight x (score - 50) for each "points" part, from the components as
+    served (one decimal), to one decimal. None when no component was
+    measured (the score is then a neutral 50, and its note says why)."""
+    measured = [c for c in components if c.get("score") is not None]
+    mean = [c for c in measured if c["combines"] == "mean"]
+    weight = sum(c["weight"] for c in mean)
+    if not measured or weight <= 0:
+        return None
+    total = sum(c["weight"] * c["score"] for c in mean) / weight + sum(
+        c["weight"] * (c["score"] - 50) for c in measured if c["combines"] == "points"
+    )
+    return round(total, 1)
+
+
+def _bills_moved(kept: dict, now: dict) -> int | None:
+    """How many bills reached a stage since the score was worked out
+    (became law, passed a chamber, were introduced...), from the two
+    breakdowns' bills by furthest stage; None when either has none."""
+    before = (kept.get("facts") or {}).get("billsByStage")
+    after = (now.get("facts") or {}).get("billsByStage")
+    if not before or not after or len(before) != len(after):
+        return None
+    return sum(max(0, a - b) for a, b in zip(after, before))
+
+
 def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) -> dict:
-    """explain_scores for a loaded Senator or Representative, with the
-    breaks its Constituent Alignment counts (and the flank breaks it
-    doesn't) as the chamber recorded each roll call: the member's vote and
-    how each party split. Served with the score so the list and the number
-    can't disagree. Each dimension also carries its one-sentence finding
-    (score_findings)."""
+    """The arithmetic of a loaded Senator's or Representative's stored
+    scores, with the breaks its Constituent Alignment counts (and the flank
+    breaks it doesn't) as the chamber recorded each roll call: the member's
+    vote and how each party split. Served with the score so the list and the
+    number can't disagree. Each dimension also carries its one-sentence
+    finding (score_findings).
+
+    The components are the ones the run that stored the scores worked out
+    (score_breakdown, kept with them: `basis` "scored"), so they add up to
+    the score shown even when the inputs have moved since: the hourly bill
+    refresh records a bill becoming law after the night's run, say. The
+    scores are also recomputed on today's records, and a dimension that
+    would come out differently says so (`sinceScored`) rather than showing
+    arithmetic for a number that isn't on the page. A score stored before
+    breakdowns were kept, or a dimension the kept one lacks, is recomputed
+    (`basis` "recomputed").
+
+    Each dimension also states its components' sum before rounding and the
+    clamp (`sum`) and whether the 0-100 clamp moved it (`clamped`)."""
     entity_dict = build_score_breakdown_entity(entity, lobbying_donation_attr=lobbying_donation_attr)
     district = entity_dict["district"]
     # A House score is recomputed on the district lines it was stored on,
@@ -266,7 +316,7 @@ def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) ->
     # who left then) — see district_pvi.lines_of. A senator's (None) reads
     # the sitting lines, which no state lean depends on.
     with lines_of(getattr(entity, "district_lines_congress", None) if district is not None else None):
-        breakdown = explain_scores(entity_dict)
+        live = explain_scores(entity_dict)
         # The seat's lean as the score read it (Cook's), and beside it the
         # one Civitas computes from precinct returns — shown, never scored.
         seat_lean = {
@@ -276,6 +326,32 @@ def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) ->
             ),
             "linesCongress": lines_congress() if district is not None else None,
         }
+    kept, scored_at = load_breakdown(entity)
+    kept = kept or {}
+    breakdown = {key: kept.get(key, part) for key, part in live.items()}
+    for key, part in breakdown.items():
+        components = [
+            {**c, "combines": "points" if c.get("label") in POINTS_COMPONENTS else "mean"}
+            for c in part.get("components") or []
+        ]
+        for c in components:
+            if c["combines"] == "points" and c.get("score") is not None:
+                c["points"] = round(c["weight"] * (c["score"] - 50), 1)
+        part["components"] = components
+        total = parts_sum(components)
+        part["sum"] = total
+        part["clamped"] = total is not None and not 0 <= total <= 100
+        now = live[key]
+        part["basis"] = "scored" if part is not now else "recomputed"
+        part["sinceScored"] = (
+            {
+                "score": now["score"],
+                "billsChanged": _bills_moved(part, now) if key == "legislativeEffectiveness" else None,
+                "scoredAt": scored_at,
+            }
+            if part is not now and now.get("score") != part.get("score")
+            else None
+        )
     record = entity_dict["votingRecord"]["partyLineRecord"]
     facts = (breakdown.get("constituentAlignment") or {}).get("facts")
     if record and facts is not None:

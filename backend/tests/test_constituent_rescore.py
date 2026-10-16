@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 import app.pipeline.analyze.score_calculator as sc
 from app.models import (
-    HousePipelineRun, KeyVote, PipelineRun, PipelineStatus, Representative, RepKeyVote, Senator,
+    HousePipelineRun, KeyVote, PipelineRun, PipelineStatus, Representative, RepKeyVote, ScoreSnapshot, Senator,
 )
 from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE
 from app.pipeline.analyze.score_calculator import (
@@ -18,6 +18,7 @@ from app.pipeline.analyze.score_calculator import (
 )
 from app.pipeline.constituent_rescore import rescore_stale_constituent_alignment
 from app.pipeline.transform.normalize_votes import stored_vote
+from app.score_keeping import hold_record, load_breakdown, stored_breakdown
 from app.time_utils import utcnow
 
 _STATES = ["CA", "TX", "OH", "PA", "WY", "VT", "GA", "AZ", "NY", "FL"]
@@ -248,3 +249,32 @@ def test_the_signal_overlap_is_re_measured_after_a_rescore(db_session, monkeypat
 
     assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == ["senate"]
     assert measured == ["senate"]
+
+
+def test_a_held_member_keeps_the_last_run_it_passed(db_session):
+    """A member the latest run couldn't score keeps that run's whole
+    scorecard: the rescore leaves its score, breakdown and snapshots alone,
+    and gives every rescored member a snapshot of the score it now shows."""
+    _make_stale("senate")
+    _seed_senate(db_session)
+    held, other = db_session.get(Senator, "S001"), db_session.get(Senator, "S002")
+    held.score_held = hold_record(RuntimeError("x"), "2026-10-15", "2026-10-14", "v6.34")
+    kept = {"constituentAlignment": {"score": 100, "components": []}}
+    held.score_breakdown = other.score_breakdown = stored_breakdown(kept)
+    db_session.commit()
+
+    assert rescore_stale_constituent_alignment(_factory(db_session), house_lines=None) == ["senate"]
+    db_session.expire_all()
+    held, other = db_session.get(Senator, "S001"), db_session.get(Senator, "S002")
+    assert held.score_constituent_alignment == 100.0
+    assert load_breakdown(held)[0] == kept
+    assert not db_session.query(ScoreSnapshot).filter_by(entity_id="S001").count()
+    # The rescored member's kept breakdown is the score it now has.
+    dims, _ = load_breakdown(other)
+    assert dims["constituentAlignment"]["score"] == other.score_constituent_alignment
+    assert "vote_part_status" not in dims["constituentAlignment"]
+    snaps = db_session.query(ScoreSnapshot).filter_by(entity_type="senator").all()
+    assert len(snaps) == 39
+    snap = next(s for s in snaps if s.entity_id == "S002")
+    assert snap.score_3 == other.score_constituent_alignment
+    assert snap.algorithm_version == sc.ALGORITHM_VERSION

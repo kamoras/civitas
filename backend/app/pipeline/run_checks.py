@@ -18,6 +18,9 @@ import logging
 from typing import Any
 
 from app.error_utils import exception_summary
+from app.models import ScoreSnapshot
+from app.score_keeping import hold_record
+from app.time_utils import utcnow
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 
 logger = logging.getLogger(__name__)
@@ -153,6 +156,31 @@ def alert_member_failures(
         )
     except Exception:
         logger.exception("Member-failure alert failed (non-fatal)")
+
+
+def record_member_holds(db: Any, model: Any, entity_type: str, failures: list[tuple[str, BaseException]]) -> None:
+    """Mark each member the run could not score as holding an earlier run's
+    score (``score_held``): the run of the member's latest snapshot, and the
+    source the run could not read when the exception names one. The
+    profile, leaderboard and compare page say so beside the score; the next
+    run that scores the member clears it (upsert). Never raises."""
+    try:
+        today = utcnow().date().isoformat()
+        for member_id, exc in failures:
+            row = db.get(model, member_id)
+            if row is None:  # never stored: no score is shown, so none is held
+                continue
+            snap = (
+                db.query(ScoreSnapshot.date, ScoreSnapshot.algorithm_version)
+                .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
+                .order_by(ScoreSnapshot.date.desc())
+                .first()
+            )
+            row.score_held = hold_record(exc, today, snap.date if snap else None, snap.algorithm_version if snap else None)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Recording held scores failed (non-fatal)")
 
 
 def unread_sponsorship_condition(chamber: str) -> str:

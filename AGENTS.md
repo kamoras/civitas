@@ -1978,6 +1978,30 @@ set re-alerts and replaces it, and a run with no failures closes it
 (2026-10-09: one senator failed every night from v6.31 on, with only the
 run's failure count to show for it).
 
+The page says so too. `run_checks.record_member_holds` marks each failed
+member's row (`score_held`: the run that failed, the source it couldn't
+read when the exception names one, and the run and method version of the
+score kept, from the member's latest snapshot), and the profile, the
+leaderboard and compare show it beside the score ("Score from the
+2026-10-14 run (method v6.34): the 2026-10-16 run couldn't read FEC
+filings"); the next run that scores the member clears it. A held member
+keeps the *whole* scorecard of that run: the startup rescores
+(`constituent_rescore`, `les_rescore`) skip them, and give every member they
+do rescore a snapshot of the score it now shows, so every stored score can
+be cited to a run (2026-10-16: a rescore had moved a held senator's score
+to one no snapshot recorded).
+
+Each stored score keeps the arithmetic that produced it: both chamber runs
+store `explain_scores` over the same input as `calculate_scores` in
+`score_breakdown`, and the rescores replace the part they rewrite. The
+breakdown endpoints serve that (`basis: "scored"`), recompute on today's
+records beside it, and report a dimension that would now come out
+differently (`sinceScored`, with how many bills moved for Legislative
+Effectiveness) instead of showing components for a number that isn't on the
+page (2026-10-16: two senators' bills became law after the night's run, and
+the recomputed components gave 86 and 68 beside scores of 75 and 57).
+`app/score_keeping.py` holds both, outside `pipeline/`.
+
 The ANALYZE phase runs members one at a time: `precompute_senator_analysis()`
 (`cross_reference.py`) does the member's embedding work, then
 `analyze_senator_batch()` consumes it and scoring follows. There is no
@@ -2170,7 +2194,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this" | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx`; data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
+| Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx`; data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
 | Site navigation: sections, main menu, footer, section tabs, hub cards and the homepage index | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |

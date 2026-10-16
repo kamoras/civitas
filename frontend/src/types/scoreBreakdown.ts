@@ -12,6 +12,21 @@ export interface ScoreBreakdownComponent {
    *  weighed over its other components. */
   score?: number | null;
   detail: string;
+  /** "mean": takes part in the weighted mean; "points": adds
+   *  weight × (score − 50) points to it (`points`). */
+  combines?: "mean" | "points";
+  /** A "points" component: the points it adds (negative: takes away). */
+  points?: number;
+}
+
+/** Set when today's records would give the dimension a different score
+ *  than the stored one (records changed after the run). */
+export interface SinceScored {
+  score: number;
+  /** Legislative Effectiveness: bills that reached a new stage since. */
+  billsChanged: number | null;
+  /** When the run worked the stored score out (YYYY-MM-DDTHH:MMZ). */
+  scoredAt: string | null;
 }
 
 export interface ScoreBreakdownDimension {
@@ -27,6 +42,14 @@ export interface ScoreBreakdownDimension {
    *  Null when the facts can't support one; absent from a breakdown
    *  served before findings existed. */
   finding?: string | null;
+  /** The components combined, before rounding and the 0 to 100 clamp. */
+  sum?: number | null;
+  /** True when `sum` fell outside 0 to 100 and the score was held at the bound. */
+  clamped?: boolean;
+  /** "scored": the run's own components, kept with the score.
+   *  "recomputed": worked out now, for a score stored before they were kept. */
+  basis?: "scored" | "recomputed";
+  sinceScored?: SinceScored | null;
 }
 
 /** Senator/representative: fundingIndependence, constituentAlignment, fundingDiversity, legislativeEffectiveness. */

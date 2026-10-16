@@ -19,6 +19,7 @@ from app.models import (
 )
 from app.pipeline.analyze.score_calculator import NON_INDUSTRY_CODES, compute_overall_score
 from app.score_display import displayed_score, thin_dimensions
+from app.score_keeping import held, stored_breakdown
 from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.pipeline.analyze.sponsorship_analysis import (
     describe_senator_position,
@@ -140,6 +141,8 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
             "legislativeEffectiveness": rep.score_legislative_effectiveness,
             "overall": compute_overall_score(rep),
             "confidence": json.loads(rep.score_confidence or "{}") or None,
+            "held": held(rep),
+            "thinData": thin_dimensions(json.loads(rep.score_confidence or "{}")),
         },
         funding={
             "totalRaised": rep.total_raised,
@@ -449,6 +452,7 @@ def get_rep_leaderboard(
                 "legislativeEffectiveness": r.score_legislative_effectiveness,
                 "overall": compute_overall_score(r),
                 "confidence": json.loads(r.score_confidence or "{}") or None,
+                "held": held(r),
             },
             "totalRaised": r.total_raised,
             "totalContributions": r.total_contributions,
@@ -525,6 +529,9 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
     existing.score_funding_diversity = cs.get("fundingDiversity", 50)
     existing.score_legislative_effectiveness = cs.get("legislativeEffectiveness", 50)
     existing.score_confidence = json.dumps(cs.get("confidence") or {})
+    existing.score_breakdown = stored_breakdown(cs.get("breakdown"))
+    # Scored by this run, so no longer held from an earlier one.
+    existing.score_held = None
 
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_contributions = funding.get("totalContributions")

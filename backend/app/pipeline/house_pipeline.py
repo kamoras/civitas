@@ -30,6 +30,7 @@ from app.pipeline.analyze.score_calculator import (
     ALGORITHM_VERSION,
     calculate_confidence,
     calculate_scores,
+    explain_scores,
     compute_overall_score,
 )
 from app.member_ids import assign_member_ids
@@ -80,6 +81,7 @@ from app.pipeline.run_checks import (
     alert_member_failures,
     alert_unread_sponsorship,
     persist_ground_truth_failures,
+    record_member_holds,
     run_calibration_check,
 )
 from app.pipeline.transform.normalize_finance import normalize_finance
@@ -1075,10 +1077,14 @@ async def run_house_pipeline() -> dict:
                         )
 
                     # Calculate scores
-                    scores = calculate_scores({
+                    scored = {
                         **rep, "lesReference": les_reference, "fundingReference": funding_reference,
                         "constituentReference": constituent_reference,
-                    })
+                    }
+                    scores = calculate_scores(scored)
+                    # The same scores' arithmetic, kept with them: what the
+                    # breakdown serves (services/_scorecard_common).
+                    scores["breakdown"] = explain_scores(scored)
                     scores["confidence"] = calculate_confidence(
                         {**rep, "constituentReference": constituent_reference},
                     )
@@ -1117,6 +1123,7 @@ async def run_house_pipeline() -> dict:
 
             progress.complete("fec_scoring", detail=f"{success_count} OK, {fail_count} failed")
             alert_member_failures("house", member_failures)
+            record_member_holds(db, Representative, "representative", member_failures)
             alert_unread_sponsorship(
                 "house", unread_bills, carried_members,
                 [r.get("bioguideId") or r.get("name", "?") for r in reps if r.get("sponsoredBillsUnavailable")],

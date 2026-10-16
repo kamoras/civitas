@@ -30,6 +30,7 @@ from app.services.bill_record import roll_call_summaries
 from app.services.pagination import paginate_bounds
 from app.services.score_trends import compute_score_trend_map
 from app.score_display import thin_dimensions
+from app.score_keeping import held
 from app.schemas import (
     CampaignPromiseSchema,
     PaginatedVotesSchema,
@@ -256,6 +257,8 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
             legislative_effectiveness=senator.score_legislative_effectiveness,
             overall=compute_overall_score(senator),
             confidence=json.loads(senator.score_confidence or "{}") or None,
+            held=held(senator),
+            thin_data=thin_dimensions(json.loads(senator.score_confidence or "{}")),
         ),
         funding=FundingSchema(
             total_raised=senator.total_raised,
@@ -478,6 +481,7 @@ def get_leaderboard(db: Session) -> list[LeaderboardEntrySchema]:
                 legislative_effectiveness=s.score_legislative_effectiveness,
                 overall=compute_overall_score(s),
                 confidence=json.loads(s.score_confidence or "{}") or None,
+                held=held(s),
             ),
             total_raised=s.total_raised,
             total_contributions=s.total_contributions,

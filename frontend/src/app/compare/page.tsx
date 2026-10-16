@@ -22,6 +22,7 @@ import { displayScore, formatCurrency } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import VotingAgreement from "@/components/compare/VotingAgreement";
+import { HeldScoreTag, heldScoreText } from "@/components/scorecard/HeldScore";
 import { useYourState } from "@/hooks/useYourState";
 
 type Chamber = "senate" | "house";
@@ -377,6 +378,7 @@ function ComparisonTable({
             [{left.party}] {left.state}
           </div>
           <div className="text-ink text-xs font-mono leading-snug mt-1">{left.name}</div>
+          <HeldScoreTag held={left.representationScore.held} />
           <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
             {leftChamber === "house" ? "House" : "Senate"}
           </div>
@@ -392,6 +394,7 @@ function ComparisonTable({
             [{right.party}] {right.state}
           </div>
           <div className="text-ink text-xs font-mono leading-snug mt-1">{right.name}</div>
+          <HeldScoreTag held={right.representationScore.held} />
           <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
             {rightChamber === "house" ? "House" : "Senate"}
           </div>
@@ -413,6 +416,20 @@ function ComparisonTable({
           </span>
         </div>
       )}
+
+      {/* A score held from an earlier run sits beside the other's newer
+          one: say so in words, not only in the tag. */}
+      {[left, right].map((m) => {
+        const held = m.representationScore.held;
+        return held ? (
+          <p
+            key={m.id}
+            className="px-3 py-2 border-b border-signal-amber/40 bg-signal-amber/10 text-center font-sans text-xs text-ink-lo"
+          >
+            {m.name}: {heldScoreText(held)}
+          </p>
+        ) : null;
+      })}
 
       {/* Score metrics */}
       <div className="divide-y divide-white/[0.07]">
