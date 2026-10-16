@@ -1146,6 +1146,10 @@ RESET_KEEPS = frozenset({
     "pipeline_runs", "supplementary_pipeline_runs", "house_pipeline_runs",
     "stock_trades_pipeline_runs", "election_pipeline_runs",
     "pipeline_phase_timings", "pipeline_rate_limit_stats",
+    # Each held election's frozen record (app/election_archive.py): its
+    # pre-election map, ballot and count. Nothing re-reads a past cycle's
+    # sources, so wiped, that election's archive would be gone for good.
+    "election_archives",
 })
 
 

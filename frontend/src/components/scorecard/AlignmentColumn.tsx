@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchRepVotes, fetchSenatorVotes } from "@/lib/api";
-import { billPageHref, rollCallHref } from "@/lib/congress";
+import { rollCallHref } from "@/lib/congress";
+import { voteNominationLine, voteSubjectHref } from "@/lib/nominations";
 import type { AlignmentFacts, BreakVote, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
 import type { ConstituentApproval as Approval } from "@/types/senator";
 import ComponentBars from "./ComponentBars";
@@ -104,7 +105,8 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
   // The bill's short title from Congress.gov when the chamber titled the vote
   // by its official one (the chamber's stays on hover and the roll call page).
   const title = rc?.billShortTitle || voteTitle(rc?.title, rc?.billLabel, fallback);
-  const href = rc ? billPageHref(rc.billId, rc.congress) : billPageHref(vote.billId);
+  const href = voteSubjectHref(rc, vote.billId);
+  const nominationLine = voteNominationLine(rc);
   const parties = rc?.parties.filter((p) => PARTY_SHORT[p.party] && p.yea + p.nay > 0) ?? [];
   return (
     <li className="flex flex-col gap-1 border-b border-white/[0.06] pb-2.5">
@@ -124,6 +126,9 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
             // not clamped (a title attribute can't be read on a touch
             // screen, and two lines cut a nomination's office off).
             <span className="break-words">{title}</span>
+          )}
+          {nominationLine && (
+            <span className="block text-[13px] text-ink-lo">{nominationLine}</span>
           )}
           {rc?.question && (
             <Link

@@ -119,7 +119,7 @@ class TestElectionPipelineLock:
         assert cleared.status == PipelineStatus.STALE
         assert db_session.query(ElectionPipelineRun).count() == 2  # stale row + fresh one
 
-    def test_a_failure_in_one_downstream_phase_does_not_abort_the_rest(self, db_session):
+    def test_a_failure_in_one_downstream_phase_does_not_abort_the_rest(self, db_session, freeze_utcnow):
         """run_election_pipeline wraps each phase in its own try/except-
         continue (see the module's own comments) specifically so one
         phase's failure doesn't take down the phases after it. Every
@@ -129,6 +129,9 @@ class TestElectionPipelineLock:
         confirmed-candidates raise and confirming coverage ingestion
         (two phases later) still runs and the run still reaches
         COMPLETED, not stuck mid-run or marked failed."""
+        # Inside a campaign: from election day the ballot phases stand down
+        # (election_is_held), and the phase mocked to fail never runs.
+        freeze_utcnow(datetime(2026, 9, 30, 12, 0))
         db_session.commit()
 
         with (

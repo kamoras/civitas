@@ -81,7 +81,7 @@ from app.pipeline.analyze.grounding import (
 from app.pipeline.analyze import claims as claim_layer
 from app import policy_relevance
 from app.pipeline.analyze import story_actor
-from app.pipeline.analyze.post_composer import compose
+from app.pipeline.analyze.post_composer import CLAIM_TASK, compose, refit_actor_threshold
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline import lease
@@ -1238,7 +1238,7 @@ def locate_claim(
         str(located.get("actor") or ""), str(located.get("predicate") or ""), source_material,
     ))
     _record_generation_sample(
-        db, "action_center_claim", rank, 1, user_prompt, located or {},
+        db, CLAIM_TASK, rank, 1, user_prompt, located or {},
         passed=verified,
         violations=None if verified else ["spans not found verbatim and together in the source"],
         once_per_day=True,
@@ -5217,6 +5217,13 @@ def _run_refresh(db: Session) -> int:
     # that can be compared against yesterday's, not an inference drawn
     # from the absence of posts.
     action_metrics.increment("articles_fetched", len(articles))
+
+    # The actor tier's threshold, refit once a day from the recorded claim
+    # calls before any claim is composed (post_composer.refit_actor_threshold).
+    try:
+        refit_actor_threshold(db)
+    except Exception:
+        logger.warning("Actor threshold refit failed; the stored one stands", exc_info=True)
 
     # The clustering and restatement cuts, refit once a day from the stored
     # articles and issues before either is used (refit_cuts).

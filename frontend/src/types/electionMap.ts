@@ -207,6 +207,9 @@ export interface ElectionMapResponse {
   horizon: number;
   /** True when the map is older than the backend's stale threshold. */
   stale?: boolean;
+  /** True on an archived election's map: its last campaign build, kept
+   * as it stood (GET /api/elections/archive/{cycle}/map). */
+  frozen?: boolean;
   pollWindowDays: number;
   /** False further out than pollWindowDays: every range is fundamentals only. */
   pollsInRange?: boolean;
@@ -256,4 +259,29 @@ export interface ElectionMapData {
     polls: PollLicence;
   };
   seats: MapSeat[];
+}
+
+/** GET /api/elections/map/seats: one seat of the map in a line, for the
+ * pages that link to it (a state's ballot, a member's profile). Every
+ * label is the map build's own. */
+export interface MapSeatLine {
+  id: string;
+  chamber: MapChamberKey;
+  state: string;
+  district: number | null;
+  special: boolean;
+  leanLabel: string | null;
+  status: MapSeat["status"];
+  /** "D+8 to R+2" for a seat with a range; null otherwise. */
+  range80Label: string | null;
+  close: boolean | null;
+  reason: string | null;
+}
+
+export interface MapSeatLines {
+  cycle: number;
+  asOf: string;
+  stale: boolean;
+  seats: MapSeatLine[];
+  pollSource: { attribution: string; license: string; url: string };
 }

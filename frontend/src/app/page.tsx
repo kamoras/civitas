@@ -9,6 +9,7 @@ import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import JsonLd from "@/components/seo/JsonLd";
 import { HOME_DESCRIPTION, HOME_TITLE, pageMetadata } from "@/lib/site";
 import { siteJsonLd } from "@/lib/seo";
+import { fetchResultsSummary } from "@/lib/resultsSummaryServer";
 
 export const metadata = pageMetadata({
   title: HOME_TITLE,
@@ -28,7 +29,10 @@ const SITE_JSON_LD = siteJsonLd();
   filings. The terminal identity is carried now by the phosphor palette, the
   mono data face and the records band.
 */
-export default function Home() {
+export default async function Home() {
+  // The election's phase, for the masthead's voter links: the same request
+  // ElectionNight makes (memoized within the render).
+  const summary = await fetchResultsSummary();
   return (
     <>
       <JsonLd data={SITE_JSON_LD} />
@@ -37,7 +41,7 @@ export default function Home() {
         {/* Renders only while election results are up (from election night
             until the count settles): the count is the news then. */}
         <ElectionNight />
-        <Masthead />
+        <Masthead electionPhase={summary?.phase.phase ?? null} />
         <OnTheRecord />
         <ThisWeekStrip variant="full" />
         <div className="mx-auto mt-8 grid max-w-7xl grid-cols-1 gap-8 px-4 sm:px-6 md:mt-10 md:grid-cols-12 md:gap-9">

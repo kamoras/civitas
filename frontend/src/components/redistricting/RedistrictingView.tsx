@@ -21,6 +21,7 @@ import {
   stateBallotHref,
 } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
+import { mapHref } from "@/lib/electionMap";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
@@ -674,6 +675,14 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
             className="inline-flex min-h-6 items-center text-ink-lo hover:text-ink-hi"
           >
             [ EVERY REDRAWN STATE ]
+          </Link>
+        </p>
+        <p className="mt-2 font-mono text-xs tracking-[0.1em]">
+          <Link
+            href={mapHref("usual", "house")}
+            className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
+          >
+            [ EVERY HOUSE SEAT ON THE SEAT MAP → ]
           </Link>
         </p>
       </section>

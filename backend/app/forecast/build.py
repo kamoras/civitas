@@ -15,7 +15,10 @@ method never saw. Chances are not part of the output.
 
 Hidden from election day on: the build stops once active_election()
 leaves the campaign phase, and the API refuses the file from then on,
-so this map yields to the results map.
+so this map yields to the results map. The file left on disk then is the
+campaign's last build: the live-results sync copies it into the
+election's archive (app/election_archive.py) before the next cycle's
+first build overwrites it.
 """
 
 from __future__ import annotations
