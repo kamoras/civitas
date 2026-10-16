@@ -10,6 +10,7 @@ import {
   aboutPageJsonLd,
   personJsonLd,
   siteJsonLd,
+  describeRedistrictingIndex,
 } from "./seo";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { BillDetail } from "@/types/bill";
@@ -187,6 +188,13 @@ describe("elections metadata", () => {
       expect(d.description.length).toBeLessThanOrEqual(160);
       expect(d.description).not.toMatch(/\bwins?\b|\bwon\b|until official/);
     }
+  });
+});
+
+describe("describeRedistrictingIndex", () => {
+  it("speaks of a redraw as coming until its election, and as past after", () => {
+    expect(describeRedistrictingIndex("2026", 9).description).toMatch(/^9 states vote on/);
+    expect(describeRedistrictingIndex("2026", 9, false).description).toMatch(/^9 states voted on/);
   });
 });
 

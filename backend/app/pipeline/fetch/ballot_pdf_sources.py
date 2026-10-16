@@ -42,6 +42,11 @@ def source_for_town(town: str) -> dict[str, str] | None:
     return None
 
 
+def all_towns() -> dict[str, dict]:
+    """Every town entry on file, by name."""
+    return dict(_load().get("towns") or {})
+
+
 def town_names_for_state(state: str) -> list[str]:
     """Every curated town name in this directory for `state` — used to
     fold PDF-sourced towns into the same selector as Google-Civic-sourced

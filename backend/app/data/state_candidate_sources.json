@@ -23,7 +23,7 @@
       "runoff_threshold_pct": null,
       "description": "Official statewide results feed, verified live 2026-08-12 against the real 2026 primary (EID 126592): elections.json -> current_ver.txt -> json/sum.json, no API key or auth. All 18 federal contests (8 districts x 2 parties, plus both Senate primaries) parse cleanly. Ground-truthed against the CO-01 Democratic primary, where the feed shows Melat Kiros 83,855 (53.2%) defeating 15-term incumbent Diana DeGette 62,715 with Wanda James third \u2014 matching what actually happened on 2026-06-30. runoff_threshold_pct is null because Colorado awards its primary to the plurality leader outright, so the top vote-getter IS the nominee; a runoff state must set this or its runoff-bound leader would be mislabeled.",
       "general_list": {
-        "source_name": "Colorado Secretary of State (2026 General Election Official Candidate List)",
+        "source_name": "Colorado Secretary of State (General Election Official Candidate List)",
         "strategy": "certified_table",
         "statewide_offices": true,
         "runoff_threshold_pct": null,
@@ -281,7 +281,7 @@
     "MS": {
       "source_name": "Mississippi Secretary of State (Official Recapitulation PDF)",
       "statewide_offices": true,
-      "statewide_offices_basis": "Mississippi elects its Governor and every other statewide executive officer in odd-numbered years (next in 2027), so none is on a 2026 ballot.",
+      "statewide_offices_basis": "Mississippi elects its Governor and every other statewide executive officer in odd-numbered years, so none is on this ballot.",
       "strategy": "ms_recap",
       "runoff_threshold_pct": 50.0,
       "description": "The SOS's own per-party 'Official Recapitulation' PDF, discovered fresh every run through 3 real hops (the stable election-results index page -> that cycle's own results page, matched by its constant '-{party}-primary-results' suffix, never a templated slug -> the iframe it embeds -> the statewide PDF link on that iframe page), all plain server-rendered HTML, no JS needed. Reached with BROWSER_HEADERS with no bot-detection friction (a bare header set gets an Akamai 'Access Denied', same shape as OH/MO/TN/NY/GA/MN). The PDF itself (ActiveReports-generated, real embedded text, not scanned) prints one row per candidate and one column per county, sliding across as many pages as it takes to cover all 82 -- a candidate's real total is only complete on the LAST page their row appears on, which state_candidates_ms.py resolves with a running {name: total} map overwritten on every occurrence, needing no per-page 'is this the final one' detection. Mississippi nominates on a MAJORITY (Miss. Const. of 1890's primary-runoff requirement) -- runoff_threshold_pct is 50, though every real 2026 federal contest in both parties cleared it on the first round (closest: Republican CD2 at 51.1%), so the 2026-04-07 runoff decided no federal race and this entry reads only the primary PDFs. Verified live 2026-09-04 against the real, certified 2026-03-10 primary: Cindy Hyde-Smith (Senate R, incumbent), Scott Colom (Senate D), Trent Kelly (CD1 R, incumbent), Cliff Johnson (CD1 D), Ron Eller (CD2 R), Bennie Thompson (CD2 D, incumbent), Michael Guest (CD3 R, incumbent), Michael Chiaradio (CD3 D), Mike Ezell (CD4 R, incumbent), Jeffrey Hulum III (CD4 D) -- the last a real late-qualified candidate the Democratic PDF appends in his own trailing block with no repeated contest header, correctly inheriting CD4 from the last header seen before his block starts."
@@ -452,7 +452,7 @@
       "locality_label": "counties and cities",
       "source_name": "Virginia Department of Elections (official results portal)",
       "statewide_offices": true,
-      "statewide_offices_basis": "Virginia elects its Governor, Lieutenant Governor and Attorney General in odd-numbered years (next in 2029), so none is on a 2026 ballot.",
+      "statewide_offices_basis": "Virginia elects its Governor, Lieutenant Governor and Attorney General in odd-numbered years, so none is on this ballot.",
       "strategy": "tabular",
       "runoff_threshold_pct": null,
       "discovery": {
@@ -867,7 +867,7 @@
     "NJ": {
       "source_name": "New Jersey Division of Elections (Certification of General Election Nominees)",
       "statewide_offices": true,
-      "statewide_offices_basis": "New Jersey elects its Governor and Lieutenant Governor in odd-numbered years (next in 2029), so neither is on a 2026 ballot.",
+      "statewide_offices_basis": "New Jersey elects its Governor and Lieutenant Governor in odd-numbered years, so neither is on this ballot.",
       "strategy": "nj_certification",
       "runoff_threshold_pct": null,
       "description": "A different shape entirely from every other state on file: New Jersey has no primary-runner-up problem to solve, because it never nominates through a scraped results feed at all \u2014 the Division of Elections itself publishes the state's own POST-primary confirmed slate as a single PDF, one evergreen URL pattern per year (nj.gov/state/elections/assets/pdf/election-results/{year}/{year}-certification-of-general-election-nominees_us-senate_us-house.pdf), verified live 2026-09-03 against the real document (dated 07/27/2026, 'For GENERAL ELECTION 11/03/2026') and confirmed as the same pattern that resolved for the real 2024 cycle too. general_ballot_complete is deliberately NOT set: although this certification lists the state's real minor-party nominees (District 3's Green candidate Welzer IS captured), the parser only recognizes party text that normalize_party already knows (Democratic/Republican/Libertarian/Green) and correctly refuses to guess at anything else \u2014 a real independent or minor-slogan candidate (verified live in District 8: 'INDEPENDENT', 'SOCIALIST WORKERS PARTY', 'WE THE PEOPLE') is silently absent from the parsed list even though they ARE on the real November ballot, so this source is real but incomplete in the same way a primary-results state is, and candidateSource must say 'nominees', not 'confirmed'. No discovery block is needed: unlike a results vendor, this PDF is filed at a fixed, predictable URL the moment the state certifies, so there is no election id or blob GUID to resolve first. It is a genuinely column-based tabular report rather than narrative text, parsed by each row's word x0 position (Name x0<130, Party 260<=x0<320) rather than by regex over flowing text, because an independent candidate's own free-text slogan repeats in ALL CAPS on county-repeat rows in a way that defeats a casing-based heuristic. runoff_threshold_pct is null because this document lists confirmed NOMINEES directly; there is no primary-vote-share threshold for this strategy to apply.",
@@ -888,7 +888,7 @@
     "KY": {
       "source_name": "Kentucky State Board of Elections (Primary Certification of Vote Totals)",
       "statewide_offices": true,
-      "statewide_offices_basis": "Kentucky elects its Governor and every other statewide executive officer in odd-numbered years (next in 2027), so none is on a 2026 ballot.",
+      "statewide_offices_basis": "Kentucky elects its Governor and every other statewide executive officer in odd-numbered years, so none is on this ballot.",
       "strategy": "ky_certification",
       "runoff_threshold_pct": null,
       "description": "The State Board of Elections' own certified, county-by-county vote-total PDF for the primary \u2014 genuinely different in shape from every other state on file: a candidate is a COLUMN and a county is a ROW, sometimes printed with the candidate's name rotated 90 degrees to fit a crowded field into narrow columns (the real 2026 US Senate Republican primary had 11 candidates). Verified live 2026-09-03 against the real 2026 document (44 pages, certified 2026-06-01): all 11 of the cycle's federal contests resolved cleanly (Senate + 6 House districts across both parties where contested), each cross-checked against the document's own printed county-level tallies. Neither the results FILE's directory nor its filename is stable across cycles \u2014 2024's file lived at /results/2020-2029/Documents/2024 Primary Results.pdf, 2026's at /Documents/2026 Primary Certification of Vote Totals Final.pdf, a different name AND a different directory \u2014 so both are read off each year's own results page (the module's own DISCOVERY constant captures whatever directory segment precedes the filename, rather than assuming one). Every candidate column's surname is read by clustering that page's words to the NEAREST vote-total column by word CENTER (not left edge \u2014 a long name like the real hyphenated surname PERRY-ADELMANN starts far enough left of a narrow column that left-edge matching pulled it into the wrong candidate's cluster) and then trusting only the cluster's single ALL-CAPS word (Mc/Mac surnames like the real McGRATH keep their natural lowercase second letter even in this all-caps header style, and are matched as such), which held constant across every real case examined regardless of given-name word count or rotation. Never guessed: any column whose cluster doesn't resolve to exactly one such surname skips the whole contest rather than risk attributing real votes to the wrong name \u2014 not yet exercised by the real document itself, only by a constructed test case, since every real 2026 contest resolved unambiguously. Kentucky nominates on a plain plurality with no runoff or convention threshold, so runoff_threshold_pct is null.",
@@ -1059,7 +1059,7 @@
       "source_name": "Montana Secretary of State (Election Night Reporting)",
       "statewide_offices": true,
       "statewide_omits": ["Public Service Commission districts"],
-      "statewide_offices_basis": "Montana elects its Governor and every other statewide executive officer in presidential-election years (next in 2028), so none is on a 2026 ballot. Its Public Service Commission is elected by district, not statewide.",
+      "statewide_offices_basis": "Montana elects its Governor and every other statewide executive officer in presidential-election years, so none is on this ballot. Its Public Service Commission is elected by district, not statewide.",
       "strategy": "totalvote_enr",
       "base_url": "https://electionresults.mt.gov",
       "queries": [
@@ -1225,7 +1225,7 @@
       "statewide_offices": true,
       "description": "Statewide offices (verified 2026-09-28): Maine elects one executive officer by popular vote: the Governor (Me. Const. art. V pt. 1 sec. 3; the Attorney General, Secretary of State and Treasurer are chosen by the Legislature, art. IX sec. 11 and art. V pts. 2-3). Both 2026 governor primaries went to ranked-choice tabulation, and the winner is read from the official RCV Summary Report, cross-checked against its final round: Hannah M. Pingree (D; trailed Nirav D. Shah 50,552 to 58,606 in first choices, won round 4 111,750 to 86,950) and Robert B. Charles (R; 59,873 in round 7). Both match the certified 2026 General Candidate List (GOV rows). Statewide nominees come from this primary-results source only, so the certified list's independent (Rick Bennett) is not shown. Legislative contests are not read: each party's State Senate / Representative file stacks every district in one sheet, and a few districts went to RCV separately.",
       "general_list": {
-        "source_name": "Maine Secretary of State (2026 General Candidate List, certified)",
+        "source_name": "Maine Secretary of State (General Candidate List, certified)",
         "strategy": "certified_table",
         "statewide_offices": true,
         "runoff_threshold_pct": null,
@@ -1312,7 +1312,7 @@
       "source_name": "Louisiana Secretary of State (voter portal: the staged November ballot)",
       "statewide_offices": true,
       "statewide_omits": ["Public Service Commission districts"],
-      "statewide_offices_basis": "Louisiana elects its Governor and every other statewide executive officer in odd-numbered years (next in 2027), so none is on a 2026 ballot. Its Public Service Commission and Board of Elementary and Secondary Education are elected by district, not statewide.",
+      "statewide_offices_basis": "Louisiana elects its Governor and every other statewide executive officer in odd-numbered years, so none is on this ballot. Its Public Service Commission and Board of Elementary and Secondary Education are elected by district, not statewide.",
       "strategy": "voterportal",
       "runoff_threshold_pct": null,
       "general_ballot_complete": true,

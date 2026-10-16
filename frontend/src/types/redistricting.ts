@@ -126,6 +126,8 @@ export interface StateRedistricting {
 
 export interface RedistrictingIndex {
   cycle: string | null;
+  /** Whether the cycle's election is still ahead (false once it is held). */
+  upcoming?: boolean;
   fromCongress: number | null;
   toCongress: number | null;
   states: {
