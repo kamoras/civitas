@@ -202,10 +202,13 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
 export default function DayReportView({
   report,
   strip,
+  hub,
 }: {
   report: DayReport;
   /** The "this week" strip, rendered by the server page. */
   strip?: ReactNode;
+  /** The section hub's cards (/congress only), rendered by the server page. */
+  hub?: ReactNode;
 }) {
   const { senate, house } = report.chambers;
   const sources = (["senate", "house"] as const)
@@ -226,6 +229,7 @@ export default function DayReportView({
             <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
           {strip}
+          {hub}
           <PeriodNav
             active="day"
             hrefs={{

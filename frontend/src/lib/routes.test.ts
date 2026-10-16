@@ -1,5 +1,7 @@
+import { readdirSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
-import { issuesUrl, monitorHref, SECTIONS } from "./routes";
+import { inSection, issuesUrl, monitorHref, SECTIONS, sectionSubpages } from "./routes";
 import { ELECTION_MAP_HREF } from "./electionMap";
 import { REDISTRICTING_HREF } from "./redistricting";
 import { presidentSupportHref } from "./presidentialSupport";
@@ -38,5 +40,76 @@ describe("SECTIONS", () => {
     expect(href("elections", "redistricting")).toBe(REDISTRICTING_HREF);
     expect(href("congress", "president")).toBe(presidentSupportHref("house"));
     expect(href("congress", "nominations")).toBe(NOMINATIONS_HREF);
+  });
+});
+
+// Pages that are no section's: the footer's own pages, the admin, and
+// /congress/president (which sends to the House's page, a tab).
+const NOT_IN_A_SECTION = new Set([
+  "/",
+  "/accessibility",
+  "/admin",
+  "/changelog",
+  "/congress/president",
+  "/developers",
+  "/environmental",
+  "/feedback",
+  "/feeds",
+]);
+
+/** Every page route under app/: route groups dropped. */
+function pageRoutes(dir: string, root: string): string[] {
+  return readdirSync(dir).flatMap((entry) => {
+    const path = join(dir, entry);
+    if (statSync(path).isDirectory()) return pageRoutes(path, root);
+    if (entry !== "page.tsx") return [];
+    const segments = relative(root, dir)
+      .split(sep)
+      .filter((s) => s && !/^\(.*\)$/.test(s));
+    return [`/${segments.join("/")}`];
+  });
+}
+
+describe("SECTIONS covers the site", () => {
+  const sectionPaths = new Set(
+    Object.values(SECTIONS).flatMap((s) =>
+      [s.href, ...s.tabs.map((t) => t.href)].map((h) => h.split(/[?#]/)[0])
+    )
+  );
+
+  it("lists every page that isn't a record, so no page is reachable only by an inline link", () => {
+    const app = join(import.meta.dirname, "..", "app");
+    // A route with a [segment] is a record (a member, a bill, a day), found
+    // from its section's pages.
+    const missing = pageRoutes(app, app).filter(
+      (r) => !r.includes("[") && !sectionPaths.has(r) && !NOT_IN_A_SECTION.has(r)
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it("puts every record route inside a section", () => {
+    const app = join(import.meta.dirname, "..", "app");
+    const orphans = pageRoutes(app, app)
+      .filter((r) => r.includes("["))
+      .filter(
+        (r) => !(Object.keys(SECTIONS) as (keyof typeof SECTIONS)[]).some((k) => inSection(k, r))
+      );
+    expect(orphans).toEqual([]);
+  });
+
+  it("menus leave out the hub, which their section's own link already is", () => {
+    expect(sectionSubpages("elections").map((t) => t.key)).toEqual([
+      "map",
+      "redistricting",
+      "archive",
+    ]);
+    expect(sectionSubpages("explore")).toEqual([]);
+  });
+
+  it("counts a page as in its section by path, not by prefix text", () => {
+    expect(inSection("politicians", "/compare/presidents")).toBe(true);
+    expect(inSection("politicians", "/leaderboard")).toBe(true);
+    expect(inSection("congress", "/congressional")).toBe(false);
+    expect(inSection("agencies", "/explore")).toBe(false);
   });
 });
