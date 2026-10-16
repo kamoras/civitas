@@ -878,24 +878,44 @@ class PublicRollCallSchema(_PublicModel):
 
 
 class PublicMemberVoteSchema(_PublicModel):
-    bill_id: str = Field(description="The measure voted on (e.g. HR.1234, PN.12), as Civitas names it")
-    bill_name: str
+    bill_id: str | None = Field(description="The measure voted on (e.g. HR.1234), as Civitas names it; null for a "
+                                            "roll call on no bill (a nomination, a quorum call, the election of "
+                                            "the Speaker, most procedural motions)")
+    bill_name: str = Field(description="The measure's short title where Congress.gov names one, else the "
+                                       "chamber's title of the vote, else its question")
     date: str = Field(description="YYYY-MM-DD")
-    vote: Literal["Yea", "Nay", "Present", "Not Voting"]
+    vote: str = Field(description="Yea, Nay, Present or Not Voting (the House's Aye and No read as Yea and Nay); "
+                                  "any other word as the chamber recorded it: Guilty or Not Guilty on an article "
+                                  "of impeachment, the candidate's name in an election of the Speaker")
     voted_with_party: bool | None = Field(description="Whether the vote sided with the member's party's majority "
-                                                      "on a party-split roll call; null when the vote carries no "
-                                                      "party signal")
+                                                      "on a roll call the parties split on (partyLeaning R or D), "
+                                                      "read as the scoring run reads it: the member's caucus party, "
+                                                      "and the majority leader's vote to be able to move to "
+                                                      "reconsider is no signal. Null when the vote carries no "
+                                                      "party signal (a bipartisan or housekeeping roll call, or a "
+                                                      "vote that isn't Yea or Nay)")
     party_leaning: Literal["R", "D", "bipartisan"] | None = Field(
-        description="How the parties split on it: R or D when one party's majority was for it and the other's "
-                    "against, bipartisan otherwise; null when not measured")
-    policy_area: str = Field(description="One of the index's policy areas (Civitas's classification)")
-    roll_call: PublicRollCallSchema | None = Field(description="The roll call this vote was cast in; null for "
-                                                               "votes stored before roll calls were recorded")
+        description="How the parties split on it, from the roll call's own positions: R or D when 65% or more of "
+                    "one party's Yea/Nay votes were Yea and 35% or fewer of the other's, bipartisan otherwise; "
+                    "null for a housekeeping question (a quorum call, a motion to table or adjourn) or when either "
+                    "party cast fewer than three Yea/Nay votes")
+    counted_as_break: bool | None = Field(
+        description="Whether Constituent Alignment counted this vote as a break with the party: a break toward the "
+                    "other party, each measure once at its latest roll call (breaks from the party's flank and "
+                    "repeat votes on one measure are not counted). The trues on every page are the score's whole "
+                    "list. Null when the member has no party-line record")
+    policy_area: str | None = Field(description="One of the index's policy areas (Civitas's classification), for the "
+                                                "votes the scoring run stored with one; null for the rest")
+    roll_call: PublicRollCallSchema = Field(description="The roll call this vote was cast in")
 
 
 class PublicMemberVotesSchema(_PublicModel):
     id: str = Field(description="The member's id")
-    total: int = Field(description="Votes on record across every page")
+    congress: int = Field(description="The Congress the votes are from: the sitting one")
+    chamber_roll_calls: int = Field(description="Roll calls Civitas holds for the member's chamber this Congress. "
+                                                "total is lower by the votes taken before the member took office "
+                                                "(or after they left)")
+    total: int = Field(description="The member's positions on those roll calls, across every page")
     page: int = Field(description="This page; a page past the last is answered as the last")
     per_page: int
     total_pages: int = Field(description="At least 1, even when there are none")

@@ -84,10 +84,10 @@ from app.state_names import STATE_NAMES
 from app.time_utils import comment_period_today
 from app.services.pagination import paginate_bounds
 from app.services.bill_record import bill_votes, canonical_bill_id
+from app.services.member_positions import member_positions
 from app.services.representative_service import (
     get_rep_leaderboard,
     get_rep_states_with_counts,
-    get_rep_votes as rep_votes,
     get_representative_by_id,
     get_representative_score_breakdown,
 )
@@ -95,7 +95,6 @@ from app.services.senator_service import (
     get_leaderboard,
     get_senator_by_id,
     get_senator_score_breakdown,
-    get_senator_votes as senator_votes,
     get_states_with_counts,
 )
 
@@ -739,22 +738,17 @@ def _roll_call(rc: dict | None, chamber: str | None = None, congress: int | None
     }
 
 
-def _member_votes(found: dict | None, member_id: str, request: Request) -> JSONResponse:
+def _member_votes(db: Session, chamber: str, member_id: str, page: int, per_page: int,
+                  request: Request) -> JSONResponse:
+    found = member_positions(db, chamber, member_id, page, per_page)
     if found is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
     return _pub_json({
-        "id": member_id, "total": found["total"], "page": found["page"], "perPage": found["perPage"],
-        "totalPages": max(1, found["totalPages"]),
-        "entries": [{
-            "billId": v["billId"], "billName": v["billName"], "date": v["date"], "vote": v["vote"],
-            "votedWithParty": v.get("votedWithParty"), "partyLeaning": v.get("partyLeaning"),
-            "policyArea": v.get("policyArea") or "PROCEDURAL", "rollCall": _roll_call(v.get("rollCall")),
-        } for v in found["votes"]],
+        "id": member_id, "congress": found["congress"], "chamberRollCalls": found["chamberRollCalls"],
+        "total": found["total"], "page": found["page"], "perPage": found["perPage"],
+        "totalPages": found["totalPages"],
+        "entries": [{**v, "rollCall": _roll_call(v["rollCall"])} for v in found["votes"]],
     }, request, max_age=CACHE_TTL_DETAIL_S)
-
-
-def _as_dict(found) -> dict | None:
-    return found.model_dump(by_alias=True) if hasattr(found, "model_dump") else found
 
 
 
@@ -768,12 +762,13 @@ def get_senator_votes(
     per_page: int = _PER_PAGE,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Every vote on record for the member this Congress, newest first:
-    the measure, the vote, whether it sided with the party, and the roll
-    call it was cast in with each party's split. The votes a profile's
-    Constituent Alignment reads, as stored by the last scoring run."""
-    member_id = resolve_member_id(db, senator_id)
-    return _member_votes(_as_dict(senator_votes(db, member_id, "all", page, per_page)), member_id, request)
+    """Every position the senator recorded on the Senate's roll calls this
+    Congress, newest first: the measure, the vote, whether it sided with
+    the party and whether Constituent Alignment counted it as a break, and
+    the roll call with each party's split. The record the score's party-line
+    figures are measured on: the countedAsBreak trues are its breaks, and
+    chamberRollCalls says how many roll calls the chamber held."""
+    return _member_votes(db, "senate", resolve_member_id(db, senator_id), page, per_page, request)
 
 
 
@@ -859,12 +854,13 @@ def get_representative_votes(
     per_page: int = _PER_PAGE,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Every vote on record for the member this Congress, newest first:
-    the measure, the vote, whether it sided with the party, and the roll
-    call it was cast in with each party's split. The votes a profile's
-    Constituent Alignment reads, as stored by the last scoring run."""
-    member_id = resolve_member_id(db, rep_id)
-    return _member_votes(_as_dict(rep_votes(db, member_id, "all", page, per_page)), member_id, request)
+    """Every position the representative recorded on the House's roll calls
+    this Congress, newest first: the measure, the vote, whether it sided
+    with the party and whether Constituent Alignment counted it as a break,
+    and the roll call with each party's split. The record the score's
+    party-line figures are measured on: the countedAsBreak trues are its
+    breaks, and chamberRollCalls says how many roll calls the chamber held."""
+    return _member_votes(db, "house", resolve_member_id(db, rep_id), page, per_page, request)
 
 
 

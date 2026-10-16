@@ -25,7 +25,7 @@ from app.member_ids import resolve_member_id
 from app.models import Representative, RollCall, RollCallPosition, Senator
 from app.pipeline.fetch.floor_logs import NAY_POSITIONS, YEA_POSITIONS
 from app.pipeline.transform.normalize_votes import is_housekeeping
-from app.services.bill_record import MemberLinks
+from app.services.member_positions import roll_call_member_ids
 from app.services.congress_service import bill_label
 
 router = APIRouter()
@@ -45,30 +45,6 @@ def _side(position: str) -> str | None:
     return None
 
 
-def _roll_call_ids(db: Session, chamber: str, congress: int, member_ids: dict[str, str]) -> dict[str, str]:
-    """{Civitas id: the id the chamber's roll calls name them by}: the
-    bioguide id for the House; for the Senate, the LIS id, found the way
-    the bill pages link a Senate vote to a member (MemberLinks)."""
-    if chamber == "house":
-        rows = db.query(Representative.id, Representative.bioguide_id).filter(
-            Representative.id.in_(list(member_ids.values()))).all()
-        return {i: b for i, b in rows if b}
-    links = MemberLinks(db)
-    people = db.query(
-        RollCallPosition.member_id, RollCallPosition.last_name, RollCallPosition.state,
-    ).join(RollCall, RollCall.id == RollCallPosition.roll_call_id).filter(
-        RollCall.chamber == "senate", RollCall.congress == congress,
-    ).distinct().all()
-    wanted = set(member_ids.values())
-    out: dict[str, str] = {}
-    for lis, last, state in people:
-        page = links.page(last_name=last, state=state, lis_id=lis)
-        sid = page.rsplit("/", 1)[-1] if page else None
-        if sid in wanted:
-            out[sid] = lis
-    return out
-
-
 def agreement(db: Session, chamber: str, left: str, right: str, congress: int | None = None) -> dict:
     congress = congress or settings.CURRENT_CONGRESS
     model = _MODEL[chamber]
@@ -76,7 +52,7 @@ def agreement(db: Session, chamber: str, left: str, right: str, congress: int | 
     members = {m.id: m for m in db.query(model).filter(model.id.in_(list(ids.values())))}
     if any(i not in members for i in ids.values()):
         raise HTTPException(status_code=404, detail=f"Both members must be in the {chamber}")
-    vote_ids = _roll_call_ids(db, chamber, congress, ids)
+    vote_ids = roll_call_member_ids(db, chamber, congress, ids)
     by_vote: dict[str, dict] = {}
     rows = (
         db.query(RollCall, RollCallPosition)
