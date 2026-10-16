@@ -14,7 +14,7 @@ Flow:
 """
 
 import asyncio
-import hashlib
+import itertools
 import json
 import logging
 import math
@@ -22,8 +22,10 @@ import pathlib
 import re
 import threading
 from collections import Counter
+from difflib import SequenceMatcher
 from functools import lru_cache
 import time
+from collections.abc import Sequence
 from typing import Iterator, NamedTuple
 import unicodedata
 import uuid
@@ -38,7 +40,6 @@ from scipy.spatial.distance import squareform
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app import calibration_drift
 from app.contact import BOT_USER_AGENT
 from app.config import settings
 from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
@@ -47,6 +48,7 @@ from app.models import (
     ActionIssue,
     ActionIssueStatus,
     ExploreDocument,
+    FeedArticle,
     Justice,
     LlmGenerationSample,
     MonitorStatus,
@@ -77,8 +79,9 @@ from app.pipeline.analyze.grounding import (
     proposal_stated_as_fact,
 )
 from app.pipeline.analyze import claims as claim_layer
+from app import policy_relevance
 from app.pipeline.analyze import story_actor
-from app.pipeline.analyze.post_composer import compose
+from app.pipeline.analyze.post_composer import CLAIM_TASK, compose, refit_actor_threshold
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline import lease
@@ -87,6 +90,7 @@ from app.pipeline.fetch.congress import congress_gov_url_for_bill_id
 from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES, fetch_fr_metadata
 from app.http_client import make_async_client
 from app.pipeline.fetch.news_feeds import (
+    MAX_ARTICLE_AGE_HOURS,
     MAX_SUMMARY_CHARS,
     NewsArticle,
     fetch_news_articles,
@@ -181,108 +185,269 @@ _POLICY_PROTOTYPES = [
 # there, unmeasured. See docs/research/action-center-relevance.md.
 POLICY_RELEVANCE_THRESHOLD = 0.20
 
-# The article relevance gate: a similarity-weighted vote among the
-# POLICY_RELEVANCE_K nearest hand-labelled feed articles in
-# app/data/policy_relevance_examples.json (kNN, Cover & Hart 1967; the
-# labelled set plays the part prototypes play elsewhere — the human
-# knowledge that seeds the classifier). k and the vote threshold come from
-# app/data/policy_relevance_calibration.json, written by
-# scripts/calibrate_policy_relevance.py, which also records the held-out
-# measurement. Measured 2026-10-10 (k=41, vote >= 0.80), with the reference
-# set cut at a date and tested on feed articles a week or more after it (so
-# one story can't sit on both sides), against the prototype gate on the
-# same articles, at three cuts: precision 0.89-0.97 vs 0.61-0.67, recall
-# 0.76-0.87 vs 0.73-0.77, McNemar p = 1e-12, 1e-10, 3e-5 — the test sets
-# run one to six weeks past their reference set, so that much topic drift
-# is inside the measurement. Its known weakness is a new U.S. story whose
-# nearest examples are foreign coverage of the same place (the first day of
-# a U.S.-Russia deal read like Ukraine-war coverage). Rerun the script when
-# examples are added (test_policy_relevance_calibration_matches_examples
-# fails until you do).
+# The article relevance gate lives in policy_relevance.py: a kNN vote over
+# feed articles labelled by their publishers' own filing, refit daily, never
+# by hand (see its docstring).
+#
+# The relevance seed's categories (app/data/policy_relevance_examples.json)
+# still label the principal-actor class vote (story_actor, _principal_actor).
 _DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
-_RELEVANCE_EXAMPLES_PATH = _DATA_DIR / "policy_relevance_examples.json"
-_RELEVANCE_CALIBRATION_PATH = _DATA_DIR / "policy_relevance_calibration.json"
+_STORY_CLASS_EXAMPLES_PATH = _DATA_DIR / "policy_relevance_examples.json"
 _relevance_examples_cache: list[dict] | None = None
-_relevance_calibration_cache: dict | None = None
 _relevance_reference_cache: dict[int, np.ndarray] = {}
 
 
 def relevance_examples() -> list[dict]:
+    """The seed's rows, for story_actor's class vote (their `category`)."""
     global _relevance_examples_cache
     if _relevance_examples_cache is None:
-        _relevance_examples_cache = json.loads(_RELEVANCE_EXAMPLES_PATH.read_text())["examples"]
+        _relevance_examples_cache = json.loads(_STORY_CLASS_EXAMPLES_PATH.read_text())["examples"]
     return _relevance_examples_cache
 
 
-def relevance_calibration() -> dict:
-    global _relevance_calibration_cache
-    if _relevance_calibration_cache is None:
-        _relevance_calibration_cache = json.loads(_RELEVANCE_CALIBRATION_PATH.read_text())
-    return _relevance_calibration_cache
-
-
-def relevance_examples_hash() -> str:
-    """Identifies the labelled set a calibration was fitted to."""
-    payload = json.dumps([[e["text"], e["relevant"]] for e in relevance_examples()])
-    return hashlib.sha256(payload.encode()).hexdigest()[:16]
-
-
-def relevance_votes(
-    article_embeddings: np.ndarray, reference: np.ndarray, labels: np.ndarray, k: int,
-) -> np.ndarray:
-    """Similarity-weighted share of relevant examples among each article's k
-    nearest (unit vectors, so the dot product is the cosine). Negative
-    similarities weigh nothing; an article with no positive neighbour
-    scores 0."""
-    sims = article_embeddings @ reference.T
-    k = min(k, reference.shape[0])
-    nearest = np.argpartition(-sims, k - 1, axis=1)[:, :k]
-    weights = np.take_along_axis(sims, nearest, axis=1).clip(min=0.0)
-    relevant = labels[nearest]
-    return (weights * relevant).sum(axis=1) / np.maximum(weights.sum(axis=1), 1e-9)
-
-
 def _relevance_reference() -> np.ndarray:
-    """The labelled examples' embeddings, once per similarity model."""
+    """The seed rows' embeddings, once per similarity model."""
     key = id(get_similarity_model())
     if key not in _relevance_reference_cache:
         _relevance_reference_cache[key] = _embed_texts_sim([e["text"] for e in relevance_examples()])
     return _relevance_reference_cache[key]
 
 
-# Article clustering (_cluster_articles): which text is embedded and where
-# the complete-linkage cut sits, both chosen by
-# scripts/calibrate_cluster_pairs.py against hand-judged article pairs
-# (app/data/cluster_pair_judgments.json) and written to
-# app/data/cluster_pair_calibration.json with the measurement behind them.
-# Rerun the script when the judged pairs change
-# (test_cluster_calibration_matches_judgments fails until you do).
-_CLUSTER_JUDGMENTS_PATH = _DATA_DIR / "cluster_pair_judgments.json"
+# Two similarity cuts the Action Center decides with, refit once a UTC day
+# from its own stored data (refit_cuts, stored in api_cache), never from
+# hand labels:
+#
+#   - clustering (_cluster_articles): the complete-linkage cut on day-
+#     centred retrieval-model cosine of headline and description start
+#     (cluster_text);
+#   - restatement (claims.distinct_claims): the similarity-model cosine at
+#     which a second claim restates an earlier one.
+#
+# Each is fitted the same way: the lowest cut (0.01 grid) at which no pair
+# the data itself says is NOT one story (or one fact) would merge. Those are
+# pairs that share a distinctive entity (_shares_distinctive_entity, the
+# monitors' test) but whose stated occasions differ: for articles, the days
+# their own text dates the event to (stated_days: a weekday read against
+# the publication date, or a month and day) at least STATED_DAY_GAP apart;
+# for claims, lines of two issues published within a day of each other as
+# separate stories, leaving out any pair that quotes one sentence. A wrong
+# merge publishes a chimera, and a wrong restatement call drops a real
+# fact, so both cuts are precision-first, and both carry CUT_MARGIN. Where a fit has fewer than
+# MIN_HARD_NEGATIVES such pairs it keeps the stored cut, or the bundled one
+# (app/data/cluster_pair_calibration.json, claim_restatement_calibration.json,
+# written by scripts/calibrate_action_cuts.py with the same fit).
+#
+# Clustering also refuses outright to join two articles whose stated days
+# differ by STATED_DAY_GAP or more (_cluster_articles), whatever their
+# cosine: the same actor two days apart is two occasions.
+#
+# Until 2026-10-16 both cuts were fitted to hand-judged pairs (564 article
+# pairs, 204 claim pairs, one labeller): docs/research/action-center-relevance.md
+# has the comparison.
+STATED_DAY_GAP = 2
+MIN_HARD_NEGATIVES = 30
+# How far back each fit reads: about four weeks of national-feed articles
+# (feed_articles), and three weeks of published issues.
+CLUSTER_REFIT_DAYS = 28
+RESTATEMENT_REFIT_DAYS = 21
+# What clustering embeds after the headline. Chosen 2026-10-15 against the
+# description lengths 200, 300 and 500, as the shortest that lets the
+# description's first sentence say who did what.
+CLUSTER_DESCRIPTION_CHARS = 200
+# A margin above both fitted cuts, as a decision. The pairs each fit reads
+# are the side of "another story" or "another fact" the data can name: two
+# articles about one actor dated days apart, two issues published as
+# separate stories. What no stated fact labels sits closer: the same actor's
+# different acts on the same day (two polls of one race, a statement and
+# the letter that followed it), and two facts of one event. On the
+# 2026-09-28..10-15 articles the clustering fit gives 0.60, and 0.60 joins
+# pairs of exactly that kind; on the issues since 2026-09-24 the
+# restatement fit gives 0.69, and its top pairs are already the same fact
+# published twice. 0.10 puts the cuts at 0.70 and 0.79, where the
+# hand-judged pairs of 2026-10-15 put clustering (0.71) and a little above
+# where they put restatement (0.75): a choice, made so the change of labels
+# loosens neither, reported beside the fit in every refit and never fitted.
+CUT_MARGIN = 0.10
+# Words two claim lines must share in a row to be one sentence quoted
+# twice (left out of the restatement fit's negatives).
+SAME_SENTENCE_RUN = 5
+
+_CUTS_TIER = "action-cuts"
+_CUTS_TTL_HOURS = 24 * 400
 _CLUSTER_CALIBRATION_PATH = _DATA_DIR / "cluster_pair_calibration.json"
-_cluster_calibration_cache: dict | None = None
+_cuts_cache: dict = {}
+
+_WORD_RE = re.compile(r"[a-z0-9']+")
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_WEEKDAY_RE = re.compile(r"\b(" + "|".join(_WEEKDAYS) + r")\b", re.IGNORECASE)
+_MONTH_ABBREVIATIONS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+_MONTH_DAY_RE = re.compile(
+    r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b", re.IGNORECASE)
 
 
-def cluster_text(title: str, summary: str | None, chars: int | None = None) -> str:
+def stated_days(text: str, published: date | None) -> frozenset[date]:
+    """The days TEXT dates what it reports to: each weekday it names, read
+    as the most recent such day on or before `published`, and each month
+    and day it names, in `published`'s year. Empty without a publication
+    date to read them against."""
+    if published is None:
+        return frozenset()
+    days: set[date] = set()
+    for m in _WEEKDAY_RE.finditer(text or ""):
+        back = (published.weekday() - _WEEKDAYS.index(m.group(1).lower())) % 7
+        days.add(published - timedelta(days=back))
+    for m in _MONTH_DAY_RE.finditer(text or ""):
+        try:
+            days.add(date(published.year, _MONTH_ABBREVIATIONS.index(m.group(1).lower()[:3]) + 1, int(m.group(2))))
+        except ValueError:
+            pass
+    return frozenset(days)
+
+
+def days_disagree(a: frozenset[date], b: frozenset[date]) -> bool:
+    """Both state a day, and none is within STATED_DAY_GAP of the other's."""
+    return bool(a and b) and min(abs((x - y).days) for x in a for y in b) >= STATED_DAY_GAP
+
+
+def cluster_text(title: str, summary: str | None, chars: int = CLUSTER_DESCRIPTION_CHARS) -> str:
     """What clustering embeds for an article: its headline and the first
-    `chars` characters of its description (the calibration's
-    description_chars unless given). Headlines alone can't tell a second
-    outlet's account of an event from another event on the same theme; the
-    description's first sentence names who did what."""
-    if chars is None:
-        chars = int(cluster_calibration()["description_chars"])
+    `chars` characters of its description. Headlines alone can't tell a
+    second outlet's account of an event from another event on the same
+    theme; the description's first sentence names who did what."""
     return f"{title}. {(summary or '')[:chars]}"
 
 
+def _zero_merge_cut(negative_scores: Sequence[float]) -> float:
+    """The lowest 0.01 cut no negative reaches."""
+    return round(math.floor(max(negative_scores) * 100 + 1) / 100, 2)
+
+
+def fit_cluster_cut(articles: Sequence[tuple[str, str, datetime]]) -> dict | None:
+    """The clustering cut for (title, description, published) articles
+    (module comment above STATED_DAY_GAP): each pair published within one
+    run's window scored on the run's day-centred embeddings, the fitted cut
+    the lowest no stated-day-disagreeing pair with a shared distinctive
+    entity reaches, plus CUT_MARGIN."""
+    if len(articles) < 2:
+        return None
+    embeddings = _embed_texts([cluster_text(t, d) for t, d, _ in articles])
+    when = [p for _, _, p in articles]
+    days = [stated_days(f"{t} {d}", p.date()) for t, d, p in articles]
+    signatures = [_issue_signature(t, [d]) for t, d, _ in articles]
+    df: Counter = Counter()
+    for s in signatures:
+        df.update(s)
+    window = timedelta(hours=MAX_ARTICLE_AGE_HOURS)
+    order = sorted(range(len(articles)), key=lambda n: when[n])
+    negatives = []
+    for a, i in enumerate(order):
+        for j in order[a + 1:]:
+            if when[j] - when[i] > window:
+                break
+            if not days_disagree(days[i], days[j]):
+                continue
+            if not _shares_distinctive_entity(signatures[i], signatures[j], df, len(articles)):
+                continue
+            # Centred on the pool one run holding both would have seen.
+            pool = [n for n in order if when[j] - window < when[n] <= when[j]]
+            centred = _center_titles(embeddings[[i, j]], embeddings[pool].mean(axis=0))
+            negatives.append(float(centred[0] @ centred[1]))
+    if len(negatives) < MIN_HARD_NEGATIVES:
+        return None
+    fitted = _zero_merge_cut(negatives)
+    return {"threshold": round(min(fitted + CUT_MARGIN, 0.99), 2), "fitted": fitted,
+            "margin": CUT_MARGIN, "negatives": len(negatives), "articles": len(articles)}
+
+
+def _shared_run(a: str, b: str) -> int:
+    """The longest run of words two lines share, verbatim."""
+    x, y = _WORD_RE.findall(a.lower()), _WORD_RE.findall(b.lower())
+    return SequenceMatcher(None, x, y, autojunk=False).find_longest_match(0, len(x), 0, len(y)).size
+
+
+def fit_restatement_cut(issues: Sequence[tuple[int, str, list[str]]]) -> dict | None:
+    """The restatement cut for (issue id, date, lines) issues: the lowest
+    cosine no pair of lines from two different issues published within a
+    day of each other that share a distinctive entity reaches, plus
+    CUT_MARGIN. The pipeline published them as two stories, so they are two
+    facts; a pair sharing SAME_SENTENCE_RUN words verbatim is left out (one
+    sentence quoted twice is one fact however the issues split)."""
+    lines = [(iid, date.fromisoformat(d[:10]), line)
+             for iid, d, ls in issues for line in ls if line and line.strip()]
+    if len(lines) < 2:
+        return None
+    signatures = [_issue_signature(line, []) for _, _, line in lines]
+    df: Counter = Counter()
+    for s in signatures:
+        df.update(s)
+    pairs = [(i, j) for i, j in itertools.combinations(range(len(lines)), 2)
+             if lines[i][0] != lines[j][0] and abs((lines[i][1] - lines[j][1]).days) <= 1
+             and _shares_distinctive_entity(signatures[i], signatures[j], df, len(lines))
+             and _shared_run(lines[i][2], lines[j][2]) < SAME_SENTENCE_RUN]
+    if len(pairs) < MIN_HARD_NEGATIVES:
+        return None
+    vectors = _embed_texts_sim([line for _, _, line in lines])
+    fitted = _zero_merge_cut([float(vectors[i] @ vectors[j]) for i, j in pairs])
+    return {"threshold": round(min(fitted + CUT_MARGIN, 0.99), 2), "fitted": fitted, "margin": CUT_MARGIN,
+            "negatives": len(pairs), "lines": len(lines)}
+
+
+def refit_cuts(db: Session) -> None:
+    """Refit both cuts on the first refresh of each UTC day, inside a
+    savepoint of the refresh's session (it commits). A fit with too few
+    pairs leaves the stored cut in place. The new cuts are used in this
+    process at once."""
+    today = utcnow().date().isoformat()
+    if _cuts_cache.get("refit_on") == today:
+        return
+    _cuts_cache["refit_on"] = today
+    since = utcnow() - timedelta(days=CLUSTER_REFIT_DAYS)
+    articles = [(r.title, r.description, r.published or r.seen_at) for r in
+                db.query(FeedArticle).filter(FeedArticle.kept.is_(True), FeedArticle.seen_at >= since)]
+    issue_since = (utcnow() - timedelta(days=RESTATEMENT_REFIT_DAYS)).date().isoformat()
+    issues = []
+    for row in db.query(ActionIssue).filter(ActionIssue.source_type.is_(None), ActionIssue.date >= issue_since):
+        try:
+            facts = json.loads(row.facts or "[]")
+        except ValueError:
+            facts = []
+        issues.append((row.id, row.date, [row.summary or "", *facts]))
+    fits = {"cluster": fit_cluster_cut(articles), "restatement": fit_restatement_cut(issues)}
+    for key, fitted in fits.items():
+        if fitted is None:
+            logger.info("Cut refit (%s): too few pairs the data labels; the stored cut stands", key)
+            continue
+        fitted["date"] = today
+        try:
+            with db.begin_nested():
+                api_cache_set(db, _CUTS_TIER, key, fitted, normal_ttl_hours=_CUTS_TTL_HOURS, commit=False)
+        except Exception:
+            logger.warning("Cut refit (%s) not stored; used in this process only", key, exc_info=True)
+        _cuts_cache[key] = (fitted, utcnow())
+        logger.info("Cut refit (%s): %s", key, fitted)
+    if fits["restatement"] is not None:
+        claim_layer.set_restatement_calibration(fits["restatement"])
+
+
+def stored_cut(key: str, bundled: pathlib.Path) -> dict:
+    """The day's refit of `key` (re-read hourly), else the bundled one."""
+    cached = _cuts_cache.get(key)
+    if cached is not None and utcnow() - cached[1] < timedelta(hours=1):
+        return cached[0]
+    stored = None
+    try:
+        with SessionLocal() as session:
+            stored = api_cache_get(session, _CUTS_TIER, key, max_age_hours=_CUTS_TTL_HOURS)
+    except Exception:
+        logger.warning("Stored %s cut unreadable; using the bundled one", key, exc_info=True)
+    value = stored or json.loads(bundled.read_text())
+    _cuts_cache[key] = (value, utcnow())
+    return value
+
+
 def cluster_calibration() -> dict:
-    global _cluster_calibration_cache
-    if _cluster_calibration_cache is None:
-        _cluster_calibration_cache = json.loads(_CLUSTER_CALIBRATION_PATH.read_text())
-    return _cluster_calibration_cache
-
-
-def cluster_judgments_hash() -> str:
-    """Identifies the judged pair set a calibration was fitted to."""
-    return hashlib.sha256(_CLUSTER_JUDGMENTS_PATH.read_bytes()).hexdigest()[:16]
+    """The clustering cut in use ({"threshold": ...}): stored_cut."""
+    return stored_cut("cluster", _CLUSTER_CALIBRATION_PATH)
 
 
 # How many candidate clusters get an LLM generation attempt per hourly run.
@@ -1073,7 +1238,7 @@ def locate_claim(
         str(located.get("actor") or ""), str(located.get("predicate") or ""), source_material,
     ))
     _record_generation_sample(
-        db, "action_center_claim", rank, 1, user_prompt, located or {},
+        db, CLAIM_TASK, rank, 1, user_prompt, located or {},
         passed=verified,
         violations=None if verified else ["spans not found verbatim and together in the source"],
         once_per_day=True,
@@ -1543,8 +1708,9 @@ def _digest_reason(article: NewsArticle) -> str | None:
     return None
 
 
-def _filter_policy_relevant(articles: list[NewsArticle]) -> list[tuple[NewsArticle, np.ndarray]]:
-    """Keep only articles about US policy/legislation; drop digest articles."""
+def _filter_policy_relevant(db: Session, articles: list[NewsArticle]) -> list[tuple[NewsArticle, np.ndarray]]:
+    """Keep only articles about US policy/legislation (policy_relevance.judge);
+    drop digest articles."""
     if not articles:
         return []
 
@@ -1572,24 +1738,12 @@ def _filter_policy_relevant(articles: list[NewsArticle]) -> list[tuple[NewsArtic
     if not specific:
         return []
 
-    texts = [f"{a.title}. {a.summary[:200]}" for a in specific]
-    article_embeddings = _embed_texts_sim(texts)
-    labels = np.array([e["relevant"] for e in relevance_examples()], dtype=float)
-    calibration = relevance_calibration()
-    k = int(calibration["k"])
-    threshold = float(calibration["threshold"])
-    votes = relevance_votes(article_embeddings, _relevance_reference(), labels, k)
-    calibration_drift.observe("policy_relevance", votes, threshold)
-
-    relevant = [
-        (article, article_embeddings[i])
-        for i, (article, vote) in enumerate(zip(specific, votes))
-        if vote >= threshold
-    ]
+    judged, fitted = policy_relevance.judge(db, specific)
+    relevant = [(article, embedding) for article, embedding, _ in judged]
     logger.info(
         "Policy relevance filter: %d/%d articles passed "
-        "(%d digests dropped, kNN k=%d, vote threshold=%.2f)",
-        len(relevant), len(articles), n_digests, k, threshold,
+        "(%d digests dropped, kNN k=%s, vote threshold=%s)",
+        len(relevant), len(articles), n_digests, fitted.get("k"), fitted.get("threshold"),
     )
     return relevant
 
@@ -1651,8 +1805,15 @@ def _cluster_articles(
     embeddings = _embed_texts([cluster_text(a.title, a.summary) for a, _ in items])
     centered = _center_titles(embeddings, embeddings.mean(axis=0))
     distance = np.clip(1.0 - centered @ centered.T, 0.0, None)
+    # Two articles whose own text dates the event to days STATED_DAY_GAP or
+    # more apart are two occasions: put them past any cut, so complete
+    # linkage never joins them (or any cluster holding both).
+    days = [stated_days(f"{a.title} {a.summary or ''}", a.published.date() if a.published else None)
+            for a, _ in items]
+    for i, j in itertools.combinations(range(len(items)), 2):
+        if days_disagree(days[i], days[j]):
+            distance[i, j] = distance[j, i] = 2.0
     threshold = float(cluster_calibration()["threshold"])
-    calibration_drift.observe("cluster_pairs", (1.0 - distance)[np.triu_indices(len(items), 1)], threshold)
     labels = fcluster(
         linkage(squareform(distance, checks=False), method="complete"),
         t=1.0 - threshold, criterion="distance",
@@ -5057,9 +5218,23 @@ def _run_refresh(db: Session) -> int:
     # from the absence of posts.
     action_metrics.increment("articles_fetched", len(articles))
 
+    # The actor tier's threshold, refit once a day from the recorded claim
+    # calls before any claim is composed (post_composer.refit_actor_threshold).
+    try:
+        refit_actor_threshold(db)
+    except Exception:
+        logger.warning("Actor threshold refit failed; the stored one stands", exc_info=True)
+
+    # The clustering and restatement cuts, refit once a day from the stored
+    # articles and issues before either is used (refit_cuts).
+    try:
+        refit_cuts(db)
+    except Exception:
+        logger.warning("Cut refit failed; the stored cuts stand", exc_info=True)
+
     # 2. Filter for policy relevance
     _set_refresh_state(stage="filter")
-    relevant = _filter_policy_relevant(articles)
+    relevant = _filter_policy_relevant(db, articles)
     if not relevant:
         logger.warning("No policy-relevant articles found")
         action_metrics.increment("refresh_aborted_no_relevant_articles")

@@ -21,7 +21,8 @@ from app.database import get_db
 from app.issue_ids import to_public_id
 from app.config import settings
 from app.models import (
-    ActionIssue, ActionIssueStatus, Agency, AgencyBudget, CongressEvent, ExploreDocument, Justice, President, Representative, RollCall,
+    ActionIssue, ActionIssueStatus, Agency, AgencyBudget, CongressEvent, ElectionArchive, ExploreDocument, Justice,
+    Nomination, President, Representative, RollCall,
     Senator,
 )
 from app.pipeline.fetch.congressional_record import congress_start
@@ -153,14 +154,30 @@ def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
         for slug in sorted(parents) if slug in latest or slug in budgeted
     ]
 
+    # Every stored nomination has its own page (/congress/nominations/...);
+    # its latest action is its lastmod.
+    nominations = [
+        {"congress": congress, "citation": citation, "lastmod": _iso_date(day or None)}
+        for congress, citation, day in db.query(
+            Nomination.congress, Nomination.citation, Nomination.latest_action_date,
+        ).order_by(Nomination.congress, Nomination.number, Nomination.part_number)
+    ]
+
     return cached_json(
         {
             "politicians": politicians, "bills": bills, "issues": issues,
             "agencies": agencies,
             "congressDays": congress_days,
             "rollCalls": roll_calls,
+            "nominations": nominations,
             # The states with a "what changed on the new map" page.
             "redistricting": redrawn_overlap_states(),
+            # Each archived general election (/elections/{cycle}).
+            "electionArchives": [
+                {"id": str(cycle), "lastmod": _iso_date(as_of)}
+                for cycle, as_of in db.query(ElectionArchive.cycle, ElectionArchive.record_as_of)
+                .filter(ElectionArchive.record_json.isnot(None)).order_by(ElectionArchive.cycle)
+            ],
             # Explore documents are listed separately, a page at a time
             # (/sitemap/explore): the corpus has no upper bound, and one
             # sitemap file holds at most 50,000 URLs.

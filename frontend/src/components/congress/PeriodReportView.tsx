@@ -121,6 +121,7 @@ export default function PeriodReportView({
   kind,
   lead,
   strip,
+  hub,
 }: {
   report: PeriodReport | MonthReport;
   kind: "week" | "month";
@@ -129,6 +130,8 @@ export default function PeriodReportView({
   lead?: { title: string; body: ReactNode };
   /** The "this week" strip, rendered by the server page. */
   strip?: ReactNode;
+  /** The section hub's cards (/congress only), rendered by the server page. */
+  hub?: ReactNode;
 }) {
   const { senate, house } = report.totals;
   const title =
@@ -151,7 +154,7 @@ export default function PeriodReportView({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
-          <SectionTabs section="congress" active="reports" />
+          <SectionTabs section="congress" active={kind} />
           <PageMasthead
             className="mb-6"
             eyebrow="What happened in Congress"
@@ -177,6 +180,7 @@ export default function PeriodReportView({
             <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
           {strip}
+          {hub}
           <PeriodNav
             active={kind}
             hrefs={{

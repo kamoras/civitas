@@ -5,12 +5,36 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { billPageHref } from "@/lib/congress";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
+import { ELECTION_MAP_HREF } from "@/lib/electionMap";
+import { REDISTRICTING_HREF } from "@/lib/redistricting";
+import type { ElectionPhase } from "@/types/election";
 
 // Listed by name, as a reader looks for their state ("Alabama, Alaska…"),
 // not by postal code ("AK, AL…").
 const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
   (STATE_NAMES[a] ?? a).localeCompare(STATE_NAMES[b] ?? b)
 );
+
+const VOTER_LINK =
+  "inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos";
+
+/** The election pages the "For voters" line adds, by the election's phase
+ * (the backend's, as ElectionNight reads it): the seat map and the new
+ * House maps through the campaign; from election day the results, and the
+ * new maps, which stay up. Nothing extra when the phase can't be read. */
+export function electionLinks(phase: ElectionPhase | null): { href: string; label: string }[] {
+  if (phase === "campaign")
+    return [
+      { href: ELECTION_MAP_HREF, label: "SEAT MAP" },
+      { href: REDISTRICTING_HREF, label: "NEW HOUSE MAPS" },
+    ];
+  if (phase === "election_day" || phase === "results")
+    return [
+      { href: "/elections", label: "RESULTS" },
+      { href: REDISTRICTING_HREF, label: "NEW HOUSE MAPS" },
+    ];
+  return [];
+}
 
 const RESEARCH_LINKS: readonly { href: string; label: string }[] = [
   { href: "/about/scores", label: "METHODS" },
@@ -29,7 +53,11 @@ const RESEARCH_LINKS: readonly { href: string; label: string }[] = [
  * document header: what the record is, who keeps it, and how to pull
  * something out of it.
  */
-export default function Masthead() {
+export default function Masthead({
+  electionPhase = null,
+}: {
+  electionPhase?: ElectionPhase | null;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // A navigation choice only, never kept (AGENTS.md §8): it fills in two
@@ -49,8 +77,8 @@ export default function Masthead() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-12 md:gap-9">
-        <div className="md:col-span-8">
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-9">
+        <div className="min-w-0">
           {/* The two offset plates are drawn from `data-text` as pseudo-
               elements (see .overprint in globals.css), so the mark's text
               content stays exactly "CIVITAS" — copyable, findable and
@@ -65,7 +93,7 @@ export default function Masthead() {
               `aria-hidden` leaves it as the printed nameplate it looks like. */}
           <div
             aria-hidden="true"
-            className="overprint font-pixel text-2xl leading-none text-ink-hi sm:text-3xl"
+            className="overprint font-pixel text-[min(1.5rem,12vw)] leading-none text-ink-hi sm:text-3xl"
             data-text="CIVITAS"
           >
             <span className="relative">CIVITAS</span>
@@ -95,8 +123,14 @@ export default function Masthead() {
 
           <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">
             Scored nightly from federal and state filings. Every number traces back to the document
-            it came from. Where a figure is a range, as on the election map, the page says how it
-            was made.
+            it came from. Where a figure is a range, as on the{" "}
+            <Link
+              href={ELECTION_MAP_HREF}
+              className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+            >
+              election map
+            </Link>
+            , the page says how it was made.
           </p>
 
           {/* The voter's way in, in the first screen: who represents me,
@@ -108,14 +142,14 @@ export default function Masthead() {
             aria-label="For voters"
             className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs tracking-[0.1em]"
           >
-            <label className="inline-flex items-center gap-2 text-ink-min">
+            <label className="inline-flex max-w-full flex-wrap items-center gap-2 text-ink-min">
               YOUR STATE:
               <select
                 value={state}
                 // The code from our own list, never the field's text, into
                 // an href.
                 onChange={(e) => setState(STATES_BY_NAME.find((c) => c === e.target.value) ?? "")}
-                className="min-h-[28px] border border-white/20 bg-surface-base px-1 font-mono text-xs tracking-normal text-ink"
+                className="min-h-[28px] min-w-0 max-w-full border border-white/20 bg-surface-base px-1 font-mono text-xs tracking-normal text-ink"
               >
                 <option value="">Pick one</option>
                 {STATES_BY_NAME.map((code) => (
@@ -137,10 +171,12 @@ export default function Masthead() {
             >
               YOUR BALLOT
             </Link>
-            <Link
-              href="/congress"
-              className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-            >
+            {electionLinks(electionPhase).map(({ href, label }) => (
+              <Link key={label} href={href} className={VOTER_LINK}>
+                {label}
+              </Link>
+            ))}
+            <Link href="/congress" className={VOTER_LINK}>
               CONGRESS THIS WEEK
             </Link>
           </nav>
@@ -165,7 +201,7 @@ export default function Masthead() {
           </nav>
         </div>
 
-        <div className="md:col-span-4">
+        <div className="min-w-0">
           <form
             onSubmit={submit}
             className="border border-ink-min/45"

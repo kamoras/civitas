@@ -34,7 +34,8 @@ const TERMS: readonly { label: string; detail: string }[] = [
   { label: "SCORES", detail: "Fixed formulas, no AI · missing data scores a neutral 50" },
 ];
 
-const ROW = "grid grid-cols-[5.5rem_1fr] gap-2 border-b border-white/[0.07] py-2";
+const ROW =
+  "grid grid-cols-[minmax(0,5.5rem)_minmax(0,1fr)] gap-2 [overflow-wrap:anywhere] border-b border-white/[0.07] py-2";
 const DT = "font-mono text-xs tracking-[0.08em] text-ink-min";
 const DD = "font-mono text-xs leading-relaxed text-ink-lo";
 
@@ -53,7 +54,7 @@ async function fetchSources(): Promise<SourceRow[] | null> {
 export default async function Holdings() {
   const sources = await fetchSources();
   return (
-    <aside className="md:col-span-4">
+    <aside>
       <h2 className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
         <span>Built from the public record</span>
         <Link

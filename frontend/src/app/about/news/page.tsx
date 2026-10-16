@@ -72,13 +72,19 @@ export default function NewsChapter() {
         </P>
         <More label="How an article is judged to be about U.S. policy">
           <P>
-            Each article is compared with 827 feed articles a person labelled as U.S. policy news or
-            not, and kept when the 41 it most resembles, weighted by how closely, are at least 80%
-            U.S. policy. Tested on articles published one to six weeks after the labelled ones, 89
-            to 97% of what it keeps is U.S. policy news, and it finds 76 to 87% of it. The rule it
-            replaced, closeness to two dozen written descriptions of policy topics, kept 61 to 67%
-            relevant articles: storm and flood coverage, foreign politics and crime passed, while
-            campaign coverage was dropped. Foreign news with no U.S. government role is not kept.
+            Each article is compared with the feed articles already read, each marked the way its
+            own publisher filed it: a politics feed or politics section counts as U.S. policy news,
+            a world feed or a foreign or arts section as not, and an article that names a sitting
+            member of Congress, justice, the president or a federal agency counts as U.S. policy
+            news whatever section it ran in. An article is kept when the ones it most resembles,
+            weighted by how closely, are mostly U.S. policy news; how many it compares with and how
+            much is mostly are worked out again each day from the stored articles. Nobody labels
+            articles by hand. Checked against the 827 articles a person had labelled before, 88 to
+            96% of what it keeps is U.S. policy news, about the same as the hand-labelled version it
+            replaced. The rule before that, closeness to two dozen written descriptions of policy
+            topics, kept 61 to 67% relevant articles: storm and flood coverage, foreign politics and
+            crime passed, while campaign coverage was dropped. Foreign news with no U.S. government
+            role is not kept.
           </P>
         </More>
         <P>

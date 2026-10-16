@@ -1,13 +1,7 @@
 import Link from "next/link";
-import { connection } from "next/server";
 import type { ResultsSummary, ResultsSummaryState } from "@/types/election";
 import { NOT_FINAL, formatEasternTime } from "@/lib/results";
-
-const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
-
-// The backend's own lifetime for this answer in the results window
-// (api/elections.py CACHE_TTL_RESULTS_S): the count moves on a five-minute sync.
-const REVALIDATE_S = 30;
+import { fetchResultsSummary } from "@/lib/resultsSummaryServer";
 
 // States given in full; the rest are one tap away in the line below them,
 // so any counting state is reachable from the first screen.
@@ -32,16 +26,7 @@ const COMMAND =
  * lists its count as official, never "wins". Civitas never calls a race.
  */
 export default async function ElectionNight() {
-  await connection();
-  let data: ResultsSummary | null = null;
-  try {
-    const res = await fetch(`${BACKEND}/api/elections/results/summary`, {
-      next: { revalidate: REVALIDATE_S },
-    });
-    if (res.ok) data = (await res.json()) as ResultsSummary;
-  } catch {
-    data = null;
-  }
+  const data = await fetchResultsSummary();
   if (!data || data.phase.phase === "campaign" || data.states.length === 0) return null;
   return <ElectionNightList data={data} />;
 }

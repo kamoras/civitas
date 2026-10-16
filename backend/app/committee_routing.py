@@ -20,7 +20,7 @@ Two signals, both in all-MiniLM-L6-v2 space, combined per chamber:
      issues). The chamber's scores become shares by a softmax.
   2. Labelled issues (tier 3). The similarity-weighted committee votes of
      the k nearest hand-labelled issues (app/data/committee_routing_examples.json),
-     the same kNN shape as the relevance gate's (action_center.relevance_votes).
+     the same kNN shape as the relevance gate's (policy_relevance.relevance_votes).
      An example whose story no committee handles votes "none".
 
 combined = alpha·prototype share + (1 − alpha)·kNN share. The top committee

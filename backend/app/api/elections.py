@@ -35,6 +35,7 @@ from app.models import (
     ApiCache,
     BallotMeasure,
     Candidate,
+    ElectionArchive,
     ElectionResultEvent,
     JudicialNominee,
     LiveResultRead,
@@ -2146,7 +2147,12 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
     see _confirmed_or_all), financials, coverage feed."""
     race = db.query(Race).filter(Race.id == race_id).first()
     if race is None:
-        raise HTTPException(status_code=404, detail="Race not found")
+        archived = _archived_race(db, race_id)
+        if archived is None:
+            raise HTTPException(status_code=404, detail="Race not found")
+        # A past election's race whose rows are gone (a data reset since):
+        # what its archive kept, enough to send an old link there.
+        return cached_json(archived, max_age=CACHE_TTL_DETAIL_S)
 
     state_pvi = get_state_pvi_map()
     district_pvi, _ = _election_district_pvi(race.cycle_year)
@@ -2179,4 +2185,31 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "candidateSource": _candidate_source(race.candidates, complete),
         "candidates": [_candidate_summary(c, stale_incumbent_ids) for c in candidates],
         "coverage": [_coverage_item(item) for item in coverage],
+        # The archived election this race belongs to, once the site has
+        # moved on to a later one; null for the site's own election.
+        "archiveCycle": _archive_cycle(db, race.cycle_year),
     }, max_age=CACHE_TTL_DETAIL_S)
+
+
+def _archive_cycle(db: Session, cycle: int) -> int | None:
+    """`cycle` when it is archived and no longer the site's election."""
+    if cycle >= active_election(db).cycle:
+        return None
+    row = db.get(ElectionArchive, cycle)
+    return cycle if row is not None and row.record_json is not None else None
+
+
+def _archived_race(db: Session, race_id: str) -> dict | None:
+    """A race found only in its election's archive. The cycle is the id's
+    first part (election_pipeline._race_id: "2026-SEN-GA")."""
+    head = race_id.split("-", 1)[0]
+    if not (head.isdigit() and len(head) == 4) or _archive_cycle(db, int(head)) is None:
+        return None
+    record = json.loads(db.get(ElectionArchive, int(head)).record_json)
+    race = next((r for r in record["races"] if r["id"] == race_id), None)
+    if race is None:
+        return None
+    return {"id": race["id"], "cycleYear": int(head), "office": race["office"], "state": race["state"],
+            "district": race["district"], "isSpecial": race["isSpecial"],
+            "candidateSource": race["candidateSource"], "candidates": race["candidates"], "coverage": [],
+            "archiveCycle": int(head)}

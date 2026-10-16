@@ -11,11 +11,14 @@ describe("SectionTabs", () => {
     const links = within(nav).getAllByRole("link");
     expect(links.map((l) => l.textContent)).toEqual([
       "Reports",
+      "Latest week",
+      "Latest month",
       "Bills",
       "Committees",
+      "Nominations",
       "Votes with the president",
     ]);
-    expect(links[3]).toHaveAttribute("aria-current", "page");
+    expect(links[6]).toHaveAttribute("aria-current", "page");
     expect(links.filter((l) => l.hasAttribute("aria-current"))).toHaveLength(1);
     for (const l of links) expect(l.className).toContain("min-h-11");
   });

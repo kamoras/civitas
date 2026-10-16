@@ -62,36 +62,5 @@
    0.723,
    0.857
   ]
- },
- "appointment": {
-  "examples_file": "appointment_examples.json",
-  "label": "appointment",
-  "subset": null,
-  "examples_hash": "09be0420d7229a26",
-  "examples": 549,
-  "positives": 31,
-  "k": 15,
-  "threshold": 0.55,
-  "loo_auc": [
-   0.987,
-   0.976,
-   0.995
-  ],
-  "auc_by_k": {
-   "5": 0.985,
-   "9": 0.984,
-   "15": 0.987,
-   "25": 0.982
-  },
-  "precision": [
-   0.905,
-   0.769,
-   1.0
-  ],
-  "recall": [
-   0.613,
-   0.438,
-   0.788
-  ]
  }
 }

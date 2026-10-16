@@ -155,7 +155,7 @@ export default function RecordIndex() {
   if (loaded && entries.length === 0) return null;
 
   return (
-    <section className="md:col-span-8">
+    <section>
       <h2 className="flex items-baseline justify-between border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
         <span>Entered into the record</span>
         <span aria-hidden="true">Latest</span>

@@ -15,9 +15,6 @@ mistake costs:
   - tragedy: the highest threshold that still flags 90% of labelled
     tragedies. A missed tragedy goes down the ordinary path, which needs an
     official record anyway; a false flag only demands more of a record.
-  - appointment: the lowest threshold with 90% precision: a nominee
-    anchor on a trend that isn't about the nomination attaches a standing
-    record to unrelated news.
   - loaded: the threshold with the best F2 (recall weighted twice
     precision): quoting a loaded name is the costlier mistake, a false flag
     only skips one trend. A recall target was tried first and rejected:
@@ -94,9 +91,6 @@ def interval(fn, scores: np.ndarray, labels: np.ndarray) -> list[float]:
 
 
 def choose(gate: str, scores: np.ndarray, labels: np.ndarray) -> float:
-    if gate == "appointment":
-        ok = [t for t in THRESHOLDS if pr(scores, labels, t)[0] >= TARGET]
-        return float(min(ok)) if ok else float(THRESHOLDS[-1])
     if gate == "loaded":
         def f2(t: float) -> float:
             p, r = pr(scores, labels, t)

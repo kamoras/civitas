@@ -56,13 +56,8 @@ _KEEP_HOURS = 24 * 365 * 5
 # Each gate: the calibration file it reads (whose content defines "the
 # calibration in use") and what a pass means, for the alert.
 GATES = {
-    "policy_relevance": ("policy_relevance_calibration.json", "articles kept as U.S. policy news"),
-    "cluster_pairs": ("cluster_pair_calibration.json", "article pairs joined into one story"),
-    "claim_restatement": ("claim_restatement_calibration.json", "claim pairs read as one claim restated"),
-    "claim_actor": ("claim_actor_calibration.json", "actor spans admitted by the vote"),
     "trend_tragedy": ("trend_gates_calibration.json", "trends voted a tragedy"),
     "trend_loaded": ("trend_gates_calibration.json", "trend names voted loaded"),
-    "trend_appointment": ("trend_gates_calibration.json", "trends voted about an appointment"),
     "committee_routing": ("committee_routing_calibration.json", "issues routed to a committee"),
     "member_photo": ("member_photo_calibration.json", "members switched to the bioguide portrait"),
 }
