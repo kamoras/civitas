@@ -164,7 +164,7 @@ const MAX_NAMED_SOURCES = 3;
  *  It used to carry none of these, and labelled every story, news ones
  *  included, "PUBLIC FEDERAL DATA". */
 export function issueCardTexts(issue: OgIssue | null) {
-  const title = issue?.title ?? "Civitas Action Center";
+  const title = issue?.title ?? "Civitas Research Action Center";
   const summary = !issue?.summary
     ? "Track what Congress is doing, and what you can do about it."
     : restatesTitle(title, issue.summary)
@@ -339,7 +339,7 @@ async function politicianImage(
   } | null
 ) {
   const identity = profile?.identity;
-  const name = identity?.name ?? "Civitas";
+  const name = identity?.name ?? "Civitas Research";
   const party = identity?.party ?? "";
   const accent = PARTY_ACCENT[party] ?? "#F2EEE7";
   const standing = formatStanding(identity);
@@ -1035,7 +1035,7 @@ export async function GET(req: NextRequest) {
     if (card) return recordCardImage(card);
     return genericCard({
       section: "PUBLIC RECORD",
-      title: "Civitas",
+      title: "Civitas Research",
       description: "The official record, in its own words.",
       footerLabel: "PUBLIC FEDERAL DATA",
     });

@@ -223,7 +223,7 @@ def build_link_card(client, url: str):
     return bsky_models.AppBskyEmbedExternal.Main(
         external=bsky_models.AppBskyEmbedExternal.External(
             uri=url,
-            title=card["title"] or "Civitas // Public Record",
+            title=card["title"] or "Civitas Research",
             description=card["description"],
             thumb=thumb,
         )

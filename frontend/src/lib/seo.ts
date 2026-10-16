@@ -232,7 +232,7 @@ export function siteJsonLd() {
       // guidelines): the 192px app icon, not the 32-unit SVG favicon.
       logo: absoluteUrl("/apple-icon.png"),
       description:
-        "An independent, open-source political transparency project that scores U.S. members of Congress and presidents from public records.",
+        "An independent, open-source public record of the U.S. government: who funds Congress and the president, how they vote, and the source document behind every number.",
       sameAs: [BSKY_PROFILE_URL, GITHUB_REPO_URL],
     },
   ];

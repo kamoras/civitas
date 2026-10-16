@@ -40,6 +40,12 @@
 }
 
 /* ===== BASE STYLES ===== */
+/* The header is fixed: a control reached by keyboard (or a #fragment)
+   scrolls to below it, never under it (WCAG 2.2 2.4.11). */
+html {
+  scroll-padding-top: var(--header-clearance);
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
@@ -103,21 +109,6 @@ li {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ink-lo);
-}
-
-/* ===== CRT SCANLINES ===== */
-.crt-overlay {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0) 0px,
-    rgba(0, 0, 0, 0) 1px,
-    rgba(0, 0, 0, 0.03) 1px,
-    rgba(0, 0, 0, 0.03) 2px
-  );
 }
 
 /* ===== GLITCH TEXT ===== */
@@ -267,10 +258,6 @@ li {
     animation: none !important;
   }
 
-  .crt-overlay::after {
-    animation: none !important;
-  }
-
   * {
     animation: none !important;
     transition-duration: 0.01ms !important;
@@ -328,7 +315,6 @@ select:focus-visible,
 input:focus-visible {
   outline: 2px solid var(--signal-cyan);
   outline-offset: 2px;
-  box-shadow: 0 0 8px rgba(77, 227, 232, 0.4);
 }
 
 /* ===== EXTERNAL LINK A11Y =====
@@ -361,89 +347,6 @@ a[target="_blank"] {
    Two devices that Tailwind cannot express cleanly. Everything else in the
    direction — rule weights, density, docket refs, the request slip — is
    plain utilities over the tokens in tailwind.config.ts. */
-
-/* Two-colour misregistration on the wordmark.
-
-   This is the SAME magenta/cyan offset the .glitch rules above already use,
-   held still. Animated it reads as a Matrix effect, which argues against a
-   site whose whole claim is deterministic, auditable scoring; frozen, the
-   identical offset reads as cheap two-plate printing — an independent press
-   rather than a conspiracy. Same DNA, opposite connotation, no new assets.
-
-   The plates are PSEUDO-ELEMENTS fed by `data-text`, matching how .glitch
-   above already does this. Real duplicated spans were the obvious approach
-   and are wrong: aria-hidden keeps them out of the accessibility tree, but
-   they still land in the element's textContent, so selecting and copying the
-   wordmark yields "CIVITASCIVITASCIVITAS", find-in-page matches three times,
-   and any DOM-text scraper sees it tripled. Pseudo-element content is in none
-   of those. */
-.overprint {
-  position: relative;
-  display: inline-block;
-  white-space: nowrap;
-}
-
-.overprint::before,
-.overprint::after {
-  content: attr(data-text);
-  position: absolute;
-  top: 0;
-  left: 0;
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-}
-
-.overprint::before {
-  color: var(--signal-magenta);
-  transform: translate(-3px, 1px);
-}
-
-.overprint::after {
-  color: var(--signal-cyan);
-  transform: translate(3px, -1px);
-}
-
-/* Forced-colors mode replaces our palette wholesale, so the two plates
-   collapse onto the base copy as one smeared word. Drop them there. */
-@media (forced-colors: active) {
-  .overprint::before,
-  .overprint::after {
-    display: none;
-  }
-}
-
-/* Rubber stamp — the governance disclosure, asserted rather than murmured.
-
-   The double ring is one box-shadow rather than a wrapper element: an inset
-   of the page colour, then the outer halo, which reads as ink bleed around
-   a stamped border. The rotation is deliberate and small; anything past
-   ~3deg starts to read as a sticker. */
-.stamp {
-  /* A rubber stamp, in stamp ink.
-
-     It was magenta with a magenta glow, which made a compliance notice the
-     most saturated thing on the homepage and read as a sticker rather than an
-     impression. Real stamps are red, sit flat on the page, and are slightly
-     off-register — the tilt below is the only part of that worth keeping.
-     The glow is gone; a stamp does not emit light. */
-  display: inline-block;
-  border: 2px solid var(--signal-red);
-  color: var(--signal-red);
-  font-family: var(--font-share-tech), ui-monospace, monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  padding: 8px 13px;
-  transform: rotate(-2.5deg);
-}
-
-/* The tilt is decoration, not information — straighten it when a reader has
-   asked for less visual noise. The stamp still reads as a stamp. */
-@media (prefers-reduced-motion: reduce) {
-  .stamp {
-    transform: none;
-  }
-}
 
 /* Share-image capture (lib/shareImage.ts). For the moment a section is
    measured and cloned, it is laid out as the picture should look: controls

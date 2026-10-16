@@ -1,5 +1,5 @@
 /** GET /api/sections (backend/app/api/sections.py): one live figure per
- *  section page, for the hub cards and the homepage's "Sections" band.
+ *  section page, for the hub cards and the homepage's index.
  *  Every count and rate is the backend's; the frontend only words it. A
  *  null is a figure the site can't give yet, never a zero. */
 
@@ -15,6 +15,9 @@ export interface SectionFigures {
     reports: { date: string; recordVotes: number } | null;
     week: { start: string; recordVotes: number } | null;
     month: { month: string; recordVotes: number } | null;
+    /** When the latest day Congress met had no business: the backend's line
+     *  for the three report figures, and the week of the last business. */
+    recess: { line: string; lastBusinessDay: string | null; week: string } | null;
     committees: { count: number; metThisWeek: number | null };
     bills: { inMotion: number };
     president: Record<"house" | "senate", { rate: number; rollCalls: number } | null>;

@@ -55,7 +55,7 @@ describe("issue link-preview card", () => {
 
   it("keeps the generic card for an unknown issue", () => {
     const t = issueCardTexts(null);
-    expect(t.title).toBe("Civitas Action Center");
+    expect(t.title).toBe("Civitas Research Action Center");
     expect(t.link).toBe("civitas-research.org");
     expect(t.date).toBe("");
   });

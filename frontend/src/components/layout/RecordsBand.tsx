@@ -206,24 +206,10 @@ export default function RecordsBand() {
   return (
     <div className="border-b-3 border-ink-min/60 bg-surface-base">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-2 sm:px-6">
-        {/* Revealed at `lg`, matching the nav's breakpoint — not `sm`.
-
-            The two halves of this band do not fit on one row until ~768px, so
-            showing this from 640px wrapped the band and put the fixed header
-            at 102px, past the clearance every page reserves. Below
-            `lg` the wordmark immediately underneath already says "CIVITAS",
-            so nothing is lost. Measured across 320-1280px.
-
-            No "CIVITAS" prefix on the label itself (2026-08, reader feedback):
-            it sat 86px above the nav wordmark, which sits directly above the
-            homepage's own overprint mark — three repeats of the same word
-            stacked at the top of one screen. This band is the one of the
-            three that costs nothing to drop: "PUBLIC RECORDS OFFICE" reads as
-            this office's, the nav's, by proximity — a letterhead names the
-            department once it's under the company's own logo. */}
-        <span className="hidden font-mono text-xs tracking-[0.16em] text-ink-lo lg:inline">
-          PUBLIC RECORDS OFFICE
-        </span>
+        {/* No "PUBLIC RECORDS OFFICE" label (2026-10): Civitas is a
+            volunteer-run open source project, not an office, and a
+            letterhead claiming to be one cost the record the credibility
+            the run status beside it earns. The status is the band. */}
 
         {/*
           Deliberately NOT role="status"/aria-live. Navbar (and so this band)

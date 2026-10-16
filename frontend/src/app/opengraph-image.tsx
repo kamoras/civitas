@@ -1,8 +1,9 @@
 import { ImageResponse } from "next/og";
 import { loadArchivoBold } from "@/lib/ogFonts";
+import { SITE_TAGLINE } from "@/lib/site";
 
 export const runtime = "edge";
-export const alt = "CIVITAS // PUBLIC RECORD";
+export const alt = "Civitas Research: no number without its source";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -12,16 +13,14 @@ const BASE = "#0e0c0a";
 const INK_HI = "#f2eee7";
 const INK_LO = "#cdc7bc";
 const INK_MIN = "#bbb5ac";
-const CYAN = "#4de3e8";
-const MAGENTA = "#ff6bd6";
 
-const WORDMARK = "CIVITAS";
-const SUBTITLE = "PUBLIC RECORD";
-const DESCRIPTION = "Congressional scorecards · Campaign finance transparency · Civic actions";
+const WORDMARK = "CIVITAS RESEARCH";
+const SUBTITLE = SITE_TAGLINE.toUpperCase();
+const DESCRIPTION = "Congress · the money · the votes · elections · agencies";
 const DOMAIN = "civitas-research.org";
 
 const WORDMARK_STYLE = {
-  fontSize: 96,
+  fontSize: 72,
   fontFamily: "Archivo",
   fontWeight: 700 as const,
   letterSpacing: "0.1em",
@@ -87,45 +86,15 @@ export default async function OgImage() {
           gap: "28px",
         }}
       >
-        {/* Overprint wordmark: two off-register plates behind the ink
-              layer — same construction and colours as .overprint on the
-              site, offset scaled up from its fixed 3px (sized for a 12px
-              navbar mark) to stay proportionate at 96px. */}
-        <div style={{ position: "relative", display: "flex" }}>
-          <div
-            style={{
-              ...WORDMARK_STYLE,
-              position: "absolute",
-              top: 5,
-              left: -5,
-              color: MAGENTA,
-              display: "flex",
-            }}
-          >
-            {WORDMARK}
-          </div>
-          <div
-            style={{
-              ...WORDMARK_STYLE,
-              position: "absolute",
-              top: -5,
-              left: 5,
-              color: CYAN,
-              display: "flex",
-            }}
-          >
-            {WORDMARK}
-          </div>
-          <div style={{ ...WORDMARK_STYLE, position: "relative", color: INK_HI, display: "flex" }}>
-            {WORDMARK}
-          </div>
-        </div>
+        {/* The name set plainly, as a masthead: no off-register plates
+            (the chromatic overprint read as an effect of its moment). */}
+        <div style={{ ...WORDMARK_STYLE, color: INK_HI, display: "flex" }}>{WORDMARK}</div>
 
         <div
           style={{
-            width: "360px",
-            height: "1px",
-            background: "rgba(205,199,188,0.3)",
+            width: "720px",
+            height: "3px",
+            background: INK_HI,
             display: "flex",
           }}
         />

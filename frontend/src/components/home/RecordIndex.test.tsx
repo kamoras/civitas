@@ -134,6 +134,27 @@ describe("buildRecordEntries", () => {
     expect(entries.map((e) => e.ref)).toEqual(["ISSUE-I00000001", "MON-2"]);
   });
 
+  it("leads each day with its issues, in rank order, so the first row is the day's top issue", () => {
+    // Issue dates are date-only (midnight UTC): a bill or monitor stamped
+    // the same afternoon used to sort above every one of them.
+    const entries = buildRecordEntries(
+      [
+        issue({ id: 1, publicId: "i00000001", date: "2026-08-18", rank: 1 }),
+        issue({ id: 2, publicId: "i00000002", date: "2026-08-18", rank: 2 }),
+        issue({ id: 3, publicId: "i00000003", date: "2026-08-17", rank: 1 }),
+      ],
+      [monitor({ id: 2, lastArticleDate: "2026-08-18T15:00:00" })],
+      [bill({ billId: "s100-119", latestActionDate: "2026-08-18T14:00:00" })]
+    );
+    expect(entries.map((e) => e.ref)).toEqual([
+      "ISSUE-I00000001",
+      "ISSUE-I00000002",
+      "MON-2",
+      "S100-119",
+      "ISSUE-I00000003",
+    ]);
+  });
+
   it("caps the list so the index stays a front page, not a feed", () => {
     const many = Array.from({ length: 20 }, (_, n) => issue({ id: n, date: "2026-08-18" }));
     expect(buildRecordEntries(many, [], [])).toHaveLength(6);

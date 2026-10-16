@@ -143,7 +143,7 @@ class McpEndpoint:
         self._server = Server(
             "civitas",
             version="v1",
-            title="Civitas",
+            title="Civitas Research",
             instructions=_INSTRUCTIONS,
             website_url=f"{SITE_URL}/developers",
             on_list_tools=_list_tools,

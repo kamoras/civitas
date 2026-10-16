@@ -434,7 +434,7 @@ def last_business_day(db: Session, on_or_before: date) -> date | None:
     return date.fromisoformat(best) if best else None
 
 
-def _long_date(d: date) -> str:
+def long_date(d: date) -> str:
     return f"{d:%A, %B} {d.day}"
 
 
@@ -454,7 +454,7 @@ def recess(db: Session, report: dict) -> dict | None:
         return None
     sentences = [
         "Neither chamber has taken a record vote or passed or confirmed anything since "
-        f"{_long_date(last)}." if last else "Neither chamber has taken a record vote or passed anything on record."
+        f"{long_date(last)}." if last else "Neither chamber has taken a record vote or passed anything on record."
     ]
     nxt = []
     for c in CHAMBERS:

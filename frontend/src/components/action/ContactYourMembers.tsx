@@ -35,7 +35,7 @@ import type { ActionIssue, IssueMember, IssueVote } from "@/types/action";
  * the district lists. Taps are counted per issue and kind only (ActionTap).
  */
 
-// The masthead's command style ("[ PULL THE FILE ]"), at a 32px touch target.
+// The site's bracketed command style ("[ ROLL CALL ]"), at a 32px touch target.
 const COMMAND =
   "inline-flex min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos";
 

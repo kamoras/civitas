@@ -150,7 +150,7 @@ def test_an_issue_match_needs_cosine_of_at_least_half_and_links_the_issue(world,
     world["trends"] = [trend("Canal tolls", description="The canal toll plan advances in the state legislature.")]
     run(world)
     (post,) = posts(world["db"])
-    assert post.text.startswith("Trending on Bluesky: “Canal tolls”. On the record: Civitas Action Center")
+    assert post.text.startswith("Trending on Bluesky: “Canal tolls”. On the record: Civitas Research Action Center")
     assert post.url.startswith("https://civitas-research.org/issue/")
     assert post.image_url is None and post.embed_kind == "card"
 
@@ -293,7 +293,7 @@ def test_a_tragedy_posts_a_confirmed_issue_by_its_verified_lede(world, bluesky_c
     run(world)
     (post,) = posts(world["db"])
     assert post.text.split("On the record: ", 1)[1].startswith(
-        "Civitas Action Center, October 14, 2026, quoting Outlet One: State officials closed the canal")
+        "Civitas Research Action Center, October 14, 2026, quoting Outlet One: State officials closed the canal")
     assert "Canal toll plan advances" not in post.text  # the unverified headline is never the post
 
 

@@ -141,22 +141,22 @@ class Feed:
 # from the `state` column rather than listed.
 FEEDS: dict[str, Feed] = {
     f.slug: f for f in (
-        Feed("all", "Civitas", "Everything Civitas publishes.", tuple(KINDS)),
-        Feed("issues", "Civitas: Action Center", KINDS["issue"] + ".", ("issue",)),
-        Feed("congress", "Civitas: Congress",
+        Feed("all", "Civitas Research", "Everything Civitas Research publishes.", tuple(KINDS)),
+        Feed("issues", "Civitas Research: Action Center", KINDS["issue"] + ".", ("issue",)),
+        Feed("congress", "Civitas Research: Congress",
              "What Congress did on each session day that had business, each week, and what the coming week holds, "
              "from the official record.",
              ("congress_day", "congress_week", "congress_ahead")),
-        Feed("members", "Civitas: Member spotlight", KINDS["spotlight"] + ".", ("spotlight",)),
-        Feed("elections", "Civitas: Elections",
+        Feed("members", "Civitas Research: Member spotlight", KINDS["spotlight"] + ".", ("spotlight",)),
+        Feed("elections", "Civitas Research: Elections",
              "News about races on the November ballot, special elections for seats in Congress as the FEC "
              "lists them, and the count on election night.",
              ("race", "result", "special")),
-        Feed("trends", "Civitas: On the record",
+        Feed("trends", "Civitas Research: On the record",
              "When a U.S. policy topic trends on Bluesky, the official record behind it: a vote, a bill, "
              "a rule or the day's congressional record, in the record's own words.",
              ("trend",)),
-        Feed("new", "Civitas: What's new", KINDS["feature"] + ", as they ship.", ("feature",)),
+        Feed("new", "Civitas Research: What's new", KINDS["feature"] + ", as they ship.", ("feature",)),
     )
 }
 

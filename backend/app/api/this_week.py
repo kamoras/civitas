@@ -25,7 +25,7 @@ from app.issue_ids import to_public_id
 from app.models import ActionIssue, CongressDay, ExploreDocument, RollCall
 from app.pipeline.congress_activity import eastern_today
 from app.retractions import retraction_for_issue
-from app.services.congress_service import CHAMBERS, bill_label, next_meeting, week_bounds
+from app.services.congress_service import CHAMBERS, bill_label, long_date, next_meeting, week_bounds
 from app.time_utils import comment_period_today
 from app.voter_calendar import next_deadlines
 
@@ -38,10 +38,6 @@ _TTL_S = 300
 _CHAMBER_NAME = {"senate": "Senate", "house": "House"}
 
 # ── Congress ──────────────────────────────────────────────────────
-
-def _long_date(d: date) -> str:
-    return f"{d:%A}, {d:%B} {d.day}"
-
 
 def _chamber(db: Session, chamber: str, today: date, monday: date, sunday: date) -> dict:
     iso = today.isoformat()
@@ -76,8 +72,8 @@ def _chamber_sentence(c: dict, today: date) -> str:
     if nxt is None:
         return f"The {name}'s next meeting is not on record yet."
     if not c["daysInSessionThisWeek"]:
-        return f"The {name} is out until {_long_date(nxt)}."
-    return f"The {name} next meets {_long_date(nxt)}."
+        return f"The {name} is out until {long_date(nxt)}."
+    return f"The {name} next meets {long_date(nxt)}."
 
 
 def congress_week(db: Session, today: date | None = None) -> dict:
@@ -90,7 +86,7 @@ def congress_week(db: Session, today: date | None = None) -> dict:
                 and senate["nextMeeting"] and senate["nextMeeting"] == house["nextMeeting"]
                 and senate["nextMeeting"] > today.isoformat())
     if together:
-        when = _long_date(date.fromisoformat(senate["nextMeeting"]))
+        when = long_date(date.fromisoformat(senate["nextMeeting"]))
         idle = not senate["daysInSessionThisWeek"] and not house["daysInSessionThisWeek"]
         sentence = f"Congress is out until {when}." if idle else f"Congress next meets {when}."
     else:
