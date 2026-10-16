@@ -58,6 +58,7 @@ from typing import NamedTuple
 import numpy as np
 
 from app import calibration_drift
+from app import data_refresh
 
 CHAMBERS = ("house", "senate")
 # CSLS's neighbourhood size, as in the paper (k = 10). Not fitted.
@@ -78,7 +79,9 @@ def _load(path: pathlib.Path) -> dict:
 
 
 def jurisdictions() -> dict[str, dict]:
-    return _load(JURISDICTIONS_PATH)["committees"]
+    # The refreshed copy when there is one (data_refresh: the chambers'
+    # rules are re-read each Congress), else the bundled one.
+    return data_refresh.read(JURISDICTIONS_PATH.name)["committees"]
 
 
 def examples() -> list[dict]:
@@ -86,7 +89,9 @@ def examples() -> list[dict]:
 
 
 def calibration() -> dict:
-    return _load(CALIBRATION_PATH)
+    # Refit automatically when its inputs change (data_refresh), so the
+    # refreshed copy wins.
+    return data_refresh.read(CALIBRATION_PATH.name)
 
 
 def data_hash() -> str:

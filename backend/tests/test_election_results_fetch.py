@@ -916,7 +916,7 @@ class TestPollCloseYear:
     def test_a_stale_file_is_warned_about_once_and_still_gates(self, monkeypatch, caplog):
         from app.pipeline.fetch import poll_close
 
-        monkeypatch.setattr(poll_close, "_cache", {"year": 2026, "states": {
+        monkeypatch.setattr(poll_close, "_load", lambda: {"year": 2026, "states": {
             "GA": {"close": "19:00", "zone": "America/New_York"},
         }})
         monkeypatch.setattr(poll_close, "_warned_years", set())
@@ -929,7 +929,7 @@ class TestPollCloseYear:
     def test_a_current_file_is_silent(self, monkeypatch, caplog):
         from app.pipeline.fetch import poll_close
 
-        monkeypatch.setattr(poll_close, "_cache", {"year": 2026, "states": {}})
+        monkeypatch.setattr(poll_close, "_load", lambda: {"year": 2026, "states": {}})
         monkeypatch.setattr(poll_close, "_warned_years", set())
         with caplog.at_level("WARNING", logger=poll_close.__name__):
             poll_close.last_poll_close("GA", date(2026, 11, 3))

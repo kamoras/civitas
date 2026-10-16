@@ -151,7 +151,112 @@ def resolve(item: dict, election: dt.date, where: str) -> dict:
     return out
 
 
-def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None) -> dict:
+_MONTHS = re.compile(r"\b(january|february|march|april|may|june|july|august|september|october|november|december|"
+                     r"jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b\.?\s*\d", re.IGNORECASE)
+
+
+def federal_holidays(year: int) -> set[dt.date]:
+    """The federal holidays (5 U.S.C. 6103) that fall in a general
+    election's window (Labor Day to Thanksgiving), with Veterans Day's
+    observed day when Nov 11 is a weekend: the days a state's deadline
+    rule may move off."""
+    def nth(weekday: int, n: int, month: int) -> dt.date:
+        first = dt.date(year, month, 1)
+        return first + dt.timedelta(days=(weekday - first.weekday()) % 7 + 7 * (n - 1))
+
+    veterans = dt.date(year, 11, 11)
+    observed = veterans + dt.timedelta(days={5: -1, 6: 1}.get(veterans.weekday(), 0))
+    return {nth(0, 1, 9), nth(0, 2, 10), veterans, observed, nth(3, 4, 11)}
+
+
+def _date_forms(d: dt.date) -> list[str]:
+    """How a citation can write `d`, normalised as quotes are (lower case),
+    longest first so a full form is replaced before its parts."""
+    month, short = d.strftime("%B").lower(), d.strftime("%b").lower()
+    day, weekday = str(d.day), d.strftime("%A").lower()
+    return [
+        f"{weekday}, {month} {day}, {d.year}", f"{month} {day}, {d.year}", f"{short}. {day}, {d.year}",
+        f"{short} {day}, {d.year}", f"{d.month}/{d.day}/{d.year}", f"{d.month:02d}/{d.day:02d}/{d.year}",
+        f"{weekday}, {month} {day}", f"{month} {day}", f"{short}. {day}",
+    ]
+
+
+def redate_quote(quote: str, moves: dict[dt.date, dt.date], years: tuple[int, int]) -> str:
+    """The quote as the state's page would print it for the new election:
+    each date it names moved with the rule (same weekday, whole weeks
+    later), and the election year after them. build() then re-reads the
+    cited page for exactly that text, so an item is carried only where
+    the state's own page now says it for the new election."""
+    out = normalise(quote)
+    for before, after in sorted(moves.items(), reverse=True):
+        for old_form, new_form in zip(_date_forms(before), _date_forms(after)):
+            out = out.replace(old_form, new_form)
+    return re.sub(rf"\b{years[0]}\b", str(years[1]), out)
+
+
+def carry(sources: dict, election: dt.date) -> tuple[dict, dict[str, list[str]]]:
+    """The sources re-dated for another general election, and per state the
+    items that could not be carried, with why.
+
+    Every general election is a Tuesday (2 U.S.C. 7), so a rule counted
+    from it ("29 days before", "the Friday before", "10 days after") lands
+    on the same weekday every cycle: it moves by the whole number of weeks
+    between the two elections, and a weekend adjustment a state makes (a
+    Sunday deadline moved to Monday) still applies. A citation that prints
+    the dates is re-dated the same way (redate_quote) and must be on the
+    cited page again in that form (build(), strict=False): a state's page
+    updated for the new election verifies it; a document about one
+    election (a year's calendar PDF) does not, and that item is left out.
+    Never carried: a rule worded as a calendar date ("October 15"), not a
+    count; a date that lands on a federal holiday it did not land on before
+    (Columbus Day and Veterans Day move against election day), where a
+    state's own rule may move it. A state that loses items says so
+    (`incomplete`); one that loses all of them is `unread`."""
+    old = dt.date.fromisoformat(sources["electionDate"])
+    shift = election - old
+    if shift.days % 7:
+        raise ValueError(f"{election} is not a Tuesday election day {shift.days} days from {old}")
+    holidays = federal_holidays(old.year) | federal_holidays(election.year)
+    out = {**sources, "electionDate": election.isoformat(), "states": {}}
+    dropped: dict[str, list[str]] = {}
+    for code, entry in sources["states"].items():
+        items, lost = [], []
+        for item in entry.get("items") or []:
+            why = None
+            if _MONTHS.search(item.get("rule", "")):
+                why = "its rule is a calendar date, not a count from election day"
+            moved = {k: v for k, v in item.items() if k != "adjustment"}
+            moves = {old: election}
+            for field in ("date", "endDate"):
+                if item.get(field):
+                    before = dt.date.fromisoformat(item[field])
+                    after = before + shift
+                    if after in holidays and before not in holidays:
+                        why = why or f"{field} would fall on a federal holiday ({after})"
+                    moved[field] = after.isoformat()
+                    moves[before] = after
+            if item.get("daysBefore") is not None:
+                counted = old - dt.timedelta(days=int(item["daysBefore"]))
+                moves.setdefault(counted, counted + shift)
+            moved["source"] = {**item["source"], "quote": redate_quote(item["source"]["quote"], moves, (old.year, election.year))}
+            if why:
+                lost.append(f"{item['kind']}/{item.get('method', '')}: {why}")
+            else:
+                items.append(moved)
+        new = {k: v for k, v in entry.items() if k != "items"}
+        if items:
+            new["items"] = items
+            if lost:
+                new["incomplete"] = True
+        elif entry.get("items"):
+            new["unread"] = "None of its deadlines could be carried to this election."
+        out["states"][code] = new
+        if lost:
+            dropped[code] = lost
+    return out, dropped
+
+
+def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, strict: bool = True) -> dict:
     election = dt.date.fromisoformat(sources["electionDate"])
     today = dt.date.today().isoformat()
     pages: dict[str, tuple[str | None, str]] = {}
@@ -170,6 +275,12 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None) -> di
             text, how = pages[src["url"]]
             if text is None or normalise(src["quote"]) not in text:
                 why = how if text is None else "quote not on the page"
+                if not strict:
+                    # A carried item (carry()): the page doesn't say it for
+                    # this election. Left out, and the state says so.
+                    print(f"{code}[{i}] {item['kind']}: not carried ({why}, {src['url']})", file=sys.stderr)
+                    entry = {**entry, "incomplete": True}
+                    continue
                 sys.exit(f"{code}[{i}] {item['kind']}: not verified ({why}, {src['url']}); "
                          "fix the citation or drop the item -- nothing was written")
             item["verification"] = {
@@ -177,11 +288,15 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None) -> di
                 "checkedOn": today,
             }
             items.append(item)
+        if not items and not strict and entry.get("items"):
+            entry = {**entry, "unread": "None of its deadlines could be carried to this election."}
         states[code] = {"timeZone": entry["timeZone"], "items": items}
         if entry.get("unread"):
             states[code]["unread"] = True
         if entry.get("note"):
             states[code]["note"] = entry["note"]
+        if entry.get("incomplete"):
+            states[code]["incomplete"] = True
     return {
         "_source": (
             "Each state's (and D.C.'s) election authority's own pages, or its statute where that "
@@ -209,6 +324,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", type=pathlib.Path)
     ap.add_argument("--text", metavar="URL")
+    ap.add_argument("--election", type=dt.date.fromisoformat,
+                    help="build for this general election, carrying each rule from the sources' (see carry())")
+    ap.add_argument("--output", type=pathlib.Path, default=OUTPUT)
     args = ap.parse_args()
     if args.cache:
         args.cache.mkdir(parents=True, exist_ok=True)
@@ -217,14 +335,20 @@ def main() -> None:
             text, how = fetch(args.text, client, args.cache)
             print(text if text is not None else how)
             return
-        result = build(json.loads(SOURCES.read_text()), client, args.cache)
-    OUTPUT.write_text(json.dumps(result, indent=1, ensure_ascii=False) + "\n")
+        sources = json.loads(SOURCES.read_text())
+        if args.election and args.election.isoformat() != sources["electionDate"]:
+            sources, dropped = carry(sources, args.election)
+            for code, lost in sorted(dropped.items()):
+                print(f"{code}: not carried: {'; '.join(lost)}", file=sys.stderr)
+        result = build(sources, client, args.cache, strict=args.election is None
+                       or args.election.isoformat() == json.loads(SOURCES.read_text())["electionDate"])
+    args.output.write_text(json.dumps(result, indent=1, ensure_ascii=False) + "\n")
     counts: dict[str, int] = {}
     for entry in result["states"].values():
         for item in entry["items"]:
             s = item["verification"]["status"]
             counts[s] = counts.get(s, 0) + 1
-    print(f"Wrote {OUTPUT} ({len(result['states'])} states): {counts}")
+    print(f"Wrote {args.output} ({len(result['states'])} states): {counts}")
 
 
 if __name__ == "__main__":
