@@ -11,10 +11,11 @@ import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import SectionTabs from "@/components/layout/SectionTabs";
 import VoteMembers, { PartyBar } from "@/components/congress/VoteMembers";
+import { VoteCount } from "@/components/congress/ReportParts";
 import AgencyLink from "@/components/agencies/AgencyLink";
 import { StatusBadge } from "@/components/nominations/NominationRow";
 import { ordinal } from "@/components/scorecard/format";
-import { calendarDate, rollCallHref, shortDate } from "@/lib/congress";
+import { calendarDate, rollCallHref, shortDate, voteResult, voteTally } from "@/lib/congress";
 import {
   CITATION,
   KIND_LABEL,
@@ -222,10 +223,10 @@ export default async function NominationPage({ params }: PageProps) {
                   <h2 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
                     The vote to confirm · roll call {final.number}, {shortDate(final.date)}
                   </h2>
-                  <p className="mt-2 font-mono text-4xl leading-none tabular-nums text-ink-hi">
-                    {final.yeas}–{final.nays}
+                  <p className="mt-2 flex flex-col gap-1">
+                    <VoteCount vote={final} size="text-4xl" />
                   </p>
-                  <p className="mt-1 text-sm text-ink-lo">{final.result}</p>
+                  <p className="mt-1 text-sm text-ink-lo">{voteResult(final)}</p>
                   <div className="mt-4 flex flex-col gap-2">
                     {(final.parties ?? []).map((p) => (
                       <PartyBar key={p.party} split={p} />
@@ -274,7 +275,7 @@ export default async function NominationPage({ params }: PageProps) {
                           ` (with ${rc.citations - 1} other nominations, en bloc)`}
                       </Link>
                       <span className="font-mono text-xs text-ink-lo">
-                        {shortDate(rc.date)} · {rc.result} · {rc.yeas}–{rc.nays}
+                        {shortDate(rc.date)} · {voteResult(rc)} · {voteTally(rc)}
                       </span>
                     </li>
                   ))}

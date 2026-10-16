@@ -7,11 +7,11 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { ordinal } from "@/components/scorecard/format";
 import type { VoteDetail } from "@/types/congress";
-import { CHAMBER_NAME, billHref, dayHref, longDate } from "@/lib/congress";
+import { CHAMBER_NAME, billHref, dayHref, longDate, voteResult, voteTally } from "@/lib/congress";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
 import SectionTabs from "@/components/layout/SectionTabs";
-import { ResultLabel } from "./ReportParts";
+import { ResultLabel, VoteCount } from "./ReportParts";
 import VoteMembers, { PartyBar } from "./VoteMembers";
 import { STATUS_LABEL, nominationHref } from "@/lib/nominations";
 import type { NominationVote, RollCallNomination } from "@/types/nomination";
@@ -34,9 +34,16 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
   // it; the question alone when the record names nothing else.
   const subject = vote.title || vote.question;
   const eyebrow = `${chamber} roll call ${vote.number} · ${ordinal(vote.congress)} Congress, ${ordinal(vote.session)} session`;
+  // A quorum call or a Speaker election puts no question: no yeas, nays or
+  // threshold to show (roll_call_shape).
+  const isQuestion = !vote.kind || vote.kind === "question";
   const counts: [string, number][] = [
-    ["Yea", vote.yeas],
-    ["Nay", vote.nays],
+    ...(isQuestion
+      ? ([
+          ["Yea", vote.yeas],
+          ["Nay", vote.nays],
+        ] as [string, number][])
+      : []),
     ["Present", vote.present],
     ["Not voting", vote.notVoting],
   ];
@@ -94,27 +101,47 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                 >
                   {subject}
                 </h1>
-                <p className="text-base text-ink">
-                  {vote.question}
-                  {vote.billId && vote.billLabel && (
-                    <>
-                      {" · "}
-                      <Link href={billHref(vote.billId, vote.congress)} className={LINK}>
-                        {vote.billLabel}
-                        {vote.billShortTitle ? `, ${vote.billShortTitle}` : ""}
-                      </Link>
-                    </>
-                  )}
-                </p>
+                {(vote.question !== subject || (vote.billId && vote.billLabel)) && (
+                  <p className="text-base text-ink">
+                    {/* An election of the Speaker has no title: the question is the h1. */}
+                    {vote.question !== subject && vote.question}
+                    {vote.billId && vote.billLabel && (
+                      <>
+                        {vote.question !== subject && " · "}
+                        <Link href={billHref(vote.billId, vote.congress)} className={LINK}>
+                          {vote.billLabel}
+                          {vote.billShortTitle ? `, ${vote.billShortTitle}` : ""}
+                        </Link>
+                      </>
+                    )}
+                  </p>
+                )}
                 {vote.nominationVote && <NominationLinks nv={vote.nominationVote} />}
               </header>
 
               <div className="grid gap-8 border border-white/15 bg-surface p-4 sm:p-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
                 <div className="flex flex-col gap-3">
-                  <ResultLabel result={vote.result} rejected={vote.rejected} />
-                  <p className="font-mono text-5xl leading-none tabular-nums text-ink-hi">
-                    {vote.yeas}–{vote.nays}
-                  </p>
+                  <ResultLabel result={voteResult(vote)} rejected={vote.rejected} />
+                  {vote.kind === "election" && vote.candidates?.length ? (
+                    <dl className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1">
+                      {vote.candidates.map((c) => (
+                        <div key={c.name} className="contents">
+                          <dt className="text-base text-ink">{c.name}</dt>
+                          <dd className="font-mono text-3xl leading-none tabular-nums text-ink-hi">
+                            {c.votes}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : vote.kind === "quorum" ? (
+                    <p className="font-mono text-3xl leading-none tabular-nums text-ink-hi">
+                      {voteTally(vote)}
+                    </p>
+                  ) : (
+                    <p className="flex flex-col gap-2">
+                      <VoteCount vote={vote} size="text-5xl" />
+                    </p>
+                  )}
                   <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs uppercase tracking-[0.1em]">
                     {counts.map(([label, n]) => (
                       <div key={label} className="contents">
@@ -122,7 +149,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                         <dd className="tabular-nums text-ink-lo">{n}</dd>
                       </div>
                     ))}
-                    {vote.majorityRequirement && (
+                    {isQuestion && vote.majorityRequirement && (
                       <div className="contents">
                         <dt className="text-ink-min">Required</dt>
                         <dd className="text-ink-lo">{vote.majorityRequirement}</dd>

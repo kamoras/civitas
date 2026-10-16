@@ -35,6 +35,7 @@ from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
 from app.services.congress_service import bill_days, bill_label
 from app.services.nomination_links import nomination_votes
+from app.services.roll_call_shape import candidate_of, shape
 
 # Congress.gov type path segment for each site bill-id prefix.
 _TYPE_PATH = {
@@ -341,7 +342,11 @@ class MemberLinks:
 def _bucket(position: str) -> str:
     """The same reading as the stored tally (floor_logs.tally), so a
     party's counts add up to the totals beside them — "Guilty" on an
-    impeachment article is a yea there, and was "not voting" here."""
+    impeachment article is a yea there, and was "not voting" here. A
+    candidate's name (an election of the Speaker) is "candidate", which the
+    stored tally counts as not voting (roll_call_shape)."""
+    if candidate_of(position):
+        return "candidate"
     p = (position or "").strip().lower()
     if p in floor_logs.YEA_POSITIONS:
         return "yea"
@@ -353,11 +358,22 @@ def _bucket(position: str) -> str:
 
 
 def party_breakdown(positions: list[RollCallPosition]) -> list[dict]:
-    """Per party: yeas, nays, present, not voting, counted from positions."""
+    """Per party: yeas, nays, present, not voting, counted from positions,
+    and in an election of the Speaker each candidate's votes
+    (`candidates`, {name: votes}, present only then)."""
     parties: dict[str, dict] = {}
     for p in positions:
-        row = parties.setdefault(p.party or "?", {"party": p.party or "?", "yea": 0, "nay": 0, "present": 0, "notVoting": 0})
-        row[_bucket(p.position)] += 1
+        row = parties.setdefault(p.party or "?", {"party": p.party or "?", "yea": 0, "nay": 0, "present": 0,
+                                                 "notVoting": 0, "candidates": {}})
+        bucket = _bucket(p.position)
+        if bucket == "candidate":
+            name = candidate_of(p.position)
+            row["candidates"][name] = row["candidates"].get(name, 0) + 1
+        else:
+            row[bucket] += 1
+    for row in parties.values():
+        if not row["candidates"]:
+            del row["candidates"]
     order = {"R": 0, "D": 1, "I": 2, "ID": 2}
     return sorted(parties.values(), key=lambda r: (order.get(r["party"], 9), r["party"]))
 
@@ -391,6 +407,7 @@ def roll_call_summaries(db: Session, refs: list[str | None]) -> dict[str, dict]:
             "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
             "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
             "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
+            **shape(rc, positions.get(rc.id, [])),
             "billShortTitle": short.get(rc.id),
             # What the vote decided about the nominations its question
             # names (a nomination has no bill); null for any other vote.
@@ -424,7 +441,7 @@ def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> 
         name, district = links.house_names.get(p.member_id or "", (None, None)) if house else (None, None)
         return {
             "lastName": p.last_name, "firstName": p.first_name, "party": p.party, "state": p.state,
-            "position": p.position, "bucket": _bucket(p.position),
+            "position": p.position, "bucket": _bucket(p.position), "candidate": candidate_of(p.position),
             "page": (links.page(bioguide=p.member_id) if house
                      else links.page(last_name=p.last_name, state=p.state, lis_id=p.member_id)),
             # The member's own name and district where the site knows them;
@@ -442,6 +459,7 @@ def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> 
         "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
         "billShortTitle": roll_call_short_titles(db, [rc]).get(rc.id),
         "nominationVote": nomination_votes(db, [rc]).get(rc.id),
+        **shape(rc, positions),
         "parties": party_breakdown(positions), "members": members,
     }
 
@@ -493,7 +511,8 @@ def bill_votes(db: Session, congress: int, bill_id: str) -> list[dict]:
         "chamber": rc.chamber, "session": rc.session, "number": rc.number, "date": rc.date,
         "question": rc.question, "title": rc.title, "result": rc.result, "rejected": rc.rejected,
         "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
-        "sourceUrl": rc.source_url, "parties": party_breakdown(positions.get(rc.id, [])),
+        "sourceUrl": rc.source_url, **shape(rc, positions.get(rc.id, [])),
+        "parties": party_breakdown(positions.get(rc.id, [])),
     } for rc in votes]
 
 

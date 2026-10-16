@@ -74,7 +74,9 @@ export default function DataChapter() {
             <Fact label="Senate.gov & House Clerk">
               Roll-call votes with every member&apos;s position, each shown on its own page
               (nominations included) and linked to the chamber&apos;s record, and each
-              chamber&apos;s live floor log.
+              chamber&apos;s live floor log. A Senate tie the Vice President broke is shown with the
+              Vice President&apos;s vote, an election of the Speaker by each candidate&apos;s votes,
+              and a quorum call as the members present, with no result.
             </Fact>
             <Fact label="unitedstates/congress-legislators">
               Committee seats and party leadership titles, an open dataset refreshed weekly. It

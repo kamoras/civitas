@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { CongressEvent, RollCallSummary } from "@/types/congress";
-import { billHref, resultTone, rollCallHref } from "@/lib/congress";
+import type { CongressEvent, RollCallShape, RollCallSummary } from "@/types/congress";
+import { billHref, resultTone, rollCallHref, voteResult, voteTally } from "@/lib/congress";
 
 export function Figure({
   value,
@@ -70,6 +70,33 @@ export function ResultLabel({ result, rejected }: { result: string; rejected: bo
   );
 }
 
+/** A roll call's count: yeas to nays in figures, with a broken tie named
+ * under it; a quorum call's or a Speaker election's count in words
+ * (roll_call_shape). `size` is the figures' class. */
+export function VoteCount({
+  vote,
+  size = "text-lg",
+}: {
+  vote: RollCallShape & { yeas: number; nays: number };
+  size?: string;
+}) {
+  const isQuestion = !vote.kind || vote.kind === "question";
+  return (
+    <>
+      <span
+        className={`font-mono tabular-nums text-ink-hi ${isQuestion ? `${size} leading-none` : "text-sm"}`}
+      >
+        {isQuestion ? `${vote.yeas}–${vote.nays}` : voteTally(vote)}
+      </span>
+      {vote.tieBreaker && (
+        <span className="text-xs text-ink-lo">
+          Tie broken: {vote.tieBreaker.byWhom} voted {vote.tieBreaker.vote}
+        </span>
+      )}
+    </>
+  );
+}
+
 /** Yea share of those voting yea or nay. Display scaling of the chamber's
  * own numbers, not a new figure. */
 function TallyBar({ yeas, nays }: { yeas: number; nays: number }) {
@@ -111,11 +138,9 @@ export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; sho
         )}
       </div>
       <div className="col-start-2 flex flex-col items-start gap-1.5 sm:col-start-auto sm:items-end">
-        <ResultLabel result={vote.result} rejected={vote.rejected} />
-        <span className="font-mono text-lg tabular-nums text-ink-hi">
-          {vote.yeas}–{vote.nays}
-        </span>
-        <TallyBar yeas={vote.yeas} nays={vote.nays} />
+        <ResultLabel result={voteResult(vote)} rejected={vote.rejected} />
+        <VoteCount vote={vote} />
+        {(!vote.kind || vote.kind === "question") && <TallyBar yeas={vote.yeas} nays={vote.nays} />}
       </div>
     </li>
   );

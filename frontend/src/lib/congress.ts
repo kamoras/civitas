@@ -137,3 +137,16 @@ export function resultTone(rejected: boolean | null): "yes" | "no" | "neutral" {
 }
 
 export const CHAMBER_NAME = { senate: "Senate", house: "House" } as const;
+
+/** A roll call's count as the backend words it (roll_call_shape: a broken
+ * tie, a quorum call, an election of the Speaker); yeas to nays from a
+ * backend image older than that field. */
+export function voteTally(v: { tally?: string; yeas: number; nays: number }): string {
+  return v.tally ?? `${v.yeas}–${v.nays}`;
+}
+
+/** What a roll call decided, as the backend words it ("Quorum call",
+ * "Johnson (LA) elected"); the chamber's result from an older backend. */
+export function voteResult(v: { resultLabel?: string; result: string }): string {
+  return v.resultLabel ?? v.result;
+}

@@ -22,6 +22,7 @@ from app.pipeline.fetch.agencies import normalized_name
 from app.ordinals import ordinal
 from app.pipeline.fetch.nominations import HEARING_CODES, JUDICIARY, MAX_PER_RUN, STATUSES, read_marker
 from app.services.bill_record import MemberLinks, vote_detail
+from app.services.roll_call_shape import shape
 from app.services.nomination_links import citations_in, nominee_names, vote_label
 
 KINDS = ("civilian", "judicial", "military")
@@ -228,7 +229,7 @@ def detail(db: Session, congress: int, citation: str) -> dict | None:
             "date": rc.date, "question": rc.question, "label": vote_label(rc.question)[1],
             "result": rc.result, "rejected": rc.rejected,
             "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
-            "sourceUrl": rc.source_url, "citations": len(citations_in(rc.question)),
+            "sourceUrl": rc.source_url, "citations": len(citations_in(rc.question)), **shape(rc),
             "parties": final_detail["parties"] if rc is final else None,
         } for rc in votes],
         "finalVote": ({"session": final.session, "number": final.number, "members": final_detail["members"]}

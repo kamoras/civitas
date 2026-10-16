@@ -1,3 +1,4 @@
+import type { RollCallShape } from "@/types/congress";
 /** GET /api/this-week (backend/app/api/this_week.py): the "this week"
  *  strip's data. Every figure and sentence is the backend's. */
 
@@ -10,7 +11,7 @@ export interface ThisWeekChamber {
   nextMeeting: string | null;
 }
 
-export interface ThisWeekVote {
+export interface ThisWeekVote extends RollCallShape {
   chamber: "senate" | "house";
   congress: number;
   session: number;

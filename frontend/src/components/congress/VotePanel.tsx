@@ -3,7 +3,15 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { BillRecordVote, VoteDetail } from "@/types/congress";
-import { CHAMBER_NAME, resultTone, rollCallHref, shortDate } from "@/lib/congress";
+import {
+  CHAMBER_NAME,
+  resultTone,
+  rollCallHref,
+  shortDate,
+  voteResult,
+  voteTally,
+} from "@/lib/congress";
+import { VoteCount } from "./ReportParts";
 import VoteMembers, { PartyBar } from "./VoteMembers";
 
 const TONE = { yes: "text-phos-mid", no: "text-signal-red", neutral: "text-ink-lo" } as const;
@@ -91,11 +99,9 @@ export default function VotePanel({
                   <span
                     className={`font-mono text-xs uppercase tracking-[0.1em] ${TONE[resultTone(v.rejected)]}`}
                   >
-                    {v.result}
+                    {voteResult(v)}
                   </span>
-                  <span className="font-mono text-lg tabular-nums text-ink-hi">
-                    {v.yeas}–{v.nays}
-                  </span>
+                  <VoteCount vote={v} />
                 </span>
               </button>
             </li>
@@ -111,7 +117,7 @@ export default function VotePanel({
                 {CHAMBER_NAME[vote.chamber]} vote {vote.number} · {shortDate(vote.date)}
               </p>
               <p className="mt-1 text-lg font-bold text-ink-hi">
-                {vote.question}: {vote.result.toLowerCase()}, {vote.yeas}–{vote.nays}
+                {vote.question}: {voteResult(vote).toLowerCase()}, {voteTally(vote)}
               </p>
             </div>
             <Link

@@ -21,6 +21,7 @@ from app.pipeline.fetch.daily_digest import words_to_int
 from app.pipeline.analyze.bill_stage import became_law_action
 from app.pipeline.bill_refresh import stored_laws
 from app.pipeline.fetch.congress import congress_of_date
+from app.services.roll_call_shape import shape, shapes
 
 CHAMBERS = ("senate", "house")
 _CHAMBER_NAME = {"senate": "Senate", "house": "House"}
@@ -183,13 +184,16 @@ def _event(e: CongressEvent) -> dict:
     }
 
 
-def _vote(rc: RollCall) -> dict:
+def _vote(rc: RollCall, shaped: dict | None = None) -> dict:
+    """`shaped`: the roll call's roll_call_shape.shape, read by the caller
+    (shapes) where it can be an election, which needs its positions."""
     return {
         "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
         "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
         "rejected": rc.rejected, "majorityRequirement": rc.majority_requirement,
         "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
         "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
+        **(shaped or shape(rc)),
     }
 
 
@@ -291,7 +295,8 @@ def record_not_published(db: Session, day: date, run: dict | None) -> bool:
 
 
 def chamber_day(row: CongressDay | None, events: list[CongressEvent], votes: list[RollCall],
-                run: dict | None, day_iso: str, chamber: str, no_record_published: bool = False) -> dict:
+                run: dict | None, day_iso: str, chamber: str, no_record_published: bool = False,
+                shaped: dict[int, dict] | None = None) -> dict:
     if row is None:
         status = "live" if votes else ("no_record_published" if no_record_published else "no_record")
     elif not row.in_session:
@@ -322,7 +327,7 @@ def chamber_day(row: CongressDay | None, events: list[CongressEvent], votes: lis
         # page say the log is unavailable instead of showing nothing.
         "floorLogStatus": _source_outcome(run, day_iso, chamber),
         "counts": _counts(digest, votes),
-        "votes": [_vote(v) for v in sorted(votes, key=lambda v: v.number)],
+        "votes": [_vote(v, (shaped or {}).get(v.id)) for v in sorted(votes, key=lambda v: v.number)],
         "passed": by_kind["passed"],
         "failed": by_kind["failed"],
         "reported": by_kind["reported"],
@@ -481,9 +486,11 @@ def day_report(db: Session, day: date) -> dict:
     votes = db.query(RollCall).filter(RollCall.date == iso).all()
     run = last_run(db)
     unpublished = not rows and not votes and record_not_published(db, day, run)
+    shaped = shapes(db, votes)
     chambers = {
         c: chamber_day(rows.get(c), [e for e in events if e.chamber == c],
-                       [v for v in votes if v.chamber == c], run, iso, c, no_record_published=unpublished)
+                       [v for v in votes if v.chamber == c], run, iso, c, no_record_published=unpublished,
+                       shaped=shaped)
         for c in CHAMBERS
     }
     met = session_days(db)
@@ -596,6 +603,7 @@ def period_report(db: Session, start: date, end: date) -> dict:
            if not is_resolution(e.bill_id) and e.bill_id and e.bill_id not in cleared
            and not passed_both_chambers(e.bill_id, e.chamber, e.text)]
     decided = [v for v in p["votes"] if v.yeas + v.nays > 0]
+    shaped = shapes(db, p["votes"])
     closest = sorted(decided, key=lambda v: (votes_from_threshold(v), v.date, v.number))[:3]
 
     days = []
@@ -630,8 +638,8 @@ def period_report(db: Session, start: date, end: date) -> dict:
         "days": days,
         "passedBothChambers": both,
         "passedOneChamber": one,
-        "closestVotes": [_vote(v) for v in closest],
-        "votes": [_vote(v) for v in sorted(p["votes"], key=lambda v: (v.date, v.chamber, v.number))],
+        "closestVotes": [_vote(v, shaped.get(v.id)) for v in closest],
+        "votes": [_vote(v, shaped.get(v.id)) for v in sorted(p["votes"], key=lambda v: (v.date, v.chamber, v.number))],
         "becameLaw": _became_law(db, start, end),
         "syncedAt": (last_run(db) or {}).get("finishedAt"),
     }
@@ -697,7 +705,10 @@ def bill_days(db: Session, bill_id: str, congress: int) -> list[dict]:
     for e in rows:
         out.setdefault((e.date, e.chamber), {"date": e.date, "chamber": e.chamber, "entries": []})["entries"].append(
             {"kind": e.kind, "text": e.text, "source": e.source})
-    for v in db.query(RollCall).filter(RollCall.bill_id == bill_id, RollCall.congress == congress):
+    votes = db.query(RollCall).filter(RollCall.bill_id == bill_id, RollCall.congress == congress).all()
+    shaped = shapes(db, votes)
+    for v in votes:
+        sh = shaped[v.id]
         out.setdefault((v.date, v.chamber), {"date": v.date, "chamber": v.chamber, "entries": []})["entries"].append(
-            {"kind": "vote", "text": f"{v.question}: {v.result}, {v.yeas}-{v.nays}", "source": "roll_call"})
+            {"kind": "vote", "text": f"{v.question}: {sh['resultLabel']}, {sh['tally']}", "source": "roll_call"})
     return sorted(out.values(), key=lambda d: d["date"], reverse=True)
