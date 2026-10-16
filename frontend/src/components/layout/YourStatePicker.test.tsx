@@ -89,4 +89,18 @@ describe("YourStatePicker", () => {
     fireEvent.change(screen.getByLabelText("Your state"), { target: { value: "GA" } });
     expect(sessionStorage.getItem(YOUR_STATE_KEY)).toBe("GA");
   });
+
+  it("in the header, clears its message box when focus moves on, so it covers nothing", () => {
+    geolocation(false);
+    render(
+      <>
+        <YourStatePicker />
+        <button type="button">Elsewhere</button>
+      </>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Use my location" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Location not available.");
+    act(() => screen.getByRole("button", { name: "Elsewhere" }).focus());
+    expect(screen.getByRole("status")).toHaveTextContent("");
+  });
 });

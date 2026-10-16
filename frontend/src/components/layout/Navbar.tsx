@@ -336,8 +336,11 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!menuOpen || !menuRef.current) return;
-    const firstLink = menuRef.current.querySelector<HTMLElement>("a[href]");
-    firstLink?.focus();
+    // The panel's first control, in reading order: the state picker at its
+    // top, then the sections. Starting on the first link skipped the
+    // picker, which Tab then reached only after every link.
+    const first = menuRef.current.querySelector<HTMLElement>("select, a[href], button");
+    first?.focus();
   }, [menuOpen]);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useYourState } from "@/hooks/useYourState";
 import { stateFromPoint } from "@/lib/stateFromPoint";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
@@ -9,6 +9,11 @@ import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
 const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
   (STATE_NAMES[a] ?? a).localeCompare(STATE_NAMES[b] ?? b)
 );
+
+// The select's border is what shows it is a control (WCAG 1.4.11, 3:1):
+// ink-min at 60% over the header is 4.1:1; white/20 was under 2:1.
+/** How long the header's message box stays when nothing else moves it. */
+const STATUS_SHOWN_MS = 8000;
 
 const BUTTON =
   "inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-ink-hi disabled:no-underline disabled:opacity-80";
@@ -30,6 +35,28 @@ export default function YourStatePicker({ size = "sm" }: { size?: "sm" | "lg" })
   const { state, setState } = useYourState();
   const [status, setStatus] = useState("");
   const [locating, setLocating] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const tall = size === "lg";
+
+  // In the header the message is a small box over the bar below; it goes
+  // when focus or a pointer moves elsewhere, or after a few seconds, so it
+  // never covers a control a reader moves to (WCAG 2.4.11). It has been
+  // announced by then: the live region speaks when the text is set.
+  useEffect(() => {
+    if (tall || !status || locating) return;
+    const box = boxRef.current;
+    const away = (e: Event) => {
+      if (!box?.contains(e.target as Node)) setStatus("");
+    };
+    const timer = window.setTimeout(() => setStatus(""), STATUS_SHOWN_MS);
+    document.addEventListener("focusin", away);
+    document.addEventListener("pointerdown", away);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("focusin", away);
+      document.removeEventListener("pointerdown", away);
+    };
+  }, [tall, status, locating]);
   const locate = () => {
     if (!("geolocation" in navigator)) {
       setStatus("This browser can't share a location. Pick your state from the list.");
@@ -62,9 +89,11 @@ export default function YourStatePicker({ size = "sm" }: { size?: "sm" | "lg" })
     );
   };
 
-  const tall = size === "lg";
   return (
-    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${tall ? "" : "relative"}`}>
+    <div
+      ref={boxRef}
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${tall ? "" : "relative"}`}
+    >
       <label htmlFor={id} className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
         Your state
       </label>
@@ -75,7 +104,7 @@ export default function YourStatePicker({ size = "sm" }: { size?: "sm" | "lg" })
           setState(e.target.value);
           setStatus("");
         }}
-        className={`${tall ? "min-h-11" : "min-h-6"} border border-white/20 bg-surface-base px-1 font-mono text-xs text-ink`}
+        className={`${tall ? "min-h-11" : "min-h-6"} border border-ink-min/60 bg-surface-base px-1 font-mono text-xs text-ink`}
       >
         <option value="">Not set</option>
         {STATES_BY_NAME.map((code) => (
