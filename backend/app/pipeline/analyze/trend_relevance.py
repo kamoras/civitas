@@ -2,7 +2,7 @@
 
 Four kNN votes (Cover & Hart 1967) over hand-labelled Bluesky trend topics,
 each the similarity-weighted share of positive examples among a trend's k
-nearest (action_center.relevance_votes, all-MiniLM-L6-v2):
+nearest (policy_relevance.relevance_votes, all-MiniLM-L6-v2):
 
   - relevance: a U.S. policy, government or civic story
     (app/data/trend_relevance_examples.json). The Action Center's article
@@ -45,7 +45,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from app import calibration_drift
-from app.pipeline.analyze.action_center import _embed_texts_sim, relevance_votes
+from app.pipeline.analyze.action_center import _embed_texts_sim
+from app.policy_relevance import relevance_votes
 from app.pipeline.analyze.grounding import (
     editorializing_language,
     electioneering_language,

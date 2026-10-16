@@ -220,7 +220,7 @@ the residual.
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
 | 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing); whether a claim's actor span is a party that can act, for spans the capitalised-actor rule refuses (against hand-labelled spans, `claim_actor_examples.json`) |
+| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance (against stored feed articles labelled by their publishers' own filing and by the officials and agencies they name, refit daily: `app/policy_relevance.py`); committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes); whether a claim's actor span is a party that can act, for spans the capitalised-actor rule refuses (against hand-labelled spans, `claim_actor_examples.json`) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
@@ -1334,8 +1334,12 @@ Trends tab's comparison.
 
 In addition to the main pipeline, the **Action Center pipeline** runs hourly to
 surface trending civic issues. It fetches RSS feeds from low-bias news sources,
-filters articles for U.S. policy relevance by a kNN vote against hand-labelled
-feed articles (`relevance_votes`; `docs/research/action-center-relevance.md`),
+filters articles for U.S. policy relevance by a kNN vote against the feed
+articles it has already judged, each labelled by its publisher's own filing
+(a politics feed or desk, a world feed or desk) and by whether it names a
+sitting official or a federal agency, with k and the threshold refit once a
+day and nothing labelled by hand (`app/policy_relevance.py`, stored in
+`feed_articles`; `docs/research/action-center-relevance.md`),
 clusters articles reporting the same event (complete linkage on headline plus
 description start, cut where no hand-judged different-event pair merges:
 `app/data/cluster_pair_judgments.json`, `scripts/calibrate_cluster_pairs.py`;
@@ -1493,8 +1497,8 @@ precision. `articles_dropped_digest` is the counter to watch.
 Each published issue records its **principal actor** (`ActionIssue.principal_actor`,
 `pipeline/analyze/story_actor.py`). That is the official named earliest in the
 headline, as `_find_related_officials` matched them. When the headline names
-none, it is a class from a kNN vote over the relevance gate's labelled
-examples, whose categories say who acts. The admin's Action Center tab charts
+none, it is a class from a kNN vote over the relevance seed's examples
+(`policy_relevance_examples.json`), whose categories say who acts. The admin's Action Center tab charts
 the weekly Herfindahl index of those actors, the president's share and the
 share with no government actor (`GET /api/admin/actor-concentration`).
 This is measurement, not selection. On 2026-10-12, a replay of every run since

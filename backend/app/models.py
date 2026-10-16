@@ -1,7 +1,19 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, VisitsBase
@@ -1641,6 +1653,36 @@ class LlmGenerationSample(Base):
     # claims, _check_summary_roles), not a separate judgment call.
     violations: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class FeedArticle(Base):
+    """One national-feed article the Action Center's relevance gate judged,
+    with the label its publisher's own filing gives it — the gate's kNN
+    reference (pipeline/analyze/policy_relevance.py).
+
+    `text` is what the gate embeds (headline and the first 200 characters of
+    the description) with tracked officials' names masked; `label` is 1 when
+    the publisher filed it under U.S. politics or it names a tracked
+    official, 0 when it was filed under another desk and names none, NULL
+    when the publisher said neither (kept: it is the gate's input record, so
+    a later change to the gate can be replayed against it). `embedding` is
+    `text` on `model`, float32. Pruned past policy_relevance.REFERENCE_DAYS.
+    """
+    __tablename__ = "feed_articles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(String, unique=True, index=True)
+    source_name: Mapped[str] = mapped_column(String)
+    scope: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    text: Mapped[str] = mapped_column(Text)
+    names_official: Mapped[bool] = mapped_column(Boolean, default=False)
+    label: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vote: Mapped[float | None] = mapped_column(Float, nullable=True)
+    kept: Mapped[bool] = mapped_column(Boolean, default=False)
+    embedding: Mapped[bytes] = mapped_column(LargeBinary)
+    model: Mapped[str] = mapped_column(String)
+    published: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class TimelineEntry(Base):
