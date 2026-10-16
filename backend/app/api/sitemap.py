@@ -21,8 +21,8 @@ from app.database import get_db
 from app.issue_ids import to_public_id
 from app.config import settings
 from app.models import (
-    ActionIssue, ActionIssueStatus, Agency, AgencyBudget, CongressEvent, ExploreDocument, Justice, Nomination, President,
-    Representative, RollCall,
+    ActionIssue, ActionIssueStatus, Agency, AgencyBudget, CongressEvent, ElectionArchive, ExploreDocument, Justice,
+    Nomination, President, Representative, RollCall,
     Senator,
 )
 from app.pipeline.fetch.congressional_record import congress_start
@@ -172,6 +172,12 @@ def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
             "nominations": nominations,
             # The states with a "what changed on the new map" page.
             "redistricting": redrawn_overlap_states(),
+            # Each archived general election (/elections/{cycle}).
+            "electionArchives": [
+                {"id": str(cycle), "lastmod": _iso_date(as_of)}
+                for cycle, as_of in db.query(ElectionArchive.cycle, ElectionArchive.record_as_of)
+                .filter(ElectionArchive.record_json.isnot(None)).order_by(ElectionArchive.cycle)
+            ],
             # Explore documents are listed separately, a page at a time
             # (/sitemap/explore): the corpus has no upper bound, and one
             # sitemap file holds at most 50,000 URLs.
