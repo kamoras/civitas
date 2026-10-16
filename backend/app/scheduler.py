@@ -9,6 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.config import settings
 from app.database import SessionLocal
 from app.error_utils import exception_summary
+from app.forecast.build import run_refresh as election_map_refresh
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
 from app.pipeline.supplementary_pipeline import (
@@ -253,6 +254,7 @@ def _nightly_pipeline() -> None:
     from app.ops_alerts import (
         check_current_congress_staleness,
         check_feedback_token_expiration,
+        check_sitting_president,
         check_state_pvi_staleness,
         resolve_ops_alert,
         send_ops_alert,
@@ -277,6 +279,10 @@ def _nightly_pipeline() -> None:
             # Each hand-labelled calibration against the stream it gates
             # (pass rates since it was fitted).
             calibration_drift.check_all,
+            # The presidents table's sitting president against the Federal
+            # Register's newest presidential document (an inauguration the
+            # roster hasn't caught up with).
+            check_sitting_president,
         )
         for check in pre_checks:
             try:
@@ -806,6 +812,19 @@ def start_scheduler() -> None:
         CronTrigger(minute="10,40", timezone="UTC"),
         id="congress_activity_sync",
         replace_existing=True,
+    )
+
+    # The 2026 election map's data (app/forecast/build.py) — every three
+    # hours at :55, and once at start, a no-op outside the campaign. Not
+    # through _start_job: it reads the database and writes only its own
+    # file on the data volume, so it is no database writer for a data
+    # reset to wait on, and a reset under it only shortens one build.
+    scheduler.add_job(
+        election_map_refresh,
+        CronTrigger(hour="*/3", minute="55", timezone="UTC"),
+        id="election_map_refresh",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
     )
 
     # Agency list and budgets — hourly at :30, clear of the :10/:40 Congress

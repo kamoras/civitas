@@ -359,6 +359,20 @@ export function describeStateRedistricting(
   };
 }
 
+/** /elections/map: the 2026 Senate and House map (usual vote, poll
+ * ranges). Never "forecast", "prediction" or "projection" — the page is
+ * none of those. */
+export function describeElectionMap(): {
+  title: string;
+  description: string;
+} {
+  return {
+    title: "2026 Senate and House Map: Usual Vote and Poll Ranges",
+    description:
+      "How each 2026 Senate and House seat usually votes, the range this year's polls suggest for the margin, and where the two disagree. Ranges, not results; not a race call. Method and held-out calibration shown.",
+  };
+}
+
 /** The agency directory: "Federal agencies: budgets, rules and comment periods". */
 export function describeAgencyIndex(): { title: string; description: string } {
   return {

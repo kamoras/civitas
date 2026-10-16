@@ -96,7 +96,7 @@ const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
   },
   {
     what: "Supreme Court",
-    detail: "The nine sitting justices",
+    detail: "The sitting justices",
     href: "/leaderboard?branch=scotus",
   },
   {
