@@ -5,6 +5,7 @@ import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { describeElectionMap } from "@/lib/seo";
 import { ELECTION_MAP_HREF, parseChamber, parseView, type MapChamber } from "@/lib/electionMap";
 import SectionTabs from "@/components/layout/SectionTabs";
+import { ELECTIONS_ARCHIVE_HREF } from "@/lib/routes";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -78,10 +79,15 @@ export default async function ElectionMapPage({
           ) : (
             <div className="max-w-2xl space-y-3 text-ink-lo">
               <p>{state.detail}</p>
-              <p>
+              <p className="flex flex-wrap gap-x-6">
                 <Link href="/elections" className="text-ink-hi underline">
                   Elections →
                 </Link>
+                {state.kind === "hidden" && (
+                  <Link href={ELECTIONS_ARCHIVE_HREF} className="text-ink-hi underline">
+                    The map before election day, in the archive →
+                  </Link>
+                )}
               </p>
             </div>
           )}
