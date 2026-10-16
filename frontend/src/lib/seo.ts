@@ -7,6 +7,8 @@ import type { ActionIssue } from "@/types/action";
 import type { BillDetail } from "@/types/bill";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { VoteDetail } from "@/types/congress";
+import type { AgencyDetail } from "@/types/agency";
+import { formatCurrency } from "@/lib/formatting";
 import {
   BSKY_PROFILE_URL,
   GITHUB_REPO_URL,
@@ -367,5 +369,58 @@ export function describeElectionMap(data: { seats: unknown[] } | null): {
   return {
     title: "2026 Senate Map: Usual Vote and Poll Ranges",
     description: `How each of the ${seats}2026 Senate seats usually votes, the range this year's polls suggest for the margin, and where the two disagree. Ranges, not results; not a race call. Method and held-out calibration shown.`,
+  };
+}
+
+/** The agency directory: "Federal agencies: budgets, rules and comment periods". */
+export function describeAgencyIndex(): { title: string; description: string } {
+  return {
+    title: "Federal agencies: budgets, rules and open comment periods",
+    description:
+      "Every federal agency the Federal Register lists: what each one spends (USAspending.gov), the rules it proposes and issues, the executive orders that name it, and when you can comment.",
+  };
+}
+
+/** One agency: "Environmental Protection Agency (EPA): budget, rules and comment periods". */
+export function describeAgency(a: AgencyDetail): { title: string; description: string } {
+  const name = a.shortName && a.shortName !== a.name ? `${a.name} (${a.shortName})` : a.name;
+  const parts = [
+    a.budget?.reported && a.budget.budgetAuthority != null
+      ? `${formatCurrency(a.budget.budgetAuthority)} in budgetary resources in FY${a.budget.fiscalYear}`
+      : a.budget?.latest?.budgetaryResources != null
+        ? `${formatCurrency(a.budget.latest.budgetaryResources)} in budgetary resources in FY${a.budget.latest.fiscalYear}`
+        : null,
+    a.documents.openCommentsCount > 0
+      ? `${a.documents.openCommentsCount} open comment period${a.documents.openCommentsCount === 1 ? "" : "s"}`
+      : null,
+    a.documents.total > 0
+      ? `${a.documents.total.toLocaleString("en-US")} Federal Register documents`
+      : null,
+  ].filter(Boolean);
+  return {
+    title: `${name}: budget, rules and comment periods`,
+    description: `${name}${a.parent ? `, part of the ${a.parent.name}` : ""}: ${
+      parts.length ? parts.join(", ") : "its Federal Register profile"
+    }. What it does, what it spends and what it is proposing, from official sources.`,
+  };
+}
+
+export function agencyJsonLd(a: AgencyDetail) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "GovernmentOrganization",
+    name: a.name,
+    ...(a.shortName ? { alternateName: a.shortName } : {}),
+    url: absoluteUrl(`/agencies/${a.slug}`),
+    ...(a.website || a.frUrl ? { sameAs: [a.website, a.frUrl].filter(Boolean) } : {}),
+    ...(a.parent
+      ? {
+          parentOrganization: {
+            "@type": "GovernmentOrganization",
+            name: a.parent.name,
+            url: absoluteUrl(`/agencies/${a.parent.slug}`),
+          },
+        }
+      : {}),
   };
 }

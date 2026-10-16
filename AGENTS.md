@@ -1109,6 +1109,15 @@ with no successful completion in `PIPELINE_STALE_ALERT_DAYS`;
 `check_pipeline_overrun` watches the opposite case of a run that started
 and is taking too long.
 
+Outside the chain, the **agency sync** (`fetch/agencies.py`,
+`scheduler._agency_sync`, `AGENCY_SYNC` lease) reads the Federal Register's
+agency list and USAspending's toptier budgets once a week (tried hourly;
+each source is read when a week has passed since it last stored). USAspending names no
+Register agency, so the two are joined by name similarity at a threshold
+`scripts/calibrate_agency_crosswalk.py` writes to
+`app/data/agency_crosswalk.json` (§3a); an agency under it is kept and
+listed unmatched, never guessed.
+
 **What makes a night long is upstream fetching, not the analysis-code
 fingerprint** (measured 2026-10-14: the fingerprint changed on 19 of the 21
 nights before, and its slowest two nights were both unchanged-hash nights).
@@ -1853,6 +1862,7 @@ the pending list).
 | Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
+| Federal agencies: weekly Register list + USAspending budgets, name crosswalk, agency pages | `backend/app/pipeline/fetch/agencies.py`, `backend/app/api/agencies.py`, `backend/scripts/calibrate_agency_crosswalk.py` (`app/data/agency_crosswalk.json`), `frontend/src/app/agencies/` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |

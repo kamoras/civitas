@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.action import router as action_router
+from app.api.agencies import router as agencies_router
 from app.api.admin import router as admin_router
 from app.api.bills import router as bills_router
 from app.api.cards import router as cards_router
@@ -41,6 +42,7 @@ api_router.include_router(presidential_support_router, tags=["presidential-suppo
 api_router.include_router(justices_router, tags=["justices"])
 api_router.include_router(leaderboard_router, tags=["leaderboard"])
 api_router.include_router(explore_router, tags=["explore"])
+api_router.include_router(agencies_router, tags=["agencies"])
 api_router.include_router(action_router, tags=["action"])
 api_router.include_router(election_map_router, tags=["elections"])
 api_router.include_router(elections_router, tags=["elections"])

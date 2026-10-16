@@ -21,7 +21,7 @@ from app.database import get_db
 from app.issue_ids import to_public_id
 from app.config import settings
 from app.models import (
-    ActionIssue, ActionIssueStatus, CongressEvent, ExploreDocument, Justice, President, Representative, RollCall,
+    ActionIssue, ActionIssueStatus, Agency, AgencyBudget, CongressEvent, ExploreDocument, Justice, President, Representative, RollCall,
     Senator,
 )
 from app.pipeline.fetch.congressional_record import congress_start
@@ -133,9 +133,30 @@ def sitemap_entries(db: Session = Depends(get_db)) -> JSONResponse:
         ).order_by(RollCall.date, RollCall.chamber, RollCall.number)
     ]
 
+    # Agencies with something to show: a document Civitas holds from them or
+    # one of their sub-agencies, or a budget. The Register also lists
+    # abolished agencies, whose pages are a description alone.
+    latest = dict(db.query(ExploreDocument.agency_slug, func.max(ExploreDocument.date))
+                  .filter(ExploreDocument.agency_slug.isnot(None), ExploreDocument.agency_slug != "")
+                  .group_by(ExploreDocument.agency_slug))
+    budgeted = {s for (s,) in db.query(AgencyBudget.agency_slug).filter(AgencyBudget.agency_slug.isnot(None))}
+    parents = dict(db.query(Agency.slug, Agency.parent_slug))
+    for slug, day in list(latest.items()):
+        up, seen = parents.get(slug), {slug}
+        while up and up not in seen:
+            seen.add(up)
+            if (latest.get(up) or "") < day:
+                latest[up] = day
+            up = parents.get(up)
+    agencies = [
+        {"id": slug, "lastmod": _iso_date(latest.get(slug))}
+        for slug in sorted(parents) if slug in latest or slug in budgeted
+    ]
+
     return cached_json(
         {
             "politicians": politicians, "bills": bills, "issues": issues,
+            "agencies": agencies,
             "congressDays": congress_days,
             "rollCalls": roll_calls,
             # The states with a "what changed on the new map" page.
