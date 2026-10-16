@@ -38,6 +38,7 @@ from typing import Callable
 
 import numpy as np
 
+from app import calibration_drift
 from app.pipeline.analyze.post_composer import compose, headline_source
 from app.pipeline import vector_store
 
@@ -266,6 +267,10 @@ def distinct_claims(claims: list[Claim]) -> list[Claim]:
     except Exception:
         logger.exception("Claim restatement check failed — keeping every claim")
         return claims
+    calibration_drift.observe(
+        "claim_restatement",
+        [float(vectors[i] @ vectors[j]) for i in range(len(claims)) for j in range(i)], threshold,
+    )
     kept: list[int] = []
     for i in range(len(claims)):
         if all(float(vectors[i] @ vectors[j]) < threshold for j in kept):

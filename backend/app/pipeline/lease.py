@@ -61,6 +61,9 @@ AGENCY_SYNC = "agency-sync-lock"
 # is done (fetch/district_pvi.run_house_on_sitting_lines), so the lines can
 # neither change under a House run nor be refreshed twice at once.
 DISTRICT_LINES = "district-lines-lock"
+# The daily refresh of generated data files (app/data_refresh.py): one at a
+# time, and none during a data reset.
+DATA_REFRESH = "data-refresh-lock"
 # Every lease, which the data reset's wipe leaves in api_cache — its own, and
 # any other that may be live — with what each one's holder is.
 TIERS = {
@@ -78,6 +81,7 @@ TIERS = {
     RESULTS_SYNC: "Live results sync",
     AGENCY_SYNC: "Agency sync",
     DISTRICT_LINES: "House run or district PVI refresh",
+    DATA_REFRESH: "Data file refresh",
 }
 
 # Ten missed beats ride out a SQLite writer holding the database for
@@ -143,6 +147,8 @@ HUNG_AFTER = {
     AGENCY_SYNC: timedelta(hours=1),
     # Held for a whole House run, whose run lock goes stale at this too.
     DISTRICT_LINES: _pipeline_timeout(),
+    # Its longest generator is bounded at four hours (data_refresh timeout_s).
+    DATA_REFRESH: timedelta(hours=6),
 }
 
 

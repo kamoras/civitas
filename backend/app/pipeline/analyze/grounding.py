@@ -24,6 +24,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.pipeline.analyze import action_metrics
+from app.time_utils import eastern_date, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -894,7 +895,7 @@ def validate_facts(facts: list, source_text: str | None = None) -> list:
         r"(?:provided|disclosed|specified|released|given|available)\b",
         re.IGNORECASE,
     )
-    _today = datetime.now(_US_EAST).date()
+    _today = eastern_date(utcnow())
     _month_index = {m: i for i, m in enumerate(calendar.month_name) if m}
 
     clean = []

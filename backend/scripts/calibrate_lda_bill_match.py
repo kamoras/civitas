@@ -126,6 +126,7 @@ def build_df(titles_by_congress: dict[int, dict[str, list[str]]]) -> dict:
         ),
         "_note": "Words in only one title are omitted and read as 1 (lobbying_records._idf).",
         "documents": documents,
+        "congresses": congresses,
         "df": {w: c for w, c in sorted(counts.items()) if c >= 2},
     }
 
@@ -220,6 +221,7 @@ def main() -> None:
     ap.add_argument("--skip-df", action="store_true")
     ap.add_argument("--skip-calibration", action="store_true")
     ap.add_argument("--cache-dir", type=pathlib.Path)
+    ap.add_argument("--output", type=pathlib.Path, default=OUTPUT)
     args = ap.parse_args()
     global CACHE_DIR
     if args.cache_dir:
@@ -231,8 +233,8 @@ def main() -> None:
     titles = {c: all_titles for c, (all_titles, _) in fetched.items()}
     if not args.skip_df:
         table = build_df(titles)
-        OUTPUT.write_text(json.dumps(table, indent=0, sort_keys=False) + "\n")
-        print(f"Wrote {OUTPUT} ({table['documents']} titles, {len(table['df'])} words)", file=sys.stderr)
+        args.output.write_text(json.dumps(table, indent=0, sort_keys=False) + "\n")
+        print(f"Wrote {args.output} ({table['documents']} titles, {len(table['df'])} words)", file=sys.stderr)
         lr._document_frequencies.cache_clear()
     if not args.skip_calibration:
         first_year = congress_first_year(args.congress)

@@ -366,10 +366,32 @@ The correct pattern, established by `_district_pvi()` /
 3. Any other file that needs the same underlying data (an audit script,
    a different scoring dimension) reads the same JSON file or calls the
    same loader — never a second hardcoded copy of the same numbers.
-4. Rerun the generating script and commit the refreshed JSON when the
-   underlying data goes stale (a new census, a population audit finding
-   drift) — this is normal, expected maintenance, not a one-time setup
-   step to forget about.
+4. The data refreshes itself. Register the file in `app/data_refresh.py`'s
+   `DATA_FILES`: a daily job (`scheduler._data_refresh`, lease
+   `DATA_REFRESH`, outside the nightly chain) runs the generating script
+   itself as a low-priority subprocess on the file's cadence (`due`),
+   writes the candidate to a scratch file, gates it (`gate`: shape,
+   plausibility, drift against the copy in use), and only a candidate that
+   passes replaces the copy in use, on the data volume (`/data/<name>`,
+   provenance in `_refreshed`: when, the command, the content's sha256). A
+   failure keeps the last good copy and opens an ops alert for that file
+   (`data-refresh-<file>`), resolved by its next good refresh. Readers go
+   through `data_refresh.read(name)` (refreshed copy, else the bundled one,
+   re-read when either changes, from either process); the bundled file in
+   git stays the pre-first-refresh fallback and the reproducible baseline,
+   and committing a regenerated one is still how a method change ships. A
+   script the job runs takes an output path and reads no `/data` copy of
+   its own output. Files a script can't regenerate unattended — a new
+   survey whose question ids change, a model-selection refit that is a
+   method decision, a source behind research-only dependencies, a source
+   that needs hand-researched corrections — get a `stale` check instead,
+   which alerts (`data-stale-<file>`) when a newer version should exist and
+   says what a person has to do. A refresh that moves scores is a data
+   refresh within the same method (announced by an ops notice and recorded
+   in `_refreshed`), not a new `ALGORITHM_VERSION`; a refit that changes a
+   method's structure or a classifier's threshold is a version change and
+   goes through review, which is why those calibrations alert rather than
+   refit themselves.
 
    `district_pvi.json` is fetched by the pipeline, not only by the
    script, but from **pinned** sources (2026-09):
@@ -553,6 +575,20 @@ counts stored beside the figures so a test recomputes every one). The
 bar is specifically about **calculated** values — anything a regression, an average, or a percentile produced —
 which must trace back to a generating script and a data file, not a
 comment asserting "trust me, I ran a script once."
+
+A calibration fitted to **hand labels** (the Action Center's relevance,
+clustering, claim and actor gates, the trend-post gates, committee routing,
+the member-photo check) can't regenerate itself, and doesn't need to when
+its labels change: each records the hash of its labels and a test fails
+until it is refit. What it can't see is the stream moving away from its
+labels. Each such gate reports what it decides (`calibration_drift.observe`,
+counted in memory and written after each hourly refresh), and a nightly
+check compares the gate's pass rate over the last four weeks with its own
+first four weeks under the calibration in use, alerting
+(`calibration-drift-<gate>`) when it has moved by 15 points or more and far
+outside sampling noise: the cue to label a fresh sample and refit. A new
+calibrated gate is added to `calibration_drift.GATES` and observes its
+decisions.
 
 ### 3b. Search ranking is measured, not asserted
 
@@ -1993,6 +2029,7 @@ the pending list).
 | Data validation | `backend/app/pipeline/assemble/validator.py` |
 | Civitas-computed district lean (display only, beside Cook) | `backend/scripts/build_district_lean.py`, `backend/app/data/district_lean.json`, `backend/app/data/district_lean_corrections.json`, `backend/app/district_lean.py` |
 | Ground-truth regression gate | `backend/app/pipeline/analyze/ground_truth.py` |
+| Generated data files' automatic refresh (cadence, gates, provenance, staleness alerts) | `backend/app/data_refresh.py` (`DATA_FILES`), `scheduler._data_refresh` |
 | Score/data-quality diagnostic playbook | `SCORE_AUDIT.md` |
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |

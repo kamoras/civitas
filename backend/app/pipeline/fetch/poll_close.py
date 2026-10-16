@@ -11,26 +11,25 @@ the page before a reader's polls close is the thing election-night
 reporting is most careful never to do.
 """
 
-import json
 import logging
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from app import data_refresh
+
 logger = logging.getLogger(__name__)
 
 _PATH = Path(__file__).resolve().parents[2] / "data" / "poll_close_times.json"
-_cache: dict | None = None
 # Election years already warned about, so a stale file is logged once per
 # process and year rather than once per state on every five-minute pass.
 _warned_years: set[int] = set()
 
 
 def _load() -> dict:
-    global _cache
-    if _cache is None:
-        _cache = json.loads(_PATH.read_text()) if _PATH.exists() else {}
-    return _cache
+    """The closing times in use: refreshed each cycle (data_refresh), else
+    the bundled file at _PATH."""
+    return data_refresh.read(_PATH.name)
 
 
 def _states() -> dict:

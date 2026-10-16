@@ -55,6 +55,7 @@ import re
 
 import numpy as np
 
+from app import calibration_drift
 from app.pipeline import vector_store
 
 logger = logging.getLogger(__name__)
@@ -158,7 +159,9 @@ def is_acting_party(span: str) -> bool:
     if _names_no_one(span):
         return False
     try:
-        return _actor_vote(span) >= actor_calibration()["threshold"]
+        vote, threshold = _actor_vote(span), actor_calibration()["threshold"]
+        calibration_drift.observe("claim_actor", [vote], threshold)
+        return vote >= threshold
     except Exception:
         # The vote only ever admits what the rule refused, so failing closed
         # leaves the rule's verdict: the claim is refused, not the run.
