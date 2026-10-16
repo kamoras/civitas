@@ -1490,7 +1490,7 @@ every stage downstream treats it as one story. Four mechanical signals:
   alone matched 12 single stories along with 16 briefings; with it, 5
   briefings and no single story (`docs/research/action-center-relevance.md`).
 
-A **livestream or video page** ("WATCH LIVE: Trump speaks at midterm rally",
+A **livestream or video page** ("WATCH LIVE: The president speaks at a midterm rally",
 "WATCH: Senate rejects …") is for watching, not a written report, so it never
 titles an issue or supplies its facts or sources, and a cluster of nothing
 else publishes nothing until a report joins it (`announces_broadcast`, in the

@@ -15,8 +15,8 @@ def _margins_by_kicker(kickers):
 
 
 def test_kicker_is_the_label_before_the_first_colon():
-    assert ac._headline_kicker("WATCH LIVE: Trump speaks at a rally") == "WATCH LIVE"
-    assert ac._headline_kicker("Trump speaks at a rally") is None
+    assert ac._headline_kicker("WATCH LIVE: The president speaks at a rally") == "WATCH LIVE"
+    assert ac._headline_kicker("The president speaks at a rally") is None
     assert ac._headline_kicker("Results after 8:00 tonight") is None
     assert ac._headline_kicker(": no label") is None
 

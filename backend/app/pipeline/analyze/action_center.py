@@ -1708,8 +1708,8 @@ def _digest_reason(article: NewsArticle) -> str | None:
     return None
 
 
-# Livestream announcements ("WATCH LIVE: Trump speaks at midterm rally in
-# Youngstown, Ohio") are pages for watching an event, not reports of it.
+# Livestream announcements ("WATCH LIVE: The president speaks at a midterm rally
+# in Ohio") are pages for watching an event, not reports of it.
 # Two became confirmed issue titles in two days (2026-10-12/13), one third
 # on the homepage record, and a permanent issue page kept saying "Watch
 # live" after the event. The page is marked by the headline's kicker, the
@@ -5476,13 +5476,13 @@ def _run_refresh(db: Session) -> int:
 
         # A livestream announcement neither titles the issue nor supplies
         # its facts or sources: its headline is an invitation to watch, and
-        # what it "claims" ("Trump speaks at midterm rally") is an event
+        # what it "claims" ("The president speaks at a midterm rally") is an event
         # that hasn't happened yet when it is published. A cluster of
         # nothing else waits for a report to join it. Replayed on the
-        # stored clusters of 2026-10-12/13: "Watch live: Trump heads to
-        # Alaska as Senate race heats up" takes PBS's "Trump heads to Alaska
-        # in a sign of how close its Senate race may be"; the Youngstown
-        # rally, two livestream pages, publishes nothing.
+        # stored clusters of 2026-10-12/13: "Watch live: The president heads
+        # to a state as its Senate race heats up" takes the outlet's report of
+        # the trip; a rally covered only by two livestream pages publishes
+        # nothing.
         live = announces_broadcast([a.title for a, _ in on_topic], db)
         if any(live):
             action_metrics.increment("articles_dropped_broadcast", sum(live))
