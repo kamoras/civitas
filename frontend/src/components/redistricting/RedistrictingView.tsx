@@ -444,14 +444,18 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
           )}
         </ul>
         <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs tracking-[0.1em]">
-          <a href={downloads.csv} download className="text-signal-cyan hover:text-phos">
+          <a
+            href={downloads.csv}
+            download
+            className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
+          >
             [ DOWNLOAD CSV ]
           </a>
           <a
             href={downloads.json}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-signal-cyan hover:text-phos"
+            className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
           >
             [ JSON ↗ ]
           </a>
@@ -658,11 +662,17 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
             or a district number.
           </p>
         )}
-        <p className="mt-4 font-mono text-xs tracking-[0.1em]">
-          <Link href={stateBallotHref(data.state)} className="text-signal-cyan hover:text-phos">
+        <p className="mt-4 flex flex-wrap gap-x-6 font-mono text-xs tracking-[0.1em]">
+          <Link
+            href={stateBallotHref(data.state)}
+            className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
+          >
             [ WHO IS ON {data.stateName.toUpperCase()}&apos;S BALLOT → ]
           </Link>{" "}
-          <Link href={REDISTRICTING_HREF} className="ml-3 text-ink-lo hover:text-ink-hi">
+          <Link
+            href={REDISTRICTING_HREF}
+            className="inline-flex min-h-6 items-center text-ink-lo hover:text-ink-hi"
+          >
             [ EVERY REDRAWN STATE ]
           </Link>
         </p>

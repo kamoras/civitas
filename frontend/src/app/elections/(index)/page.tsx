@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import BackToTop from "@/components/BackToTop";
 import Link from "next/link";
-import { REDISTRICTING_HREF } from "@/lib/redistricting";
-import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import ResultsOverview from "@/components/elections/results/ResultsOverview";
@@ -287,6 +286,7 @@ export default function ElectionsPage() {
               page left open as polls close, or as results start) is
               usually not announced, which is exactly the moment worth
               announcing. */}
+          <SectionTabs section="elections" active="ballots" />
           <PageMasthead
             eyebrow={
               stillVoting && results
@@ -379,19 +379,7 @@ export default function ElectionsPage() {
             ) : campaignMode ? (
               <>
                 Pick a state for its candidates, their filings, statewide ballot measures, and the
-                coverage we have ingested. Shading is partisan lean, not a forecast.{" "}
-                <Link
-                  href={REDISTRICTING_HREF}
-                  className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
-                >
-                  [ NEW HOUSE MAPS: WHAT CHANGED → ]
-                </Link>{" "}
-                <Link
-                  href={ELECTION_MAP_HREF}
-                  className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
-                >
-                  [ SENATE AND HOUSE MAP: USUAL VOTE AND POLL RANGES → ]
-                </Link>
+                coverage we have ingested. Shading is partisan lean, not a forecast.
               </>
             ) : null}
           </PageMasthead>

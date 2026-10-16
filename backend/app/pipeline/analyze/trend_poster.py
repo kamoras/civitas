@@ -7,7 +7,7 @@ Hourly, from the Action Center's scheduler job (scheduler._hourly_action_refresh
  1. Read Bluesky's public getTrends (fetch/trending.fetch_bluesky_trends)
     and keep each listing as TrendObservation rows. A failed read is an
     outage, not an empty list: nothing is recorded, dropped or posted.
- 2. Score each trend (trend_relevance): the relevance vote, the tragedy
+ 2. Score each trend (trend_relevance): Bluesky's category, the tragedy
     vote, and the neutrality gate on its display name
     (the only words a post quotes from Bluesky).
  3. Find its record on a pinned match only (trend_evidence: an issue,
@@ -63,6 +63,7 @@ from app.pipeline.analyze.trend_evidence import (
     find_evidence,
 )
 from app.pipeline.analyze.trend_relevance import (
+    POLITICS_CATEGORY,
     TrendScores,
     loaded_votes,
     neutrality_problems,
@@ -234,7 +235,7 @@ def evaluate(
     if problems:
         return "skipped", "trend name: " + "; ".join(problems), None, None
     if not scores.relevant:
-        return "ineligible", f"relevance vote {scores.relevance:.2f}", None, None
+        return "ineligible", f"Bluesky category {trend.category or 'none'}, not {POLITICS_CATEGORY}", None, None
     if not evidence:
         return "ineligible", "no pinned record", None, None
     reasons = []
@@ -350,7 +351,7 @@ def run_trend_posts(db: Session, now: datetime | None = None) -> dict:
             row.decision, row.reason, row.decided_at = "dropped", "no longer trending when the window opened", now
     db.commit()
 
-    scores = score_trends([(t.display_name, t.description) for t in trends])
+    scores = score_trends([(t.display_name, t.description, t.category) for t in trends])
     index: RecordIndex | None = None
     rows: list[TrendCandidate] = []
     drafts: dict[str, Draft] = {}

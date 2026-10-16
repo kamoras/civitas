@@ -6,6 +6,7 @@ around that call is (its vector_db_* summary keys were chromadb_* before
 the 2026-07 migration cleanup).
 """
 
+import asyncio
 from datetime import datetime
 from unittest.mock import patch
 
@@ -27,6 +28,16 @@ def _no_bill_cache_rebuild_thread(monkeypatch):
     warmed = []
     monkeypatch.setattr("app.services.bill_service.warm_bill_collection_cache", lambda: warmed.append(1))
     return warmed
+
+
+@pytest.fixture(autouse=True)
+def agency_syncs(monkeypatch):
+    """A reset ends by starting the agency sync (the agency list, wiped, is
+    read again at once rather than at the next :30): recorded here, for the
+    same reason as the bills warm above."""
+    started = []
+    monkeypatch.setattr("app.api.admin.run_agency_sync", lambda: started.append(1))
+    return started
 
 
 class TestResetAllDataVectorStoreSummary:
@@ -258,7 +269,7 @@ class TestResetGuard:
         assert lease.acquire(db_session, lease.DATA_RESET) is not None
         assert "Another data reset" in await self._refused(db_session)
 
-    async def test_holds_every_writer_off_for_the_wipe_and_lets_go_after(self, db_session, monkeypatch):
+    async def test_holds_every_writer_off_for_the_wipe_and_lets_go_after(self, db_session, monkeypatch, agency_syncs):
         from app.api.admin import admin_reset_data
         from app.background import WritesHeld, start_writer
         from app.pipeline import lease
@@ -283,6 +294,12 @@ class TestResetGuard:
             result = await admin_reset_data()
         assert result["rowsDeleted"] == 2
         assert during == {"pipeline_started": False, "refresh_ran": False, "writer_started": False}
+        # The agency list is read again straight after.
+        for _ in range(50):
+            if agency_syncs:
+                break
+            await asyncio.sleep(0.01)
+        assert agency_syncs == [1]
         # The backed-out pipeline left no run row, and the reset let go.
         assert db_session.query(models.HousePipelineRun).count() == 0
         assert not lease.held(db_session, lease.DATA_RESET)

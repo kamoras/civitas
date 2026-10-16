@@ -240,7 +240,7 @@ export function TrendPostsDashboard({ token }: { token: string }) {
                     PARTIES
                   </th>
                   <th scope="col" className={`text-right ${th}`}>
-                    RELEVANCE
+                    CATEGORY
                   </th>
                   <th scope="col" className={`text-right ${th}`}>
                     TRAGEDY
@@ -293,8 +293,8 @@ export function TrendPostsDashboard({ token }: { token: string }) {
                       <div>named: {c.namedParties.join(" ") || NOT_MEASURED}</div>
                       <div>sponsors: {c.sponsorParties.join(" ") || NOT_MEASURED}</div>
                     </td>
-                    <td className="text-right py-1 pr-3 tabular-nums">
-                      {formatMeasure(c.relevance)}
+                    <td className="text-right py-1 pr-3 text-ink-lo">
+                      {c.category || NOT_MEASURED}
                     </td>
                     <td className="text-right py-1 pr-3 tabular-nums">
                       {formatMeasure(c.tragedy)}

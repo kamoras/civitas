@@ -1,14 +1,25 @@
 """Which Bluesky trends a trend post may be about, and how they may be quoted.
 
-Four kNN votes (Cover & Hart 1967) over hand-labelled Bluesky trend topics,
-each the similarity-weighted share of positive examples among a trend's k
-nearest (action_center.relevance_votes, all-MiniLM-L6-v2):
+Whether a trend is a U.S. policy, government or civic story at all is
+Bluesky's own filing: getTrends lists each trend with a category, and only
+POLITICS_CATEGORY is eligible (score_trends' `relevance`, 1.0 or 0.0). It
+is a first cut, not the guarantee: a trend posts only with a pinned
+official record behind it (trend_evidence), and that match is what keeps a
+foreign election or a celebrity's name from reaching a post. Until
+2026-10-16 this was a kNN vote over 350 hand-labelled topics. The 3,084
+trends of the 2026-09-12..10-15 backtest predate the category, so they
+measure the vote's removal: the full decision posts 4 trends without it
+against 3 with it, the fourth an Insurrection Act trend the vote scored
+0.28. On the 106 trends production has recorded with their category, the
+vote passed 20 and Bluesky filed 19 of them under politics; the category
+gate changes no post there (one decision moves from ineligible to skipped:
+a foreign election whose issue record a later check refuses;
+docs/research/trend-posts.md).
 
-  - relevance: a U.S. policy, government or civic story
-    (app/data/trend_relevance_examples.json). The Action Center's article
-    gate is fitted to news articles; trend topics are a short name and a
-    one-line description, a different distribution, so they get their own
-    labelled set.
+Four kNN votes (Cover & Hart 1967) over hand-labelled Bluesky trend topics
+remain, each the similarity-weighted share of positive examples among a
+trend's k nearest (action_center.relevance_votes, all-MiniLM-L6-v2):
+
   - tragedy: people killed, injured, attacked or detained by force, or a
     death (app/data/political_violence_examples.json).
     A tragedy is not excluded: it is eligible only when an official record
@@ -27,8 +38,7 @@ nearest (action_center.relevance_votes, all-MiniLM-L6-v2):
 
 k and each threshold come from app/data/trend_gates_calibration.json,
 written by scripts/calibrate_trend_gates.py with its leave-one-out
-measurement; the relevance threshold of 0.5 is a decision recorded there,
-not a fit. test_trend_gates_calibration_matches_examples fails until the
+measurement. test_trend_gates_calibration_matches_examples fails until the
 script is rerun after an example changes.
 
 Nothing here is read by a score or kept in the learning store: the module
@@ -55,7 +65,6 @@ from app.pipeline.analyze.grounding import (
 from app.pipeline.vector_store import get_similarity_model
 
 _DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
-RELEVANCE_EXAMPLES_PATH = _DATA_DIR / "trend_relevance_examples.json"
 VIOLENCE_EXAMPLES_PATH = _DATA_DIR / "political_violence_examples.json"
 LOADED_EXAMPLES_PATH = _DATA_DIR / "loaded_language_examples.json"
 APPOINTMENT_EXAMPLES_PATH = _DATA_DIR / "appointment_examples.json"
@@ -63,11 +72,15 @@ CALIBRATION_PATH = _DATA_DIR / "trend_gates_calibration.json"
 
 # gate name -> (examples file, label field, subset field or None).
 GATES: dict[str, tuple[pathlib.Path, str, str | None]] = {
-    "relevance": (RELEVANCE_EXAMPLES_PATH, "relevant", None),
     "tragedy": (VIOLENCE_EXAMPLES_PATH, "tragedy", None),
     "loaded": (LOADED_EXAMPLES_PATH, "loaded", None),
     "appointment": (APPOINTMENT_EXAMPLES_PATH, "appointment", None),
 }
+
+# Bluesky's getTrends category for a politics trend (fetch/trending). The
+# platform's own filing of the topic, read as published, like an outlet's
+# section in news_feeds.NEWS_FEEDS.
+POLITICS_CATEGORY = "politics"
 
 _examples_cache: dict[str, list[dict]] = {}
 _calibration_cache: dict | None = None
@@ -119,6 +132,7 @@ def threshold(gate: str) -> float:
 
 @dataclass(frozen=True)
 class TrendScores:
+    # 1.0 when Bluesky filed the trend under POLITICS_CATEGORY, else 0.0.
     relevance: float
     tragedy: float
     loaded: float
@@ -126,7 +140,7 @@ class TrendScores:
 
     @property
     def relevant(self) -> bool:
-        return self.relevance >= threshold("relevance")
+        return self.relevance >= 0.5
 
     @property
     def is_tragedy(self) -> bool:
@@ -146,14 +160,15 @@ def trend_text(name: str, description: str | None) -> str:
     return name.strip() + (f". {description.strip()}" if description and description.strip() else "")
 
 
-def score_trends(trends: list[tuple[str, str | None]]) -> list[TrendScores]:
-    """Scores for each (display name, description). The loaded vote reads the
-    name alone, the words a post would quote."""
+def score_trends(trends: list[tuple[str, str | None, str | None]]) -> list[TrendScores]:
+    """Scores for each (display name, description, Bluesky category). The
+    loaded vote reads the name alone, the words a post would quote."""
     if not trends:
         return []
-    topic = _embed_texts_sim([trend_text(n, d) for n, d in trends])
-    names = _embed_texts_sim([n for n, _ in trends])
-    rel, trag, appt = (gate_votes(g, topic) for g in ("relevance", "tragedy", "appointment"))
+    topic = _embed_texts_sim([trend_text(n, d) for n, d, _ in trends])
+    names = _embed_texts_sim([n for n, _, _ in trends])
+    rel = [1.0 if (c or "").strip().lower() == POLITICS_CATEGORY else 0.0 for _, _, c in trends]
+    trag, appt = (gate_votes(g, topic) for g in ("tragedy", "appointment"))
     loaded = gate_votes("loaded", names)
     return [TrendScores(float(a), float(b), float(c), float(d))
             for a, b, c, d in zip(rel, trag, loaded, appt)]

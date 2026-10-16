@@ -57,6 +57,7 @@ export function chamberView(r: ElectionMapResponse, chamber: MapChamber): Electi
     // A file built before the field existed was always within its window.
     pollsInRange: r.pollsInRange ?? true,
     bins: r.bins,
+    units: r.units,
     calibration: c.calibration,
     model: c.model,
     sources: {
@@ -148,7 +149,7 @@ export const VIEW_LABEL: Record<MapView, string> = {
 
 export const VIEW_STAMP: Record<MapView, string> = {
   usual: "HOW EACH SEAT USUALLY VOTES",
-  polls: "WHAT RECENT POLLS SUGGEST",
+  polls: "MARGIN RANGES, FROM POLLS WHERE A SEAT HAS ANY",
   diff: "WHERE POLLS DISAGREE WITH THE USUAL VOTE",
 };
 
@@ -156,7 +157,7 @@ export const VIEW_EXPLAINER: Record<MapView, string> = {
   usual:
     "From official results of the last two presidential elections, compared with the country as a whole.",
   polls:
-    "The usual vote, nudged by this year's polls. Each seat shows a range, and close ranges stay grey.",
+    "The usual vote, nudged by this year's polls where a seat has any. Each seat shows a range of the margin, and close ranges stay grey.",
   diff: "Seats where polls point a different way from how the seat usually votes, by more than the range allows.",
 };
 
@@ -322,7 +323,7 @@ export function stampSentence(view: MapView, c: MapCounts, asOf: string): string
   const date = formatAsOf(asOf);
   if (view === "usual") return `Showing how each seat usually votes. As of ${date}.`;
   if (view === "polls")
-    return `Showing what recent polls suggest. ${c.close} ${c.close === 1 ? "seat" : "seats"} too close to tell. As of ${date}.`;
+    return `Showing margin ranges, from polls where a seat has any. ${c.close} ${c.close === 1 ? "seat" : "seats"} too close to tell. As of ${date}.`;
   return `Showing where polls disagree with the usual vote: ${c.differ} ${c.differ === 1 ? "seat" : "seats"}. As of ${date}.`;
 }
 
@@ -356,9 +357,11 @@ export function differenceGlyph(seat: MapSeat): string | null {
 
 /** One seat's accessible name on the map. */
 export function seatAriaLabel(seat: MapSeat, view: MapView): string {
-  const usual = seat.leanLabel ? `usual vote ${seat.leanLabel}` : "no usual-vote figure";
+  const usual = seat.leanLabel ? `usual vote ${seat.leanLabel} lean` : "no usual-vote figure";
   if (seat.status !== "range") return `${seatName(seat)}: ${usual}. ${seat.reason}`;
-  const polls = `polls suggest ${rangeLabel(seat)}${crossesEven(seat) ? ", too close to tell" : ""}${seat.difference.seatPolls ? "" : " (no poll of this seat: usual vote and national swing only)"}`;
+  // A file written before the label existed (the minutes between a deploy
+  // and the next build) names the range by its unit alone.
+  const polls = `${seat.rangeBasisLabel ?? "Margin range"}: ${rangeLabel(seat)}${crossesEven(seat) ? ", too close to tell" : ""}`;
   const diff =
     seat.difference.strength > 0
       ? `, polls point toward ${seat.difference.direction}`

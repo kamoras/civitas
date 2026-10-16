@@ -169,13 +169,20 @@ async def fetch_fr_metadata(
                 params={"fields[]": fields},
                 timeout=DEFAULT_FETCH_TIMEOUT_S,
             )
-            data = resp.json()
-        except (httpx.HTTPError, ValueError) as e:
+        except httpx.HTTPError as e:
             logger.warning("Federal Register refresh failed: %s", e)
             return None
+        # A single number the Register has no document for answers 404 with
+        # an HTML page, not JSON: checked before parsing, or that one
+        # provisional number ("X26-10925") read as the whole refresh failing.
         if resp.status_code == 404 and len(batch) == 1:
             missing.add(batch[0])
             continue
+        try:
+            data = resp.json()
+        except ValueError as e:
+            logger.warning("Federal Register refresh failed: %s", e)
+            return None
         if resp.status_code != 200 or not isinstance(data, dict):
             logger.warning("Federal Register refresh returned %d", resp.status_code)
             return None
