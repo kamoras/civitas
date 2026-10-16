@@ -203,6 +203,21 @@ describe("ElectionsPage", () => {
     );
   });
 
+  it("names a presidential cycle as one, never a midterm", async () => {
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2028 });
+    fetchLiveResults.mockResolvedValue({
+      ...CAMPAIGN,
+      cycleYear: 2028,
+      phase: { ...CAMPAIGN.phase, electionDate: "2028-11-07" },
+    });
+    render(<ElectionsPage />);
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      "2028 presidential election ballot"
+    );
+    expect(document.body).not.toHaveTextContent(/midterm/i);
+  });
+
   it("holds the lean map back until it knows whether results are on", async () => {
     fetchPviMap.mockResolvedValue({ states: { GA: 3, NY: -10 }, districts: {}, cycleYear: 2026 });
     let answer: (v: unknown) => void = () => {};

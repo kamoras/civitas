@@ -456,3 +456,16 @@ a[target="_blank"] {
 [data-share-capturing] [data-share-exclude] {
   display: none !important;
 }
+
+/* The election map's Difference view: a seat that moved pulses twice when
+   the view opens (an attention cue against change blindness). The class
+   that uses it is motion-safe only. */
+@keyframes map-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}

@@ -13,7 +13,12 @@ describe("ComputedLeanData", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ asOf: "2026-10-15", sha256: "a".repeat(64) }),
+        json: async () => ({
+          asOf: "2026-10-15",
+          sha256: "a".repeat(64),
+          window: "2024+2028",
+          congresses: [{ congress: 121 }, { congress: 122 }],
+        }),
       })
     );
     render(await ComputedLeanData());
@@ -25,6 +30,16 @@ describe("ComputedLeanData", () => {
     );
     expect(await screen.findByText(/\(2026, October 15\)\. Computed partisan lean/)).toBeTruthy();
     expect(screen.getByText("a".repeat(64))).toBeTruthy();
+    // Named from the table, not a literal.
+    expect(
+      screen.getByText(
+        /Computed partisan lean of U\.S\. House districts, 121st and 122nd Congress lines/
+      )
+    ).toBeTruthy();
+    const ld = document.querySelector('script[type="application/ld+json"]')?.textContent ?? "";
+    expect(ld).toContain(
+      "open 2024 and 2028 precinct returns on the 121st and 122nd Congress lines"
+    );
   });
 
   it("keeps the links when the backend can't be reached", async () => {
@@ -32,5 +47,6 @@ describe("ComputedLeanData", () => {
     render(await ComputedLeanData());
     expect(screen.getByRole("link", { name: "CSV" })).toBeTruthy();
     expect(await screen.findByText(/\(n\.d\.\)/)).toBeTruthy();
+    expect(screen.getByText(/House districts, each Congress's lines on file/)).toBeTruthy();
   });
 });

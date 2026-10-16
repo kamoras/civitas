@@ -57,6 +57,11 @@ def _load() -> dict:
     return _cache
 
 
+def calendar_election_date() -> str | None:
+    """The election the calendar file was built for (ISO date), or None."""
+    return _load().get("electionDate")
+
+
 def short_date(d: date) -> str:
     return f"{d:%b} {d.day}"
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { congressOrdinal } from "@/lib/sources";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import Navbar from "@/components/layout/Navbar";
@@ -60,7 +61,7 @@ export default async function PresidentSupportPage({
         <div className="mx-auto max-w-6xl">
           <CongressTabs active="president" />
           <PageMasthead
-            eyebrow={`${CHAMBERS[chamber]} · ${view ? `${view.congress}th Congress` : "This Congress"}`}
+            eyebrow={`${CHAMBERS[chamber]} · ${view ? `${congressOrdinal(view.congress)} Congress` : "This Congress"}`}
             title="Votes with the president"
             aside={
               <nav aria-label="Chamber" className="grid grid-cols-2">

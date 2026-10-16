@@ -67,3 +67,18 @@ def test_unknown_state_is_404():
 def test_route_is_not_shadowed_by_the_profile_route():
     paths = [r.path for r in politicians.router.routes]
     assert paths.index("/politicians/house-districts") < paths.index("/politicians/{politician_id}")
+
+
+def test_the_121st_congress_reads_unchanged_maps_and_never_crashes(monkeypatch):
+    """2029-01-03, the 121st in office before anyone builds its crosswalk:
+    with the 2028 maps confirmed and no redraw, every state reads the
+    120th's districts (the same lines); with the cycle unconfirmed the
+    finder answers unavailable instead of failing."""
+    from app import district_lines
+
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 121)
+    monkeypatch.setattr(district_lines, "_maps", lambda: {"2026": {"TX": {"map": "CD120"}}})
+    assert _body(politicians.house_districts_by_county(state="TX"))["available"] is False
+    monkeypatch.setattr(district_lines, "_maps", lambda: {"2026": {"TX": {"map": "CD120"}}, "2028": {}})
+    body = _body(politicians.house_districts_by_county(state="TX"))
+    assert body["available"] is True and len(body["districts"]) == 38

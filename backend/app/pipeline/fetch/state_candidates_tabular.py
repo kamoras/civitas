@@ -388,6 +388,14 @@ async def _sos_api_report_urls(
     return found
 
 
+def with_year(template: str, year: int) -> str:
+    """A URL template with the cycle filled in: {year}, and {decade} for a
+    site that files each decade's elections under a folder of their own
+    ("2020-2029"), so the next decade's address is built, not typed."""
+    start = year // 10 * 10
+    return template.replace("{year}", str(year)).replace("{decade}", f"{start}-{start + 9}")
+
+
 async def _discover_urls(
     client: httpx.AsyncClient, state: str, year: int, discovery: dict,
 ) -> list[dict]:
@@ -423,7 +431,7 @@ async def _discover_urls(
         template = discovery.get("url") or ""
         if not template:
             return []
-        url = template.replace("{year}", str(year))
+        url = with_year(template, year)
         held = None
         if "{primary_date" in url:
             # The state's own primary date, from the national calendar
@@ -499,7 +507,7 @@ async def _discover_urls(
         # pattern: a state that files its results under a per-cycle path
         # (Maryland's /elections/{year}/primary_results/) needs the page
         # itself templated, or nothing is ever found there again.
-        page_url = (discovery.get("page_url") or "").replace("{year}", str(year))
+        page_url = with_year(discovery.get("page_url") or "", year)
         if election_id:
             page_url = page_url.replace("{election_id}", election_id)
         resp = await _get(client, page_url, f"{state} downloads page")

@@ -364,6 +364,29 @@ Rhode Island draws at 4×5 pixels on a phone — also get a labelled box off
 the coast joined to the state by a leader line, placed from the map's own
 path generator.
 
+## The 2026 Senate and House map (before election day)
+
+```mermaid
+flowchart LR
+    FIT["fit_forecast_model.py<br/>Senate: MEDSL + FEC + 538, 1998–2022<br/>House: FEC + rebuilt lean + 538, 2018–2022"] --> MODEL["forecast_model.json<br/>forecast_house_model.json<br/>parameters + held-out checks"]
+    HIST["build_house_lean_history.py<br/>VEST 2016/2020 on Census blocks"] --> FIT
+    WIKI["Wikipedia race articles<br/>(current revision, gated)"] --> BUILD
+    DB["races + confirmed nominees"] --> BUILD
+    PVI["state_pvi.json + district_lean.json<br/>(usual vote)"] --> BUILD
+    MODEL --> BUILD["forecast/build.py<br/>every 3 h, campaign only"]
+    BUILD --> FILE["/data/election_map.json"]
+    FILE --> API["GET /api/elections/map<br/>404 from election day"]
+    API --> PAGE["/elections/map<br/>Usual vote · Polls · Difference"]
+```
+
+Each seat: its usual vote, and where both parties have a nominee an 80%
+range for the margin (structural line + poll average, inverse variance,
+one fitted scale). Ranges, never a winner; no seat total, because the
+held-out seat counts missed by more than independent races allow. The
+whole package (`app/forecast/`) is outside `app/pipeline/` and imports
+nothing from scoring. Poll-derived output is CC BY-SA 4.0, "Wikipedia
+contributors". README "The 2026 Senate and House map" has the numbers.
+
 ## Election night: the live count
 
 From election day (Eastern date) the site's subject stays on the election

@@ -4987,7 +4987,7 @@ def _commit_stage(db: Session, stage: str) -> None:
 
 def _run_refresh(db: Session) -> int:
     t0 = time.perf_counter()
-    today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
+    today = eastern_date(utcnow()).isoformat()
 
     logger.info("Action center refresh starting for %s", today)
     action_metrics.reset()

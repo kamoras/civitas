@@ -31,16 +31,21 @@ import httpx
 
 from app.config import settings
 from app.database import SessionLocal
+from app.election_calendar import federal_states
+from app.election_phase import active_election
 from app.models import (
     ApiCache,
     ElectionPipelineRun,
     HousePipelineRun,
     PipelineRun,
     PipelineStatus,
+    President,
     StockTradesPipelineRun,
     SupplementaryPipelineRun,
 )
+from app.pipeline.fetch import ballot_pdf_sources
 from app.time_utils import utcnow
+from app.voter_calendar import calendar_election_date
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +366,178 @@ def check_current_congress_staleness() -> None:
     )
 
 
+# How far ahead of an election each piece of cycle-specific data has to be
+# in place. The maps must be settled by the year's filing deadlines; voter
+# deadlines start with UOCAVA ballots 45 days out and registration about a
+# month out, and a calendar must be on the page well before either; poll
+# closing times only matter on the night, a town's sample ballot once it is
+# printed (about two months out).
+READINESS_LEAD = {
+    "maps": None,  # from January 1 of the election year
+    "calendar": timedelta(days=150),
+    "poll_close": timedelta(days=45),
+    "town_ballots": timedelta(days=60),
+}
+
+
+def election_readiness_gaps(election_day: date) -> dict[str, str]:
+    """{condition: what is missing} for the cycle-specific data the coming
+    election needs and doesn't have yet, each only once its lead time has
+    begun (READINESS_LEAD). Nothing here is typed per cycle: each check
+    compares a data file with the election the calendar says is next."""
+    # Imported here, not at the top: district_lean (through
+    # live_results.sync), district_pvi and poll_close (through the data
+    # refresh it reads) import this module.
+    from app.district_lean import lines_table
+    from app.live_results.sync import _maps
+    from app.pipeline.fetch import poll_close
+    from app.pipeline.fetch.district_pvi import congress_for_election
+
+    today = utcnow().date()
+    year = election_day.year
+    gaps: dict[str, str] = {}
+    if today >= date(year, 1, 1):
+        if str(year) not in _maps():
+            gaps["election-ready-maps"] = (
+                f"app/data/redrawn_congressional_maps.json has no entry for {year}. Each cycle's maps are "
+                f"confirmed there (an empty entry when no state redrew; a state whose new map is in force, "
+                f"or a court-held one, with its source). Until then the {year} House pages carry no "
+                f"computed lean, and a state that redrew would be read on its old lines."
+            )
+        else:
+            congress = congress_for_election(year)
+            missing = sorted(st for st in federal_states() if not lines_table(st, congress))
+            if missing:
+                gaps["election-ready-district-lean"] = (
+                    f"No computed district lean for the {congress}th Congress's lines in {', '.join(missing)} "
+                    f"(they redrew, or app/data/district_lean.json has no table to carry forward). Rebuild it "
+                    f"with backend/scripts/build_district_lean.py for those maps."
+                )
+    if today >= election_day - READINESS_LEAD["calendar"] and calendar_election_date() != election_day.isoformat():
+        gaps["election-ready-calendar"] = (
+            f"app/data/election_calendar.json is for {calendar_election_date() or 'no election'}, not "
+            f"{election_day}: every state page and the homepage strip show no voter deadlines until it is "
+            f"rebuilt for {election_day} (backend/scripts/build_election_calendar.py)."
+        )
+    if today >= election_day - READINESS_LEAD["poll_close"] and poll_close.file_year() != year:
+        gaps["election-ready-poll-close"] = (
+            f"app/data/poll_close_times.json is for {poll_close.file_year() or 'no stated year'}, not {year}: "
+            f"election night would hold each state's count to the last cycle's closing times "
+            f"(backend/scripts/fetch_poll_close_times.py {year})."
+        )
+    if today >= election_day - READINESS_LEAD["town_ballots"]:
+        stale = sorted(
+            town for town, entry in ballot_pdf_sources.all_towns().items()
+            if (entry.get("election_date") or "") < (election_day - timedelta(days=366)).isoformat()
+        )
+        if stale:
+            gaps["election-ready-town-ballots"] = (
+                f"The sample ballots on file for {', '.join(stale)} are from an earlier cycle; those towns show "
+                f"as not covered until app/data/ballot_pdf_sources.json names the {year} ballot."
+            )
+    return gaps
+
+
+READINESS_CONDITIONS = (
+    "election-ready-maps", "election-ready-district-lean", "election-ready-calendar",
+    "election-ready-poll-close", "election-ready-town-ballots",
+)
+
+
+def check_election_readiness() -> None:
+    """One alert per piece of cycle-specific data the coming election is
+    missing (election_readiness_gaps), each resolved once it is in place,
+    so a new cycle's needs are flagged ahead of time rather than found on
+    the page. Only in the campaign phase: once the election is held the
+    data that mattered was used, and the next cycle's checks begin when the
+    site moves on to it."""
+    election = active_election()
+    gaps = election_readiness_gaps(election.election_day) if election.phase == "campaign" else {}
+    for condition in READINESS_CONDITIONS:
+        if condition in gaps:
+            send_ops_alert(
+                "Coming election's data not ready",
+                gaps[condition],
+                dedupe_key=f"{condition}-{election.election_day}",
+                condition=condition,
+            )
+        else:
+            resolve_ops_alert(condition)
+
+
+# The Federal Register's presidential documents (proclamations, executive
+# orders, memoranda) each name the president who signed them: the official
+# record of who holds the office, published within days of a signing.
+PRESIDENTIAL_DOCUMENTS_URL = "https://www.federalregister.gov/api/v1/documents.json"
+
+
+def _person_key(name: str) -> tuple[str, str] | None:
+    """(first, last) of a name with initials, suffixes and punctuation
+    dropped, so the Federal Register's "First Last" and the roster's "First
+    M. Last, Jr." compare equal; None for an empty name."""
+    words = [w for w in "".join(c if c.isalpha() or c == " " else "" for c in name.lower()).split()
+             if len(w) > 1 and w not in {"jr", "sr", "ii", "iii", "iv"}]
+    return (words[0], words[-1]) if words else None
+
+
+def newest_presidential_signer(timeout: float = 15.0) -> tuple[str, str] | None:
+    """(president's name, signing date) of the newest presidential document
+    in the Federal Register, or None when it can't be read."""
+    try:
+        resp = httpx.get(PRESIDENTIAL_DOCUMENTS_URL, params={
+            "conditions[type][]": "PRESDOCU", "order": "newest", "per_page": 20,
+            "fields[]": ["president", "signing_date"],
+        }, timeout=timeout)
+        resp.raise_for_status()
+        rows = [r for r in resp.json().get("results") or []
+                if (r.get("president") or {}).get("name") and r.get("signing_date")]
+    except Exception:
+        logger.warning("Federal Register presidential documents could not be read", exc_info=True)
+        return None
+    if not rows:
+        return None
+    newest = max(rows, key=lambda r: r["signing_date"])
+    return newest["president"]["name"], newest["signing_date"]
+
+
+def check_sitting_president() -> None:
+    """Alert when the presidents table's sitting president is not the one
+    signing presidential documents.
+
+    The sitting president comes from UCSB's roster each night
+    (presidential_roster.py), never a typed name. A roster that is slow to
+    add a new president after an inauguration would keep the outgoing one
+    "sitting" with nothing to say so. The Federal Register is the official
+    cross-check: its newest presidential document, signed after the stored
+    president's term began, by someone else, means the roster has fallen
+    behind. A register still showing the outgoing president's last
+    documents (it publishes days after signing) is not a disagreement."""
+    signer = newest_presidential_signer()
+    if signer is None:
+        return
+    name, signed = signer
+    db = SessionLocal()
+    try:
+        sitting = db.query(President).filter(President.is_current.is_(True)).all()
+    finally:
+        db.close()
+    if len(sitting) == 1 and _person_key(sitting[0].name) == _person_key(name):
+        resolve_ops_alert("sitting-president-mismatch")
+        return
+    if len(sitting) == 1 and signed < (sitting[0].term_start or ""):
+        return  # the register is behind the roster, not the other way round
+    stored = ", ".join(p.name for p in sitting) or "nobody"
+    send_ops_alert(
+        "Sitting president differs from the Federal Register",
+        f"The Federal Register's newest presidential document, signed {signed}, is {name}'s, but the "
+        f"presidents table marks {stored} as sitting. The roster (UCSB's presidents list, read nightly by "
+        f"presidential_roster.py) has not caught up: the site names the wrong sitting president until it "
+        f"does. Check https://www.presidency.ucsb.edu/presidents; nothing needs editing in code.",
+        dedupe_key=f"sitting-president-mismatch-{signed}-{_person_key(name)}",
+        condition="sitting-president-mismatch",
+    )
+
+
 def check_feedback_token_expiration() -> None:
     """Alert when FEEDBACK_TOKEN is within 30 days of expiring.
 
@@ -447,7 +624,7 @@ def check_state_pvi_staleness() -> None:
     # Presidential county-level canvass data is reliably compiled within a
     # few weeks of the election; mid-December of the election year is a
     # comfortable buffer before alerting.
-    if date.today() < date(next_cycle, 12, 15):
+    if utcnow().date() < date(next_cycle, 12, 15):
         resolve_ops_alert("stale-state-pvi")  # regenerated for the new cycle
     else:
         send_ops_alert(
