@@ -31,6 +31,8 @@ import httpx
 
 from app.config import settings
 from app.database import SessionLocal
+from app.election_calendar import federal_states
+from app.election_phase import active_election
 from app.models import (
     ApiCache,
     ElectionPipelineRun,
@@ -40,7 +42,9 @@ from app.models import (
     StockTradesPipelineRun,
     SupplementaryPipelineRun,
 )
+from app.pipeline.fetch import ballot_pdf_sources
 from app.time_utils import utcnow
+from app.voter_calendar import calendar_election_date
 
 logger = logging.getLogger(__name__)
 
@@ -380,12 +384,13 @@ def election_readiness_gaps(election_day: date) -> dict[str, str]:
     election needs and doesn't have yet, each only once its lead time has
     begun (READINESS_LEAD). Nothing here is typed per cycle: each check
     compares a data file with the election the calendar says is next."""
+    # Imported here, not at the top: district_lean (through
+    # live_results.sync), district_pvi and poll_close (through the data
+    # refresh it reads) import this module.
     from app.district_lean import lines_table
-    from app.election_calendar import federal_states
     from app.live_results.sync import _maps
-    from app.pipeline.fetch import ballot_pdf_sources, poll_close
+    from app.pipeline.fetch import poll_close
     from app.pipeline.fetch.district_pvi import congress_for_election
-    from app.voter_calendar import calendar_election_date
 
     today = utcnow().date()
     year = election_day.year
@@ -445,8 +450,6 @@ def check_election_readiness() -> None:
     the page. Only in the campaign phase: once the election is held the
     data that mattered was used, and the next cycle's checks begin when the
     site moves on to it."""
-    from app.election_phase import active_election
-
     election = active_election()
     gaps = election_readiness_gaps(election.election_day) if election.phase == "campaign" else {}
     for condition in READINESS_CONDITIONS:

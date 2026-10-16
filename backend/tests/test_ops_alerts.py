@@ -10,6 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app import ops_alerts
+from app.election_phase import ActiveElection
 from app.models import (
     ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus,
     StockTradesPipelineRun, SupplementaryPipelineRun,
@@ -505,15 +507,11 @@ class TestElectionReadiness:
     ELECTION = date(2028, 11, 7)
 
     def _gaps(self, today, maps=None):
-        from datetime import datetime as dt
-
-        from app.ops_alerts import election_readiness_gaps
-
         maps = maps if maps is not None else {"2026": {}}
-        with patch("app.ops_alerts.utcnow", return_value=dt.combine(today, dt.min.time())), \
+        with patch("app.ops_alerts.utcnow", return_value=datetime.combine(today, datetime.min.time())), \
              patch("app.live_results.sync._maps", return_value=maps), \
              patch("app.district_lines._maps", return_value=maps):
-            return election_readiness_gaps(self.ELECTION)
+            return ops_alerts.election_readiness_gaps(self.ELECTION)
 
     def test_nothing_is_asked_for_before_its_lead_time(self):
         assert self._gaps(date(2027, 12, 1)) == {}
@@ -540,13 +538,10 @@ class TestElectionReadiness:
             "election-ready-calendar", "election-ready-town-ballots", "election-ready-poll-close"}
 
     def test_alerts_open_and_resolve_per_condition(self):
-        from app.election_phase import ActiveElection
-        from app.ops_alerts import check_election_readiness
-
         held = ActiveElection(election_day=self.ELECTION, phase="campaign", results_until=None, last_result_change=None)
-        with patch("app.election_phase.active_election", return_value=held), \
+        with patch("app.ops_alerts.active_election", return_value=held), \
              patch("app.ops_alerts.election_readiness_gaps", return_value={"election-ready-maps": "x"}), \
              patch("app.ops_alerts.send_ops_alert") as alert, patch("app.ops_alerts.resolve_ops_alert") as resolve:
-            check_election_readiness()
+            ops_alerts.check_election_readiness()
         assert alert.call_args.kwargs["condition"] == "election-ready-maps"
         assert "election-ready-calendar" in [c.args[0] for c in resolve.call_args_list]
