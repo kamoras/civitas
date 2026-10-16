@@ -1256,6 +1256,102 @@ class LiveResultRead(Base):
     reason_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
 
+class FederalElectionDate(Base):
+    """One row of the FEC's federal election calendar (api.open.fec.gov
+    /v1/election-dates/): a primary, runoff, general, convention or special
+    election in one state, as the FEC lists it. The election calendar page
+    reads every row; a special election (`is_special`, from the FEC's own
+    type code) is also the subject of the specials board, and its count, read
+    on the night from the state's own feed through the live-results readers
+    (live_results/specials.py), is stored on it.
+
+    Every field but the count is the FEC's, copied: the type code and its
+    label, the note (often the vacated seat, "Rep. Mark Green's Seat."), the
+    district. Nothing here is typed by hand, and nothing is a call: the
+    count is the source's figures, "leading" until the source says official.
+    """
+    __tablename__ = "federal_election_dates"
+
+    # "{date}-{state}-{office}-{district or 0}-{type code}": the FEC's rows
+    # carry no id of their own, and these fields are what makes one.
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    election_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    # The FEC's election_year (a special is filed under the year it is held).
+    election_year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    state: Mapped[str] = mapped_column(String(2), nullable=False)
+    office: Mapped[str] = mapped_column(String(1), nullable=False)  # FEC's H / S / P
+    # The FEC's district, for a House row; 0 for an at-large seat, None where
+    # the row names none.
+    district: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    type_code: Mapped[str] = mapped_column(String(4), nullable=False)
+    type_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_special: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The day of the last FEC read that listed this row.
+    listed_on: Mapped[str] = mapped_column(String(10), nullable=False)
+
+    # A special election's count, as the state's own feed showed it at the
+    # last trusted read (RaceResult's fields, for a contest that has no Race:
+    # a special is on no cycle's ballot pages). NULL until one is stored.
+    result_source_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    result_source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # JSON list, most votes first: {name, party, votes}, the source's printing.
+    tallies: Mapped[str | None] = mapped_column(Text, nullable=True)
+    votes_counted: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reporting_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unit_label: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    units_complete: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    official: Mapped[bool] = mapped_column(Boolean, default=False)
+    source_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_change_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # How the last read of the state's feed for this special went (the
+    # LiveResultRead statuses, plus "ambiguous": two contests for the seat),
+    # so the page can tell "not counted yet" from "couldn't read".
+    read_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    read_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class SeatVacancy(Base):
+    """A seat in Congress empty today, as the chamber's own list shows it:
+    the House Clerk's MemberData.xml (a seat with no member, whose
+    <predecessor-info> names who left and when), or, for the Senate, a class
+    seat on file (senate_classes.json) with no sitting senator of that class
+    in the Senate's own member list. Replaced whole on each read that
+    succeeds."""
+    __tablename__ = "seat_vacancies"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # "H-TX-23", "S-OH-3"
+    office: Mapped[str] = mapped_column(String(1), nullable=False)
+    state: Mapped[str] = mapped_column(String(2), nullable=False)
+    district: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    senate_class: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    predecessor: Mapped[str | None] = mapped_column(String, nullable=True)
+    predecessor_party: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    vacated_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # The chamber's own sentence ("Vacancy due to the resignation of ...").
+    footnote: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_url: Mapped[str] = mapped_column(String, nullable=False)
+    read_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class FecReportingDeadline(Base):
+    """A campaign finance report's due date, from the FEC's reporting-dates
+    API (/v1/reporting-dates/). The FEC lists one row per jurisdiction a
+    date applies to without naming the jurisdiction, so rows are kept per
+    (due date, report type), with how many the FEC listed."""
+    __tablename__ = "fec_reporting_deadlines"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # "{due_date}-{report_type}"
+    due_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    report_type: Mapped[str] = mapped_column(String(8), nullable=False)
+    label: Mapped[str | None] = mapped_column(String, nullable=True)
+    report_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rows: Mapped[int] = mapped_column(Integer, default=1)
+    read_on: Mapped[str] = mapped_column(String(10), nullable=False)
+
+
 class Justice(Base):
     """Supreme Court justice: the voting record, and the appointing
     president's effect on their votes, shown and not scored

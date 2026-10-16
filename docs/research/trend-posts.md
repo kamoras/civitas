@@ -58,7 +58,7 @@ with near-duplicates (cosine > 0.95) excluded and 95% bootstrap intervals.
 |---|---|---|---|---|---|---|
 | relevance (U.S. policy story), removed 2026-10-16 | 350 (93) | 15 | 0.5 (design decision) | 0.91 [0.88, 0.94] | 0.74 [0.64, 0.83] | 0.61 [0.51, 0.70] |
 | tragedy | 501 (143) | 25 | 0.5 (90% recall) | 0.97 [0.96, 0.99] | 0.84 | 0.90 |
-| political violence (among tragedies) | 143 (45) | 5 | 0.8 (90% precision) | 0.91 [0.85, 0.96] | 0.93 [0.80, 1.00] | 0.56 [0.40, 0.70] |
+| political violence (among tragedies), removed 2026-10-16 | 143 (45) | 5 | 0.8 (90% precision) | 0.91 [0.85, 0.96] | 0.93 [0.80, 1.00] | 0.56 [0.40, 0.70] |
 | loaded language (trend name) | 759 (145) | 25 | 0.3 (best F2) | 0.89 [0.86, 0.92] | 0.54 [0.47, 0.60] | 0.79 [0.72, 0.86] |
 | appointment (nominee anchor), removed 2026-10-16 | 549 (31) | 15 | 0.55 (90% precision) | 0.99 [0.98, 0.99] | 0.91 [0.77, 1.00] | 0.61 [0.44, 0.79] |
 
@@ -80,10 +80,50 @@ and the image, and the bill number stands in.
 ### Tragedies and violence
 
 These are not excluded outright. A trend the tragedy vote flags is eligible
-only when its political-violence vote is at least 0.8 **and** its record is
-an official one: a vote, a bill, the day's record or an agency's document,
-not an Action Center issue. The post states only what that record says.
+only when its record is an official one: a vote, a bill, the day's record
+or an agency's document, not an Action Center issue. (Until 2026-10-16 its
+political-violence vote also had to be at least 0.8; see below.) The post states only what that record says.
 The template has no slot for victims or perpetrators. No record, no post.
+
+### 2026-10-16: the political-violence vote is removed
+
+Political violence is in scope: an agent's shooting, a death in immigration
+detention, an attack on the Capitol. The vote meant to let those through
+refused 44% of the political tragedies it was labelled on (leave-one-out
+recall 0.56), and the official record it was paired with already says
+there is a government angle. A tragedy now needs only the official record.
+
+Replayed over the backtest with the vote removed: the same 3 posts. Of the
+62 trends the tragedy vote flags, 55 have no pinned record and 7 are
+anchored only on an Action Center issue, all 7 about immigration
+enforcement (detainee listings, detentions, hiring) — skipped under both
+rules because an issue is not an official record. No tragedy in the window
+had an official record, so no decision changed. The tests post an agent's
+shooting, a detention death and a Capitol attack anniversary, each with a
+passed Act as its record (`test_political_violence_with_an_official_record_posts`).
+
+What kept those stories off Bluesky was the official-record rule, not the
+vote: the immigration-enforcement trends above match only news issues. So
+a tragedy may now also post a **confirmed Action Center issue**: a news
+issue (not developing, not a duplicate) reported by two or more outlets,
+whose lede is a claim compose() verified in its source
+(`tragedy_issue_refusal`). The post quotes that lede, credited to its outlet
+("Civitas Action Center, <date>, quoting <outlet>: <lede>"), never the
+headline, and the lede must pass the neutrality gate and the loaded-language
+vote. Political reading is what the trend and record already carry:
+Bluesky filed the trend under politics, and the record passed the Action
+Center's U.S.-policy gate.
+
+Replayed: the 7 immigration-enforcement trends all anchor on one issue from
+2026-09-24, from before ledes were verified claims (its lede, "ICE has
+wasted tens of millions of dollars with 'uninformed' detention plans", is a
+characterisation no check verified), so they are still refused, rightly.
+The backtest posts the same 3. Of every issue in the database that could
+serve a tragedy (14 confirmed, multi-outlet, verified-lede issues since
+2026-10-02), the drafts are verbatim attributed claims; the loaded-language
+vote refuses 3 of them ("... alleging Trump's taxpayer-funded ads are
+illegal propaganda", and two plain ones at 0.30 and 0.31), and 2 are too
+long for a post.
 
 ## Selection, caps and the party audit
 

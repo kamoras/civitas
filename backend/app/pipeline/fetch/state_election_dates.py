@@ -240,19 +240,14 @@ def save_calendar(cycle: int, calendar: dict[str, dict], *, complete: bool, read
     _update(change)
 
 
-async def fetch_fec_calendar(
-    client: httpx.AsyncClient, cycle: int,
-) -> tuple[dict[str, dict], bool]:
-    """({state: {"primary", "runoff", "senate"}}, complete) for every state
-    the FEC lists a federal election for. `complete` only when every page
-    came back and there was something on them — a read cut short is still
-    returned, since what it has is true, but it can't say what is absent
-    (save_calendar). Empty and incomplete on a failure of the first page.
-
-    Special elections are excluded: a special primary is a different race
-    on its own schedule, and folding one in would report a state's regular
-    primary as whenever its last vacancy happened to be filled.
-    """
+async def fetch_fec_rows(client: httpx.AsyncClient, year: int) -> tuple[list[dict], bool]:
+    """(rows, complete): every row of the FEC's federal election calendar
+    for `election_year` `year`, as the FEC returns them. `complete` only
+    when every page came back and held as many rows as the FEC counts --
+    a read cut short is still returned, since what it has is true, but it
+    can't say what is absent. Empty and incomplete on a failure of the
+    first page. Read by the state calendar below and by the special-election and
+    calendar read (special_elections.py), which keeps every row."""
     from app.pipeline.fetch.fec import _fetch_with_retry
 
     rows: list[dict] = []
@@ -261,7 +256,7 @@ async def fetch_fec_calendar(
         payload = await _fetch_with_retry(
             client,
             "https://api.open.fec.gov/v1/election-dates/"
-            f"?election_year={cycle}&per_page=100&page={page}",
+            f"?election_year={year}&per_page=100&page={page}",
         )
         if not payload:
             logger.warning("FEC election-date calendar page %d failed — read incomplete", page)
@@ -273,7 +268,11 @@ async def fetch_fec_calendar(
             # no pagination, or one that came back short, can't say what
             # is absent — and a complete read retracts (save_calendar).
             count = pagination.get("count")
-            complete = bool(rows) and isinstance(count, int) and len(rows) == count
+            # An empty year the FEC itself counts as empty (an odd year
+            # before any special is scheduled) is complete too: callers
+            # store and retract only with rows in hand, so it changes
+            # nothing, and it isn't an outage to alert on.
+            complete = isinstance(count, int) and len(rows) == count
             if not complete:
                 logger.warning(
                     "FEC election-date calendar read %d row(s) of %s — read incomplete",
@@ -286,12 +285,33 @@ async def fetch_fec_calendar(
             "FEC election-date calendar has more than %d pages — read incomplete",
             _FEC_MAX_PAGES,
         )
+    return rows, complete
 
+
+def is_special_row(row: dict) -> bool:
+    """Whether an FEC election-date row is a special election. The FEC's
+    own type codes for one all start "S" (SP special primary, SG special
+    general, SR special runoff, SGR special general runoff, SC special
+    convention); its label says "special" too, and either is taken."""
+    return str(row.get("election_type_id") or "").startswith("S") or "special" in (
+        row.get("election_type_full") or ""
+    ).lower()
+
+
+def calendar_from_rows(rows: list[dict]) -> dict[str, dict]:
+    """{state: {"primary", "runoff", "senate"}} from the FEC's rows.
+
+    Special elections are excluded here, not dropped: they are stored, every
+    row of them, by special_elections.py. This is each state's REGULAR
+    calendar, and a special primary is a different race on its own schedule:
+    folding one in would report a state's regular primary as whenever its
+    last vacancy happened to be filled.
+    """
     calendar: dict[str, dict] = {}
     for row in sorted(rows, key=lambda r: r.get("election_date") or ""):
         kind = (row.get("election_type_full") or "").lower()
         state, held = row.get("election_state"), row.get("election_date")
-        if not state or not held or "special" in kind:
+        if not state or not held or is_special_row(row):
             continue
         if row.get("office_sought") not in ("H", "S"):
             continue
@@ -304,7 +324,16 @@ async def fetch_fec_calendar(
             entry.setdefault("primary", held)
         elif "runoff" in kind and "general" not in kind:
             entry.setdefault("runoff", held)
-    return {s: d for s, d in calendar.items() if d}, complete
+    return {s: d for s, d in calendar.items() if d}
+
+
+async def fetch_fec_calendar(
+    client: httpx.AsyncClient, cycle: int,
+) -> tuple[dict[str, dict], bool]:
+    """({state: {"primary", "runoff", "senate"}}, complete) for every state
+    the FEC lists a federal election for (fetch_fec_rows, calendar_from_rows)."""
+    rows, complete = await fetch_fec_rows(client, cycle)
+    return calendar_from_rows(rows), complete
 
 
 async def discover_dates(

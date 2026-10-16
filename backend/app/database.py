@@ -1150,6 +1150,11 @@ RESET_KEEPS = frozenset({
     # pre-election map, ballot and count. Nothing re-reads a past cycle's
     # sources, so wiped, that election's archive would be gone for good.
     "election_archives",
+    # The FEC's election calendar, and on each special election's row the
+    # count read from its state's feed on the night (live_results/
+    # specials.py): the calendar is re-read nightly, but a special's count
+    # is read only inside its window, so wiped, it would be gone for good.
+    "federal_election_dates",
 })
 
 

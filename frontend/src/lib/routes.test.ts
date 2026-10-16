@@ -1,7 +1,14 @@
 import { readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
-import { inSection, issuesUrl, monitorHref, SECTIONS, sectionSubpages } from "./routes";
+import {
+  CALENDAR_HREF,
+  inSection,
+  issuesUrl,
+  monitorHref,
+  SECTIONS,
+  sectionSubpages,
+} from "./routes";
 import { ELECTION_MAP_HREF } from "./electionMap";
 import { REDISTRICTING_HREF } from "./redistricting";
 import { presidentSupportHref } from "./presidentialSupport";
@@ -38,6 +45,7 @@ describe("SECTIONS", () => {
       SECTIONS[section].tabs.find((t) => t.key === key)?.href;
     expect(href("elections", "map")).toBe(ELECTION_MAP_HREF);
     expect(href("elections", "redistricting")).toBe(REDISTRICTING_HREF);
+    expect(href("elections", "calendar")).toBe(CALENDAR_HREF);
     expect(href("congress", "president")).toBe(presidentSupportHref("house"));
     expect(href("congress", "nominations")).toBe(NOMINATIONS_HREF);
   });
@@ -101,6 +109,7 @@ describe("SECTIONS covers the site", () => {
     expect(sectionSubpages("elections").map((t) => t.key)).toEqual([
       "map",
       "redistricting",
+      "calendar",
       "archive",
     ]);
     expect(sectionSubpages("explore")).toEqual([]);

@@ -2082,7 +2082,7 @@ def admin_trend_posts(
             "topic": r.topic, "name": r.display_name, "rank": r.rank,
             "firstSeen": r.first_seen_at.isoformat(), "decidedAt": r.decided_at.isoformat(),
             "category": r.category, "tragedy": round(r.tragedy, 3),
-            "politicalViolence": round(r.political_violence, 3), "loaded": round(r.loaded, 3),
+            "loaded": round(r.loaded, 3),
             "neutrality": json.loads(r.neutrality or "[]"),
             "matchType": r.match_type, "matchStrength": r.match_strength,
             "recordKind": r.record_kind, "recordKey": r.record_key, "recordDate": r.record_date,
