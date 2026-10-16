@@ -382,14 +382,26 @@ def candidate_columns(low_headers: list[str], name: str, party_tag: str) -> list
 # ---------------------------------------------------------------------------
 
 
-def poll_table(text: str, dem_name: str, rep_name: str, as_of: date, refs: dict[str, str]) -> TableResult | None:
+def poll_table(text: str, dem_name: str, rep_name: str, as_of: date, refs: dict[str, str],
+               district: int | None = None) -> TableResult | None:
     """The general-election poll table of one race article, or None when
     the article has none for these two nominees. Raises GateFailure when
-    the table is there but fails a gate."""
-    general = section(text, "General election", 2)
+    the table is there but fails a gate.
+
+    A Senate race, or an at-large House seat, has an article of its own,
+    with "General election" at the top level. A districted state's House
+    article has a "District N" section per seat, with the same structure
+    one level down."""
+    within, level = None, 2
+    if district is not None:
+        within = section(text, f"District {district}", 2)
+        if within is None:
+            return None
+        level = 3
+    general = section(text, "General election", level, within)
     if general is None:
         return None
-    polling = section(text, "Polling", 3, general)
+    polling = section(text, "Polling", level + 1, general)
     if polling is None:
         return None
     block = text[polling[0]:polling[1]]
@@ -483,7 +495,10 @@ def _rows(data, col, dcol, rcol, share_cols, others, as_of: date, refs: dict[str
         # In a ranked-choice round the ballots no longer ranking anyone are
         # printed beside the shares, outside the 100%.
         counted = [i for i in share_cols if col["round"] is None or "not ranked" not in low_of[i]]
-        total = sum(v for i in counted if i < len(row) and (v := parse_share(row[i][1])) is not None)
+        # A cell spanning two columns ("Other" and "Undecided" together) is
+        # one share, counted once.
+        cells = list({id(row[i]): row[i] for i in counted if i < len(row)}.values())
+        total = sum(v for cell in cells if (v := parse_share(cell[1])) is not None)
         if total > SHARE_TOTAL_MAX:
             raise GateFailure(f"{name} ({end}): shares sum to {total:.1f}")
         n, pop = parse_sample(row[col["sample"]][1]) if col["sample"] is not None and col["sample"] < len(row) else (None, "")
@@ -582,6 +597,26 @@ async def fetch_current(titles: list[str]) -> dict[str, dict] | None:
             out[requested] = {"title": page["title"], "revid": rev["revid"], "timestamp": rev["timestamp"],
                               "content": rev.get("slots", {}).get("main", {}).get("content", "")}
     return out
+
+
+async def titles_with_prefix(prefix: str) -> list[str] | None:
+    """Every article title starting with `prefix` (main namespace), or None
+    when Wikipedia could not be reached."""
+    out: list[str] = []
+    params = {"action": "query", "list": "allpages", "apprefix": prefix, "apnamespace": "0",
+              "apfilterredir": "nonredirects", "aplimit": "500", "format": "json", "formatversion": "2"}
+    while True:
+        resp = await fetch_with_retry_requests(
+            _rate_limiter, "GET", API + "?" + urllib.parse.urlencode(params), retries=4, backoff_s=10.0,
+            log_label="election-map wikipedia titles", headers=HEADERS,
+        )
+        if resp is None:
+            return None
+        body = resp.json()
+        out += [p["title"] for p in body.get("query", {}).get("allpages", [])]
+        if "continue" not in body:
+            return out
+        params.update(body["continue"])
 
 
 def revision_date(rev: dict) -> date:

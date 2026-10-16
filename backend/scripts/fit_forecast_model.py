@@ -48,6 +48,7 @@ import argparse
 import csv
 import io
 import json
+import re
 import sys
 import urllib.request
 import zipfile
@@ -55,8 +56,11 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from app.contact import BOT_USER_AGENT  # noqa: E402
 from app.forecast import model  # noqa: E402
+from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows  # noqa: E402
+from build_district_lean import _as_first_sheet  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[1] / "app" / "data"
 TRAINING = DATA / "forecast_training.json"
@@ -88,16 +92,34 @@ def fetch(url: str, dest: Path) -> bytes:
     return dest.read_bytes()
 
 
+def presidential_totals(text: str) -> dict[str, dict[str, dict[str, int]]]:
+    """{year: {state: {"D", "R"}}}: each major-party candidate's votes on
+    every ballot line. MEDSL's 1976-2020 rows put a fusion line (New York's
+    Working Families, Conservative) under its own party, so a candidate's
+    total is every row with their name in that state."""
+    side_of: dict = {}
+    rows = list(csv.DictReader(io.StringIO(text)))
+    # The write-in flag is not used: MEDSL's file marks DC's 2020 major-party
+    # candidates as write-ins. A row with no candidate named (pooled
+    # write-ins, which MEDSL files under a party) is no candidate's vote.
+    rows = [r for r in rows if r["candidate"].strip()]
+    for r in rows:
+        side = {"DEMOCRAT": "D", "REPUBLICAN": "R"}.get(r["party_simplified"])
+        if side:
+            side_of[(r["year"], r["state_po"], r["candidate"])] = side
+    out: dict = defaultdict(lambda: defaultdict(lambda: {"D": 0, "R": 0}))
+    for r in rows:
+        side = side_of.get((r["year"], r["state_po"], r["candidate"]))
+        if side:
+            out[r["year"]][r["state_po"]][side] += int(float(r["candidatevotes"]))
+    return out
+
+
 def presidential_counts(text: str) -> dict[int, dict[str, dict[str, int]]]:
     """{year: {state: {"D", "R"}, "US": {...}}} two-party presidential votes."""
-    out: dict[int, dict] = defaultdict(lambda: defaultdict(lambda: {"D": 0, "R": 0}))
-    for r in csv.DictReader(io.StringIO(text)):
-        side = {"DEMOCRAT": "D", "REPUBLICAN": "R"}.get(r["party_simplified"])
-        if side and r["writein"] != "TRUE":
-            y = int(r["year"])
-            out[y][r["state_po"]][side] += int(float(r["candidatevotes"]))
+    out = {int(y): dict(v) for y, v in presidential_totals(text).items()}
     for y, states in out.items():
-        states["US"] = {k: sum(s[k] for st, s in states.items() if st != "US") for k in ("D", "R")}
+        states["US"] = {k: sum(s[k] for s in states.values()) for k in ("D", "R")}
         if len(states) != 52:
             raise SystemExit(f"president {y}: {len(states) - 1} jurisdictions, expected 51")
     return out
@@ -167,15 +189,16 @@ def incumbent_code(race: dict, inc: dict) -> int:
     return code
 
 
-def polls(text: str) -> tuple[dict, dict]:
-    """({(year, state, special): [poll rows]}, {year: [generic poll rows]})."""
+def polls(text: str) -> tuple[dict, dict, dict]:
+    """({(year, state, special): [Senate poll rows]}, {year: [generic poll
+    rows]}, {(year, "ST-N"): [House poll rows]}) — 538 numbers districts
+    from 1, so an at-large seat is "AK-1" there and "AK-0" here."""
     races: dict = defaultdict(list)
     generic: dict = defaultdict(list)
+    house: dict = defaultdict(list)
     for r in csv.DictReader(io.StringIO(text)):
         kind = r["race"].split("_")[1]
         if kind not in ("Sen-G", "Sen-GS", "House-G") or r["electiondate"][5:7] != "11":
-            continue
-        if kind == "House-G" and r["location"] != "US":
             continue
         pct = {r["cand1_party"]: float(r["cand1_pct"]), r["cand2_party"]: float(r["cand2_pct"])}
         if set(pct) != {"DEM", "REP"}:
@@ -185,11 +208,161 @@ def polls(text: str) -> tuple[dict, dict]:
         row = model.Poll(r["pollster"], int(r["time_to_election"]), n, round(pct["REP"] - pct["DEM"], 2),
                          partisan).as_row()
         year = int(r["electiondate"][:4])
-        if kind == "House-G":
+        if kind == "House-G" and r["location"] == "US":
             generic[str(year)].append(row)
+        elif kind == "House-G":
+            house[(year, r["location"])].append(row)
         else:
             races[(year, r["location"], kind == "Sen-GS")].append(row)
-    return races, generic
+    return races, generic, house
+
+
+# ---------------------------------------------------------------------------
+# The House (app/data/forecast_house_training.json, forecast_house_model.json)
+# ---------------------------------------------------------------------------
+
+HOUSE_TRAINING = DATA / "forecast_house_training.json"
+HOUSE_MODEL = DATA / "forecast_house_model.json"
+HOUSE_LEAN = DATA / "forecast_house_lean.json"
+# Federal Elections 2018, 2020 and 2022, the FEC's compilation of each
+# state's certified results (public domain): the "US House Results by
+# State" sheet of each. 2024 is not fitted: the FEC has published no 2024
+# compilation of House results, and no openly licensed archive holds the
+# 2024 generic-ballot polls the method needs (538's ends with 2022; MEDSL's
+# House file sits behind a sign-in form, which Civitas does not pass).
+FEC_HOUSE = {
+    2018: ("https://www.fec.gov/documents/2706/federalelections2018.xlsx", "2018 US House Results by State"),
+    2020: ("https://www.fec.gov/documents/4228/federalelections2020.xlsx", "13. US House Results by State"),
+    2022: ("https://www.fec.gov/documents/5676/federalelections2022.xlsx", "8. US House Results by State"),
+}
+HOUSE_SOURCE = (
+    "Results and incumbency: Federal Election Commission, Federal Elections 2018, 2020 and 2022, "
+    "US House Results by State (certified results, public domain). Lean: app/data/forecast_house_lean.json "
+    "(Civitas, from VEST 2016 and 2020 precinct results, CC BY 4.0, and Census blocks and districts), "
+    f"each district's lean before the election on the lines it was held on. Polls: FiveThirtyEight "
+    f"pollster-ratings/raw_polls.csv at commit {POLLS_COMMIT[:7]} (CC BY 4.0)."
+)
+_D_PARTIES = {"D", "DEM", "DFL"}
+_R_PARTIES = {"R", "REP"}
+
+
+def _sheet_file(raw: bytes, title: str) -> str:
+    """The worksheet file ("sheet13") of the sheet named `title`."""
+    zf = zipfile.ZipFile(io.BytesIO(raw))
+    wb = zf.read("xl/workbook.xml").decode()
+    rels = zf.read("xl/_rels/workbook.xml.rels").decode()
+    sheet = re.search(r'<sheet\b[^>]*name="%s"[^>]*/>' % re.escape(title.replace("&", "&amp;")), wb).group(0)
+    rid = re.search(r'r:id="([^"]+)"', sheet).group(1)
+    rel = re.search(r'<Relationship\b[^>]*Id="%s"[^>]*/>' % re.escape(rid), rels).group(0)
+    return re.search(r'Target="([^"]+)"', rel).group(1).rsplit("/", 1)[-1].removesuffix(".xml")
+
+
+def fec_house(raw: bytes, sheet: str) -> list[dict]:
+    """Contested House generals from one FEC workbook: the top two by
+    general-election votes are a Democrat and a Republican. A candidate on
+    several lines (New York's and Connecticut's fusion parties) counts once,
+    every line summed."""
+    rows = _xlsx_rows(_as_first_sheet(raw, _sheet_file(raw, sheet)))
+    vcol = next(k for k in rows[0] if k.strip() == "GENERAL VOTES")
+    icol = next(k for k in rows[0] if k.startswith("(I)"))
+    races: dict = defaultdict(dict)
+    for r in rows:
+        st, dist = r.get("STATE ABBREVIATION", "").strip(), r.get("DISTRICT", "").strip()
+        if not re.fullmatch(r"\d\d", dist) or not st:
+            continue  # totals, headers, unexpired-term specials ("05 - UNEXPIRED TERM")
+        if not (r.get("CANDIDATE NAME") or "").strip() or (r.get("TOTAL VOTES") or "").strip():
+            continue  # "Party Votes:" / "District Votes:" total rows
+        # A ranked-choice count (Maine, Alaska from 2022) is its last round
+        # where the workbook gives the rounds; 2018's gives only the first.
+        rounds = [r[k] for k in sorted(k for k in r if "ROUND RCV VOTES" in k) if re.fullmatch(r"\d+", (r[k] or "").strip())]
+        votes = re.sub(r"[,\s]", "", rounds[-1] if rounds else (r.get(vcol) or ""))
+        if not re.fullmatch(r"\d+", votes):
+            continue  # "Unopposed", blank, write-in notes
+        fec = r.get("FEC ID#") or r.get("FEC ID") or ""
+        name = (fec if fec not in ("", "n/a") else r.get("CANDIDATE NAME", "")).strip()
+        cand = races[(st, int(dist))].setdefault(name, {"votes": 0, "parties": set(), "inc": False})
+        cand["votes"] += int(votes)
+        cand["parties"].add((r.get("PARTY") or "").strip().upper())
+        cand["inc"] |= (r.get(icol) or "").strip() == "(I)"
+    out = []
+    for (st, dist), cands in races.items():
+        top = sorted(cands.values(), key=lambda c: -c["votes"])[:2]
+        if len(top) < 2:
+            continue
+        side = {("D" if c["parties"] & _D_PARTIES else "R" if c["parties"] & _R_PARTIES else "X"): c for c in top}
+        if set(side) != {"D", "R"}:
+            continue
+        d, rep = side["D"], side["R"]
+        out.append({"state": st, "district": dist,
+                    "margin": round(100 * (rep["votes"] - d["votes"]) / (rep["votes"] + d["votes"]), 3),
+                    "inc": 1 if rep["inc"] else -1 if d["inc"] else 0})
+    return out
+
+
+def fit_house(cache: Path, house_polls: dict, generic: dict, senate: tuple) -> None:
+    leans = json.loads(HOUSE_LEAN.read_text())
+    rows, missing = [], []
+    for year, (url, sheet) in FEC_HOUSE.items():
+        lean = leans["leans"][str(year)]
+        lines = leans["lines"][leans["_method"][str(year)].split("th", 1)[0]]
+        at_large = {k.split("-")[0] for k in lines if k.endswith("-0")}
+        states = {k.split("-")[0] for k in lines}
+        for race in fec_house(fetch(url, cache / f"federalelections{year}.xlsx"), sheet):
+            if race["state"] not in states:
+                continue  # the delegates (DC, the territories) are not states' seats
+            seat = f"{race['state']}-{0 if race['state'] in at_large else race['district']}"
+            if race["state"] in leans["excluded"].get(str(year), {}):
+                continue
+            if seat not in lean:
+                missing.append(f"{year} {seat}")
+                continue
+            poll_key = (year, f"{race['state']}-{1 if race['state'] in at_large else race['district']}")
+            rows.append({"year": year, "state": seat, "special": False, "margin": race["margin"],
+                         "lean": lean[seat], "inc": race["inc"], "polls": house_polls.get(poll_key, [])})
+    per_year = {y: sum(1 for r in rows if r["year"] == y) for y in FEC_HOUSE}
+    print(f"House: {len(rows)} races, {sum(1 for r in rows if r['polls'])} polled; per year {per_year}; "
+          f"no lean for {missing}")
+    if missing or any(v < 300 for v in per_year.values()):
+        raise SystemExit("House: a results row has no lean, or a cycle parsed too few contested races")
+    gen = {y: v for y, v in generic.items() if int(y) in FEC_HOUSE}
+    HOUSE_TRAINING.write_text(json.dumps({
+        "_source": HOUSE_SOURCE, "_regenerate": REGENERATE,
+        "_license": "Poll rows derived from FiveThirtyEight's raw_polls.csv, CC BY 4.0; leans derived from "
+                    "VEST, CC BY 4.0; results public domain.",
+        "_columns": {"polls": "[pollster, days before election day, sample size, R-D margin, partisan sponsor]"},
+        "races": rows, "generic": dict(sorted(gen.items())),
+    }, separators=(",", ":")) + "\n")
+    write_model(HOUSE_MODEL, HOUSE_SOURCE, rows, gen, borrow=senate)
+
+
+def write_model(path: Path, source: str, rows: list[dict], generic: dict, borrow: tuple | None = None) -> dict:
+    """Fit and evaluate one chamber. `borrow` is (rows, generic) of the
+    chamber whose national coefficient this one takes (model.fit): the
+    full fit's for the published parameters, and for each held-out cycle a
+    fit without that cycle."""
+    out = {"_source": source, "_regenerate": REGENERATE, "_method": "app/forecast/model.py (module docstring)",
+           "fits": {}, "evaluation": {}}
+    if borrow:
+        out["_nationalCoefficient"] = ("the Senate fit's generic-ballot coefficient at the same horizon "
+                                       "(model.fit, national_coef): three House cycles cannot identify it")
+    for h in model.HORIZONS:
+        coef = coef_for = None
+        if borrow:
+            b_rows, b_gen = borrow
+            coef = model.fit(b_rows, b_gen, h)["beta"][3]
+
+            def coef_for(year, h=h):
+                return model.fit([r for r in b_rows if r["year"] != year],
+                                 {y: v for y, v in b_gen.items() if int(y) != year}, h)["beta"][3]
+        out["fits"][str(h)] = model.fit(rows, generic, h, coef)
+        out["evaluation"][str(h)] = model.leave_one_cycle_out(rows, generic, h, coef_for)
+        ev = out["evaluation"][str(h)]
+        keys = ("races", "polledRaces", "all", "polled", "coverage80", "coverage95", "meanAbsError")
+        print(f"{path.name} horizon {h}: {json.dumps({k: ev[k] for k in keys})}")
+        for b in ev["calibration"]:
+            print("   ", b)
+    path.write_text(json.dumps(at_write_precision(out), indent=1) + "\n")
+    return out
 
 
 # Fitted numbers are written to 10 significant digits: far beyond anything
@@ -217,7 +390,7 @@ def main(argv: list[str] | None = None) -> int:
     pres = presidential_counts(fetch(PRESIDENT_URL, args.cache / "president.csv").decode())
     races = senate_races(fetch(SENATE_URL, args.cache / "senate.csv").decode())
     inc = incumbents(args.cache)
-    race_polls, generic = polls(fetch(POLLS_URL, args.cache / "raw_polls.csv").decode())
+    race_polls, generic, house_polls = polls(fetch(POLLS_URL, args.cache / "raw_polls.csv").decode())
     rows = []
     for race in races:
         key = (race["year"], race["state"], race["special"])
@@ -238,16 +411,8 @@ def main(argv: list[str] | None = None) -> int:
         "races": rows, "generic": dict(sorted(generic.items())),
     }
     TRAINING.write_text(json.dumps(training, separators=(",", ":")) + "\n")
-    out = {"_source": SOURCE, "_regenerate": REGENERATE, "_method": "app/forecast/model.py (module docstring)",
-           "fits": {}, "evaluation": {}}
-    for h in model.HORIZONS:
-        out["fits"][str(h)] = model.fit(rows, training["generic"], h)
-        out["evaluation"][str(h)] = model.leave_one_cycle_out(rows, training["generic"], h)
-        ev = out["evaluation"][str(h)]
-        print(f"horizon {h}: {json.dumps({k: ev[k] for k in ('races', 'polledRaces', 'all', 'polled', 'coverage80', 'coverage95', 'meanAbsError')})}")
-        for b in ev["calibration"]:
-            print("   ", b)
-    MODEL.write_text(json.dumps(at_write_precision(out), indent=1) + "\n")
+    write_model(MODEL, SOURCE, rows, training["generic"])
+    fit_house(args.cache, house_polls, generic, (rows, training["generic"]))
     return 0
 
 

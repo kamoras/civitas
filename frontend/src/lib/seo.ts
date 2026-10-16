@@ -359,16 +359,17 @@ export function describeStateRedistricting(
   };
 }
 
-/** /elections/map: the 2026 Senate map (usual vote, poll ranges). Never
- * "forecast", "prediction" or "projection" — the page is none of those. */
-export function describeElectionMap(data: { seats: unknown[] } | null): {
+/** /elections/map: the 2026 Senate and House map (usual vote, poll
+ * ranges). Never "forecast", "prediction" or "projection" — the page is
+ * none of those. */
+export function describeElectionMap(): {
   title: string;
   description: string;
 } {
-  const seats = data ? `${data.seats.length} ` : "";
   return {
-    title: "2026 Senate Map: Usual Vote and Poll Ranges",
-    description: `How each of the ${seats}2026 Senate seats usually votes, the range this year's polls suggest for the margin, and where the two disagree. Ranges, not results; not a race call. Method and held-out calibration shown.`,
+    title: "2026 Senate and House Map: Usual Vote and Poll Ranges",
+    description:
+      "How each 2026 Senate and House seat usually votes, the range this year's polls suggest for the margin, and where the two disagree. Ranges, not results; not a race call. Method and held-out calibration shown.",
   };
 }
 
