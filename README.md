@@ -585,16 +585,21 @@ Every hour at :15
        │         2026-10-16), so a headline and its own lede can't pass
        │         the two-claim gate as two facts.
        │         Title = the top article's real headline, never a
-       │         livestream announcement's: an article whose headline
+       │         livestream or video page's: an article whose headline
        │         kicker (the label before its first ": ") scores past the
-       │         livestream cut ("WATCH LIVE", "LISTEN LIVE"; embedding
-       │         margin over news-report, recorded-clip and live-blog
-       │         prototypes, cut measured from 129 labelled production
-       │         kickers in app/data/broadcast_kicker_labels.json) gives no
-       │         title, fact or source, and a cluster of nothing else waits
-       │         for a report. Replayed: 10 of 1,441 stored headlines
-       │         flagged, all livestream pages; 2 confirmed titles change
-       │         (one to PBS's report, one withheld). Summary = the
+       │         day's cut ("WATCH LIVE", "WATCH"; embedding margin over
+       │         news-report and live-blog prototypes) gives no title,
+       │         fact or source, and a cluster of nothing else waits for a
+       │         report. The cut is fitted daily on publishers' own
+       │         filing, no hand labels: stored feed articles under a
+       │         video section (The Hill's /video-clips/, BBC's
+       │         /news/videos/) against the same feeds' articles, max F1
+       │         (0.120 on 2026-10-16: 18 of 18 filed-video kickers, 2 of
+       │         126 articles, both Hill livestreams filed as news).
+       │         Replayed on 1,441 stored headlines: 20 flagged, 10
+       │         livestreams, 9 recorded clips, 1 Civitas vote-draft title
+       │         (never filtered); 2 confirmed titles change (one to PBS's
+       │         report, one withheld). Summary = the
        │         single best claim. Facts = the supporting claims, each
        │         carrying the outlet it came from, shown on the issue as
        │         "Media coverage".

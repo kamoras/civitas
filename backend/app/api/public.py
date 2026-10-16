@@ -973,7 +973,7 @@ async def search_documents(
 
     The same engine as the site's Explore page: meaning and exact words
     together, weighed with recency and how often other documents cite
-    each one, so an identifier or docket number is found too."""
+    each one — so an identifier or docket number is found too."""
     if politician_id:
         given = politician_id
         politician_id = await off_loop(db, lambda session: _politician_id(session, given))

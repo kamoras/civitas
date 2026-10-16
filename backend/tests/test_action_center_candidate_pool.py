@@ -202,7 +202,7 @@ def test_a_livestream_announcement_never_titles_or_sources_an_issue(db_session, 
     but livestream pages, so it publishes nothing and cluster 6 takes the
     second slot (2026-10-12/13: two "WATCH LIVE" titles confirmed)."""
     live_urls = {CLUSTERS[2][0].url, *(a.url for a in CLUSTERS[4])}
-    monkeypatch.setattr(action_center, "announces_broadcast", lambda titles: [
+    monkeypatch.setattr(action_center, "announces_broadcast", lambda titles, db: [
         any(a.title == t and a.url in live_urls for c in CLUSTERS for a in c) for t in titles
     ])
     action_center._run_refresh(db_session)

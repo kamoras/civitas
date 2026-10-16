@@ -401,9 +401,9 @@ def detect_donor_vote_connections(
             "description": (
                 f"{industry.replace('_', ' ').title()} accounts for "
                 f"{share:.0f}% of this member's classifiable industry "
-                f"funding (${ind['total']:,.0f}): a substantial concentration, "
-                f"not a typical spread across many industries. Votes on "
-                f"related topics: "
+                f"funding (${ind['total']:,.0f}) "
+                f"— a substantial concentration, not a typical spread "
+                f"across many industries. Votes on related topics: "
                 + ". ".join(desc_parts) + "."
             ),
         })

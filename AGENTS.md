@@ -1490,17 +1490,20 @@ every stage downstream treats it as one story. Four mechanical signals:
   alone matched 12 single stories along with 16 briefings; with it, 5
   briefings and no single story (`docs/research/action-center-relevance.md`).
 
-A **livestream announcement** ("WATCH LIVE: Trump speaks at midterm rally")
-is a page for watching an event, not a report of it, so it never titles an
-issue or supplies its facts or sources, and a cluster of nothing else
-publishes nothing until a report joins it (`announces_broadcast`, in the
+A **livestream or video page** ("WATCH LIVE: Trump speaks at midterm rally",
+"WATCH: Senate rejects …") is for watching, not a written report, so it never
+titles an issue or supplies its facts or sources, and a cluster of nothing
+else publishes nothing until a report joins it (`announces_broadcast`, in the
 issue loop). It is told by the headline's kicker, the label before its first
-": ", classified by embedding margin, with the cut measured on first use from
-the labelled production kickers in `app/data/broadcast_kicker_labels.json`;
-the whole headline does not separate, because its topic outweighs the
-kicker. A recorded clip ("WATCH:") and a live blog ("Live updates:") report
-what happened and are left alone. `articles_dropped_broadcast` and
-`clusters_only_broadcast` are the counters.
+": ", classified by embedding margin, so it covers outlets that file their
+livestreams as ordinary articles (PBS). The cut is fitted each day on labels
+the publishers supply, never hand labels (`fit_broadcast_cut`): stored feed
+articles filed under a video section of their site (The Hill's
+`/video-clips/`, BBC's `/news/videos/`) against the same feeds' other
+articles, F1-maximising, because the labels are noisy (The Hill files some
+livestreams as news). A live blog ("Live updates:") is a report and is left
+alone. `articles_dropped_broadcast` and `clusters_only_broadcast` are the
+counters.
 
 This has to happen here because once several stories share one article the
 boundary between them is not recoverable later — cluster coherence filtering
