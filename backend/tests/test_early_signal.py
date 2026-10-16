@@ -508,3 +508,33 @@ class TestRuleAbstractSentences:
 def test_a_rule_record_missing_its_number_and_date_leaves_them_out():
     _, _, facts = es._compose_developing_rule_issue(_rule(document_number="", publication_date=""))
     assert facts[1] == "Federal Register document."
+
+
+@pytest.mark.parametrize("now, congress, house_year", [
+    # Jan 2, 2027: the 119th still sits; its House votes are numbered in 2026.
+    pytest.param("2027-01-02T15:00:00", 119, 2026, id="outgoing_congress_reads_its_last_year"),
+    # Jan 3, 2027 after noon ET: the 120th sits; its votes are 2027's.
+    pytest.param("2027-01-03T18:00:00", 120, 2027, id="new_congress_reads_its_own_year"),
+    pytest.param("2028-06-01T12:00:00", 120, 2028, id="second_session"),
+])
+def test_the_roll_call_poll_reads_the_sitting_congress(db_session, freeze_utcnow, monkeypatch, now, congress, house_year):
+    from datetime import datetime
+
+    from app.config import settings
+
+    freeze_utcnow(datetime.fromisoformat(now))
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", congress)
+    seen = {}
+
+    async def senate(_client, _db, *, congress, session_number, **_kw):
+        seen.setdefault("senate", []).append((congress, session_number))
+        return []
+
+    async def house(_client, _db, *, year, **_kw):
+        seen["house"] = year
+        return []
+
+    monkeypatch.setattr(es, "fetch_recent_roll_calls", senate)
+    monkeypatch.setattr(es, "fetch_recent_house_roll_calls", house)
+    es._fetch_recent_votes(db_session)
+    assert seen == {"senate": [(congress, 1), (congress, 2)], "house": house_year}

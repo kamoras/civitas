@@ -88,8 +88,8 @@ class Senator(Base):
     years_in_office: Mapped[int] = mapped_column(Integer, default=0)
     initials: Mapped[str] = mapped_column(String(4), default="")
     # Seat vacancy — mirrors President.is_current / Justice.is_active.
-    # Set manually via the admin panel (no automated detection — see
-    # AGENTS.md). Historical scores/data are left untouched when a seat
+    # Set by member_lifecycle when the member leaves the roster (or by the
+    # admin panel's vacancy action). Historical scores/data are left untouched when a seat
     # goes vacant; the directory and profile page show a banner instead
     # of hiding or silently continuing to display the departed member
     # as if still serving.
