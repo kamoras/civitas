@@ -11,10 +11,11 @@ nearest (action_center.relevance_votes, all-MiniLM-L6-v2):
     labelled set.
   - tragedy: people killed, injured, attacked or detained by force, or a
     death (app/data/political_violence_examples.json).
-  - political violence: among the tragedy examples only, the share with a
-    U.S. government or policy angle (the same file). A tragedy is not
-    excluded outright; it is eligible only when this vote is high and an
-    official record answers it (trend_poster).
+    A tragedy is not excluded: it is eligible only when an official record
+    answers it (trend_poster). A sixth vote, whether a tragedy has a U.S.
+    government or policy angle, was removed 2026-10-16: the official record
+    is that angle, and the vote refused 44% of the political tragedies it
+    was labelled on (leave-one-out recall 0.56).
   - loaded: the trend's display name, the only words a post quotes from
     Bluesky, judges or mocks rather than names
     (app/data/loaded_language_examples.json).
@@ -60,13 +61,10 @@ LOADED_EXAMPLES_PATH = _DATA_DIR / "loaded_language_examples.json"
 APPOINTMENT_EXAMPLES_PATH = _DATA_DIR / "appointment_examples.json"
 CALIBRATION_PATH = _DATA_DIR / "trend_gates_calibration.json"
 
-# gate name -> (examples file, label field, subset field or None). The
-# political-violence vote is taken among tragedy examples only: it answers
-# "given a tragedy, is it a political one", not "is it political".
+# gate name -> (examples file, label field, subset field or None).
 GATES: dict[str, tuple[pathlib.Path, str, str | None]] = {
     "relevance": (RELEVANCE_EXAMPLES_PATH, "relevant", None),
     "tragedy": (VIOLENCE_EXAMPLES_PATH, "tragedy", None),
-    "political_violence": (VIOLENCE_EXAMPLES_PATH, "political", "tragedy"),
     "loaded": (LOADED_EXAMPLES_PATH, "loaded", None),
     "appointment": (APPOINTMENT_EXAMPLES_PATH, "appointment", None),
 }
@@ -123,7 +121,6 @@ def threshold(gate: str) -> float:
 class TrendScores:
     relevance: float
     tragedy: float
-    political_violence: float
     loaded: float
     appointment: float = 0.0
 
@@ -134,10 +131,6 @@ class TrendScores:
     @property
     def is_tragedy(self) -> bool:
         return self.tragedy >= threshold("tragedy")
-
-    @property
-    def political_tragedy(self) -> bool:
-        return self.political_violence >= threshold("political_violence")
 
     @property
     def is_loaded(self) -> bool:
@@ -160,10 +153,10 @@ def score_trends(trends: list[tuple[str, str | None]]) -> list[TrendScores]:
         return []
     topic = _embed_texts_sim([trend_text(n, d) for n, d in trends])
     names = _embed_texts_sim([n for n, _ in trends])
-    rel, trag, pol, appt = (gate_votes(g, topic) for g in ("relevance", "tragedy", "political_violence", "appointment"))
+    rel, trag, appt = (gate_votes(g, topic) for g in ("relevance", "tragedy", "appointment"))
     loaded = gate_votes("loaded", names)
-    return [TrendScores(float(a), float(b), float(c), float(d), float(e))
-            for a, b, c, d, e in zip(rel, trag, pol, loaded, appt)]
+    return [TrendScores(float(a), float(b), float(c), float(d))
+            for a, b, c, d in zip(rel, trag, loaded, appt)]
 
 
 def neutrality_problems(quoted: str, context: str = "", loaded_vote: float | None = None) -> list[str]:

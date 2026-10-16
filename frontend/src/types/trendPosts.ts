@@ -43,7 +43,6 @@ export interface TrendCandidate {
   decidedAt: string;
   relevance: number | null;
   tragedy: number | null;
-  politicalViolence: number | null;
   loaded: number | null;
   neutrality: string[];
   matchType: string | null;

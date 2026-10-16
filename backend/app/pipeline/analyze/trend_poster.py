@@ -7,8 +7,8 @@ Hourly, from the Action Center's scheduler job (scheduler._hourly_action_refresh
  1. Read Bluesky's public getTrends (fetch/trending.fetch_bluesky_trends)
     and keep each listing as TrendObservation rows. A failed read is an
     outage, not an empty list: nothing is recorded, dropped or posted.
- 2. Score each trend (trend_relevance): the relevance vote, the tragedy and
-    political-violence votes, and the neutrality gate on its display name
+ 2. Score each trend (trend_relevance): the relevance vote, the tragedy
+    vote, and the neutrality gate on its display name
     (the only words a post quotes from Bluesky).
  3. Find its record on a pinned match only (trend_evidence: an issue,
     an Act's title, a nominee, or a named member's own bill).
@@ -30,9 +30,9 @@ ops alert fires on a divergence (check_party_balance).
 
 Every word of a post is template text, a stored record field, or Bluesky's
 trend name in quotation marks attributed to Bluesky. No model writes any
-of it. A tragedy is eligible only when its political-violence vote is high
-and the record is an official one (a vote, a bill, the day's record, an
-agency's document), and the post states only what that record says.
+of it. A tragedy is eligible only when the record is an official one (a
+vote, a bill, the day's record, an agency's document), and the post states
+only what that record says.
 
 The picture is the record's card (services/record_cards, rendered by the
 frontend's /api/og): for the first TRIAL_DAYS of trend posts Bluesky gets
@@ -237,8 +237,6 @@ def evaluate(
         return "ineligible", f"relevance vote {scores.relevance:.2f}", None, None
     if not evidence:
         return "ineligible", "no pinned record", None, None
-    if scores.is_tragedy and not scores.political_tragedy:
-        return "skipped", f"tragedy without a political reading (vote {scores.political_violence:.2f})", evidence[0], None
     reasons = []
     for ev in evidence:
         if scores.is_tragedy and ev.record.kind not in OFFICIAL_KINDS:
@@ -313,7 +311,9 @@ def _upsert(db: Session, trend: BlueskyTrend, scores: TrendScores, now: datetime
     row.last_seen_at = now
     row.rank = trend.rank
     row.relevance, row.tragedy = scores.relevance, scores.tragedy
-    row.political_violence, row.loaded = scores.political_violence, scores.loaded
+    # political_violence is no longer measured (the vote was removed
+    # 2026-10-16); the NOT NULL column is dropped in a later release.
+    row.political_violence, row.loaded = 0.0, scores.loaded
     return row
 
 

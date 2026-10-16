@@ -245,9 +245,6 @@ export function TrendPostsDashboard({ token }: { token: string }) {
                   <th scope="col" className={`text-right ${th}`}>
                     TRAGEDY
                   </th>
-                  <th scope="col" className={`text-right ${th}`}>
-                    POL. VIOLENCE
-                  </th>
                   <th scope="col" className="text-right py-1 font-normal">
                     LOADED
                   </th>
@@ -301,9 +298,6 @@ export function TrendPostsDashboard({ token }: { token: string }) {
                     </td>
                     <td className="text-right py-1 pr-3 tabular-nums">
                       {formatMeasure(c.tragedy)}
-                    </td>
-                    <td className="text-right py-1 pr-3 tabular-nums">
-                      {formatMeasure(c.politicalViolence)}
                     </td>
                     <td className="text-right py-1 tabular-nums">{formatMeasure(c.loaded)}</td>
                   </tr>

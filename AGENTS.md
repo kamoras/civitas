@@ -1318,8 +1318,10 @@ top of a kNN relevance vote ≥ 0.5 over labelled trends (`trend_relevance.py`,
 calibrated by `scripts/calibrate_trend_gates.py` into
 `trend_gates_calibration.json`). The trend's name must pass a neutrality gate
 (`grounding`'s electioneering, editorializing and advocacy-as-fact checks plus a
-loaded-language vote); a tragedy is eligible only with a high political-violence
-vote and an official record (not an issue). Every word is template text, a
+loaded-language vote); a tragedy (the tragedy vote) is eligible only with an
+official record (not an issue), whatever its political reading: the
+political-violence vote was removed 2026-10-16, so agents' shootings, deaths
+in detention and attacks on the Capitol post whenever a record answers them. Every word is template text, a
 stored record field, or the trend's name quoted and attributed to Bluesky — no
 model. Selection is party-blind (rank weight × match strength); each trend gets
 one `TrendCandidate` audit row with the parties of the members it names and of

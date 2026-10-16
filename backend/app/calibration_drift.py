@@ -62,7 +62,6 @@ GATES = {
     "claim_actor": ("claim_actor_calibration.json", "actor spans admitted by the vote"),
     "trend_relevance": ("trend_gates_calibration.json", "trends voted relevant"),
     "trend_tragedy": ("trend_gates_calibration.json", "trends voted a tragedy"),
-    "trend_political_violence": ("trend_gates_calibration.json", "trends voted political violence"),
     "trend_loaded": ("trend_gates_calibration.json", "trend names voted loaded"),
     "trend_appointment": ("trend_gates_calibration.json", "trends voted about an appointment"),
     "committee_routing": ("committee_routing_calibration.json", "issues routed to a committee"),

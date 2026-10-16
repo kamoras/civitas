@@ -36,7 +36,7 @@ from app.pipeline.fetch.trending import BlueskyTrend
 from app.services import record_cards
 
 NOW = datetime(2026, 10, 14, 18, 0)  # 14:00 Eastern, inside the posting window
-RELEVANT = TrendScores(relevance=0.9, tragedy=0.0, political_violence=0.0, loaded=0.0)
+RELEVANT = TrendScores(relevance=0.9, tragedy=0.0, loaded=0.0)
 
 
 def trend(name, topic="t1", rank=0, description="", started=NOW - timedelta(hours=3)):
@@ -179,7 +179,7 @@ def test_a_record_dated_after_the_trend_plus_two_days_is_not_evidence(world):
 
 def test_an_irrelevant_trend_is_never_matched(world):
     world["trends"] = [trend("Example Tariff Relief Act")]
-    world["scores"]["Example Tariff Relief Act"] = TrendScores(0.2, 0, 0, 0)
+    world["scores"]["Example Tariff Relief Act"] = TrendScores(0.2, 0, 0)
     run(world)
     row = world["db"].query(TrendCandidate).one()
     assert row.decision == "ineligible" and row.reason.startswith("relevance vote")
@@ -198,7 +198,7 @@ def test_an_electioneering_trend_name_is_skipped(world, name):
 
 def test_a_loaded_trend_name_is_skipped(world):
     world["trends"] = [trend("Example Tariff Relief Act")]
-    world["scores"]["Example Tariff Relief Act"] = TrendScores(0.9, 0, 0, loaded=0.99)
+    world["scores"]["Example Tariff Relief Act"] = TrendScores(0.9, 0, loaded=0.99)
     run(world)
     row = world["db"].query(TrendCandidate).one()
     assert row.decision == "skipped" and "loaded language" in row.reason
@@ -224,36 +224,60 @@ def test_a_loaded_bill_title_is_left_out_of_the_post_and_the_image(world, monkey
 
 # -- tragedies -----------------------------------------------------------------
 
+TRAGEDY = TrendScores(0.9, tragedy=0.95, loaded=0)
+
+
+def _act_vote(db, number, title, date="2026-10-13"):
+    """A Senate roll call passing an Act of this title (the act match's record)."""
+    db.add(RollCall(chamber="senate", congress=119, session=2, number=number, date=date,
+                    question="On Passage of the Bill", title=title, result="Bill Passed", yeas=60, nays=39,
+                    fetched_at=NOW))
+    db.commit()
+
+
 def test_a_tragedy_with_no_record_is_never_posted(world):
     world["trends"] = [trend("Shooting at a fairground")]
-    world["scores"]["Shooting at a fairground"] = TrendScores(0.9, tragedy=0.95, political_violence=0.95, loaded=0)
+    world["scores"]["Shooting at a fairground"] = TRAGEDY
     run(world)
     row = world["db"].query(TrendCandidate).one()
     assert row.decision == "ineligible" and posts(world["db"]) == []
 
 
-def test_a_tragedy_without_a_political_reading_is_skipped_even_with_a_record(world):
-    world["trends"] = [trend("Example Tariff Relief Act")]
-    world["scores"]["Example Tariff Relief Act"] = TrendScores(0.9, tragedy=0.95, political_violence=0.1, loaded=0)
-    run(world)
-    row = world["db"].query(TrendCandidate).one()
-    assert row.decision == "skipped" and "tragedy" in row.reason and posts(world["db"]) == []
-
-
-def test_a_political_tragedy_needs_an_official_record_not_an_issue(world):
+def test_a_tragedy_needs_an_official_record_not_an_issue(world):
     world["trends"] = [trend("Canal tolls", description="The canal toll plan advances in the state legislature.")]
-    world["scores"]["Canal tolls"] = TrendScores(0.9, tragedy=0.95, political_violence=0.95, loaded=0)
+    world["scores"]["Canal tolls"] = TRAGEDY
     run(world)
     row = world["db"].query(TrendCandidate).one()
     assert row.decision == "skipped" and "official record" in row.reason
 
 
-def test_a_political_tragedy_with_an_official_record_posts_only_the_record(world, bluesky_configured):
+def test_a_tragedy_with_an_official_record_posts_only_the_record(world, bluesky_configured):
     world["trends"] = [trend("Example Tariff Relief Act")]
-    world["scores"]["Example Tariff Relief Act"] = TrendScores(0.9, tragedy=0.95, political_violence=0.95, loaded=0)
+    world["scores"]["Example Tariff Relief Act"] = TRAGEDY
     run(world)
     (post,) = posts(world["db"])
     assert post.text.split("On the record: ", 1)[1].startswith("Senate roll call 301")
+
+
+# Political violence stays in scope: an agent's shooting, a death in
+# immigration detention and an attack on the Capitol each post when an
+# official record answers them, whatever a vote would have read into them
+# (the political-violence vote was removed 2026-10-16).
+@pytest.mark.parametrize("name,description,title", [
+    ("Example Agent Accountability Act", "An immigration agent shot a man during an arrest; senators cite the bill.",
+     "Example Agent Accountability Act"),
+    ("Example Detention Oversight Act", "A detainee died in an immigration processing center; the bill passed.",
+     "Example Detention Oversight Act"),
+    ("Example Capitol Security Act", "Lawmakers mark the anniversary of the attack on the Capitol with the bill.",
+     "Example Capitol Security Act"),
+])
+def test_political_violence_with_an_official_record_posts(world, bluesky_configured, name, description, title):
+    _act_vote(world["db"], 401, title)
+    world["trends"] = [trend(name, description=description)]
+    world["scores"][name] = TRAGEDY
+    run(world)
+    (post,) = posts(world["db"])
+    assert "Senate roll call 401" in post.text and title in post.text
 
 
 # -- caps, dedupe, holds ---------------------------------------------------------
@@ -632,7 +656,7 @@ def test_a_trend_about_the_nomination_anchors_on_the_vote(world):
     _nomination(world["db"])
     name = "Jordan Vale confirmation"
     world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]
-    world["scores"][name] = TrendScores(0.9, 0, 0, 0, appointment=0.95)
+    world["scores"][name] = TrendScores(0.9, 0, 0, appointment=0.95)
     run(world)
     row = world["db"].query(TrendCandidate).one()
     assert (row.match_type, row.record_key) == ("nominee", "vote:senate/119/2/302")
@@ -642,7 +666,7 @@ def test_an_old_confirmation_is_not_a_record_of_new_news(world):
     _nomination(world["db"], date="2026-03-01")
     name = "Jordan Vale confirmation"
     world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]
-    world["scores"][name] = TrendScores(0.9, 0, 0, 0, appointment=0.95)
+    world["scores"][name] = TrendScores(0.9, 0, 0, appointment=0.95)
     run(world)
     assert world["db"].query(TrendCandidate).one().decision == "ineligible"
 
