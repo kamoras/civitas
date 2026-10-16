@@ -360,8 +360,8 @@ def record_span(db: Session) -> tuple[date, date] | None:
 # Congress's first day when the record began), and Explore keeps the
 # sitting Congress's floor speeches only (explore_pipeline.
 # _purge_out_of_scope_speeches). Outside those, an empty list is "not held
-# here", never "none": H.R. 2 of the 118th Congress, passed by the House on
-# a roll call, read "No recorded votes on this bill in either chamber".
+# here", never "none": a bill of an earlier Congress the House passed on a
+# roll call read "No recorded votes on this bill in either chamber".
 
 _GOVINFO_CREC = "https://www.govinfo.gov/app/collection/crec"
 _ROLL_CALL_SOURCES = {"senate": "https://www.senate.gov/legislative/votes_new.htm",

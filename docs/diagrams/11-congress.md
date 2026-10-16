@@ -32,10 +32,10 @@ which of its votes, floor debate and Record days aren't held (and links
 each roll call its Congress.gov history names to the chamber's own record),
 the public API's `/bills/{id}/votes` carries `covered` and `heldCongresses`,
 and a `/congress` day, week, month or roll call outside the record is a 404
-that states where the record starts (`GET /api/congress/coverage`). Until
-2026-10 H.R. 2 of the 118th Congress, passed by the House on a roll call,
-read "No recorded votes on this bill in either chamber", and
-`/congress/2024-12-18` said neither chamber met. Fetching past Congresses'
+that states where the record starts (`GET /api/congress/coverage`). Before this,
+a bill of an earlier Congress that the House passed on a roll call read "No
+recorded votes on this bill in either chamber", and a day before the record
+began said neither chamber met. Fetching past Congresses'
 roll calls on demand was considered and not done: stored, they would also
 reach the day and week reports and `record_span`, which would then claim
 days the Digest back-fill never read.

@@ -535,7 +535,7 @@ describe("bill page", () => {
       ...record,
       billId: "HR.2",
       billLabel: "H.R. 2",
-      congress: 118,
+      congress: 149,
       title: null,
       votes: [],
       days: [],
@@ -544,7 +544,7 @@ describe("bill page", () => {
       unavailable: [],
       actions: [
         {
-          date: "2023-05-11",
+          date: "2085-05-11",
           text: "Passed House by recorded vote: 219 - 213 (Roll no. 209).",
           type: "Floor",
           rollCalls: [
@@ -552,23 +552,23 @@ describe("bill page", () => {
               chamber: "house",
               number: 209,
               session: 1,
-              sourceUrl: "https://clerk.house.gov/evs/2023/roll209.xml",
+              sourceUrl: "https://clerk.house.gov/evs/2085/roll209.xml",
             },
           ],
         },
       ],
       coverage: {
         votes: notHeld(
-          "Civitas holds roll calls from the 119th Congress on, so this bill's votes aren't held."
+          "Civitas holds roll calls from the 150th Congress on, so this bill's votes aren't held."
         ),
         floor: notHeld("Civitas keeps the sitting Congress's floor speeches only."),
-        digest: notHeld("Civitas's record of Congress starts January 3, 2025."),
+        digest: notHeld("Civitas's record of Congress starts January 3, 2087."),
       },
     };
     render(
       <BillPageView
         billId="HR.2"
-        canonicalPath="/congress/bills/HR.2?congress=118"
+        canonicalPath="/congress/bills/HR.2?congress=149"
         record={past}
         detail={null}
         stageName={null}
@@ -579,12 +579,12 @@ describe("bill page", () => {
     expect(screen.getByText(/so this bill's votes aren't held/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "House roll call 209" })).toHaveAttribute(
       "href",
-      "https://clerk.house.gov/evs/2023/roll209.xml"
+      "https://clerk.house.gov/evs/2085/roll209.xml"
     );
     expect(
       screen.getByText("Civitas keeps the sitting Congress's floor speeches only.")
     ).toBeTruthy();
-    expect(screen.getByText("Civitas's record of Congress starts January 3, 2025.")).toBeTruthy();
+    expect(screen.getByText("Civitas's record of Congress starts January 3, 2087.")).toBeTruthy();
     expect(screen.queryByText(/No committee meeting or report/)).toBeNull();
     expect(screen.getAllByText("not held").length).toBe(3);
     // Congress.gov gave no title here: the h1 is the bill's number, never empty.
