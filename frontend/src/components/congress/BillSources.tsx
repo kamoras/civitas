@@ -52,11 +52,16 @@ export default function BillSources({
       "Summary",
       record?.summary
         ? `Congressional Research Service, ${record.summary.actionDesc}, ${longDate(record.summary.actionDate)}, quoted as published.`
-        : "None published by the Congressional Research Service yet.",
+        : // Unknown is not none: a record that couldn't be read says so.
+          !record || record.unavailable.includes("summaries")
+          ? "Not read from Congress.gov just now."
+          : "None published by the Congressional Research Service yet.",
     ],
     [
       "Votes",
-      "Each roll call as Senate.gov or the House Clerk records it, stored by Civitas with every member's position.",
+      record?.coverage?.votes.held === false
+        ? "Not held for this Congress: each roll call is at Senate.gov or the House Clerk."
+        : "Each roll call as Senate.gov or the House Clerk records it, stored by Civitas with every member's position.",
     ],
   ];
   if (detail) {
@@ -123,7 +128,7 @@ export default function BillSources({
             Cite this bill page
           </h3>
           <CiteThis
-            title={`${label}: ${title}${congress ? ` (${ordinal(congress)} Congress)` : ""}`}
+            title={`${label}${title && title !== label ? `: ${title}` : ""}${congress ? ` (${ordinal(congress)} Congress)` : ""}`}
             path={canonicalPath}
           />
         </div>
