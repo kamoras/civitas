@@ -59,6 +59,27 @@ export function agencyExploreHref(slug: string): string {
 }
 
 /**
+ * The elections archive: every general election Civitas has kept a record
+ * of (`/elections/archive`), and each one's page (`/elections/{cycle}`).
+ *
+ * The last tab of `SECTIONS.elections`, and the tab an archive page marks
+ * as its own. The index never goes empty: before the first archive it says
+ * when one starts.
+ */
+export const ELECTIONS_ARCHIVE_HREF = "/elections/archive";
+
+/** One archived general election's page. */
+export function electionArchiveHref(cycle: number): string {
+  return `/elections/${cycle}`;
+}
+
+/** A race on its archived election's page (the anchor the page gives it,
+ *  and the one the old `/elections/{raceId}` links resolve to). */
+export function archivedRaceHref(cycle: number, raceId: string): string {
+  return `${electionArchiveHref(cycle)}#race-${raceId}`;
+}
+
+/**
  * Each section's sub-pages, in the order its tab bar lists them: the one
  * table `SectionTabs` reads, so a page added here appears in every bar of its
  * section. Every tab is a page of its own (a link with `aria-current`, not an
@@ -87,6 +108,7 @@ export const SECTIONS = {
       { key: "ballots", label: "Ballots by state", href: "/elections" },
       { key: "map", label: "Seat map", href: "/elections/map?chamber=senate&view=usual" },
       { key: "redistricting", label: "New House maps", href: "/elections/redistricting" },
+      { key: "archive", label: "Archive", href: ELECTIONS_ARCHIVE_HREF },
     ],
   },
 } as const;

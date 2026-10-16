@@ -5,7 +5,9 @@ Ranges, not results, and never a race call: the file holds no chance of
 anyone winning. Served from /data/election_map.json, which the pipeline
 process writes (app.forecast.build). From election day on the map yields
 to the results map: both routes answer 404 once active_election() leaves
-the campaign phase.
+the campaign phase. Its final pre-election state is copied into the
+election's archive on election day (app/election_archive.py,
+GET /api/elections/archive/{cycle}/map).
 
 The poll figures and everything built on them are derived from Wikipedia
 (Wikipedia contributors) under CC BY-SA 4.0, and every response says so.
@@ -38,7 +40,8 @@ _stamp = None
 # The refresh runs every three hours; a map older than three missed runs
 # is marked stale on the page (the build alerts on each failure).
 STALE_AFTER = timedelta(hours=9)
-HIDDEN = "The election map is shown during the campaign only; from election day on, the results map replaces it."
+HIDDEN = ("The election map is shown during the campaign only; from election day on, the results map replaces it, "
+          "and the map as it stood before the election is kept in that election's archive.")
 NOT_BUILT = "The election map has not been built yet."
 
 

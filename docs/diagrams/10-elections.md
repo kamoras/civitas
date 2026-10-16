@@ -37,6 +37,13 @@ election's candidates or measures again: the site stays on the election
 through the results window, but its sources have moved on, and a re-read
 would unwrite what was certified.
 
+Each pass of the live count also copies the held election into its
+archive (`app/election_archive.freeze`, table `election_archives`, kept by a
+data reset): the map's file once (the campaign's last build), and the
+ballot, counts and statewide measures on every pass until the results
+window closes. After that nothing rewrites it, and `/elections/{cycle}`
+serves it for good.
+
 ## The run
 
 Phases are `ELECTION_PIPELINE_STEPS` in `election_pipeline.py`. Each one

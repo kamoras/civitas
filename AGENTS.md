@@ -1667,6 +1667,16 @@ wrong number on election night is worse than none:
   winning on any surface, no seat tally by party, and it is withdrawn the
   moment `active_election()` leaves the campaign phase, so no estimate ever
   sits beside a live count.
+- The held election is archived before the site moves on
+  (`app/election_archive.py`, `ElectionArchive`, kept by every reset through
+  `RESET_KEEPS`): from election day each live-results pass copies the map's
+  file once (the campaign's last build: the build stops on election day) and
+  the federal ballot, counts and statewide measures on every pass until the
+  window closes; nothing rewrites it after, and a pass that finds no races
+  never replaces a record. `/elections/{cycle}` serves it, and an old
+  `/elections/{raceId}` link goes there once the site's election is a later
+  one (`race_detail`'s `archiveCycle`). The same §7 rules hold there:
+  quoted, and no race called.
 - A data reset inside the results window keeps the held election's ballot and
   count (`database.RESET_KEEPS_WHILE_RESULTS`) and the coverage markers its
   pages read beside them (statewide, judicial and ballot-basis `api_cache`
@@ -2033,6 +2043,7 @@ the pending list).
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
 | Senate and House map: usual vote and poll ranges (pre-election; separate from scoring) | `backend/app/forecast/` (`model.py`, `polls.py`, `training_polls.py`, `build.py`), `backend/scripts/fit_forecast_model.py`, `backend/scripts/fetch_silver_bulletin_polls.py`, `backend/scripts/build_house_lean_history.py`, `app/data/forecast_model.json`, `forecast_house_model.json`, `forecast_house_lean.json`, `backend/app/api/election_map.py`, `frontend/src/components/elections/map/`, `frontend/src/lib/electionMap.ts` |
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
+| Archive of each held election (frozen pre-election map, ballot, counts, measures) | `backend/app/election_archive.py`, `backend/app/api/election_archive.py`, `frontend/src/app/elections/[raceId]/page.tsx` (a year is an archive, anything else an old race link), `frontend/src/app/elections/archive/page.tsx`, `frontend/src/components/elections/archive/CycleArchive.tsx` |
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |

@@ -605,6 +605,7 @@ def _election_results_sync() -> None:
         return
 
     def _run():
+        from app.election_archive import freeze
         from app.http_client import make_async_client
         from app.live_results.sync import results_tracker, sync_live_results
 
@@ -612,7 +613,15 @@ def _election_results_sync() -> None:
             db = SessionLocal()
             try:
                 async with make_async_client() as client:
-                    return await sync_live_results(db, client, election.election_day)
+                    summary = await sync_live_results(db, client, election.election_day)
+                # The election's archive (app/election_archive.py), copied
+                # on every pass through the window and frozen by its close.
+                try:
+                    freeze(db, election.election_day)
+                except Exception:
+                    db.rollback()
+                    logger.exception("Election archive copy failed")
+                return summary
             finally:
                 db.close()
 

@@ -7,6 +7,7 @@ from app.api.bills import router as bills_router
 from app.api.cards import router as cards_router
 from app.api.compare import router as compare_router
 from app.api.congress import router as congress_router
+from app.api.election_archive import router as election_archive_router
 from app.api.election_map import router as election_map_router
 from app.api.elections import router as elections_router
 from app.api.explore import router as explore_router
@@ -45,6 +46,7 @@ api_router.include_router(explore_router, tags=["explore"])
 api_router.include_router(agencies_router, tags=["agencies"])
 api_router.include_router(action_router, tags=["action"])
 api_router.include_router(election_map_router, tags=["elections"])
+api_router.include_router(election_archive_router, tags=["elections"])
 api_router.include_router(elections_router, tags=["elections"])
 api_router.include_router(redistricting_router, tags=["elections"])
 api_router.include_router(bills_router, tags=["bills"])

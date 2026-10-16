@@ -1200,6 +1200,29 @@ class ElectionResultEvent(Base):
     race: Mapped["Race"] = relationship(back_populates="result_events")
 
 
+class ElectionArchive(Base):
+    """A held general election's record, kept after the site moves on to
+    the next one (app/election_archive.py): the seat map as its last
+    campaign build left it, and the federal ballot, statewide measures and
+    each race's count as they stood. Copied from election day until the
+    results window closes; after that nothing rewrites it, since the rows
+    it was copied from are ordinary derived data again (a data reset wipes
+    them, the measure prune deletes past elections' measures). Kept by a
+    reset (database.RESET_KEEPS)."""
+    __tablename__ = "election_archives"
+
+    cycle: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    election_day: Mapped[str] = mapped_column(String(10), nullable=False)
+    # The map's JSON (forecast/build.py's file) as it stood when the
+    # campaign ended. Written once, never replaced; NULL when no map for
+    # this election was on disk on election day.
+    map_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    map_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Races, candidates, counts and measures (election_archive.build_record).
+    record_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    record_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class LiveResultRead(Base):
     """How the last read of a state's live-results feed went, per election:
     what lets the page tell "the count hasn't started" from "Civitas

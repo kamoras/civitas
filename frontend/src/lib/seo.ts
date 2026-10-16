@@ -374,6 +374,27 @@ export function describeElectionMap(cycle?: number): {
   };
 }
 
+/** /elections/archive: every general election Civitas has kept a record of. */
+export function describeElectionArchiveIndex(): { title: string; description: string } {
+  return {
+    title: "Past U.S. general elections: results, ballots and the map before the vote",
+    description:
+      "Each general election Civitas covered, kept after the site moves on: every Senate and House race's count as its state reported it, the candidates and statewide ballot measures on the ballot, and the seat map as it stood the day before.",
+  };
+}
+
+/** /elections/{cycle}: "2026 general election results, ballot and pre-election map". */
+export function describeElectionArchive(
+  cycle: number,
+  races: number,
+  measures: number
+): { title: string; description: string } {
+  return {
+    title: `${cycle} general election: results, ballot and pre-election map`,
+    description: `The ${cycle} U.S. general election as Civitas recorded it: the count in ${races} Senate and House races as each state reported it, the candidates on the ballot and ${measures} statewide ballot measure${measures === 1 ? "" : "s"}, quoted from their sources, and the seat map as it stood before election day. No race is called.`,
+  };
+}
+
 /** The agency directory: "Federal agencies: budgets, rules and comment periods". */
 export function describeAgencyIndex(): { title: string; description: string } {
   return {
