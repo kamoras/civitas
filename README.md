@@ -270,6 +270,8 @@ Scores sitting and historical presidents from a mix of live and archival sources
 - **Historical**: C-SPAN Presidential Historians Survey (historical legacy), UCSB election-margin data, MeasuringWorth real-GDP series (1790–present), Maddison Project GDP per person for the US and 13 peer economies (1946–2022, extended by the World Bank's live series): postwar growth is scored relative to those peers, with their catching up with US incomes set aside
 - All three score dimensions (Public Mandate, Effectiveness, Historical Legacy) are computed from source data with no LLM involvement. Dimensions a president has no real data source for are left N/A rather than filled with a placeholder.
 
+**Who is sitting** comes from UCSB's roster each night; nothing names a president in code. A president the tables below were written before is matched by name (`derived_president_id`; the election-mandates table by the roster's names, `presidential_elections`), and every night `ops_alerts.check_sitting_president` compares the roster's sitting president with the Federal Register's newest presidential document: one signed after the stored term began, by someone else, means the roster is behind an inauguration and sends an ops alert.
+
 ### Phase 6b — VOTES WITH THE PRESIDENT
 
 Reads new OMB Statements of Administration Policy and rebuilds each member's votes with the president's stated positions and the expected rate for their seat. Informational, not scored; see [Votes with the President](#votes-with-the-president-nightly-informational).
@@ -756,6 +758,8 @@ How often each member votes with the president's stated position, beside what me
 ```
 
 **The source.** The president's position comes only from a signed, citable statement tied to the measure. OMB lists every SAP of the administration on one page; the index and the PDFs are served without a bot wall (the site's WordPress JSON API answers 403 and is not used) and `robots.txt` allows both. On 2026-10-13 it listed 194 statements for the 119th Congress: 125 addressed to the House, 69 to the Senate. One covers nineteen resolutions without citing any by number and cannot be matched to a vote.
+
+**Whose positions.** "The president" is the sitting one (the presidents table's `is_current`, from the roster). A Congress that spans an inauguration counts only statements issued and roll calls cast since the sitting president's term began (`presidential_support.presidency_start`), so an outgoing administration's position never counts as its successor's.
 
 **Which votes count.** A roll call counts when it is the chamber's final vote on a measure (passage, adoption, concurrence, a veto override), read from the chamber's own question wording, or a vote on an amendment a statement names by number; a statement addressed to that chamber covers the measure, issued on or before the vote; no later statement on the measure (in either chamber) has superseded it; and the statement supports or opposes passage. Procedural votes (cloture, motions to proceed, discharge, table, recommit) are left out because no statement addresses them. A Yea advances the measure, so the president's side is Yea under a supporting statement and Nay under an opposing one; present and not voting are not votes. On the 2026-10-13 record that is 122 House and 27 Senate roll calls. Many Senate statements were never followed by a final vote: the Senate disposed of most war-powers and disapproval resolutions on motions to discharge or proceed, which are not counted.
 

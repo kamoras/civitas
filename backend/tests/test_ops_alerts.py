@@ -496,3 +496,90 @@ class TestEachAlertResolves:
             )
         resolve.assert_called_once_with("ground-truth-house")
         send.assert_not_called()
+
+
+class TestCheckSittingPresident:
+    """The roster's sitting president against the Federal Register's newest
+    presidential document: an inauguration the roster hasn't caught up with
+    is alerted; a register that is merely behind the roster is not."""
+
+    @staticmethod
+    def _check(db_session, signer):
+        from types import SimpleNamespace
+
+        from app.ops_alerts import check_sitting_president
+
+        with patch("app.ops_alerts.newest_presidential_signer", return_value=signer), \
+             patch("app.ops_alerts.SessionLocal", return_value=SimpleNamespace(query=db_session.query, close=lambda: None)), \
+             patch("app.ops_alerts.send_ops_alert") as alert, \
+             patch("app.ops_alerts.resolve_ops_alert") as resolve:
+            check_sitting_president()
+        return alert, resolve
+
+    @pytest.fixture
+    def roster(self, db_session):
+        from app.models import President
+
+        db_session.add_all([
+            President(id="outgoing-47", name="Outgoing A. President, Jr.", party="R", number=47,
+                      term_start="2025-01-20", is_current=True),
+        ])
+        db_session.commit()
+
+    def test_the_same_person_resolves(self, db_session, roster):
+        alert, resolve = self._check(db_session, ("Outgoing President", "2026-10-07"))
+        alert.assert_not_called()
+        resolve.assert_called_once_with("sitting-president-mismatch")
+
+    def test_a_new_president_the_roster_lacks_alerts(self, db_session, roster):
+        # 2029-01-21: the new president's first documents, the roster still
+        # on the outgoing one.
+        alert, _ = self._check(db_session, ("Incoming President", "2029-01-21"))
+        assert alert.call_args.kwargs["condition"] == "sitting-president-mismatch"
+        assert "Incoming President" in alert.call_args.args[1]
+
+    def test_a_register_behind_the_roster_is_quiet(self, db_session):
+        # The roster already shows the new president; the register's newest
+        # documents (published days after signing) are still the outgoing
+        # president's.
+        from app.models import President
+
+        db_session.add(President(id="incoming-48", name="Incoming President", party="D", number=48,
+                                 term_start="2029-01-20", is_current=True))
+        db_session.commit()
+        alert, resolve = self._check(db_session, ("Outgoing President", "2029-01-17"))
+        alert.assert_not_called()
+        resolve.assert_not_called()
+
+    def test_no_sitting_president_alerts(self, db_session):
+        alert, _ = self._check(db_session, ("Incoming President", "2029-01-21"))
+        assert "nobody" in alert.call_args.args[1]
+
+    def test_an_unreadable_register_changes_nothing(self, db_session, roster):
+        alert, resolve = self._check(db_session, None)
+        alert.assert_not_called()
+        resolve.assert_not_called()
+
+
+def test_newest_presidential_signer_reads_the_newest_signing(monkeypatch):
+    from app import ops_alerts
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"results": [
+                {"president": {"name": "Outgoing President"}, "signing_date": "2029-01-19"},
+                {"president": {"name": "Incoming President"}, "signing_date": "2029-01-20"},
+                {"president": None, "signing_date": "2029-01-21"},
+            ]}
+
+    monkeypatch.setattr(ops_alerts.httpx, "get", lambda *a, **k: Resp())
+    assert ops_alerts.newest_presidential_signer() == ("Incoming President", "2029-01-20")
+
+    def down(*a, **k):
+        raise ops_alerts.httpx.ConnectError("down")
+
+    monkeypatch.setattr(ops_alerts.httpx, "get", down)
+    assert ops_alerts.newest_presidential_signer() is None

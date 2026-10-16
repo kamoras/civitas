@@ -361,6 +361,81 @@ def check_current_congress_staleness() -> None:
     )
 
 
+# The Federal Register's presidential documents (proclamations, executive
+# orders, memoranda) each name the president who signed them: the official
+# record of who holds the office, published within days of a signing.
+PRESIDENTIAL_DOCUMENTS_URL = "https://www.federalregister.gov/api/v1/documents.json"
+
+
+def _person_key(name: str) -> tuple[str, str] | None:
+    """(first, last) of a name with initials, suffixes and punctuation
+    dropped, so the Federal Register's "First Last" and the roster's "First
+    M. Last, Jr." compare equal; None for an empty name."""
+    words = [w for w in "".join(c if c.isalpha() or c == " " else "" for c in name.lower()).split()
+             if len(w) > 1 and w not in {"jr", "sr", "ii", "iii", "iv"}]
+    return (words[0], words[-1]) if words else None
+
+
+def newest_presidential_signer(timeout: float = 15.0) -> tuple[str, str] | None:
+    """(president's name, signing date) of the newest presidential document
+    in the Federal Register, or None when it can't be read."""
+    try:
+        resp = httpx.get(PRESIDENTIAL_DOCUMENTS_URL, params={
+            "conditions[type][]": "PRESDOCU", "order": "newest", "per_page": 20,
+            "fields[]": ["president", "signing_date"],
+        }, timeout=timeout)
+        resp.raise_for_status()
+        rows = [r for r in resp.json().get("results") or []
+                if (r.get("president") or {}).get("name") and r.get("signing_date")]
+    except Exception:
+        logger.warning("Federal Register presidential documents could not be read", exc_info=True)
+        return None
+    if not rows:
+        return None
+    newest = max(rows, key=lambda r: r["signing_date"])
+    return newest["president"]["name"], newest["signing_date"]
+
+
+def check_sitting_president() -> None:
+    """Alert when the presidents table's sitting president is not the one
+    signing presidential documents.
+
+    The sitting president comes from UCSB's roster each night
+    (presidential_roster.py), never a typed name. A roster that is slow to
+    add a new president after an inauguration would keep the outgoing one
+    "sitting" with nothing to say so. The Federal Register is the official
+    cross-check: its newest presidential document, signed after the stored
+    president's term began, by someone else, means the roster has fallen
+    behind. A register still showing the outgoing president's last
+    documents (it publishes days after signing) is not a disagreement."""
+    from app.models import President
+
+    signer = newest_presidential_signer()
+    if signer is None:
+        return
+    name, signed = signer
+    db = SessionLocal()
+    try:
+        sitting = db.query(President).filter(President.is_current.is_(True)).all()
+    finally:
+        db.close()
+    if len(sitting) == 1 and _person_key(sitting[0].name) == _person_key(name):
+        resolve_ops_alert("sitting-president-mismatch")
+        return
+    if len(sitting) == 1 and signed < (sitting[0].term_start or ""):
+        return  # the register is behind the roster, not the other way round
+    stored = ", ".join(p.name for p in sitting) or "nobody"
+    send_ops_alert(
+        "Sitting president differs from the Federal Register",
+        f"The Federal Register's newest presidential document, signed {signed}, is {name}'s, but the "
+        f"presidents table marks {stored} as sitting. The roster (UCSB's presidents list, read nightly by "
+        f"presidential_roster.py) has not caught up: the site names the wrong sitting president until it "
+        f"does. Check https://www.presidency.ucsb.edu/presidents; nothing needs editing in code.",
+        dedupe_key=f"sitting-president-mismatch-{signed}-{_person_key(name)}",
+        condition="sitting-president-mismatch",
+    )
+
+
 def check_feedback_token_expiration() -> None:
     """Alert when FEEDBACK_TOKEN is within 30 days of expiring.
 

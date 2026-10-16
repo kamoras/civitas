@@ -370,3 +370,33 @@ async def test_reading_stops_at_its_budget(db_session, monkeypatch):
     monkeypatch.setattr(ps, "READ_BUDGET_S", 5)
     monkeypatch.setattr(ps, "time", SimpleNamespace(monotonic=lambda: next(ticks, 10.0)))
     assert await ps.refresh_statements(None, db_session) == {"status": "budget spent", "read": 1}
+
+
+def test_a_congress_spanning_an_inauguration_counts_only_the_sitting_president(db_session):
+    """The 121st Congress convenes on Jan 3, 2029, under the outgoing
+    president; from Jan 20 "the president" is the new one. An outgoing
+    statement must not count a later vote as the new president's position,
+    and votes before the new term are not the new president's either."""
+    from app.models import President
+
+    db_session.add_all([
+        President(id="outgoing-47", name="Outgoing", party="R", number=47, term_start="2025-01-20",
+                  term_end="2029-01-20"),
+        President(id="incoming-48", name="Incoming", party="D", number=48, term_start="2029-01-20", is_current=True),
+        PolicyStatement(url="https://example.gov/outgoing.pdf", title="H.R. 5", readable=True, issued="2029-01-10",
+                        chamber="house", measures='["HR.5"]', amendments="[]", position="support",
+                        position_sentence="Supports."),
+        PolicyStatement(url="https://example.gov/incoming.pdf", title="H.R. 6", readable=True, issued="2029-02-01",
+                        chamber="house", measures='["HR.6"]', amendments="[]", position="oppose",
+                        position_sentence="Opposes."),
+        RollCall(chamber="house", congress=121, session=1, number=1, date="2029-01-15", question="On Passage",
+                 title="H.R. 5", bill_id="HR.5", result="Passed"),
+        RollCall(chamber="house", congress=121, session=1, number=2, date="2029-01-25", question="On Passage",
+                 title="H.R. 5", bill_id="HR.5", result="Passed"),
+        RollCall(chamber="house", congress=121, session=1, number=3, date="2029-02-05", question="On Passage",
+                 title="H.R. 6", bill_id="HR.6", result="Failed"),
+    ])
+    db_session.commit()
+    assert ps.match_roll_calls(db_session, "house", 121) == 1
+    (only,) = db_session.query(StatementRollCall).all()
+    assert db_session.get(RollCall, only.roll_call_id).number == 3
