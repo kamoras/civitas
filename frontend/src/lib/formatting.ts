@@ -5,6 +5,9 @@ export function formatCurrency(amount: number): string {
   // toLocaleString branch (e.g. a negative million rendered "$-1,000,000").
   const sign = amount < 0 ? "-" : "";
   const abs = Math.abs(amount);
+  if (abs >= 1_000_000_000_000) {
+    return `${sign}$${(abs / 1_000_000_000_000).toFixed(2)}T`;
+  }
   if (abs >= 1_000_000_000) {
     return `${sign}$${(abs / 1_000_000_000).toFixed(1)}B`;
   }

@@ -22,6 +22,7 @@ import {
 
 describe("formatCurrency", () => {
   it.each([
+    ["trillions (an agency budget)", 1_934_000_000_000, "$1.93T"],
     ["billions", 2_500_000_000, "$2.5B"],
     ["millions", 1_200_000, "$1.2M"],
     ["thousands", 45_000, "$45K"],

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.api.action import NOT_RETIRED_DRAFT
 from app.api.elections import ballot_state_codes
 from app.api.response_helpers import cached_json
 from app.database import get_db
@@ -150,11 +151,12 @@ def _rins(doc: ExploreDocument) -> set[str]:
 
 def _issues_by_document(db: Session, today: date) -> dict[int, str]:
     """Explore document id -> public id of the newest Action Center issue
-    (in the last two weeks, not withdrawn) that cites it."""
+    (in the last two weeks, not withdrawn, not a draft retired unconfirmed)
+    that cites it."""
     since = (today - timedelta(days=_NEWS_WINDOW_DAYS)).isoformat()
     out: dict[int, str] = {}
     issues = (db.query(ActionIssue.id, ActionIssue.related_explore_ids)
-              .filter(ActionIssue.date >= since).order_by(ActionIssue.date))
+              .filter(ActionIssue.date >= since, NOT_RETIRED_DRAFT).order_by(ActionIssue.date))
     for issue_id, related in issues:
         public_id = to_public_id(issue_id)
         if retraction_for_issue(public_id):

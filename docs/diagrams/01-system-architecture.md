@@ -13,7 +13,8 @@ flowchart TB
         SENGOV["Senate.gov · House Clerk<br/>roll-call vote XML<br/>no API"]
         OYEZ["Oyez / supremecourt.gov · SCDB · FJC · Martin-Quinn<br/>SCOTUS votes · opinions · appointments"]
         ECON["BLS · BEA / FRED · MeasuringWorth · World Bank<br/>employment · GDP · unemployment · prices · peer-economy GDP"]
-        FEDREG["Federal Register<br/>orders · rulemaking"]
+        FEDREG["Federal Register<br/>orders · rulemaking · agency list"]
+        USASP["USAspending.gov<br/>toptier agency budgets"]
         UCSB["UCSB American Presidency Project<br/>roster · approval · margins"]
         PTR["House Clerk · Senate eFD · OGE · SEC<br/>STOCK Act disclosures"]
         VOTEVIEW["Voteview<br/>Nokken-Poole ideal points"]
@@ -26,12 +27,13 @@ flowchart TB
     subgraph PIPE["Pipelines — APScheduler"]
         NIGHTLY["Nightly chain, 03:00 UTC<br/>senate → supplementary → house<br/>→ stock → election<br/>4-6h cold · 45-90m warm"]
         HOURLY["Hourly at :15<br/>Action Center refresh"]
-        SUPP["Supplementary (in the chain)<br/>explore · justices (weekly) · PVI · presidents"]
+        AGENCY["Weekly (tried hourly at :30)<br/>agency list + USAspending budgets"]
+        SUPP["Supplementary (in the chain)<br/>explore · justices (weekly, or on a Court change) · PVI · presidents"]
         ELECT["Election pipeline<br/>races · candidates · ballot measures · coverage"]
     end
 
     subgraph STORE["Persistence — /data volume"]
-        SQLITE[("SQLite civitas.db<br/>49 tables · visits.db 6")]
+        SQLITE[("SQLite civitas.db<br/>68 tables · visits.db 9")]
         VECDB[("sqlite-vec vectors.db<br/>vec_explore + vec_bills<br/>384-dim, cosine")]
     end
 

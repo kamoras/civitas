@@ -20,16 +20,40 @@ from app.pipeline.fetch.oyez_common import OYEZ_BASE, unix_to_date as _unix_to_d
 
 logger = logging.getLogger(__name__)
 
-async def fetch_current_justices(client: httpx.AsyncClient) -> list[dict]:
-    """Fetch the list of current (active) Supreme Court justices from Oyez."""
-    resp = await client.get(f"{OYEZ_BASE}/justices", timeout=DEFAULT_FETCH_TIMEOUT_S)
+async def fetch_justice_list(client: httpx.AsyncClient) -> list[dict] | None:
+    """Oyez's list of every justice who has served, or None when it can't
+    be read (never [] for an outage: an empty list would read as a Court
+    with nobody on it)."""
+    try:
+        resp = await client.get(f"{OYEZ_BASE}/justices", timeout=DEFAULT_FETCH_TIMEOUT_S)
+    except httpx.HTTPError as e:
+        logger.warning("Oyez justices endpoint unreachable: %s", e)
+        return None
     if resp.status_code != 200:
         logger.warning("Oyez justices endpoint returned %d", resp.status_code)
-        return []
-
+        return None
     all_justices = resp.json()
-    if not isinstance(all_justices, list):
-        return []
+    return all_justices if isinstance(all_justices, list) else None
+
+
+def service_ended(all_justices: list[dict]) -> dict[str, str | None]:
+    """{id: last day of service} for every justice with no current role on
+    Oyez's list — who has left the Court, and when (None when Oyez gives no
+    date). A justice who left one seat for another (an associate justice
+    made Chief) still has a current role and is not here."""
+    ended = {}
+    for j in all_justices:
+        roles = j.get("roles") or []
+        if roles and not any(r.get("date_end") == 0 for r in roles):
+            last = max(r.get("date_end") or 0 for r in roles)
+            ended[j.get("identifier", "")] = (_unix_to_date(last) or None) if last else None
+    return ended
+
+
+async def fetch_current_justices(client: httpx.AsyncClient | None, all_justices: list[dict] | None = None) -> list[dict]:
+    """The sitting justices from Oyez's list ([] when it can't be read)."""
+    if all_justices is None:
+        all_justices = await fetch_justice_list(client) or []
 
     current = []
     for j in all_justices:

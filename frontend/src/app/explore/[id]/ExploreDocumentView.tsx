@@ -10,6 +10,7 @@ import TerminalTitlebar from "@/components/TerminalTitlebar";
 import CopyText from "@/components/CopyText";
 import CiteThis from "@/components/shared/CiteThis";
 import { billCanonicalPath } from "@/lib/congress";
+import AgencyLink from "@/components/agencies/AgencyLink";
 import {
   streamExploreDocumentSummary,
   parseExploreSummaryText,
@@ -694,7 +695,15 @@ export default function ExploreDocumentView({
             </h1>
 
             <div className="flex items-center gap-4 flex-wrap text-xs">
-              {doc.agencyName && <span className="text-signal-orange">{doc.agencyName}</span>}
+              {doc.agencyName && (
+                <span className="text-signal-orange">
+                  <AgencyLink
+                    name={doc.agencyName}
+                    slug={doc.agencySlug}
+                    className="inline-flex min-h-6 items-center underline decoration-signal-orange/40 underline-offset-2 hover:text-phos"
+                  />
+                </span>
+              )}
               {doc.politicianName && !doc.agencyName && (
                 <span className="text-ink">{doc.politicianName}</span>
               )}

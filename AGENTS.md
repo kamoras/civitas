@@ -1107,6 +1107,15 @@ with no successful completion in `PIPELINE_STALE_ALERT_DAYS`;
 `check_pipeline_overrun` watches the opposite case of a run that started
 and is taking too long.
 
+Outside the chain, the **agency sync** (`fetch/agencies.py`,
+`scheduler._agency_sync`, `AGENCY_SYNC` lease) reads the Federal Register's
+agency list and USAspending's toptier budgets once a week (tried hourly;
+each source is read when a week has passed since it last stored). USAspending names no
+Register agency, so the two are joined by name similarity at a threshold
+`scripts/calibrate_agency_crosswalk.py` writes to
+`app/data/agency_crosswalk.json` (§3a); an agency under it is kept and
+listed unmatched, never guessed.
+
 **What makes a night long is upstream fetching, not the analysis-code
 fingerprint** (measured 2026-10-14: the fingerprint changed on 19 of the 21
 nights before, and its slowest two nights were both unchanged-hash nights).
@@ -1176,7 +1185,12 @@ Between TRANSFORM and the rest, both chamber pipelines run
 
 **Presidents are never reconciled or removed, and neither is the Court** —
 both functions take an explicit chamber and reject anything but
-`senate`/`house`. A former president is permanent site content. Relatedly,
+`senate`/`house`. A former president is permanent site content. The Court
+has its own, narrower reconciliation: the justice step marks a justice no
+longer on Oyez's sitting list inactive (`retire_departed_justices`, never a
+delete, refused below the Court's quorum of six) and the Supplementary run
+checks that list nightly so a confirmation or departure doesn't wait for the
+weekly refresh (`court_roster_changed`). Relatedly,
 the Senate/House leaderboards rank only currently-serving members, while the
 presidential leaderboard ranks the *historical* field and excludes the
 sitting president (see `president_service.get_president_leaderboard`) — for
@@ -1269,6 +1283,20 @@ backoff). This only works because a refused statement is always its
 transaction's first write, so retrying it loses nothing.
 `tests/test_write_lock_holds.py` makes a pipeline write at every slow call
 of the refresh's stages on a file-backed database.
+
+The pipeline holds itself to the same rule. **A learning-store write
+commits at once** (`bill_learning.record_classification`,
+`donor_classifier_ai._store_donor_learning`,
+`industry_classifier._store_classification`): every caller goes on to
+classify the next bill or donor (an encode, the kNN pass) before it would
+commit, and on 2026-10-16 the hold watcher caught the Senate run holding
+the lock 19 to 22 s that way, near the busy timeout everything else waits
+on. A commit per upsert costs about 0.1 ms, against tens of ms of
+classification per item, and keeps every later read in the run (the
+exact-match lookups, the kNN references) seeing the rows already written,
+which a buffer flushed at batch end would not. The same test file makes a
+second-connection write at each classification step of the bill, donor and
+industry classifiers.
 
 Each issue's actions are fixed templates around stored data:
 
@@ -1797,6 +1825,7 @@ the pending list).
 | Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
+| Federal agencies: weekly Register list + USAspending budgets, name crosswalk, agency pages | `backend/app/pipeline/fetch/agencies.py`, `backend/app/api/agencies.py`, `backend/scripts/calibrate_agency_crosswalk.py` (`app/data/agency_crosswalk.json`), `frontend/src/app/agencies/` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |

@@ -8,7 +8,10 @@ on "database is locked".
 These run the refresh's stages on a file-backed database, as production
 does, and at every slow call (model, embedding, network) make a pipeline
 write from a second connection with a short busy timeout: it must get the
-write lock. Then the retry that keeps one refused write from failing a run.
+write lock. The pipeline's own learning-store writes are held to the same
+rule (2026-10-16: an upsert left open through the classification after it
+held the lock ~20 s). Then the retry that keeps one refused write from
+failing a run.
 """
 
 import json
@@ -32,7 +35,8 @@ from app.models import (
 )
 from app.pipeline import cache
 from app.pipeline.analyze import action_center as ac
-from app.pipeline.analyze import early_signal
+from app.pipeline.analyze import bill_analyzer, donor_classifier_ai, early_signal
+from app.pipeline.transform import industry_classifier
 
 TODAY = "2026-10-15"
 
@@ -150,6 +154,109 @@ def test_the_signal_stages_commit_before_the_next_fetch(file_sessionmaker, pipel
     check = file_sessionmaker()
     assert check.query(ActionIssue).filter(ActionIssue.status == ActionIssueStatus.DEVELOPING).count() == 1
     check.close()
+
+
+def _learned(file_sessionmaker, **filters) -> set[tuple[str, str, str]]:
+    check = file_sessionmaker()
+    rows = {(r.entity_name, r.entity_type, r.value)
+            for r in check.query(LearnedClassification).filter_by(**filters)}
+    check.close()
+    return rows
+
+
+async def test_bill_classification_commits_each_learning_write_before_the_next_bill(
+    file_sessionmaker, pipeline_write, monkeypatch,
+):
+    """2026-10-16: record_classification's upsert was left open while the
+    next bills were classified, holding the write lock ~20 s at a time.
+    The same writer serves the Senate's key bills and recent votes and
+    the House's bills."""
+    def classify(text, bill_id=None, db_session=None):
+        pipeline_write(f"classifying {bill_id}")
+        return [{"area": "PROCEDURAL", "confidence": 0.95}]
+
+    monkeypatch.setattr(bill_analyzer, "classify_policy_areas_multi", classify)
+    bills = [{"billId": f"S.{n}", "billName": f"Bill {n}", "congress": 119, "summary": "", "actions": []}
+             for n in (1, 2, 3)]
+    db = file_sessionmaker()
+    try:
+        assert len(await bill_analyzer.classify_all_bills(bills, db_session=db)) == 3
+    finally:
+        db.close()
+
+    assert [where for where, _ in pipeline_write.results] == ["classifying S.1", "classifying S.2", "classifying S.3"]
+    assert all(ok for _, ok in pipeline_write.results), pipeline_write.results
+    assert _learned(file_sessionmaker, entity_type="bill_policy") == {
+        (f"S.{n}", "bill_policy", "PROCEDURAL") for n in (1, 2, 3)
+    }
+
+
+def test_donor_classification_commits_each_learning_write_before_classifying_on(
+    file_sessionmaker, pipeline_write, monkeypatch,
+):
+    """2026-10-16: the main loop's last upsert stayed open through the kNN
+    pass (20 s). Every slow step, in the loop and in the kNN pass, must
+    find the lock free; the rows written are the same."""
+    donors = [{"name": f"Acme {n} Inc", "amount": 100, "fec_receipt": {"entity_type": "ORG"}} for n in (1, 2)]
+    donors.append({"name": "Mystery Fund", "amount": 5})
+
+    def skip_check(name_upper):
+        pipeline_write(f"skip check {name_upper}")
+        return False
+
+    def semantic(name, candidate_name=None):
+        pipeline_write(f"semantic {name}")
+        return None
+
+    def knn(names, session, entity_type, **_):
+        pipeline_write(f"kNN {entity_type}")
+        return {n: "TECH" if entity_type == "industry" else "PAC" for n in names}
+
+    monkeypatch.setattr(donor_classifier_ai, "classify_industries_batch_scored",
+                        lambda names: {n: ("TECH", 0.9) for n in names if n.startswith("Acme")})
+    monkeypatch.setattr(donor_classifier_ai, "is_skip_entity", skip_check)
+    monkeypatch.setattr(donor_classifier_ai, "classify_donor_type_semantic", semantic)
+    monkeypatch.setattr(donor_classifier_ai, "normalize_learning_store",
+                        lambda session: pipeline_write("normalizing the learning store") or 0)
+    monkeypatch.setattr(donor_classifier_ai, "cross_validate_donor_types",
+                        lambda session: pipeline_write("cross-validating PAC labels") or 0)
+    monkeypatch.setattr(donor_classifier_ai, "classify_batch_nn", knn)
+
+    db = file_sessionmaker()
+    try:
+        result = donor_classifier_ai._classify_donors_hybrid_sync(donors, db)
+    finally:
+        db.close()
+
+    assert result["MYSTERY FUND"] == {"type": "PAC", "industry": "TECH", "skip": False}
+    assert ("kNN industry", True) in pipeline_write.results
+    assert all(ok for _, ok in pipeline_write.results), pipeline_write.results
+    assert {(n, t, v) for n, t, v in _learned(file_sessionmaker) if not n.startswith("DONOR ")} == {
+        ("ACME 1 INC", "donor_type", "Org/Employees"), ("ACME 1 INC", "industry", "TECH"),
+        ("ACME 2 INC", "donor_type", "Org/Employees"), ("ACME 2 INC", "industry", "TECH"),
+        ("MYSTERY FUND", "donor_type", "PAC"), ("MYSTERY FUND", "industry", "TECH"),
+    }
+
+
+def test_industry_classification_commits_each_learning_write_before_the_next_name(
+    file_sessionmaker, pipeline_write, monkeypatch,
+):
+    def classify(name):
+        pipeline_write(f"embedding {name}")
+        return "TECH", {}
+
+    monkeypatch.setattr(industry_classifier, "classify_industry_with_provenance", classify)
+    db = file_sessionmaker()
+    try:
+        for name in ("Acme Software", "Beta Software"):
+            assert industry_classifier.classify_with_learning(name, db) == ("TECH", "embedding")
+    finally:
+        db.close()
+
+    assert all(ok for _, ok in pipeline_write.results), pipeline_write.results
+    assert _learned(file_sessionmaker, entity_type="industry") == {
+        ("ACME SOFTWARE", "industry", "TECH"), ("BETA SOFTWARE", "industry", "TECH"),
+    }
 
 
 class _Locked:

@@ -34,6 +34,9 @@ interface SitemapIndex {
   rollCalls?: RollCallEntry[];
   /** States with a redistricting page (/elections/redistricting/{ST}). */
   redistricting?: string[];
+  /** Agencies with documents or a budget (/agencies/{slug}). Optional only
+   * for a backend image older than this field. */
+  agencies?: SitemapEntry[];
 }
 
 interface RollCallEntry {
@@ -91,6 +94,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/congress`, changeFrequency: "hourly", priority: 0.8 },
     { url: `${SITE_URL}/congress/bills`, changeFrequency: "hourly", priority: 0.8 },
     { url: `${SITE_URL}/congress/committees`, changeFrequency: "daily", priority: 0.6 },
+    { url: `${SITE_URL}/agencies`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${SITE_URL}/congress/president/house`, changeFrequency: "daily", priority: 0.6 },
     { url: `${SITE_URL}/congress/president/senate`, changeFrequency: "daily", priority: 0.6 },
     { url: `${SITE_URL}/leaderboard`, changeFrequency: "daily", priority: 0.8 },
@@ -125,6 +129,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...entries(index.politicians, (id) => `/politicians/${id}`, "weekly", 0.8),
     ...entries(index.bills, (id) => `/congress/bills/${id}`, "weekly", 0.5),
     ...entries(index.issues, (id) => `/issue/${id}`, "weekly", 0.5),
+    ...entries(index.agencies ?? [], (id) => `/agencies/${id}`, "weekly", 0.5),
     ...congressReports(index.congressDays ?? []),
     ...(index.rollCalls ?? []).map((v) => ({
       url: `${SITE_URL}${rollCallHref(v)}`,
