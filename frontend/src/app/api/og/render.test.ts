@@ -55,3 +55,27 @@ describe("record card render", () => {
     expect(res.headers.get("cache-control")).toBe("public, max-age=300");
   });
 });
+
+describe("issue card render", () => {
+  it("renders an issue card as a PNG", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/api/action/issues/i0000abcd"))
+          return Response.json({
+            publicId: "i0000abcd",
+            title: "Agency sues a state",
+            summary: "The agency sued Thursday.",
+            summarySource: "Outlet B",
+            date: "2026-10-15",
+            status: "confirmed",
+            sourceNames: ["Outlet A", "Outlet B"],
+            imageUrl: null,
+          });
+        throw new Error("offline");
+      })
+    );
+    const res = await GET(new NextRequest("http://localhost/api/og?issue=i0000abcd"));
+    expect(res.headers.get("content-type")).toBe("image/png");
+  });
+});

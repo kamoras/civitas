@@ -8,25 +8,26 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 from app.pipeline.fetch.fr_rulemaking import (
-    _primary_agency,
     fetch_fr_rulemaking,
+    issuing_agency,
 )
 
 
-class TestPrimaryAgency:
+class TestIssuingAgency:
     @pytest.mark.parametrize("agencies, expected", [
-        pytest.param([{"name": "EPA", "parent_id": None}], "EPA", id="single_agency"),
+        pytest.param([{"name": "EPA", "id": 1, "parent_id": None, "slug": "epa"}], ("EPA", "epa"), id="single_agency"),
         pytest.param([
-            {"name": "Transportation Department", "parent_id": None},
-            {"name": "FAA", "parent_id": 492},
-        ], "Transportation Department", id="parent_and_child"),
-        pytest.param([{"name": "FAA", "parent_id": 492}], "FAA", id="only_child_agency"),
-        pytest.param([], "", id="empty_list"),
-        pytest.param([{"raw_name": "DEPARTMENT OF ENERGY", "parent_id": None}], "DEPARTMENT OF ENERGY",
+            {"name": "Transportation Department", "id": 492, "parent_id": None, "slug": "transportation-department"},
+            {"name": "FAA", "id": 159, "parent_id": 492, "slug": "faa"},
+        ], ("FAA", "faa"), id="parent_and_child_is_the_child"),
+        pytest.param([{"name": "FAA", "id": 159, "parent_id": 492, "slug": "faa"}], ("FAA", "faa"),
+                     id="only_child_agency"),
+        pytest.param([], ("", ""), id="empty_list"),
+        pytest.param([{"raw_name": "DEPARTMENT OF ENERGY", "parent_id": None}], ("DEPARTMENT OF ENERGY", ""),
                      id="raw_name_fallback"),
     ])
-    def test_primary_agency(self, agencies, expected):
-        assert _primary_agency(agencies) == expected
+    def test_issuing_agency(self, agencies, expected):
+        assert issuing_agency(agencies) == expected
 
 
 SAMPLE_RULE = {

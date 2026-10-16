@@ -31,6 +31,7 @@ from app.pipeline.analyze.trend_poster import run_trend_posts
 from app.pipeline import lease
 from app.pipeline import bill_refresh
 from app.pipeline.fetch import bill_display_titles
+from app.pipeline.fetch.agencies import run_agency_sync
 from app.services.bill_service import warm_bill_collection_cache
 
 if TYPE_CHECKING:
@@ -251,6 +252,7 @@ def _nightly_pipeline() -> None:
     from app.ops_alerts import (
         check_current_congress_staleness,
         check_feedback_token_expiration,
+        check_sitting_president,
         check_state_pvi_staleness,
         resolve_ops_alert,
         send_ops_alert,
@@ -272,6 +274,10 @@ def _nightly_pipeline() -> None:
             # self-advance (see the check's own docstring for why), so the
             # alert is the only signal that a manual refresh is due.
             check_state_pvi_staleness,
+            # The presidents table's sitting president against the Federal
+            # Register's newest presidential document (an inauguration the
+            # roster hasn't caught up with).
+            check_sitting_president,
         )
         for check in pre_checks:
             try:
@@ -701,6 +707,14 @@ def _congress_activity_sync() -> None:
     _start_job(_run, name="congress-activity-sync")
 
 
+def _agency_sync() -> None:
+    """The agency list and budgets (fetch/agencies.py): tried hourly, each
+    source read only once a week has passed since it last stored, so a
+    source that failed is retried within the hour. Outside the nightly
+    chain: nothing the chain scores reads it."""
+    _start_job(run_agency_sync, name="agency-sync")
+
+
 def start_scheduler() -> None:
     """Parse the cron schedule from settings and start the scheduler.
 
@@ -790,6 +804,16 @@ def start_scheduler() -> None:
         _congress_activity_sync,
         CronTrigger(minute="10,40", timezone="UTC"),
         id="congress_activity_sync",
+        replace_existing=True,
+    )
+
+    # Agency list and budgets — hourly at :30, clear of the :10/:40 Congress
+    # sync, the :15 action refresh and the :25 dead-run tidy; a no-op unless
+    # a source is a week old (checked inside).
+    scheduler.add_job(
+        _agency_sync,
+        CronTrigger(minute="30", timezone="UTC"),
+        id="agency_sync",
         replace_existing=True,
     )
 

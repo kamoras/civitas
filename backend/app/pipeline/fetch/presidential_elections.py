@@ -42,7 +42,9 @@ import re
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
+from app.models import President
 from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.fetch.historical_executive_orders import name_key
 from app.pipeline.fetch.http_utils import fetch_with_retry_requests
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -139,9 +141,15 @@ def _to_float(text: str) -> float | None:
         return None
 
 
-def _mandates_rows(html: str) -> list[tuple[str, float | None, float | None, float | None]]:
+def _mandates_rows(
+    html: str, known: dict[str, str] | None = None,
+) -> list[tuple[str, float | None, float | None, float | None]]:
     """(president_id, popular_margin, electoral_pct, electoral_margin) per
-    election row of UCSB's mandates table."""
+    election row of UCSB's mandates table. A name _NAME_TO_ID doesn't list
+    (a president elected after it was written) is matched to the presidents
+    table by name (`known`: name_key -> id, from the same UCSB site's
+    roster), so their election counts the night it is in the table."""
+    known = known or {}
     doc = lxml_html.fromstring(html)
     tables = doc.cssselect("table")
     if not tables:
@@ -154,7 +162,7 @@ def _mandates_rows(html: str) -> list[tuple[str, float | None, float | None, flo
             continue
         name_text = cells[0].text_content().strip()
         if name_text:
-            current_id = _NAME_TO_ID.get(_normalize_name(name_text))
+            current_id = _NAME_TO_ID.get(_normalize_name(name_text)) or known.get(name_key(name_text))
         if current_id is None:
             continue
         # Column order (verified against a live fetch, 2026-07): President,
@@ -198,7 +206,7 @@ def _fit_scales(rows) -> dict | None:
     }
 
 
-def _parse_mandates_table(html: str) -> tuple[dict[str, list[float]], dict | None]:
+def _parse_mandates_table(html: str, known: dict[str, str] | None = None) -> tuple[dict[str, list[float]], dict | None]:
     """Returns (president_id -> list of margin percentages, one per election
     that president won, and the scale fits). Popular-vote margin is used
     where it exists; where it's "nd" (the earliest elections in the table)
@@ -206,7 +214,7 @@ def _parse_mandates_table(html: str) -> tuple[dict[str, list[float]], dict | Non
     mixed in raw — the electoral college exaggerates margins ~5x, which
     structurally inflated the earliest presidents' Public Mandate (#218
     review S3). With no usable fit, those elections are left out."""
-    rows = _mandates_rows(html)
+    rows = _mandates_rows(html, known)
     fits = _fit_scales(rows)
     if fits is None:
         logger.warning("Too few mandates rows with both popular and electoral figures to fit a rescale")
@@ -260,7 +268,12 @@ async def fetch_election_margins(db: Session) -> dict[str, float]:
     Returns president_id -> average margin percentage across that
     president's own election win(s). Empty dict (never None) on total
     failure."""
-    cache_key = "all-presidents"
+    presidents = db.query(President.id, President.name, President.number).all()
+    known = {name_key(name): pid for pid, name, _ in presidents}
+    # Keyed by the newest president on the roster, so a new president's
+    # first night reads the table afresh instead of a month-old copy
+    # without their election.
+    cache_key = f"all-presidents-{max((n for *_, n in presidents), default=0)}"
     cached = api_cache_get(db, _CACHE_TIER, cache_key, max_age_hours=_CACHE_MAX_AGE_HOURS)
     if cached is not None:
         return cached["data"]
@@ -274,7 +287,7 @@ async def fetch_election_margins(db: Session) -> dict[str, float]:
     )
     if resp is not None and resp.status_code == 200:
         try:
-            margins_by_id, fits = _parse_mandates_table(resp.text)
+            margins_by_id, fits = _parse_mandates_table(resp.text, known)
             mandates_table_ok = fits is not None
         except Exception:
             logger.exception("Failed to parse UCSB election-mandates table")

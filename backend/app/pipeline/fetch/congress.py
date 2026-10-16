@@ -1019,8 +1019,9 @@ def parse_senate_vote_xml(
 async def fetch_recent_roll_calls(
     client: httpx.AsyncClient,
     db: Session,
-    congress: int = 119,
-    session_number: int = 1,
+    *,
+    congress: int,
+    session_number: int,
     count: int = 15,
     max_age_hours: int | None = None,
 ) -> list[dict] | None:
@@ -1223,7 +1224,8 @@ def parse_house_vote_xml(
 async def fetch_recent_house_roll_calls(
     client: httpx.AsyncClient,
     db: Session,
-    year: int = 2025,
+    *,
+    year: int,
     count: int = 15,
     max_age_hours: int | None = None,
 ) -> list[dict] | None:

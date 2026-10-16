@@ -2,13 +2,14 @@
 ActionIssue from a Senate roll-call vote before press coverage exists."""
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 
-from app.models import ActionIssue, ActionIssueStatus, Senator, SponsoredBill
+from app.config import settings
+from app.models import ActionIssue, ActionIssueStatus, RetiredReason, Senator, SponsoredBill
 from app.pipeline.analyze import early_signal as es
 from app.pipeline.analyze.action_center import mark_recent_duplicates
 from app.time_utils import utcnow
@@ -341,6 +342,56 @@ class TestStaleVotes:
         assert stale.is_current is False and stale.status == ActionIssueStatus.DEVELOPING
         assert fresh.is_current is True and confirmed.is_current is True
 
+    _AWAITING = "This is from the record; news coverage of the {} has not appeared yet."
+    _DID_NOT = "news coverage of the {} did not appear while it was on the Action Center."
+
+    def _awaiting(self, row, kind="vote"):
+        row.summary = "The House voted 401 to 14. " + self._AWAITING.format(kind)
+        return row
+
+    def test_a_stale_draft_stops_saying_coverage_has_not_appeared_yet(self, db_session):
+        live = self._awaiting(self._draft(db_session, "2026-10-14"))
+        stale = self._awaiting(self._draft(db_session, "2026-09-16", url="u2"))
+        assert es.retire_stale_vote_drafts(db_session, "2026-10-15") == 1
+        assert stale.retired_reason == RetiredReason.UNCONFIRMED
+        db_session.flush()
+        assert es.reword_retired_drafts(db_session) == 1
+        assert stale.summary.endswith("This is from the record; " + self._DID_NOT.format("vote"))
+        assert live.summary.endswith(self._AWAITING.format("vote"))
+        assert es.reword_retired_drafts(db_session) == 0
+
+    def test_a_covered_draft_keeps_its_summary(self, db_session):
+        """Coverage did appear: it is why the draft was retired. Saying it
+        didn't would be false, and the rewrite can't be undone."""
+        draft = self._awaiting(self._draft(db_session, "2026-10-14"))
+        draft.related_bill_ids = json.dumps([{"id": "S.2403"}])
+        covering = ActionIssue(date="2026-10-15", rank=1, title="House passes Senate retirement bill", summary="s",
+                               is_current=True, status=ActionIssueStatus.CONFIRMED,
+                               related_bill_ids=json.dumps([{"id": "S.2403"}]))
+        db_session.add(covering)
+        db_session.flush()
+        assert es.retire_covered_developing_issues(db_session) == 1
+        assert draft.retired_reason == RetiredReason.COVERED and draft.duplicate_of_id == covering.id
+        db_session.flush()
+        assert es.reword_retired_drafts(db_session) == 0
+        assert draft.summary.endswith(self._AWAITING.format("vote"))
+
+    def test_a_draft_retired_before_reasons_were_kept_gets_one_from_the_record(self, db_session):
+        # Retired by #997 with no reason: covered if a reported issue, current
+        # or not, covers its bill; otherwise unconfirmed.
+        covered = self._awaiting(self._draft(db_session, "2026-09-16"))
+        covered.related_bill_ids = json.dumps([{"id": "S.2403"}])
+        rule = self._awaiting(self._draft(db_session, "2026-09-16", url="u2"), "rule")
+        covered.is_current = rule.is_current = False
+        db_session.add(ActionIssue(date="2026-09-17", rank=1, title="Reporting", summary="s", is_current=False,
+                                   status=ActionIssueStatus.CONFIRMED, related_bill_ids=json.dumps([{"id": "S.2403"}])))
+        db_session.flush()
+        assert es.reword_retired_drafts(db_session) == 1
+        assert covered.retired_reason == RetiredReason.COVERED
+        assert covered.summary.endswith(self._AWAITING.format("vote"))
+        assert rule.retired_reason == RetiredReason.UNCONFIRMED
+        assert rule.summary.endswith(self._DID_NOT.format("rule"))
+
     def test_a_current_draft_is_reworded_from_its_record(self, db_session):
         # "S 2403" was the Clerk's file spelling, stored before the template
         # printed bills as the site does.
@@ -508,3 +559,29 @@ class TestRuleAbstractSentences:
 def test_a_rule_record_missing_its_number_and_date_leaves_them_out():
     _, _, facts = es._compose_developing_rule_issue(_rule(document_number="", publication_date=""))
     assert facts[1] == "Federal Register document."
+
+
+@pytest.mark.parametrize("now, congress, house_year", [
+    # Jan 2, 2027: the 119th still sits; its House votes are numbered in 2026.
+    pytest.param("2027-01-02T15:00:00", 119, 2026, id="outgoing_congress_reads_its_last_year"),
+    # Jan 3, 2027 after noon ET: the 120th sits; its votes are 2027's.
+    pytest.param("2027-01-03T18:00:00", 120, 2027, id="new_congress_reads_its_own_year"),
+    pytest.param("2028-06-01T12:00:00", 120, 2028, id="second_session"),
+])
+def test_the_roll_call_poll_reads_the_sitting_congress(db_session, freeze_utcnow, monkeypatch, now, congress, house_year):
+    freeze_utcnow(datetime.fromisoformat(now))
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", congress)
+    seen = {}
+
+    async def senate(_client, _db, *, congress, session_number, **_kw):
+        seen.setdefault("senate", []).append((congress, session_number))
+        return []
+
+    async def house(_client, _db, *, year, **_kw):
+        seen["house"] = year
+        return []
+
+    monkeypatch.setattr(es, "fetch_recent_roll_calls", senate)
+    monkeypatch.setattr(es, "fetch_recent_house_roll_calls", house)
+    es._fetch_recent_votes(db_session)
+    assert seen == {"senate": [(congress, 1), (congress, 2)], "house": house_year}
