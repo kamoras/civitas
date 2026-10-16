@@ -29,18 +29,20 @@ LLM hallucinations"). This extends a pattern the codebase already
 proved, to the fields that still generate prose.
 """
 
-import hashlib
 import json
 import logging
 import pathlib
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Callable
 
 import numpy as np
 
-from app import calibration_drift
+from app.database import SessionLocal
 from app.pipeline.analyze.post_composer import compose, headline_source
 from app.pipeline import vector_store
+from app.pipeline.cache import api_cache_get
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -223,34 +225,41 @@ def on_topic(claims: list[Claim], articles: list) -> list[Claim]:
 # headline and its own lede) passed it, and the two-claim gate counted it
 # twice: replayed on 2026-10-11..15, a two-story briefing's two lines about
 # its second story made a two-claim issue. distinct_claims drops a claim
-# whose similarity-model cosine with an earlier one reaches a threshold
-# fitted to hand-labelled pairs (app/data/claim_restatement_pairs.json, by
-# scripts/calibrate_claim_restatement.py into
-# claim_restatement_calibration.json): the lowest threshold whose precision
-# (pairs it calls restatements that are) has a lower 95% bound of at least
-# 0.85, since a false call drops a real second fact and with it, often, the
-# issue (the script says why that bar).
+# whose similarity-model cosine with an earlier one reaches a threshold the
+# Action Center refits once a UTC day from its own published issues
+# (action_center.refit_cuts: the lowest cosine no pair of lines from issues
+# days apart that share a distinctive entity reaches), stored in api_cache;
+# app/data/claim_restatement_calibration.json, the same fit on a production
+# snapshot (scripts/calibrate_action_cuts.py), until the first refit. A
+# false call drops a real second fact and with it, often, the issue, so the
+# cut is precision-first.
 _DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
-RESTATEMENT_PAIRS_PATH = _DATA_DIR / "claim_restatement_pairs.json"
 RESTATEMENT_CALIBRATION_PATH = _DATA_DIR / "claim_restatement_calibration.json"
-_restatement_calibration_cache: dict | None = None
+_RESTATEMENT_TIER, _RESTATEMENT_KEY = "action-cuts", "restatement"
+_restatement_calibration_cache: tuple[dict, datetime] | None = None
 
 
-def restatement_pairs() -> list[dict]:
-    return json.loads(RESTATEMENT_PAIRS_PATH.read_text())["pairs"]
-
-
-def restatement_pairs_hash() -> str:
-    """Identifies the labelled set a calibration was fitted to."""
-    payload = json.dumps([[p["a"], p["b"], p["restatement"]] for p in restatement_pairs()])
-    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+def set_restatement_calibration(fitted: dict) -> None:
+    """Use a fresh refit in this process at once (action_center.refit_cuts)."""
+    global _restatement_calibration_cache
+    _restatement_calibration_cache = (fitted, utcnow())
 
 
 def restatement_calibration() -> dict:
+    """The restatement cut in use ({"threshold": ...}): the day's refit,
+    re-read hourly, else the bundled one."""
     global _restatement_calibration_cache
-    if _restatement_calibration_cache is None:
-        _restatement_calibration_cache = json.loads(RESTATEMENT_CALIBRATION_PATH.read_text())
-    return _restatement_calibration_cache
+    if _restatement_calibration_cache and utcnow() - _restatement_calibration_cache[1] < timedelta(hours=1):
+        return _restatement_calibration_cache[0]
+    stored = None
+    try:
+        with SessionLocal() as session:
+            stored = api_cache_get(session, _RESTATEMENT_TIER, _RESTATEMENT_KEY, max_age_hours=24 * 400)
+    except Exception:
+        logger.warning("Stored restatement cut unreadable; using the bundled one", exc_info=True)
+    value = stored or json.loads(RESTATEMENT_CALIBRATION_PATH.read_text())
+    _restatement_calibration_cache = (value, utcnow())
+    return value
 
 
 def distinct_claims(claims: list[Claim]) -> list[Claim]:
@@ -267,10 +276,6 @@ def distinct_claims(claims: list[Claim]) -> list[Claim]:
     except Exception:
         logger.exception("Claim restatement check failed — keeping every claim")
         return claims
-    calibration_drift.observe(
-        "claim_restatement",
-        [float(vectors[i] @ vectors[j]) for i in range(len(claims)) for j in range(i)], threshold,
-    )
     kept: list[int] = []
     for i in range(len(claims)):
         if all(float(vectors[i] @ vectors[j]) < threshold for j in kept):

@@ -1,10 +1,8 @@
 """Tests for Action Center deduplication and national monitor creation logic."""
 
-import importlib.util
 import json
-import pathlib
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -150,7 +148,7 @@ class TestClusterArticles:
         arts = [NewsArticle(title="Council passes budget", summary="x" * 300, url="u0", source_name="s"),
                 NewsArticle(title="Port strike ends", summary=None, url="u1", source_name="s")]
         ac._cluster_articles([(a, None) for a in arts])
-        chars = ac.cluster_calibration()["description_chars"]
+        chars = ac.CLUSTER_DESCRIPTION_CHARS
         assert seen == ["Council passes budget. " + "x" * chars, "Port strike ends. "]
 
     @staticmethod
@@ -275,60 +273,128 @@ class TestClusterArticlesModel:
         runs = [sorted(sorted(a.title for a in c) for c in ac._cluster_articles(items)) for _ in range(2)]
         assert runs[0] == runs[1]
 
-    def test_no_judged_different_event_pair_reaches_the_cut(self):
-        """Re-measures the calibration's constraint on the judged pairs with
-        the scoring the script uses."""
-        path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "calibrate_cluster_pairs.py"
-        spec = importlib.util.spec_from_file_location("calibrate_cluster_pairs", path)
-        script = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(script)
-        data = json.loads(ac._CLUSTER_JUDGMENTS_PATH.read_text())
-        articles = data["articles"]
-        dropped = {
-            a["id"] for a in articles
-            if ac._digest_reason(NewsArticle(title=a["title"], url="", source_name="", summary=a["description"]))
-        }
-        pairs = [p for p in data["pairs"]
-                 if p["label"] != "unsure" and p["a"] not in dropped and p["b"] not in dropped]
-        scores = script.pair_scores(articles, pairs, [ac.cluster_text(a["title"], a["description"]) for a in articles])
-        cut = ac.cluster_calibration()["threshold"]
-        merged = [p for p, s in zip(pairs, scores) if s >= cut]
-        assert not [p for p in merged if p["label"] == "different"]
-        calibration = ac.cluster_calibration()
-        assert sum(p["label"] == "same" for p in merged) == calibration["candidates"][calibration["text"]]["same_merged"]
+
+class TestStatedDays:
+    """The days an article's own text dates what it reports to."""
+
+    def test_weekdays_read_back_from_the_publication_date(self):
+        # 2028-03-01 is a Wednesday.
+        assert ac.stated_days("The board voted Monday.", date(2028, 3, 1)) == {date(2028, 2, 28)}
+        assert ac.stated_days("Lawmakers met on Wednesday.", date(2028, 3, 1)) == {date(2028, 3, 1)}
+
+    def test_a_month_and_day_is_read_in_the_publication_year(self):
+        assert ac.stated_days("A hearing is set for Nov. 5.", date(2028, 3, 1)) == {date(2028, 11, 5)}
+        assert ac.stated_days("Filed on Feb 30.", date(2028, 3, 1)) == frozenset()
+
+    def test_nothing_without_a_date_to_read_against(self):
+        assert ac.stated_days("Monday", None) == frozenset()
+
+    def test_days_disagree_only_when_both_state_days_far_apart(self):
+        mon, tue, fri = date(2028, 2, 28), date(2028, 2, 29), date(2028, 3, 3)
+        assert ac.days_disagree(frozenset({mon}), frozenset({fri}))
+        assert not ac.days_disagree(frozenset({mon}), frozenset({tue}))
+        assert not ac.days_disagree(frozenset({mon, fri}), frozenset({tue}))
+        assert not ac.days_disagree(frozenset(), frozenset({fri}))
 
 
-class TestClusterCalibration:
-    """app/data/cluster_pair_calibration.json is fitted to the judged pairs
-    by scripts/calibrate_cluster_pairs.py."""
+class TestStatedDayVeto:
+    """Two articles whose own text dates the event days apart are never one
+    cluster, however alike they read."""
 
-    def test_cluster_calibration_matches_judgments(self):
-        calibration = ac.cluster_calibration()
-        assert calibration["judgments_hash"] == ac.cluster_judgments_hash()
-        assert calibration["text"] == f"title+description[{calibration['description_chars']}]"
-        assert 0.0 < calibration["threshold"] < 1.0
-        chosen = calibration["candidates"][calibration["text"]]
-        assert chosen["cut"] == calibration["threshold"]
-        # Precision first: no other candidate merges more same-event pairs
-        # at its own zero-chimera cut.
-        assert all(c["same_merged"] <= chosen["same_merged"] for c in calibration["candidates"].values())
+    def test_alike_articles_on_different_stated_days_stay_apart(self, monkeypatch):
+        monkeypatch.setattr(ac, "cluster_calibration", lambda: {"threshold": 0.5})
+        published = datetime(2028, 3, 3, 12, tzinfo=timezone.utc)  # a Friday
+        arts = [NewsArticle(title="Senator Example rallies voters", summary="The senator spoke Monday.", url="u0",
+                            source_name="s", published=published),
+                NewsArticle(title="Senator Example rallies voters", summary="The senator spoke Friday.", url="u1",
+                            source_name="s", published=published),
+                NewsArticle(title="Senator Example rallies voters", summary="The senator spoke.", url="u2",
+                            source_name="s", published=published)]
+        same = [[1.0, 0.0, 0.0]] * 3
+        monkeypatch.setattr(ac, "_embed_texts", lambda texts: np.array(same + [[-1.0, 0.0, 0.0]] * 0))
+        monkeypatch.setattr(ac, "_center_titles", lambda e, m: e)
+        groups = sorted(sorted(a.url for a in c) for c in ac._cluster_articles([(a, None) for a in arts]))
+        assert not any({"u0", "u1"} <= set(g) for g in groups)
 
-    def test_judged_pairs_are_well_formed(self):
-        data = json.loads(ac._CLUSTER_JUDGMENTS_PATH.read_text())
-        assert data["_source"] and data["_rubric"]
-        when = {a["id"]: datetime.fromisoformat(a["published"].replace("Z", "+00:00")) for a in data["articles"]}
-        assert len(when) == len(data["articles"])
-        relations = {"same": {"report", "reaction"}, "different": {"storyline", "other"}, "unsure": {None}}
-        seen = set()
-        for p in data["pairs"]:
-            assert p["a"] in when and p["b"] in when and p["a"] != p["b"]
-            assert p.get("relation") in relations[p["label"]]
-            assert abs(when[p["a"]] - when[p["b"]]) <= timedelta(hours=48)
-            key = frozenset((p["a"], p["b"]))
-            assert key not in seen
-            seen.add(key)
-        labels = {p["label"] for p in data["pairs"]}
-        assert labels == {"same", "different", "unsure"}
+
+class TestCutRefit:
+    """Both cuts are refit from the stored data, never hand labels."""
+
+    def test_the_cluster_fit_is_the_lowest_cut_no_day_disagreeing_pair_reaches(self, monkeypatch):
+        published = datetime(2028, 3, 3, 12)  # a Friday
+        articles = [(f"Senator Example story {i}", f"It happened {day}.", published)
+                    for i, day in enumerate(["Monday", "Friday"] * (ac.MIN_HARD_NEGATIVES // 2 + 1))]
+        rng = np.random.default_rng(0)
+        monkeypatch.setattr(ac, "_embed_texts", lambda texts: rng.standard_normal((len(texts), 8)))
+        monkeypatch.setattr(ac, "_shares_distinctive_entity", lambda a, b, df, n: True)
+        scores = []
+        real = ac._center_titles
+
+        def centre(e, m):
+            out = real(e, m)
+            scores.append(float(out[0] @ out[1]))
+            return out
+        monkeypatch.setattr(ac, "_center_titles", centre)
+        fitted = ac.fit_cluster_cut(articles)
+        assert fitted["fitted"] > max(scores) and fitted["fitted"] - max(scores) <= 0.01 + 1e-9
+        assert fitted["threshold"] == round(fitted["fitted"] + ac.CUT_MARGIN, 2)
+
+    def test_the_cluster_fit_needs_enough_pairs(self):
+        assert ac.fit_cluster_cut([("a", "Monday", datetime(2028, 3, 3))]) is None
+
+    def test_the_restatement_fit_reads_separate_stories_published_together(self, monkeypatch):
+        issues = [(i, "2028-03-01", [f"Senator Example acted {i}."]) for i in range(12)]
+        issues.append((99, "2028-03-20", ["Senator Example acted later."]))  # weeks apart: not read
+        seen = []
+        monkeypatch.setattr(ac, "_shares_distinctive_entity", lambda a, b, df, n: True)
+        monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: seen.append(list(texts)) or np.eye(len(texts)))
+        fitted = ac.fit_restatement_cut(issues)
+        assert fitted["negatives"] == 66  # 12 choose 2, all same-day separate issues
+        assert fitted["fitted"] == 0.01 and fitted["threshold"] == round(0.01 + ac.CUT_MARGIN, 2)
+
+    def test_one_sentence_quoted_in_two_issues_is_not_a_negative(self):
+        assert ac._shared_run("The board approved the plan on Monday morning.",
+                              "Officials said the board approved the plan on Monday.") >= ac.SAME_SENTENCE_RUN
+
+    def test_the_bundled_cuts_say_where_they_came_from(self):
+        from app.pipeline.analyze import claims
+
+        for path in (ac._CLUSTER_CALIBRATION_PATH, claims.RESTATEMENT_CALIBRATION_PATH):
+            data = json.loads(path.read_text())
+            assert data["_source"] and 0 < data["threshold"] < 1 and data["negatives"] >= ac.MIN_HARD_NEGATIVES
+            assert data["threshold"] == round(data["fitted"] + data["margin"], 2)
+
+    def test_the_refit_runs_once_a_day_in_a_savepoint(self, db_session, freeze_utcnow, monkeypatch):
+        from app.pipeline.analyze import claims
+        from app.pipeline.cache import api_cache_get
+
+        monkeypatch.setattr(ac, "_cuts_cache", {})
+        monkeypatch.setattr(claims, "_restatement_calibration_cache", None)
+        fits = []
+        monkeypatch.setattr(ac, "fit_cluster_cut", lambda a: fits.append(1) or {"threshold": 0.66})
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: {"threshold": 0.81})
+        db_session.add(Senator(id="pending-one", name="Pending One", state="ZZ", party="I"))
+        db_session.flush()  # the refresh's own pending work
+        freeze_utcnow(datetime(2028, 3, 1, 9))
+        ac.refit_cuts(db_session)
+        assert ac.cluster_calibration()["threshold"] == 0.66
+        assert claims.restatement_calibration()["threshold"] == 0.81  # used at once
+        assert api_cache_get(db_session, "action-cuts", "cluster", max_age_hours=24)["threshold"] == 0.66
+        freeze_utcnow(datetime(2028, 3, 1, 21))
+        ac.refit_cuts(db_session)
+        assert len(fits) == 1
+        db_session.rollback()  # nothing of the caller's was committed
+        assert db_session.query(Senator).count() == 0
+
+    def test_a_short_fit_keeps_the_stored_cut(self, db_session, freeze_utcnow, monkeypatch):
+        monkeypatch.setattr(ac, "_cuts_cache", {})
+        monkeypatch.setattr(ac, "fit_cluster_cut", lambda a: None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
+        monkeypatch.setattr(ac, "api_cache_get", lambda *a, **k: None)
+        freeze_utcnow(datetime(2028, 3, 1, 9))
+        ac.refit_cuts(db_session)
+        bundled = json.loads(ac._CLUSTER_CALIBRATION_PATH.read_text())["threshold"]
+        assert ac.cluster_calibration()["threshold"] == bundled
 
 
 class TestRankClusters:
