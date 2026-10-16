@@ -11,7 +11,7 @@
     {
       "id": "special-election-counts",
       "date": "2026-10-16",
-      "title": "Special elections and their counts",
+      "title": "Special elections and counts",
       "summary": "Each special election the FEC lists is kept on the site, and its count is read from the state's own results feed on election night, as the general's is.",
       "url": "/elections/calendar"
     },

@@ -1,7 +1,14 @@
 import { readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CALENDAR_HREF, inSection, issuesUrl, monitorHref, SECTIONS, sectionSubpages } from "./routes";
+import {
+  CALENDAR_HREF,
+  inSection,
+  issuesUrl,
+  monitorHref,
+  SECTIONS,
+  sectionSubpages,
+} from "./routes";
 import { ELECTION_MAP_HREF } from "./electionMap";
 import { REDISTRICTING_HREF } from "./redistricting";
 import { presidentSupportHref } from "./presidentialSupport";
