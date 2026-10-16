@@ -457,16 +457,20 @@ def _explore_count(db, raw: str) -> int | None:
 def results(raw: str, db=None, path: str | None = None, per_group: int = 10) -> dict:
     """The /search page: every match grouped by kind (each group's count
     and its first `per_group`), Explore's own count for the words, the page
-    a confident query goes to, the close calls beside it, and the nearest
-    names when nothing matched."""
+    a confident query goes to, the two to four pages a near miss could
+    have meant, and the nearest names when nothing matched."""
     raw = (raw or "")[:QUERY_MAX]
     a = answer(raw, path, db)
     groups: dict[str, list[Hit]] = {}
     for h in a.ranked:
         groups.setdefault(h.kind, []).append(h)
     p = params()
-    close = [h.public() for h in a.ranked[1:4]
-             if a.ranked and a.ranked[0].score - h.score < p.direct_margin and h.match >= p.direct_floor * 0.8]
+    # A close call: a match good enough to jump to, but with one to three
+    # others too near it. More than that is a list, not a close call.
+    near_top = [h for h in a.ranked if a.ranked[0].score - h.score < p.direct_margin] if a.ranked else []
+    close = ([h.public() for h in near_top]
+             if a.direct is None and a.ranked and a.ranked[0].match >= p.direct_floor and 2 <= len(near_top) <= 4
+             else [])
     near = _nearest(raw, path) if not a.ranked and normalize(raw) else []
     return {
         "query": raw,

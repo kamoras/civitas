@@ -471,8 +471,8 @@ export default function DataChapter() {
         </P>
         <P>
           When what you typed names one page clearly (a bill number, a district code, a full name),
-          Enter takes you straight there, to the part of the page your other words name (&ldquo;HR
-          1 votes&rdquo;, a member&apos;s name and &ldquo;donors&rdquo;). When two pages fit equally
+          Enter takes you straight there, to the part of the page your other words name (&ldquo;HR 1
+          votes&rdquo;, a member&apos;s name and &ldquo;donors&rdquo;). When two pages fit equally
           well, such as two members with one surname, you get the list instead. How clear is clear
           enough was measured: of 2,588 test searches built from the pages&apos; own names and
           numbers, held out from the tuning, 93 in 100 went straight to the right page, and none

@@ -196,7 +196,9 @@ def test_results_group_by_kind_with_counts(index):
 def test_close_calls_are_offered(index):
     out = site_search.results("john smith", path=index)
     assert out["direct"] is None
-    assert any(a["url"] == "/politicians/john-smith-ny" for a in out["alternatives"])
+    assert {a["url"] for a in out["alternatives"]} == {"/politicians/john-smith", "/politicians/john-smith-ny"}
+    # A broad query is a list, not a close call.
+    assert site_search.results("agency", path=index)["alternatives"] == []
 
 
 def test_a_missing_index_says_so(tmp_path):

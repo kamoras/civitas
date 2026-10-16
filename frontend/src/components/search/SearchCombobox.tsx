@@ -11,6 +11,11 @@ const DEBOUNCE_MS = 150;
 // One letter matches half the site.
 const MIN_CHARS = 2;
 
+// The highlighted match is drawn inverted (ink ground, dark text), a
+// change of fill rather than of colour alone.
+const OPTION_ACTIVE = "bg-ink-hi text-surface-base";
+const OPTION = "text-ink-hi";
+
 /** What the live region says for a set of suggestions. */
 export function suggestionStatus(items: SearchItem[], preselected: boolean, query: string): string {
   if (query.trim().length < MIN_CHARS) return "";
@@ -166,7 +171,7 @@ export default function SearchCombobox({
       >
         {label}
       </label>
-      <div className="flex items-stretch border-2 border-ink-lo bg-surface-base focus-within:border-ink-hi focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-signal-cyan">
+      <div className="flex items-stretch border-2 border-ink-lo bg-surface-base focus-within:border-ink-hi">
         <span aria-hidden="true" className="flex items-center pl-3 font-mono text-sm text-ink-lo">
           &gt;
         </span>
@@ -196,11 +201,11 @@ export default function SearchCombobox({
           onBlur={() => setOpen(false)}
           onFocus={() => items.length > 0 && value.trim().length >= MIN_CHARS && setOpen(true)}
           placeholder="A member, bill, agency, district, page…"
-          className="min-h-11 w-full min-w-0 bg-transparent px-2 font-mono text-base text-ink-hi caret-phos placeholder:text-ink-min focus:outline-none focus-visible:shadow-none focus-visible:outline-none"
+          className="min-h-11 w-full min-w-0 bg-transparent px-2 font-mono text-base text-ink-hi caret-phos placeholder:text-ink-min"
         />
         <button
           type="submit"
-          className="min-h-11 min-w-16 border-l-2 border-ink-lo px-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-hi hover:bg-ink-hi hover:text-surface-base"
+          className="min-h-11 min-w-16 border-l-2 border-ink-lo px-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-hi hover:bg-white/10"
         >
           Go
         </button>
@@ -229,9 +234,7 @@ export default function SearchCombobox({
               go(item);
             }}
             onMouseMove={() => i !== active && setActive(i)}
-            className={`flex min-h-11 cursor-pointer flex-col justify-center gap-0.5 border-b border-white/15 px-3 py-2 last:border-b-0 ${
-              i === active ? "bg-ink-hi text-surface-base" : "text-ink-hi"
-            }`}
+            className={`flex min-h-11 cursor-pointer flex-col justify-center gap-0.5 border-b border-white/15 px-3 py-2 last:border-b-0 ${i === active ? OPTION_ACTIVE : OPTION}`}
           >
             <span className="flex items-baseline justify-between gap-3">
               <span className="min-w-0 font-sans text-sm font-semibold">{item.label}</span>

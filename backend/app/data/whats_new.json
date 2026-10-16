@@ -5,7 +5,7 @@
       "id": "site-search",
       "date": "2026-10-16",
       "title": "Search the whole site",
-      "summary": "One search box in the header finds members, bills, roll calls, agencies, committees, districts, races, ballot measures, issues, nominations, documents and pages as you type, and an exact match such as a bill number or a district code goes straight to its page.",
+      "summary": "One box in the header finds members, bills, agencies, districts, races, issues, documents and pages as you type, and an exact match such as a bill number goes straight to its page.",
       "url": "/search"
     },
     {

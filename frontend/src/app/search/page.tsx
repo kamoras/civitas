@@ -148,7 +148,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                     id="close-call"
                     className="font-mono text-xs uppercase tracking-[0.14em] text-signal-amber"
                   >
-                    Close call. Did you mean the other one?
+                    Close call. Which one did you mean?
                   </h3>
                   <div className="mt-2">
                     {data.alternatives.map((a) => (

@@ -282,7 +282,7 @@ def _committees(db: Session) -> list[Entity]:
         out.append(Entity(
             "committee", f"{chamber} {c['name']}",
             f"/congress/committees?committee={param}#committee-results",
-            f"{chamber} committee · {c['meetings']} meetings on record, latest {c['latest']}",
+            f"{chamber} committee · {c['meetings']} meeting{'' if c['meetings'] == 1 else 's'} on record, latest {c['latest']}",
             importance=0.6, aliases=[short, f"{chamber} {short}"],
         ))
     return out
