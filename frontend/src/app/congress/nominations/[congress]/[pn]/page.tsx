@@ -11,6 +11,7 @@ import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import { CongressTabs } from "@/components/congress/CongressNav";
 import VoteMembers, { PartyBar } from "@/components/congress/VoteMembers";
+import AgencyLink from "@/components/agencies/AgencyLink";
 import { StatusBadge } from "@/components/nominations/NominationRow";
 import { ordinal } from "@/components/scorecard/format";
 import { calendarDate, rollCallHref, shortDate } from "@/lib/congress";
@@ -96,7 +97,14 @@ export default async function NominationPage({ params }: PageProps) {
   );
   const facts: [string, React.ReactNode][] = [
     ["Received", n.receivedDate ? calendarDate(n.receivedDate) : "—"],
-    ["Agency or body", n.organization || "—"],
+    [
+      "Agency or body",
+      n.organization ? (
+        <AgencyLink name={n.organization} slug={n.agencySlug} className={LINK} />
+      ) : (
+        "—"
+      ),
+    ],
     ["Committee", n.committee?.name || "None named"],
     [
       "Hearings",

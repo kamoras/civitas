@@ -393,11 +393,11 @@ All models: `backend/app/models.py`. Response shapes: `backend/app/schemas.py`.
 
 ## Nominations
 
-`nominations` (migration 0050) holds one row per Congress.gov citation
+`nominations` (migration 0052) holds one row per Congress.gov citation
 (`congress`, `citation` unique): the description, organization and first
 position title verbatim, every position's nominees as published (JSON),
 every action verbatim (JSON), the status read from the action codes and its
 date, the referral committee's system code, the hearings (JSON) and, for a
 confirmed Article III judgeship, the FJC judge id. It joins `roll_calls`
 by the citations the vote question states, on request; nothing stores the
-link.
+link. Its organization joins `agencies` on an exact normalized name (the Register's name or short name, or a crosswalked USAspending name), also on request.

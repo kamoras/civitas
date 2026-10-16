@@ -17,7 +17,8 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Nomination, RollCall
+from app.models import Agency, AgencyBudget, Nomination, RollCall
+from app.pipeline.fetch.agencies import normalized_name
 from app.ordinals import ordinal
 from app.pipeline.fetch.nominations import HEARING_CODES, JUDICIARY, MAX_PER_RUN, STATUSES, read_marker
 from app.services.bill_record import MemberLinks, vote_detail
@@ -26,6 +27,29 @@ from app.services.nomination_links import citations_in, nominee_names, vote_labe
 KINDS = ("civilian", "judicial", "military")
 # Width of the time-to-confirm histogram's bars, in days.
 BIN_DAYS = 30
+
+
+def agency_index(db: Session) -> dict[str, str]:
+    """{normalized name: agency slug} for every name an agency goes by in
+    the registry (fetch/agencies.py): the Federal Register's name and short
+    name, and the USAspending name its crosswalk already matched to it. A
+    name two agencies share is left out, so a lookup is exact or nothing."""
+    names: dict[str, set[str]] = {}
+    for slug, name, short in db.execute(select(Agency.slug, Agency.name, Agency.short_name)):
+        for n in (name, short):
+            if n:
+                names.setdefault(normalized_name(n), set()).add(slug)
+    for name, slug in db.execute(
+        select(AgencyBudget.name, AgencyBudget.agency_slug).where(AgencyBudget.agency_slug.isnot(None))
+    ):
+        names.setdefault(normalized_name(name), set()).add(slug)
+    return {n: next(iter(slugs)) for n, slugs in names.items() if len(slugs) == 1}
+
+
+def agency_slug(organization: str, index: dict[str, str]) -> str | None:
+    """The registry agency Congress.gov's organization names, exactly; None
+    when none does (the page shows the organization as text)."""
+    return index.get(normalized_name(organization)) if organization else None
 
 
 def kind_of(row: Nomination) -> str:
@@ -59,9 +83,10 @@ def congress_gov_url(row: Nomination) -> str:
     return f"https://www.congress.gov/nomination/{ordinal(row.congress)}-congress/{tail}"
 
 
-def summary(row: Nomination) -> dict:
+def summary(row: Nomination, agencies: dict[str, str] | None = None) -> dict:
     names = nominee_names(row)
     return {
+        "agencySlug": agency_slug(row.organization, agencies) if agencies is not None else None,
         "congress": row.congress, "citation": row.citation, "description": row.description,
         "organization": row.organization, "positionTitle": row.position_title, "kind": kind_of(row),
         "nominees": names, "nomineeCount": row.nominee_count,
@@ -89,6 +114,7 @@ def list_nominations(
     by_status = dict(db.execute(select(filtered.c.status, func.count()).group_by(filtered.c.status)).all())
     listed = base.where(Nomination.status == status) if status else base
     total = db.execute(select(func.count()).select_from(listed.subquery())).scalar_one()
+    agencies = agency_index(db)
     rows = db.execute(
         listed.order_by(Nomination.latest_action_date.desc(), Nomination.number.desc(), Nomination.part_number)
         .offset((page - 1) * per_page).limit(per_page)
@@ -97,7 +123,7 @@ def list_nominations(
         "congress": congress, "total": total, "page": page, "perPage": per_page,
         "counts": {s: by_status.get(s, 0) for s in STATUSES},
         "allStatuses": sum(by_status.values()),
-        "items": [summary(r) for r in rows],
+        "items": [summary(r, agencies) for r in rows],
     }
 
 
@@ -144,6 +170,7 @@ def stats(db: Session, congress: int) -> dict:
             "timeToConfirm": _distribution(sorted(d for r in mine if (d := days_to_confirm(r)) is not None)),
         }
     orgs = Counter(r.organization for r in rows if r.organization)
+    agencies = agency_index(db)
     status_counts = Counter(r.status for r in rows)
     latest = max((r.update_date for r in rows), default=None)
     return {
@@ -154,7 +181,8 @@ def stats(db: Session, congress: int) -> dict:
         "counts": {s: status_counts.get(s, 0) for s in STATUSES},
         "kinds": by_kind,
         "binDays": BIN_DAYS,
-        "organizations": [{"name": n, "count": c} for n, c in sorted(orgs.items())],
+        "organizations": [{"name": n, "count": c, "agencySlug": agency_slug(n, agencies)}
+                          for n, c in sorted(orgs.items())],
         "asOf": latest[:10] if latest else None,
     }
 
@@ -180,7 +208,7 @@ def detail(db: Session, congress: int, citation: str) -> dict | None:
     final = next((rc for rc in reversed(votes) if rc.question.startswith("On the Nomination")), None)
     final_detail = vote_detail(db, final, links) if final else None
     return {
-        **summary(row),
+        **summary(row, agency_index(db)),
         "nominees": json.loads(row.nominees or "[]"),
         "actions": json.loads(row.actions or "[]"),
         "hearings": [

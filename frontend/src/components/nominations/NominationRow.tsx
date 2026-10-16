@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AgencyLink from "@/components/agencies/AgencyLink";
 import { shortDate } from "@/lib/congress";
 import { STATUS_LABEL, STATUS_STYLE, nominationHref } from "@/lib/nominations";
 import type { NominationStatus, NominationSummary } from "@/types/nomination";
@@ -22,7 +23,7 @@ export default function NominationRow({ n }: { n: NominationSummary }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <StatusBadge status={n.status} />
         <span className="font-mono text-xs text-ink-min">
-          {n.citation} · {n.organization}
+          {n.citation} · <AgencyLink name={n.organization} slug={n.agencySlug} />
           {n.daysToConfirm != null && ` · confirmed in ${n.daysToConfirm} days`}
         </span>
       </div>

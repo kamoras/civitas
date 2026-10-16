@@ -14,7 +14,7 @@ from sqlalchemy.exc import OperationalError
 from app import database
 from app.database import get_db
 from app.main import app
-from app.models import LearnedClassification, Nomination, RollCall, RollCallPosition
+from app.models import Agency, AgencyBudget, LearnedClassification, Nomination, RollCall, RollCallPosition
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch import nominations as nm
 from app.services import nomination_service as ns
@@ -369,3 +369,17 @@ def test_the_sitemap_lists_every_nomination(client):
 def test_congress_gov_url_for_a_part():
     assert ns.congress_gov_url(Nomination(congress=119, number=730, part_number="47")) == \
         "https://www.congress.gov/nomination/119th-congress/730/47"
+
+
+def test_an_organization_links_the_agency_it_names_exactly(db_session, client):
+    db_session.add(Agency(slug="labor-department", fr_id=1, name="Labor Department", synced_at=datetime(2026, 10, 1)))
+    db_session.add(AgencyBudget(toptier_code="1601", name="Department of Labor", agency_slug="labor-department",
+                                synced_at=datetime(2026, 10, 1)))
+    db_session.add(Agency(slug="army-department", fr_id=2, name="Army Department", synced_at=datetime(2026, 10, 1)))
+    db_session.commit()
+    items = {i["citation"]: i for i in client.get("/api/nominations").json()["items"]}
+    assert items["PN1129"]["agencySlug"] == "labor-department"  # by the USAspending name it was matched to
+    assert items["PN636"]["agencySlug"] is None  # "Army" is not "Army Department": text
+    assert client.get("/api/nominations/119/PN1129").json()["agencySlug"] == "labor-department"
+    orgs = {o["name"]: o["agencySlug"] for o in client.get("/api/nominations/stats").json()["organizations"]}
+    assert orgs["Department of Labor"] == "labor-department" and orgs["Army"] is None

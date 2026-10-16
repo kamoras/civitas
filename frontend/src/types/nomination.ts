@@ -11,6 +11,9 @@ export interface NominationSummary {
   /** Congress.gov's description, verbatim: the nominee, their state, the office. */
   description: string;
   organization: string;
+  /** The registry agency the organization names exactly (/agencies/{slug});
+   *  null when none does, and the organization is shown as text. */
+  agencySlug: string | null;
   positionTitle: string;
   kind: NominationKind;
   /** The first few nominees as published: "Jane Q. Doe (TX)". */
@@ -70,7 +73,7 @@ export interface NominationStats {
     }
   >;
   binDays: number;
-  organizations: { name: string; count: number }[];
+  organizations: { name: string; count: number; agencySlug: string | null }[];
   asOf: string | null;
 }
 

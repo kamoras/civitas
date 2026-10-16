@@ -3,16 +3,16 @@
 Additive only (a new table), so the previous image runs unchanged against
 the migrated schema.
 
-Revision ID: 0050
-Revises: 0049
+Revision ID: 0052
+Revises: 0051
 Create Date: 2026-10-15
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0050'
-down_revision = '0049'
+revision = '0052'
+down_revision = '0051'
 branch_labels = None
 depends_on = None
 
