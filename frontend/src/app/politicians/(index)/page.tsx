@@ -143,6 +143,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
 }
 
 const EMPTY_DIRECTORY: PoliticianCard[] = [];
+const CARD_GRID = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
 
 /** Keeps ?state= and ?county= in the address bar so a filtered delegation
  * can be bookmarked, shared and returned to with Back. The History API, not
@@ -350,6 +351,23 @@ function PoliticiansPageContent() {
 
   const activeCount = filtered.filter((p) => p.activeIssueCount > 0).length;
 
+  // A picked state's senators come before the House finder: they are the
+  // answer to "who represents me" for everyone in the state, while the
+  // finder is the question only the House part needs. With the finder
+  // first, the senators of an arrival from the homepage's state picker sat
+  // just below a phone's first screen.
+  const senators = state ? filtered.filter((p) => p.branch === "senate") : [];
+  const rest = state ? filtered.filter((p) => p.branch !== "senate") : filtered;
+  const finder = linesReady && (
+    <CountyFinder
+      stateCode={state}
+      lines={houseLines!}
+      query={county}
+      onQuery={setCounty}
+      matches={countyMatches}
+    />
+  );
+
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
@@ -447,34 +465,38 @@ function PoliticiansPageContent() {
             </div>
           </div>
 
-          {linesReady && (
-            <CountyFinder
-              stateCode={state}
-              lines={houseLines!}
-              query={county}
-              onQuery={setCounty}
-              matches={countyMatches}
-            />
-          )}
-
           {/* Results */}
           {loading ? (
             <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest pulse-subtle">
               LOADING...
             </div>
           ) : error ? (
-            <div className="text-center py-16 font-mono text-xs text-signal-red">{error}</div>
+            <>
+              {finder}
+              <div className="text-center py-16 font-mono text-xs text-signal-red">{error}</div>
+            </>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest">
-              NO RESULTS
-            </div>
+            <>
+              {finder}
+              <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest">
+                NO RESULTS
+              </div>
+            </>
           ) : (
             <>
               <p className="font-mono text-xs text-ink-min mb-3 tracking-widest">
                 {filtered.length} POLITICIAN{filtered.length !== 1 ? "S" : ""}
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filtered.map((p) => (
+              {senators.length > 0 && (
+                <div className={`${CARD_GRID} mb-4`}>
+                  {senators.map((p) => (
+                    <PoliticianCardUI key={p.id} p={p} />
+                  ))}
+                </div>
+              )}
+              {finder}
+              <div className={CARD_GRID}>
+                {rest.map((p) => (
                   <PoliticianCardUI key={p.id} p={p} />
                 ))}
               </div>
