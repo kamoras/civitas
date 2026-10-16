@@ -77,8 +77,8 @@ export default function Masthead({
 
   return (
     <section className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-12 md:gap-9">
-        <div className="md:col-span-8">
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-9">
+        <div className="min-w-0">
           {/* The two offset plates are drawn from `data-text` as pseudo-
               elements (see .overprint in globals.css), so the mark's text
               content stays exactly "CIVITAS" — copyable, findable and
@@ -93,7 +93,7 @@ export default function Masthead({
               `aria-hidden` leaves it as the printed nameplate it looks like. */}
           <div
             aria-hidden="true"
-            className="overprint font-pixel text-2xl leading-none text-ink-hi sm:text-3xl"
+            className="overprint font-pixel text-[min(1.5rem,12vw)] leading-none text-ink-hi sm:text-3xl"
             data-text="CIVITAS"
           >
             <span className="relative">CIVITAS</span>
@@ -142,14 +142,14 @@ export default function Masthead({
             aria-label="For voters"
             className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs tracking-[0.1em]"
           >
-            <label className="inline-flex items-center gap-2 text-ink-min">
+            <label className="inline-flex max-w-full flex-wrap items-center gap-2 text-ink-min">
               YOUR STATE:
               <select
                 value={state}
                 // The code from our own list, never the field's text, into
                 // an href.
                 onChange={(e) => setState(STATES_BY_NAME.find((c) => c === e.target.value) ?? "")}
-                className="min-h-[28px] border border-white/20 bg-surface-base px-1 font-mono text-xs tracking-normal text-ink"
+                className="min-h-[28px] min-w-0 max-w-full border border-white/20 bg-surface-base px-1 font-mono text-xs tracking-normal text-ink"
               >
                 <option value="">Pick one</option>
                 {STATES_BY_NAME.map((code) => (
@@ -201,7 +201,7 @@ export default function Masthead({
           </nav>
         </div>
 
-        <div className="md:col-span-4">
+        <div className="min-w-0">
           <form
             onSubmit={submit}
             className="border border-ink-min/45"

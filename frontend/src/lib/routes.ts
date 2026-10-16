@@ -1,3 +1,5 @@
+import { ABOUT_CHAPTERS, ABOUT_OVERVIEW_HREF } from "./aboutPages";
+
 /**
  * Shared hrefs for in-app navigation targets that need a specific URL shape.
  */
@@ -80,21 +82,41 @@ export function archivedRaceHref(cycle: number, raceId: string): string {
 }
 
 /**
- * Each section's sub-pages, in the order its tab bar lists them: the one
- * table `SectionTabs` reads, so a page added here appears in every bar of its
- * section. Every tab is a page of its own (a link with `aria-current`, not an
+ * The site's sections and each one's pages, in the order the main
+ * navigation, the footer, the homepage's "Sections" band and each section's
+ * tab bar list them: one table, so a page added here appears in all of
+ * them. `href` is the section's hub; `match` is the paths that count as
+ * being in the section (the main navigation's current-section mark).
+ *
+ * Every tab is a page of its own (a link with `aria-current`, not an
  * in-page ARIA tab), and none is ever dropped for the election phase: a page
  * out of its phase (the seat map from election day on) says so itself, so
  * the tab still leads somewhere that explains. The hrefs repeat
  * `ELECTION_MAP_HREF`, `REDISTRICTING_HREF` and `presidentSupportHref("house")`
  * as literals because those modules import this one; `routes.test.ts` holds
- * them equal.
+ * them equal. "Latest week" and "Latest month" lead to the report of the
+ * last week and month Congress met (app/congress/week, app/congress/month),
+ * not the calendar's, so a recess never opens on an empty report.
  */
 export const SECTIONS = {
+  action: {
+    label: "Action Center",
+    href: ACTION_CENTER_HREF,
+    match: ["/action", "/issue"],
+    tabs: [
+      { key: "today", label: "Today", href: ACTION_CENTER_HREF },
+      { key: "ongoing", label: "Ongoing", href: ACTION_CENTER_MONITORS_HREF },
+      { key: "archive", label: "Archive", href: ACTION_CENTER_ARCHIVE_HREF },
+    ],
+  },
   congress: {
     label: "Congress",
+    href: "/congress",
+    match: ["/congress"],
     tabs: [
       { key: "reports", label: "Reports", href: "/congress" },
+      { key: "week", label: "Latest week", href: "/congress/week" },
+      { key: "month", label: "Latest month", href: "/congress/month" },
       { key: "bills", label: "Bills", href: "/congress/bills" },
       { key: "committees", label: "Committees", href: "/congress/committees" },
       { key: "nominations", label: "Nominations", href: "/congress/nominations" },
@@ -103,8 +125,31 @@ export const SECTIONS = {
       { key: "president", label: "Votes with the president", href: "/congress/president/house" },
     ],
   },
+  agencies: {
+    label: "Agencies",
+    href: "/agencies",
+    match: ["/agencies"],
+    tabs: [
+      { key: "directory", label: "Every agency", href: "/agencies" },
+      { key: "budget", label: "Budgets", href: "/agencies#budget" },
+      { key: "comments", label: "Open comment periods", href: "/explore?comment=open" },
+    ],
+  },
+  politicians: {
+    label: "Politicians",
+    href: "/politicians",
+    match: ["/politicians", "/leaderboard", "/compare"],
+    tabs: [
+      { key: "directory", label: "Every member", href: "/politicians" },
+      { key: "leaderboard", label: "Leaderboard", href: "/leaderboard" },
+      { key: "compare", label: "Compare members", href: "/compare" },
+      { key: "presidents", label: "Compare presidents", href: "/compare/presidents" },
+    ],
+  },
   elections: {
     label: "Elections",
+    href: "/elections",
+    match: ["/elections"],
     tabs: [
       { key: "ballots", label: "Ballots by state", href: "/elections" },
       { key: "map", label: "Seat map", href: "/elections/map?chamber=senate&view=usual" },
@@ -112,7 +157,35 @@ export const SECTIONS = {
       { key: "archive", label: "Archive", href: ELECTIONS_ARCHIVE_HREF },
     ],
   },
+  explore: {
+    label: "Explore",
+    href: "/explore",
+    match: ["/explore"],
+    tabs: [{ key: "search", label: "Search the record", href: "/explore" }],
+  },
+  about: {
+    label: "About",
+    href: ABOUT_OVERVIEW_HREF,
+    match: ["/about"],
+    tabs: [
+      { key: "overview", label: "Overview", href: ABOUT_OVERVIEW_HREF },
+      ...ABOUT_CHAPTERS.map((c) => ({ key: c.href, label: c.title, href: c.href })),
+    ],
+  },
 } as const;
 
 export type SectionKey = keyof typeof SECTIONS;
 export type SectionTabKey<S extends SectionKey> = (typeof SECTIONS)[S]["tabs"][number]["key"];
+
+/** A section's pages other than its hub: what its menu lists under the
+ * hub's own link, so no menu names one page twice. */
+export function sectionSubpages(section: SectionKey) {
+  const { href, tabs } = SECTIONS[section];
+  return tabs.filter((t) => t.href !== href);
+}
+
+/** Whether `pathname` (no query string, as usePathname gives it) is in the
+ * section. */
+export function inSection(section: SectionKey, pathname: string): boolean {
+  return SECTIONS[section].match.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}

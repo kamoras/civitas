@@ -65,6 +65,7 @@ export const TOPIC_FEEDS = {
   congress: { url: "/feed/congress.xml", title: "Civitas: Congress" },
   elections: { url: "/feed/elections.xml", title: "Civitas: Elections" },
   trends: { url: "/feed/trends.xml", title: "Civitas: On the record" },
+  new: { url: "/feed/new.xml", title: "Civitas: What's new" },
 } satisfies Record<string, Feed>;
 
 /** A state's feed: its races and its members of Congress (api/feed.py

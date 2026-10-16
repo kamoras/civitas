@@ -1344,11 +1344,12 @@ sitting official or a federal agency, with k and the threshold refit once a
 day and nothing labelled by hand (`app/policy_relevance.py`, stored in
 `feed_articles`; `docs/research/action-center-relevance.md`),
 clusters articles reporting the same event (complete linkage on headline plus
-description start, cut where no hand-judged different-event pair merges:
-`app/data/cluster_pair_judgments.json`, `scripts/calibrate_cluster_pairs.py`;
-a missed merge costs a story a source, a wrong one publishes a chimera, so
-the cut is precision-first and is never refitted from the pipeline's own
-label of shared names), incorporates trending topics from Google Trends and Bluesky,
+description start; two articles whose own text dates the event days apart
+are never joined; the cut is refit once a day as the lowest no stored pair
+of articles about one actor on stated days apart reaches, plus a stated
+margin, `action_center.refit_cuts`, `CUT_MARGIN`; a missed merge costs a
+story a source, a wrong one publishes a chimera, so the cut is
+precision-first and is never refitted from a label of shared names alone), incorporates trending topics from Google Trends and Bluesky,
 and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
@@ -1563,6 +1564,20 @@ docstrings do, not because one day's output looks thin. An issue that isn't
 posted still keeps its page: the issue cleanup deletes only developing
 issues nobody confirmed (`_cleanup_old_unposted_issues`), since the sitemap
 lists every confirmed issue.
+
+**A user-facing feature ships with its changelog entry.** A PR that adds a
+page or a feature a reader would notice adds one entry to
+`backend/app/data/whats_new.json` (its `_contract` names the fields: a
+stable id, the UTC release date, a title, one plain sentence, the page's
+path). That one entry is `/changelog`'s "New on the site" list, the What's
+new feed and one Bluesky post (`app/whats_new.py`, kind `feature`): no post
+is ever written by hand, and no code is written per feature. The posting
+rule (at most one a day, in the posting window, never on a day busier than
+the median of the fortnight before, never an entry over 28 days old, never
+a page that doesn't load) is in the module's docstring with the replay
+behind it. Write the sentence to stay true: no named politicians, no
+pronouns, no em dashes, no emoji, no year or Congress number
+(`tests/test_whats_new.py`). Changing an entry's id posts it again.
 
 **Ahead of each election** a nightly pre-check (`ops_alerts.check_election_readiness`)
 compares each cycle-specific data file with the election the calendar says
@@ -2106,6 +2121,7 @@ the pending list).
 | Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this" | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx`; data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
+| Site navigation: sections, main menu, footer, section tabs, hub cards and the homepage "Sections" band | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
 | Homepage (masthead, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
 
@@ -2286,6 +2302,15 @@ the pending list).
   own with `shareMetaAttrs`), and the captured image carries the source
   line, the as-of date and the score scale under the picture, since a
   picture travels without its page.
+- **A new page goes in `SECTIONS`** (`src/lib/routes.ts`): that one table is
+  the main navigation (a disclosure button per section on desktop, two
+  levels on a phone), the footer, each section's tab bar, its hub's cards and
+  the homepage's "Sections" band, so a page that isn't in it is reachable
+  only by an inline link. `routes.test.ts` fails on a page route in no
+  section (records with a `[segment]`, the footer's own pages and the admin
+  aside). A page with a live figure gets it from `GET /api/sections`
+  (`app/api/sections.py`), worded in `lib/sectionPreviews.ts`; a figure not
+  read yet says so, never a bare zero.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
   Activating a tab must focus **the incoming tab**, not its panel — the
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving

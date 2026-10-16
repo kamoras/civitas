@@ -28,8 +28,9 @@ Delivery to Bluesky is at most once per attempt and bounded:
     it would say something false. The feed entry keeps its own
     `published` time, so the same words stay true there.
 
-Timing. The kinds in SCHEDULED_KINDS — the spotlight and the Congress
-posts, whose words name their own date and stay true for days — go to
+Timing. The kinds in SCHEDULED_KINDS — the spotlight, the Congress
+posts and the feature posts, whose words name their own date or none and
+stay true for days — go to
 Bluesky inside the hours U.S. users are most active
 (app/data/bluesky_post_windows.json, measured by
 scripts/fetch_bluesky_activity.py). One written outside them is held, as a
@@ -86,6 +87,7 @@ KINDS: dict[str, str] = {
     "result": "Election-night counts, in each state's own figures",
     "special": "A special election for a seat in Congress, when the FEC's election calendar lists it",
     "trend": "On the record: the official record behind a topic trending on Bluesky",
+    "feature": "New pages and features on Civitas, once each",
 }
 
 MAX_BSKY_ATTEMPTS = 3
@@ -105,7 +107,7 @@ RETRY_AFTER = timedelta(minutes=45)
 # Kinds whose Bluesky send waits for the posting window (module docstring).
 # Each names its own date or none at all, so its words are as true at the
 # window as when written; news kinds are never here.
-SCHEDULED_KINDS = frozenset({"spotlight", "congress_day", "congress_week", "congress_ahead"})
+SCHEDULED_KINDS = frozenset({"spotlight", "congress_day", "congress_week", "congress_ahead", "feature"})
 # How long a held post whose window was missed stays sendable: a hold is
 # hours, so this is only reached by the pipeline process being down for
 # days, after which the post stays in the feed and isn't sent.
@@ -154,6 +156,7 @@ FEEDS: dict[str, Feed] = {
              "When a U.S. policy topic trends on Bluesky, the official record behind it: a vote, a bill, "
              "a rule or the day's congressional record, in the record's own words.",
              ("trend",)),
+        Feed("new", "Civitas: What's new", KINDS["feature"] + ", as they ship.", ("feature",)),
     )
 }
 
@@ -471,10 +474,11 @@ def subjects_published_since(db: Session, kind: str, since: datetime) -> list[st
 _BSKY_GET_POSTS = "https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts"
 # How long after sending a post's likes are still read, how often, and the
 # kinds read: the trend posts' image-vs-card trial (trend_poster) compares
-# them by embed_kind. A post's likes come in its first days.
+# them by embed_kind, and the feature posts' volume rule (app/whats_new.py)
+# is to be replayed with them. A post's likes come in its first days.
 ENGAGEMENT_WINDOW = timedelta(days=14)
 ENGAGEMENT_REFRESH = timedelta(hours=6)
-ENGAGEMENT_KINDS = ("trend",)
+ENGAGEMENT_KINDS = ("trend", "feature")
 
 
 def refresh_engagement(db: Session) -> int:

@@ -76,7 +76,7 @@ function TallyBar({ yeas, nays }: { yeas: number; nays: number }) {
   const total = yeas + nays;
   const pct = total > 0 ? (yeas / total) * 100 : 0;
   return (
-    <div aria-hidden="true" className="h-1 w-24 bg-white/10">
+    <div aria-hidden="true" className="h-1 w-24 max-w-full bg-white/10">
       <div className="h-1 bg-ink-lo" style={{ width: `${pct}%` }} />
     </div>
   );
@@ -84,7 +84,7 @@ function TallyBar({ yeas, nays }: { yeas: number; nays: number }) {
 
 export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; showDate?: boolean }) {
   return (
-    <li className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 border-b border-white/[0.09] py-3 sm:grid-cols-[4.5rem_minmax(0,1fr)_9.5rem]">
+    <li className="grid grid-cols-[minmax(0,4.5rem)_minmax(0,1fr)] gap-x-4 gap-y-2 border-b border-white/[0.09] py-3 sm:grid-cols-[minmax(0,4.5rem)_minmax(0,1fr)_minmax(0,9.5rem)]">
       <div className="flex flex-col gap-1 font-mono text-xs uppercase tracking-[0.1em] text-ink-lo">
         <span>No. {vote.number}</span>
         {showDate && <span className="text-ink-min">{vote.date.slice(5)}</span>}

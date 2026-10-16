@@ -2,22 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect, useRef, useCallback } from "react";
-import { ACTION_CENTER_HREF } from "@/lib/routes";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import RecordsBand from "./RecordsBand";
 
-const NAV_LINKS: readonly { href: string; label: string; accent?: boolean }[] = [
-  { href: ACTION_CENTER_HREF, label: "ACTION CENTER", accent: true },
-  { href: "/congress", label: "CONGRESS" },
-  { href: "/agencies", label: "AGENCIES" },
-  { href: "/politicians", label: "POLITICIANS" },
-  { href: "/elections", label: "ELECTIONS" },
-  { href: "/leaderboard", label: "LEADERBOARD" },
-  { href: "/compare", label: "COMPARE" },
-  { href: "/explore", label: "EXPLORE" },
-  { href: "/about", label: "ABOUT" },
-];
+// The main navigation is the SECTIONS table (lib/routes.ts): each section's
+// hub, with its other pages one step below it. Leaderboard and Compare are
+// Politicians' pages, not two more top-level links: seven sections fit a
+// 768 px row with a menu button each, nine did not.
+const NAV = Object.keys(SECTIONS) as SectionKey[];
+// The Action Center is the one section drawn in the brighter ink.
+const ACCENT: SectionKey = "action";
 
 /**
  * One definition of what a nav link looks like, for all three rows.
@@ -45,12 +41,211 @@ function navLinkClass(active: boolean, accent: boolean | undefined, size: "sm" |
   return `${base} border-transparent ${accent ? "text-ink-hi hover:text-phos" : "text-ink-lo hover:text-ink-hi"}`;
 }
 
+/** The path a tab's href names, for comparing with usePathname (which never
+ * carries a query string or fragment). */
+function pathOf(href: string): string {
+  return href.split(/[?#]/)[0];
+}
+
+/** A sub-page is the current page when its path is, and no other page of
+ * the section shares that path (the Action Center's three tabs are one
+ * path, told apart by the query string, which this can't read without
+ * suspending every page). */
+function currentSubpage(section: SectionKey, href: string, pathname: string): boolean {
+  const path = pathOf(href);
+  return (
+    path === pathname && SECTIONS[section].tabs.filter((t) => pathOf(t.href) === path).length === 1
+  );
+}
+
+// Where the desktop row replaces MENU, and where it takes its full
+// treatment, in rem so both move with the reader's text size (a larger
+// default font or zoom reaches MENU sooner, never an overflowing row).
+// Measured under `next build` at the default size: the compact row is
+// 599 px beside a 116 px wordmark, so from 56rem (896 px) it has 149 px to
+// spare; the full row is 839 px beside a 132 px wordmark, 261 px to spare
+// from 80rem (1280 px). The margins are for a longer label or a wider
+// fallback face; past them, useRowFits below switches to MENU.
+// Written out in full where used (min-[56rem]:…, xl:…): Tailwind finds
+// classes by scanning for whole strings, never a built one.
+// The least space kept between the wordmark and the row.
+const MIN_GAP_PX = 24;
+
+/**
+ * Whether the desktop row fits its bar, measured: the rem breakpoints
+ * above are the layout, this is the guard behind them. If the row (or a
+ * translated label, or a fallback face) is wider than the bar leaves, the
+ * header takes the MENU layout at that width instead of overflowing or
+ * wrapping past `--header-clearance`. A row that doesn't fit stays laid out
+ * (invisible and inert), so it is still measured, and comes back as soon as
+ * it fits. Without ResizeObserver (a test, an old browser) the
+ * breakpoints alone decide.
+ */
+export function useRowFits(
+  bar: React.RefObject<HTMLElement | null>,
+  logo: React.RefObject<HTMLElement | null>,
+  row: React.RefObject<HTMLElement | null>
+): boolean {
+  const [fits, setFits] = useState(true);
+  useEffect(() => {
+    const b = bar.current;
+    if (!b || typeof ResizeObserver === "undefined") return;
+    let needed = 0;
+    const check = () => {
+      const r = row.current;
+      if (r && r.offsetWidth > 0)
+        needed = (logo.current?.offsetWidth ?? 0) + r.scrollWidth + MIN_GAP_PX;
+      const style = getComputedStyle(b);
+      const room = b.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      setFits(needed === 0 || needed <= room);
+    };
+    const ro = new ResizeObserver(check);
+    ro.observe(b);
+    if (row.current) ro.observe(row.current);
+    check();
+    return () => ro.disconnect();
+  }, [bar, logo, row]);
+  return fits;
+}
+
+const SUBLINK =
+  "flex min-h-11 items-center font-mono text-xs uppercase tracking-[0.12em] transition-colors";
+
+/**
+ * A section in the desktop row: its hub's link and, beside it, a button that
+ * discloses the section's other pages (the WAI-ARIA disclosure navigation
+ * pattern, "with top-level links": a button with aria-expanded and a plain
+ * list of links, no menu role, so Tab walks it like any other links).
+ * Escape closes it and returns focus to the button; so does focus or a
+ * pointer leaving it.
+ */
+function SectionItem({
+  section,
+  active,
+  open,
+  onToggle,
+  onClose,
+  alignRight,
+  pathname,
+}: {
+  section: SectionKey;
+  active: boolean;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  alignRight: boolean;
+  pathname: string;
+}) {
+  const { label, href } = SECTIONS[section];
+  const subs = sectionSubpages(section);
+  const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // While open: a pointer or focus leaving the item closes it, and Escape
+  // closes it and returns focus to the button. Listeners, not handlers on
+  // the item's <div>, which is not itself interactive.
+  useEffect(() => {
+    const item = ref.current;
+    if (!open || !item) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!item.contains(e.target as Node)) onClose();
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      if (!item.contains(e.relatedTarget as Node | null)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const inside = item.contains(document.activeElement);
+      onClose();
+      if (inside) buttonRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    item.addEventListener("focusout", onFocusOut);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+      item.removeEventListener("focusout", onFocusOut);
+    };
+  }, [open, onClose]);
+
+  const panelId = `nav-pages-${section}`;
+  return (
+    <div ref={ref} className="relative flex items-center gap-0.5">
+      <Link
+        href={href}
+        aria-current={active ? "page" : undefined}
+        className={`tracking-normal xl:tracking-widest ${navLinkClass(active, section === ACCENT, "xs")}`}
+      >
+        {label.toUpperCase()}
+      </Link>
+      {subs.length > 0 && (
+        <button
+          ref={buttonRef}
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          aria-label={`${label} pages`}
+          onClick={onToggle}
+          className="inline-flex h-6 w-6 items-center justify-center font-mono text-xs text-ink-min transition-colors hover:text-phos aria-expanded:text-phos"
+        >
+          <span
+            aria-hidden="true"
+            className={`inline-block transition-transform ${open ? "rotate-180" : ""}`}
+          >
+            &#9662;
+          </span>
+        </button>
+      )}
+      {subs.length > 0 && (
+        <ul
+          id={panelId}
+          hidden={!open}
+          className={`absolute top-full z-10 mt-3 w-max min-w-56 max-w-80 border border-white/15 border-t-phos/50 bg-surface-base py-1 ${
+            alignRight ? "right-0" : "left-0"
+          }`}
+        >
+          {subs.map((t) => {
+            const current = currentSubpage(section, t.href, pathname);
+            return (
+              <li key={t.key}>
+                <Link
+                  href={t.href}
+                  aria-current={current ? "page" : undefined}
+                  onClick={() => onClose()}
+                  className={`${SUBLINK} px-4 ${current ? "text-ink-hi" : "text-ink-lo hover:bg-white/[0.04] hover:text-ink-hi"}`}
+                >
+                  <span aria-hidden="true" className="mr-2 text-ink-min">
+                    &rsaquo;
+                  </span>
+                  {t.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function Navbar() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // The desktop section whose pages are showing, and the page it was opened
+  // on: a navigation by any route (a link, Back) closes it without an effect.
+  const [opened, setOpened] = useState<{ section: SectionKey; path: string } | null>(null);
+  const openSection = opened && opened.path === pathname ? opened.section : null;
+  const closeSection = useCallback(() => setOpened(null), []);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const logoRef = useRef<HTMLAnchorElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const rowFits = useRowFits(barRef, logoRef, rowRef);
+  // MENU's breakpoint, or always MENU when the row doesn't fit.
+  const menuOnly = rowFits ? "min-[56rem]:hidden" : "";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 50);
@@ -95,14 +290,6 @@ export default function Navbar() {
     return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen, closeMenu]);
 
-  // usePathname() never includes a query string, so compare against the href's
-  // path only — ACTION_CENTER_HREF carries a ?tab=, and a raw === would leave
-  // the Action Center link permanently un-highlighted.
-  const isActive = (href: string) => {
-    const path = href.split("?")[0];
-    return pathname === path || pathname.startsWith(path + "/");
-  };
-
   return (
     <header
       role="banner"
@@ -121,77 +308,64 @@ export default function Navbar() {
       {/* The skip link is the root layout's, ahead of everything: a second
           one here cost keyboard users an extra Tab on every page. */}
       <nav aria-label="Main navigation" className="border-b-3 border-white/15">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div
+          ref={barRef}
+          className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between"
+        >
           <Link
+            ref={logoRef}
             href="/"
-            className="font-pixel text-xs sm:text-sm text-ink-hi hover:text-phos transition-colors tracking-widest"
+            className="font-pixel text-xs sm:text-sm min-[56rem]:text-xs xl:text-sm text-ink-hi hover:text-phos transition-colors tracking-widest"
           >
             CIVITAS
           </Link>
 
           {/*
-          Two link rows, not one, because one row cannot serve 640px and
-          1440px at the same size.
+          One row from 56rem (896 px at the default text size), compact
+          below xl (tighter gap, normal tracking, no [BSKY], which the footer
+          carries anyway) and full from xl. It was two rows, one per width,
+          which each section's pages would have given two copies of every
+          id. The widths and margins are in the comment above useRowFits.
 
-          Nine wide-tracked uppercase links measure 793px at the full
-          treatment, so they need ~975px of viewport before they fit beside
-          the wordmark — which is why the full row starts at `lg`. Below that
-          they used to wrap, and with the records band above them a wrapped
-          row made a 114px header between 640 and 740px, past the clearance
-          every page reserves. Content got clipped site-wide.
-
-          The earlier fix held the menu button all the way to `lg`, which
-          handed a hamburger to every tablet. Instead `md` (768px) now gets a
-          compact row: tighter gap, normal tracking, and no [BSKY] (which the
-          footer carries anyway). That measures 548px against a 588px budget
-          at 768px — the narrowest width it renders at.
-
-          `flex-nowrap` is the guard, not the layout: if a fallback face ever
-          measures wider than Share Tech Mono, the row overflows — which the
-          route audit catches as horizontal scroll — rather than silently
-          wrapping and clipping the top of every page again.
-
-          Measured across 320-1536px in all five records-band states.
+          It started at 768 px with 4 px to spare, so one longer label or a
+          larger text size would have overflowed it. Now the breakpoints are
+          in rem (they move with the text size) with ~150 px to spare, and
+          useRowFits switches to MENU at any width where the measured row
+          still doesn't fit. `flex-nowrap` stays: a wrapped row would push
+          the header past `--header-clearance` and clip every page.
         */}
-          {/* Compact row: md up to lg */}
-          <div className="hidden md:flex lg:hidden items-center gap-3 flex-nowrap">
-            {NAV_LINKS.map(({ href, label, accent }) => {
-              const active = isActive(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  aria-current={active ? "page" : undefined}
-                  className={`tracking-[0.025em] ${navLinkClass(active, accent, "xs")}`}
-                >
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Full row: lg and up */}
-          <div className="hidden lg:flex items-center gap-7 flex-nowrap">
-            {NAV_LINKS.map(({ href, label, accent }) => {
-              const active = isActive(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  aria-current={active ? "page" : undefined}
-                  className={`tracking-widest ${navLinkClass(active, accent, "xs")}`}
-                >
-                  {label}
-                </Link>
-              );
-            })}
+          <div
+            ref={rowRef}
+            data-testid="nav-row"
+            // Not fitting, it stays laid out but invisible, inert and out of
+            // the flow, so useRowFits can still measure it and bring it back
+            // when it fits again (the window widens, the text shrinks).
+            inert={!rowFits}
+            className={`hidden min-[56rem]:flex items-center gap-2 xl:gap-6 flex-nowrap ${
+              rowFits ? "" : "invisible pointer-events-none absolute right-0"
+            }`}
+          >
+            {NAV.map((section, i) => (
+              <SectionItem
+                key={section}
+                section={section}
+                active={inSection(section, pathname)}
+                open={openSection === section}
+                onToggle={() =>
+                  setOpened(openSection === section ? null : { section, path: pathname })
+                }
+                onClose={closeSection}
+                alignRight={i >= NAV.length - 2}
+                pathname={pathname}
+              />
+            ))}
             <a
               href={BSKY_PROFILE_URL}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Civitas on Bluesky (opens in new tab)"
               title="Follow Civitas on Bluesky"
-              className="text-ink-lo hover:text-phos font-mono text-xs tracking-widest transition-colors"
+              className="hidden xl:inline text-ink-lo hover:text-phos font-mono text-xs tracking-widest transition-colors"
             >
               [BSKY]
             </a>
@@ -203,7 +377,7 @@ export default function Navbar() {
               move. It was the 36x20 word alone, in the hardest thumb zone. */}
           <button
             ref={toggleRef}
-            className="md:hidden -my-3 -mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
+            className={`${menuOnly} -my-3 -mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors`}
             onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
             aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={menuOpen}
@@ -213,34 +387,68 @@ export default function Navbar() {
           </button>
         </div>
 
-        {/* Mobile menu */}
+        {/* Mobile menu: two levels, every section's pages listed under its
+            hub, so any page is two taps from MENU (MENU, then the page).
+            Every target is 44 px tall; the list scrolls inside the header
+            when it is taller than the screen. */}
         {menuOpen && (
           <div
             ref={menuRef}
             id="mobile-menu"
-            className="md:hidden bg-surface-base/[0.98] border-t border-white/[0.07] px-6 py-8 flex flex-col items-start gap-5"
+            className={`${menuOnly} max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
           >
-            {NAV_LINKS.map(({ href, label, accent }) => {
-              const active = isActive(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  aria-current={active ? "page" : undefined}
-                  onClick={closeMenu}
-                  className={`self-start tracking-widest ${navLinkClass(active, accent, "sm")}`}
-                >
-                  {label}
-                </Link>
-              );
-            })}
+            <ul>
+              {NAV.map((section) => {
+                const { label, href } = SECTIONS[section];
+                const active = inSection(section, pathname);
+                const subs = sectionSubpages(section);
+                return (
+                  <li key={section} className="border-b border-white/[0.07] py-1">
+                    <Link
+                      href={href}
+                      aria-current={active ? "page" : undefined}
+                      onClick={closeMenu}
+                      className="flex min-h-11 items-center"
+                    >
+                      <span
+                        className={`tracking-widest ${navLinkClass(active, section === ACCENT, "sm")}`}
+                      >
+                        {label.toUpperCase()}
+                      </span>
+                    </Link>
+                    {subs.length > 0 && (
+                      <ul
+                        aria-label={`${label} pages`}
+                        className="mb-1 grid grid-cols-2 gap-x-4 border-l border-white/15 pl-3"
+                      >
+                        {subs.map((t) => {
+                          const current = currentSubpage(section, t.href, pathname);
+                          return (
+                            <li key={t.key}>
+                              <Link
+                                href={t.href}
+                                aria-current={current ? "page" : undefined}
+                                onClick={closeMenu}
+                                className={`${SUBLINK} leading-snug ${current ? "text-ink-hi" : "text-ink-lo hover:text-ink-hi"}`}
+                              >
+                                {t.label}
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
             <a
               href={BSKY_PROFILE_URL}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Civitas on Bluesky (opens in new tab)"
               onClick={closeMenu}
-              className="text-ink-lo hover:text-phos font-mono text-sm tracking-widest transition-colors"
+              className="mt-2 inline-flex min-h-11 items-center text-ink-lo hover:text-phos font-mono text-sm tracking-widest transition-colors"
             >
               [BSKY]
             </a>

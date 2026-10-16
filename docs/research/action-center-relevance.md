@@ -315,6 +315,47 @@ them four reports of an ICE officer's shooting in New York the old gate
 also missed, but also a space station landing, a missing flight and a
 celebrity's summons (agencies named in passing).
 
+## 2026-10-16: the clustering and restatement cuts refit themselves
+
+Both cuts were fitted once to pairs one labeller judged (564 article pairs,
+204 claim pairs). Each is now refit once a day from the stored data
+(`action_center.refit_cuts`), as the lowest cut no pair the data itself
+says is two stories (or two facts) reaches, plus a stated margin
+(`CUT_MARGIN`, 0.10, a choice reported beside every fit):
+
+- **clustering**: pairs of stored feed articles that share a distinctive
+  entity and whose own text dates the event two or more days apart (a
+  weekday read against the publication date, or a month and day). On the
+  301 articles of 2026-09-28..10-15 (257 such pairs) the fit is 0.60, the
+  cut 0.70. Clustering also never joins two such articles.
+- **restatement**: pairs of lines from two issues published within a day
+  of each other as separate stories, sharing a distinctive entity, leaving
+  out any pair that quotes one sentence (five words in a row). On the
+  issues of the last three weeks (76 lines, 380 pairs) the fit is 0.69, the
+  cut 0.79. Lines of issues days apart were tried first and rejected: an
+  ongoing story's later issue restates the earlier one's facts, so that fit
+  read 0.94.
+
+The margin covers what no stated fact labels: one actor's different acts
+on the same day, and two facts of one event. The fits alone reach those
+pairs: at 0.60, on the same 301 articles, 50 pairs merge, 13 of them pairs
+the hand judgments called different events.
+
+| Cut | Article pairs over the cut (48 h) | [diag] hand: same / different |
+|---|---|---|
+| hand-judged 0.71 | 19 | 18 / 1 |
+| refit 0.60 + 0.10, with the day veto | 22 | 20 / 2 |
+| refit 0.60 alone, with the day veto | 50 | 36 / 13 |
+
+| Restatement cut | Claim pairs flagged (of 204) | [diag] hand precision / recall |
+|---|---|---|
+| hand-fitted 0.75 | 27 | 0.96 / 0.42 |
+| refit 0.69 + 0.10 = 0.79 | 18 | 0.94 / 0.27 |
+
+The restatement cut moves up, so fewer second claims are dropped as
+restatements: a missed restatement counts one fact twice toward the
+two-claim gate, a false one drops a real fact and often the issue with it.
+
 ## The digest filter
 
 `_digest_reason`'s body check drops an article whose description splits

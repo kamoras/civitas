@@ -32,6 +32,7 @@ from app import data_refresh
 from app.background import WritesHeld, start_writer
 from app.broadcast import deliver_pending, refresh_engagement
 from app.pipeline.analyze.trend_poster import run_trend_posts
+from app.whats_new import post_whats_new
 from app.pipeline import lease
 from app.pipeline import bill_refresh
 from app.pipeline.fetch import nominations
@@ -388,14 +389,19 @@ def _hourly_action_refresh() -> None:
 def _post_trends() -> None:
     """The hourly trend posts (analyze/trend_poster.py), after the refresh
     so an issue posted this hour already counts as covering its record, and
-    the engagement read their image-vs-card trial is measured by. Under the
-    Action Center's lease, which yields to a data reset."""
+    the engagement read their image-vs-card trial is measured by; first,
+    the hour's "New on Civitas" check (app/whats_new.py). Under the Action
+    Center's lease, which yields to a data reset."""
     db = SessionLocal()
     try:
         with lease.holding(db, lease.ACTION_REFRESH, yield_to=lease.DATA_RESET) as token:
             if token is None:
                 logger.info("Trend posts skipped: %s", lease.code_and_refusal(db, lease.ACTION_REFRESH)[1])
                 return
+            try:
+                logger.info("What's new: %s", post_whats_new(db))
+            except Exception:
+                logger.exception("What's new post failed (non-fatal)")
             logger.info("Trend posts: %s", run_trend_posts(db))
             refresh_engagement(db)
     except Exception:

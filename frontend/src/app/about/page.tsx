@@ -285,7 +285,7 @@ export default function AboutOverview() {
             Source code
           </PillLink>
           <PillLink href="/developers">Public API and MCP server</PillLink>
-          <PillLink href="/changelog">Scoring changelog</PillLink>
+          <PillLink href="/changelog">Changelog</PillLink>
           <PillLink href="/feedback">Disagree with a score? Tell us</PillLink>
         </div>
       </Section>

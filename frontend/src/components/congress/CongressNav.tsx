@@ -22,7 +22,7 @@ export function PeriodNav({
     <Link
       href={hrefs[key]}
       aria-current={active === key ? "page" : undefined}
-      className={`flex min-h-11 min-w-20 items-center justify-center border font-mono text-sm uppercase tracking-[0.12em] transition-colors ${
+      className={`flex min-h-11 items-center justify-center border px-4 font-mono text-sm uppercase tracking-[0.12em] transition-colors ${
         active === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
       }`}
     >

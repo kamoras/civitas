@@ -27,7 +27,7 @@ import { useResultsNow } from "@/hooks/useResultsNow";
 import { fetchPviMap } from "@/lib/api";
 import { describeInterval, useLiveResults } from "@/hooks/useLiveResults";
 import type { PviMap } from "@/types/election";
-import { useElectionsInitial } from "./ElectionsInitial";
+import { useElectionsHub, useElectionsInitial } from "./ElectionsInitial";
 
 /*
   Second page onto the records palette, after the homepage. Same recipe:
@@ -107,6 +107,7 @@ export default function ElectionsPage() {
   const router = useRouter();
   // What the server already read (elections/layout.tsx), when it could.
   const initial = useElectionsInitial();
+  const hub = useElectionsHub();
   const [pvi, setPvi] = useState<PviMap | null>(initial?.pvi ?? null);
   // The clock is read when the data lands, not on every render, so the
   // countdown is a function of what was fetched: the server's clock for
@@ -392,6 +393,8 @@ export default function ElectionsPage() {
               refreshFailed={!!resultsError}
             />
           )}
+
+          {hub}
 
           {error && campaignMode && (
             <div
