@@ -88,6 +88,7 @@ from app.pipeline.analyze.bill_learning import get_health_metrics
 from app.pipeline.analyze.ollama_client import get_llm_stats
 from app.pipeline.analyze.score_calibration import generate_calibration_report
 from app.pipeline.fetch import ballot_measure_pdf_sources, district_pvi
+from app.pipeline.fetch.agencies import run_agency_sync
 from app.pipeline_chain import chain_running
 from app.scheduler import get_next_run_time, triggered_chain
 from app.services import bill_service
@@ -1906,6 +1907,12 @@ async def admin_reset_data():
     # A database write in the pipeline process: off the event loop.
 
     await asyncio.to_thread(bill_service.warm_bill_collection_cache)
+    # The agency list costs one request and nothing else rebuilds it before
+    # the next :30: read it now, so /agencies isn't empty for up to an hour.
+    try:
+        background.start_writer(run_agency_sync, name="agency-sync")
+    except background.WritesHeld as held:
+        logger.info("%s", held)
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",

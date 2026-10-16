@@ -27,6 +27,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return pageMetadata({ ...describeAgency(agency), path: agencyHref(agency.slug) });
 }
 
+// While documents are still being linked to their agencies, an empty list
+// is not "none" (the outage-or-incomplete-is-not-none rule).
+const LINKING_TAIL = "Older documents are still being linked to the agency that issued them.";
+
 const H2 = "font-display text-xl font-extrabold text-ink-hi";
 const MORE =
   "mt-3 inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.12em] text-signal-cyan hover:text-phos";
@@ -203,6 +207,13 @@ function Overview({ a }: { a: AgencyDetail }) {
           <Figure label="Proposed rules" value={proposed.toLocaleString("en-US")} />
           <Figure label="Final rules" value={final.toLocaleString("en-US")} />
         </dl>
+        {docs.linking && (
+          <p className="mt-3 text-xs leading-relaxed text-ink-lo">
+            Counts so far: documents stored before agencies were read are still being linked to the
+            agency that issued them ({docs.linking.linked.toLocaleString("en-US")} of{" "}
+            {docs.linking.total.toLocaleString("en-US")} linked).
+          </p>
+        )}
         <SourceLine
           source={a.documentsSource}
           asOf={a.documentsAsOf}
@@ -294,7 +305,9 @@ export default async function AgencyPage({ params }: PageProps) {
                   </>
                 ) : (
                   <p className="mt-2 text-sm text-ink-lo">
-                    No comment period of this agency is open on Civitas right now.
+                    {docs.linking
+                      ? `None linked to this agency yet. ${LINKING_TAIL}`
+                      : "No comment period of this agency is open on Civitas right now."}
                   </p>
                 )}
               </section>
@@ -306,7 +319,11 @@ export default async function AgencyPage({ params }: PageProps) {
                 {docs.proposedRules.length > 0 ? (
                   <AgencyDocList docs={docs.proposedRules} today={today} />
                 ) : (
-                  <p className="mt-2 text-sm text-ink-lo">None on Civitas.</p>
+                  <p className="mt-2 text-sm text-ink-lo">
+                    {docs.linking
+                      ? `None linked to this agency yet. ${LINKING_TAIL}`
+                      : "None on Civitas."}
+                  </p>
                 )}
               </section>
 
@@ -317,7 +334,11 @@ export default async function AgencyPage({ params }: PageProps) {
                 {docs.finalRules.length > 0 ? (
                   <AgencyDocList docs={docs.finalRules} today={today} />
                 ) : (
-                  <p className="mt-2 text-sm text-ink-lo">None on Civitas.</p>
+                  <p className="mt-2 text-sm text-ink-lo">
+                    {docs.linking
+                      ? `None linked to this agency yet. ${LINKING_TAIL}`
+                      : "None on Civitas."}
+                  </p>
                 )}
               </section>
 

@@ -20,6 +20,14 @@ derives from the data and writes to app/data/agency_crosswalk.json
 match another agency scored higher on, is stored unmatched and listed as
 such, never paired with its runner-up.
 
+Documents stored before explore_documents.agency_slug existed are linked
+to their agency here too, each hour until none is left (link_documents):
+a document whose stored agency is one with no sub-agencies is linked by
+that name, since the Register's issuer can be no more specific; the rest
+(a department's, which may be a sub-agency's) have their issuer read from
+the Register, newest first, LINK_PER_RUN an hour. Until then an agency page
+says how many are linked rather than reading as "no rules".
+
 Every fetcher returns None when its source could not be read, never an
 empty list, and a source that could not be read leaves what is stored
 untouched: an outage is never read as "no agencies" or "no budget".
@@ -39,9 +47,10 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.http_client import DEFAULT_FETCH_TIMEOUT_S, make_async_client
-from app.models import Agency, AgencyBudget
+from app.models import Agency, AgencyBudget, ExploreDocument
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline import lease
+from app.pipeline.fetch.fr_rulemaking import fetch_fr_metadata, issuing_agency
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -59,6 +68,11 @@ USASPENDING_SOURCE = {"name": "USAspending.gov", "url": "https://www.usaspending
 SYNC_EVERY = timedelta(days=7)
 # Between USAspending's per-agency requests: about 110 a week.
 REQUEST_PAUSE_S = 0.25
+# Unlinked documents whose issuer is read from the Register each hourly
+# run: 25 requests of 20 (fr_rulemaking.REFRESH_BATCH), about ten seconds.
+# The 5,855 department documents of 2026-10 take about twelve hours, where
+# the nightly refresh's 2,000 a night (explore_pipeline) took five nights.
+LINK_PER_RUN = 500
 
 CROSSWALK_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "agency_crosswalk.json"
 _crosswalk_cache: dict | None = None
@@ -278,6 +292,82 @@ async def sync_agencies(db: Session, client: httpx.AsyncClient, *, fr_due: bool 
     return stats
 
 
+def _unlinked(db: Session):
+    """Rulemaking documents whose issuing agency hasn't been read: stored
+    before explore_documents.agency_slug (NULL; "" is read, and named no
+    Register agency)."""
+    return db.query(ExploreDocument).filter(
+        ExploreDocument.source == "Federal Register", ExploreDocument.chamber == "Regulatory",
+        ExploreDocument.agency_slug.is_(None),
+    )
+
+
+def linking_progress(db: Session) -> dict | None:
+    """{"linked", "total"} rulemaking documents linked to their agency, or
+    None when every one is: the agency pages' counts are complete."""
+    total = db.query(func.count(ExploreDocument.id)).filter(
+        ExploreDocument.source == "Federal Register", ExploreDocument.chamber == "Regulatory").scalar() or 0
+    unlinked = _unlinked(db).count()
+    return {"linked": total - unlinked, "total": total} if unlinked else None
+
+
+def link_by_name(db: Session) -> int:
+    """Link each unlinked document whose stored agency (the Register's name
+    for it) is an agency with no sub-agencies: the issuer the Register would
+    give (fr_rulemaking.issuing_agency, the listed agency no other sits
+    under) can be no other. A department's are left for read_issuers."""
+    agencies = db.query(Agency.slug, Agency.name, Agency.parent_slug).all()
+    parents = {a.parent_slug for a in agencies if a.parent_slug}
+    leaf_by_name = {a.name: a.slug for a in agencies if a.slug not in parents}
+    linked = 0
+    for doc in _unlinked(db).filter(ExploreDocument.agency_name.in_(leaf_by_name)):
+        doc.agency_slug = leaf_by_name[doc.agency_name]
+        linked += 1
+    db.commit()
+    return linked
+
+
+def _fr_number(external_id: str) -> str:
+    return external_id.removeprefix("fr-reg-") if external_id.startswith("fr-reg-") else external_id.removeprefix("fr-")
+
+
+async def read_issuers(db: Session, client: httpx.AsyncClient, limit: int = LINK_PER_RUN) -> int | None:
+    """Read the issuing agency of up to `limit` unlinked documents, newest
+    first, from the Register. How many were linked, or None when the
+    Register couldn't be asked (they stay unlinked, for the next hour)."""
+    rows = _unlinked(db).order_by(ExploreDocument.date.desc()).limit(limit).all()
+    if not rows:
+        return 0
+    by_number = {_fr_number(r.external_id): r for r in rows}
+    got = await fetch_fr_metadata(client, list(by_number), fields=["document_number", "agencies"])
+    if got is None:
+        return None
+    found, missing = got
+    # A number the Register has no document for (a provisional one it
+    # re-issued under its own): removed, as the nightly refresh does
+    # (explore_pipeline._refresh_federal_register), or it would stay
+    # unlinked, and the agency pages' counts "so far", for good.
+    for number in missing:
+        if number in by_number:
+            db.delete(by_number[number])
+    linked = 0
+    for number, doc in found.items():
+        row = by_number.get(number)
+        if row is not None and "agencies" in doc:
+            row.agency_name, row.agency_slug = issuing_agency(doc["agencies"] or [])
+            linked += 1
+    db.commit()
+    return linked
+
+
+async def link_documents(db: Session, client: httpx.AsyncClient) -> dict:
+    """Both ways of linking, the free one first. Only once the Register's
+    agency list is stored: which agencies have sub-agencies comes from it."""
+    if db.query(Agency.slug).first() is None:
+        return {"byName": 0, "read": 0}
+    return {"byName": link_by_name(db), "read": await read_issuers(db, client)}
+
+
 def due(db: Session) -> tuple[bool, bool]:
     """(the Register's list, USAspending's budgets): each due when it last
     stored more than SYNC_EVERY ago, or never. Each source is retried on
@@ -291,19 +381,22 @@ def due(db: Session) -> tuple[bool, bool]:
 
 async def _run(db: Session, fr_due: bool = True, usaspending_due: bool = True) -> dict:
     async with make_async_client() as client:
-        return await sync_agencies(db, client, fr_due=fr_due, usaspending_due=usaspending_due)
+        stats = await sync_agencies(db, client, fr_due=fr_due, usaspending_due=usaspending_due) \
+            if fr_due or usaspending_due else {}
+        stats["documentsLinked"] = await link_documents(db, client)
+        return stats
 
 
 def run_agency_sync() -> dict | None:
-    """The scheduled job: under its lease, and only when a sync is due.
-    None when it didn't run."""
+    """The scheduled job: under its lease, and only when a sync is due or
+    documents are still unlinked. None when it didn't run."""
     with lease.job(lease.AGENCY_SYNC, who="Agency sync") as held:
         if not held:
             return None
         db = SessionLocal()
         try:
             fr_due, usaspending_due = due(db)
-            if not (fr_due or usaspending_due):
+            if not (fr_due or usaspending_due or _unlinked(db).first() is not None):
                 return None
             stats = asyncio.run(_run(db, fr_due, usaspending_due))
             logger.info("Agency sync: %s", stats)

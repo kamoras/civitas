@@ -217,6 +217,30 @@ describe("ExplorePage", () => {
     api.fetchExploreMatches.mockReset();
   });
 
+  it("offers the agencies a search names, in the Agencies group", async () => {
+    api.searchExplore.mockResolvedValue({ query: "aviation", results: [], count: 0 });
+    api.fetchExploreMatches.mockResolvedValue({
+      members: { total: 0, items: [] },
+      bills: { total: 0, items: [] },
+      agencies: {
+        total: 1,
+        items: [
+          {
+            slug: "federal-aviation-administration",
+            name: "Federal Aviation Administration",
+            shortName: "FAA",
+          },
+        ],
+      },
+    });
+    open("q=aviation");
+
+    const link = await screen.findByRole("link", { name: /Federal Aviation Administration/ });
+    expect(link).toHaveAttribute("href", "/agencies/federal-aviation-administration");
+    expect(screen.getByRole("heading", { name: /Agencies/ })).toBeInTheDocument();
+    api.fetchExploreMatches.mockReset();
+  });
+
   it("still opens a bill number's page when the groups can't be read", async () => {
     api.searchExplore.mockResolvedValue({ query: "H.R. 7008", results: [], count: 0 });
     api.fetchExploreMatches.mockRejectedValue(new Error("502"));
